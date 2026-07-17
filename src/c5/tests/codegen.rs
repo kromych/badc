@@ -1538,6 +1538,38 @@ fn builtin_overflow_on_128bit_operand_is_rejected() {
     );
 }
 
+/// `__int128` <-> scalar conversions run correctly. An integer initializer
+/// or cast to `__int128` widens into the 16-byte object (low half = value,
+/// high half = sign); a cast to a narrower integer loads the low bytes.
+/// Before, the initializer copied 16 bytes from the scalar treated as an
+/// address (fault) and the narrowing cast returned the object's address
+/// instead of its value.
+#[test]
+fn int128_scalar_conversions_run_correctly() {
+    use crate::jit_run;
+    let program = super::compile_str_bare(
+        "typedef unsigned __int128 u128; typedef signed __int128 s128;\n\
+         typedef union { u128 v; unsigned long long h[2]; } U;\n\
+         typedef union { s128 v; unsigned long long h[2]; } S;\n\
+         static int uok(u128 x, unsigned long long hi, unsigned long long lo){ U u; u.v=x; return u.h[0]==lo&&u.h[1]==hi; }\n\
+         static int sok(s128 x, unsigned long long hi, unsigned long long lo){ S u; u.v=x; return u.h[0]==lo&&u.h[1]==hi; }\n\
+         int main(void){\n\
+           int n=-5; s128 a=n; if(!sok(a,0xFFFFFFFFFFFFFFFFull,0xFFFFFFFFFFFFFFFBull))return 1;\n\
+           unsigned un=5u; u128 b=un; if(!uok(b,0,5))return 2;\n\
+           u128 c=(u128)0xABCDu; if(!uok(c,0,0xABCD))return 3;\n\
+           U g; g.h[0]=0xDEADBEEFull; g.h[1]=0x1111ull;\n\
+           if((unsigned long long)g.v!=0xDEADBEEFull)return 4;\n\
+           if((unsigned)g.v!=0xDEADBEEFu)return 5;\n\
+           return 0; }",
+    );
+    let exit = jit_run(&program, &["int128_conv".to_string()])
+        .expect("int128 conversion fixture runs under JIT");
+    assert_eq!(
+        exit, 0,
+        "int128 scalar conversion produced a wrong value or fault: exit {exit}",
+    );
+}
+
 /// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering uses an
 /// LDAXR / STLXR exclusive-monitor retry loop. Confirm both opcodes are
 /// present by their fixed bit patterns, independent of register fields:

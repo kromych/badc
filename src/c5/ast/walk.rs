@@ -719,6 +719,18 @@ impl<'a> Walker<'a> {
             0
         }
     }
+    /// True when `ty` is the GCC 128-bit `__int128` as a value (not a
+    /// pointer to one). It shares the struct machinery but a cast to or
+    /// from a scalar converts the 128-bit value, unlike a plain struct
+    /// whose value in a scalar context is just its address.
+    fn is_int128_value_ty(&self, ty: i64) -> bool {
+        let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+        if stripped < STRUCT_BASE || struct_ptr_depth(ty) != 0 {
+            return false;
+        }
+        let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
+        self.structs.get(id).is_some_and(|s| s.name == "__int128")
+    }
     /// True when the expression's type tag carries the volatile
     /// qualifier (C99 6.7.3); `false` for node shapes without a type.
     fn expr_is_volatile(&self, id: ExprId) -> bool {
@@ -1395,6 +1407,33 @@ impl<'a> Walker<'a> {
     /// block-scope compound literals (`Expr::CompoundLiteral`), both
     /// of which lower the same C99 6.7.8 / 6.5.2.5 initializer
     /// shapes into the same slot.
+    /// Store a scalar `v` of type `src_ty` into the 16-byte `__int128`
+    /// object at `dst_addr`: the source, converted to 64 bits, fills the
+    /// low half and its sign fills the high half (C99 6.3.1.3/6.3.1.8
+    /// widening). Shared by the cast, initializer, and assignment paths,
+    /// which otherwise treat the scalar as a struct-rvalue address and
+    /// copy 16 bytes from it.
+    fn store_scalar_as_int128(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        dst_addr: super::super::ir::ValueId,
+        v: super::super::ir::ValueId,
+        src_ty: i64,
+    ) {
+        let low_ty = Ty::LongLong as i64 | (src_ty & UNSIGNED_BIT);
+        let low = self.convert_scalar_value(b, v, src_ty, low_ty);
+        let store_kind = store_kind_for(low_ty, self.target);
+        b.store(dst_addr, low, store_kind);
+        let zero_extend = (src_ty & UNSIGNED_BIT) != 0 || is_pointer_ty(src_ty);
+        let high = if zero_extend {
+            b.imm(0)
+        } else {
+            b.binop_imm(BinOp::Shr, low, 63)
+        };
+        let hi_addr = b.binop_imm(BinOp::Add, dst_addr, 8);
+        b.store(hi_addr, high, store_kind);
+    }
+
     fn emit_local_init(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
@@ -1406,12 +1445,19 @@ impl<'a> Walker<'a> {
             super::super::ast::LocalInit::None => Ok(()),
             super::super::ast::LocalInit::Scalar(init_id) => {
                 let v = self.walk_expr_rvalue(b, *init_id)?;
-                // C99 6.7.8p13 struct-value initializer: copy the
-                // source's bytes into the slot via Mcpy. `v` is the
-                // source address (the walker's address-as-value
-                // routing for struct rvalues).
+                // C99 6.7.8p13 struct-value initializer: copy the source's
+                // bytes into the slot via Mcpy. `v` is the source address
+                // (the walker's address-as-value routing for struct
+                // rvalues). A scalar source of a 128-bit `__int128` slot is
+                // widened into it instead -- `v` is then a value, not an
+                // address, so an Mcpy from it would fault.
                 if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                     let dst = b.local_addr(slot);
+                    let src_ty = expr_ty(self.ast.expr(*init_id)).unwrap_or(ty);
+                    if self.is_int128_value_ty(ty) && !is_struct_ty(src_ty) {
+                        self.store_scalar_as_int128(b, dst, v, src_ty);
+                        return Ok(());
+                    }
                     let size = self.struct_size(ty);
                     b.mcpy(dst, v, size);
                     return Ok(());
@@ -3394,6 +3440,29 @@ impl<'a> Walker<'a> {
                     // cast operand.
                     Expr::InlineAsm(_) => Ty::Int as i64,
                 };
+                // A 128-bit `__int128` rvalue is carried as its address
+                // (the struct-rvalue address-as-value rule). A cast to an
+                // integer or pointer loads the object's low 8 bytes (its
+                // value mod 2^64); the convert then narrows to `to_ty`.
+                // Without the load the address is used as the value.
+                if self.is_int128_value_ty(src_ty)
+                    && !is_struct_ty(*to_ty)
+                    && !is_floating_scalar(*to_ty)
+                {
+                    let low_ty = Ty::LongLong as i64 | UNSIGNED_BIT;
+                    let low = b.load(v, load_kind_for(low_ty, self.target));
+                    return Ok(self.convert_scalar_value(b, low, low_ty, *to_ty));
+                }
+                // The reverse: a scalar cast to a 128-bit `__int128`
+                // materialises a 16-byte object and yields its address per
+                // the same address-as-value rule. Without this the scalar
+                // value stands where an address is expected.
+                if !is_struct_ty(src_ty) && self.is_int128_value_ty(*to_ty) {
+                    let slot = b.alloc_synthetic_struct(16);
+                    let addr = b.local_addr(slot);
+                    self.store_scalar_as_int128(b, addr, v, src_ty);
+                    return Ok(addr);
+                }
                 Ok(self.convert_scalar_value(b, v, src_ty, *to_ty))
             }
             Expr::CompoundAssign { op, lhs, rhs, ty } => {

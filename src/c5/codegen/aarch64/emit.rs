@@ -2028,6 +2028,151 @@ struct FnCtx<'a> {
     param_plan: &'a [super::ArgPlacement],
 }
 
+/// Lower an `Inst::InlineAsm` (GCC extended asm) on AArch64. Assigns each
+/// register operand a machine register per its constraint, saves the registers
+/// the block overwrites, captures the operand values / addresses to a stack
+/// region, loads the inputs, encodes the register-concrete template through the
+/// table encoder, and stores the outputs back through their addresses. Raw-byte
+/// pieces emit their literal bytes verbatim. `x16` / `x17` are the bridge
+/// scratch, so the operand pool is `x0..x15`.
+fn emit_inline_asm_aarch64(
+    code: &mut Vec<u8>,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    use super::super::ir::AsmConstraint;
+    use super::asm::{AsmOpndA64, assign_operand_regs, parse_template};
+    use super::encode::{enc_add_imm, enc_str_imm, enc_str32_imm, enc_strh_imm, enc_sub_imm};
+    use super::table::{self, Opnd};
+
+    let insns = match parse_template(&asm.template) {
+        Ok(i) => i,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    let op_reg = match assign_operand_regs(&asm.operands) {
+        Ok(r) => r,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    // A read-write (`+`) output needs its current value loaded first; not yet
+    // handled.
+    if asm.operands.iter().any(|o| o.is_rw) {
+        bail_msg("aarch64 inline asm: read-write operands not yet supported");
+        return false;
+    }
+
+    // Registers the block overwrites: the operand registers plus the explicit
+    // clobber list, restricted to the x0..x15 pool.
+    let mut used_mask: u32 = asm.clobber_regs & 0xFFFF;
+    for r in op_reg.iter().flatten() {
+        used_mask |= 1 << r;
+    }
+    let save_list: Vec<u8> = (0u8..16).filter(|r| used_mask & (1 << r) != 0).collect();
+
+    let n = asm.operands.len();
+    let n_saved = save_list.len();
+    // Stack region: captures at [sp + i*8], saved registers above them. Kept
+    // 16-byte aligned per AAPCS64.
+    let size = (((n + n_saved) * 8) as u32 + 15) & !15;
+    if size >= 4096 {
+        bail_msg("aarch64 inline asm: operand frame too large");
+        return false;
+    }
+    if size > 0 {
+        emit(code, enc_sub_imm(Reg(31), Reg(31), size));
+    }
+    let cap_off = |i: usize| (i * 8) as u32;
+    let save_off = |j: usize| ((n + j) * 8) as u32;
+
+    // Save the clobbered registers, then capture each operand's value (input) /
+    // address (output) -- both before any operand register is overwritten.
+    for (j, &r) in save_list.iter().enumerate() {
+        emit_sp_str_x_auto(code, Reg(r), save_off(j));
+    }
+    for (i, &a) in args.iter().enumerate() {
+        let Some(place) = alloc.places.get(a as usize).copied() else {
+            bail_msg("aarch64 inline asm: operand place missing");
+            return false;
+        };
+        let Some(r) = materialize_int(code, place, Reg(16), frame) else {
+            bail_msg("aarch64 inline asm: operand not an integer place");
+            return false;
+        };
+        emit_sp_str_x_auto(code, r, cap_off(i));
+    }
+    // Load inputs and memory addresses into their assigned registers.
+    for (i, op) in asm.operands.iter().enumerate() {
+        let Some(r) = op_reg[i] else { continue };
+        if matches!(op.constraint, AsmConstraint::Mem) || !op.is_output {
+            emit_sp_ldr_x(code, Reg(r), cap_off(i));
+        }
+    }
+    // Encode each template instruction; raw-byte pieces emit verbatim.
+    for insn in &insns {
+        if !insn.bytes.is_empty() {
+            code.extend_from_slice(&insn.bytes);
+            continue;
+        }
+        let mut ops: Vec<Opnd> = Vec::new();
+        for o in &insn.operands {
+            let opnd = match *o {
+                AsmOpndA64::Imm(v) => Opnd::Imm(v),
+                AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
+                AsmOpndA64::Reg { num, is64 } => Opnd::Reg { num, is64 },
+                AsmOpndA64::Ref { idx, is64 } => {
+                    let Some(r) = op_reg.get(idx as usize).copied().flatten() else {
+                        bail_msg("aarch64 inline asm: operand reference is not a register");
+                        return false;
+                    };
+                    let is64 = is64.unwrap_or(asm.operands[idx as usize].width >= 8);
+                    Opnd::Reg { num: r, is64 }
+                }
+            };
+            ops.push(opnd);
+        }
+        match table::encode(&insn.mnemonic, &ops) {
+            Ok(word) => emit(code, word),
+            Err(m) => {
+                bail_msg(&m);
+                return false;
+            }
+        }
+    }
+    // Store the register outputs back through their captured addresses (x16
+    // holds the address; the operand pool is untouched).
+    for (i, op) in asm.operands.iter().enumerate() {
+        if !op.is_output || matches!(op.constraint, AsmConstraint::Mem) {
+            continue;
+        }
+        let Some(r) = op_reg[i] else { continue };
+        emit_sp_ldr_x(code, Reg(16), cap_off(i));
+        match op.width {
+            8 => emit(code, enc_str_imm(Reg(r), Reg(16), 0)),
+            4 => emit(code, enc_str32_imm(Reg(r), Reg(16), 0)),
+            2 => emit(code, enc_strh_imm(Reg(r), Reg(16), 0)),
+            _ => {
+                bail_msg("aarch64 inline asm: unsupported output width");
+                return false;
+            }
+        }
+    }
+    // Restore the saved registers and free the frame.
+    for (j, &r) in save_list.iter().enumerate() {
+        emit_sp_ldr_x(code, Reg(r), save_off(j));
+    }
+    if size > 0 {
+        emit(code, enc_add_imm(Reg(31), Reg(31), size));
+    }
+    true
+}
+
 fn emit_inst(
     cx: &mut super::ssa::emit_common::EmitCtx,
     inst: &Inst,
@@ -2651,22 +2796,7 @@ fn emit_inst(
             // value.
             true
         }
-        Inst::InlineAsm { asm, args } => {
-            // Raw-byte templates (arch-neutral) emit their literal bytes. The
-            // operand save/restore path and the ARM-syntax mnemonic encoder are
-            // not yet implemented, so a template carrying operands or mnemonics
-            // is left for the caller to reject.
-            if args.is_empty()
-                && let Some(bytes) =
-                    super::super::ssa::emit_common::parse_raw_template(&asm.template)
-            {
-                code.extend_from_slice(&bytes);
-                true
-            } else {
-                bail_msg("aarch64 inline asm: only operand-free raw-byte templates are supported");
-                false
-            }
-        }
+        Inst::InlineAsm { asm, args } => emit_inline_asm_aarch64(code, asm, args, alloc, frame),
         _ => false,
     }
 }

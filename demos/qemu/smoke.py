@@ -740,7 +740,11 @@ def maybe_boot(binp: Path, arch: str) -> None:
     if aavmf is not None:
         machine = "virt,acpi=off"
     console = "ttyAMA0" if arch == "aarch64" else "ttyS0"
-    append = os.environ.get("BADC_QEMU_APPEND") or f"rdinit=/sbin/init console={console}"
+    # earlycon (arm64) prints from the device-tree stdout-path PL011 before the
+    # console driver initialises, so a stall in early kernel setup is still
+    # visible on the serial log instead of a silent timeout.
+    early = "earlycon " if arch == "aarch64" else ""
+    append = os.environ.get("BADC_QEMU_APPEND") or f"{early}rdinit=/sbin/init console={console}"
     # No network: a boot smoke test needs none, and the default virtio-net
     # NIC pulls in a boot ROM (efi-virtio.rom) that is not staged next to the
     # freshly linked emulator, so `-nic none` keeps the run self-contained.

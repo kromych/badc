@@ -124,6 +124,12 @@ def main() -> int:
     ap.add_argument("--work", type=Path, default=HERE / ".ovmf-build")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--badc", default=os.environ.get("BADC") or default_badc())
+    ap.add_argument("--nasm-with-badc", action="store_true",
+                    help="build nasm with badc and assemble the firmware with it "
+                         "(else a system / $NASM_PREFIX nasm)")
+    ap.add_argument("--out", type=Path, default=None,
+                    help="stage the built firmware images (pflash-padded where the "
+                         "platform needs it) into this directory")
     args = ap.parse_args()
     arch, dsc = PLATFORMS[args.platform]
     work: Path = args.work
@@ -133,13 +139,26 @@ def main() -> int:
         if shutil.which(tool) is None:
             print(f"error: `{tool}` not on PATH", file=sys.stderr)
             return 1
-    nasm = shutil.which("nasm") or (
-        os.environ.get("NASM_PREFIX", "") + "nasm")
-    if not (shutil.which("nasm") or Path(nasm).is_file()):
-        print("error: nasm not found (set NASM_PREFIX)", file=sys.stderr)
-        return 1
     if not Path(args.badc).is_file() and shutil.which(args.badc) is None:
         print(f"error: badc not found at {args.badc}", file=sys.stderr)
+        return 1
+    if args.nasm_with_badc:
+        # Build nasm with badc and point the edk2 build at it via NASM_PREFIX, so
+        # the assembler is badc-built too. aarch64 firmware never invokes nasm,
+        # but the tool check still wants one present.
+        nasm_dir = args.work / "badc-nasm"
+        nasm_dir.mkdir(parents=True, exist_ok=True)
+        sys.path.insert(0, str(HERE.parent / "nasm"))
+        import smoke as nasm_smoke
+        nasm_tgt = {"X64": "linux-x64", "AARCH64": "linux-aarch64"}[arch]
+        nasm_smoke.ensure_source()
+        nasm_smoke.ensure_config(nasm_tgt)
+        nasm_bin = nasm_smoke.build_nasm(Path(args.badc), nasm_tgt, True, nasm_dir)
+        os.environ["NASM_PREFIX"] = str(nasm_bin.parent) + os.sep
+        print(f"built nasm with badc: {nasm_bin}")
+    nasm = shutil.which("nasm") or (os.environ.get("NASM_PREFIX", "") + "nasm")
+    if not (shutil.which("nasm") or Path(nasm).is_file()):
+        print("error: nasm not found (set NASM_PREFIX)", file=sys.stderr)
         return 1
 
     work.mkdir(parents=True, exist_ok=True)
@@ -202,6 +221,20 @@ def main() -> int:
         print(first_badc_failure(r.stdout))
         return r.returncode
     print(f"\nOK: built under {src / 'Build'}")
+    if args.out is not None:
+        # Stage the images the way build_ovmf.py does (pflash-pad where the
+        # platform needs it) so the RELEASE_BADC firmware is a drop-in for the
+        # gcc build's published artifact.
+        from build_ovmf import PLATFORMS as REF, pad_to, PFLASH_BYTES
+        fv = src / "Build" / REF[args.platform]["build_dir"] / "RELEASE_BADC" / "FV"
+        args.out.mkdir(parents=True, exist_ok=True)
+        for name, padded in REF[args.platform]["images"].items():
+            img = fv / name
+            if not img.is_file():
+                continue
+            dst = args.out / (Path(name).stem + "-pflash.raw" if padded else name)
+            pad_to(img, dst, PFLASH_BYTES) if padded else shutil.copyfile(img, dst)
+            print(f"staged {dst}")
     return 0
 
 

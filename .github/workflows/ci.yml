@@ -1255,54 +1255,71 @@ jobs:
         run: python demos/edk2/smoke.py
 
   firmware-x64:
-    # Build x86_64 OVMF from a pinned edk2 release and publish it as an
-    # artifact; the qemu x86_64 kernel lane and the edk2 x64 app lane boot
-    # through it instead of the apt-packaged firmware. A separate job from the
-    # aarch64 firmware so an aarch64 build issue cannot skip the x86_64 lanes.
-    name: ovmf (x64 firmware build)
+    # Build x86_64 OVMF with badc (C compiler) and badc-built nasm (assembler),
+    # and publish it as an artifact; the qemu x86_64 kernel lane and the edk2 x64
+    # app lane boot through it. A separate job from the aarch64 firmware so an
+    # aarch64 build issue cannot skip the x86_64 lanes.
+    name: ovmf (x64 firmware build, badc)
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: firmware-x64
       - name: install edk2 build deps
-        run: ./scripts/apt_resilient_install.sh build-essential uuid-dev iasl nasm python3-venv
-      - name: build OVMF X64
-        run: python demos/edk2/build_ovmf.py --platform ovmf --work "$RUNNER_TEMP/fw" --jobs 4
+        run: ./scripts/apt_resilient_install.sh build-essential uuid-dev iasl python3-venv
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: build OVMF X64 with badc + badc-nasm
+        env:
+          BADC: ${{ github.workspace }}/target/release/badc
+        run: python demos/edk2/build_badc_selfhost.py --platform ovmf --work "$RUNNER_TEMP/fw" --out "$RUNNER_TEMP/out" --nasm-with-badc --jobs 4
       - name: publish OVMF firmware
         uses: actions/upload-artifact@v4
         with:
           name: ovmf-x64
           path: |
-            ${{ runner.temp }}/fw/fv/OVMF_CODE.fd
-            ${{ runner.temp }}/fw/fv/OVMF_VARS.fd
+            ${{ runner.temp }}/out/OVMF_CODE.fd
+            ${{ runner.temp }}/out/OVMF_VARS.fd
           if-no-files-found: error
 
   firmware-arm64:
-    # Build AArch64 ArmVirtQemu (AAVMF) from the same pinned edk2 release; the
-    # edk2 aarch64 app lane boots its UEFI application through it. Independent
-    # of the x64 firmware job.
-    name: ovmf (aavmf firmware build)
+    # Build AArch64 ArmVirtQemu (AAVMF) with badc; the qemu aarch64 kernel lane
+    # and the edk2 aarch64 app lane boot through it. Independent of the x64
+    # firmware job. aarch64 firmware has no x86 assembly, so nasm is built for
+    # the tool check but never invoked.
+    name: ovmf (aavmf firmware build, badc)
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: firmware-arm64
       - name: install edk2 build deps
-        run: ./scripts/apt_resilient_install.sh build-essential uuid-dev iasl nasm python3-venv
-      - name: build AAVMF (ArmVirtQemu)
-        run: python demos/edk2/build_ovmf.py --platform aavmf --work "$RUNNER_TEMP/fw" --jobs 4
+        run: ./scripts/apt_resilient_install.sh build-essential uuid-dev iasl python3-venv
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: build AAVMF with badc
+        env:
+          BADC: ${{ github.workspace }}/target/release/badc
+        run: python demos/edk2/build_badc_selfhost.py --platform aavmf --work "$RUNNER_TEMP/fw" --out "$RUNNER_TEMP/out" --nasm-with-badc --jobs 4
       - name: publish AAVMF firmware
         uses: actions/upload-artifact@v4
         with:
           name: aavmf-arm64
           path: |
-            ${{ runner.temp }}/fw/fv/QEMU_EFI-pflash.raw
-            ${{ runner.temp }}/fw/fv/QEMU_VARS-pflash.raw
+            ${{ runner.temp }}/out/QEMU_EFI-pflash.raw
+            ${{ runner.temp }}/out/QEMU_VARS-pflash.raw
           if-no-files-found: error
 
   qemu:

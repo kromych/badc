@@ -1581,6 +1581,14 @@ fn inline_asm_hint() {
 }
 
 #[test]
+fn inline_asm_raw_bytes() {
+    // Raw machine bytes emitted from a template (`.byte` directive and the
+    // bare hex-byte run) encode a no-op per target; the interpreter models
+    // them as opaque and the surrounding computation is unaffected.
+    assert_eq!(run_fixture("inline_asm_raw_bytes.c"), 0);
+}
+
+#[test]
 fn compound_assign_int_fp() {
     // C99 6.5.16.2: an integer lvalue with a floating rhs in a
     // compound assignment performs the operation in floating point

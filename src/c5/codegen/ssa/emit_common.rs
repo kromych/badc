@@ -691,6 +691,70 @@ pub(crate) fn bail_msg(backend: &str, reason: &str) {
     let _ = (backend, reason);
 }
 
+/// Parse an inline-asm template whose every piece is raw machine bytes,
+/// returning the concatenated little-endian bytes, or `None` when any piece is
+/// a mnemonic the caller must encode itself. A piece is raw bytes when it is a
+/// run of 2-hex-digit tokens (`CC C3 90`) or a `.byte` / `.word` / `.long` /
+/// `.quad` directive of integer constants. Arch-neutral so both backends emit
+/// raw-byte asm identically.
+pub(crate) fn parse_raw_template(template: &[u8]) -> Option<alloc::vec::Vec<u8>> {
+    let text = core::str::from_utf8(template).ok()?;
+    let mut out = alloc::vec::Vec::new();
+    let mut any = false;
+    for piece in text.split([';', '\n']) {
+        let piece = piece.trim();
+        if piece.is_empty() {
+            continue;
+        }
+        any = true;
+        out.extend_from_slice(&parse_raw_piece(piece)?);
+    }
+    any.then_some(out)
+}
+
+fn parse_raw_piece(piece: &str) -> Option<alloc::vec::Vec<u8>> {
+    let width = match piece.split_whitespace().next()? {
+        ".byte" => Some(1usize),
+        ".word" | ".2byte" => Some(2),
+        ".long" | ".4byte" => Some(4),
+        ".quad" | ".8byte" => Some(8),
+        _ => None,
+    };
+    if let Some(w) = width {
+        let args = piece[piece.find(char::is_whitespace)?..].trim();
+        let mut out = alloc::vec::Vec::new();
+        for a in args.split(',') {
+            out.extend_from_slice(&(parse_raw_int(a.trim())? as u64).to_le_bytes()[..w]);
+        }
+        return Some(out);
+    }
+    // Bare hex-byte run: every whitespace-delimited token is exactly two hex
+    // digits, so a mnemonic (letters) is never mistaken for one.
+    let toks: alloc::vec::Vec<&str> = piece.split_whitespace().collect();
+    (!toks.is_empty()
+        && toks
+            .iter()
+            .all(|t| t.len() == 2 && t.bytes().all(|b| b.is_ascii_hexdigit())))
+    .then(|| {
+        toks.iter()
+            .map(|t| u8::from_str_radix(t, 16).unwrap())
+            .collect()
+    })
+}
+
+fn parse_raw_int(s: &str) -> Option<i64> {
+    let (neg, s) = match s.strip_prefix('-') {
+        Some(r) => (true, r),
+        None => (false, s),
+    };
+    let v = if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        i64::from_str_radix(h, 16).ok()?
+    } else {
+        s.parse::<i64>().ok()?
+    };
+    Some(if neg { -v } else { v })
+}
+
 /// Translate a c5-stack slot index (the operand of an
 /// address-of-local emit) into a byte offset relative to fp /
 /// rbp. Locals (`off < 0`) sit at `off * 8`; parameters
@@ -851,5 +915,42 @@ pub(crate) fn record_block_start_pc(
     // middle (or end) of `main` instead of its prologue.
     if block_idx > 0 && block_start_pc != 0 && block_start_pc < pc_to_native.len() {
         pc_to_native[block_start_pc] = code_len;
+    }
+}
+
+#[cfg(test)]
+mod raw_template_tests {
+    use super::parse_raw_template;
+
+    #[test]
+    fn bare_hex_and_directives() {
+        // Bare hex-byte run (`;` / whitespace separated), read as hex.
+        assert_eq!(
+            parse_raw_template(b"CC; C3; 90").unwrap(),
+            [0xCC, 0xC3, 0x90]
+        );
+        assert_eq!(
+            parse_raw_template(b"1f 20 03 d5").unwrap(),
+            [0x1f, 0x20, 0x03, 0xd5]
+        );
+        // `.byte` / `.word` / `.long` / `.quad`, little-endian at width.
+        assert_eq!(
+            parse_raw_template(b".byte 0x1f, 0x20, 0x03, 0xd5").unwrap(),
+            [0x1f, 0x20, 0x03, 0xd5]
+        );
+        assert_eq!(parse_raw_template(b".word 0x1234").unwrap(), [0x34, 0x12]);
+        assert_eq!(parse_raw_template(b".byte 144").unwrap(), [0x90]);
+        // Mixed directive + hex-run pieces concatenate.
+        assert_eq!(parse_raw_template(b".byte 0x90; 90").unwrap(), [0x90, 0x90]);
+    }
+
+    #[test]
+    fn rejects_mnemonics_and_empty() {
+        // A piece that is a mnemonic (letters) is not a raw-byte template.
+        assert!(parse_raw_template(b"nop").is_none());
+        assert!(parse_raw_template(b".byte 0x90; add %rax, %rbx").is_none());
+        // An empty template carries no bytes.
+        assert!(parse_raw_template(b"").is_none());
+        assert!(parse_raw_template(b"   ").is_none());
     }
 }

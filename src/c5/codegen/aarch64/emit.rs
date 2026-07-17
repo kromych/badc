@@ -2651,6 +2651,22 @@ fn emit_inst(
             // value.
             true
         }
+        Inst::InlineAsm { asm, args } => {
+            // Raw-byte templates (arch-neutral) emit their literal bytes. The
+            // operand save/restore path and the ARM-syntax mnemonic encoder are
+            // not yet implemented, so a template carrying operands or mnemonics
+            // is left for the caller to reject.
+            if args.is_empty()
+                && let Some(bytes) =
+                    super::super::ssa::emit_common::parse_raw_template(&asm.template)
+            {
+                code.extend_from_slice(&bytes);
+                true
+            } else {
+                bail_msg("aarch64 inline asm: only operand-free raw-byte templates are supported");
+                false
+            }
+        }
         _ => false,
     }
 }

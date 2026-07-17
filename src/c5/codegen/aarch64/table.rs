@@ -82,6 +82,11 @@ pub(crate) enum Opnd {
     /// A system register, as its 15-bit `mrs`/`msr` field
     /// (`(op0-2)<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2`).
     SysReg(u16),
+    /// A memory reference `[base, #off]` (`off` in bytes) for `ldr` / `str`.
+    Mem {
+        base: u8,
+        off: u32,
+    },
 }
 
 /// AArch64 logical-immediate (bitmask) encoder. Returns the 13-bit field
@@ -188,6 +193,22 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => return Err(String::from("inline asm: bad mrs/msr operands")),
         };
         return Ok(base | ((field as u32) << 5) | (rt as u32 & 31));
+    }
+    // Load / store with an immediate offset: `ldr Xt, [Xn, #off]` etc. The
+    // access width comes from the register operand (X vs W).
+    if mnemonic == "ldr" || mnemonic == "str" {
+        if let [Opnd::Reg { num, is64 }, Opnd::Mem { base, off }] = *ops {
+            use super::encode::{Reg, enc_ldr_imm, enc_ldr32_imm, enc_str_imm, enc_str32_imm};
+            let rt = Reg(num);
+            let rn = Reg(base);
+            return Ok(match (mnemonic, is64) {
+                ("ldr", true) => enc_ldr_imm(rt, rn, off),
+                ("ldr", false) => enc_ldr32_imm(rt, rn, off),
+                ("str", true) => enc_str_imm(rt, rn, off),
+                _ => enc_str32_imm(rt, rn, off),
+            });
+        }
+        return Err(String::from("inline asm: bad ldr/str operands"));
     }
     for f in super::isa_a64_table::FORMS {
         if f.mnemonic != mnemonic {

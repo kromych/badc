@@ -36,6 +36,16 @@ pub(crate) enum AsmOpndA64 {
     Lsl(u32),
     /// A system register named in a `mrs` / `msr`, resolved to its 15-bit field.
     SysReg(u16),
+    /// A memory reference `[base, #off]` (the `off` defaults to 0). The base is
+    /// an operand reference or an explicit register.
+    Mem { base: MemBase, off: i64 },
+}
+
+/// The base register of a memory operand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MemBase {
+    Ref(u8),
+    Reg(u8),
 }
 
 /// The 15-bit `mrs`/`msr` system-register field for a name, or the generic
@@ -127,8 +137,60 @@ fn parse_int(s: &str) -> Option<i64> {
     Some(if neg { -v } else { v })
 }
 
+/// Split an operand list on commas, but not commas inside `[...]` (a memory
+/// operand carries its own comma, as in `[x1, #8]`).
+fn split_operands(rest: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let (mut depth, mut start) = (0i32, 0usize);
+    for (i, c) in rest.char_indices() {
+        match c {
+            '[' => depth += 1,
+            ']' => depth -= 1,
+            ',' if depth == 0 => {
+                out.push(rest[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let last = rest[start..].trim();
+    if !last.is_empty() {
+        out.push(last);
+    }
+    out
+}
+
+/// Parse a `[base]` / `[base, #off]` memory reference.
+fn parse_mem(inner: &str) -> Result<AsmOpndA64, String> {
+    let parts = split_operands(inner);
+    if parts.is_empty() || parts.len() > 2 {
+        return Err(format!("inline asm: bad memory operand `[{inner}]`"));
+    }
+    let base = match parse_operand(parts[0])? {
+        AsmOpndA64::Ref { idx, .. } => MemBase::Ref(idx),
+        AsmOpndA64::Reg { num, .. } => MemBase::Reg(num),
+        _ => {
+            return Err(format!(
+                "inline asm: memory base must be a register `[{inner}]`"
+            ));
+        }
+    };
+    let off = if parts.len() == 2 {
+        parts[1]
+            .strip_prefix('#')
+            .and_then(parse_int)
+            .ok_or_else(|| format!("inline asm: bad memory offset `{}`", parts[1]))?
+    } else {
+        0
+    };
+    Ok(AsmOpndA64::Mem { base, off })
+}
+
 /// Parse one operand token (already trimmed).
 fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
+    if let Some(inner) = tok.strip_prefix('[').and_then(|t| t.strip_suffix(']')) {
+        return parse_mem(inner);
+    }
     if let Some(rest) = tok.strip_prefix('#') {
         let v = parse_int(rest).ok_or_else(|| format!("inline asm: bad immediate `{tok}`"))?;
         return Ok(AsmOpndA64::Imm(v));
@@ -192,8 +254,8 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         };
         let mut operands = Vec::new();
         if !rest.is_empty() {
-            for op in rest.split(',') {
-                operands.push(parse_operand(op.trim())?);
+            for op in split_operands(rest) {
+                operands.push(parse_operand(op)?);
             }
         }
         insns.push(AsmInsnA64 {
@@ -304,6 +366,33 @@ mod tests {
         assert_eq!(insns[0].bytes, [0x1f, 0x20, 0x03, 0xd5]);
         assert!(insns[0].mnemonic.is_empty());
         assert_eq!(insns[1].mnemonic, "add");
+    }
+
+    #[test]
+    fn parse_memory_operands() {
+        // A memory operand keeps its internal comma out of the operand split.
+        let insns = parse_template(b"ldr %0, [%1, #8]; str x3, [x4]").unwrap();
+        assert_eq!(insns[0].mnemonic, "ldr");
+        assert_eq!(
+            insns[0].operands,
+            [
+                AsmOpndA64::Ref { idx: 0, is64: None },
+                AsmOpndA64::Mem {
+                    base: MemBase::Ref(1),
+                    off: 8
+                },
+            ]
+        );
+        assert_eq!(
+            insns[1].operands,
+            [
+                AsmOpndA64::Reg { num: 3, is64: true },
+                AsmOpndA64::Mem {
+                    base: MemBase::Reg(4),
+                    off: 0
+                },
+            ]
+        );
     }
 
     #[test]

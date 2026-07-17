@@ -50,6 +50,28 @@ fn move_wide() {
 }
 
 #[test]
+fn load_store_immediate() {
+    // ldr/str Xt, [Xn, #off]: the offset is scaled by the access size (8).
+    assert_eq!(
+        enc("ldr", &[x(0), Opnd::Mem { base: 1, off: 0 }]),
+        0xF9400020
+    );
+    assert_eq!(
+        enc("ldr", &[x(0), Opnd::Mem { base: 1, off: 8 }]),
+        0xF9400420
+    );
+    assert_eq!(
+        enc("str", &[x(0), Opnd::Mem { base: 1, off: 0 }]),
+        0xF9000020
+    );
+    // 32-bit access uses the W-register form (scaled by 4).
+    assert_eq!(
+        enc("ldr", &[w(2), Opnd::Mem { base: 3, off: 4 }]),
+        0xB9400462
+    );
+}
+
+#[test]
 fn system_register_move() {
     // mrs Xt, <sysreg> = 0xD5300000 | field<<5 | Rt; msr <sysreg>, Xt =
     // 0xD5100000 | field<<5 | Rt. CTR_EL0 field 0x5801 is cross-checked against

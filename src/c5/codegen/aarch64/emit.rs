@@ -2137,18 +2137,36 @@ fn emit_inline_asm_aarch64(
         }
         let mut ops: Vec<Opnd> = Vec::new();
         for o in &insn.operands {
+            let resolve_ref =
+                |idx: u8| -> Option<u8> { op_reg.get(idx as usize).copied().flatten() };
             let opnd = match *o {
                 AsmOpndA64::Imm(v) => Opnd::Imm(v),
                 AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
                 AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
                 AsmOpndA64::Reg { num, is64 } => Opnd::Reg { num, is64 },
                 AsmOpndA64::Ref { idx, is64 } => {
-                    let Some(r) = op_reg.get(idx as usize).copied().flatten() else {
+                    let Some(r) = resolve_ref(idx) else {
                         bail_msg("aarch64 inline asm: operand reference is not a register");
                         return false;
                     };
                     let is64 = is64.unwrap_or(asm.operands[idx as usize].width >= 8);
                     Opnd::Reg { num: r, is64 }
+                }
+                AsmOpndA64::Mem { base, off } => {
+                    let base = match base {
+                        super::asm::MemBase::Reg(n) => n,
+                        super::asm::MemBase::Ref(idx) => {
+                            let Some(r) = resolve_ref(idx) else {
+                                bail_msg("aarch64 inline asm: memory base is not a register");
+                                return false;
+                            };
+                            r
+                        }
+                    };
+                    Opnd::Mem {
+                        base,
+                        off: off as u32,
+                    }
                 }
             };
             ops.push(opnd);

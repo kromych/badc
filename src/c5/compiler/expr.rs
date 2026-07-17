@@ -2670,9 +2670,30 @@ impl Compiler {
                     let struct_lhs_ast = self.ast_acc.take();
                     self.mark_emit_other();
                     self.expr(Token::Assign as i64)?;
-                    let struct_rhs_ast = self.ast_acc;
+                    let mut struct_rhs_ast = self.ast_acc;
                     if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {
-                        return Err(self.compile_err("cannot assign non-struct value to a struct"));
+                        // A scalar assigned to a 128-bit `__int128` lvalue is
+                        // widened: wrap the rhs in a cast to `__int128` so the
+                        // cast lowering materialises the 16-byte value and the
+                        // struct-copy below stores it. Other struct types
+                        // reject a non-struct rhs (C99 6.5.16.1p1).
+                        if self.is_int128_ty(t) {
+                            if let Some(rhs) = struct_rhs_ast {
+                                let pos = self.ast_src_pos();
+                                struct_rhs_ast = Some(self.ast.push_expr(
+                                    super::super::ast::Expr::Cast {
+                                        child: rhs,
+                                        to_ty: t,
+                                    },
+                                    pos,
+                                ));
+                            }
+                            self.ty = t;
+                        } else {
+                            return Err(
+                                self.compile_err("cannot assign non-struct value to a struct")
+                            );
+                        }
                     }
                     // C99 6.5.16.1p1: the operands need compatible
                     // unqualified struct types -- lvalue conversion

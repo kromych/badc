@@ -182,6 +182,17 @@ impl Compiler {
         struct_ty_for(self.structs.len() - 1)
     }
 
+    /// True when `t` is the GCC 128-bit `__int128` as a value (not a
+    /// pointer to one). Mirrors the walker's `is_int128_value_ty`; used to
+    /// widen a scalar assigned to an `__int128` lvalue.
+    pub(super) fn is_int128_ty(&self, t: i64) -> bool {
+        if !is_struct_ty(t) || struct_ptr_depth(t) != 0 {
+            return false;
+        }
+        let id = struct_id_of(t);
+        self.structs.get(id).is_some_and(|s| s.name == "__int128")
+    }
+
     /// Synthesize the aggregate that models a GCC `vector_size(n_bytes)` vector
     /// of `elem_ty`: a single array field of `n_bytes / sizeof(elem)` lanes,
     /// flagged `is_vector`. sizeof / initialization / by-value pass reuse the

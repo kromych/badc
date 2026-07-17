@@ -1538,12 +1538,12 @@ fn builtin_overflow_on_128bit_operand_is_rejected() {
     );
 }
 
-/// `__int128` <-> scalar conversions run correctly. An integer initializer
-/// or cast to `__int128` widens into the 16-byte object (low half = value,
-/// high half = sign); a cast to a narrower integer loads the low bytes.
-/// Before, the initializer copied 16 bytes from the scalar treated as an
-/// address (fault) and the narrowing cast returned the object's address
-/// instead of its value.
+/// `__int128` <-> scalar conversions run correctly. An integer initializer,
+/// cast, or assignment to `__int128` widens into the 16-byte object (low
+/// half = value, high half = sign); a cast to a narrower integer loads the
+/// low bytes. Before, the initializer copied 16 bytes from the scalar
+/// treated as an address (fault), the narrowing cast returned the object's
+/// address instead of its value, and the assignment was rejected at parse.
 #[test]
 fn int128_scalar_conversions_run_correctly() {
     use crate::jit_run;
@@ -1560,6 +1560,8 @@ fn int128_scalar_conversions_run_correctly() {
            U g; g.h[0]=0xDEADBEEFull; g.h[1]=0x1111ull;\n\
            if((unsigned long long)g.v!=0xDEADBEEFull)return 4;\n\
            if((unsigned)g.v!=0xDEADBEEFu)return 5;\n\
+           u128 d; unsigned e=9u; d=e; if(!uok(d,0,9))return 6;\n\
+           s128 h; int m=-3; h=m; if(!sok(h,0xFFFFFFFFFFFFFFFFull,0xFFFFFFFFFFFFFFFDull))return 7;\n\
            return 0; }",
     );
     let exit = jit_run(&program, &["int128_conv".to_string()])

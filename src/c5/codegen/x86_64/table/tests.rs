@@ -37,7 +37,10 @@ fn alu_reg_mem_and_imm() {
     assert_eq!(enc("add", &[r(0, 8), m(6, 8)]), [0x48, 0x03, 0x06]); // add rax, [rsi]
     assert_eq!(enc("add", &[m(6, 8), r(0, 8)]), [0x48, 0x01, 0x06]); // add [rsi], rax
     // imm8 sign-extended form (83 /0) vs imm32 form (81 /0) by value range.
-    assert_eq!(enc("add", &[r(0, 8), Opnd::Imm(7)]), [0x48, 0x83, 0xc0, 0x07]);
+    assert_eq!(
+        enc("add", &[r(0, 8), Opnd::Imm(7)]),
+        [0x48, 0x83, 0xc0, 0x07]
+    );
     // rax + imm32: the accumulator form (05 id, 6 bytes) is shorter than the
     // 81 /0 id form (7 bytes), so shortest-wins picks it (as the assembler does).
     assert_eq!(
@@ -56,7 +59,10 @@ fn alu_reg_mem_and_imm() {
 #[test]
 fn shifts_and_unary() {
     // shl r/m, imm8 (C1 /4); shl r/m, 1 (D1 /4); shl r/m, cl (D3 /4).
-    assert_eq!(enc("shl", &[r(0, 8), Opnd::Imm(3)]), [0x48, 0xc1, 0xe0, 0x03]);
+    assert_eq!(
+        enc("shl", &[r(0, 8), Opnd::Imm(3)]),
+        [0x48, 0xc1, 0xe0, 0x03]
+    );
     assert_eq!(enc("shl", &[r(0, 8), r(1, 1)]), [0x48, 0xd3, 0xe0]); // shl rax, cl
     assert_eq!(enc("neg", &[r(2, 4)]), [0xf7, 0xda]); // neg edx
     assert_eq!(enc("bswap", &[r(0, 8)]), [0x48, 0x0f, 0xc8]); // bswap rax
@@ -265,7 +271,11 @@ mod differential {
         let stem = alloc::format!("badc-int-{:x}", bytes_hash(itxt.as_bytes()));
         let s = dir.join(alloc::format!("{stem}.s"));
         let o = dir.join(alloc::format!("{stem}.o"));
-        std::fs::write(&s, alloc::format!(".intel_syntax noprefix\n.text\n{itxt}\n")).ok()?;
+        std::fs::write(
+            &s,
+            alloc::format!(".intel_syntax noprefix\n.text\n{itxt}\n"),
+        )
+        .ok()?;
         let out = Command::new("clang")
             .args(["--target=x86_64-linux-gnu", "-c"])
             .arg(&s)
@@ -368,9 +378,7 @@ mod differential {
 
     fn sweep_cases() -> Vec<(&'static str, Vec<Opnd>)> {
         let mut cases: Vec<(&'static str, Vec<Opnd>)> = Vec::new();
-        let alu = [
-            "add", "sub", "and", "or", "xor", "cmp", "adc", "sbb", "mov",
-        ];
+        let alu = ["add", "sub", "and", "or", "xor", "cmp", "adc", "sbb", "mov"];
         let widths = [1u8, 2, 4, 8];
         let regs = [0u8, 3, 8, 15];
         for mnem in alu {
@@ -425,12 +433,19 @@ mod differential {
         }
         std::eprintln!(
             "differential_sweep: OK={} BAD={} GAP={} SKIP={}",
-            t.ok, t.bad, t.gap, t.skip
+            t.ok,
+            t.bad,
+            t.gap,
+            t.skip
         );
         // The hand-built sweep is well-typed, so it must be complete as well as
         // correct.
         assert_eq!(t.bad, 0, "table encodings disagree with the assembler");
-        assert_eq!(t.gap, 0, "sweep case not covered by the catalogue: {:?}", t.gaps);
+        assert_eq!(
+            t.gap, 0,
+            "sweep case not covered by the catalogue: {:?}",
+            t.gaps
+        );
     }
 
     /// Seeded deterministic fuzzer: draw random operands for each catalogue
@@ -486,6 +501,9 @@ mod differential {
         );
         // Wrong bytes are the hard failure; a gap (a valid form the catalogue
         // does not yet cover) is reported but tolerated by the fuzzer.
-        assert_eq!(t.bad, 0, "fuzzed table encodings disagree with the assembler");
+        assert_eq!(
+            t.bad, 0,
+            "fuzzed table encodings disagree with the assembler"
+        );
     }
 }

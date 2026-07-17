@@ -16,7 +16,6 @@
 use alloc::format;
 use alloc::string::String;
 
-
 /// A field of a form: where a value lands in the 32-bit word and how the
 /// operand that feeds it is encoded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,7 +72,10 @@ pub(crate) enum A64Op {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Opnd {
     /// Register: `num` 0..31, `is64` selects X vs W.
-    Reg { num: u8, is64: bool },
+    Reg {
+        num: u8,
+        is64: bool,
+    },
     Imm(i64),
     /// An `lsl #shift` modifier operand.
     Lsl(u32),
@@ -90,7 +92,11 @@ pub(crate) fn encode_logical_imm(value: u64, is64: bool) -> Option<u32> {
     if !is64 && (value >> 32) != 0 {
         return None;
     }
-    let size_mask = if size == 64 { u64::MAX } else { (1u64 << size) - 1 };
+    let size_mask = if size == 64 {
+        u64::MAX
+    } else {
+        (1u64 << size) - 1
+    };
     if value == 0 || value == size_mask {
         return None;
     }
@@ -104,7 +110,11 @@ pub(crate) fn encode_logical_imm(value: u64, is64: bool) -> Option<u32> {
         }
         esize = h;
     }
-    let emask = if esize == 64 { u64::MAX } else { (1u64 << esize) - 1 };
+    let emask = if esize == 64 {
+        u64::MAX
+    } else {
+        (1u64 << esize) - 1
+    };
     let elem = value & emask;
 
     let ctz = |x: u64| x.trailing_zeros();
@@ -175,7 +185,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         if ops.len() < required || ops.len() > f.ops.len() {
             continue;
         }
-        if f.ops.iter().zip(ops.iter()).all(|(&p, &o)| op_matches(p, o)) {
+        if f.ops
+            .iter()
+            .zip(ops.iter())
+            .all(|(&p, &o)| op_matches(p, o))
+        {
             return pack(f, ops);
         }
     }
@@ -188,7 +202,7 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
     let mut word = f.base;
     for field in f.fields {
         match *field {
-            Field::Rd => word |= (reg(ops[0])? as u32 & 31) << 0,
+            Field::Rd => word |= reg(ops[0])? as u32 & 31,
             Field::Rn => {
                 // Rn is the operand at index 1 for 2+ register forms.
                 word |= (reg(ops[1])? as u32 & 31) << 5;
@@ -222,7 +236,9 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                     _ => return Err(String::from("inline asm: expected lsl shift")),
                 };
                 if s % 16 != 0 {
-                    return Err(String::from("inline asm: move-wide shift not a multiple of 16"));
+                    return Err(String::from(
+                        "inline asm: move-wide shift not a multiple of 16",
+                    ));
                 }
                 word |= (s / 16) << 21;
             }

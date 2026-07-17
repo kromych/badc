@@ -399,7 +399,9 @@ fn parse_raw_bytes(piece: &str) -> Option<Result<Vec<u8>, String>> {
         for a in args.split(',') {
             let a = a.trim();
             let Some(v) = parse_int(a) else {
-                return Some(Err(format!("inline asm: bad `.byte`-directive value `{a}`")));
+                return Some(Err(format!(
+                    "inline asm: bad `.byte`-directive value `{a}`"
+                )));
             };
             out.extend_from_slice(&(v as u64).to_le_bytes()[..w]);
         }
@@ -542,7 +544,9 @@ pub(crate) fn encode(
     match mnemonic {
         // Raw bytes carry their payload on the `AsmInsn`, not in `ops`; the
         // caller emits them directly and never routes them here.
-        Mnemonic::RawBytes => Err(String::from("inline asm: raw bytes not routed through encode")),
+        Mnemonic::RawBytes => Err(String::from(
+            "inline asm: raw bytes not routed through encode",
+        )),
         Mnemonic::Nop => {
             code.push(0x90);
             Ok(())

@@ -12,7 +12,10 @@ fn x(n: u8) -> Opnd {
     Opnd::Reg { num: n, is64: true }
 }
 fn w(n: u8) -> Opnd {
-    Opnd::Reg { num: n, is64: false }
+    Opnd::Reg {
+        num: n,
+        is64: false,
+    }
 }
 fn enc(mnem: &str, ops: &[Opnd]) -> u32 {
     encode(mnem, ops).unwrap_or_else(|e| panic!("{mnem}: {e}"))
@@ -56,15 +59,16 @@ fn shifts_by_immediate() {
 #[test]
 fn logical_immediate_encoder() {
     // The verified bitmask encoder: field is N<<12 | immr<<6 | imms.
-    assert_eq!(encode_logical_imm(0xFF, true), Some((1 << 12) | (0 << 6) | 7));
+    let field = |n: u32, immr: u32, imms: u32| (n << 12) | (immr << 6) | imms;
+    assert_eq!(encode_logical_imm(0xFF, true), Some(field(1, 0, 7)));
     assert_eq!(
         encode_logical_imm(0xF0F0_F0F0_F0F0_F0F0, true),
-        Some((0 << 12) | (4 << 6) | 0x33)
+        Some(field(0, 4, 0x33))
     );
-    assert_eq!(encode_logical_imm(0x1, true), Some((1 << 12) | (0 << 6) | 0));
+    assert_eq!(encode_logical_imm(0x1, true), Some(field(1, 0, 0)));
     assert_eq!(
         encode_logical_imm(0xFFFF_FFFF_FFFF_FFF0, true),
-        Some((1 << 12) | (60 << 6) | 0x3B)
+        Some(field(1, 60, 0x3B))
     );
     // Not encodable: zero, all-ones, and (for W) a value with high bits set.
     assert_eq!(encode_logical_imm(0, true), None);
@@ -128,11 +132,7 @@ mod differential {
             let _ = std::fs::remove_file(&s);
             return None;
         }
-        let dis = Command::new("objdump")
-            .arg("-d")
-            .arg(&o)
-            .output()
-            .ok()?;
+        let dis = Command::new("objdump").arg("-d").arg(&o).output().ok()?;
         let _ = std::fs::remove_file(&s);
         let _ = std::fs::remove_file(&o);
         let text = String::from_utf8_lossy(&dis.stdout);
@@ -140,7 +140,10 @@ mod differential {
         for line in text.lines() {
             if let Some(colon) = line.find(':') {
                 let after = line[colon + 1..].trim_start();
-                let hexword: String = after.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
+                let hexword: String = after
+                    .chars()
+                    .take_while(|c| c.is_ascii_hexdigit())
+                    .collect();
                 if hexword.len() == 8
                     && line[..colon].trim().bytes().all(|b| b.is_ascii_hexdigit())
                     && !line[..colon].trim().is_empty()
@@ -156,7 +159,10 @@ mod differential {
         Opnd::Reg { num: n, is64: true }
     }
     fn wn(n: u8) -> Opnd {
-        Opnd::Reg { num: n, is64: false }
+        Opnd::Reg {
+            num: n,
+            is64: false,
+        }
     }
 
     /// Sweep the register / immediate surface and require the catalogue word to
@@ -179,7 +185,9 @@ mod differential {
                 alloc::format!("w{n}")
             }
         };
-        for m in ["add", "sub", "adds", "subs", "and", "orr", "eor", "ands", "bic", "orn", "eon"] {
+        for m in [
+            "add", "sub", "adds", "subs", "and", "orr", "eor", "ands", "bic", "orn", "eon",
+        ] {
             for is64 in [true, false] {
                 for &(a, b, c) in &[(0u8, 1u8, 2u8), (5, 6, 7), (9, 10, 11), (20, 21, 22)] {
                     let ops = if is64 {
@@ -204,14 +212,27 @@ mod differential {
             }
         }
         for m in ["and", "orr", "eor", "ands"] {
-            for &v in &[0xFFi64, 0x1, 0xF0F0F0F0F0F0F0F0u64 as i64, 0xFFFFFFF0u32 as i64] {
+            for &v in &[
+                0xFFi64,
+                0x1,
+                0xF0F0F0F0F0F0F0F0u64 as i64,
+                0xFFFFFFF0u32 as i64,
+            ] {
                 let txt = alloc::format!("{m} x0, x1, #{v}");
                 cases.push((txt, alloc::vec![xn(0), xn(1), Opnd::Imm(v)], m));
             }
         }
         for &v in &[0i64, 0x1234, 0xFFFF] {
-            cases.push((alloc::format!("movz x0, #{v}"), alloc::vec![xn(0), Opnd::Imm(v)], "movz"));
-            cases.push((alloc::format!("movk x0, #{v}"), alloc::vec![xn(0), Opnd::Imm(v)], "movk"));
+            cases.push((
+                alloc::format!("movz x0, #{v}"),
+                alloc::vec![xn(0), Opnd::Imm(v)],
+                "movz",
+            ));
+            cases.push((
+                alloc::format!("movk x0, #{v}"),
+                alloc::vec![xn(0), Opnd::Imm(v)],
+                "movk",
+            ));
         }
         for &s in &[0u32, 16, 32, 48] {
             cases.push((
@@ -285,6 +306,9 @@ mod differential {
             }
         }
         std::eprintln!("a64 logical_immediate: checked={checked} bad={bad}");
-        assert_eq!(bad, 0, "logical-immediate encoding disagrees with the assembler");
+        assert_eq!(
+            bad, 0,
+            "logical-immediate encoding disagrees with the assembler"
+        );
     }
 }

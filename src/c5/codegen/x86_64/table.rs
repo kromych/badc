@@ -244,10 +244,10 @@ pub(crate) fn encode(
             continue;
         }
         matched = true;
-        if let Ok(bytes) = encode_form(f, ops, opw) {
-            if best.as_ref().is_none_or(|b| bytes.len() < b.len()) {
-                best = Some(bytes);
-            }
+        if let Ok(bytes) = encode_form(f, ops, opw)
+            && best.as_ref().is_none_or(|b| bytes.len() < b.len())
+        {
+            best = Some(bytes);
         }
     }
     best.ok_or_else(|| {

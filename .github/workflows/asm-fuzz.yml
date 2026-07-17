@@ -1,0 +1,36 @@
+name: asm-fuzz
+
+# Differential fuzzing of the table-driven instruction encoders against the
+# system assembler (clang + objdump). Each case forks the assembler, so this is
+# a nightly / on-demand lane, not a per-push gate -- the always-on golden tests
+# in the normal suite already lock the encodings on every push. macOS runners
+# carry both an integrated-assembler clang that cross-encodes x86-64 and a
+# native AArch64 assembler, plus an objdump that prints A64 as 32-bit words, so
+# a single runner covers both catalogues. The tests self-skip if the tools are
+# absent, so a runner without them stays green rather than failing spuriously.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly at 07:17 UTC (off the :00/:30 marks the fleet crowds).
+    - cron: "17 7 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  differential:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: differential encoder fuzz (x86-64 + A64 vs the assembler)
+        env:
+          BADC_FUZZ_ASM: "1"
+        run: |
+          cargo test --release --lib --features full -- \
+            codegen::x86_64::table::tests::differential \
+            codegen::aarch64::table::tests::differential \
+            --nocapture

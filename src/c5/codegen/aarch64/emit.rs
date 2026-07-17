@@ -2125,6 +2125,7 @@ fn emit_inline_asm_aarch64(
             let opnd = match *o {
                 AsmOpndA64::Imm(v) => Opnd::Imm(v),
                 AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
+                AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
                 AsmOpndA64::Reg { num, is64 } => Opnd::Reg { num, is64 },
                 AsmOpndA64::Ref { idx, is64 } => {
                     let Some(r) = op_reg.get(idx as usize).copied().flatten() else {

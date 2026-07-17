@@ -50,6 +50,16 @@ fn move_wide() {
 }
 
 #[test]
+fn system_register_move() {
+    // mrs Xt, <sysreg> = 0xD5300000 | field<<5 | Rt; msr <sysreg>, Xt =
+    // 0xD5100000 | field<<5 | Rt. CTR_EL0 field 0x5801 is cross-checked against
+    // the pattern-matched encoding 0xD53B0020.
+    assert_eq!(enc("mrs", &[x(0), Opnd::SysReg(0x5801)]), 0xD53B0020);
+    assert_eq!(enc("mrs", &[x(5), Opnd::SysReg(0x5801)]), 0xD53B0025);
+    assert_eq!(enc("msr", &[Opnd::SysReg(0x5801), x(0)]), 0xD51B0020);
+}
+
+#[test]
 fn shifts_by_immediate() {
     assert_eq!(enc("lsl", &[x(0), x(1), Opnd::Imm(4)]), 0xD37CEC20); // lsl x0, x1, #4
     assert_eq!(enc("lsr", &[x(0), x(1), Opnd::Imm(4)]), 0xD344FC20); // lsr x0, x1, #4

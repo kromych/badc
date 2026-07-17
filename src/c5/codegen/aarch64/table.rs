@@ -79,6 +79,9 @@ pub(crate) enum Opnd {
     Imm(i64),
     /// An `lsl #shift` modifier operand.
     Lsl(u32),
+    /// A system register, as its 15-bit `mrs`/`msr` field
+    /// (`(op0-2)<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2`).
+    SysReg(u16),
 }
 
 /// AArch64 logical-immediate (bitmask) encoder. Returns the 13-bit field
@@ -176,6 +179,16 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
 /// (assembly) order. `OptLsl` slots may be omitted by the caller (a missing
 /// trailing shift defaults to 0).
 pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
+    // System-register move: `mrs Xt, <sysreg>` / `msr <sysreg>, Xt`. The
+    // register is always 64-bit; the 15-bit system-register field sits at bit 5.
+    if mnemonic == "mrs" || mnemonic == "msr" {
+        let (base, rt, field) = match (mnemonic, ops) {
+            ("mrs", [Opnd::Reg { num, .. }, Opnd::SysReg(f)]) => (0xD530_0000u32, *num, *f),
+            ("msr", [Opnd::SysReg(f), Opnd::Reg { num, .. }]) => (0xD510_0000u32, *num, *f),
+            _ => return Err(String::from("inline asm: bad mrs/msr operands")),
+        };
+        return Ok(base | ((field as u32) << 5) | (rt as u32 & 31));
+    }
     for f in super::isa_a64_table::FORMS {
         if f.mnemonic != mnemonic {
             continue;

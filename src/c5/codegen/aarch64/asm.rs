@@ -34,6 +34,58 @@ pub(crate) enum AsmOpndA64 {
     Imm(i64),
     /// A `lsl #n` shift modifier (move-wide).
     Lsl(u32),
+    /// A system register named in a `mrs` / `msr`, resolved to its 15-bit field.
+    SysReg(u16),
+}
+
+/// The 15-bit `mrs`/`msr` system-register field for a name, or the generic
+/// `s<op0>_<op1>_c<CRn>_c<CRm>_<op2>` spelling that names any register.
+/// `field = (op0-2)<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2`.
+fn sysreg_field(name: &str) -> Option<u16> {
+    fn pack(op0: u16, op1: u16, crn: u16, crm: u16, op2: u16) -> u16 {
+        ((op0 - 2) << 14) | (op1 << 11) | (crn << 7) | (crm << 3) | op2
+    }
+    // Common registers by name; extend as needed.
+    let named = |n: &str| -> Option<(u16, u16, u16, u16, u16)> {
+        Some(match n {
+            "midr_el1" => (3, 0, 0, 0, 0),
+            "mpidr_el1" => (3, 0, 0, 0, 5),
+            "ctr_el0" => (3, 3, 0, 0, 1),
+            "tpidr_el0" => (3, 3, 13, 0, 2),
+            "sctlr_el1" => (3, 0, 1, 0, 0),
+            "vbar_el1" => (3, 0, 12, 0, 0),
+            "daif" => (3, 3, 4, 2, 1),
+            "nzcv" => (3, 3, 4, 2, 0),
+            "cntfrq_el0" => (3, 3, 14, 0, 0),
+            "cntpct_el0" => (3, 3, 14, 0, 1),
+            "esr_el1" => (3, 0, 5, 2, 0),
+            "far_el1" => (3, 0, 6, 0, 0),
+            "elr_el1" => (3, 0, 4, 0, 1),
+            "spsr_el1" => (3, 0, 4, 0, 0),
+            "currentel" => (3, 0, 4, 2, 2),
+            _ => return None,
+        })
+    };
+    if let Some((op0, op1, crn, crm, op2)) = named(name) {
+        return Some(pack(op0, op1, crn, crm, op2));
+    }
+    // Generic `sN_N_cN_cN_N` spelling.
+    let p: Vec<&str> = name.split('_').collect();
+    if p.len() == 5
+        && let Some(op0) = p[0].strip_prefix('s').and_then(|s| s.parse::<u16>().ok())
+        && let Ok(op1) = p[1].parse::<u16>()
+        && let Some(crn) = p[2].strip_prefix('c').and_then(|s| s.parse::<u16>().ok())
+        && let Some(crm) = p[3].strip_prefix('c').and_then(|s| s.parse::<u16>().ok())
+        && let Ok(op2) = p[4].parse::<u16>()
+        && (2..=3).contains(&op0)
+        && op1 <= 7
+        && crn <= 15
+        && crm <= 15
+        && op2 <= 7
+    {
+        return Some(pack(op0, op1, crn, crm, op2));
+    }
+    None
 }
 
 /// One instruction of a parsed template.
@@ -104,6 +156,10 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     }
     if let Some((num, is64)) = parse_reg(tok) {
         return Ok(AsmOpndA64::Reg { num, is64 });
+    }
+    // A system-register name (for mrs / msr).
+    if let Some(field) = sysreg_field(tok) {
+        return Ok(AsmOpndA64::SysReg(field));
     }
     Err(format!("inline asm: unsupported operand `{tok}`"))
 }
@@ -248,5 +304,26 @@ mod tests {
         assert_eq!(insns[0].bytes, [0x1f, 0x20, 0x03, 0xd5]);
         assert!(insns[0].mnemonic.is_empty());
         assert_eq!(insns[1].mnemonic, "add");
+    }
+
+    #[test]
+    fn parse_sysreg_operands() {
+        // CTR_EL0 field 0x5801, cross-checked against the pattern-matched
+        // encoding elsewhere; the generic `s3_3_c14_c0_2` names CNTVCT_EL0.
+        assert_eq!(sysreg_field("ctr_el0"), Some(0x5801));
+        assert_eq!(sysreg_field("s3_3_c0_c0_1"), Some(0x5801)); // == ctr_el0
+        assert_eq!(sysreg_field("s3_3_c14_c0_2"), Some(0x5F02)); // cntvct_el0
+        assert_eq!(sysreg_field("not_a_reg"), None);
+        let insns = parse_template(b"mrs %0, ctr_el0; msr nzcv, %1").unwrap();
+        assert_eq!(insns[0].mnemonic, "mrs");
+        assert_eq!(
+            insns[0].operands,
+            [
+                AsmOpndA64::Ref { idx: 0, is64: None },
+                AsmOpndA64::SysReg(0x5801)
+            ]
+        );
+        assert_eq!(insns[1].mnemonic, "msr");
+        assert!(matches!(insns[1].operands[0], AsmOpndA64::SysReg(_)));
     }
 }

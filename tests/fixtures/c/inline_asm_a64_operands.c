@@ -11,7 +11,13 @@ long compute(long b, long c) {
     __asm__("add %0, %1, %2" : "=r"(sum) : "r"(b), "r"(c)); /* b + c */
     long doubled;
     __asm__("lsl %0, %1, #1" : "=r"(doubled) : "r"(sum)); /* sum << 1 */
-    return doubled;
+    /* mrs reads a system register: CNTVCT_EL0 (the EL0-readable virtual
+     * counter), spelled generically so it takes the general inline-asm path
+     * rather than the pattern-matched ctr_el0 special case. It is nonzero on
+     * any running system, so the deterministic result survives. */
+    long cnt;
+    __asm__("mrs %0, s3_3_c14_c0_2" : "=r"(cnt));
+    return cnt != 0 ? doubled : 0;
 #else
     return (b + c) << 1;
 #endif

@@ -53,16 +53,17 @@ use super::encode::{
     emit_mov_r_imm64, emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm, emit_movq_xmm_r,
     emit_movsd_mem_xmm, emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem,
     emit_movsx_r_mem16, emit_movsxd_r_mem, emit_movups_mem_xmm, emit_movups_xmm_mem,
-    emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_neg_r, emit_or_r_mem,
-    emit_or_rr, emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl,
-    emit_shr_r_cl, emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32, emit_subsd,
-    emit_subss, emit_test_rr, emit_ucomisd, emit_ucomiss, emit_vfmadd231sd, emit_vfmadd231ss,
+    emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_or_r_mem, emit_or_rr,
+    emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl,
+    emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32, emit_subsd, emit_subss,
+    emit_test_rr, emit_ucomisd, emit_ucomiss, emit_unary_r, emit_vfmadd231sd, emit_vfmadd231ss,
     emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd,
     emit_vfnmsub231ss, emit_xchg_mem_r, emit_xchg_rr, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
     emit_xorps,
 };
 use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
 use super::ssa::reg_alloc::{Allocation, Place};
+use super::table::Mnem;
 
 /// Per-function frame layout. Bytes are 16-aligned at every
 /// region boundary so SysV / Win64's sp-at-call invariant holds.
@@ -5054,14 +5055,14 @@ fn emit_binop_divmod(
     if is_unsigned {
         emit_xor_rr(code, Reg::RDX, Reg::RDX);
         match div_operand {
-            DivOperand::Reg(r) => super::encode::emit_div_r(code, r),
-            DivOperand::Mem(off) => super::encode::emit_div_m(code, Reg::RSP, off),
+            DivOperand::Reg(r) => super::encode::emit_unary_r(code, Mnem::Div, 8, r),
+            DivOperand::Mem(off) => super::encode::emit_unary_m(code, Mnem::Div, 8, Reg::RSP, off),
         }
     } else {
         super::encode::emit_cqo(code);
         match div_operand {
-            DivOperand::Reg(r) => super::encode::emit_idiv_r(code, r),
-            DivOperand::Mem(off) => super::encode::emit_idiv_m(code, Reg::RSP, off),
+            DivOperand::Reg(r) => super::encode::emit_unary_r(code, Mnem::Idiv, 8, r),
+            DivOperand::Mem(off) => super::encode::emit_unary_m(code, Mnem::Idiv, 8, Reg::RSP, off),
         }
     }
     // Capture result into rd before restoring rdx / rax.
@@ -5323,9 +5324,9 @@ fn emit_binop_imm(
                 emit_mov_rr(code, rd, rn);
             }
             if rhs_imm == 1 {
-                super::encode::emit_inc_r(code, rd);
+                super::encode::emit_unary_r(code, Mnem::Inc, 8, rd);
             } else {
-                super::encode::emit_dec_r(code, rd);
+                super::encode::emit_unary_r(code, Mnem::Dec, 8, rd);
             }
             true
         }
@@ -5334,9 +5335,9 @@ fn emit_binop_imm(
                 emit_mov_rr(code, rd, rn);
             }
             if rhs_imm == 1 {
-                super::encode::emit_dec_r(code, rd);
+                super::encode::emit_unary_r(code, Mnem::Dec, 8, rd);
             } else {
-                super::encode::emit_inc_r(code, rd);
+                super::encode::emit_unary_r(code, Mnem::Inc, 8, rd);
             }
             true
         }
@@ -7657,7 +7658,7 @@ fn emit_atomic_rmw(
             }
             emit_mov_rr(code, Reg::RAX, val);
             if matches!(op, Op::Sub) {
-                emit_neg_r(code, Reg::RAX);
+                emit_unary_r(code, Mnem::Neg, 8, Reg::RAX);
             }
             emit_lock_xadd_mem_r(code, a, 0, Reg::RAX, width);
             // RAX now holds the prior contents; stash it before the pop.

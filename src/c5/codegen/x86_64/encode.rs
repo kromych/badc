@@ -564,6 +564,18 @@ fn emit_alu_r_mem(code: &mut Vec<u8>, mnem: Mnem, dst: Reg, base: Reg, disp: i32
     super::table::encode_into(code, mnem, Some(8), &[r64(dst), m64(base, disp)]);
 }
 
+/// `op reg` -- a one-operand register form (neg / not / inc / dec / mul / div /
+/// ...). One of the generic shape emitters the native lowering calls in place of
+/// a per-instruction wrapper.
+pub(crate) fn emit_unary_r(code: &mut Vec<u8>, mnem: Mnem, width: u8, r: Reg) {
+    super::table::encode_into(code, mnem, Some(width), &[rw(r, width)]);
+}
+
+/// `op [base + disp]` -- a one-operand memory form.
+pub(crate) fn emit_unary_m(code: &mut Vec<u8>, mnem: Mnem, width: u8, base: Reg, disp: i32) {
+    super::table::encode_into(code, mnem, Some(width), &[mw(base, disp, width)]);
+}
+
 /// `ADD dst, [base + disp]` -- 64-bit, `dst += [mem]`.
 pub(crate) fn emit_add_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_alu_r_mem(code, Mnem::Add, dst, base, disp);
@@ -614,15 +626,6 @@ pub(crate) fn emit_imul_r_r_imm32(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: i
     emit_byte(code, 0x69);
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
     code.extend_from_slice(&imm.to_le_bytes());
-}
-
-/// `NEG r64` -- two's-complement negate (Intel SDM Vol.2, group 3
-/// `F7 /3`). Used by the atomic subtract lowering, which negates the
-/// operand before a `LOCK XADD`.
-pub(crate) fn emit_neg_r(code: &mut Vec<u8>, r: Reg) {
-    emit_byte(code, rex(true, false, false, r.high()));
-    emit_byte(code, 0xF7);
-    emit_byte(code, modrm(0b11, 3, r.lo()));
 }
 
 // ---- Atomic memory operations (Intel SDM Vol.2). The memory operand
@@ -699,39 +702,6 @@ pub(crate) fn emit_lock_cmpxchg_mem_r(
     emit_byte(code, 0x0F);
     emit_byte(code, if width == 1 { 0xB0 } else { 0xB1 });
     emit_modrm_mem(code, reg, base, disp);
-}
-
-/// `IDIV r/m64` -- signed divide `rdx:rax / r`. Quotient -> rax,
-/// remainder -> rdx. The caller must sign-extend rax into rdx with
-/// [`emit_cqo`] first.
-pub(crate) fn emit_idiv_r(code: &mut Vec<u8>, divisor: Reg) {
-    emit_byte(code, rex(true, false, false, divisor.high()));
-    emit_byte(code, 0xF7);
-    emit_byte(code, modrm(0b11, 7, divisor.lo()));
-}
-
-/// `DIV r/m64` -- unsigned divide `rdx:rax / r`. Quotient -> rax,
-/// remainder -> rdx. The caller must zero rdx (e.g. `xor edx, edx`)
-/// instead of sign-extending with [`emit_cqo`].
-pub(crate) fn emit_div_r(code: &mut Vec<u8>, divisor: Reg) {
-    emit_byte(code, rex(true, false, false, divisor.high()));
-    emit_byte(code, 0xF7);
-    emit_byte(code, modrm(0b11, 6, divisor.lo()));
-}
-
-/// `IDIV r/m64` with a memory divisor at `[base + disp]`. The reg
-/// field carries the `/7` opcode extension; REX.R is therefore clear.
-pub(crate) fn emit_idiv_m(code: &mut Vec<u8>, base: Reg, disp: i32) {
-    emit_byte(code, rex(true, false, false, base.high()));
-    emit_byte(code, 0xF7);
-    emit_modrm_mem(code, Reg(7), base, disp);
-}
-
-/// `DIV r/m64` with a memory divisor at `[base + disp]` (`/6`).
-pub(crate) fn emit_div_m(code: &mut Vec<u8>, base: Reg, disp: i32) {
-    emit_byte(code, rex(true, false, false, base.high()));
-    emit_byte(code, 0xF7);
-    emit_modrm_mem(code, Reg(6), base, disp);
 }
 
 // ---- SSE2 floating-point. ----
@@ -1298,21 +1268,6 @@ pub(crate) fn emit_add_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
 /// `SUB r64, imm32`.
 pub(crate) fn emit_sub_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
     emit_alu_r_imm32(code, 5, dst, imm);
-}
-
-/// `INC r64` -- `REX.W FF /0`. The single-byte `40+rd` encoding is a
-/// REX prefix in 64-bit mode, so the `FF` form is the only one.
-pub(crate) fn emit_inc_r(code: &mut Vec<u8>, dst: Reg) {
-    emit_byte(code, rex(true, false, false, dst.high()));
-    emit_byte(code, 0xFF);
-    emit_byte(code, modrm(0b11, 0, dst.lo()));
-}
-
-/// `DEC r64` -- `REX.W FF /1`.
-pub(crate) fn emit_dec_r(code: &mut Vec<u8>, dst: Reg) {
-    emit_byte(code, rex(true, false, false, dst.high()));
-    emit_byte(code, 0xFF);
-    emit_byte(code, modrm(0b11, 1, dst.lo()));
 }
 
 /// `AND r64, imm32`.
@@ -3093,7 +3048,7 @@ mod tests {
     fn neg_rax() {
         // neg rax -> 48 F7 D8
         assert_eq!(
-            assemble(|c| emit_neg_r(c, Reg::RAX)),
+            assemble(|c| emit_unary_r(c, Mnem::Neg, 8, Reg::RAX)),
             vec![0x48, 0xF7, 0xD8]
         );
     }

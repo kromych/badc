@@ -16,6 +16,8 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+pub(crate) use super::isa_x86_table::Mnem;
+
 /// Operand-size width class of a form's operand slot.
 ///
 /// `V` is 16/32/64 (word/dword/qword) selected by the operation width; `Y` is
@@ -109,6 +111,10 @@ pub(crate) enum RegField {
 /// One catalogue entry: an operand pattern plus its encoding.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Form {
+    /// The mnemonic as an enum, for the native emitter's type-safe, integer
+    /// dispatch. `mnemonic` is the same value as a string, for the inline-asm
+    /// parser's token lookup and for diagnostics.
+    pub mnem: Mnem,
     pub mnemonic: &'static str,
     pub ops: &'static [OpPat],
     /// Mandatory prefix bytes (`F2`/`F3`/mandatory-`66`), in order, emitted
@@ -297,13 +303,23 @@ impl InsnBuf {
     }
 }
 
-fn form_matches(f: &Form, mnemonic: &str, ops: &[Opnd], opw: u8) -> bool {
-    f.mnemonic == mnemonic
-        && f.ops.len() == ops.len()
+fn form_matches(f: &Form, ops: &[Opnd], opw: u8) -> bool {
+    f.ops.len() == ops.len()
         && f.ops
             .iter()
             .zip(ops.iter())
             .all(|(&p, &o)| pat_matches(p, o, opw))
+}
+
+impl Mnem {
+    /// The mnemonic for a token, or `None`. Used only by the inline-asm parser
+    /// (the one place a mnemonic arrives as text); the catalogue is sorted by
+    /// name, so this binary-searches.
+    pub(crate) fn from_name(name: &str) -> Option<Mnem> {
+        let forms = super::isa_x86_table::FORMS;
+        let i = forms.partition_point(|f| f.mnemonic < name);
+        forms.get(i).filter(|f| f.mnemonic == name).map(|f| f.mnem)
+    }
 }
 
 /// Encode one instruction. `width_override` forces the operation width (an
@@ -312,19 +328,17 @@ fn form_matches(f: &Form, mnemonic: &str, ops: &[Opnd], opw: u8) -> bool {
 /// order), which deterministically reproduces the assembler's preference for
 /// the `83 /r` imm8 short form, the accumulator immediate forms, and the like.
 pub(crate) fn encode(
-    mnemonic: &str,
+    mnem: Mnem,
     width_override: Option<u8>,
     ops: &[Opnd],
 ) -> Result<Vec<u8>, String> {
     let opw = op_width(ops, width_override);
-    let (best, matched) = encode_best(mnemonic, opw, ops);
+    let (best, matched) = encode_best(mnem, opw, ops);
     match best {
         Some(b) => Ok(b.as_slice().to_vec()),
-        None if matched => Err(format!(
-            "inline asm: `{mnemonic}` operand form not encodable"
-        )),
+        None if matched => Err(format!("inline asm: `{mnem:?}` operand form not encodable")),
         None => Err(format!(
-            "inline asm: no encoding for `{mnemonic}` with these operands"
+            "inline asm: no encoding for `{mnem:?}` with these operands"
         )),
     }
 }
@@ -334,31 +348,31 @@ pub(crate) fn encode(
 /// catalogue covers, so a failure is a codegen invariant violation and panics.
 pub(crate) fn encode_into(
     code: &mut Vec<u8>,
-    mnemonic: &str,
+    mnem: Mnem,
     width_override: Option<u8>,
     ops: &[Opnd],
 ) {
     let opw = op_width(ops, width_override);
-    match encode_best(mnemonic, opw, ops).0 {
+    match encode_best(mnem, opw, ops).0 {
         Some(b) => code.extend_from_slice(b.as_slice()),
-        None => panic!("native emit: no encoding for `{mnemonic}` with these operands"),
+        None => panic!("native emit: no encoding for `{mnem:?}` with these operands"),
     }
 }
 
-/// The shortest encoding of `mnemonic` for `ops`, plus whether any form matched
-/// (to distinguish "no such form" from "form matched but not encodable"). The
-/// catalogue is sorted by mnemonic (the `catalogue_is_sorted` test enforces it),
-/// so this binary-searches to the mnemonic's contiguous run of forms.
-fn encode_best(mnemonic: &str, opw: u8, ops: &[Opnd]) -> (Option<InsnBuf>, bool) {
+/// The shortest encoding of `mnem` for `ops`, plus whether any form matched (to
+/// distinguish "no such form" from "form matched but not encodable"). The
+/// catalogue is sorted by mnemonic and `Mnem`'s Ord matches that order, so this
+/// binary-searches on the integer discriminant to the mnemonic's run of forms.
+fn encode_best(mnem: Mnem, opw: u8, ops: &[Opnd]) -> (Option<InsnBuf>, bool) {
     let forms = super::isa_x86_table::FORMS;
-    let start = forms.partition_point(|f| f.mnemonic < mnemonic);
+    let start = forms.partition_point(|f| f.mnem < mnem);
     let mut best: Option<InsnBuf> = None;
     let mut matched = false;
     for f in &forms[start..] {
-        if f.mnemonic != mnemonic {
+        if f.mnem != mnem {
             break;
         }
-        if !form_matches(f, mnemonic, ops, opw) {
+        if !form_matches(f, ops, opw) {
             continue;
         }
         matched = true;

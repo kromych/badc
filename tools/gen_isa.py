@@ -292,12 +292,31 @@ def emit(forms, out):
     lines.append('// `super::table::encode`.')
     lines.append('')
     lines.append('use super::table::{Form, ImmC, Map, OpPat::*, RegField::*, RexW::*, W};')
+    lines.append('use Mnem::*;')
+    lines.append('')
+    # One enum variant per distinct mnemonic, in the same (sorted) order as the
+    # catalogue, so `Mnem`'s derived Ord matches the FORMS row order and the
+    # encoder can binary-search on the integer discriminant.
+    mnems = sorted({f['mnem'] for f in forms})
+
+    def variant(m):
+        return m[0].upper() + m[1:]
+
+    lines.append('/// Every mnemonic the catalogue encodes. Generated; the native emitter')
+    lines.append('/// passes these instead of strings, and the inline-asm parser maps a')
+    lines.append('/// token to one via `Mnem::from_name`.')
+    lines.append('#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]')
+    lines.append('pub(crate) enum Mnem {')
+    for m in mnems:
+        lines.append(f'    {variant(m)},')
+    lines.append('}')
     lines.append('')
     lines.append('#[rustfmt::skip]')
     lines.append('pub(crate) static FORMS: &[Form] = &[')
     for f in forms:
         lines.append(
-            f'    Form {{ mnemonic: "{f["mnem"]}", ops: &[{f["ops"]}], '
+            f'    Form {{ mnem: {variant(f["mnem"])}, mnemonic: "{f["mnem"]}", '
+            f'ops: &[{f["ops"]}], '
             f'pp: &[], map: Map::{f["map"]}, opcode: &[{f["opcode"]}], '
             f'plus_r: {f["plus_r"]}, rexw: {f["rexw"]}, reg: {f["reg"]}, '
             f'rm: {f["rm"]}, imm: {f["imm"]}, imm_op: {f["imm_op"]} }},'

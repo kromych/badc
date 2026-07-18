@@ -723,7 +723,11 @@ pub(crate) fn encode(
     // Mnemonics the table encoder covers route through it; the operands are
     // resolved to Intel order first.
     if let Some((name, width, tops)) = to_table(mnemonic, suffix, ops) {
-        code.extend_from_slice(&super::table::encode(name, width, &tops)?);
+        // The inline-asm path holds the mnemonic as text (a parsed token); map
+        // it to the catalogue enum at this one boundary.
+        let mnem = super::table::Mnem::from_name(name)
+            .ok_or_else(|| format!("inline asm: unknown catalogue mnemonic `{name}`"))?;
+        code.extend_from_slice(&super::table::encode(mnem, width, &tops)?);
         return Ok(());
     }
     match mnemonic {

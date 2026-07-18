@@ -8,7 +8,8 @@
 use super::*;
 
 fn enc(mnem: &str, ops: &[Opnd]) -> Vec<u8> {
-    encode(mnem, None, ops).unwrap_or_else(|e| panic!("{mnem}: {e}"))
+    let m = Mnem::from_name(mnem).unwrap_or_else(|| panic!("no such mnemonic `{mnem}`"));
+    encode(m, None, ops).unwrap_or_else(|e| panic!("{mnem}: {e}"))
 }
 
 fn r(num: u8, width: u8) -> Opnd {
@@ -553,7 +554,11 @@ mod differential {
                 t.skip += 1;
                 continue;
             };
-            match encode(mnem, None, ops) {
+            let Some(m) = Mnem::from_name(mnem) else {
+                t.skip += 1;
+                continue;
+            };
+            match encode(m, None, ops) {
                 Ok(bytes) => match disasm(&bytes) {
                     Ok(got) if got == intent => t.ok += 1,
                     Ok(got) => {

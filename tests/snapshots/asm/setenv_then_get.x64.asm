@@ -30,5 +30,3 @@ Disassembly of section .text:
                	movsbq	(%rax), %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

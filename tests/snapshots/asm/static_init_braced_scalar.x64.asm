@@ -80,4 +80,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

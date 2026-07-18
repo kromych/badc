@@ -13,4 +13,3 @@ Disassembly of section .text:
 <main>:
                	movl	$0x1, %eax
                	retq
-               	addb	%al, (%rax)

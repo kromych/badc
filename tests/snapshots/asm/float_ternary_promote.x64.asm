@@ -121,5 +121,3 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

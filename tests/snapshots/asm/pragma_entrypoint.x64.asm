@@ -13,4 +13,3 @@ Disassembly of section .text:
 <custom_entry>:
                	movl	$0x17, %eax
                	retq
-               	addb	%al, (%rax)

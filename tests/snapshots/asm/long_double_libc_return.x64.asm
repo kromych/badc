@@ -79,4 +79,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

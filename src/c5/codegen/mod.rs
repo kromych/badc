@@ -2063,19 +2063,15 @@ pub(crate) fn lower_for(
 /// the same source/flags/target produce identical output bytes
 /// regardless of the build environment.
 ///
-/// The marker is NUL-terminated and prefixed by a 4-byte
-/// alignment pad so the start of the string sits on a 4-byte
-/// boundary regardless of the per-arch instruction stream's
-/// trailing alignment. Disassemblers walking past the last
-/// real instruction will see noise; that's fine because the
-/// runtime never branches into this region.
+/// The marker is NUL-terminated and appended immediately after the
+/// last instruction with no alignment pad. A pad would be 0-3 bytes
+/// of `0x00` whose length tracks where the final instruction happens
+/// to end, so a disassembler walking to the marker decodes it as a
+/// trailing instruction that shifts on any earlier code-size change --
+/// which churns the `tests/snapshots` disassembly for cosmetic
+/// reasons. Appending flush keeps the marker's start at the code end,
+/// so disassembly stops exactly at the last real instruction.
 fn append_build_info(build: &mut Build) {
-    // 4-byte align the start so the marker is easy to spot in a
-    // hex dump (and so per-arch instruction-alignment invariants
-    // aren't violated for any later additions).
-    while !build.text.len().is_multiple_of(4) {
-        build.text.push(0);
-    }
     build
         .text
         .extend_from_slice(crate::OUTPUT_MARKER.as_bytes());

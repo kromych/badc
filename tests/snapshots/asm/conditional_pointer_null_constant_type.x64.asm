@@ -78,4 +78,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

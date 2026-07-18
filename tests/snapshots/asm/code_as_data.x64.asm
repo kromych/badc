@@ -18,5 +18,3 @@ Disassembly of section .text:
                	leaq	-<rip>, %rax        # <addr>
                	movslq	(%rax), %rax
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

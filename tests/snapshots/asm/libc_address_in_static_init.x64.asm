@@ -62,4 +62,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	pushq	%r11
                	retq
-               	addb	%al, (%rax)

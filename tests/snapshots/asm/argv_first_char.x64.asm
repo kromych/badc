@@ -19,5 +19,3 @@ Disassembly of section .text:
                	movq	0x8(%rsi), %rax
                	movsbq	(%rax), %rax
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

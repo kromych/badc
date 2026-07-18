@@ -136,4 +136,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

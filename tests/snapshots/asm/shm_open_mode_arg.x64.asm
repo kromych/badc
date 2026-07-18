@@ -82,4 +82,3 @@ Disassembly of section .text:
                	movl	$0x3, %ebx
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

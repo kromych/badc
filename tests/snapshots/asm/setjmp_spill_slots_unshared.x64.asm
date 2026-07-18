@@ -309,4 +309,3 @@ Disassembly of section .text:
                	callq	<addr>
                	movzbq	%al, %rax
                	ud2
-               	addb	%al, 0x41(%rdx)

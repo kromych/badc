@@ -18,4 +18,3 @@ Disassembly of section .text:
 <main>:
                	movl	$0x2a, %eax
                	retq
-               	addb	%al, (%rax)

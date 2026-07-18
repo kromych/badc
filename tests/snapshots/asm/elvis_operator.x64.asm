@@ -156,5 +156,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x63, %eax
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

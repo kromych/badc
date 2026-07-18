@@ -91,4 +91,3 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	movslq	%eax, %rax
                	retq
-               	addb	%al, (%rax)

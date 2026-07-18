@@ -163,4 +163,3 @@ Disassembly of section .text:
                	movl	%ecx, 0x8(%rax)
                	movb	%cl, 0x10(%rax)
                	jmp	<addr>
-               	addb	%al, (%rax)

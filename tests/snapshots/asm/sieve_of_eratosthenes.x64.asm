@@ -62,4 +62,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

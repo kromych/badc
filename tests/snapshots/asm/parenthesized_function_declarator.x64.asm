@@ -44,4 +44,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	retq
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

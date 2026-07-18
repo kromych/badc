@@ -15,4 +15,3 @@ Disassembly of section .text:
                	nop
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)

@@ -28,4 +28,3 @@ Disassembly of section .text:
                	movl	$0x13, %eax
                	movl	$0x1e, %eax
                	retq
-               	addb	%al, 0x41(%rdx)

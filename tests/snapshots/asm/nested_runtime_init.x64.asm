@@ -212,4 +212,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)

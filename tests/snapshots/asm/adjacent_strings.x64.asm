@@ -14,5 +14,3 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movsbq	0x5(%rax), %rax
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

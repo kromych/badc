@@ -64,4 +64,3 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

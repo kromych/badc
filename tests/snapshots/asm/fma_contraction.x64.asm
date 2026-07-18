@@ -282,4 +282,3 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)

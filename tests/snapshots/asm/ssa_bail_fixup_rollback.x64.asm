@@ -334,4 +334,3 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

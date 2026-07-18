@@ -310,4 +310,3 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

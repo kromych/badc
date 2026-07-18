@@ -309,4 +309,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

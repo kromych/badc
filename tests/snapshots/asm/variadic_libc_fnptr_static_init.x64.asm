@@ -49,4 +49,3 @@ Disassembly of section .text:
 
 <__c5_sys_snprintf>:
                	jmp	<addr>
-               	addb	%al, (%rax)

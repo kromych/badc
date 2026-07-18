@@ -25,4 +25,3 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

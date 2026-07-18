@@ -20,4 +20,3 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

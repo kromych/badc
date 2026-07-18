@@ -152,4 +152,3 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movq	%rax, -0x2050(%rbp)
                	jmp	<addr>
-               	addb	%al, (%rax)

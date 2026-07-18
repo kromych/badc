@@ -66,4 +66,3 @@ Disassembly of section .text:
                	addq	$0x2030, %rsp           # imm = 0x2030
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

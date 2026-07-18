@@ -14,5 +14,3 @@ Disassembly of section .text:
                	movl	$0x80000000, %eax       # imm = 0x80000000
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

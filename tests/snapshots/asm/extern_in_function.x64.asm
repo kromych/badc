@@ -19,4 +19,3 @@ Disassembly of section .text:
 <main>:
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)

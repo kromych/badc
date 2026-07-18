@@ -128,4 +128,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

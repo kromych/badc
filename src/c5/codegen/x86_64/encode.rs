@@ -139,18 +139,36 @@ fn sib(scale: u8, index: u8, base: u8) -> u8 {
 /// Append a single byte to the code buffer. Wrapper exists for
 /// symmetry with [`emit_bytes`]; both funnel through `Vec::push`.
 /// A 64-bit register as a table-encoder operand.
-fn r64(r: Reg) -> super::table::Opnd {
-    super::table::Opnd::Reg { num: r.0, width: 8 }
+fn rw(r: Reg, width: u8) -> super::table::Opnd {
+    super::table::Opnd::Reg { num: r.0, width }
 }
 
-/// A 64-bit `[base + disp]` memory reference as a table-encoder operand.
-fn m64(base: Reg, disp: i32) -> super::table::Opnd {
+/// A `[base + disp]` memory reference of the given width, as a table operand.
+fn mw(base: Reg, disp: i32, width: u8) -> super::table::Opnd {
     super::table::Opnd::Mem {
         base: base.0,
         index: None,
         scale: 1,
         disp,
-        width: 8,
+        width,
+    }
+}
+
+fn r64(r: Reg) -> super::table::Opnd {
+    rw(r, 8)
+}
+fn m64(base: Reg, disp: i32) -> super::table::Opnd {
+    mw(base, disp, 8)
+}
+
+/// A `[base + index * scale]` (SIB) memory reference of the given width.
+fn msib(base: Reg, index: Reg, scale: u8, width: u8) -> super::table::Opnd {
+    super::table::Opnd::Mem {
+        base: base.0,
+        index: Some(index.0),
+        scale,
+        disp: 0,
+        width,
     }
 }
 
@@ -300,46 +318,29 @@ pub(crate) fn emit_syscall(code: &mut Vec<u8>) {
 /// `disp`'s magnitude. Handles `[rsp + disp]` (which always needs a
 /// SIB byte) and `[rbp + disp]` (which always needs `mod >= 01`).
 pub(crate) fn emit_mov_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_byte(code, rex(true, dst.high(), false, base.high()));
-    emit_byte(code, 0x8B);
-    emit_modrm_mem(code, dst, base, disp);
+    super::table::encode_into(code, "mov", Some(8), &[rw(dst, 8), mw(base, disp, 8)]);
 }
 
 /// `MOV r32, [base + disp]` -- 32-bit load (zero-extends to 64).
 /// Encoding: `8B /r` (no REX.W).
 pub(crate) fn emit_mov_r_mem32(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    if dst.high() || base.high() {
-        emit_byte(code, rex(false, dst.high(), false, base.high()));
-    }
-    emit_byte(code, 0x8B);
-    emit_modrm_mem(code, dst, base, disp);
+    super::table::encode_into(code, "mov", Some(4), &[rw(dst, 4), mw(base, disp, 4)]);
 }
 
 /// `MOV [base + disp], r64` -- 64-bit memory store.
 /// Encoding: `REX.W + 89 /r`.
 pub(crate) fn emit_mov_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
-    emit_byte(code, rex(true, src.high(), false, base.high()));
-    emit_byte(code, 0x89);
-    emit_modrm_mem(code, src, base, disp);
+    super::table::encode_into(code, "mov", Some(8), &[mw(base, disp, 8), rw(src, 8)]);
 }
 
 /// `MOV [base + disp], r32` -- 32-bit store.
 pub(crate) fn emit_mov_mem_r32(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
-    if src.high() || base.high() {
-        emit_byte(code, rex(false, src.high(), false, base.high()));
-    }
-    emit_byte(code, 0x89);
-    emit_modrm_mem(code, src, base, disp);
+    super::table::encode_into(code, "mov", Some(4), &[mw(base, disp, 4), rw(src, 4)]);
 }
 
 /// `MOV [base + disp], r16` -- 16-bit store.
 pub(crate) fn emit_mov_mem_r16(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
-    emit_byte(code, 0x66);
-    if src.high() || base.high() {
-        emit_byte(code, rex(false, src.high(), false, base.high()));
-    }
-    emit_byte(code, 0x89);
-    emit_modrm_mem(code, src, base, disp);
+    super::table::encode_into(code, "mov", Some(2), &[mw(base, disp, 2), rw(src, 2)]);
 }
 
 /// `MOV [base + disp], r8` -- 8-bit store. The REX prefix (even empty)
@@ -356,9 +357,7 @@ pub(crate) fn emit_mov_mem_r8(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg
 /// for signed `int` lvalue reads -- C signed semantics require the
 /// high bit of the 4-byte slot to propagate.
 pub(crate) fn emit_movsxd_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_byte(code, rex(true, dst.high(), false, base.high()));
-    emit_byte(code, 0x63);
-    emit_modrm_mem(code, dst, base, disp);
+    super::table::encode_into(code, "movsxd", None, &[rw(dst, 8), mw(base, disp, 4)]);
 }
 
 /// `MOV r32, [base + disp]` -- 32-bit load. The CPU implicitly
@@ -367,12 +366,7 @@ pub(crate) fn emit_movsxd_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i
 /// [`LoadKind::U32`] for `unsigned int` lvalue reads. Encoding: no REX.W,
 /// just `8B /r` (with REX only if any operand needs the high bank).
 pub(crate) fn emit_mov_r32_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    let needs_rex = dst.high() || base.high();
-    if needs_rex {
-        emit_byte(code, rex(false, dst.high(), false, base.high()));
-    }
-    emit_byte(code, 0x8B);
-    emit_modrm_mem(code, dst, base, disp);
+    super::table::encode_into(code, "mov", Some(4), &[rw(dst, 4), mw(base, disp, 4)]);
 }
 
 /// `MOV [base + disp], r32` -- 32-bit memory store of the low half
@@ -380,12 +374,7 @@ pub(crate) fn emit_mov_r32_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i3
 /// operand register needs the high bank). Companion to
 /// [`emit_movsxd_r_mem`] for the `StoreKind::I32` lowering.
 pub(crate) fn emit_mov_mem32_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
-    let needs_rex = src.high() || base.high();
-    if needs_rex {
-        emit_byte(code, rex(false, src.high(), false, base.high()));
-    }
-    emit_byte(code, 0x89);
-    emit_modrm_mem(code, src, base, disp);
+    super::table::encode_into(code, "mov", Some(4), &[mw(base, disp, 4), rw(src, 4)]);
 }
 
 /// `MOV DWORD PTR [base + disp], imm32` -- 32-bit immediate store.
@@ -393,13 +382,12 @@ pub(crate) fn emit_mov_mem32_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Re
 /// bank). Used to initialise the System V `__va_list_tag`
 /// `gp_offset` / `fp_offset` (4-byte each) in `va_start`.
 pub(crate) fn emit_mov_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
-    if base.high() {
-        emit_byte(code, rex(false, false, false, base.high()));
-    }
-    emit_byte(code, 0xC7);
-    // Reg field is the /0 opcode extension.
-    emit_modrm_mem(code, Reg(0), base, disp);
-    emit_i32(code, imm);
+    super::table::encode_into(
+        code,
+        "mov",
+        Some(4),
+        &[mw(base, disp, 4), super::table::Opnd::Imm(imm as i64)],
+    );
 }
 
 /// `ADD dword [base + disp], imm32` -- add an immediate to a 32-bit
@@ -1608,148 +1596,129 @@ pub(crate) fn emit_movsx_r_r8(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
-/// Emit the ModR/M + SIB + displacement bytes for a memory operand
-/// of the form `[base + index * scale + disp]`. `scale` must be 1,
-/// 2, 4, or 8. When `disp == 0` and `base` isn't RBP/R13, emits
-/// the mod=00 short form (no displacement byte); for RBP/R13 base
-/// the form requires mod=01 with disp8=0 because mod=00 means
-/// RIP-relative addressing.
-fn emit_modrm_sib_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, index: Reg, scale: u8, disp: i32) {
-    let bp_form = base.lo() == 5; // RBP/R13
-    let scale_bits: u8 = match scale {
-        1 => 0,
-        2 => 1,
-        4 => 2,
-        8 => 3,
-        _ => panic!("emit_modrm_sib_mem: invalid scale {scale}"),
-    };
-    let (mod_, want_disp8, want_disp32) = if disp == 0 && !bp_form {
-        (0b00, false, false)
-    } else if (-128..=127).contains(&disp) {
-        (0b01, true, false)
-    } else {
-        (0b10, false, true)
-    };
-    // mod=..., reg=reg.lo(), r/m=100 (SIB follows).
-    emit_byte(code, modrm(mod_, reg.lo(), 4));
-    // scale=scale_bits, index=index.lo(), base=base.lo().
-    emit_byte(code, sib(scale_bits, index.lo(), base.lo()));
-    if want_disp8 {
-        emit_byte(code, disp as i8 as u8);
-    } else if want_disp32 {
-        emit_i32(code, disp);
-    }
-}
-
 /// `MOVSXD r64, [base + index * scale]` -- 32-bit signed indexed load.
 pub(crate) fn emit_movsxd_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
-    emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
-    emit_byte(code, 0x63);
-    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+    super::table::encode_into(
+        code,
+        "movsxd",
+        None,
+        &[rw(dst, 8), msib(base, index, scale, 4)],
+    );
 }
 
 /// `MOV r64, [base + index * scale]` -- 64-bit indexed load.
 pub(crate) fn emit_mov_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
-    emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
-    emit_byte(code, 0x8B);
-    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+    super::table::encode_into(
+        code,
+        "mov",
+        Some(8),
+        &[rw(dst, 8), msib(base, index, scale, 8)],
+    );
 }
 
 /// `LEA r64, [base + index * scale]` -- compute the effective address.
 pub(crate) fn emit_lea_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
-    emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
-    emit_byte(code, 0x8D);
-    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+    super::table::encode_into(
+        code,
+        "lea",
+        Some(8),
+        &[rw(dst, 8), msib(base, index, scale, 8)],
+    );
 }
 
 /// `MOV r32, [base + index * scale]` -- 32-bit zero-extending indexed
 /// load.
 pub(crate) fn emit_mov_r32_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
-    let needs_rex = dst.high() || index.high() || base.high();
-    if needs_rex {
-        emit_byte(code, rex(false, dst.high(), index.high(), base.high()));
-    }
-    emit_byte(code, 0x8B);
-    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+    super::table::encode_into(
+        code,
+        "mov",
+        Some(4),
+        &[rw(dst, 4), msib(base, index, scale, 4)],
+    );
 }
 
 /// `MOVSX r64, [base + index * scale]` (16-bit) -- 16-bit signed
 /// indexed load.
 pub(crate) fn emit_movsx_r_sib16(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
-    emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0xBF);
-    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+    super::table::encode_into(
+        code,
+        "movsx",
+        None,
+        &[rw(dst, 8), msib(base, index, scale, 2)],
+    );
 }
 
 /// `MOVZX r64, [base + index * scale]` (16-bit) -- 16-bit unsigned
 /// indexed load.
 pub(crate) fn emit_movzx_r_sib16(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
-    emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0xB7);
-    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+    super::table::encode_into(
+        code,
+        "movzx",
+        None,
+        &[rw(dst, 8), msib(base, index, scale, 2)],
+    );
 }
 
 /// `MOVSX r64, [base + index * scale]` (8-bit) -- 8-bit signed
 /// indexed load.
 pub(crate) fn emit_movsx_r_sib8(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
-    emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0xBE);
-    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+    super::table::encode_into(
+        code,
+        "movsx",
+        None,
+        &[rw(dst, 8), msib(base, index, scale, 1)],
+    );
 }
 
 /// `MOVZX r64, [base + index * scale]` (8-bit) -- 8-bit unsigned
 /// indexed load.
 pub(crate) fn emit_movzx_r_sib8(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
-    emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0xB6);
-    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+    super::table::encode_into(
+        code,
+        "movzx",
+        None,
+        &[rw(dst, 8), msib(base, index, scale, 1)],
+    );
 }
 
 /// `MOV [base + index * scale], r64` -- 64-bit indexed store.
 pub(crate) fn emit_mov_sib_r(code: &mut Vec<u8>, base: Reg, index: Reg, scale: u8, src: Reg) {
-    emit_byte(code, rex(true, src.high(), index.high(), base.high()));
-    emit_byte(code, 0x89);
-    emit_modrm_sib_mem(code, src, base, index, scale, 0);
+    super::table::encode_into(
+        code,
+        "mov",
+        Some(8),
+        &[msib(base, index, scale, 8), rw(src, 8)],
+    );
 }
 
 /// `MOV [base + index * scale], r32` -- 32-bit indexed store.
 pub(crate) fn emit_mov_sib_r32(code: &mut Vec<u8>, base: Reg, index: Reg, scale: u8, src: Reg) {
-    let needs_rex = src.high() || index.high() || base.high();
-    if needs_rex {
-        emit_byte(code, rex(false, src.high(), index.high(), base.high()));
-    }
-    emit_byte(code, 0x89);
-    emit_modrm_sib_mem(code, src, base, index, scale, 0);
+    super::table::encode_into(
+        code,
+        "mov",
+        Some(4),
+        &[msib(base, index, scale, 4), rw(src, 4)],
+    );
 }
 
 /// `MOV [base + index * scale], r16` -- 16-bit indexed store.
-/// Operand-size prefix 66h selects 16-bit, then the standard REX is
-/// optional based on register banks.
 pub(crate) fn emit_mov_sib_r16(code: &mut Vec<u8>, base: Reg, index: Reg, scale: u8, src: Reg) {
-    emit_byte(code, 0x66);
-    let needs_rex = src.high() || index.high() || base.high();
-    if needs_rex {
-        emit_byte(code, rex(false, src.high(), index.high(), base.high()));
-    }
-    emit_byte(code, 0x89);
-    emit_modrm_sib_mem(code, src, base, index, scale, 0);
+    super::table::encode_into(
+        code,
+        "mov",
+        Some(2),
+        &[msib(base, index, scale, 2), rw(src, 2)],
+    );
 }
 
-/// `MOV [base + index * scale], r8` -- 8-bit indexed store.
-/// Uses opcode 88h (MOV r/m8, r8). Any high-bank operand forces a
-/// REX byte (which also picks the new-8-bit subreg encoding for
-/// rsi/rdi/rbp/rsp instead of their legacy AH/BH/CH/DH halves).
+/// `MOV [base + index * scale], r8` -- 8-bit indexed store (opcode 88).
 pub(crate) fn emit_mov_sib_r8(code: &mut Vec<u8>, base: Reg, index: Reg, scale: u8, src: Reg) {
-    let needs_rex = src.high() || index.high() || base.high() || src.lo() >= 4;
-    if needs_rex {
-        emit_byte(code, rex(false, src.high(), index.high(), base.high()));
-    }
-    emit_byte(code, 0x88);
-    emit_modrm_sib_mem(code, src, base, index, scale, 0);
+    super::table::encode_into(
+        code,
+        "mov",
+        Some(1),
+        &[msib(base, index, scale, 1), rw(src, 1)],
+    );
 }
 
 fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {

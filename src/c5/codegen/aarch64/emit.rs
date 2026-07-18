@@ -2177,10 +2177,7 @@ fn emit_inline_asm_aarch64(
                         r
                     }
                 };
-                Opnd::Mem {
-                    base,
-                    off: off as u32,
-                }
+                Opnd::Mem { base, off }
             }
             AsmOpndA64::Cond(c) => Opnd::Cond(c),
             AsmOpndA64::Label { .. } => {

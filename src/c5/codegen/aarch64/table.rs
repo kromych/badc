@@ -27,6 +27,10 @@ pub(crate) enum Field {
     /// A raw unsigned immediate: `shift` = low bit, `width` = bit count. Fed by
     /// the operand at `op` (index into the instruction's operand list).
     UImm { op: u8, shift: u8, width: u8 },
+    /// A two's-complement signed immediate: `shift` = low bit, `width` = bit
+    /// count. Fed by the operand at `op` -- either a plain immediate (`smax`
+    /// imm8) or a memory reference's offset (`ldur`/`ldtr` unscaled imm9).
+    SImm { op: u8, shift: u8, width: u8 },
     /// The 13-bit logical-immediate bitmask field (`N:immr:imms` at bit 10),
     /// computed from the operand value. `is64` selects the 64/32-bit element.
     LogicalImm { op: u8, is64: bool },
@@ -88,10 +92,12 @@ pub(crate) enum Opnd {
     /// A system register, as its 15-bit `mrs`/`msr` field
     /// (`(op0-2)<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2`).
     SysReg(u16),
-    /// A memory reference `[base, #off]` (`off` in bytes) for `ldr` / `str`.
+    /// A memory reference `[base, #off]` (`off` in bytes). `off` is signed for
+    /// the unscaled/unprivileged imm9 forms; the scaled `ldr`/`str` path treats
+    /// it as an unsigned scaled offset.
     Mem {
         base: u8,
-        off: u32,
+        off: i64,
     },
     /// A 4-bit condition code for the conditional-select forms.
     Cond(u8),
@@ -180,6 +186,17 @@ fn imm(o: Opnd) -> Result<i64, String> {
     }
 }
 
+/// An immediate field's value: a plain immediate, or a memory reference's
+/// offset (the imm9/imm12 offset of the load-store forms). Used by the raw
+/// unsigned and signed immediate fields, which a memory operand may feed.
+fn imm_or_off(o: Opnd) -> Result<i64, String> {
+    match o {
+        Opnd::Imm(v) => Ok(v),
+        Opnd::Mem { off, .. } => Ok(off),
+        _ => Err(String::from("inline asm: immediate operand expected")),
+    }
+}
+
 fn cond(o: Opnd) -> Result<u8, String> {
     match o {
         Opnd::Cond(c) => Ok(c),
@@ -220,6 +237,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             use super::encode::{Reg, enc_ldr_imm, enc_ldr32_imm, enc_str_imm, enc_str32_imm};
             let rt = Reg(num);
             let rn = Reg(base);
+            let off = off as u32; // scaled unsigned offset (imm12)
             return Ok(match (mnemonic, is64) {
                 ("ldr", true) => enc_ldr_imm(rt, rn, off),
                 ("ldr", false) => enc_ldr32_imm(rt, rn, off),
@@ -263,12 +281,24 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                 word |= (reg(ops[op as usize])? as u32 & 31) << shift;
             }
             Field::UImm { op, shift, width } => {
-                let v = imm(ops[op as usize])?;
+                let v = imm_or_off(ops[op as usize])?;
                 let mask = (1u64 << width) - 1;
                 if (v as u64) & !mask != 0 {
                     return Err(format!("inline asm: immediate out of {width}-bit range"));
                 }
                 word |= ((v as u32) & mask as u32) << shift;
+            }
+            Field::SImm { op, shift, width } => {
+                let v = imm_or_off(ops[op as usize])?;
+                let lo = -(1i64 << (width - 1));
+                let hi = (1i64 << (width - 1)) - 1;
+                if v < lo || v > hi {
+                    return Err(format!(
+                        "inline asm: signed immediate out of {width}-bit range"
+                    ));
+                }
+                let mask = (1u64 << width) - 1;
+                word |= (((v as u64) & mask) as u32) << shift;
             }
             Field::LogicalImm { op, is64 } => {
                 let v = imm(ops[op as usize])? as u64;

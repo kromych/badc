@@ -80,6 +80,27 @@ DB_FIXES = {
         ("stlxrh Wd, Ws, [Xn|SP]", None),
     ("stxrh Wd, Xs, [Xn|SP]", "01001000|000|Rd|0|11111|Rn|Rs"):
         ("stxrh Wd, Ws, [Xn|SP]", None),
+    # The sign-extending byte/halfword unscaled + unprivileged loads carry the
+    # opc[23:22] target-width bits inverted: the assembler encodes the 32-bit
+    # (Wd) variant as opc=11 and the 64-bit (Xd) as opc=10, but the database
+    # ships them the other way round. Swap the middle group (100<->110) so each
+    # width gets its true opc. (ldtrsw/ldursw are 64-bit only, opc=10, correct.)
+    ("ldtrsb Wd, [Xn|SP, #offS]", "00111000|100|offS:9|10|Rn|Rd"):
+        (None, "00111000|110|offS:9|10|Rn|Rd"),
+    ("ldtrsb Xd, [Xn|SP, #offS]", "00111000|110|offS:9|10|Rn|Rd"):
+        (None, "00111000|100|offS:9|10|Rn|Rd"),
+    ("ldtrsh Wd, [Xn|SP, #offS]", "01111000|100|offS:9|10|Rn|Rd"):
+        (None, "01111000|110|offS:9|10|Rn|Rd"),
+    ("ldtrsh Xd, [Xn|SP, #offS]", "01111000|110|offS:9|10|Rn|Rd"):
+        (None, "01111000|100|offS:9|10|Rn|Rd"),
+    ("ldursb Wd, [Xn|SP, #offS]", "00111000|100|offS:9|00|Rn|Rd"):
+        (None, "00111000|110|offS:9|00|Rn|Rd"),
+    ("ldursb Xd, [Xn|SP, #offS]", "00111000|110|offS:9|00|Rn|Rd"):
+        (None, "00111000|100|offS:9|00|Rn|Rd"),
+    ("ldursh Wd, [Xn|SP, #offS]", "01111000|100|offS:9|00|Rn|Rd"):
+        (None, "01111000|110|offS:9|00|Rn|Rd"),
+    ("ldursh Xd, [Xn|SP, #offS]", "01111000|110|offS:9|00|Rn|Rd"):
+        (None, "01111000|100|offS:9|00|Rn|Rd"),
 }
 
 # The store-form atomic aliases (ST<op> = LD<op> with the result discarded)
@@ -104,6 +125,24 @@ BARE = {'Rm': 5, 'Rn': 5, 'Rd': 5, 'Ra': 5, 'Rt': 5, 'Rt2': 5, 'Rs': 5,
 
 # Aliases that store the inverted written condition (al/nv invalid there).
 COND_INV = {'cset', 'csetm', 'cinc', 'cinv', 'cneg'}
+
+
+def split_ops(rest):
+    """Split an operand list on top-level commas; a memory operand carries its
+    own comma (`[Xn|SP, #offS]`), so commas inside brackets do not split."""
+    out, depth, start = [], 0, 0
+    for i, c in enumerate(rest):
+        if c == '[':
+            depth += 1
+        elif c == ']':
+            depth -= 1
+        elif c == ',' and depth == 0:
+            out.append(rest[start:i].strip())
+            start = i + 1
+    tail = rest[start:].strip()
+    if tail:
+        out.append(tail)
+    return out
 
 
 def parse_op(op):
@@ -170,14 +209,26 @@ def classify(heads, toks, op, im):
                 rd_width = w
             i += 1
             continue
-        if re.fullmatch(r'\[Xn(\|SP)?\]', t):
-            # A base-register memory reference; the base feeds Rn.
+        if (mm := re.fullmatch(r'\[Xn(?:\|SP)?(?:, #(\w+))?\]', t)):
+            # A memory reference: the base feeds Rn, an optional immediate
+            # offset feeds its named field. The unscaled/unprivileged forms
+            # take a two's-complement offset (`#offS`, signed); the byte
+            # unsigned form takes `#offZ`. Scaled offsets carry a `*N`
+            # multiplier and do not match here (the raw model cannot scale).
             fv = fl.get('Rn')
             if fv is None or fv[0] != 5:
                 return ('residual', 'memory base field Rn not a 5-bit field')
             consumed.add('Rn')
             ops.append('Mem')
             fields.append(f'Reg {{ op: {i}, shift: {fv[1]} }}')
+            if (offname := mm.group(1)) is not None:
+                ov = fl.get(offname)
+                if ov is None:
+                    return ('residual', f'memory offset #{offname} has no field')
+                kind = 'SImm' if offname.endswith('S') else 'UImm'
+                consumed.add(offname)
+                fields.append(
+                    f'{kind} {{ op: {i}, shift: {ov[1]}, width: {ov[0]} }}')
             i += 1
             continue
         if t0 == '#sysreg':
@@ -232,18 +283,17 @@ def classify(heads, toks, op, im):
             return ('residual', 'shift-alias fields not immr/imms shaped')
         if (m := re.fullmatch(r'#(\w+)', t0)) and not im:
             name = m.group(1)
-            if name.endswith('S'):
-                # The trailing-S names (immS/offS/relS) are signed; a raw
-                # unsigned field would mis-encode the negative half.
-                return ('residual', f'signed immediate {t0}, no signed field kind')
-            if name in fl:
-                w, pos = fl[name]
-                consumed.add(name)
-                ops.append('Imm')
-                fields.append(f'UImm {{ op: {i}, shift: {pos}, width: {w} }}')
-                i += 1
-                continue
-            return ('residual', f'immediate token {t0} has no matching field')
+            if name not in fl:
+                return ('residual', f'immediate token {t0} has no matching field')
+            w, pos = fl[name]
+            consumed.add(name)
+            ops.append('Imm')
+            # Trailing-S names (immS) are two's-complement signed; the rest
+            # are raw unsigned fields.
+            kind = 'SImm' if name.endswith('S') else 'UImm'
+            fields.append(f'{kind} {{ op: {i}, shift: {pos}, width: {w} }}')
+            i += 1
+            continue
         if t.startswith('{'):
             # Optional shift groups whose absent form is all-zero field bits
             # are dropped; extend/index groups are not (their default is not
@@ -278,7 +328,7 @@ def catalogue(rows, residuals=None):
     forms = {}
     for inst, op, im in rows:
         headpart, _, rest = inst.partition(' ')
-        toks = tuple(t.strip() for t in rest.split(',')) if rest else ()
+        toks = tuple(split_ops(rest)) if rest else ()
         heads = headpart.split('|')
         r = classify(heads, toks, op, im)
         if r[0] == 'residual':

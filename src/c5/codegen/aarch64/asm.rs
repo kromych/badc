@@ -464,6 +464,15 @@ mod tests {
                 },
             ]
         );
+        // A negative offset feeds the signed imm9 forms (ldur/ldtr/sttr).
+        let insns = parse_template(b"ldtr w0, [x1, #-4]").unwrap();
+        assert_eq!(
+            insns[0].operands[1],
+            AsmOpndA64::Mem {
+                base: MemBase::Reg(1),
+                off: -4
+            }
+        );
     }
 
     #[test]

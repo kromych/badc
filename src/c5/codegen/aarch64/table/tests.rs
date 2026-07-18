@@ -259,6 +259,42 @@ fn memory_and_positional_registers() {
     assert_eq!(enc("cmpp", &[x(3), x(4)]), 0xBAC4007F);
 }
 
+/// Memory operands carrying an immediate offset (the unscaled/unprivileged
+/// signed imm9 and the byte unsigned imm12) and the standalone signed
+/// immediate (`smax`/`smin` imm8). One word per class, all verified against
+/// the assembler. The offset feeds a `SImm`/`UImm` field from the same memory
+/// operand whose base feeds `Rn`.
+#[test]
+fn signed_and_offset_immediates() {
+    let mem = |base: u8, off: i64| Opnd::Mem { base, off };
+    // Unscaled/unprivileged signed imm9 (bit 12): sign-encoded two's complement.
+    assert_eq!(enc("ldtr", &[w(0), mem(1, -4)]), 0xB85FC820); // ldtr w0, [x1, #-4]
+    assert_eq!(enc("ldtr", &[x(2), mem(3, 255)]), 0xF84FF862); // max imm9
+    assert_eq!(enc("sttr", &[w(4), mem(5, -256)]), 0xB81008A4); // min imm9
+    assert_eq!(enc("ldur", &[x(6), mem(7, -1)]), 0xF85FF0E6);
+    assert_eq!(enc("stur", &[w(8), mem(9, 0)]), 0xB8000128);
+    assert_eq!(enc("ldtrsw", &[x(4), mem(5, -256)]), 0xB89008A4);
+    // Sign-extending byte/halfword loads carry opc[23:22] inverted: the 32-bit
+    // (Wd) variant is opc=11, the 64-bit (Xd) opc=10 (corrected from the db).
+    assert_eq!(enc("ldtrsb", &[w(1), mem(2, -8)]), 0x38DF8841);
+    assert_eq!(enc("ldtrsb", &[x(1), mem(2, -8)]), 0x389F8841);
+    assert_eq!(enc("ldtrsh", &[w(1), mem(2, -8)]), 0x78DF8841);
+    assert_eq!(enc("ldursb", &[x(1), mem(2, -8)]), 0x389F8041);
+    assert_eq!(enc("ldapur", &[x(0), mem(1, -4)]), 0xD95FC020);
+    assert_eq!(enc("stlur", &[w(2), mem(3, 5)]), 0x99005062);
+    // Byte unsigned imm12 (bit 10, scale 1): a raw unsigned field.
+    assert_eq!(enc("ldrb", &[w(0), mem(1, 5)]), 0x39401420);
+    assert_eq!(enc("strb", &[w(2), mem(3, 4095)]), 0x393FFC62); // max imm12
+    // Standalone signed imm8 (bit 10).
+    assert_eq!(enc("smax", &[w(0), w(1), Opnd::Imm(-1)]), 0x11C3FC20);
+    assert_eq!(enc("smax", &[x(2), x(3), Opnd::Imm(127)]), 0x91C1FC62);
+    assert_eq!(enc("smin", &[w(4), w(5), Opnd::Imm(-128)]), 0x11CA00A4);
+    // Range checks reject values the field cannot hold.
+    assert!(encode("ldtr", &[w(0), mem(1, 256)]).is_err()); // > imm9 max
+    assert!(encode("ldtr", &[w(0), mem(1, -257)]).is_err()); // < imm9 min
+    assert!(encode("smax", &[w(0), w(1), Opnd::Imm(128)]).is_err()); // > imm8 max
+}
+
 #[cfg(feature = "std")]
 mod differential {
     use super::super::super::isa_a64_table;
@@ -354,6 +390,7 @@ mod differential {
     fn field_for(f: &Form, idx: usize) -> Option<Field> {
         f.fields.iter().copied().find(|fl| match *fl {
             Field::UImm { op, .. }
+            | Field::SImm { op, .. }
             | Field::LogicalImm { op, .. }
             | Field::MovImm { op }
             | Field::MovHw { op }
@@ -361,6 +398,17 @@ mod differential {
             | Field::ShrAlias { op }
             | Field::Cond { op, .. } => op as usize == idx,
             _ => false,
+        })
+    }
+
+    /// A representative in-range offset for a memory slot that carries one
+    /// (negative for the signed imm9 forms, positive for the byte unsigned
+    /// form), or None for a base-only memory operand.
+    fn mem_off(f: &Form, idx: usize) -> Option<i64> {
+        f.fields.iter().find_map(|fl| match *fl {
+            Field::SImm { op, .. } if op as usize == idx => Some(-8),
+            Field::UImm { op, .. } if op as usize == idx => Some(8),
+            _ => None,
         })
     }
 
@@ -376,6 +424,11 @@ mod differential {
                 vs.retain(|v| *v <= max);
                 vs.dedup();
                 vs.into_iter().map(imm).collect()
+            }
+            Some(Field::SImm { width, .. }) => {
+                // Two's-complement field: exercise the extremes and a negative.
+                let bound = 1i64 << (width - 1);
+                [-bound, -1, bound - 1].iter().map(|&v| imm(v)).collect()
             }
             Some(Field::LogicalImm { is64, .. }) => if is64 {
                 &[
@@ -457,13 +510,19 @@ mod differential {
                             ));
                             ops.push(Opnd::Reg { num: regs[i], is64 });
                         }
-                        A64Op::Mem => {
-                            txt.push(alloc::format!("[x{}]", regs[i]));
-                            ops.push(Opnd::Mem {
-                                base: regs[i],
-                                off: 0,
-                            });
-                        }
+                        A64Op::Mem => match mem_off(f, i) {
+                            Some(off) => {
+                                txt.push(alloc::format!("[x{}, #{off}]", regs[i]));
+                                ops.push(Opnd::Mem { base: regs[i], off });
+                            }
+                            None => {
+                                txt.push(alloc::format!("[x{}]", regs[i]));
+                                ops.push(Opnd::Mem {
+                                    base: regs[i],
+                                    off: 0,
+                                });
+                            }
+                        },
                         _ => {
                             if let Some((t, o)) = &cands[i][if i == slot { pick } else { 0 }] {
                                 txt.push(t.clone());

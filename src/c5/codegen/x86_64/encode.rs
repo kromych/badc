@@ -415,20 +415,14 @@ pub(crate) fn emit_add_mem64_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm
 /// sign-extended into a 64-bit register. Used by [`LoadKind::I16`] for
 /// `short` lvalue reads. Encoding: `REX.W + 0F BF /r`.
 pub(crate) fn emit_movsx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_byte(code, rex(true, dst.high(), false, base.high()));
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0xBF);
-    emit_modrm_mem(code, dst, base, disp);
+    super::table::encode_into(code, Mnem::Movsx, None, &[rw(dst, 8), mw(base, disp, 2)]);
 }
 
 /// `MOVZX r64, [base + disp]` (16-bit memory source) -- 16-bit load
 /// zero-extended into a 64-bit register. Used by [`LoadKind::U16`] for
 /// `unsigned short` / `u16` lvalue reads. Encoding: `REX.W + 0F B7 /r`.
 pub(crate) fn emit_movzx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_byte(code, rex(true, dst.high(), false, base.high()));
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0xB7);
-    emit_modrm_mem(code, dst, base, disp);
+    super::table::encode_into(code, Mnem::Movzx, None, &[rw(dst, 8), mw(base, disp, 2)]);
 }
 
 /// `MOV [base + disp], r16` -- 16-bit memory store of the low half-
@@ -449,9 +443,7 @@ pub(crate) fn emit_mov_mem16_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Re
 /// `LEA r64, [base + disp]` -- compute effective address.
 /// Encoding: `REX.W + 8D /r`.
 pub(crate) fn emit_lea_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_byte(code, rex(true, dst.high(), false, base.high()));
-    emit_byte(code, 0x8D);
-    emit_modrm_mem(code, dst, base, disp);
+    super::table::encode_into(code, Mnem::Lea, Some(8), &[rw(dst, 8), mw(base, disp, 8)]);
 }
 
 /// `LEA r64, [rip + disp32]` -- the RIP-relative addressing form
@@ -1267,20 +1259,14 @@ pub(crate) fn emit_setcc_r8(code: &mut Vec<u8>, cc: Cc, dst: Reg) {
 /// `MOVZX r64, byte ptr [base + disp]` -- load a byte zero-extended
 /// into a 64-bit register. Encoding: `REX.W + 0F B6 /r`.
 pub(crate) fn emit_movzx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_byte(code, rex(true, dst.high(), false, base.high()));
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0xB6);
-    emit_modrm_mem(code, dst, base, disp);
+    super::table::encode_into(code, Mnem::Movzx, None, &[rw(dst, 8), mw(base, disp, 1)]);
 }
 
 /// `MOVSX r64, byte ptr [base + disp]` -- load a byte sign-extended
 /// into a 64-bit register. Used by [`LoadKind::I8`] for `signed char`
 /// lvalue reads. Encoding: `REX.W + 0F BE /r`.
 pub(crate) fn emit_movsx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_byte(code, rex(true, dst.high(), false, base.high()));
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0xBE);
-    emit_modrm_mem(code, dst, base, disp);
+    super::table::encode_into(code, Mnem::Movsx, None, &[rw(dst, 8), mw(base, disp, 1)]);
 }
 
 /// `MOVZX r64, r/m8` -- zero-extend a byte register into a 64-bit
@@ -1288,10 +1274,7 @@ pub(crate) fn emit_movsx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i
 /// prefix also disables the AH/CH/DH/BH high-byte aliases so we
 /// can treat any of the 16 GPRs as an 8-bit source.
 pub(crate) fn emit_movzx_r_r8(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_byte(code, rex(true, dst.high(), false, src.high()));
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0xB6);
-    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+    super::table::encode_into(code, Mnem::Movzx, None, &[rw(dst, 8), rw(src, 1)]);
 }
 
 /// `MOV byte ptr [base + disp], r8` -- store the low byte of `src`.
@@ -1417,27 +1400,19 @@ pub(crate) fn emit_xor_eax_eax(code: &mut Vec<u8>) {
 /// `MOVSXD r64, r32` -- sign-extend a 32-bit register to 64 bits.
 /// Reg-to-reg form of [`emit_movsxd_r_mem`].
 pub(crate) fn emit_movsxd_r_r(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_byte(code, rex(true, dst.high(), false, src.high()));
-    emit_byte(code, 0x63);
-    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+    super::table::encode_into(code, Mnem::Movsxd, None, &[rw(dst, 8), rw(src, 4)]);
 }
 
 /// `MOVSX r64, r/m16` (register form) -- sign-extend low 16 bits.
 pub(crate) fn emit_movsx_r_r16(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_byte(code, rex(true, dst.high(), false, src.high()));
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0xBF);
-    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+    super::table::encode_into(code, Mnem::Movsx, None, &[rw(dst, 8), rw(src, 2)]);
 }
 
 /// `MOVSX r64, r/m8` (register form) -- sign-extend low 8 bits.
 /// REX is always emitted to access the new-encoding 8-bit subregs
 /// (`sil` / `dil` / `bpl` / `spl`) instead of the legacy AH/CH/etc.
 pub(crate) fn emit_movsx_r_r8(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_byte(code, rex(true, dst.high(), false, src.high()));
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0xBE);
-    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+    super::table::encode_into(code, Mnem::Movsx, None, &[rw(dst, 8), rw(src, 1)]);
 }
 
 /// `MOVSXD r64, [base + index * scale]` -- 32-bit signed indexed load.

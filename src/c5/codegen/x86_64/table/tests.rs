@@ -123,6 +123,22 @@ fn cmov_forms() {
     );
 }
 
+#[test]
+fn accumulator_extend_and_fences() {
+    // Accumulator sign-extends: the 64-bit forms carry REX.W on a nullary
+    // opcode. AT&T spellings alias the Intel ones.
+    assert_eq!(enc("cwde", &[]), [0x98]);
+    assert_eq!(enc("cdqe", &[]), [0x48, 0x98]);
+    assert_eq!(enc("cdq", &[]), [0x99]);
+    assert_eq!(enc("cqo", &[]), [0x48, 0x99]);
+    assert_eq!(enc("cltq", &[]), enc("cdqe", &[]));
+    assert_eq!(enc("cqto", &[]), enc("cqo", &[]));
+    // Fences carry their full second opcode byte.
+    assert_eq!(enc("lfence", &[]), [0x0f, 0xae, 0xe8]);
+    assert_eq!(enc("mfence", &[]), [0x0f, 0xae, 0xf0]);
+    assert_eq!(enc("sfence", &[]), [0x0f, 0xae, 0xf8]);
+}
+
 // ------------------------------------------------------------------
 // Differential + fuzz harness against the system assembler.
 // ------------------------------------------------------------------
@@ -475,7 +491,10 @@ mod differential {
                 cases.push(("cmpxchg", vec![m(6, w), r(a, w)]));
             }
         }
-        for mnem in ["rdtsc", "rdtscp", "cpuid", "cli", "sti", "hlt", "nop"] {
+        for mnem in [
+            "rdtsc", "rdtscp", "cpuid", "cli", "sti", "hlt", "nop", "cwde", "cdqe", "cdq", "cqo",
+            "lfence", "mfence", "sfence",
+        ] {
             cases.push((mnem, vec![]));
         }
         cases

@@ -33,6 +33,8 @@ setb setbe setl setle setnb setnbe setnl setnle
 setno setnp setns setnz seto setp sets setz
 cmovb cmovbe cmovl cmovle cmovnb cmovnbe cmovnl cmovnle
 cmovno cmovnp cmovns cmovnz cmovo cmovp cmovs cmovz
+cwde cdqe cdq cqo
+lfence mfence sfence
 push pop lea nop
 movzx movsx movsxd
 cmpxchg xadd
@@ -238,6 +240,9 @@ def main():
     args = ap.parse_args()
     d = json.load(open(args.db))
     aliases = d.get('aliases', {})
+    # AT&T spellings the database does not carry; GCC inline asm uses these for
+    # the accumulator sign-extends.
+    att_aliases = {'cwde': ['cwtl'], 'cdqe': ['cltq'], 'cdq': ['cltd'], 'cqo': ['cqto']}
     forms = []
     seen = set()
     for g in d['instructions']:
@@ -255,7 +260,8 @@ def main():
                 continue
             # Emit the canonical mnemonic and every alias spelling of it (the
             # condition-code aliases: sete == setz, and so on).
-            for name in [mnem] + aliases.get(mnem, {}).get('aliases', []):
+            alias_names = aliases.get(mnem, {}).get('aliases', []) + att_aliases.get(mnem, [])
+            for name in [mnem] + alias_names:
                 f = build_form(name, ops, enc)
                 if f is None:
                     continue

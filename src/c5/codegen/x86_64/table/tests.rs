@@ -271,6 +271,104 @@ fn memory_rip_relative() {
 }
 
 #[test]
+fn widened_catalogue_encodings() {
+    // Branch families: the Rel operand is the raw displacement (the asm
+    // layer resolves labels); rel8 wins when the value fits, call has no
+    // rel8 form. Register / memory indirect branches ride FF /2, /4.
+    assert_eq!(enc("jmp", &[Opnd::Imm(-2)]), [0xeb, 0xfe]);
+    assert_eq!(enc("je", &[Opnd::Imm(-2)]), [0x74, 0xfe]);
+    assert_eq!(
+        enc("jmp", &[Opnd::Imm(0x1000)]),
+        [0xe9, 0x00, 0x10, 0x00, 0x00]
+    );
+    assert_eq!(
+        enc("call", &[Opnd::Imm(-5)]),
+        [0xe8, 0xfb, 0xff, 0xff, 0xff]
+    );
+    assert_eq!(enc("jmp", &[r(0, 8)]), [0xff, 0xe0]);
+    assert_eq!(enc("call", &[r(0, 8)]), [0xff, 0xd0]);
+    assert_eq!(enc("jmp", &[m(0, 8)]), [0xff, 0x20]);
+    // Double-shifts: MR with the count in imm8 or cl.
+    assert_eq!(
+        enc("shld", &[r(0, 8), r(3, 8), Opnd::Imm(5)]),
+        [0x48, 0x0f, 0xa4, 0xd8, 0x05]
+    );
+    assert_eq!(
+        enc("shrd", &[r(0, 4), r(3, 4), r(1, 1)]),
+        [0x0f, 0xad, 0xd8]
+    );
+    // 16-bit push/pop take the operand-size prefix; push imm encodes 6A/68
+    // (the 66 68 iw pushw-immediate row is excluded as mandatory-66).
+    assert_eq!(enc("push", &[r(1, 2)]), [0x66, 0x51]);
+    assert_eq!(enc("pop", &[r(1, 2)]), [0x66, 0x59]);
+    assert_eq!(enc("push", &[Opnd::Imm(7)]), [0x6a, 0x07]);
+    assert_eq!(
+        enc("push", &[Opnd::Imm(0x1234)]),
+        [0x68, 0x34, 0x12, 0x00, 0x00]
+    );
+    // Fixed-16-bit system forms take no operand-size prefix (their width is
+    // baked into the opcode); the width-group forms of str/sldt do.
+    assert_eq!(enc("lldt", &[r(1, 2)]), [0x0f, 0x00, 0xd1]);
+    assert_eq!(enc("ltr", &[r(1, 2)]), [0x0f, 0x00, 0xd9]);
+    assert_eq!(enc("str", &[r(1, 2)]), [0x66, 0x0f, 0x00, 0xc9]);
+    // in/out: fixed al/ax/eax and dx widths select the form, no prefix for
+    // the byte form.
+    assert_eq!(enc("in", &[r(0, 1), r(2, 2)]), [0xec]);
+    assert_eq!(enc("in", &[r(0, 2), r(2, 2)]), [0x66, 0xed]);
+    assert_eq!(enc("in", &[r(0, 4), r(2, 2)]), [0xed]);
+    assert_eq!(enc("out", &[r(2, 2), r(0, 1)]), [0xee]);
+    // movabs spells the 64-bit immediate mov.
+    assert_eq!(
+        enc("movabs", &[r(0, 8), Opnd::Imm(0x1122334455)]),
+        [0x48, 0xb8, 0x55, 0x44, 0x33, 0x22, 0x11, 0x00, 0x00, 0x00]
+    );
+    // bt-group immediate forms (0F BA /4../7).
+    assert_eq!(
+        enc("bt", &[r(0, 8), Opnd::Imm(5)]),
+        [0x48, 0x0f, 0xba, 0xe0, 0x05]
+    );
+    assert_eq!(
+        enc("btr", &[r(0, 4), Opnd::Imm(3)]),
+        [0x0f, 0xba, 0xf0, 0x03]
+    );
+    // 16-bit accumulator xchg keeps the 90+r short form under the prefix;
+    // the 32-bit self-exchange must use 87 /r (0x90 is NOP, which skips the
+    // zero-extension), and cmpxchg8b takes no REX.W (that selects
+    // cmpxchg16b).
+    assert_eq!(enc("xchg", &[r(0, 2), r(3, 2)]), [0x66, 0x93]);
+    assert_eq!(enc("xchg", &[r(0, 4), r(0, 4)]), [0x87, 0xc0]);
+    assert_eq!(enc("cmpxchg8b", &[m(6, 8)]), [0x0f, 0xc7, 0x0e]);
+    // Mandatory F2/F3/66 prefixes ride Form::pp, emitted after the derived
+    // operand-size prefix and before REX, matching the assembler's order.
+    assert_eq!(enc("pause", &[]), [0xf3, 0x90]);
+    assert_eq!(
+        enc("popcnt", &[r(0, 8), r(3, 8)]),
+        [0xf3, 0x48, 0x0f, 0xb8, 0xc3]
+    );
+    assert_eq!(
+        enc("popcnt", &[r(1, 2), r(2, 2)]),
+        [0x66, 0xf3, 0x0f, 0xb8, 0xca]
+    );
+    assert_eq!(enc("lzcnt", &[r(0, 4), r(3, 4)]), [0xf3, 0x0f, 0xbd, 0xc3]);
+    // 0F38-map forms: adcx carries a mandatory 66, movbe none.
+    assert_eq!(
+        enc("adcx", &[r(0, 8), r(3, 8)]),
+        [0x66, 0x48, 0x0f, 0x38, 0xf6, 0xc3]
+    );
+    assert_eq!(enc("movbe", &[r(0, 4), m(6, 4)]), [0x0f, 0x38, 0xf0, 0x06]);
+    // Immediates must fit their field; an out-of-range value falls through
+    // to a wider form rather than truncating (push 0x1234 skips pushw's iw).
+    assert!(
+        encode(
+            Mnem::from_name("bt").unwrap(),
+            None,
+            &[r(0, 8), Opnd::Imm(0x1234)]
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn catalogue_is_sorted() {
     // encode() binary-searches the catalogue by mnemonic, which is correct only
     // if the generator emitted it sorted. Lock the invariant.
@@ -454,11 +552,8 @@ mod differential {
         if mn == "movabs" {
             mn = String::from("mov");
         }
-        if mn == "nop" || mn == "xchg" {
-            // xchg eax,eax and its width variants alias to nop; fold both.
-            if rest.is_empty() || rest.contains("ax,%") {
-                return (String::from("nop"), Vec::new());
-            }
+        if mn == "nop" && rest.is_empty() {
+            return (String::from("nop"), Vec::new());
         }
         // Drop a trailing AT&T size suffix (addq -> add) but keep movzbq-style
         // compound mnemonics distinct.
@@ -480,6 +575,12 @@ mod differential {
                     ops.push(o.replace('%', ""));
                 }
             }
+        }
+        if mn == "xchg" {
+            // 86/87 encodes either operand order; the assembler and the
+            // catalogue may pick opposite reg/rm assignments of the same
+            // exchange, so compare the operand multiset.
+            ops.sort();
         }
         (mn, ops)
     }
@@ -625,139 +726,99 @@ mod differential {
         Opnd::RipRel { disp, width }
     }
 
-    fn sweep_cases() -> Vec<(&'static str, Vec<Opnd>)> {
+    /// The operation widths a form's width classes admit: the `v` / `y`
+    /// groups instantiate at each member width, fixed-width forms once.
+    fn form_widths(f: &Form) -> &'static [u8] {
+        let has = |w: W| {
+            f.ops.iter().any(|&p| {
+                matches!(p,
+                    OpPat::Reg(x) | OpPat::Rm(x) | OpPat::Mem(x) | OpPat::Fixed(_, x) if x == w)
+            })
+        };
+        if has(W::V) {
+            &[2, 4, 8]
+        } else if has(W::Y) {
+            &[4, 8]
+        } else {
+            &[8]
+        }
+    }
+
+    /// Synthesize differential cases for one form at one operation width.
+    /// Each slot gets a small choice set (low / high registers, a register
+    /// and a memory shape for r/m, a small and a wide immediate); the cases
+    /// cycle the slots' choices index-aligned rather than taking the full
+    /// cartesian product. `Rel` forms are skipped: their operand is a branch
+    /// target at the assembler level but a raw displacement here, so the
+    /// golden tests lock them instead.
+    fn cases_for_form(f: &Form, opw: u8, out: &mut Vec<(&'static str, Vec<Opnd>)>) {
+        // Effective operation width of this instantiation: the widest
+        // register / memory slot (what `op_width` will see). A byte-only
+        // form sits in the fixed-width bucket, so `opw` alone is not it.
+        let eff = f
+            .ops
+            .iter()
+            .filter_map(|&p| match p {
+                OpPat::Reg(w) | OpPat::Rm(w) | OpPat::Mem(w) | OpPat::Fixed(_, w) => wbytes(w, opw),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(opw);
+        let mut slots: Vec<Vec<Opnd>> = Vec::new();
+        for &p in f.ops {
+            let choices = match p {
+                OpPat::Rel(_) => return,
+                OpPat::Reg(w) => match wbytes(w, opw) {
+                    Some(wb) => vec![r(3, wb), r(9, wb)],
+                    None => return,
+                },
+                OpPat::Rm(w) => match wbytes(w, opw) {
+                    Some(wb) => vec![r(3, wb), r(9, wb), m(6, wb)],
+                    None => return,
+                },
+                OpPat::Mem(w) => match wbytes(w, opw) {
+                    Some(wb) => vec![m(6, wb), md(13, 8, wb)],
+                    None => return,
+                },
+                OpPat::MemAny => vec![m(6, 8), md(13, 8, 1)],
+                OpPat::Fixed(n, w) => match wbytes(w, opw) {
+                    Some(wb) => vec![r(n, wb)],
+                    None => return,
+                },
+                OpPat::Imm(ImmC::One) => vec![Opnd::Imm(1)],
+                OpPat::Imm(ImmC::Iq) => vec![Opnd::Imm(7), Opnd::Imm(0x1122334455)],
+                // The wide value stays inside the effective width so a
+                // byte-operand form is not asked for an unencodable case.
+                OpPat::Imm(_) => vec![
+                    Opnd::Imm(7),
+                    Opnd::Imm(if eff == 1 { 0x45 } else { 0x2345 }),
+                ],
+            };
+            slots.push(choices);
+        }
+        let n = slots.iter().map(Vec::len).max().unwrap_or(1);
+        for k in 0..n {
+            out.push((f.mnemonic, slots.iter().map(|c| c[k % c.len()]).collect()));
+        }
+    }
+
+    /// Every catalogued form instantiated at every width it admits, deduped:
+    /// the case list is derived from the table itself so a form added by the
+    /// generator is fuzzed without touching this file.
+    fn derived_cases() -> Vec<(&'static str, Vec<Opnd>)> {
         let mut cases: Vec<(&'static str, Vec<Opnd>)> = Vec::new();
-        let alu = ["add", "sub", "and", "or", "xor", "cmp", "adc", "sbb", "mov"];
-        let widths = [1u8, 2, 4, 8];
-        let regs = [0u8, 3, 8, 15];
-        for mnem in alu {
-            for &w in &widths {
-                for &a in &regs {
-                    for &b in &[3u8, 8] {
-                        cases.push((mnem, vec![r(a, w), r(b, w)]));
-                    }
-                    cases.push((mnem, vec![r(a, w), m(6, w)]));
-                    cases.push((mnem, vec![m(6, w), r(a, w)]));
-                    cases.push((mnem, vec![r(a, w), Opnd::Imm(7)]));
-                    cases.push((mnem, vec![r(a, w), Opnd::Imm(0x1234)]));
-                }
+        for f in super::super::super::isa_x86_table::FORMS {
+            for &opw in form_widths(f) {
+                cases_for_form(f, opw, &mut cases);
             }
         }
-        for mnem in ["inc", "dec", "neg", "not", "mul", "imul", "div", "idiv"] {
-            for &w in &widths {
-                for &a in &[0u8, 8] {
-                    cases.push((mnem, vec![r(a, w)]));
-                }
-            }
-        }
-        // setcc: one r/m8 operand, canonical and alias spellings; the high
-        // registers exercise the REX-prefix path (sil/dil, r8b..r15b).
-        for mnem in [
-            "seto", "setno", "setb", "setnb", "setz", "setnz", "setbe", "setnbe", "sets", "setns",
-            "setp", "setnp", "setl", "setnl", "setle", "setnle", "sete", "setne", "seta", "setae",
-            "setg", "setge", "setc", "setnc",
-        ] {
-            for &a in &[0u8, 3, 4, 8, 15] {
-                cases.push((mnem, vec![r(a, 1)]));
-            }
-            cases.push((mnem, vec![m(6, 1)]));
-        }
-        // cmovcc: reg, r/m of width 16/32/64.
-        for mnem in [
-            "cmovo", "cmovno", "cmovb", "cmovnb", "cmovz", "cmovnz", "cmovbe", "cmovnbe", "cmovs",
-            "cmovns", "cmovp", "cmovnp", "cmovl", "cmovnl", "cmovle", "cmovnle", "cmove", "cmovne",
-            "cmova", "cmovg",
-        ] {
-            for &w in &[2u8, 4, 8] {
-                for &a in &[0u8, 8] {
-                    cases.push((mnem, vec![r(a, w), r(3, w)]));
-                    cases.push((mnem, vec![r(a, w), m(6, w)]));
-                }
-            }
-        }
-        for mnem in ["shl", "shr", "sar", "rol", "ror"] {
-            for &w in &widths {
-                for &a in &[0u8, 8] {
-                    cases.push((mnem, vec![r(a, w), Opnd::Imm(3)]));
-                    cases.push((mnem, vec![r(a, w), r(1, 1)])); // , cl
-                }
-            }
-        }
-        for &w in &[4u8, 8] {
-            for &a in &[0u8, 8] {
-                cases.push(("bswap", vec![r(a, w)]));
-                cases.push(("xadd", vec![m(6, w), r(a, w)]));
-                cases.push(("cmpxchg", vec![m(6, w), r(a, w)]));
-            }
-        }
-        for mnem in [
-            "rdtsc",
-            "rdtscp",
-            "cpuid",
-            "cli",
-            "sti",
-            "hlt",
-            "nop",
-            "cwde",
-            "cdqe",
-            "cdq",
-            "cqo",
-            "lfence",
-            "mfence",
-            "sfence",
-            "syscall",
-            "sysret",
-            "sysenter",
-            "sysexit",
-            "swapgs",
-            "clts",
-            "ud2",
-            "serialize",
-            "lahf",
-            "sahf",
-            "xgetbv",
-            "xsetbv",
-            "iretq",
-            "rdpkru",
-        ] {
-            cases.push((mnem, vec![]));
-        }
-        // rdrand / rdseed write a 16/32/64-bit register; movnti stores a
-        // 32/64-bit register to memory.
-        for mnem in ["rdrand", "rdseed"] {
-            for &w in &[2u8, 4, 8] {
-                for &a in &[0u8, 8] {
-                    cases.push((mnem, vec![r(a, w)]));
-                }
-            }
-        }
-        for &w in &[4u8, 8] {
-            for &a in &[0u8, 8] {
-                cases.push(("movnti", vec![m(6, w), r(a, w)]));
-            }
-        }
-        // Sizeless-memory ops: any operand width matches and none emits a
-        // size prefix. Swept across a few operand widths and base registers.
-        for mnem in [
-            "clflush",
-            "prefetchnta",
-            "prefetcht0",
-            "prefetcht1",
-            "prefetcht2",
-            "prefetchw",
-            "fxsave",
-            "fxrstor",
-            "lgdt",
-            "lidt",
-            "sgdt",
-            "sidt",
-        ] {
-            for &w in &[1u8, 8] {
-                for &b in &[0u8, 3, 12] {
-                    cases.push((mnem, vec![m(b, w)]));
-                }
-            }
-        }
+        let mut seen = std::collections::HashSet::new();
+        cases.retain(|(m, ops)| seen.insert(alloc::format!("{m} {ops:?}")));
+        cases
+    }
+
+    fn sweep_cases() -> Vec<(&'static str, Vec<Opnd>)> {
+        let mut cases = derived_cases();
         // Base + displacement across the special bases (rbp/r13 forced disp8,
         // rsp/r12 SIB) and displacement sizes (zero, disp8, disp32, negative).
         for &(base, disp) in &[
@@ -817,8 +878,8 @@ mod differential {
             t.gap,
             t.skip
         );
-        // The hand-built sweep is well-typed, so it must be complete as well as
-        // correct.
+        // The sweep is derived from the catalogue, so it must be complete
+        // (every case has a form) as well as correct.
         assert_eq!(t.bad, 0, "table encodings disagree with the assembler");
         assert_eq!(
             t.gap, 0,
@@ -827,8 +888,11 @@ mod differential {
         );
     }
 
-    /// Seeded deterministic fuzzer: draw random operands for each catalogue
-    /// mnemonic and cross-check the encoding against the assembler.
+    /// Seeded deterministic fuzzer: draw a random catalogue form, a random
+    /// admissible width, and random operands (registers, memory shapes with
+    /// displacement / SIB / RIP-relative, immediates), and cross-check the
+    /// encoding against the assembler. Form-driven, so a catalogue addition
+    /// is fuzzed without touching this list.
     #[test]
     fn seeded_fuzz() {
         if !enabled() {
@@ -841,30 +905,62 @@ mod differential {
             st ^= st << 17;
             st
         };
-        let widths = [1u8, 2, 4, 8];
+        let forms = super::super::super::isa_x86_table::FORMS;
         let mut cases: Vec<(&'static str, Vec<Opnd>)> = Vec::new();
-        let mnems = [
-            "add", "sub", "and", "or", "xor", "cmp", "adc", "sbb", "mov", "test", "shl", "shr",
-            "sar", "rol", "ror", "inc", "dec", "neg", "not", "bswap", "xadd", "cmpxchg", "movzx",
-            "movsx",
-        ];
-        for _ in 0..2000 {
-            let mnem = mnems[(next() as usize) % mnems.len()];
-            let w = widths[(next() as usize) % widths.len()];
-            let a = (next() as u8) & 15;
-            let shape = next() % 4;
-            let ops = match mnem {
-                "inc" | "dec" | "neg" | "not" | "bswap" => vec![r(a, w.max(4))],
-                "movzx" | "movsx" => vec![r(a, 8), r((next() as u8) & 15, 1)],
-                "xadd" | "cmpxchg" => vec![m((next() as u8) & 15, w), r(a, w)],
-                _ => match shape {
-                    0 => vec![r(a, w), r((next() as u8) & 15, w)],
-                    1 => vec![r(a, w), Opnd::Imm((next() as i32 % 200) as i64)],
-                    2 => vec![r(a, w), m((next() as u8) & 15, w)],
-                    _ => vec![m((next() as u8) & 15, w), r(a, w)],
-                },
-            };
-            cases.push((mnem, ops));
+        'draw: while cases.len() < 2000 {
+            let f = &forms[(next() as usize) % forms.len()];
+            let widths = form_widths(f);
+            let opw = widths[(next() as usize) % widths.len()];
+            let mut ops = Vec::new();
+            for &p in f.ops {
+                let rnd_mem = |wb: u8, next: &mut dyn FnMut() -> u64| -> Opnd {
+                    let base = (next() as u8) & 15;
+                    match next() % 4 {
+                        0 => m(base, wb),
+                        1 => md(base, (next() as i32 % 0x200) - 0x100, wb),
+                        2 => {
+                            // SIB index rsp (4) means "no index"; skip it.
+                            let mut index = (next() as u8) & 15;
+                            if index == 4 {
+                                index = 5;
+                            }
+                            let scale = 1u8 << (next() % 4);
+                            msib(base, index, scale, (next() as i32 % 0x100) - 0x80, wb)
+                        }
+                        _ => mrip((next() as i32 % 0x1000) - 0x800, wb),
+                    }
+                };
+                let o = match p {
+                    OpPat::Rel(_) => continue 'draw,
+                    OpPat::Reg(w) => match wbytes(w, opw) {
+                        Some(wb) => r((next() as u8) & 15, wb),
+                        None => continue 'draw,
+                    },
+                    OpPat::Rm(w) => match wbytes(w, opw) {
+                        Some(wb) => {
+                            if next() % 2 == 0 {
+                                r((next() as u8) & 15, wb)
+                            } else {
+                                rnd_mem(wb, &mut next)
+                            }
+                        }
+                        None => continue 'draw,
+                    },
+                    OpPat::Mem(w) => match wbytes(w, opw) {
+                        Some(wb) => rnd_mem(wb, &mut next),
+                        None => continue 'draw,
+                    },
+                    OpPat::MemAny => rnd_mem(8, &mut next),
+                    OpPat::Fixed(n, w) => match wbytes(w, opw) {
+                        Some(wb) => r(n, wb),
+                        None => continue 'draw,
+                    },
+                    OpPat::Imm(ImmC::One) => Opnd::Imm(1),
+                    OpPat::Imm(_) => Opnd::Imm((next() as i32 % 0x3000) as i64 - 0x1000),
+                };
+                ops.push(o);
+            }
+            cases.push((f.mnemonic, ops));
         }
         let t = check(&cases);
         for f in t.fails.iter().take(30) {

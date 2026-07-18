@@ -200,12 +200,31 @@ fn pat_matches(p: OpPat, o: Opnd, opw: u8) -> bool {
         (OpPat::Fixed(num, w), Opnd::Reg { num: n, width }) => {
             n == num && wbytes(w, opw) == Some(width)
         }
+        // An immediate must fit its field as the instruction will read it
+        // (byte fields take either signedness; a 32-bit field under a 64-bit
+        // operation sign-extends), or a narrow form would win on length and
+        // silently truncate the value.
         (OpPat::Imm(c), Opnd::Imm(v)) => match c {
-            ImmC::Imms8 => (-128..=127).contains(&v),
+            ImmC::Ib => (-0x80..=0xff).contains(&v),
+            ImmC::Imms8 => (-0x80..=0x7f).contains(&v),
+            ImmC::Iw => (-0x8000..=0xffff).contains(&v),
+            ImmC::Id if opw == 8 => (-0x8000_0000..=0x7fff_ffff).contains(&v),
+            ImmC::Id => (-0x8000_0000..=0xffff_ffff).contains(&v),
+            ImmC::Iv => match opw {
+                2 => (-0x8000..=0xffff).contains(&v),
+                8 => (-0x8000_0000..=0x7fff_ffff).contains(&v),
+                _ => (-0x8000_0000..=0xffff_ffff).contains(&v),
+            },
+            ImmC::Iq => true,
             ImmC::One => v == 1,
-            _ => true,
         },
-        (OpPat::Rel(_), Opnd::Imm(_)) => true,
+        // A relative offset must fit its field, or the short branch form
+        // would win with a truncated displacement.
+        (OpPat::Rel(sz), Opnd::Imm(v)) => match sz {
+            1 => (-0x80..=0x7f).contains(&v),
+            2 => (-0x8000..=0x7fff).contains(&v),
+            _ => (-0x8000_0000..=0x7fff_ffff).contains(&v),
+        },
         _ => false,
     }
 }
@@ -387,16 +406,17 @@ fn encode_best(mnem: Mnem, opw: u8, ops: &[Opnd]) -> (Option<InsnBuf>, bool) {
 
 fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<InsnBuf, String> {
     let mut code = InsnBuf::new();
-    // Operand-size prefix for a 16-bit operation. Suppressed for a form with no
-    // width-bearing operand (e.g. a sizeless-memory op such as clflush), whose
-    // operand width does not select 16-bit operation.
-    let has_width_op = f.ops.iter().any(|p| {
+    // Operand-size prefix: `66` selects the 16-bit member of a `v` width
+    // group. A form whose widths are all fixed (lldt r16/m16, in al/dx) has
+    // its operand size baked into the opcode and takes no prefix, matching
+    // the assembler.
+    let has_v = f.ops.iter().any(|p| {
         matches!(
             p,
-            OpPat::Reg(_) | OpPat::Rm(_) | OpPat::Mem(_) | OpPat::Fixed(..)
+            OpPat::Reg(W::V) | OpPat::Rm(W::V) | OpPat::Mem(W::V) | OpPat::Fixed(_, W::V)
         )
     });
-    if opw == 2 && has_width_op && f.rexw != RexW::Default64 {
+    if opw == 2 && has_v {
         code.push(0x66);
     }
     code.extend_from_slice(f.pp);
@@ -407,6 +427,20 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<InsnBuf, String> {
         _ => None,
     };
     let rm_op = (f.rm != 255).then(|| ops[f.rm as usize]);
+
+    // `xchg eax, eax` must not take the 90+r accumulator short form: 0x90
+    // decodes as NOP and skips the 32-bit zero-extension a real exchange
+    // performs. The 16/64-bit self-exchanges are architectural no-ops
+    // either way and keep the short form.
+    if f.plus_r
+        && *f.opcode == [0x90]
+        && opw == 4
+        && matches!(rm_op, Some(Opnd::Reg { num: 0, .. }))
+    {
+        return Err(String::from(
+            "inline asm: xchg eax, eax is not the 90+r form",
+        ));
+    }
 
     // REX computation.
     let w = match f.rexw {

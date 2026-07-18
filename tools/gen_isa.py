@@ -13,43 +13,33 @@ Usage:
     tools/gen_isa.py --db /path/to/db/isa_x86.json \
         --out src/c5/codegen/x86_64/isa_x86_table.rs
 
-Scope: the legacy general-purpose + system instruction surface C reaches
-through inline asm and that the general lowering emits. VEX/EVEX/XOP/APX and
-explicit-66 (operand-size-redundant or niche) forms are excluded; the width
-groups `v` (16/32/64) and `y` (32/64) cover the 16-bit case, and the encoder
-adds the operand-size prefix by width.
+Scope: every row of the database's GP / system categories the form model can
+express. VEX/EVEX/XOP/APX encodings, address-size-prefixed rows, and operand
+classes outside the model (moff, sreg, far pointers, implicit string-op
+memory) are excluded structurally. A width-group form (`v` = 16/32/64, `y` =
+32/64) takes the operand-size prefix from the encoder when instantiated
+16-bit; a mandatory prefix in the op string (`66` on a 16-bit-only or
+prefix-selected encoding, `F2`/`F3`) rides `Form::pp` in database order.
 """
 import argparse, json, re, sys
 
 CATS = ('GP', 'GP GP_EXT', 'GP GP_IN_OUT', 'VIRTUALIZATION')
-# Mnemonics we admit into the first catalogue: the inline-asm + general-lowering
-# surface. Kept explicit so the table's contents are a reviewed decision.
-ALLOW = set("""
-add sub and or xor cmp adc sbb mov test xchg
-inc dec neg not mul imul div idiv
-shl shr sar sal rol ror rcl rcr
-bsf bsr bswap bt btc btr bts
-setb setbe setl setle setnb setnbe setnl setnle
-setno setnp setns setnz seto setp sets setz
-cmovb cmovbe cmovl cmovle cmovnb cmovnbe cmovnl cmovnle
-cmovno cmovnp cmovns cmovnz cmovo cmovp cmovs cmovz
-cwde cdqe cdq cqo
-lfence mfence sfence
-syscall sysret sysenter sysexit swapgs clts ud2 serialize
-lahf sahf xgetbv xsetbv iretq rdpkru
-rdrand rdseed movnti
-clflush prefetchnta prefetcht0 prefetcht1 prefetcht2 prefetchw
-fxsave fxrstor fxsave64 fxrstor64
-lgdt lidt sgdt sidt
-push pop lea nop
-movzx movsx movsxd
-cmpxchg xadd
-int int3 hlt pause leave ret
-cli sti cld std cmc clc stc
-rdtsc rdtscp rdmsr wrmsr rdpmc cpuid
-invd wbinvd monitor mwait
-in out
-""".split())
+# Rows excluded by hand: mnemonic -> reason. Everything else in CATS that the
+# form model can express is catalogued.
+DENY = {}
+# Database spelling fixes: (mnemonic, prefix+opcode byte string) -> GNU-as
+# mnemonic. The database folds jrcxz (E3 in 64-bit mode) under `jecxz` (the
+# real jecxz, 67 E3, is excluded with the other address-size-prefixed rows)
+# and names the 66-prefixed 16-bit stack / flag / interrupt-return forms
+# after their plain spellings; GNU as reserves those for the 64-bit default
+# forms and spells the 16-bit ones with a `w` suffix.
+RENAME = {
+    ('jecxz', 'E3'): 'jrcxz',
+    ('push', '66 68'): 'pushw',
+    ('pushf', '66 9C'): 'pushfw',
+    ('popf', '66 9D'): 'popfw',
+    ('iret', '66 CF'): 'iretw',
+}
 
 ACCESS = re.compile(r'^[a-zA-Z]:')
 DEFAULT64 = {'push', 'pop', 'call', 'jmp', 'leave', 'ret', 'retf', 'enter',
@@ -74,7 +64,7 @@ def sig_ops(sig):
 
 
 def parse_op(op):
-    """Legacy encoding -> dict, or None for VEX/EVEX/explicit-66/unmodelled."""
+    """Legacy encoding -> dict, or None for VEX/EVEX/prefixed/unmodelled."""
     tag = None
     m = re.match(r'^\[([A-Z ]+)\]\s*(.*)$', op)
     if m:
@@ -85,7 +75,7 @@ def parse_op(op):
         return None
     enc = {'tag': tag, 'map': 'Legacy', 'rexw': False, 'opbytes': [],
            'plus_r': False, 'ext': None, 'modrm_r': False, 'imm': None,
-           'rel': None}
+           'rel': None, 'pp': []}
     seen = False
     i = 0
     while i < len(parts):
@@ -94,20 +84,21 @@ def parse_op(op):
             continue
         if p == 'REX.W':
             enc['rexw'] = True; continue
-        if p == '66' and not seen:
-            # Legacy `66` is the operand-size prefix; the encoder re-derives it
-            # from the operation width, so the form's operands already carry the
-            # 16-bit class. (0F38/0F3A forms where 66 is mandatory are excluded
-            # below and unused by the GP/system surface.)
+        if p in ('66', 'F2', 'F3') and not seen:
+            # A mandatory prefix (a 16-bit-only or prefix-selected encoding)
+            # rides `Form::pp`. The width-group rows carry no `66`; the
+            # encoder derives theirs from the operation width and emits it
+            # before `pp`, matching the assembler's prefix order.
+            enc['pp'].append(int(p, 16))
             continue
-        if p in ('F2', 'F3') and not seen:
-            return None                            # F2/F3-prefixed niche GP
+        if p == '67' and not seen:
+            return None                            # address-size-prefixed form
         if p == '0F' and enc['map'] == 'Legacy' and not seen:
             enc['map'] = 'Op0F'; continue
         if enc['map'] == 'Op0F' and p == '38' and not seen:
-            return None                            # 0F38 map: unused GP niche
+            enc['map'] = 'Op0F38'; continue
         if enc['map'] == 'Op0F' and p == '3A' and not seen:
-            return None                            # 0F3A map: unused GP niche
+            enc['map'] = 'Op0F3A'; continue
         mo = re.match(r'^([0-9A-F]{2})(\+[ri])?$', p)
         if mo:
             enc['opbytes'].append(int(mo.group(1), 16))
@@ -130,6 +121,8 @@ def parse_op(op):
     if not enc['opbytes']:
         return None
     return enc
+
+
 
 
 IMM_MAP = {'imm8': 'Ib', 'imms8': 'Imms8', 'imm16': 'Iw', 'imm32': 'Id',
@@ -180,6 +173,9 @@ def build_form(mnem, sig_operands, enc):
         if p is None:
             return None
         pats.append(p); roles.append(role)
+    # The form has one immediate slot; a two-immediate row (enter) is out.
+    if sum(1 for r in roles if r == 'imm') > 1:
+        return None
     # role indices
     reg_idx = rm_idx = imm_idx = None
     tag = enc['tag']
@@ -189,10 +185,17 @@ def build_form(mnem, sig_operands, enc):
     # reg / rm assignment from the tag
     regmem = [i for i, r in enumerate(roles) if r in ('reg', 'rm', 'fixed')]
     if enc['plus_r']:
-        rm_idx = regmem[0] if regmem else None
+        # The +r register is the non-fixed operand (`xchg ax, r16` embeds
+        # the r16, not the accumulator).
+        nonfixed = [i for i in regmem if roles[i] != 'fixed']
+        rm_idx = (nonfixed or regmem)[0] if regmem else None
         regfield = 'NoReg'
     elif enc['ext'] is not None:
-        rm_idx = regmem[0] if regmem else None
+        # A /digit form needs a register / memory operand for ModRM.rm; a row
+        # with none (xbegin's fixed-ModRM tail) is outside the model.
+        if not regmem:
+            return None
+        rm_idx = regmem[0]
         regfield = f'Ext({enc["ext"]})'
     elif enc['modrm_r']:
         if tag == 'RM':
@@ -217,17 +220,33 @@ def build_form(mnem, sig_operands, enc):
     else:
         # no ModRM (nullary / OP forms)
         regfield = 'NoReg'
+    # REX.W is width-derived for the width groups and for register-capable
+    # 64-bit operands. A memory-only 64-bit operand describes the access
+    # footprint, not the operation size (cmpxchg8b, vmptrld): REX.W there
+    # would select a different instruction or is meaningless.
+    regq = any(p in ('Reg(W::Q)', 'Rm(W::Q)', 'Fixed(0, W::Q)') for p in pats)
     rexw = ('W1' if enc['rexw']
             else 'Default64' if mnem in DEFAULT64
-            else 'ByWidth' if any('W::V' in p or 'W::Y' in p or 'W::Q' in p for p in pats)
+            else 'ByWidth' if regq or any('W::V' in p or 'W::Y' in p for p in pats)
             else 'W0')
+    # An explicit `66` and the `v` width group cannot coexist: the encoder
+    # would also derive an operand-size prefix at the 16-bit instantiation.
+    if 0x66 in enc['pp'] and any('W::V' in p for p in pats):
+        return None
     imm_enc = 'None'
     if imm_idx is not None:
-        imm_enc = f'Some({pats[imm_idx].split("(")[1][:-1]})'  # ImmC::X
+        if pats[imm_idx].startswith('Rel('):
+            # A relative-offset operand emits like a plain immediate of its
+            # byte size; the fit check lives in the Rel operand match.
+            rel_imm = {1: 'ImmC::Ib', 2: 'ImmC::Iw', 4: 'ImmC::Id'}
+            imm_enc = f'Some({rel_imm[int(pats[imm_idx][4:-1])]})'
+        else:
+            imm_enc = f'Some({pats[imm_idx].split("(")[1][:-1]})'  # ImmC::X
     ob = ', '.join(f'0x{b:02X}' for b in enc['opbytes'])
     ops_s = ', '.join(pats)
     return {
         'mnem': mnem, 'ops': ops_s, 'map': enc['map'], 'opcode': ob,
+        'pp': ', '.join(f'0x{b:02X}' for b in enc['pp']),
         'plus_r': str(enc['plus_r']).lower(), 'rexw': rexw, 'reg': regfield,
         'rm': 255 if rm_idx is None else rm_idx,
         'imm': imm_enc, 'imm_op': 255 if imm_idx is None else imm_idx,
@@ -248,7 +267,8 @@ def main():
     aliases = d.get('aliases', {})
     # AT&T spellings the database does not carry; GCC inline asm uses these for
     # the accumulator sign-extends.
-    att_aliases = {'cwde': ['cwtl'], 'cdqe': ['cltq'], 'cdq': ['cltd'], 'cqo': ['cqto']}
+    att_aliases = {'cbw': ['cbtw'], 'cwd': ['cwtd'], 'cwde': ['cwtl'],
+                   'cdqe': ['cltq'], 'cdq': ['cltd'], 'cqo': ['cqto']}
     forms = []
     seen = set()
     for g in d['instructions']:
@@ -259,11 +279,13 @@ def main():
             if not sig:
                 continue
             mnem, ops = sig_ops(sig)
-            if mnem not in ALLOW:
+            if mnem in DENY:
                 continue
             enc = parse_op(it['op'])
             if enc is None:
                 continue
+            opbytes = ' '.join(f'{b:02X}' for b in enc['pp'] + enc['opbytes'])
+            mnem = RENAME.get((mnem, opbytes), mnem)
             # Emit the canonical mnemonic and every alias spelling of it (the
             # condition-code aliases: sete == setz, and so on).
             alias_names = aliases.get(mnem, {}).get('aliases', []) + att_aliases.get(mnem, [])
@@ -317,7 +339,7 @@ def emit(forms, out):
         lines.append(
             f'    Form {{ mnem: {variant(f["mnem"])}, mnemonic: "{f["mnem"]}", '
             f'ops: &[{f["ops"]}], '
-            f'pp: &[], map: Map::{f["map"]}, opcode: &[{f["opcode"]}], '
+            f'pp: &[{f["pp"]}], map: Map::{f["map"]}, opcode: &[{f["opcode"]}], '
             f'plus_r: {f["plus_r"]}, rexw: {f["rexw"]}, reg: {f["reg"]}, '
             f'rm: {f["rm"]}, imm: {f["imm"]}, imm_op: {f["imm_op"]} }},'
             f'  // {f["src"]}')

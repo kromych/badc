@@ -51,12 +51,12 @@ KERNELS = [
     ),
     (
         "preempt.c",
+        # Both arches now round-robin three threads under a timer ISR.
         {
-            "x64": ["BADC-PREEMPT: start", "[thread 0]", "[thread 1]",
-                    "[thread 2]", "BADC-PREEMPT: scheduler done",
-                    "BADC-PREEMPT-OK"],
-            "aarch64": ["BADC-PREEMPT: start", "aarch64 preemption pending",
-                        "BADC-PREEMPT-OK"],
+            arch: ["BADC-PREEMPT: start", "[thread 0]", "[thread 1]",
+                   "[thread 2]", "BADC-PREEMPT: scheduler done",
+                   "BADC-PREEMPT-OK"]
+            for arch in ("x64", "aarch64")
         },
     ),
 ]

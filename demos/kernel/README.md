@@ -53,13 +53,20 @@ the inline-asm smoke by taking over the interrupt vector table and the timer,
 so it is a live test of badc emitting a real interrupt service routine -- a
 `__attribute__((naked))` function whose body is the context switch.
 
-On x86_64 it is complete and the smoke boots it: the serial output shows the
+Both targets are complete and the smoke boots them: the serial output shows the
 three threads round-robin under the timer, then `efi_main` resumes after the
-scheduler stops and prints `BADC-PREEMPT-OK`. It exercises the full inline-asm
-surface an ISR needs -- naked prologue suppression, explicit-register operands,
-`push`/`pop`, immediate port I/O, and a direct `call` to a C symbol
-(`call schedule`). The AArch64 path (generic timer + GIC + EL1 vectors) is not
-implemented yet; there the kernel prints a banner and halts.
+scheduler stops and prints `BADC-PREEMPT-OK`.
+
+* **x86_64** reprograms the 8259 PIC + 8254 PIT and installs an IDT; the naked
+  ISR saves the registers, `call`s the C scheduler, restores, and `iretq`s. It
+  exercises naked prologue suppression, explicit-register operands, `push`/`pop`,
+  immediate port I/O, and a direct `call` to a C symbol.
+* **AArch64** programs the GICv2 + the virtual generic timer and installs an EL1
+  vector table. UEFI maps loaded data execute-never, so the table lives in a
+  page of `EfiLoaderCode` obtained from `BootServices->AllocatePages`; the naked
+  ISR reaches the scheduler through `TPIDR_EL1` and a `blr` (AArch64 inline asm
+  has no symbol references), saves the full integer context with `stp`, and
+  returns through `eret`.
 
 All addresses and saved stack pointers use the pointer-width `UINTN`
 (`unsigned long long`), not `unsigned long`, because the EFI targets are LLP64

@@ -1,7 +1,7 @@
 // AArch64 inline asm: multiply, conditional select, and a one-byte output.
 // Each helper lowers a distinct form through the general inline-asm path;
-// main returns 42 only when all three produce the architecturally correct
-// result. Native aarch64 only.
+// main returns 42 only when every helper produces the architecturally
+// correct result. Native aarch64 only.
 
 static long mul_asm(long a, long b) {
     long r;
@@ -51,6 +51,20 @@ static unsigned int rev_asm(unsigned int v) {
     return r;
 }
 
+static long lt_asm(long a, long b) {
+    long r;
+    // Set the flags, then materialize the predicate: r = (a < b).
+    __asm__("subs xzr, %1, %2\n\tcset %0, lt" : "=r"(r) : "r"(a), "r"(b));
+    return r;
+}
+
+static long sel_inc_asm(long a, long b) {
+    long r;
+    // Conditional select-increment: r = a < b ? a : b + 1.
+    __asm__("subs xzr, %1, %2\n\tcsinc %0, %1, %2, lt" : "=r"(r) : "r"(a), "r"(b));
+    return r;
+}
+
 int main(void) {
     long p = mul_asm(6, 7);            // 42
     long m = min_asm(10, 20);          // 10
@@ -59,8 +73,12 @@ int main(void) {
     long c = clz_asm(1);               // 63
     long ma = madd_asm(5, 8, 2);       // 42
     unsigned int rv = rev_asm(0x11223344); // 0x44332211
+    long f1 = lt_asm(10, 20);          // 1
+    long f0 = lt_asm(20, 10);          // 0
+    long s1 = sel_inc_asm(10, 20);     // 10 (condition holds)
+    long s2 = sel_inc_asm(30, 20);     // 21 (b + 1)
     if (p == 42 && m == 10 && b == 0x42 && d == 42 && c == 63 && ma == 42
-        && rv == 0x44332211u) {
+        && rv == 0x44332211u && f1 == 1 && f0 == 0 && s1 == 10 && s2 == 21) {
         return 42;
     }
     return 1;

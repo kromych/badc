@@ -46,6 +46,10 @@ pub(crate) enum Field {
     /// Logical/arithmetic right-shift `#n` for the `lsr`/`asr` aliases: `immr`
     /// at bit 16 (imms is baked in the base word).
     ShrAlias { op: u8 },
+    /// 4-bit condition code at bit 12, fed by the operand at `op`. `inv` stores
+    /// the inverted condition for the aliases whose written condition flips
+    /// (`cset`/`csetm`); al/nv have no inversion and are rejected there.
+    Cond { op: u8, inv: bool },
 }
 
 /// One catalogue entry: a base word and the fields spliced into it.
@@ -69,6 +73,8 @@ pub(crate) enum A64Op {
     Imm,
     /// An optional `lsl #s` shift (move-wide / add-sub-imm); absent = 0.
     OptLsl,
+    /// A condition code.
+    Cond,
 }
 
 /// A resolved operand handed to [`encode`].
@@ -175,12 +181,20 @@ fn imm(o: Opnd) -> Result<i64, String> {
     }
 }
 
+fn cond(o: Opnd) -> Result<u8, String> {
+    match o {
+        Opnd::Cond(c) => Ok(c),
+        _ => Err(String::from("inline asm: condition operand expected")),
+    }
+}
+
 fn op_matches(p: A64Op, o: Opnd) -> bool {
     match (p, o) {
         (A64Op::X, Opnd::Reg { is64, .. }) => is64,
         (A64Op::W, Opnd::Reg { is64, .. }) => !is64,
         (A64Op::Imm, Opnd::Imm(_)) => true,
         (A64Op::OptLsl, Opnd::Lsl(_)) => true,
+        (A64Op::Cond, Opnd::Cond(_)) => true,
         _ => false,
     }
 }
@@ -214,31 +228,6 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             });
         }
         return Err(String::from("inline asm: bad ldr/str operands"));
-    }
-    // Multiply `mul Xd, Xn, Xm` (the `madd Xd, Xn, Xm, xzr` alias) and
-    // conditional-select `csel Xd, Xn, Xm, <cond>`. Both take three registers of
-    // one width; csel adds the 4-bit condition.
-    // `csel` carries an Opnd::Cond the catalogue's register-only field model
-    // does not express, so it stays bespoke. `mul` and the other register
-    // data-processing forms are in the generated catalogue below.
-    if mnemonic == "csel" {
-        let (rd, is64, rn, rm, cond) = match ops {
-            [
-                Opnd::Reg { num: d, is64 },
-                Opnd::Reg { num: n, is64: n1 },
-                Opnd::Reg { num: m, is64: n2 },
-                Opnd::Cond(c),
-            ] if is64 == n1 && is64 == n2 => (*d, *is64, *n, *m, *c),
-            _ => return Err(String::from("inline asm: bad csel operands")),
-        };
-        let rd = (rd as u32) & 31;
-        let rn = (rn as u32 & 31) << 5;
-        let rm = (rm as u32 & 31) << 16;
-        return Ok(if is64 {
-            0x9A80_0000 | rm | ((cond as u32 & 15) << 12) | rn | rd
-        } else {
-            0x1A80_0000 | rm | ((cond as u32 & 15) << 12) | rn | rd
-        });
     }
     // The catalogue is sorted by mnemonic (enforced by the generator and the
     // `catalogue_is_sorted` test): binary-search to the mnemonic's run of forms.
@@ -324,6 +313,20 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
             Field::ShrAlias { op } => {
                 let n = imm(ops[op as usize])? as u32;
                 word |= (n & 63) << 16;
+            }
+            Field::Cond { op, inv } => {
+                let c = cond(ops[op as usize])?;
+                let c = if inv {
+                    if c >= 14 {
+                        return Err(String::from(
+                            "inline asm: al/nv condition is invalid for this alias",
+                        ));
+                    }
+                    c ^ 1
+                } else {
+                    c
+                };
+                word |= ((c as u32) & 15) << 12;
             }
         }
     }

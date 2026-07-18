@@ -94,6 +94,36 @@ fn multiply_and_conditional_select() {
 }
 
 #[test]
+fn conditional_select_family() {
+    // csinc/csinv/csneg place the written condition directly at bit 12.
+    assert_eq!(enc("csinc", &[x(0), x(1), x(2), Opnd::Cond(1)]), 0x9A821420); // csinc x0, x1, x2, ne
+    assert_eq!(
+        enc("csinc", &[w(1), w(2), w(3), Opnd::Cond(11)]),
+        0x1A83B441
+    ); // csinc w1, w2, w3, lt
+    assert_eq!(
+        enc("csinv", &[x(3), x(4), x(5), Opnd::Cond(11)]),
+        0xDA85B083
+    ); // csinv x3, x4, x5, lt
+    assert_eq!(
+        enc("csneg", &[x(3), x(4), x(5), Opnd::Cond(11)]),
+        0xDA85B483
+    ); // csneg x3, x4, x5, lt
+    assert_eq!(
+        enc("csneg", &[w(20), w(21), w(22), Opnd::Cond(10)]),
+        0x5A96A6B4
+    ); // csneg w20, w21, w22, ge
+    // cset/csetm fold Rn = Rm = zr into the base and store the inverted
+    // condition.
+    assert_eq!(enc("cset", &[x(0), Opnd::Cond(11)]), 0x9A9FA7E0); // cset x0, lt
+    assert_eq!(enc("cset", &[w(7), Opnd::Cond(1)]), 0x1A9F07E7); // cset w7, ne
+    assert_eq!(enc("csetm", &[x(2), Opnd::Cond(12)]), 0xDA9FD3E2); // csetm x2, gt
+    // al/nv have no inversion; the aliases reject them.
+    assert!(encode("cset", &[x(0), Opnd::Cond(14)]).is_err());
+    assert!(encode("csetm", &[w(0), Opnd::Cond(15)]).is_err());
+}
+
+#[test]
 fn data_processing_registers() {
     // 2-source divide.
     assert_eq!(enc("udiv", &[x(0), x(1), x(2)]), 0x9AC20820); // udiv x0, x1, x2
@@ -158,20 +188,43 @@ fn logical_immediate_encoder() {
     assert_eq!(enc("orr", &[x(5), x(6), Opnd::Imm(0x1)]), 0xB24000C5); // orr x5, x6, #1
 }
 
-/// The design spike found four database rows whose literal bits disagree with
-/// the architecture; the generator corrects them (DB_FIXES). Encoding these
-/// mnemonics exercises the corrected forms -- had the raw rows shipped, the
-/// bytes would be wrong.
+/// Differential sweeps found seven database rows disagreeing with the
+/// architecture; the generator corrects them (DB_FIXES). Encoding the
+/// corrected forms locks the true bits -- had the raw rows shipped, the bytes
+/// would be wrong.
 #[test]
 fn corrected_database_rows_encode_true_bits() {
     // `sub` shares the arithmetic class; a straightforward reg3 word.
     assert_eq!(enc("sub", &[x(0), x(1), x(2)]), 0xCB020020);
+    // subps: the shipped row lacked the S bit (carried subp's opcode).
+    assert_eq!(enc("subps", &[x(0), x(1), x(2)]), 0xBAC20020);
+    // crc32x/crc32cx: the shipped rows named W destinations X.
+    assert_eq!(enc("crc32x", &[w(1), w(2), x(3)]), 0x9AC34C41);
     // (ret / cbz / dsb are in the follow-on system/branch surface; their
     // corrections are recorded in tools/gen_isa_a64.py DB_FIXES.)
 }
 
+/// The signature classifier catalogues every GP row the field model expresses;
+/// lock one word per newly covered class (all verified against the assembler).
+#[test]
+fn classified_catalogue_growth() {
+    assert_eq!(enc("adc", &[x(1), x(2), x(3)]), 0x9A030041); // carry arithmetic
+    assert_eq!(enc("smull", &[x(1), w(2), w(3)]), 0x9B237C41); // mixed-width multiply
+    assert_eq!(enc("umaddl", &[x(1), w(2), w(3), x(4)]), 0x9BA31041);
+    assert_eq!(enc("extr", &[x(1), x(2), x(3), Opnd::Imm(5)]), 0x93C31441);
+    assert_eq!(enc("ror", &[x(1), x(2), x(3)]), 0x9AC32C41); // rorv alias
+    assert_eq!(enc("rev64", &[x(5), x(6)]), 0xDAC00CC5); // rev X spelling
+    assert_eq!(enc("svc", &[Opnd::Imm(1)]), 0xD4000021); // exception class
+    assert_eq!(enc("hint", &[Opnd::Imm(7)]), 0xD50320FF);
+    assert_eq!(enc("nop", &[]), 0xD503201F); // zero-operand class
+    // chkfeat's spelling is newer than the local assembler; the base equals
+    // its architectural `hint #40` identity.
+    assert_eq!(enc("chkfeat", &[]), 0xD503251F);
+}
+
 #[cfg(feature = "std")]
 mod differential {
+    use super::super::super::isa_a64_table;
     use super::super::*;
     use alloc::string::String;
     use alloc::vec::Vec;
@@ -191,16 +244,32 @@ mod differential {
         h
     }
 
-    /// Assemble one A64 instruction and return its 32-bit word, or None if the
-    /// assembler rejects it.
+    /// Assembler invocations to try in order: the native target first, then a
+    /// feature-maximal cross target for extension instructions (MTE, TME, CPA,
+    /// GCS) the native default rejects.
+    const ARGSETS: &[&[&str]] = &[
+        &["--target=arm64-apple-darwin"],
+        &[
+            "--target=aarch64-linux-gnu",
+            "-march=armv9.5a+memtag+tme+cpa+gcs",
+        ],
+    ];
+
+    /// Assemble one A64 instruction and return its 32-bit word, or None if
+    /// every argset rejects it.
     fn clang_word(itxt: &str) -> Option<u32> {
+        ARGSETS.iter().find_map(|args| clang_word_with(itxt, args))
+    }
+
+    fn clang_word_with(itxt: &str, args: &[&str]) -> Option<u32> {
         let dir = std::env::temp_dir();
         let stem = alloc::format!("badc-a64-{:x}", hash(itxt.as_bytes()));
         let s = dir.join(alloc::format!("{stem}.s"));
         let o = dir.join(alloc::format!("{stem}.o"));
         std::fs::write(&s, alloc::format!(".text\n{itxt}\n")).ok()?;
         let out = Command::new("clang")
-            .args(["--target=arm64-apple-darwin", "-c"])
+            .args(args)
+            .arg("-c")
             .arg(&s)
             .arg("-o")
             .arg(&o)
@@ -236,181 +305,155 @@ mod differential {
     fn xn(n: u8) -> Opnd {
         Opnd::Reg { num: n, is64: true }
     }
-    fn wn(n: u8) -> Opnd {
-        Opnd::Reg {
-            num: n,
-            is64: false,
+
+    fn cond_name(c: u8) -> &'static str {
+        [
+            "eq", "ne", "cs", "cc", "mi", "pl", "vs", "vc", "hi", "ls", "ge", "lt", "gt", "le",
+            "al", "nv",
+        ][c as usize & 15]
+    }
+
+    /// The field consuming the operand slot at `idx`.
+    fn field_for(f: &Form, idx: usize) -> Option<Field> {
+        f.fields.iter().copied().find(|fl| match *fl {
+            Field::UImm { op, .. }
+            | Field::LogicalImm { op, .. }
+            | Field::MovImm { op }
+            | Field::MovHw { op }
+            | Field::LslAlias { op, .. }
+            | Field::ShrAlias { op }
+            | Field::Cond { op, .. } => op as usize == idx,
+            _ => false,
+        })
+    }
+
+    /// Candidates for a non-register slot, derived from its field kind:
+    /// rendered text plus the operand, `None` for an omitted optional shift.
+    fn slot_cands(f: &Form, idx: usize) -> Vec<Option<(String, Opnd)>> {
+        let is64 = matches!(f.ops.first(), Some(A64Op::X));
+        let imm = |v: i64| Some((alloc::format!("#{v}"), Opnd::Imm(v)));
+        match field_for(f, idx) {
+            Some(Field::UImm { width, .. }) => {
+                let max = (1i64 << width) - 1;
+                let mut vs = alloc::vec![1i64, 5, max];
+                vs.retain(|v| *v <= max);
+                vs.dedup();
+                vs.into_iter().map(imm).collect()
+            }
+            Some(Field::LogicalImm { is64, .. }) => if is64 {
+                &[
+                    0xFFi64,
+                    1,
+                    0xF0F0_F0F0_F0F0_F0F0u64 as i64,
+                    0x0000_FFFF_0000_FFFF,
+                ][..]
+            } else {
+                &[0xFFi64, 1, 0xF0F0_F0F0u32 as i64, 0xFFFF][..]
+            }
+            .iter()
+            .map(|&v| imm(v))
+            .collect(),
+            Some(Field::MovImm { .. }) => [0x1234i64, 0, 0xFFFF].iter().map(|&v| imm(v)).collect(),
+            Some(Field::MovHw { .. }) => {
+                let lsl = |s: u32| Some((alloc::format!("lsl #{s}"), Opnd::Lsl(s)));
+                let mut vs = alloc::vec![None, lsl(16)];
+                if is64 {
+                    vs.push(lsl(48));
+                }
+                vs
+            }
+            Some(Field::LslAlias { is64, .. }) => {
+                let w = if is64 { 64 } else { 32 };
+                [1i64, 4, w - 1].iter().map(|&v| imm(v)).collect()
+            }
+            Some(Field::ShrAlias { .. }) => {
+                let w = if is64 { 64 } else { 32 };
+                [1i64, 4, w - 1].iter().map(|&v| imm(v)).collect()
+            }
+            Some(Field::Cond { inv, .. }) => {
+                let mut cs = alloc::vec![1u8, 11];
+                if !inv {
+                    cs.push(14); // al: valid only where the condition is direct
+                }
+                cs.into_iter()
+                    .map(|c| Some((String::from(cond_name(c)), Opnd::Cond(c))))
+                    .collect()
+            }
+            _ => Vec::new(),
         }
     }
 
-    /// Sweep the register / immediate surface and require the catalogue word to
-    /// equal the assembler's. The contract is *never wrong, may be
-    /// incomplete*: a `bad` (encoded, disagrees) fails; a `gap` (assembler
-    /// accepts, catalogue has no form) is reported.
+    /// Sweep the catalogue itself: synthesize operands for every form from its
+    /// operand pattern and require the encoded word to equal the assembler's.
+    /// Register numbers avoid 31, so no zr/sp alias re-canonicalization can
+    /// shift the assembler's word choice. `bad` (encoded, disagrees) and `gap`
+    /// (assembler accepts, encode refuses) both fail; `skip` counts forms the
+    /// local assemblers reject (extension spellings), reported per mnemonic.
     #[test]
     fn differential_sweep() {
         if !enabled() {
             return;
         }
+        let regsets: [[u8; 4]; 3] = [[1, 2, 3, 4], [9, 10, 11, 12], [20, 21, 22, 23]];
+        let mut cases: Vec<(String, Vec<Opnd>, &'static str)> = Vec::new();
+        for f in isa_a64_table::FORMS {
+            let cands: Vec<Vec<Option<(String, Opnd)>>> = f
+                .ops
+                .iter()
+                .enumerate()
+                .map(|(i, p)| match p {
+                    A64Op::X | A64Op::W => Vec::new(),
+                    _ => slot_cands(f, i),
+                })
+                .collect();
+            let build = |regs: &[u8; 4], slot: usize, pick: usize| {
+                let mut txt: Vec<String> = Vec::new();
+                let mut ops: Vec<Opnd> = Vec::new();
+                for (i, p) in f.ops.iter().enumerate() {
+                    match p {
+                        A64Op::X | A64Op::W => {
+                            let is64 = matches!(p, A64Op::X);
+                            txt.push(alloc::format!(
+                                "{}{}",
+                                if is64 { 'x' } else { 'w' },
+                                regs[i]
+                            ));
+                            ops.push(Opnd::Reg { num: regs[i], is64 });
+                        }
+                        _ => {
+                            if let Some((t, o)) = &cands[i][if i == slot { pick } else { 0 }] {
+                                txt.push(t.clone());
+                                ops.push(*o);
+                            }
+                        }
+                    }
+                }
+                let txt = if txt.is_empty() {
+                    String::from(f.mnemonic)
+                } else {
+                    alloc::format!("{} {}", f.mnemonic, txt.join(", "))
+                };
+                (txt, ops, f.mnemonic)
+            };
+            let has_regs = f.ops.iter().any(|p| matches!(p, A64Op::X | A64Op::W));
+            for regs in regsets.iter().take(if has_regs { 3 } else { 1 }) {
+                cases.push(build(regs, usize::MAX, 0));
+            }
+            for (i, c) in cands.iter().enumerate() {
+                for pick in 1..c.len() {
+                    cases.push(build(&regsets[0], i, pick));
+                }
+            }
+        }
+
         let (mut ok, mut bad, mut gap, mut skip) = (0, 0, 0, 0);
         let mut fails: Vec<String> = Vec::new();
-        let mut cases: Vec<(String, Vec<Opnd>, &str)> = Vec::new();
-
-        let regnames = |is64: bool, n: u8| {
-            if is64 {
-                alloc::format!("x{n}")
-            } else {
-                alloc::format!("w{n}")
-            }
-        };
-        for m in [
-            "add", "sub", "adds", "subs", "and", "orr", "eor", "ands", "bic", "orn", "eon",
-        ] {
-            for is64 in [true, false] {
-                for &(a, b, c) in &[(0u8, 1u8, 2u8), (5, 6, 7), (9, 10, 11), (20, 21, 22)] {
-                    let ops = if is64 {
-                        alloc::vec![xn(a), xn(b), xn(c)]
-                    } else {
-                        alloc::vec![wn(a), wn(b), wn(c)]
-                    };
-                    let txt = alloc::format!(
-                        "{m} {}, {}, {}",
-                        regnames(is64, a),
-                        regnames(is64, b),
-                        regnames(is64, c)
-                    );
-                    cases.push((txt, ops, m));
-                }
-            }
-        }
-        for m in ["mul", "mneg", "sdiv", "udiv"] {
-            for is64 in [true, false] {
-                for &(a, b, c) in &[(0u8, 1u8, 2u8), (5, 6, 7), (9, 10, 11), (20, 21, 22)] {
-                    let ops = if is64 {
-                        alloc::vec![xn(a), xn(b), xn(c)]
-                    } else {
-                        alloc::vec![wn(a), wn(b), wn(c)]
-                    };
-                    let txt = alloc::format!(
-                        "{m} {}, {}, {}",
-                        regnames(is64, a),
-                        regnames(is64, b),
-                        regnames(is64, c)
-                    );
-                    cases.push((txt, ops, m));
-                }
-            }
-        }
-        for m in ["smulh", "umulh"] {
-            for &(a, b, c) in &[(0u8, 1u8, 2u8), (5, 6, 7), (9, 10, 11), (20, 21, 22)] {
-                let txt = alloc::format!("{m} x{a}, x{b}, x{c}");
-                cases.push((txt, alloc::vec![xn(a), xn(b), xn(c)], m));
-            }
-        }
-        for m in ["madd", "msub"] {
-            for is64 in [true, false] {
-                for &(a, b, c, d) in &[
-                    (0u8, 1u8, 2u8, 3u8),
-                    (5, 6, 7, 8),
-                    (9, 10, 11, 12),
-                    (20, 21, 22, 23),
-                ] {
-                    let ops = if is64 {
-                        alloc::vec![xn(a), xn(b), xn(c), xn(d)]
-                    } else {
-                        alloc::vec![wn(a), wn(b), wn(c), wn(d)]
-                    };
-                    let txt = alloc::format!(
-                        "{m} {}, {}, {}, {}",
-                        regnames(is64, a),
-                        regnames(is64, b),
-                        regnames(is64, c),
-                        regnames(is64, d)
-                    );
-                    cases.push((txt, ops, m));
-                }
-            }
-        }
-        for m in ["cls", "clz", "rbit"] {
-            for is64 in [true, false] {
-                for &(a, b) in &[(0u8, 1u8), (5, 6), (9, 10), (20, 21)] {
-                    let ops = if is64 {
-                        alloc::vec![xn(a), xn(b)]
-                    } else {
-                        alloc::vec![wn(a), wn(b)]
-                    };
-                    let txt = alloc::format!("{m} {}, {}", regnames(is64, a), regnames(is64, b));
-                    cases.push((txt, ops, m));
-                }
-            }
-        }
-        // rev is 32-bit only; rev32 is 64-bit only; rev16 has both.
-        for &(m, widths) in &[
-            ("rev", &[false][..]),
-            ("rev16", &[true, false][..]),
-            ("rev32", &[true][..]),
-        ] {
-            for &is64 in widths {
-                for &(a, b) in &[(0u8, 1u8), (5, 6), (9, 10), (20, 21)] {
-                    let ops = if is64 {
-                        alloc::vec![xn(a), xn(b)]
-                    } else {
-                        alloc::vec![wn(a), wn(b)]
-                    };
-                    let txt = alloc::format!("{m} {}, {}", regnames(is64, a), regnames(is64, b));
-                    cases.push((txt, ops, m));
-                }
-            }
-        }
-        for m in ["add", "sub", "adds", "subs"] {
-            for &v in &[0i64, 1, 5, 0xFFF] {
-                let txt = alloc::format!("{m} x0, x1, #{v}");
-                cases.push((txt, alloc::vec![xn(0), xn(1), Opnd::Imm(v)], m));
-            }
-        }
-        for m in ["and", "orr", "eor", "ands"] {
-            for &v in &[
-                0xFFi64,
-                0x1,
-                0xF0F0F0F0F0F0F0F0u64 as i64,
-                0xFFFFFFF0u32 as i64,
-            ] {
-                let txt = alloc::format!("{m} x0, x1, #{v}");
-                cases.push((txt, alloc::vec![xn(0), xn(1), Opnd::Imm(v)], m));
-            }
-        }
-        for &v in &[0i64, 0x1234, 0xFFFF] {
-            cases.push((
-                alloc::format!("movz x0, #{v}"),
-                alloc::vec![xn(0), Opnd::Imm(v)],
-                "movz",
-            ));
-            cases.push((
-                alloc::format!("movk x0, #{v}"),
-                alloc::vec![xn(0), Opnd::Imm(v)],
-                "movk",
-            ));
-        }
-        for &s in &[0u32, 16, 32, 48] {
-            cases.push((
-                alloc::format!("movz x0, #1, lsl #{s}"),
-                alloc::vec![xn(0), Opnd::Imm(1), Opnd::Lsl(s)],
-                "movz",
-            ));
-        }
-        for m in ["lsl", "lsr", "asr"] {
-            for &v in &[1i64, 4, 31, 63] {
-                cases.push((
-                    alloc::format!("{m} x0, x1, #{v}"),
-                    alloc::vec![xn(0), xn(1), Opnd::Imm(v)],
-                    m,
-                ));
-            }
-        }
-
+        let mut gaps: Vec<String> = Vec::new();
+        let mut skipped: std::collections::BTreeSet<&'static str> = Default::default();
         for (txt, ops, m) in &cases {
             let Some(want) = clang_word(txt) else {
                 skip += 1;
+                skipped.insert(m);
                 continue;
             };
             match encode(m, ops) {
@@ -421,14 +464,31 @@ mod differential {
                         fails.push(alloc::format!("{txt}: got {got:08x} want {want:08x}"));
                     }
                 }
-                Err(_) => gap += 1,
+                Err(e) => {
+                    gap += 1;
+                    if gaps.len() < 40 {
+                        gaps.push(alloc::format!("{txt}: {e}"));
+                    }
+                }
             }
         }
         for f in &fails {
             std::eprintln!("  FAIL {f}");
         }
-        std::eprintln!("a64 differential_sweep: OK={ok} BAD={bad} GAP={gap} SKIP={skip}");
+        for g in &gaps {
+            std::eprintln!("  GAP {g}");
+        }
+        std::eprintln!(
+            "a64 differential_sweep: forms={} cases={} OK={ok} BAD={bad} GAP={gap} SKIP={skip}",
+            isa_a64_table::FORMS.len(),
+            cases.len()
+        );
+        if !skipped.is_empty() {
+            let names: Vec<&str> = skipped.into_iter().collect();
+            std::eprintln!("  skipped (assembler rejects): {}", names.join(" "));
+        }
         assert_eq!(bad, 0, "A64 catalogue words disagree with the assembler");
+        assert_eq!(gap, 0, "synthesized catalogue operands failed to encode");
     }
 
     /// Cross-check the logical-immediate encoder against the assembler for

@@ -149,13 +149,22 @@ pub(crate) enum Opnd {
         disp: i32,
         width: u8,
     },
+    /// RIP-relative memory `disp32(%rip)`: ModRM mod=00 rm=101 in 64-bit mode.
+    /// The displacement is the (relocation-patched) offset from the next
+    /// instruction.
+    RipRel {
+        disp: i32,
+        width: u8,
+    },
     Imm(i64),
 }
 
 impl Opnd {
     fn width(self) -> Option<u8> {
         match self {
-            Opnd::Reg { width, .. } | Opnd::Mem { width, .. } => Some(width),
+            Opnd::Reg { width, .. } | Opnd::Mem { width, .. } | Opnd::RipRel { width, .. } => {
+                Some(width)
+            }
             Opnd::Imm(_) => None,
         }
     }
@@ -178,8 +187,10 @@ fn pat_matches(p: OpPat, o: Opnd, opw: u8) -> bool {
         (OpPat::Reg(w), Opnd::Reg { width, .. }) => wbytes(w, opw) == Some(width),
         (OpPat::Rm(w), Opnd::Reg { width, .. }) => wbytes(w, opw) == Some(width),
         (OpPat::Rm(w), Opnd::Mem { width, .. }) => wbytes(w, opw) == Some(width),
+        (OpPat::Rm(w), Opnd::RipRel { width, .. }) => wbytes(w, opw) == Some(width),
         (OpPat::Mem(w), Opnd::Mem { width, .. }) => wbytes(w, opw) == Some(width),
-        (OpPat::MemAny, Opnd::Mem { .. }) => true,
+        (OpPat::Mem(w), Opnd::RipRel { width, .. }) => wbytes(w, opw) == Some(width),
+        (OpPat::MemAny, Opnd::Mem { .. } | Opnd::RipRel { .. }) => true,
         (OpPat::Fixed(num, w), Opnd::Reg { num: n, width }) => {
             n == num && wbytes(w, opw) == Some(width)
         }
@@ -250,7 +261,8 @@ fn reg_num(o: Opnd) -> u8 {
     match o {
         Opnd::Reg { num, .. } => num,
         Opnd::Mem { base, .. } => base,
-        Opnd::Imm(_) => 0,
+        // RIP-relative has no base register (rm=101 is fixed): no REX.B.
+        Opnd::RipRel { .. } | Opnd::Imm(_) => 0,
     }
 }
 
@@ -379,6 +391,11 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<Vec<u8>, String> {
                 disp,
                 ..
             }) => emit_modrm_mem(&mut code, regfield, base, index, scale, disp),
+            Some(Opnd::RipRel { disp, .. }) => {
+                // mod=00 rm=101: RIP-relative, disp32 follows.
+                code.push(((regfield & 7) << 3) | 5);
+                code.extend_from_slice(&disp.to_le_bytes());
+            }
             _ => return Err(String::from("inline asm: form needs an r/m operand")),
         }
     }

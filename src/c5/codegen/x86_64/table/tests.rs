@@ -41,6 +41,9 @@ fn msib(base: u8, index: u8, scale: u8, disp: i32, width: u8) -> Opnd {
         width,
     }
 }
+fn mrip(disp: i32, width: u8) -> Opnd {
+    Opnd::RipRel { disp, width }
+}
 
 #[test]
 fn alu_reg_reg_widths() {
@@ -249,6 +252,24 @@ fn memory_sib() {
 }
 
 #[test]
+fn memory_rip_relative() {
+    // mod=00 rm=101 with a disp32: RIP-relative, no base/index, no REX.B.
+    assert_eq!(
+        enc("mov", &[r(1, 8), mrip(8, 8)]),
+        [0x48, 0x8b, 0x0d, 0x08, 0x00, 0x00, 0x00]
+    ); // mov rcx, [rip+8]
+    assert_eq!(
+        enc("lea", &[r(0, 8), mrip(-16, 8)]),
+        [0x48, 0x8d, 0x05, 0xf0, 0xff, 0xff, 0xff]
+    ); // lea rax, [rip-16]
+    // A high destination register still takes REX.R; the base contributes no REX.B.
+    assert_eq!(
+        enc("mov", &[r(8, 8), mrip(0, 8)]),
+        [0x4c, 0x8b, 0x05, 0x00, 0x00, 0x00, 0x00]
+    ); // mov r8, [rip]
+}
+
+#[test]
 fn catalogue_is_sorted() {
     // encode() binary-searches the catalogue by mnemonic, which is correct only
     // if the generator emitted it sorted. Lock the invariant.
@@ -331,6 +352,16 @@ mod differential {
                         let sign = if disp < 0 { "-" } else { "+" };
                         alloc::format!("{sz} ptr [{b}{idx} {sign} {}]", disp.unsigned_abs())
                     }
+                }
+                Opnd::RipRel { disp, width } => {
+                    let sz = match width {
+                        1 => "byte",
+                        2 => "word",
+                        4 => "dword",
+                        _ => "qword",
+                    };
+                    let sign = if disp < 0 { "-" } else { "+" };
+                    alloc::format!("{sz} ptr [rip {sign} {}]", disp.unsigned_abs())
                 }
                 Opnd::Imm(v) => alloc::format!("{v}"),
             });
@@ -585,6 +616,9 @@ mod differential {
             width,
         }
     }
+    fn mrip(disp: i32, width: u8) -> Opnd {
+        Opnd::RipRel { disp, width }
+    }
 
     fn sweep_cases() -> Vec<(&'static str, Vec<Opnd>)> {
         let mut cases: Vec<(&'static str, Vec<Opnd>)> = Vec::new();
@@ -750,6 +784,13 @@ mod differential {
                         cases.push(("mov", vec![r(1, 8), msib(base, index, scale, disp, 8)]));
                     }
                 }
+            }
+        }
+        // RIP-relative across destination registers and displacement signs.
+        for &reg in &[0u8, 1, 8, 15] {
+            for &disp in &[0i32, 8, -16, 0x1234] {
+                cases.push(("mov", vec![r(reg, 8), mrip(disp, 8)]));
+                cases.push(("lea", vec![r(reg, 8), mrip(disp, 8)]));
             }
         }
         cases

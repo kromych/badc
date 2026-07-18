@@ -218,7 +218,7 @@ pub(crate) fn emit_mov_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     if dst == src {
         return;
     }
-    super::table::encode_into(code, Mnem::Mov, Some(8), &[r64(dst), r64(src)]);
+    emit_rr(code, Mnem::Mov, 8, dst, src);
 }
 
 /// `mov r32, r32` (89 /r without REX.W). Writing a 32-bit register
@@ -271,7 +271,7 @@ pub(crate) fn emit_extend_rax_for_return(code: &mut Vec<u8>, ext: super::ReturnE
 /// * otherwise               -> `REX.W + B8+rd io` (10 bytes).
 pub(crate) fn emit_mov_r_imm64(code: &mut Vec<u8>, dst: Reg, imm: i64) {
     if imm == 0 {
-        emit_xor_rr(code, dst, dst);
+        emit_rr(code, Mnem::Xor, 8, dst, dst);
         return;
     }
     if (0..=u32::MAX as i64).contains(&imm) {
@@ -503,55 +503,12 @@ pub(crate) fn emit_add_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
 //      ADD=01 SUB=29 AND=21 OR=09 XOR=31 CMP=39. ModR/M.reg=src,
 //      r/m=dst.
 
-/// `ADD dst, src` -- 64-bit, `dst += src`.
-pub(crate) fn emit_add_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    alu_rr(code, Mnem::Add, dst, src);
-}
-
-/// `SUB dst, src` -- 64-bit, `dst -= src`.
-pub(crate) fn emit_sub_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    alu_rr(code, Mnem::Sub, dst, src);
-}
-
-/// `AND dst, src` -- 64-bit, `dst &= src`.
-pub(crate) fn emit_and_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    alu_rr(code, Mnem::And, dst, src);
-}
-
-/// `OR dst, src` -- 64-bit, `dst |= src`.
-pub(crate) fn emit_or_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    alu_rr(code, Mnem::Or, dst, src);
-}
-
-/// `XOR dst, src` -- 64-bit, `dst ^= src`.
-pub(crate) fn emit_xor_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    alu_rr(code, Mnem::Xor, dst, src);
-}
-
-/// `CMP dst, src` -- 64-bit; sets flags = `dst - src` without storing.
-pub(crate) fn emit_cmp_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    alu_rr(code, Mnem::Cmp, dst, src);
-}
-
-/// `TEST dst, src` -- `dst & src`, setting ZF / SF (and clearing
-/// CF / OF). Encoding: `REX.W + 85 /r`. `test reg, reg` is the 3-byte
-/// compare-with-zero that replaces a 7-byte `cmp reg, imm32` against 0:
-/// ZF / SF / CF / OF match, so every dependent `jcc` / `setcc` is
-/// unchanged.
-pub(crate) fn emit_test_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    alu_rr(code, Mnem::Test, dst, src);
-}
-
-/// A 64-bit `op dst, src` between two registers, routed through the table
-/// encoder (the `r/m, r` direction: `dst` is r/m, `src` is reg).
-fn alu_rr(code: &mut Vec<u8>, mnem: Mnem, dst: Reg, src: Reg) {
-    super::table::encode_into(code, mnem, Some(8), &[r64(dst), r64(src)]);
-}
-
-/// `IMUL dst, src` -- two-operand signed multiply, `dst = dst * src`.
-/// Encoding: `REX.W + 0F AF /r`.
-pub(crate) fn emit_imul_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    super::table::encode_into(code, Mnem::Imul, Some(8), &[r64(dst), r64(src)]);
+/// `op dst, src` -- a register-register form. A generic shape emitter the native
+/// lowering calls in place of a per-instruction wrapper. The `r/m, r` direction
+/// (ADD/SUB/AND/OR/XOR/CMP/TEST/MOV: `dst` is r/m, `src` is reg) and the `r, r/m`
+/// direction (IMUL) are both selected by the catalogue from the operand shape.
+pub(crate) fn emit_rr(code: &mut Vec<u8>, mnem: Mnem, width: u8, dst: Reg, src: Reg) {
+    super::table::encode_into(code, mnem, Some(width), &[rw(dst, width), rw(src, width)]);
 }
 
 // ---- ALU with a memory source: `OP dst, [base + disp]`. The
@@ -2656,7 +2613,7 @@ mod tests {
         // test rax, rax  ->  48 85 C0 -- the compare-with-zero form,
         // shorter than `cmp rax, 0` (48 81 F8 00 00 00 00).
         assert_eq!(
-            assemble(|c| emit_test_rr(c, Reg::RAX, Reg::RAX)),
+            assemble(|c| emit_rr(c, Mnem::Test, 8, Reg::RAX, Reg::RAX)),
             vec![0x48, 0x85, 0xC0]
         );
     }

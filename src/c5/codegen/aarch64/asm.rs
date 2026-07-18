@@ -73,6 +73,7 @@ fn sysreg_field(name: &str) -> Option<u16> {
             "mpidr_el1" => (3, 0, 0, 0, 5),
             "ctr_el0" => (3, 3, 0, 0, 1),
             "tpidr_el0" => (3, 3, 13, 0, 2),
+            "tpidr_el1" => (3, 0, 13, 0, 4),
             "sctlr_el1" => (3, 0, 1, 0, 0),
             "vbar_el1" => (3, 0, 12, 0, 0),
             "daif" => (3, 3, 4, 2, 1),
@@ -501,6 +502,7 @@ mod tests {
         assert_eq!(sysreg_field("cntv_tval_el0"), Some(0x5F18));
         assert_eq!(sysreg_field("cntvct_el0"), Some(0x5F02));
         assert_eq!(sysreg_field("cntp_ctl_el0"), Some(0x5F11));
+        assert_eq!(sysreg_field("tpidr_el1"), Some(0x4684)); // per-CPU pointer
         // Register names are case-insensitive.
         assert_eq!(sysreg_field("CurrentEL"), sysreg_field("currentel"));
         assert_eq!(sysreg_field("CNTV_CTL_EL0"), Some(0x5F19));

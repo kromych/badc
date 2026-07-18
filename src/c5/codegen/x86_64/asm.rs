@@ -122,6 +122,10 @@ pub(crate) struct AsmInsn {
     pub operands: Vec<AsmOpnd>,
     /// Literal bytes for a [`Mnemonic::RawBytes`] piece; empty otherwise.
     pub bytes: Vec<u8>,
+    /// For a direct `call` / `jmp` to a bare identifier (`call schedule`),
+    /// the target symbol name; the emitter resolves it to a rel32 through a
+    /// relocation. `None` for every other instruction.
+    pub sym_target: Option<alloc::string::String>,
 }
 
 /// A resolved operand: a concrete register (with its access size) or an
@@ -472,6 +476,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 suffix: None,
                 operands: Vec::new(),
                 bytes: bytes?,
+                sym_target: None,
             });
             continue;
         }
@@ -483,6 +488,26 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         };
         let (mnemonic, suffix) = split_mnemonic(mnem_tok)
             .ok_or_else(|| format!("inline asm: unsupported instruction `{mnem_tok}`"))?;
+        // A direct `call` / `jmp` to a bare identifier is a symbol reference
+        // (basic-asm `call schedule`); the target is resolved to a rel32 by a
+        // relocation, not parsed as a register / immediate / memory operand.
+        let is_bare_ident = !rest.is_empty()
+            && rest
+                .bytes()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_')
+            && rest.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+            && reg_by_name(rest).is_none();
+        if matches!(mnem_tok, "call" | "callq" | "jmp" | "jmpq") && is_bare_ident {
+            insns.push(AsmInsn {
+                mnemonic,
+                suffix,
+                operands: Vec::new(),
+                bytes: Vec::new(),
+                sym_target: Some(alloc::string::String::from(rest)),
+            });
+            continue;
+        }
         let mut operands = Vec::new();
         if !rest.is_empty() {
             for op in rest.split(',') {
@@ -494,6 +519,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             suffix,
             operands,
             bytes: Vec::new(),
+            sym_target: None,
         });
     }
     Ok(insns)

@@ -2743,6 +2743,27 @@ fn explicit_register_inline_asm_x64() {
 }
 
 #[test]
+fn inline_asm_call_symbol_x64() {
+    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    // A naked ISR's `call <symbol>` resolves to the target function through a
+    // relocation (E8 + rel32), patched by the same fixup pass as a normal
+    // call. Compilation succeeding proves the symbol resolved -- an unknown
+    // target bails -- and the naked body's `iretq` (48 cf) survives intact.
+    let src = "void schedule(void){ }\n\
+               __attribute__((naked)) void isr(void){ __asm__ volatile(\"call schedule\\n\\tiretq\"); }\n\
+               int main(void){ return 0; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap();
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("naked call-symbol must emit -- the target must resolve");
+    assert!(
+        bytes.windows(2).any(|w| w == [0x48, 0xcf]),
+        "the naked ISR body (iretq) must be present"
+    );
+}
+
+#[test]
 fn in_out_port_forms_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     // The variable-port form uses dx (EC/ED/EE/EF); the immediate-port form

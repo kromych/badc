@@ -163,6 +163,9 @@ pub(crate) fn compile_function_to_bytes(
                     &ret_tags,
                     0,
                     &mut fn_unwind,
+                    // The ssa_native path is single-function; a cross-function
+                    // inline-asm call has no target here (rejected downstream).
+                    &alloc::collections::BTreeMap::new(),
                 )
             };
             if !ok {

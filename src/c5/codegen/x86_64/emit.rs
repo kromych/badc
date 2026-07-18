@@ -1437,6 +1437,7 @@ pub(crate) fn emit_function(
     ret_tags: &alloc::collections::BTreeMap<usize, i64>,
     tls_total_size: usize,
     fn_unwind: &mut Vec<super::FnUnwind>,
+    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -1743,6 +1744,7 @@ pub(crate) fn emit_function(
                         tls_total_size,
                         param_from_home: &param_from_home,
                         param_plan: &param_plan,
+                        name2entpc,
                     };
                     emit_inst(
                         &mut cx,
@@ -2659,6 +2661,9 @@ struct FnCtx<'a> {
     tls_total_size: usize,
     param_from_home: &'a [bool],
     param_plan: &'a [super::ArgPlacement],
+    /// Function name -> entry PC, for resolving an inline-asm `call`/`jmp` to a
+    /// bare symbol into a relocation.
+    name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
 }
 
 fn emit_inst(
@@ -2684,6 +2689,7 @@ fn emit_inst(
         tls_total_size,
         param_from_home,
         param_plan,
+        name2entpc,
     } = *fcx;
     // The bundled emit output now arrives in `cx`; recreate the per-field
     // names as disjoint reborrows so the per-`Inst` lowering below is unchanged.
@@ -3037,7 +3043,9 @@ fn emit_inst(
             abi,
             *current_alloca_top,
         ),
-        Inst::InlineAsm { asm, args } => emit_inline_asm(code, asm, args, func, alloc, frame),
+        Inst::InlineAsm { asm, args } => {
+            emit_inline_asm(code, asm, args, func, alloc, frame, fixups, name2entpc)
+        }
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
         Inst::Fma {
             a,
@@ -5798,6 +5806,8 @@ fn emit_inline_asm(
     func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
+    fixups: &mut Vec<super::encode::Fixup>,
+    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
 ) -> bool {
     use super::super::ir::{AsmConstraint, AsmRegSize, Inst};
     use super::asm::{AsmOpnd, Concrete};
@@ -5864,6 +5874,29 @@ fn emit_inline_asm(
         // A raw-byte piece emits its literal bytes with no operand resolution.
         if insn.mnemonic == super::asm::Mnemonic::RawBytes {
             code.extend_from_slice(&insn.bytes);
+            continue;
+        }
+        // A direct `call` / `jmp` to a symbol: resolve the name to its entry
+        // and emit the E8/E9 opcode plus a rel32 the fixup pass patches once
+        // every function's address is final.
+        if let Some(name) = &insn.sym_target {
+            let Some(&ent_pc) = name2entpc.get(name.as_str()) else {
+                bail_msg(&alloc::format!(
+                    "inline asm: unknown call/jmp target `{name}`"
+                ));
+                return false;
+            };
+            let is_call =
+                matches!(insn.mnemonic, super::asm::Mnemonic::Table(n) if n.starts_with("call"));
+            // native_offset is the opcode byte; the fixup pass patches the
+            // rel32 at +1 and computes the displacement from the 5-byte end.
+            fixups.push(super::encode::Fixup {
+                native_offset: code.len(),
+                target_ent_pc: ent_pc,
+                kind: super::encode::BranchKind::Call,
+            });
+            code.push(if is_call { 0xE8 } else { 0xE9 });
+            code.extend_from_slice(&[0u8; 4]);
             continue;
         }
         let mut concrete: alloc::vec::Vec<Concrete> = alloc::vec::Vec::new();

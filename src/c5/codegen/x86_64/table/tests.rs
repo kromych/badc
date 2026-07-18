@@ -89,6 +89,22 @@ fn double_precision_and_ext_moves() {
     assert_eq!(enc("movsxd", &[r(0, 8), r(1, 4)]), [0x48, 0x63, 0xc1]); // movsxd rax, ecx
 }
 
+#[test]
+fn setcc_byte_forms() {
+    // 0F 90+cc /0 with an r/m8 operand; the reg field is a zero extension.
+    // High byte registers (sil, r10b) take the REX / REX.B prefix, verified
+    // byte-identical to the assembler.
+    assert_eq!(enc("sete", &[r(0, 1)]), [0x0f, 0x94, 0xc0]); // sete al
+    assert_eq!(enc("setne", &[r(3, 1)]), [0x0f, 0x95, 0xc3]); // setne bl
+    assert_eq!(enc("setl", &[r(1, 1)]), [0x0f, 0x9c, 0xc1]); // setl cl
+    assert_eq!(enc("setg", &[r(2, 1)]), [0x0f, 0x9f, 0xc2]); // setg dl
+    assert_eq!(enc("seta", &[r(6, 1)]), [0x40, 0x0f, 0x97, 0xc6]); // seta sil
+    assert_eq!(enc("setbe", &[r(10, 1)]), [0x41, 0x0f, 0x96, 0xc2]); // setbe r10b
+    // An alias spelling encodes identically to its canonical form.
+    assert_eq!(enc("setz", &[r(0, 1)]), enc("sete", &[r(0, 1)]));
+    assert_eq!(enc("setnge", &[r(0, 1)]), enc("setl", &[r(0, 1)]));
+}
+
 // ------------------------------------------------------------------
 // Differential + fuzz harness against the system assembler.
 // ------------------------------------------------------------------
@@ -400,6 +416,18 @@ mod differential {
                     cases.push((mnem, vec![r(a, w)]));
                 }
             }
+        }
+        // setcc: one r/m8 operand, canonical and alias spellings; the high
+        // registers exercise the REX-prefix path (sil/dil, r8b..r15b).
+        for mnem in [
+            "seto", "setno", "setb", "setnb", "setz", "setnz", "setbe", "setnbe", "sets", "setns",
+            "setp", "setnp", "setl", "setnl", "setle", "setnle", "sete", "setne", "seta", "setae",
+            "setg", "setge", "setc", "setnc",
+        ] {
+            for &a in &[0u8, 3, 4, 8, 15] {
+                cases.push((mnem, vec![r(a, 1)]));
+            }
+            cases.push((mnem, vec![m(6, 1)]));
         }
         for mnem in ["shl", "shr", "sar", "rol", "ror"] {
             for &w in &widths {

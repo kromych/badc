@@ -167,12 +167,48 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "sbb", ops: &[Rm(W::V), Imm(ImmC::Iv)], pp: &[], map: Map::Legacy, opcode: &[0x81], plus_r: false, rexw: ByWidth, reg: Ext(3), rm: 0, imm: Some(ImmC::Iv), imm_op: 1 },  // sbb rv/mv immv
     Form { mnemonic: "sbb", ops: &[Reg(W::B), Rm(W::B)], pp: &[], map: Map::Legacy, opcode: &[0x1A], plus_r: false, rexw: W0, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // sbb r8 r8/m8
     Form { mnemonic: "sbb", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Legacy, opcode: &[0x1B], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // sbb rv rv/mv
+    Form { mnemonic: "setb", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x92], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setb r8/m8
+    Form { mnemonic: "setnae", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x92], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setnae r8/m8
+    Form { mnemonic: "setc", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x92], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setc r8/m8
+    Form { mnemonic: "setbe", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x96], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setbe r8/m8
+    Form { mnemonic: "setna", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x96], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setna r8/m8
+    Form { mnemonic: "setl", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x9C], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setl r8/m8
+    Form { mnemonic: "setnge", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x9C], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setnge r8/m8
+    Form { mnemonic: "setle", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x9E], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setle r8/m8
+    Form { mnemonic: "setng", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x9E], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setng r8/m8
+    Form { mnemonic: "setnb", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x93], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setnb r8/m8
+    Form { mnemonic: "setae", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x93], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setae r8/m8
+    Form { mnemonic: "setnc", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x93], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setnc r8/m8
+    Form { mnemonic: "setnbe", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x97], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setnbe r8/m8
+    Form { mnemonic: "seta", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x97], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // seta r8/m8
+    Form { mnemonic: "setnl", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x9D], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setnl r8/m8
+    Form { mnemonic: "setge", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x9D], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setge r8/m8
+    Form { mnemonic: "setnle", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x9F], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setnle r8/m8
+    Form { mnemonic: "setg", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x9F], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setg r8/m8
+    Form { mnemonic: "setno", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x91], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setno r8/m8
+    Form { mnemonic: "setnp", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x9B], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setnp r8/m8
+    Form { mnemonic: "setpo", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x9B], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setpo r8/m8
+    Form { mnemonic: "setns", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x99], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setns r8/m8
+    Form { mnemonic: "setnz", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x95], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setnz r8/m8
+    Form { mnemonic: "setne", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x95], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setne r8/m8
+    Form { mnemonic: "seto", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x90], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // seto r8/m8
+    Form { mnemonic: "setp", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x9A], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setp r8/m8
+    Form { mnemonic: "setpe", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x9A], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setpe r8/m8
+    Form { mnemonic: "sets", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x98], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // sets r8/m8
+    Form { mnemonic: "setz", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x94], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // setz r8/m8
+    Form { mnemonic: "sete", ops: &[Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0x94], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // sete r8/m8
     Form { mnemonic: "shl", ops: &[Rm(W::B), Fixed(1, W::B)], pp: &[], map: Map::Legacy, opcode: &[0xD2], plus_r: false, rexw: W0, reg: Ext(4), rm: 0, imm: None, imm_op: 255 },  // shl r8/m8 cl
+    Form { mnemonic: "sal", ops: &[Rm(W::B), Fixed(1, W::B)], pp: &[], map: Map::Legacy, opcode: &[0xD2], plus_r: false, rexw: W0, reg: Ext(4), rm: 0, imm: None, imm_op: 255 },  // sal r8/m8 cl
     Form { mnemonic: "shl", ops: &[Rm(W::V), Fixed(1, W::B)], pp: &[], map: Map::Legacy, opcode: &[0xD3], plus_r: false, rexw: ByWidth, reg: Ext(4), rm: 0, imm: None, imm_op: 255 },  // shl rv/mv cl
+    Form { mnemonic: "sal", ops: &[Rm(W::V), Fixed(1, W::B)], pp: &[], map: Map::Legacy, opcode: &[0xD3], plus_r: false, rexw: ByWidth, reg: Ext(4), rm: 0, imm: None, imm_op: 255 },  // sal rv/mv cl
     Form { mnemonic: "shl", ops: &[Rm(W::B), Imm(ImmC::One)], pp: &[], map: Map::Legacy, opcode: &[0xD0], plus_r: false, rexw: W0, reg: Ext(4), rm: 0, imm: Some(ImmC::One), imm_op: 1 },  // shl r8/m8 1
+    Form { mnemonic: "sal", ops: &[Rm(W::B), Imm(ImmC::One)], pp: &[], map: Map::Legacy, opcode: &[0xD0], plus_r: false, rexw: W0, reg: Ext(4), rm: 0, imm: Some(ImmC::One), imm_op: 1 },  // sal r8/m8 1
     Form { mnemonic: "shl", ops: &[Rm(W::V), Imm(ImmC::One)], pp: &[], map: Map::Legacy, opcode: &[0xD1], plus_r: false, rexw: ByWidth, reg: Ext(4), rm: 0, imm: Some(ImmC::One), imm_op: 1 },  // shl rv/mv 1
+    Form { mnemonic: "sal", ops: &[Rm(W::V), Imm(ImmC::One)], pp: &[], map: Map::Legacy, opcode: &[0xD1], plus_r: false, rexw: ByWidth, reg: Ext(4), rm: 0, imm: Some(ImmC::One), imm_op: 1 },  // sal rv/mv 1
     Form { mnemonic: "shl", ops: &[Rm(W::B), Imm(ImmC::Ib)], pp: &[], map: Map::Legacy, opcode: &[0xC0], plus_r: false, rexw: W0, reg: Ext(4), rm: 0, imm: Some(ImmC::Ib), imm_op: 1 },  // shl r8/m8 imm8
+    Form { mnemonic: "sal", ops: &[Rm(W::B), Imm(ImmC::Ib)], pp: &[], map: Map::Legacy, opcode: &[0xC0], plus_r: false, rexw: W0, reg: Ext(4), rm: 0, imm: Some(ImmC::Ib), imm_op: 1 },  // sal r8/m8 imm8
     Form { mnemonic: "shl", ops: &[Rm(W::V), Imm(ImmC::Ib)], pp: &[], map: Map::Legacy, opcode: &[0xC1], plus_r: false, rexw: ByWidth, reg: Ext(4), rm: 0, imm: Some(ImmC::Ib), imm_op: 1 },  // shl rv/mv imm8
+    Form { mnemonic: "sal", ops: &[Rm(W::V), Imm(ImmC::Ib)], pp: &[], map: Map::Legacy, opcode: &[0xC1], plus_r: false, rexw: ByWidth, reg: Ext(4), rm: 0, imm: Some(ImmC::Ib), imm_op: 1 },  // sal rv/mv imm8
     Form { mnemonic: "shr", ops: &[Rm(W::B), Fixed(1, W::B)], pp: &[], map: Map::Legacy, opcode: &[0xD2], plus_r: false, rexw: W0, reg: Ext(5), rm: 0, imm: None, imm_op: 255 },  // shr r8/m8 cl
     Form { mnemonic: "shr", ops: &[Rm(W::V), Fixed(1, W::B)], pp: &[], map: Map::Legacy, opcode: &[0xD3], plus_r: false, rexw: ByWidth, reg: Ext(5), rm: 0, imm: None, imm_op: 255 },  // shr rv/mv cl
     Form { mnemonic: "shr", ops: &[Rm(W::B), Imm(ImmC::One)], pp: &[], map: Map::Legacy, opcode: &[0xD0], plus_r: false, rexw: W0, reg: Ext(5), rm: 0, imm: Some(ImmC::One), imm_op: 1 },  // shr r8/m8 1

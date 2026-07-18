@@ -29,6 +29,8 @@ add sub and or xor cmp adc sbb mov test xchg
 inc dec neg not mul imul div idiv
 shl shr sar sal rol ror rcl rcr
 bsf bsr bswap bt btc btr bts
+setb setbe setl setle setnb setnbe setnl setnle
+setno setnp setns setnz seto setp sets setz
 push pop lea nop
 movzx movsx movsxd
 cmpxchg xadd
@@ -193,11 +195,15 @@ def build_form(mnem, sig_operands, enc):
             rms = [i for i in regmem if roles[i] in ('rm', 'fixed')]
             if len(regs) == 1 and len(rms) == 1:
                 reg_idx, rm_idx = regs[0], rms[0]
+            elif not regs and len(rms) == 1:
+                # One-operand ModRM form (setcc): the reg field is an ignored
+                # opcode extension, emitted as zero.
+                rm_idx = rms[0]
             elif len(regmem) == 2:
                 rm_idx, reg_idx = regmem[0], regmem[1]
             else:
                 return None
-        regfield = f'FromOp({reg_idx})'
+        regfield = 'Ext(0)' if reg_idx is None else f'FromOp({reg_idx})'
     else:
         # no ModRM (nullary / OP forms)
         regfield = 'NoReg'
@@ -229,6 +235,7 @@ def main():
     ap.add_argument('--out', required=True)
     args = ap.parse_args()
     d = json.load(open(args.db))
+    aliases = d.get('aliases', {})
     forms = []
     seen = set()
     for g in d['instructions']:
@@ -244,14 +251,17 @@ def main():
             enc = parse_op(it['op'])
             if enc is None:
                 continue
-            f = build_form(mnem, ops, enc)
-            if f is None:
-                continue
-            key = (f['mnem'], f['ops'], f['opcode'], f['imm'])
-            if key in seen:
-                continue
-            seen.add(key)
-            forms.append(f)
+            # Emit the canonical mnemonic and every alias spelling of it (the
+            # condition-code aliases: sete == setz, and so on).
+            for name in [mnem] + aliases.get(mnem, {}).get('aliases', []):
+                f = build_form(name, ops, enc)
+                if f is None:
+                    continue
+                key = (f['mnem'], f['ops'], f['opcode'], f['imm'])
+                if key in seen:
+                    continue
+                seen.add(key)
+                forms.append(f)
     # Stable order: mnemonic, then declaration order within the db (preference).
     emit(forms, args.out)
 

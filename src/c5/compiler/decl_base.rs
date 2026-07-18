@@ -331,6 +331,7 @@ impl Compiler {
         constructor: &mut bool,
         destructor: &mut bool,
         always_inline: &mut bool,
+        naked: &mut bool,
     ) {
         // The bare `noreturn` spelling lexes as the <stdnoreturn.h>
         // keyword token, not an identifier; both name this attribute.
@@ -368,6 +369,11 @@ impl Compiler {
                 // GNU `always_inline`: a mandatory inline request. Recorded so
                 // the inliner can warn when it cannot honor it.
                 *always_inline = true;
+            } else if n == "naked" || n == "__naked__" {
+                // GNU `naked`: emit no prologue/epilogue; the body is the
+                // function's entire machine code (inline asm). Used for
+                // interrupt service routines that return via `iretq`/`eret`.
+                *naked = true;
             }
         }
     }
@@ -402,6 +408,7 @@ impl Compiler {
         let mut constructor = false;
         let mut destructor = false;
         let mut always_inline = false;
+        let mut naked = false;
         let mut init_priority: Option<u32> = None;
         loop {
             if self.lex.tk == Token::Attribute {
@@ -479,6 +486,7 @@ impl Compiler {
                             &mut saw_constructor,
                             &mut saw_destructor,
                             &mut always_inline,
+                            &mut naked,
                         );
                         self.next()?;
                         if saw_aligned {
@@ -576,6 +584,7 @@ impl Compiler {
                             &mut saw_constructor,
                             &mut saw_destructor,
                             &mut always_inline,
+                            &mut naked,
                         );
                         self.next()?;
                         if saw_aligned && self.lex.tk == '(' {
@@ -630,6 +639,9 @@ impl Compiler {
             // A mandatory inline request implies `inline`.
             self.pending_is_inline = true;
             self.pending_is_always_inline = true;
+        }
+        if naked {
+            self.pending_is_naked = true;
         }
         if let Some(p) = init_priority {
             self.pending.attr_init_priority = Some(p);

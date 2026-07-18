@@ -589,6 +589,8 @@ pub(crate) struct FinishedFunction {
     /// Propagated onto `FunctionSsa::is_always_inline`; implies
     /// `is_inline`.
     pub is_always_inline: bool,
+    /// `__attribute__((naked))`: propagated onto `FunctionSsa::is_naked`.
+    pub is_naked: bool,
     pub n_locals: i64,
     /// Per-parameter type tags in declared order. The walker
     /// reads these to emit the C99 6.2.4 / 6.5.2.2-mandated

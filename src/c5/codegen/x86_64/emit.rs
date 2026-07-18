@@ -1503,7 +1503,14 @@ pub(crate) fn emit_function(
     // xmm argument register.
     let param_plan = param_placements(func, abi);
 
-    let mut uw = emit_prologue(code, func, alloc, frame, abi, snapshot);
+    // A `__attribute__((naked))` function emits no prologue: its body (inline
+    // asm) is the entire machine code, so there is no frame to set up or
+    // unwind. The matching `Terminator::Return` below emits no epilogue.
+    let mut uw = if func.is_naked {
+        super::FnUnwind::default()
+    } else {
+        emit_prologue(code, func, alloc, frame, abi, snapshot)
+    };
     uw.begin = snapshot as u32;
     super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
@@ -1672,6 +1679,11 @@ pub(crate) fn emit_function(
             for v in block.inst_range.clone() {
                 let inst = &func.insts[v as usize];
                 let place = place_of(alloc, v);
+                // A naked function's machine code is exactly its inline asm; the
+                // compiler-inserted alloca/return-value scaffolding is dropped.
+                if func.is_naked && !matches!(inst, Inst::InlineAsm { .. }) {
+                    continue;
+                }
                 if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
                     continue;
                 }
@@ -1780,6 +1792,9 @@ pub(crate) fn emit_function(
                 bail_rollback!();
             }
             match block.terminator {
+                // A naked function's inline-asm body provides its own return
+                // (e.g. `iretq`); emit no epilogue for the synthetic return.
+                Terminator::Return(_) if func.is_naked => {}
                 Terminator::Return(v) => {
                     if let Some((tail_pc, target_pc, args)) = tail_call {
                         let fp_arg_mask = match &func.insts[tail_pc] {

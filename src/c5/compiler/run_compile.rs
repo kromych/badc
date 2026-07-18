@@ -182,6 +182,7 @@ impl Compiler {
             self.pending.attr_cleanup = None;
             self.pending_is_inline = false;
             self.pending_is_always_inline = false;
+            self.pending_is_naked = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
                     thread_local = true;
@@ -1321,6 +1322,9 @@ impl Compiler {
                     // from a value-returning cast) reads `0`
                     // instead of whatever the function body
                     // happened to leave in the accumulator.
+                    // A naked function has no synthetic return value: its
+                    // inline-asm body is the entire function and returns on its
+                    // own (e.g. `iretq`), so emit no accumulator zeroing.
                     if self.current_func_returns_void {
                         self.emit_imm(0);
                     }

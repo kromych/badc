@@ -3116,6 +3116,7 @@ int main(void) { return 0; }
             is_variadic: false,
             is_inline: false,
             is_always_inline: false,
+            is_naked: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,

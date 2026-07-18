@@ -602,7 +602,12 @@ pub(crate) fn emit_function(
     let macho_tlv_descriptors_snapshot = macho_tlv_descriptors.len();
     let elf_tpoff_snapshot = elf_tpoff_fixups.len();
 
-    emit_prologue(code, func, alloc, frame, abi);
+    // A `__attribute__((naked))` function emits no prologue/epilogue; its
+    // inline-asm body is the entire function (an interrupt vector or ISR
+    // returning via `eret`). The matching `Terminator::Return` emits nothing.
+    if !func.is_naked {
+        emit_prologue(code, func, alloc, frame, abi);
+    }
     super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
     // Per-parameter incoming-register plan; consumed by the per-inst
@@ -790,6 +795,11 @@ pub(crate) fn emit_function(
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
             let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+            // A naked function's machine code is exactly its inline asm; the
+            // compiler-inserted alloca/return-value scaffolding is dropped.
+            if func.is_naked && !matches!(inst, Inst::InlineAsm { .. }) {
+                continue;
+            }
             // Skip pure insts whose value isn't consumed by any
             // other inst or terminator. Walker-side pattern folds
             // (LoadLocal, indexed-load) sometimes leave the
@@ -938,6 +948,9 @@ pub(crate) fn emit_function(
             return false;
         }
         match block.terminator {
+            // A naked function's inline-asm body provides its own return (eret);
+            // emit no epilogue for the synthetic return.
+            Terminator::Return(_) if func.is_naked => {}
             Terminator::Return(v) => emit_return(code, v, alloc, frame, &scratch, func, abi),
             Terminator::Jmp(t) => {
                 // Fall through when the target is the next block in

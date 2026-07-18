@@ -2689,6 +2689,42 @@ fn external_bool_return_is_masked_before_branch() {
 }
 
 #[test]
+fn naked_function_emits_body_only() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    // A `__attribute__((naked))` function's machine code is exactly its
+    // inline-asm body -- no prologue (push rbp), no epilogue, no synthetic
+    // return -- so an interrupt service routine can end in `iretq`.
+    let src = "__attribute__((naked)) void isr(void){ __asm__ volatile(\"hlt\\n\\tiretq\"); }\n\
+               int main(void){ return 0; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap();
+    let obj = emit_native_with_options(
+        &program,
+        Target::LinuxX64,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        },
+    )
+    .expect("emit relocatable");
+    let text = elf64_section(&obj, ".text").expect(".text");
+    let off = elf_func_value(&obj, "isr").expect("isr symbol value") as usize;
+    let size = elf_func_symbols(&obj)
+        .into_iter()
+        .find(|(n, _)| n == "isr")
+        .expect("isr symbol")
+        .1 as usize;
+    // hlt = F4, iretq = 48 CF. Body-only: exactly these three bytes, with no
+    // prologue byte (55 = push rbp) and no trailing return (C3 / xor+ret).
+    assert_eq!(
+        &text[off..off + size],
+        &[0xF4, 0x48, 0xCF],
+        "naked function must emit its inline-asm body verbatim"
+    );
+}
+
+#[test]
 fn fxsave_fxrstor_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     // edk2's BaseLib reaches x87/SSE state save/restore through

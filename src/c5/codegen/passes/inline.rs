@@ -1270,6 +1270,7 @@ fn splice_multi_block(
         is_variadic: original.is_variadic,
         is_inline: original.is_inline,
         is_always_inline: original.is_always_inline,
+        is_naked: original.is_naked,
         insts: new_insts,
         inst_src: new_inst_src,
         blocks: new_blocks,

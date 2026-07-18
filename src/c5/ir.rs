@@ -740,6 +740,10 @@ pub(crate) struct FunctionSsa {
     /// gcc / MSVC diagnostic; a plain `inline` that stays out of line is
     /// silent (it is only a hint).
     pub is_always_inline: bool,
+    /// True if the function carried `__attribute__((naked))`: emit no
+    /// prologue/epilogue and no implicit return; the body (inline asm) is the
+    /// function's entire machine code. Used for interrupt service routines.
+    pub is_naked: bool,
     /// Flat list of all SSA instructions in the function, indexed
     /// by [`ValueId`]. Each [`Block::inst_range`] is a contiguous
     /// slice of this list.

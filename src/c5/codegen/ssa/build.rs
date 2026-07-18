@@ -161,6 +161,7 @@ impl SsaBuilder {
             is_variadic,
             is_inline: false,
             is_always_inline: false,
+            is_naked: false,
             insts: Vec::new(),
             inst_src: Vec::new(),
             blocks: Vec::new(),

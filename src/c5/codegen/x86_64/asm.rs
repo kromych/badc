@@ -94,6 +94,12 @@ pub(crate) enum Mnemonic {
     /// instructions the mnemonic catalogue does not cover; the bytes are
     /// emitted verbatim.
     RawBytes,
+    /// A general-purpose / system mnemonic recognized straight from the
+    /// catalogue, not one of the bespoke forms above. The string is the
+    /// catalogue mnemonic; [`encode`] routes it through the table encoder with
+    /// a generic AT&T-to-Intel operand transpose. This is what lets inline asm
+    /// reach every instruction the table encodes without a per-mnemonic arm.
+    Table(&'static str),
 }
 
 /// One symbolic operand of a template instruction.
@@ -310,13 +316,27 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
     })
 }
 
+/// The catalogue mnemonic matching `name`, as a `'static` string, or `None`.
+/// Lets a mnemonic the table encodes but that has no bespoke [`Mnemonic`]
+/// variant still be parsed and routed through the table.
+fn table_mnemonic(name: &str) -> Option<&'static str> {
+    super::isa_x86_table::FORMS
+        .iter()
+        .map(|f| f.mnemonic)
+        .find(|&m| m == name)
+}
+
 /// Resolve a mnemonic token to its base form plus any AT&T size suffix.
 /// A trailing `b`/`w`/`l`/`q` is a suffix only when the token is not a
 /// mnemonic as written (so `shl` stays `shl`, but `bswapl` is
-/// `bswap` + long).
+/// `bswap` + long). A token that is not a bespoke mnemonic but names a
+/// catalogue instruction resolves to [`Mnemonic::Table`].
 fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     if let Some(m) = mnemonic_by_name(tok) {
         return Some((m, None));
+    }
+    if let Some(name) = table_mnemonic(tok) {
+        return Some((Mnemonic::Table(name), None));
     }
     let (base, suffix) = match tok.as_bytes().last() {
         Some(b'b') => (&tok[..tok.len() - 1], Some(AsmRegSize::Byte)),
@@ -325,7 +345,10 @@ fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
         Some(b'q') => (&tok[..tok.len() - 1], Some(AsmRegSize::Quad)),
         _ => return None,
     };
-    mnemonic_by_name(base).map(|m| (m, suffix))
+    if let Some(m) = mnemonic_by_name(base) {
+        return Some((m, suffix));
+    }
+    table_mnemonic(base).map(|name| (Mnemonic::Table(name), suffix))
 }
 
 /// Parse one operand token (already trimmed).
@@ -546,6 +569,11 @@ fn to_table(
 ) -> Option<(&'static str, Option<u8>, Vec<super::table::Opnd>)> {
     use super::table::Opnd;
     use Mnemonic as M;
+    // A catalogue-passthrough mnemonic carries its own name; arrange the AT&T
+    // operands into the table's Intel order by arity and route straight through.
+    if let M::Table(name) = mnemonic {
+        return to_table_generic(name, suffix, ops);
+    }
     let name = match mnemonic {
         M::Add => "add",
         M::Sub => "sub",
@@ -582,19 +610,7 @@ fn to_table(
     {
         return None;
     }
-    let cvt = |c: &Concrete| -> Opnd {
-        match *c {
-            Concrete::Reg { reg, size } => Opnd::Reg {
-                num: reg,
-                width: size.bytes(),
-            },
-            Concrete::Mem { base, size } => Opnd::Mem {
-                base,
-                width: size.bytes(),
-            },
-            Concrete::Imm(v) => Opnd::Imm(v),
-        }
-    };
+    let cvt = table_opnd;
     let tops: Vec<Opnd> = match mnemonic {
         M::Rdtsc
         | M::Rdtscp
@@ -633,6 +649,64 @@ fn to_table(
         },
     };
     Some((name, suffix.map(|s| s.bytes()), tops))
+}
+
+/// Arrange the operands of a catalogue-passthrough mnemonic
+/// ([`Mnemonic::Table`]) into the table's Intel order, by arity: no operands
+/// stay empty, a unary form passes its operand, a two-operand form transposes
+/// AT&T `src, dst` to `dst, src`, and a shift / rotate takes its count (CL or an
+/// immediate) after the destination with an omitted count meaning `1`. Operands
+/// naming a register with no catalogue form (MMX / control / debug / segment,
+/// `reg >= MMX_BASE`) return `None`.
+fn to_table_generic(
+    name: &'static str,
+    suffix: Option<AsmRegSize>,
+    ops: &[Concrete],
+) -> Option<(&'static str, Option<u8>, Vec<super::table::Opnd>)> {
+    use super::table::Opnd;
+    if ops
+        .iter()
+        .any(|o| matches!(o, Concrete::Reg { reg, .. } if *reg >= MMX_BASE))
+    {
+        return None;
+    }
+    let shift_like = matches!(
+        name,
+        "shl" | "shr" | "sar" | "sal" | "rol" | "ror" | "rcl" | "rcr"
+    );
+    let tops = match ops {
+        [] => Vec::new(),
+        [rm] if shift_like => alloc::vec![table_opnd(rm), Opnd::Imm(1)],
+        [rm] => alloc::vec![table_opnd(rm)],
+        [count, dst] if shift_like => {
+            let c = match *count {
+                Concrete::Imm(v) => Opnd::Imm(v),
+                // The shift / rotate count is CL regardless of the register's name.
+                Concrete::Reg { reg: 1, .. } => Opnd::Reg { num: 1, width: 1 },
+                _ => return None,
+            };
+            alloc::vec![table_opnd(dst), c]
+        }
+        [src, dst] => alloc::vec![table_opnd(dst), table_opnd(src)],
+        _ => return None,
+    };
+    Some((name, suffix.map(|s| s.bytes()), tops))
+}
+
+/// Convert a resolved operand to the table encoder's operand form.
+fn table_opnd(c: &Concrete) -> super::table::Opnd {
+    use super::table::Opnd;
+    match *c {
+        Concrete::Reg { reg, size } => Opnd::Reg {
+            num: reg,
+            width: size.bytes(),
+        },
+        Concrete::Mem { base, size } => Opnd::Mem {
+            base,
+            width: size.bytes(),
+        },
+        Concrete::Imm(v) => Opnd::Imm(v),
+    }
 }
 
 /// Encode one resolved instruction into `code`. Operands are in AT&T
@@ -957,6 +1031,50 @@ mod tests {
             [0x66, 0xEF]
         );
         assert_eq!(enc(Mnemonic::Out, Some(AsmRegSize::Long), &[]), [0xEF]);
+    }
+
+    #[test]
+    fn catalogue_passthrough() {
+        let q = AsmRegSize::Quad;
+        let rax = Concrete::Reg { reg: 0, size: q };
+        let rbx = Concrete::Reg { reg: 3, size: q };
+        // A non-bespoke catalogue mnemonic parses to Mnemonic::Table, stripping
+        // an AT&T size suffix; an unknown token stays unresolved.
+        assert_eq!(split_mnemonic("cmp"), Some((Mnemonic::Table("cmp"), None)));
+        assert_eq!(
+            split_mnemonic("negq"),
+            Some((Mnemonic::Table("neg"), Some(q)))
+        );
+        assert_eq!(split_mnemonic("bogusxyz"), None);
+        // Encodings match the assembler (the table is the same core the
+        // differential sweep checks): neg/not (F7 /3,/2), and AT&T
+        // `op src, dst` transposed to Intel for cmp (39 /r) and adc (11 /r).
+        assert_eq!(
+            enc(Mnemonic::Table("neg"), None, &[rax]),
+            [0x48, 0xF7, 0xD8]
+        );
+        assert_eq!(
+            enc(Mnemonic::Table("not"), None, &[rax]),
+            [0x48, 0xF7, 0xD0]
+        );
+        assert_eq!(
+            enc(Mnemonic::Table("cmp"), None, &[rbx, rax]),
+            [0x48, 0x39, 0xD8]
+        );
+        assert_eq!(
+            enc(Mnemonic::Table("adc"), None, &[rbx, rax]),
+            [0x48, 0x11, 0xD8]
+        );
+        // A rotate takes its count after the destination; `rol $1` selects the
+        // D1 /0 rotate-by-one short form, `rol $4` the C1 /0 immediate form.
+        assert_eq!(
+            enc(Mnemonic::Table("rol"), None, &[Concrete::Imm(1), rax]),
+            [0x48, 0xD1, 0xC0]
+        );
+        assert_eq!(
+            enc(Mnemonic::Table("rol"), None, &[Concrete::Imm(4), rax]),
+            [0x48, 0xC1, 0xC0, 0x04]
+        );
     }
 
     #[test]

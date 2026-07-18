@@ -2070,6 +2070,14 @@ fn run_inline_asm(
             // Literal machine bytes are opaque to the register model, like the
             // privileged / port ops below: no modelled effect under the VM.
             Mnemonic::RawBytes => {}
+            // The interpreter is not a CPU emulator: a mnemonic reached through
+            // the catalogue is refused rather than modelled. Such inline asm is
+            // an ahead-of-time / JIT construct, executed natively there.
+            Mnemonic::Table(name) => {
+                return Err(C5Error::Runtime(alloc::format!(
+                    "inline asm: `{name}` is not supported under --interp"
+                )));
+            }
             Mnemonic::Nop | Mnemonic::Rdtsc | Mnemonic::Rdtscp => {
                 // No host clock: the timestamp read produces zero in the
                 // registers it defines (rax/rdx, and rcx for rdtscp).

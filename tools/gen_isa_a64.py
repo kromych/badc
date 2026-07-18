@@ -6,17 +6,19 @@ and emits `src/c5/codegen/aarch64/isa_a64_table.rs`: a `Form` per instruction
 row as a base word plus the field list `super::table::encode` splices operands
 into. The base words -- the encoding facts -- come from the database. The
 operand-to-field mapping is derived by classifying each row's written operand
-signature against the field model (Rd@0, Rn@5, Rm@16, Ra@10 at fixed written
-positions, plus the immediate / shift-alias / condition field kinds). Rows the
-model cannot express are skipped and bucketed; --residuals prints them ranked
-by row count as the model-growth roadmap.
+signature against the field model (register operands feeding named 5-bit fields
+at bit positions read from the encoding, a base-register memory reference, plus
+the immediate / shift-alias / condition field kinds). Rows the model cannot
+express are skipped and bucketed; --residuals prints them ranked by row count
+as the model-growth roadmap.
 
-Differential sweeps proved seven shipped database rows disagree with the
-architecture (cbz carrying cbnz's opcode, ret, dsb, subps missing its S bit,
-crc32x/crc32cx destination width) -- corrected in DB_FIXES -- and that
-addg/subg write a 16-scaled immediate the raw-field model would encode
-wrongly -- dropped in EXCLUDED_ROWS. This is why the encoder is derived, not
-copied: the database is a strong starting point, not ground truth.
+Differential sweeps proved several shipped database rows disagree with the
+architecture (cbz carrying cbnz's opcode; ret, dsb, subps missing bits;
+crc32x/crc32cx destination width; ldset's width-mismatched destination; the
+word/doubleword compare-and-swap rows dropping bit 23) -- corrected in
+DB_FIXES -- and that addg/subg write a 16-scaled immediate the raw-field model
+would encode wrongly -- dropped in EXCLUDED_ROWS. This is why the encoder is
+derived, not copied: the database is a strong starting point, not ground truth.
 
 Usage:
     tools/gen_isa_a64.py --db /path/to/db/isa_aarch64.json \
@@ -40,7 +42,52 @@ DB_FIXES = {
         ("crc32x Wd, Wn, Xm", None),
     ("crc32cx Xd, Xn, Xm", "10011010|110|Rm|0|10111|Rn|Rd"):
         ("crc32cx Wd, Wn, Xm", None),
+    # The ldset 64-bit forms are shipped with a 32-bit `Wd` destination; the
+    # assembler rejects that width mix (the field is width-independent, so the
+    # bytes are already correct -- only the spelling is wrong).
+    ("ldset Xs, Wd, [Xn|SP]", "11111000|001|Rs|0|01100|Rn|Rd"):
+        ("ldset Xs, Xd, [Xn|SP]", None),
+    ("ldseta Xs, Wd, [Xn|SP]", "11111000|101|Rs|0|01100|Rn|Rd"):
+        ("ldseta Xs, Xd, [Xn|SP]", None),
+    ("ldsetl Xs, Wd, [Xn|SP]", "11111000|011|Rs|0|01100|Rn|Rd"):
+        ("ldsetl Xs, Xd, [Xn|SP]", None),
+    ("ldsetal Xs, Wd, [Xn|SP]", "11111000|111|Rs|0|01100|Rn|Rd"):
+        ("ldsetal Xs, Xd, [Xn|SP]", None),
+    # The word/doubleword compare-and-swap rows drop bit 23 (the byte/halfword
+    # rows carry it); the assembler sets it, so the shipped bytes are wrong.
+    ("cas Ws, Wd, [Xn|SP]", "10001000|001|Rs|0|11111|Rn|Rd"):
+        (None, "10001000|101|Rs|0|11111|Rn|Rd"),
+    ("casa Ws, Wd, [Xn|SP]", "10001000|011|Rs|0|11111|Rn|Rd"):
+        (None, "10001000|111|Rs|0|11111|Rn|Rd"),
+    ("casl Ws, Wd, [Xn|SP]", "10001000|001|Rs|1|11111|Rn|Rd"):
+        (None, "10001000|101|Rs|1|11111|Rn|Rd"),
+    ("casal Ws, Wd, [Xn|SP]", "10001000|011|Rs|1|11111|Rn|Rd"):
+        (None, "10001000|111|Rs|1|11111|Rn|Rd"),
+    ("cas Xs, Xd, [Xn|SP]", "11001000|001|Rs|0|11111|Rn|Rd"):
+        (None, "11001000|101|Rs|0|11111|Rn|Rd"),
+    ("casa Xs, Xd, [Xn|SP]", "11001000|011|Rs|0|11111|Rn|Rd"):
+        (None, "11001000|111|Rs|0|11111|Rn|Rd"),
+    ("casl Xs, Xd, [Xn|SP]", "11001000|001|Rs|1|11111|Rn|Rd"):
+        (None, "11001000|101|Rs|1|11111|Rn|Rd"),
+    ("casal Xs, Xd, [Xn|SP]", "11001000|011|Rs|1|11111|Rn|Rd"):
+        (None, "11001000|111|Rs|1|11111|Rn|Rd"),
+    # The unsigned halfword exclusive forms are shipped with 64-bit data
+    # registers; the assembler takes W (the sub-word value zero-extends), and
+    # only the mis-widened row exists, so a correct W spelling would not match.
+    ("ldaxrh Xd, [Xn|SP]", "01001000|010|11111|1|11111|Rn|Rd"):
+        ("ldaxrh Wd, [Xn|SP]", None),
+    ("stlxrh Wd, Xs, [Xn|SP]", "01001000|000|Rd|1|11111|Rn|Rs"):
+        ("stlxrh Wd, Ws, [Xn|SP]", None),
+    ("stxrh Wd, Xs, [Xn|SP]", "01001000|000|Rd|0|11111|Rn|Rs"):
+        ("stxrh Wd, Ws, [Xn|SP]", None),
 }
+
+# The store-form atomic aliases (ST<op> = LD<op> with the result discarded)
+# are defined by the architecture only for the plain and release orderings;
+# the acquire spellings ST<op>A / ST<op>AL do not exist (an acquire on a
+# discarded load has no meaning) and the assembler rejects them.
+UNDEFINED_ROW = re.compile(
+    r'st(add|clr|eor|set|smax|smin|umax|umin)a[lbh]* ').match
 
 # Rows whose written immediate is not the raw field value (addg/subg #imm1 is
 # the field scaled by 16); a raw UImm form would encode them wrongly.
@@ -52,7 +99,8 @@ EXCLUDED_ROWS = {
 # Bare op-string tokens whose bit width is not written inline (widths verified
 # by the 32-bit row-sum constraint in the design spike).
 BARE = {'Rm': 5, 'Rn': 5, 'Rd': 5, 'Ra': 5, 'Rt': 5, 'Rt2': 5, 'Rs': 5,
-        'Rd2': 5, 'cond': 4, 'CRm': 4, 'CRn': 4, 'sop': 2, 'option': 3}
+        'Rs2': 5, 'Rd2': 5, 'cond': 4, 'CRm': 4, 'CRn': 4, 'sop': 2,
+        'option': 3}
 
 # Aliases that store the inverted written condition (al/nv invalid there).
 COND_INV = {'cset', 'csetm', 'cinc', 'cinv', 'cneg'}
@@ -82,10 +130,11 @@ def parse_op(op):
     return (base & 0xFFFFFFFF, fields) if pos == 32 else None
 
 
-# The written position and bit position each register letter must occupy for
-# the fixed-field model.
-REG_SLOT = {'d': 0, 'n': 1, 'm': 2, 'a': 3}
-REG_FIELD = {'d': ('Rd', 0), 'n': ('Rn', 5), 'm': ('Rm', 16), 'a': ('Ra', 10)}
+# Register operand suffix -> the encoding field it feeds. The bit position is
+# read from each row's encoding string, not fixed: the same field lands at
+# different bits across instructions (e.g. Rs at bit 0 in stlr, bit 16 in cas).
+REG_FIELD = {'d': 'Rd', 'n': 'Rn', 'm': 'Rm', 'a': 'Ra', 's': 'Rs',
+             't': 'Rt', 't2': 'Rt2', 'd2': 'Rd2', 's2': 'Rs2'}
 
 
 def classify(heads, toks, op, im):
@@ -107,19 +156,28 @@ def classify(heads, toks, op, im):
     while i < len(toks):
         t = toks[i]
         t0 = t.split('|')[0]
-        if (m := re.fullmatch(r'([XW])([dnma])', t0)):
-            w, letter = m.group(1), m.group(2)
-            if REG_SLOT[letter] != i:
-                return ('residual',
-                        f'register {t0} written at index {i}, model expects {REG_SLOT[letter]}')
-            fname, fpos = REG_FIELD[letter]
-            if fl.get(fname) != (5, fpos):
-                return ('residual', f'register field {fname} not at bit {fpos}')
+        if (m := re.fullmatch(r'([XW])(d2|s2|t2|[dnmast])', t0)):
+            # A register operand feeds a named 5-bit field; its bit position is
+            # read from the encoding, so any operand order is expressible.
+            w, fname = m.group(1), REG_FIELD[m.group(2)]
+            fv = fl.get(fname)
+            if fv is None or fv[0] != 5:
+                return ('residual', f'register field {fname} not a 5-bit field')
             consumed.add(fname)
             ops.append(w)
-            fields.append(fname)
-            if letter == 'd':
+            fields.append(f'Reg {{ op: {i}, shift: {fv[1]} }}')
+            if m.group(2) == 'd':
                 rd_width = w
+            i += 1
+            continue
+        if re.fullmatch(r'\[Xn(\|SP)?\]', t):
+            # A base-register memory reference; the base feeds Rn.
+            fv = fl.get('Rn')
+            if fv is None or fv[0] != 5:
+                return ('residual', 'memory base field Rn not a 5-bit field')
+            consumed.add('Rn')
+            ops.append('Mem')
+            fields.append(f'Reg {{ op: {i}, shift: {fv[1]} }}')
             i += 1
             continue
         if t0 == '#sysreg':
@@ -208,7 +266,7 @@ def load_rows(db):
             continue
         for it in g['data']:
             inst, op = it['inst'], it['op']
-            if inst in EXCLUDED_ROWS:
+            if inst in EXCLUDED_ROWS or UNDEFINED_ROW(inst):
                 continue
             fi, fo = DB_FIXES.get((inst, op), (None, None))
             rows.append((fi or inst, fo or op, it.get('imm', '')))
@@ -256,7 +314,7 @@ def main():
         '//',
         '// The A64 GP catalogue interpreted by `super::table::encode`: every',
         '// database row whose written-operand signature maps onto the field',
-        '// model. Seven database rows are corrected and two dropped before',
+        '// model. Some database rows are corrected and some dropped before',
         '// parsing (see tools/gen_isa_a64.py DB_FIXES / EXCLUDED_ROWS).',
         '',
         'use super::table::{A64Op, A64Op::*, Field, Field::*, Form};',

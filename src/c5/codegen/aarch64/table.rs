@@ -20,15 +20,10 @@ use alloc::string::String;
 /// operand that feeds it is encoded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Field {
-    /// Destination register `Rd` at bit 0.
-    Rd,
-    /// First source register `Rn` at bit 5.
-    Rn,
-    /// Second source register `Rm` at bit 16.
-    Rm,
-    /// Third source (accumulator) register `Ra` at bit 10, for the 3-source
-    /// multiply forms `madd`/`msub`.
-    Ra,
+    /// A register spliced at bit `shift`, fed by the operand at index `op`.
+    /// The value is a plain register's number or a memory operand's base
+    /// register; the operand widths (`sf`) are baked into the base word.
+    Reg { op: u8, shift: u8 },
     /// A raw unsigned immediate: `shift` = low bit, `width` = bit count. Fed by
     /// the operand at `op` (index into the instruction's operand list).
     UImm { op: u8, shift: u8, width: u8 },
@@ -75,6 +70,8 @@ pub(crate) enum A64Op {
     OptLsl,
     /// A condition code.
     Cond,
+    /// A base-register memory reference `[Xn|SP]`.
+    Mem,
 }
 
 /// A resolved operand handed to [`encode`].
@@ -170,6 +167,8 @@ pub(crate) fn encode_logical_imm(value: u64, is64: bool) -> Option<u32> {
 fn reg(o: Opnd) -> Result<u8, String> {
     match o {
         Opnd::Reg { num, .. } => Ok(num),
+        // A memory reference contributes its base register (the Rn field).
+        Opnd::Mem { base, .. } => Ok(base),
         _ => Err(String::from("inline asm: register operand expected")),
     }
 }
@@ -195,6 +194,7 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
         (A64Op::Imm, Opnd::Imm(_)) => true,
         (A64Op::OptLsl, Opnd::Lsl(_)) => true,
         (A64Op::Cond, Opnd::Cond(_)) => true,
+        (A64Op::Mem, Opnd::Mem { .. }) => true,
         _ => false,
     }
 }
@@ -259,13 +259,9 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
     let mut word = f.base;
     for field in f.fields {
         match *field {
-            Field::Rd => word |= reg(ops[0])? as u32 & 31,
-            Field::Rn => {
-                // Rn is the operand at index 1 for 2+ register forms.
-                word |= (reg(ops[1])? as u32 & 31) << 5;
+            Field::Reg { op, shift } => {
+                word |= (reg(ops[op as usize])? as u32 & 31) << shift;
             }
-            Field::Rm => word |= (reg(ops[2])? as u32 & 31) << 16,
-            Field::Ra => word |= (reg(ops[3])? as u32 & 31) << 10,
             Field::UImm { op, shift, width } => {
                 let v = imm(ops[op as usize])?;
                 let mask = (1u64 << width) - 1;

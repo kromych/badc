@@ -17,6 +17,9 @@ fn w(n: u8) -> Opnd {
         is64: false,
     }
 }
+fn m(base: u8) -> Opnd {
+    Opnd::Mem { base, off: 0 }
+}
 fn enc(mnem: &str, ops: &[Opnd]) -> u32 {
     encode(mnem, ops).unwrap_or_else(|e| panic!("{mnem}: {e}"))
 }
@@ -222,6 +225,40 @@ fn classified_catalogue_growth() {
     assert_eq!(enc("chkfeat", &[]), 0xD503251F);
 }
 
+/// Base-register memory operands and positional register fields (Rs/Rt/Rt2/Rd2,
+/// and Rd/Rn at written positions the fixed model rejected). One word per newly
+/// covered class, all verified against the assembler.
+#[test]
+fn memory_and_positional_registers() {
+    // Load-acquire / store-release: the data register feeds Rd/Rs at bit 0, the
+    // base feeds Rn at bit 5. SP is base register 31.
+    assert_eq!(enc("stlr", &[w(0), m(1)]), 0x889FFC20); // stlr w0, [x1]
+    assert_eq!(enc("stlr", &[x(2), m(3)]), 0xC89FFC62);
+    assert_eq!(enc("ldar", &[x(6), m(7)]), 0xC8DFFCE6);
+    assert_eq!(enc("ldar", &[x(0), m(31)]), 0xC8DFFFE0); // ldar x0, [sp]
+    // Compare-and-swap: Rs at bit 16, Rt at bit 0, base at bit 5. The word form
+    // sets bit 23 (the corrected database row).
+    assert_eq!(enc("cas", &[w(8), w(9), m(10)]), 0x88A87D49);
+    assert_eq!(enc("cas", &[x(11), x(12), m(13)]), 0xC8AB7DAC);
+    assert_eq!(enc("casb", &[w(8), w(9), m(10)]), 0x08A87D49); // byte form unchanged
+    // Atomic memory ops share the Rs@16 / Rt@0 / base layout.
+    assert_eq!(enc("swp", &[w(14), w(15), m(16)]), 0xB82E820F);
+    assert_eq!(enc("ldadd", &[x(17), x(18), m(19)]), 0xF8310272);
+    // Store-exclusive: the status register is Rd at bit 16 (not bit 0); the
+    // stored value may be wider than the status register.
+    assert_eq!(enc("stlxr", &[w(20), w(21), m(22)]), 0x8814FED5);
+    assert_eq!(enc("stlxr", &[w(23), x(24), m(25)]), 0xC817FF38);
+    // Load/store exclusive pair: Rd2/Rs2 at bit 10.
+    assert_eq!(enc("ldaxp", &[x(0), x(1), m(2)]), 0xC87F8440);
+    assert_eq!(enc("stxp", &[w(3), w(4), w(5), m(6)]), 0x882314C4);
+    // Register at written index 0 mapping to Rn (no Rd operand): relaxing the
+    // fixed slot order.
+    assert_eq!(enc("blr", &[x(9)]), 0xD63F0120);
+    assert_eq!(enc("cmn", &[x(5), x(6)]), 0xAB0600BF);
+    assert_eq!(enc("cmn", &[w(7), Opnd::Imm(10)]), 0x310028FF);
+    assert_eq!(enc("cmpp", &[x(3), x(4)]), 0xBAC4007F);
+}
+
 #[cfg(feature = "std")]
 mod differential {
     use super::super::super::isa_a64_table;
@@ -402,7 +439,7 @@ mod differential {
                 .iter()
                 .enumerate()
                 .map(|(i, p)| match p {
-                    A64Op::X | A64Op::W => Vec::new(),
+                    A64Op::X | A64Op::W | A64Op::Mem => Vec::new(),
                     _ => slot_cands(f, i),
                 })
                 .collect();
@@ -419,6 +456,13 @@ mod differential {
                                 regs[i]
                             ));
                             ops.push(Opnd::Reg { num: regs[i], is64 });
+                        }
+                        A64Op::Mem => {
+                            txt.push(alloc::format!("[x{}]", regs[i]));
+                            ops.push(Opnd::Mem {
+                                base: regs[i],
+                                off: 0,
+                            });
                         }
                         _ => {
                             if let Some((t, o)) = &cands[i][if i == slot { pick } else { 0 }] {

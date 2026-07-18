@@ -268,6 +268,36 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "cpuid", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0xA2], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // cpuid eax ebx ecx edx
     Form { mnemonic: "xadd", ops: &[Rm(W::B), Reg(W::B)], pp: &[], map: Map::Op0F, opcode: &[0xC0], plus_r: false, rexw: W0, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // xadd r8/m8 r8
     Form { mnemonic: "xadd", ops: &[Rm(W::V), Reg(W::V)], pp: &[], map: Map::Op0F, opcode: &[0xC1], plus_r: false, rexw: ByWidth, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // xadd rv/mv rv
+    Form { mnemonic: "cmovb", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x42], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovb rv rv/mv
+    Form { mnemonic: "cmovnae", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x42], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovnae rv rv/mv
+    Form { mnemonic: "cmovc", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x42], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovc rv rv/mv
+    Form { mnemonic: "cmovbe", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x46], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovbe rv rv/mv
+    Form { mnemonic: "cmovna", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x46], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovna rv rv/mv
+    Form { mnemonic: "cmovl", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x4C], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovl rv rv/mv
+    Form { mnemonic: "cmovnge", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x4C], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovnge rv rv/mv
+    Form { mnemonic: "cmovle", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x4E], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovle rv rv/mv
+    Form { mnemonic: "cmovng", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x4E], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovng rv rv/mv
+    Form { mnemonic: "cmovnb", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x43], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovnb rv rv/mv
+    Form { mnemonic: "cmovae", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x43], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovae rv rv/mv
+    Form { mnemonic: "cmovnc", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x43], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovnc rv rv/mv
+    Form { mnemonic: "cmovnbe", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x47], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovnbe rv rv/mv
+    Form { mnemonic: "cmova", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x47], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmova rv rv/mv
+    Form { mnemonic: "cmovnl", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x4D], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovnl rv rv/mv
+    Form { mnemonic: "cmovge", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x4D], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovge rv rv/mv
+    Form { mnemonic: "cmovnle", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x4F], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovnle rv rv/mv
+    Form { mnemonic: "cmovg", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x4F], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovg rv rv/mv
+    Form { mnemonic: "cmovno", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x41], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovno rv rv/mv
+    Form { mnemonic: "cmovnp", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x4B], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovnp rv rv/mv
+    Form { mnemonic: "cmovpo", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x4B], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovpo rv rv/mv
+    Form { mnemonic: "cmovns", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x49], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovns rv rv/mv
+    Form { mnemonic: "cmovnz", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x45], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovnz rv rv/mv
+    Form { mnemonic: "cmovne", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x45], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovne rv rv/mv
+    Form { mnemonic: "cmovo", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x40], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovo rv rv/mv
+    Form { mnemonic: "cmovp", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x4A], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovp rv rv/mv
+    Form { mnemonic: "cmovpe", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x4A], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovpe rv rv/mv
+    Form { mnemonic: "cmovs", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x48], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovs rv rv/mv
+    Form { mnemonic: "cmovz", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x44], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmovz rv rv/mv
+    Form { mnemonic: "cmove", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0x44], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // cmove rv rv/mv
     Form { mnemonic: "rdtsc", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x31], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // rdtsc edx eax
     Form { mnemonic: "rdtscp", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xF9], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // rdtscp edx eax ecx
     Form { mnemonic: "cli", ops: &[], pp: &[], map: Map::Legacy, opcode: &[0xFA], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // cli

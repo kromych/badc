@@ -31,6 +31,8 @@ shl shr sar sal rol ror rcl rcr
 bsf bsr bswap bt btc btr bts
 setb setbe setl setle setnb setnbe setnl setnle
 setno setnp setns setnz seto setp sets setz
+cmovb cmovbe cmovl cmovle cmovnb cmovnbe cmovnl cmovnle
+cmovno cmovnp cmovns cmovnz cmovo cmovp cmovs cmovz
 push pop lea nop
 movzx movsx movsxd
 cmpxchg xadd

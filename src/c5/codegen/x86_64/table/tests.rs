@@ -105,6 +105,24 @@ fn setcc_byte_forms() {
     assert_eq!(enc("setnge", &[r(0, 1)]), enc("setl", &[r(0, 1)]));
 }
 
+#[test]
+fn cmov_forms() {
+    // 0F 40+cc /r: reg is the destination, r/m the source, width from the
+    // operands. Verified byte-identical to the assembler.
+    assert_eq!(enc("cmove", &[r(0, 8), r(6, 8)]), [0x48, 0x0f, 0x44, 0xc6]); // cmove rax, rsi
+    assert_eq!(enc("cmovl", &[r(2, 4), r(1, 4)]), [0x0f, 0x4c, 0xd1]); // cmovl edx, ecx
+    assert_eq!(enc("cmovg", &[r(9, 8), r(8, 8)]), [0x4d, 0x0f, 0x4f, 0xc8]); // cmovg r9, r8
+    // Alias spellings match their canonical condition.
+    assert_eq!(
+        enc("cmovnle", &[r(0, 8), r(1, 8)]),
+        enc("cmovg", &[r(0, 8), r(1, 8)])
+    );
+    assert_eq!(
+        enc("cmovz", &[r(0, 8), r(1, 8)]),
+        enc("cmove", &[r(0, 8), r(1, 8)])
+    );
+}
+
 // ------------------------------------------------------------------
 // Differential + fuzz harness against the system assembler.
 // ------------------------------------------------------------------
@@ -428,6 +446,19 @@ mod differential {
                 cases.push((mnem, vec![r(a, 1)]));
             }
             cases.push((mnem, vec![m(6, 1)]));
+        }
+        // cmovcc: reg, r/m of width 16/32/64.
+        for mnem in [
+            "cmovo", "cmovno", "cmovb", "cmovnb", "cmovz", "cmovnz", "cmovbe", "cmovnbe", "cmovs",
+            "cmovns", "cmovp", "cmovnp", "cmovl", "cmovnl", "cmovle", "cmovnle", "cmove", "cmovne",
+            "cmova", "cmovg",
+        ] {
+            for &w in &[2u8, 4, 8] {
+                for &a in &[0u8, 8] {
+                    cases.push((mnem, vec![r(a, w), r(3, w)]));
+                    cases.push((mnem, vec![r(a, w), m(6, w)]));
+                }
+            }
         }
         for mnem in ["shl", "shr", "sar", "rol", "ror"] {
             for &w in &widths {

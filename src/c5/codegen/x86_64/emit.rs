@@ -6288,7 +6288,7 @@ fn emit_va_arg_sysv(
     // r10 = offset + reg_save_area (at [ap + 16]) = the argument slot,
     // then bump the offset field in memory by step.
     super::encode::emit_rm(code, Mnem::Add, 8, SCRATCH_R10, ap, 16);
-    super::encode::emit_add_mem32_imm32(code, ap, off_disp, step);
+    super::encode::emit_mi(code, Mnem::Add, 4, ap, off_disp, step);
     // jmp done
     super::encode::emit_jmp_rel32(code, 0);
     let jmp_rel32_at = code.len() - 4;
@@ -6302,7 +6302,7 @@ fn emit_va_arg_sysv(
     // `double` occupies one, a by-value aggregate `ceil(size/8)`.
     let ov_step = if is_fp { 8 } else { aligned };
     emit_mov_r_mem(code, SCRATCH_R10, ap, 8);
-    super::encode::emit_add_mem64_imm32(code, ap, 8, ov_step);
+    super::encode::emit_mi(code, Mnem::Add, 8, ap, 8, ov_step);
     // --- done: r10 holds the argument address; deliver it to dst. ---
     let done = code.len();
     let rel_to_done = (done - (jmp_rel32_at + 4)) as i32;

@@ -391,24 +391,16 @@ pub(crate) fn emit_mov_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm
     );
 }
 
-/// `ADD dword [base + disp], imm32` -- add an immediate to a 32-bit
-/// memory operand in place. Encoding: `81 /0 id`.
-pub(crate) fn emit_add_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
-    if base.high() {
-        emit_byte(code, rex(false, false, false, base.high()));
-    }
-    emit_byte(code, 0x81);
-    emit_modrm_mem(code, Reg(0), base, disp);
-    emit_i32(code, imm);
-}
-
-/// `ADD qword [base + disp], imm32` -- add a sign-extended immediate to
-/// a 64-bit memory operand in place. Encoding: `REX.W 81 /0 id`.
-pub(crate) fn emit_add_mem64_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
-    emit_byte(code, rex(true, false, false, base.high()));
-    emit_byte(code, 0x81);
-    emit_modrm_mem(code, Reg(0), base, disp);
-    emit_i32(code, imm);
+/// `op [base + disp], imm` -- a memory-immediate ALU operation. The catalogue
+/// selects the shortest form (the `83` imm8 group when the value fits a signed
+/// byte, else `81`).
+pub(crate) fn emit_mi(code: &mut Vec<u8>, mnem: Mnem, width: u8, base: Reg, disp: i32, imm: i32) {
+    super::table::encode_into(
+        code,
+        mnem,
+        Some(width),
+        &[mw(base, disp, width), super::table::Opnd::Imm(imm as i64)],
+    );
 }
 
 /// `MOVSX r64, [base + disp]` (16-bit memory source) -- 16-bit load

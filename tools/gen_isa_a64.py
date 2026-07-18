@@ -149,6 +149,31 @@ def recipes(rows):
                          else 'ShrAlias { op: 2 }')
                 add(mnem, want, base, f'&[{want}, {want}, Imm]',
                     f'&[Rd, Rn, {field}]', inst)
+
+    # data-processing reg, reg, reg (2-source divide, 3-source multiply with the
+    # accumulator fixed to the zero register): a plain third register source,
+    # no shift group. smulh/umulh are 64-bit only; smull/umull mix widths and
+    # are handled elsewhere.
+    def is_reg3_plain(inst, im):
+        return (inst.endswith('Xm') or inst.endswith('Wm')) and '{' not in inst
+    for mnem in ('mul', 'mneg', 'sdiv', 'udiv', 'smulh', 'umulh'):
+        for want in ('X', 'W'):
+            r = row_for(rows, mnem, want, is_reg3_plain)
+            if r:
+                (base, _), inst, _ = r
+                add(mnem, want, base, f'&[{want}, {want}, {want}]',
+                    '&[Rd, Rn, Rm]', inst)
+
+    # data-processing reg, reg (bit count / bit reverse): a single register
+    # source.
+    def is_reg2(inst, im):
+        return (inst.endswith('Xn') or inst.endswith('Wn')) and inst.count(',') == 1
+    for mnem in ('cls', 'clz', 'rbit'):
+        for want in ('X', 'W'):
+            r = row_for(rows, mnem, want, is_reg2)
+            if r:
+                (base, _), inst, _ = r
+                add(mnem, want, base, f'&[{want}, {want}]', '&[Rd, Rn]', inst)
     return out
 
 

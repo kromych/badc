@@ -94,6 +94,22 @@ fn multiply_and_conditional_select() {
 }
 
 #[test]
+fn data_processing_registers() {
+    // 2-source divide.
+    assert_eq!(enc("udiv", &[x(0), x(1), x(2)]), 0x9AC20820); // udiv x0, x1, x2
+    assert_eq!(enc("udiv", &[w(0), w(1), w(2)]), 0x1AC20820); // udiv w0, w1, w2
+    assert_eq!(enc("sdiv", &[x(3), x(4), x(5)]), 0x9AC50C83); // sdiv x3, x4, x5
+    // 3-source multiply with the addend fixed to the zero register.
+    assert_eq!(enc("mneg", &[x(0), x(1), x(2)]), 0x9B02FC20); // mneg x0, x1, x2
+    assert_eq!(enc("smulh", &[x(0), x(1), x(2)]), 0x9B427C20); // smulh x0, x1, x2
+    assert_eq!(enc("umulh", &[x(0), x(1), x(2)]), 0x9BC27C20); // umulh x0, x1, x2
+    // bit count / bit reverse.
+    assert_eq!(enc("cls", &[x(0), x(1)]), 0xDAC01420); // cls x0, x1
+    assert_eq!(enc("clz", &[x(0), x(1)]), 0xDAC01020); // clz x0, x1
+    assert_eq!(enc("rbit", &[w(0), w(1)]), 0x5AC00020); // rbit w0, w1
+}
+
+#[test]
 fn system_register_move() {
     // mrs Xt, <sysreg> = 0xD5300000 | field<<5 | Rt; msr <sysreg>, Xt =
     // 0xD5100000 | field<<5 | Rt. CTR_EL0 field 0x5801 is cross-checked against
@@ -255,6 +271,43 @@ mod differential {
                         regnames(is64, b),
                         regnames(is64, c)
                     );
+                    cases.push((txt, ops, m));
+                }
+            }
+        }
+        for m in ["mul", "mneg", "sdiv", "udiv"] {
+            for is64 in [true, false] {
+                for &(a, b, c) in &[(0u8, 1u8, 2u8), (5, 6, 7), (9, 10, 11), (20, 21, 22)] {
+                    let ops = if is64 {
+                        alloc::vec![xn(a), xn(b), xn(c)]
+                    } else {
+                        alloc::vec![wn(a), wn(b), wn(c)]
+                    };
+                    let txt = alloc::format!(
+                        "{m} {}, {}, {}",
+                        regnames(is64, a),
+                        regnames(is64, b),
+                        regnames(is64, c)
+                    );
+                    cases.push((txt, ops, m));
+                }
+            }
+        }
+        for m in ["smulh", "umulh"] {
+            for &(a, b, c) in &[(0u8, 1u8, 2u8), (5, 6, 7), (9, 10, 11), (20, 21, 22)] {
+                let txt = alloc::format!("{m} x{a}, x{b}, x{c}");
+                cases.push((txt, alloc::vec![xn(a), xn(b), xn(c)], m));
+            }
+        }
+        for m in ["cls", "clz", "rbit"] {
+            for is64 in [true, false] {
+                for &(a, b) in &[(0u8, 1u8), (5, 6), (9, 10), (20, 21)] {
+                    let ops = if is64 {
+                        alloc::vec![xn(a), xn(b)]
+                    } else {
+                        alloc::vec![wn(a), wn(b)]
+                    };
+                    let txt = alloc::format!("{m} {}, {}", regnames(is64, a), regnames(is64, b));
                     cases.push((txt, ops, m));
                 }
             }

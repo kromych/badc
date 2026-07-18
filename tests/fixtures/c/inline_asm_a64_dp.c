@@ -24,11 +24,26 @@ static unsigned char low_byte_asm(int v) {
     return r;
 }
 
+static unsigned long div_asm(unsigned long a, unsigned long b) {
+    unsigned long r;
+    __asm__("udiv %0, %1, %2" : "=r"(r) : "r"(a), "r"(b));
+    return r;
+}
+
+static long clz_asm(long v) {
+    long r;
+    // Count leading zeros: 1 has 63 in a 64-bit register.
+    __asm__("clz %0, %1" : "=r"(r) : "r"(v));
+    return r;
+}
+
 int main(void) {
     long p = mul_asm(6, 7);            // 42
     long m = min_asm(10, 20);          // 10
     unsigned char b = low_byte_asm(0x142); // 0x42
-    if (p == 42 && m == 10 && b == 0x42) {
+    unsigned long d = div_asm(84, 2);  // 42
+    long c = clz_asm(1);               // 63
+    if (p == 42 && m == 10 && b == 0x42 && d == 42 && c == 63) {
         return 42;
     }
     return 1;

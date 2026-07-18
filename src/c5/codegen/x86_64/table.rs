@@ -221,7 +221,7 @@ fn modrm_reg(reg: u8, rm: u8) -> u8 {
     0xC0 | ((reg & 7) << 3) | (rm & 7)
 }
 
-fn emit_modrm_mem(code: &mut Vec<u8>, reg: u8, base: u8, index: Option<u8>, scale: u8, disp: i32) {
+fn emit_modrm_mem(code: &mut InsnBuf, reg: u8, base: u8, index: Option<u8>, scale: u8, disp: i32) {
     let rm = base & 7;
     // A SIB byte is required for a scaled index, and for an rsp/r12 base
     // (rm==100 otherwise means "SIB follows").
@@ -266,6 +266,37 @@ fn reg_num(o: Opnd) -> u8 {
     }
 }
 
+/// A fixed-capacity buffer for one encoded instruction. An x86-64 instruction
+/// is at most 15 bytes, so encoding never touches the heap -- the native
+/// emitter appends the finished bytes to its output, and shortest-wins compares
+/// candidates on the stack.
+#[derive(Clone, Copy)]
+struct InsnBuf {
+    data: [u8; 15],
+    len: u8,
+}
+
+impl InsnBuf {
+    fn new() -> Self {
+        InsnBuf {
+            data: [0; 15],
+            len: 0,
+        }
+    }
+    fn push(&mut self, b: u8) {
+        self.data[self.len as usize] = b;
+        self.len += 1;
+    }
+    fn extend_from_slice(&mut self, bs: &[u8]) {
+        let n = self.len as usize;
+        self.data[n..n + bs.len()].copy_from_slice(bs);
+        self.len += bs.len() as u8;
+    }
+    fn as_slice(&self) -> &[u8] {
+        &self.data[..self.len as usize]
+    }
+}
+
 fn form_matches(f: &Form, mnemonic: &str, ops: &[Opnd], opw: u8) -> bool {
     f.mnemonic == mnemonic
         && f.ops.len() == ops.len()
@@ -286,13 +317,43 @@ pub(crate) fn encode(
     ops: &[Opnd],
 ) -> Result<Vec<u8>, String> {
     let opw = op_width(ops, width_override);
-    let mut best: Option<Vec<u8>> = None;
-    let mut matched = false;
-    // The catalogue is sorted by mnemonic (enforced by the generator and the
-    // `catalogue_is_sorted` test): binary-search to the mnemonic's contiguous
-    // run of forms rather than scanning the whole table.
+    let (best, matched) = encode_best(mnemonic, opw, ops);
+    match best {
+        Some(b) => Ok(b.as_slice().to_vec()),
+        None if matched => Err(format!(
+            "inline asm: `{mnemonic}` operand form not encodable"
+        )),
+        None => Err(format!(
+            "inline asm: no encoding for `{mnemonic}` with these operands"
+        )),
+    }
+}
+
+/// Encode one instruction directly into `code`, no heap allocation. The native
+/// emitter's migrated families use this: the operands are always a form the
+/// catalogue covers, so a failure is a codegen invariant violation and panics.
+pub(crate) fn encode_into(
+    code: &mut Vec<u8>,
+    mnemonic: &str,
+    width_override: Option<u8>,
+    ops: &[Opnd],
+) {
+    let opw = op_width(ops, width_override);
+    match encode_best(mnemonic, opw, ops).0 {
+        Some(b) => code.extend_from_slice(b.as_slice()),
+        None => panic!("native emit: no encoding for `{mnemonic}` with these operands"),
+    }
+}
+
+/// The shortest encoding of `mnemonic` for `ops`, plus whether any form matched
+/// (to distinguish "no such form" from "form matched but not encodable"). The
+/// catalogue is sorted by mnemonic (the `catalogue_is_sorted` test enforces it),
+/// so this binary-searches to the mnemonic's contiguous run of forms.
+fn encode_best(mnemonic: &str, opw: u8, ops: &[Opnd]) -> (Option<InsnBuf>, bool) {
     let forms = super::isa_x86_table::FORMS;
     let start = forms.partition_point(|f| f.mnemonic < mnemonic);
+    let mut best: Option<InsnBuf> = None;
+    let mut matched = false;
     for f in &forms[start..] {
         if f.mnemonic != mnemonic {
             break;
@@ -301,38 +362,17 @@ pub(crate) fn encode(
             continue;
         }
         matched = true;
-        if let Ok(bytes) = encode_form(f, ops, opw)
-            && best.as_ref().is_none_or(|b| bytes.len() < b.len())
+        if let Ok(buf) = encode_form(f, ops, opw)
+            && best.is_none_or(|b| buf.len < b.len)
         {
-            best = Some(bytes);
+            best = Some(buf);
         }
     }
-    best.ok_or_else(|| {
-        if matched {
-            format!("inline asm: `{mnemonic}` operand form not encodable")
-        } else {
-            format!("inline asm: no encoding for `{mnemonic}` with these operands")
-        }
-    })
+    (best, matched)
 }
 
-/// Encode one instruction directly into `code`. The native emitter's migrated
-/// families use this: the operands are always a form the catalogue covers, so a
-/// failure is a codegen invariant violation and panics.
-pub(crate) fn encode_into(
-    code: &mut Vec<u8>,
-    mnemonic: &str,
-    width_override: Option<u8>,
-    ops: &[Opnd],
-) {
-    match encode(mnemonic, width_override, ops) {
-        Ok(bytes) => code.extend_from_slice(&bytes),
-        Err(e) => panic!("native emit: {e}"),
-    }
-}
-
-fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<Vec<u8>, String> {
-    let mut code = Vec::new();
+fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<InsnBuf, String> {
+    let mut code = InsnBuf::new();
     // Operand-size prefix for a 16-bit operation. Suppressed for a form with no
     // width-bearing operand (e.g. a sizeless-memory op such as clflush), whose
     // operand width does not select 16-bit operation.
@@ -430,7 +470,7 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<Vec<u8>, String> {
     Ok(code)
 }
 
-fn emit_imm(code: &mut Vec<u8>, c: ImmC, v: i64, opw: u8) {
+fn emit_imm(code: &mut InsnBuf, c: ImmC, v: i64, opw: u8) {
     match c {
         ImmC::Ib | ImmC::Imms8 => code.push(v as u8),
         ImmC::Iw => code.extend_from_slice(&(v as u16).to_le_bytes()),

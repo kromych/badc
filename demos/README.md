@@ -219,6 +219,19 @@ loads and runs; the app formats through EDK II's `UnicodeSPrint` and writes
 to `ConOut`, so a correct boot exercises the whole closure end to end. See
 [`edk2/README.md`](./edk2/README.md).
 
+## kernel/
+
+Freestanding UEFI "kernels" badc compiles for x86_64 and AArch64, booted under
+QEMU through the UEFI firmware badc built (OVMF on x86_64, ArmVirtQemu/AAVMF on
+aarch64). `kernel.c` is a live end-to-end test of badc's inline assembly on the
+boot path (`cpuid` + a table-encoder `bswap` on x86_64, `mrs` on AArch64,
+raw-byte templates on both). `preempt.c` is a preemptive multitasking kernel: it
+installs its own timer interrupt and context-switches three threads on every
+tick through a `__attribute__((naked))` interrupt service routine, on both
+x86_64 (8259 PIC + 8254 PIT + IDT) and AArch64 (GICv2 + virtual generic timer +
+EL1 vector table). The build is the hard gate; each target also boots where QEMU
+and the firmware are present. See [`kernel/README.md`](./kernel/README.md).
+
 ## nt_hello/
 
 NT-native usermode skeleton. Subsystem =

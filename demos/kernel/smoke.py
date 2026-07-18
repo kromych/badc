@@ -7,12 +7,14 @@ QEMU/OVMF and checks the serial output.
 
 kernel.c exercises inline assembly on the boot path: `cpuid` + a table-encoder
 `bswap` on x86_64, `mrs` on AArch64, and raw-byte templates on both. preempt.c
-goes further on x86_64: it installs its own IDT and PIT timer, then round-robins
-three threads through a naked-function interrupt service routine that performs
-the context switch, so a correct boot proves badc emits a working ISR (naked
+goes further on both arches: it installs its own timer interrupt, then round-
+robins three threads through a naked-function interrupt service routine that
+performs the context switch, so a correct boot proves badc emits a working ISR
+end to end. x86_64 uses the 8259 PIC + 8254 PIT + an IDT (exercising naked
 prologue suppression, explicit-register operands, push/pop, immediate port I/O,
-and a direct `call` to a C symbol) end to end. On AArch64 preempt.c prints a
-banner and halts (generic-timer preemption not implemented yet).
+and a direct `call` to a C symbol); AArch64 uses the GICv2 + the virtual generic
+timer + an EL1 vector table, reaching the scheduler through TPIDR_EL1 and a
+`blr`.
 
 Override the badc binary via `$BADC` (default: `target/release/badc[.exe]`).
 The boot check is skipped (build-only) when QEMU or the firmware is missing.

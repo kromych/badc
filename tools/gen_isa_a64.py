@@ -164,11 +164,12 @@ def recipes(rows):
                 add(mnem, want, base, f'&[{want}, {want}, {want}]',
                     '&[Rd, Rn, Rm]', inst)
 
-    # data-processing reg, reg (bit count / bit reverse): a single register
-    # source.
+    # data-processing reg, reg (bit-count, bit-reverse, byte-reverse): a single
+    # register source. rev is 32-bit only and rev32 64-bit only; row_for skips
+    # the width a mnemonic lacks.
     def is_reg2(inst, im):
         return (inst.endswith('Xn') or inst.endswith('Wn')) and inst.count(',') == 1
-    for mnem in ('cls', 'clz', 'rbit'):
+    for mnem in ('cls', 'clz', 'rbit', 'rev', 'rev16', 'rev32'):
         for want in ('X', 'W'):
             r = row_for(rows, mnem, want, is_reg2)
             if r:

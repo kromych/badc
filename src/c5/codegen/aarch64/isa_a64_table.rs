@@ -65,6 +65,10 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "orr", ops: &[W, W, Imm], base: 0x32000000, fields: &[Rd, Rn, LogicalImm { op: 2, is64: false }] },  // orr Wd|WSP, Wn, #log_imm
     Form { mnemonic: "rbit", ops: &[X, X], base: 0xDAC00000, fields: &[Rd, Rn] },  // rbit Xd, Xn
     Form { mnemonic: "rbit", ops: &[W, W], base: 0x5AC00000, fields: &[Rd, Rn] },  // rbit Wd, Wn
+    Form { mnemonic: "rev", ops: &[W, W], base: 0x5AC00800, fields: &[Rd, Rn] },  // rev Wd, Wn
+    Form { mnemonic: "rev16", ops: &[X, X], base: 0xDAC00400, fields: &[Rd, Rn] },  // rev16 Xd, Xn
+    Form { mnemonic: "rev16", ops: &[W, W], base: 0x5AC00400, fields: &[Rd, Rn] },  // rev16 Wd, Wn
+    Form { mnemonic: "rev32", ops: &[X, X], base: 0xDAC00800, fields: &[Rd, Rn] },  // rev32 Xd, Xn
     Form { mnemonic: "sdiv", ops: &[X, X, X], base: 0x9AC00C00, fields: &[Rd, Rn, Rm] },  // sdiv Xd, Xn, Xm
     Form { mnemonic: "sdiv", ops: &[W, W, W], base: 0x1AC00C00, fields: &[Rd, Rn, Rm] },  // sdiv Wd, Wn, Wm
     Form { mnemonic: "smulh", ops: &[X, X, X], base: 0x9B407C00, fields: &[Rd, Rn, Rm] },  // smulh Xd, Xn, Xm

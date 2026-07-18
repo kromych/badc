@@ -44,6 +44,13 @@ static long madd_asm(long a, long b, long c) {
     return r;
 }
 
+static unsigned int rev_asm(unsigned int v) {
+    unsigned int r;
+    // Byte-reverse a 32-bit word: 0x11223344 -> 0x44332211.
+    __asm__("rev %w0, %w1" : "=r"(r) : "r"(v));
+    return r;
+}
+
 int main(void) {
     long p = mul_asm(6, 7);            // 42
     long m = min_asm(10, 20);          // 10
@@ -51,7 +58,9 @@ int main(void) {
     unsigned long d = div_asm(84, 2);  // 42
     long c = clz_asm(1);               // 63
     long ma = madd_asm(5, 8, 2);       // 42
-    if (p == 42 && m == 10 && b == 0x42 && d == 42 && c == 63 && ma == 42) {
+    unsigned int rv = rev_asm(0x11223344); // 0x44332211
+    if (p == 42 && m == 10 && b == 0x42 && d == 42 && c == 63 && ma == 42
+        && rv == 0x44332211u) {
         return 42;
     }
     return 1;

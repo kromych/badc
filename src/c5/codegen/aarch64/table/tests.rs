@@ -111,6 +111,10 @@ fn data_processing_registers() {
     assert_eq!(enc("madd", &[x(0), x(1), x(2), x(3)]), 0x9B020C20); // madd x0, x1, x2, x3
     assert_eq!(enc("madd", &[w(0), w(1), w(2), w(3)]), 0x1B020C20); // madd w0, w1, w2, w3
     assert_eq!(enc("msub", &[x(3), x(4), x(5), x(6)]), 0x9B059883); // msub x3, x4, x5, x6
+    // byte reverse: rev is 32-bit only, rev32 64-bit only, rev16 both.
+    assert_eq!(enc("rev", &[w(0), w(1)]), 0x5AC00820); // rev w0, w1
+    assert_eq!(enc("rev16", &[x(0), x(1)]), 0xDAC00420); // rev16 x0, x1
+    assert_eq!(enc("rev32", &[x(0), x(1)]), 0xDAC00820); // rev32 x0, x1
 }
 
 #[test]
@@ -329,6 +333,24 @@ mod differential {
         }
         for m in ["cls", "clz", "rbit"] {
             for is64 in [true, false] {
+                for &(a, b) in &[(0u8, 1u8), (5, 6), (9, 10), (20, 21)] {
+                    let ops = if is64 {
+                        alloc::vec![xn(a), xn(b)]
+                    } else {
+                        alloc::vec![wn(a), wn(b)]
+                    };
+                    let txt = alloc::format!("{m} {}, {}", regnames(is64, a), regnames(is64, b));
+                    cases.push((txt, ops, m));
+                }
+            }
+        }
+        // rev is 32-bit only; rev32 is 64-bit only; rev16 has both.
+        for &(m, widths) in &[
+            ("rev", &[false][..]),
+            ("rev16", &[true, false][..]),
+            ("rev32", &[true][..]),
+        ] {
+            for &is64 in widths {
                 for &(a, b) in &[(0u8, 1u8), (5, 6), (9, 10), (20, 21)] {
                     let ops = if is64 {
                         alloc::vec![xn(a), xn(b)]

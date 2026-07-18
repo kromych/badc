@@ -62,6 +62,10 @@ fn sysreg_field(name: &str) -> Option<u16> {
     fn pack(op0: u16, op1: u16, crn: u16, crm: u16, op2: u16) -> u16 {
         ((op0 - 2) << 14) | (op1 << 11) | (crn << 7) | (crm << 3) | op2
     }
+    // Register names are case-insensitive in the architecture; normalize before
+    // matching either the named table or the generic spelling.
+    let name = name.to_ascii_lowercase();
+    let name = name.as_str();
     // Common registers by name; extend as needed.
     let named = |n: &str| -> Option<(u16, u16, u16, u16, u16)> {
         Some(match n {
@@ -75,6 +79,16 @@ fn sysreg_field(name: &str) -> Option<u16> {
             "nzcv" => (3, 3, 4, 2, 0),
             "cntfrq_el0" => (3, 3, 14, 0, 0),
             "cntpct_el0" => (3, 3, 14, 0, 1),
+            "cntvct_el0" => (3, 3, 14, 0, 2),
+            // Physical / virtual generic-timer control, timer-value, and
+            // compare-value registers.
+            "cntp_ctl_el0" => (3, 3, 14, 2, 1),
+            "cntp_tval_el0" => (3, 3, 14, 2, 0),
+            "cntp_cval_el0" => (3, 3, 14, 2, 2),
+            "cntv_ctl_el0" => (3, 3, 14, 3, 1),
+            "cntv_tval_el0" => (3, 3, 14, 3, 0),
+            "cntv_cval_el0" => (3, 3, 14, 3, 2),
+            "cntkctl_el1" => (3, 0, 14, 1, 0),
             "esr_el1" => (3, 0, 5, 2, 0),
             "far_el1" => (3, 0, 6, 0, 0),
             "elr_el1" => (3, 0, 4, 0, 1),
@@ -482,6 +496,14 @@ mod tests {
         assert_eq!(sysreg_field("ctr_el0"), Some(0x5801));
         assert_eq!(sysreg_field("s3_3_c0_c0_1"), Some(0x5801)); // == ctr_el0
         assert_eq!(sysreg_field("s3_3_c14_c0_2"), Some(0x5F02)); // cntvct_el0
+        // Generic-timer registers (verified byte-identical to the assembler).
+        assert_eq!(sysreg_field("cntv_ctl_el0"), Some(0x5F19));
+        assert_eq!(sysreg_field("cntv_tval_el0"), Some(0x5F18));
+        assert_eq!(sysreg_field("cntvct_el0"), Some(0x5F02));
+        assert_eq!(sysreg_field("cntp_ctl_el0"), Some(0x5F11));
+        // Register names are case-insensitive.
+        assert_eq!(sysreg_field("CurrentEL"), sysreg_field("currentel"));
+        assert_eq!(sysreg_field("CNTV_CTL_EL0"), Some(0x5F19));
         assert_eq!(sysreg_field("not_a_reg"), None);
         let insns = parse_template(b"mrs %0, ctr_el0; msr nzcv, %1").unwrap();
         assert_eq!(insns[0].mnemonic, "mrs");

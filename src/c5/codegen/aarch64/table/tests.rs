@@ -107,6 +107,10 @@ fn data_processing_registers() {
     assert_eq!(enc("cls", &[x(0), x(1)]), 0xDAC01420); // cls x0, x1
     assert_eq!(enc("clz", &[x(0), x(1)]), 0xDAC01020); // clz x0, x1
     assert_eq!(enc("rbit", &[w(0), w(1)]), 0x5AC00020); // rbit w0, w1
+    // 3-source multiply-accumulate: the addend Ra sits at bit 10.
+    assert_eq!(enc("madd", &[x(0), x(1), x(2), x(3)]), 0x9B020C20); // madd x0, x1, x2, x3
+    assert_eq!(enc("madd", &[w(0), w(1), w(2), w(3)]), 0x1B020C20); // madd w0, w1, w2, w3
+    assert_eq!(enc("msub", &[x(3), x(4), x(5), x(6)]), 0x9B059883); // msub x3, x4, x5, x6
 }
 
 #[test]
@@ -297,6 +301,30 @@ mod differential {
             for &(a, b, c) in &[(0u8, 1u8, 2u8), (5, 6, 7), (9, 10, 11), (20, 21, 22)] {
                 let txt = alloc::format!("{m} x{a}, x{b}, x{c}");
                 cases.push((txt, alloc::vec![xn(a), xn(b), xn(c)], m));
+            }
+        }
+        for m in ["madd", "msub"] {
+            for is64 in [true, false] {
+                for &(a, b, c, d) in &[
+                    (0u8, 1u8, 2u8, 3u8),
+                    (5, 6, 7, 8),
+                    (9, 10, 11, 12),
+                    (20, 21, 22, 23),
+                ] {
+                    let ops = if is64 {
+                        alloc::vec![xn(a), xn(b), xn(c), xn(d)]
+                    } else {
+                        alloc::vec![wn(a), wn(b), wn(c), wn(d)]
+                    };
+                    let txt = alloc::format!(
+                        "{m} {}, {}, {}, {}",
+                        regnames(is64, a),
+                        regnames(is64, b),
+                        regnames(is64, c),
+                        regnames(is64, d)
+                    );
+                    cases.push((txt, ops, m));
+                }
             }
         }
         for m in ["cls", "clz", "rbit"] {

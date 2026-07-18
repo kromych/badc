@@ -26,6 +26,9 @@ pub(crate) enum Field {
     Rn,
     /// Second source register `Rm` at bit 16.
     Rm,
+    /// Third source (accumulator) register `Ra` at bit 10, for the 3-source
+    /// multiply forms `madd`/`msub`.
+    Ra,
     /// A raw unsigned immediate: `shift` = low bit, `width` = bit count. Fed by
     /// the operand at `op` (index into the instruction's operand list).
     UImm { op: u8, shift: u8, width: u8 },
@@ -273,6 +276,7 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                 word |= (reg(ops[1])? as u32 & 31) << 5;
             }
             Field::Rm => word |= (reg(ops[2])? as u32 & 31) << 16,
+            Field::Ra => word |= (reg(ops[3])? as u32 & 31) << 10,
             Field::UImm { op, shift, width } => {
                 let v = imm(ops[op as usize])?;
                 let mask = (1u64 << width) - 1;

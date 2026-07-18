@@ -32,8 +32,8 @@ DB_FIXES = {
 
 # Bare op-string tokens whose bit width is not written inline (widths verified
 # by the 32-bit row-sum constraint in the design spike).
-BARE = {'Rm': 5, 'Rn': 5, 'Rd': 5, 'Rt': 5, 'Rt2': 5, 'Rs': 5, 'Rd2': 5,
-        'cond': 4, 'CRm': 4, 'CRn': 4, 'sop': 2, 'option': 3}
+BARE = {'Rm': 5, 'Rn': 5, 'Rd': 5, 'Ra': 5, 'Rt': 5, 'Rt2': 5, 'Rs': 5,
+        'Rd2': 5, 'cond': 4, 'CRm': 4, 'CRn': 4, 'sop': 2, 'option': 3}
 
 
 def parse_op(op):
@@ -174,6 +174,18 @@ def recipes(rows):
             if r:
                 (base, _), inst, _ = r
                 add(mnem, want, base, f'&[{want}, {want}]', '&[Rd, Rn]', inst)
+
+    # 3-source multiply-accumulate: reg, reg, reg, reg (the fourth is the
+    # accumulator Ra). mul/mneg above are the Ra=zr aliases of these.
+    def is_reg4(inst, im):
+        return inst.endswith('Xa') or inst.endswith('Wa')
+    for mnem in ('madd', 'msub'):
+        for want in ('X', 'W'):
+            r = row_for(rows, mnem, want, is_reg4)
+            if r:
+                (base, _), inst, _ = r
+                add(mnem, want, base, f'&[{want}, {want}, {want}, {want}]',
+                    '&[Rd, Rn, Rm, Ra]', inst)
     return out
 
 

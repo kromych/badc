@@ -37,13 +37,21 @@ static long clz_asm(long v) {
     return r;
 }
 
+static long madd_asm(long a, long b, long c) {
+    long r;
+    // Multiply-accumulate: r = a * b + c.
+    __asm__("madd %0, %1, %2, %3" : "=r"(r) : "r"(a), "r"(b), "r"(c));
+    return r;
+}
+
 int main(void) {
     long p = mul_asm(6, 7);            // 42
     long m = min_asm(10, 20);          // 10
     unsigned char b = low_byte_asm(0x142); // 0x42
     unsigned long d = div_asm(84, 2);  // 42
     long c = clz_asm(1);               // 63
-    if (p == 42 && m == 10 && b == 0x42 && d == 42 && c == 63) {
+    long ma = madd_asm(5, 8, 2);       // 42
+    if (p == 42 && m == 10 && b == 0x42 && d == 42 && c == 63 && ma == 42) {
         return 42;
     }
     return 1;

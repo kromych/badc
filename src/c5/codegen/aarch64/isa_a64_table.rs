@@ -43,6 +43,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "lsl", ops: &[W, W, Imm], base: 0x53000000, fields: &[Rd, Rn, LslAlias { op: 2, is64: false }] },  // lsl Wd, Wn, #n
     Form { mnemonic: "lsr", ops: &[X, X, Imm], base: 0xD340FC00, fields: &[Rd, Rn, ShrAlias { op: 2 }] },  // lsr Xd, Xn, #n
     Form { mnemonic: "lsr", ops: &[W, W, Imm], base: 0x53007C00, fields: &[Rd, Rn, ShrAlias { op: 2 }] },  // lsr Wd, Wn, #n
+    Form { mnemonic: "madd", ops: &[X, X, X, X], base: 0x9B000000, fields: &[Rd, Rn, Rm, Ra] },  // madd Xd, Xn, Xm, Xa
+    Form { mnemonic: "madd", ops: &[W, W, W, W], base: 0x1B000000, fields: &[Rd, Rn, Rm, Ra] },  // madd Wd, Wn, Wm, Wa
     Form { mnemonic: "mneg", ops: &[X, X, X], base: 0x9B00FC00, fields: &[Rd, Rn, Rm] },  // mneg Xd, Xn, Xm
     Form { mnemonic: "mneg", ops: &[W, W, W], base: 0x1B00FC00, fields: &[Rd, Rn, Rm] },  // mneg Wd, Wn, Wm
     Form { mnemonic: "movk", ops: &[X, Imm, OptLsl], base: 0xF2800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movk Xd, #imm, {lsl #n}
@@ -51,6 +53,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "movn", ops: &[W, Imm, OptLsl], base: 0x12800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movn Wd, #imm, {lsl #n}
     Form { mnemonic: "movz", ops: &[X, Imm, OptLsl], base: 0xD2800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movz Xd, #imm, {lsl #n}
     Form { mnemonic: "movz", ops: &[W, Imm, OptLsl], base: 0x52800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movz Wd, #imm, {lsl #n}
+    Form { mnemonic: "msub", ops: &[X, X, X, X], base: 0x9B008000, fields: &[Rd, Rn, Rm, Ra] },  // msub Xd, Xn, Xm, Xa
+    Form { mnemonic: "msub", ops: &[W, W, W, W], base: 0x1B008000, fields: &[Rd, Rn, Rm, Ra] },  // msub Wd, Wn, Wm, Wa
     Form { mnemonic: "mul", ops: &[X, X, X], base: 0x9B007C00, fields: &[Rd, Rn, Rm] },  // mul Xd, Xn, Xm
     Form { mnemonic: "mul", ops: &[W, W, W], base: 0x1B007C00, fields: &[Rd, Rn, Rm] },  // mul Wd, Wn, Wm
     Form { mnemonic: "orn", ops: &[X, X, X], base: 0xAA200000, fields: &[Rd, Rn, Rm] },  // orn Xd, Xn, Xm, {sop #n}

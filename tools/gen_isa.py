@@ -38,6 +38,9 @@ lfence mfence sfence
 syscall sysret sysenter sysexit swapgs clts ud2 serialize
 lahf sahf xgetbv xsetbv iretq rdpkru
 rdrand rdseed movnti
+clflush prefetchnta prefetcht0 prefetcht1 prefetcht2 prefetchw
+fxsave fxrstor fxsave64 fxrstor64
+lgdt lidt sgdt sidt
 push pop lea nop
 movzx movsx movsxd
 cmpxchg xadd
@@ -149,7 +152,7 @@ def op_pattern(raw):
         sz = {'rel8': 1, 'rel16': 2, 'rel32': 4}.get(raw)
         return (f'Rel({sz})', 'imm') if sz else (None, None)
     if raw == 'mem':
-        return 'Mem(W::Q)', 'rm'
+        return 'MemAny', 'rm'
     # reg / mem / reg-or-mem width classes
     def cls(s):
         return {'8': 'B', '16': 'Wd', '32': 'L', '64': 'Q', 'v': 'V', 'y': 'Y'}.get(s)

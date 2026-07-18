@@ -59,6 +59,10 @@ pub(crate) enum OpPat {
     Rm(W),
     /// Memory only (`ModRM.rm` with a memory form).
     Mem(W),
+    /// Memory of unspecified size (`clflush`, `prefetch`, the descriptor-table
+    /// and save/restore ops): matches a memory operand of any width and never
+    /// contributes an operand-size prefix.
+    MemAny,
     /// Immediate.
     Imm(ImmC),
     /// A fixed architectural register (`al`/`ax`/`eax`/`rax`, `cl`, `dx`, ...).
@@ -164,6 +168,7 @@ fn pat_matches(p: OpPat, o: Opnd, opw: u8) -> bool {
         (OpPat::Rm(w), Opnd::Reg { width, .. }) => wbytes(w, opw) == Some(width),
         (OpPat::Rm(w), Opnd::Mem { width, .. }) => wbytes(w, opw) == Some(width),
         (OpPat::Mem(w), Opnd::Mem { width, .. }) => wbytes(w, opw) == Some(width),
+        (OpPat::MemAny, Opnd::Mem { .. }) => true,
         (OpPat::Fixed(num, w), Opnd::Reg { num: n, width }) => {
             n == num && wbytes(w, opw) == Some(width)
         }
@@ -269,8 +274,16 @@ pub(crate) fn encode(
 
 fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<Vec<u8>, String> {
     let mut code = Vec::new();
-    // Operand-size prefix for a 16-bit operation.
-    if opw == 2 && f.rexw != RexW::Default64 {
+    // Operand-size prefix for a 16-bit operation. Suppressed for a form with no
+    // width-bearing operand (e.g. a sizeless-memory op such as clflush), whose
+    // operand width does not select 16-bit operation.
+    let has_width_op = f.ops.iter().any(|p| {
+        matches!(
+            p,
+            OpPat::Reg(_) | OpPat::Rm(_) | OpPat::Mem(_) | OpPat::Fixed(..)
+        )
+    });
+    if opw == 2 && has_width_op && f.rexw != RexW::Default64 {
         code.push(0x66);
     }
     code.extend_from_slice(f.pp);

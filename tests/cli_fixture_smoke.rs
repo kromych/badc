@@ -74,6 +74,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_cmov.c", "linux-aarch64"), // x86-64 cmovcc
     ("inline_asm_x64_cdqe.c", "linux-aarch64"), // x86-64 cdqe
     ("inline_asm_x64_movnti.c", "linux-aarch64"), // x86-64 movnti/sfence
+    ("inline_asm_x64_clflush.c", "linux-aarch64"), // x86-64 clflush/prefetch
 ];
 
 #[test]

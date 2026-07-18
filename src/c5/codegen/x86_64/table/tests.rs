@@ -160,6 +160,20 @@ fn system_and_rng_ops() {
 }
 
 #[test]
+fn sizeless_memory_ops() {
+    // No operand-size prefix regardless of the operand's declared width; the
+    // reg field is the opcode extension. fxsave64 carries REX.W.
+    assert_eq!(enc("clflush", &[m(0, 8)]), [0x0f, 0xae, 0x38]); // clflush [rax] (/7)
+    assert_eq!(enc("clflush", &[m(0, 2)]), [0x0f, 0xae, 0x38]); // width irrelevant, no 66
+    assert_eq!(enc("prefetcht0", &[m(0, 8)]), [0x0f, 0x18, 0x08]); // /1
+    assert_eq!(enc("prefetchw", &[m(0, 8)]), [0x0f, 0x0d, 0x08]); // 0F 0D /1
+    assert_eq!(enc("fxsave", &[m(0, 8)]), [0x0f, 0xae, 0x00]); // /0
+    assert_eq!(enc("fxsave64", &[m(0, 8)]), [0x48, 0x0f, 0xae, 0x00]); // REX.W /0
+    assert_eq!(enc("lgdt", &[m(0, 8)]), [0x0f, 0x01, 0x10]); // /2
+    assert_eq!(enc("sidt", &[m(0, 8)]), [0x0f, 0x01, 0x08]); // /1
+}
+
+#[test]
 fn catalogue_is_sorted() {
     // encode() binary-searches the catalogue by mnemonic, which is correct only
     // if the generator emitted it sorted. Lock the invariant.
@@ -566,6 +580,28 @@ mod differential {
         for &w in &[4u8, 8] {
             for &a in &[0u8, 8] {
                 cases.push(("movnti", vec![m(6, w), r(a, w)]));
+            }
+        }
+        // Sizeless-memory ops: any operand width matches and none emits a
+        // size prefix. Swept across a few operand widths and base registers.
+        for mnem in [
+            "clflush",
+            "prefetchnta",
+            "prefetcht0",
+            "prefetcht1",
+            "prefetcht2",
+            "prefetchw",
+            "fxsave",
+            "fxrstor",
+            "lgdt",
+            "lidt",
+            "sgdt",
+            "sidt",
+        ] {
+            for &w in &[1u8, 8] {
+                for &b in &[0u8, 3, 12] {
+                    cases.push((mnem, vec![m(b, w)]));
+                }
             }
         }
         cases

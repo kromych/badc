@@ -351,6 +351,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_cmov.c", 42),
     ("inline_asm_x64_cdqe.c", 42),
     ("inline_asm_x64_movnti.c", 42),
+    ("inline_asm_x64_clflush.c", 42),
     ("compound_literal_struct_field.c", 0),
     ("goto.c", 5),
     ("switch_statement.c", 25),

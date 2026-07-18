@@ -45,19 +45,19 @@ use super::DataFixup;
 use super::GotFixup;
 use super::Target;
 use super::encode::{
-    Cc, Fixup, PltCallFixup, Reg, emit_add_r_mem, emit_add_rsp_imm32, emit_addsd, emit_addss,
-    emit_and_r_imm32, emit_and_r_mem, emit_cmp_r_mem, emit_cvtsd2ss, emit_cvtsi2sd, emit_cvtsi2ss,
-    emit_cvtss2sd, emit_cvttsd2si, emit_cvttss2si, emit_divsd, emit_divss, emit_imul_r_mem,
-    emit_jcc_rel8, emit_jmp_rel8, emit_lea_r_mem, emit_lock_cmpxchg_mem_r, emit_lock_xadd_mem_r,
-    emit_mov_mem_r, emit_mov_r_imm64, emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm,
-    emit_movq_xmm_r, emit_movsd_mem_xmm, emit_movsd_xmm_mem, emit_movss_mem_xmm,
-    emit_movss_xmm_mem, emit_movsx_r_mem16, emit_movsxd_r_mem, emit_movups_mem_xmm,
-    emit_movups_xmm_mem, emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd, emit_mulss,
-    emit_or_r_mem, emit_pop_r, emit_push_r, emit_ret, emit_rr, emit_sar_r_cl, emit_setcc_r8,
-    emit_shl_r_cl, emit_shr_r_cl, emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rsp_imm32, emit_subsd,
-    emit_subss, emit_ucomisd, emit_ucomiss, emit_unary_r, emit_vfmadd231sd, emit_vfmadd231ss,
-    emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd,
-    emit_vfnmsub231ss, emit_xchg_mem_r, emit_xchg_rr, emit_xor_r_mem, emit_xorpd, emit_xorps,
+    Cc, Fixup, PltCallFixup, Reg, emit_add_rsp_imm32, emit_addsd, emit_addss, emit_and_r_imm32,
+    emit_cvtsd2ss, emit_cvtsi2sd, emit_cvtsi2ss, emit_cvtss2sd, emit_cvttsd2si, emit_cvttss2si,
+    emit_divsd, emit_divss, emit_imul_r_mem, emit_jcc_rel8, emit_jmp_rel8, emit_lea_r_mem,
+    emit_lock_cmpxchg_mem_r, emit_lock_xadd_mem_r, emit_mov_mem_r, emit_mov_r_imm64,
+    emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm, emit_movq_xmm_r, emit_movsd_mem_xmm,
+    emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem, emit_movsx_r_mem16,
+    emit_movsxd_r_mem, emit_movups_mem_xmm, emit_movups_xmm_mem, emit_movzx_r_mem16,
+    emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_pop_r, emit_push_r, emit_ret, emit_rm, emit_rr,
+    emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl, emit_shr_r_imm8,
+    emit_sub_rsp_imm32, emit_subsd, emit_subss, emit_ucomisd, emit_ucomiss, emit_unary_r,
+    emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd,
+    emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss, emit_xchg_mem_r, emit_xchg_rr,
+    emit_xorpd, emit_xorps,
 };
 use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
 use super::ssa::reg_alloc::{Allocation, Place};
@@ -4711,7 +4711,7 @@ fn emit_binop(
                 }
             };
             if let Some(cc) = cmp_cc {
-                emit_cmp_r_mem(code, rn, Reg::RSP, rhs_off);
+                emit_rm(code, Mnem::Cmp, 8, rn, Reg::RSP, rhs_off);
                 if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
                     return true;
                 }
@@ -4722,12 +4722,12 @@ fn emit_binop(
                     emit_mov_rr(code, rd, rn);
                 }
                 match op {
-                    BinOp::Add => emit_add_r_mem(code, rd, Reg::RSP, rhs_off),
-                    BinOp::Sub => emit_sub_r_mem(code, rd, Reg::RSP, rhs_off),
+                    BinOp::Add => emit_rm(code, Mnem::Add, 8, rd, Reg::RSP, rhs_off),
+                    BinOp::Sub => emit_rm(code, Mnem::Sub, 8, rd, Reg::RSP, rhs_off),
                     BinOp::Mul => emit_imul_r_mem(code, rd, Reg::RSP, rhs_off),
-                    BinOp::And => emit_and_r_mem(code, rd, Reg::RSP, rhs_off),
-                    BinOp::Or => emit_or_r_mem(code, rd, Reg::RSP, rhs_off),
-                    BinOp::Xor => emit_xor_r_mem(code, rd, Reg::RSP, rhs_off),
+                    BinOp::And => emit_rm(code, Mnem::And, 8, rd, Reg::RSP, rhs_off),
+                    BinOp::Or => emit_rm(code, Mnem::Or, 8, rd, Reg::RSP, rhs_off),
+                    BinOp::Xor => emit_rm(code, Mnem::Xor, 8, rd, Reg::RSP, rhs_off),
                     _ => unreachable!(),
                 }
             }
@@ -6282,7 +6282,7 @@ fn emit_va_arg_sysv(
     // --- register-save path ---
     // r10 = offset + reg_save_area (at [ap + 16]) = the argument slot,
     // then bump the offset field in memory by step.
-    super::encode::emit_add_r_mem(code, SCRATCH_R10, ap, 16);
+    super::encode::emit_rm(code, Mnem::Add, 8, SCRATCH_R10, ap, 16);
     super::encode::emit_add_mem32_imm32(code, ap, off_disp, step);
     // jmp done
     super::encode::emit_jmp_rel32(code, 0);

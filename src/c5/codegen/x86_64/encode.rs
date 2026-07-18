@@ -517,8 +517,15 @@ pub(crate) fn emit_rr(code: &mut Vec<u8>, mnem: Mnem, width: u8, dst: Reg, src: 
 //      operand is read in place, avoiding a scratch register the
 //      surrounding allocation may not have free.
 
-fn emit_alu_r_mem(code: &mut Vec<u8>, mnem: Mnem, dst: Reg, base: Reg, disp: i32) {
-    super::table::encode_into(code, mnem, Some(8), &[r64(dst), m64(base, disp)]);
+/// `op dst, [base + disp]` -- a register with a memory source (the generic
+/// reg-from-memory shape emitter).
+pub(crate) fn emit_rm(code: &mut Vec<u8>, mnem: Mnem, width: u8, dst: Reg, base: Reg, disp: i32) {
+    super::table::encode_into(
+        code,
+        mnem,
+        Some(width),
+        &[rw(dst, width), mw(base, disp, width)],
+    );
 }
 
 /// `op reg` -- a one-operand register form (neg / not / inc / dec / mul / div /
@@ -531,36 +538,6 @@ pub(crate) fn emit_unary_r(code: &mut Vec<u8>, mnem: Mnem, width: u8, r: Reg) {
 /// `op [base + disp]` -- a one-operand memory form.
 pub(crate) fn emit_unary_m(code: &mut Vec<u8>, mnem: Mnem, width: u8, base: Reg, disp: i32) {
     super::table::encode_into(code, mnem, Some(width), &[mw(base, disp, width)]);
-}
-
-/// `ADD dst, [base + disp]` -- 64-bit, `dst += [mem]`.
-pub(crate) fn emit_add_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_alu_r_mem(code, Mnem::Add, dst, base, disp);
-}
-
-/// `SUB dst, [base + disp]` -- 64-bit, `dst -= [mem]`.
-pub(crate) fn emit_sub_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_alu_r_mem(code, Mnem::Sub, dst, base, disp);
-}
-
-/// `AND dst, [base + disp]` -- 64-bit, `dst &= [mem]`.
-pub(crate) fn emit_and_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_alu_r_mem(code, Mnem::And, dst, base, disp);
-}
-
-/// `OR dst, [base + disp]` -- 64-bit, `dst |= [mem]`.
-pub(crate) fn emit_or_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_alu_r_mem(code, Mnem::Or, dst, base, disp);
-}
-
-/// `XOR dst, [base + disp]` -- 64-bit, `dst ^= [mem]`.
-pub(crate) fn emit_xor_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_alu_r_mem(code, Mnem::Xor, dst, base, disp);
-}
-
-/// `CMP dst, [base + disp]` -- 64-bit; flags = `dst - [mem]`.
-pub(crate) fn emit_cmp_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_alu_r_mem(code, Mnem::Cmp, dst, base, disp);
 }
 
 /// `IMUL dst, [base + disp]` -- two-operand signed multiply with a

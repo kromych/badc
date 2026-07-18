@@ -43,3 +43,18 @@ QEMU_SYSTEM_AARCH64=demos/qemu/qbuild-aarch64/qemu-system-aarch64 \
 ```
 
 so the whole stack -- the kernel, and the emulator it runs in -- is badc-built.
+
+## Preemptive multitasking (`preempt.c`)
+
+`preempt.c` is a second, larger kernel: it installs its own timer interrupt,
+runs three hardcoded threads, and context-switches between them on every tick,
+with each thread printing to the serial port under a spin lock. It goes beyond
+the inline-asm smoke by taking over the interrupt vector table and the timer,
+so it is a live test of badc emitting a real interrupt service routine -- a
+`__attribute__((naked))` function whose body is the context switch.
+
+It is the target spec for two compiler features it depends on:
+`__attribute__((naked))` and inline-asm references to C symbols (the ISR's
+`call schedule`). Until those land it is not built by the smoke; the x86_64
+path is complete and the AArch64 path (generic timer + GIC + EL1 vectors) is
+pending.

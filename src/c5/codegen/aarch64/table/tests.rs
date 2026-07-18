@@ -72,6 +72,17 @@ fn load_store_immediate() {
 }
 
 #[test]
+fn catalogue_is_sorted() {
+    // encode() binary-searches the catalogue by mnemonic; the generator emits it
+    // sorted. Lock the invariant.
+    let forms = super::super::isa_a64_table::FORMS;
+    assert!(
+        forms.windows(2).all(|w| w[0].mnemonic <= w[1].mnemonic),
+        "isa_a64_table::FORMS must be sorted by mnemonic"
+    );
+}
+
+#[test]
 fn multiply_and_conditional_select() {
     // mul = madd with the zero register as addend.
     assert_eq!(enc("mul", &[x(0), x(1), x(2)]), 0x9B027C20); // mul x0, x1, x2

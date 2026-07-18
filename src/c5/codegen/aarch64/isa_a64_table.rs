@@ -11,52 +11,52 @@ use super::table::{A64Op::*, Field::*, Form};
 pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "add", ops: &[X, X, X], base: 0x8B000000, fields: &[Rd, Rn, Rm] },  // add Xd, Xn, Xm, {lsl|lsr|asr #n}
     Form { mnemonic: "add", ops: &[W, W, W], base: 0x0B000000, fields: &[Rd, Rn, Rm] },  // add Wd, Wn, Wm, {lsl|lsr|asr #n}
-    Form { mnemonic: "sub", ops: &[X, X, X], base: 0xCB000000, fields: &[Rd, Rn, Rm] },  // sub Xd, Xn, Xm, {lsl|lsr|asr #n}
-    Form { mnemonic: "sub", ops: &[W, W, W], base: 0x4B000000, fields: &[Rd, Rn, Rm] },  // sub Wd, Wn, Wm, {lsl|lsr|asr #n}
-    Form { mnemonic: "adds", ops: &[X, X, X], base: 0xAB000000, fields: &[Rd, Rn, Rm] },  // adds Xd, Xn, Xm, {lsl|lsr|asr #n}
-    Form { mnemonic: "adds", ops: &[W, W, W], base: 0x2B000000, fields: &[Rd, Rn, Rm] },  // adds Wd, Wn, Wm, {lsl|lsr|asr #n}
-    Form { mnemonic: "subs", ops: &[X, X, X], base: 0xEB000000, fields: &[Rd, Rn, Rm] },  // subs Xd, Xn, Xm, {lsl|lsr|asr #n}
-    Form { mnemonic: "subs", ops: &[W, W, W], base: 0x6B000000, fields: &[Rd, Rn, Rm] },  // subs Wd, Wn, Wm, {lsl|lsr|asr #n}
-    Form { mnemonic: "and", ops: &[X, X, X], base: 0x8A000000, fields: &[Rd, Rn, Rm] },  // and Xd|SP, Xn, Xm, {sop #n}
-    Form { mnemonic: "and", ops: &[W, W, W], base: 0x0A000000, fields: &[Rd, Rn, Rm] },  // and Wd|WSP, Wn, Wm, {sop #n}
-    Form { mnemonic: "orr", ops: &[X, X, X], base: 0xAA000000, fields: &[Rd, Rn, Rm] },  // orr Xd, Xn, Xm, {sop #n}
-    Form { mnemonic: "orr", ops: &[W, W, W], base: 0x2A000000, fields: &[Rd, Rn, Rm] },  // orr Wd, Wn, Wm, {sop #n}
-    Form { mnemonic: "eor", ops: &[X, X, X], base: 0xCA000000, fields: &[Rd, Rn, Rm] },  // eor Xd, Xn, Xm, {sop #n}
-    Form { mnemonic: "eor", ops: &[W, W, W], base: 0x4A000000, fields: &[Rd, Rn, Rm] },  // eor Wd, Wn, Wm, {sop #n}
-    Form { mnemonic: "ands", ops: &[X, X, X], base: 0xEA000000, fields: &[Rd, Rn, Rm] },  // ands Xd|SP, Xn, Xm, {sop #n}
-    Form { mnemonic: "ands", ops: &[W, W, W], base: 0x6A000000, fields: &[Rd, Rn, Rm] },  // ands Wd|WSP, Wn, Wm, {sop #n}
-    Form { mnemonic: "bic", ops: &[X, X, X], base: 0x8A200000, fields: &[Rd, Rn, Rm] },  // bic Xd, Xn, Xm, {sop #n}
-    Form { mnemonic: "bic", ops: &[W, W, W], base: 0x0A200000, fields: &[Rd, Rn, Rm] },  // bic Wd, Wn, Wm, {sop #n}
-    Form { mnemonic: "orn", ops: &[X, X, X], base: 0xAA200000, fields: &[Rd, Rn, Rm] },  // orn Xd, Xn, Xm, {sop #n}
-    Form { mnemonic: "orn", ops: &[W, W, W], base: 0x2A200000, fields: &[Rd, Rn, Rm] },  // orn Wd, Wn, Wm, {sop #n}
-    Form { mnemonic: "eon", ops: &[X, X, X], base: 0xCA200000, fields: &[Rd, Rn, Rm] },  // eon Xd, Xn, Xm, {sop #n}
-    Form { mnemonic: "eon", ops: &[W, W, W], base: 0x4A200000, fields: &[Rd, Rn, Rm] },  // eon Wd, Wn, Wm, {sop #n}
     Form { mnemonic: "add", ops: &[X, X, Imm], base: 0x91000000, fields: &[Rd, Rn, UImm { op: 2, shift: 10, width: 12 }] },  // add Xd|SP, Xn|SP, #immZ, {lsl #n=0|12}
     Form { mnemonic: "add", ops: &[W, W, Imm], base: 0x11000000, fields: &[Rd, Rn, UImm { op: 2, shift: 10, width: 12 }] },  // add Wd|WSP, Wn|WSP, #immZ, {lsl #n=0|12}
-    Form { mnemonic: "sub", ops: &[X, X, Imm], base: 0xD1000000, fields: &[Rd, Rn, UImm { op: 2, shift: 10, width: 12 }] },  // sub Xd|SP, Xn|SP, #immZ, {lsl #n=0|12}
-    Form { mnemonic: "sub", ops: &[W, W, Imm], base: 0x51000000, fields: &[Rd, Rn, UImm { op: 2, shift: 10, width: 12 }] },  // sub Wd|WSP, Wn|WSP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "adds", ops: &[X, X, X], base: 0xAB000000, fields: &[Rd, Rn, Rm] },  // adds Xd, Xn, Xm, {lsl|lsr|asr #n}
+    Form { mnemonic: "adds", ops: &[W, W, W], base: 0x2B000000, fields: &[Rd, Rn, Rm] },  // adds Wd, Wn, Wm, {lsl|lsr|asr #n}
     Form { mnemonic: "adds", ops: &[X, X, Imm], base: 0xB1000000, fields: &[Rd, Rn, UImm { op: 2, shift: 10, width: 12 }] },  // adds Xd|SP, Xn|SP, #immZ, {lsl #n=0|12}
     Form { mnemonic: "adds", ops: &[W, W, Imm], base: 0x31000000, fields: &[Rd, Rn, UImm { op: 2, shift: 10, width: 12 }] },  // adds Wd|WSP, Wn|WSP, #immZ, {lsl #n=0|12}
-    Form { mnemonic: "subs", ops: &[X, X, Imm], base: 0xF1000000, fields: &[Rd, Rn, UImm { op: 2, shift: 10, width: 12 }] },  // subs Xd|SP, Xn|SP, #immZ, {lsl #n=0|12}
-    Form { mnemonic: "subs", ops: &[W, W, Imm], base: 0x71000000, fields: &[Rd, Rn, UImm { op: 2, shift: 10, width: 12 }] },  // subs Wd|WSP, Wn|WSP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "and", ops: &[X, X, X], base: 0x8A000000, fields: &[Rd, Rn, Rm] },  // and Xd|SP, Xn, Xm, {sop #n}
+    Form { mnemonic: "and", ops: &[W, W, W], base: 0x0A000000, fields: &[Rd, Rn, Rm] },  // and Wd|WSP, Wn, Wm, {sop #n}
     Form { mnemonic: "and", ops: &[X, X, Imm], base: 0x92000000, fields: &[Rd, Rn, LogicalImm { op: 2, is64: true }] },  // and Xd|SP, Xn, #imm
     Form { mnemonic: "and", ops: &[W, W, Imm], base: 0x12000000, fields: &[Rd, Rn, LogicalImm { op: 2, is64: false }] },  // and Wd|WSP, Wn, #imm
-    Form { mnemonic: "orr", ops: &[X, X, Imm], base: 0xB2000000, fields: &[Rd, Rn, LogicalImm { op: 2, is64: true }] },  // orr Xd|SP, Xn, #log_imm
-    Form { mnemonic: "orr", ops: &[W, W, Imm], base: 0x32000000, fields: &[Rd, Rn, LogicalImm { op: 2, is64: false }] },  // orr Wd|WSP, Wn, #log_imm
-    Form { mnemonic: "eor", ops: &[X, X, Imm], base: 0xD2000000, fields: &[Rd, Rn, LogicalImm { op: 2, is64: true }] },  // eor Xd|SP, Xn, #imm
-    Form { mnemonic: "eor", ops: &[W, W, Imm], base: 0x52000000, fields: &[Rd, Rn, LogicalImm { op: 2, is64: false }] },  // eor Wd|WSP, Wn, #imm
+    Form { mnemonic: "ands", ops: &[X, X, X], base: 0xEA000000, fields: &[Rd, Rn, Rm] },  // ands Xd|SP, Xn, Xm, {sop #n}
+    Form { mnemonic: "ands", ops: &[W, W, W], base: 0x6A000000, fields: &[Rd, Rn, Rm] },  // ands Wd|WSP, Wn, Wm, {sop #n}
     Form { mnemonic: "ands", ops: &[X, X, Imm], base: 0xF2000000, fields: &[Rd, Rn, LogicalImm { op: 2, is64: true }] },  // ands Xd|SP, Xn, #imm
     Form { mnemonic: "ands", ops: &[W, W, Imm], base: 0x72000000, fields: &[Rd, Rn, LogicalImm { op: 2, is64: false }] },  // ands Wd|WSP, Wn, #imm
-    Form { mnemonic: "movz", ops: &[X, Imm, OptLsl], base: 0xD2800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movz Xd, #imm, {lsl #n}
-    Form { mnemonic: "movz", ops: &[W, Imm, OptLsl], base: 0x52800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movz Wd, #imm, {lsl #n}
-    Form { mnemonic: "movk", ops: &[X, Imm, OptLsl], base: 0xF2800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movk Xd, #imm, {lsl #n}
-    Form { mnemonic: "movk", ops: &[W, Imm, OptLsl], base: 0x72800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movk Wd, #imm, {lsl #n}
-    Form { mnemonic: "movn", ops: &[X, Imm, OptLsl], base: 0x92800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movn Xd, #imm, {lsl #n}
-    Form { mnemonic: "movn", ops: &[W, Imm, OptLsl], base: 0x12800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movn Wd, #imm, {lsl #n}
+    Form { mnemonic: "asr", ops: &[X, X, Imm], base: 0x9340FC00, fields: &[Rd, Rn, ShrAlias { op: 2 }] },  // asr Xd, Xn, #n
+    Form { mnemonic: "asr", ops: &[W, W, Imm], base: 0x13007C00, fields: &[Rd, Rn, ShrAlias { op: 2 }] },  // asr Wd, Wn, #n
+    Form { mnemonic: "bic", ops: &[X, X, X], base: 0x8A200000, fields: &[Rd, Rn, Rm] },  // bic Xd, Xn, Xm, {sop #n}
+    Form { mnemonic: "bic", ops: &[W, W, W], base: 0x0A200000, fields: &[Rd, Rn, Rm] },  // bic Wd, Wn, Wm, {sop #n}
+    Form { mnemonic: "eon", ops: &[X, X, X], base: 0xCA200000, fields: &[Rd, Rn, Rm] },  // eon Xd, Xn, Xm, {sop #n}
+    Form { mnemonic: "eon", ops: &[W, W, W], base: 0x4A200000, fields: &[Rd, Rn, Rm] },  // eon Wd, Wn, Wm, {sop #n}
+    Form { mnemonic: "eor", ops: &[X, X, X], base: 0xCA000000, fields: &[Rd, Rn, Rm] },  // eor Xd, Xn, Xm, {sop #n}
+    Form { mnemonic: "eor", ops: &[W, W, W], base: 0x4A000000, fields: &[Rd, Rn, Rm] },  // eor Wd, Wn, Wm, {sop #n}
+    Form { mnemonic: "eor", ops: &[X, X, Imm], base: 0xD2000000, fields: &[Rd, Rn, LogicalImm { op: 2, is64: true }] },  // eor Xd|SP, Xn, #imm
+    Form { mnemonic: "eor", ops: &[W, W, Imm], base: 0x52000000, fields: &[Rd, Rn, LogicalImm { op: 2, is64: false }] },  // eor Wd|WSP, Wn, #imm
     Form { mnemonic: "lsl", ops: &[X, X, Imm], base: 0xD3400000, fields: &[Rd, Rn, LslAlias { op: 2, is64: true }] },  // lsl Xd, Xn, #n
     Form { mnemonic: "lsl", ops: &[W, W, Imm], base: 0x53000000, fields: &[Rd, Rn, LslAlias { op: 2, is64: false }] },  // lsl Wd, Wn, #n
     Form { mnemonic: "lsr", ops: &[X, X, Imm], base: 0xD340FC00, fields: &[Rd, Rn, ShrAlias { op: 2 }] },  // lsr Xd, Xn, #n
     Form { mnemonic: "lsr", ops: &[W, W, Imm], base: 0x53007C00, fields: &[Rd, Rn, ShrAlias { op: 2 }] },  // lsr Wd, Wn, #n
-    Form { mnemonic: "asr", ops: &[X, X, Imm], base: 0x9340FC00, fields: &[Rd, Rn, ShrAlias { op: 2 }] },  // asr Xd, Xn, #n
-    Form { mnemonic: "asr", ops: &[W, W, Imm], base: 0x13007C00, fields: &[Rd, Rn, ShrAlias { op: 2 }] },  // asr Wd, Wn, #n
+    Form { mnemonic: "movk", ops: &[X, Imm, OptLsl], base: 0xF2800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movk Xd, #imm, {lsl #n}
+    Form { mnemonic: "movk", ops: &[W, Imm, OptLsl], base: 0x72800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movk Wd, #imm, {lsl #n}
+    Form { mnemonic: "movn", ops: &[X, Imm, OptLsl], base: 0x92800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movn Xd, #imm, {lsl #n}
+    Form { mnemonic: "movn", ops: &[W, Imm, OptLsl], base: 0x12800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movn Wd, #imm, {lsl #n}
+    Form { mnemonic: "movz", ops: &[X, Imm, OptLsl], base: 0xD2800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movz Xd, #imm, {lsl #n}
+    Form { mnemonic: "movz", ops: &[W, Imm, OptLsl], base: 0x52800000, fields: &[Rd, MovImm { op: 1 }, MovHw { op: 2 }] },  // movz Wd, #imm, {lsl #n}
+    Form { mnemonic: "orn", ops: &[X, X, X], base: 0xAA200000, fields: &[Rd, Rn, Rm] },  // orn Xd, Xn, Xm, {sop #n}
+    Form { mnemonic: "orn", ops: &[W, W, W], base: 0x2A200000, fields: &[Rd, Rn, Rm] },  // orn Wd, Wn, Wm, {sop #n}
+    Form { mnemonic: "orr", ops: &[X, X, X], base: 0xAA000000, fields: &[Rd, Rn, Rm] },  // orr Xd, Xn, Xm, {sop #n}
+    Form { mnemonic: "orr", ops: &[W, W, W], base: 0x2A000000, fields: &[Rd, Rn, Rm] },  // orr Wd, Wn, Wm, {sop #n}
+    Form { mnemonic: "orr", ops: &[X, X, Imm], base: 0xB2000000, fields: &[Rd, Rn, LogicalImm { op: 2, is64: true }] },  // orr Xd|SP, Xn, #log_imm
+    Form { mnemonic: "orr", ops: &[W, W, Imm], base: 0x32000000, fields: &[Rd, Rn, LogicalImm { op: 2, is64: false }] },  // orr Wd|WSP, Wn, #log_imm
+    Form { mnemonic: "sub", ops: &[X, X, X], base: 0xCB000000, fields: &[Rd, Rn, Rm] },  // sub Xd, Xn, Xm, {lsl|lsr|asr #n}
+    Form { mnemonic: "sub", ops: &[W, W, W], base: 0x4B000000, fields: &[Rd, Rn, Rm] },  // sub Wd, Wn, Wm, {lsl|lsr|asr #n}
+    Form { mnemonic: "sub", ops: &[X, X, Imm], base: 0xD1000000, fields: &[Rd, Rn, UImm { op: 2, shift: 10, width: 12 }] },  // sub Xd|SP, Xn|SP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "sub", ops: &[W, W, Imm], base: 0x51000000, fields: &[Rd, Rn, UImm { op: 2, shift: 10, width: 12 }] },  // sub Wd|WSP, Wn|WSP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "subs", ops: &[X, X, X], base: 0xEB000000, fields: &[Rd, Rn, Rm] },  // subs Xd, Xn, Xm, {lsl|lsr|asr #n}
+    Form { mnemonic: "subs", ops: &[W, W, W], base: 0x6B000000, fields: &[Rd, Rn, Rm] },  // subs Wd, Wn, Wm, {lsl|lsr|asr #n}
+    Form { mnemonic: "subs", ops: &[X, X, Imm], base: 0xF1000000, fields: &[Rd, Rn, UImm { op: 2, shift: 10, width: 12 }] },  // subs Xd|SP, Xn|SP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "subs", ops: &[W, W, Imm], base: 0x71000000, fields: &[Rd, Rn, UImm { op: 2, shift: 10, width: 12 }] },  // subs Wd|WSP, Wn|WSP, #immZ, {lsl #n=0|12}
 ];

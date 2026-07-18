@@ -239,7 +239,15 @@ pub(crate) fn encode(
     let opw = op_width(ops, width_override);
     let mut best: Option<Vec<u8>> = None;
     let mut matched = false;
-    for f in super::isa_x86_table::FORMS {
+    // The catalogue is sorted by mnemonic (enforced by the generator and the
+    // `catalogue_is_sorted` test): binary-search to the mnemonic's contiguous
+    // run of forms rather than scanning the whole table.
+    let forms = super::isa_x86_table::FORMS;
+    let start = forms.partition_point(|f| f.mnemonic < mnemonic);
+    for f in &forms[start..] {
+        if f.mnemonic != mnemonic {
+            break;
+        }
         if !form_matches(f, mnemonic, ops, opw) {
             continue;
         }

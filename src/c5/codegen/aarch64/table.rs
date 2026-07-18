@@ -246,9 +246,13 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             Some(c) => 0x1A80_0000 | rm | ((c as u32 & 15) << 12) | rn | rd,
         });
     }
-    for f in super::isa_a64_table::FORMS {
+    // The catalogue is sorted by mnemonic (enforced by the generator and the
+    // `catalogue_is_sorted` test): binary-search to the mnemonic's run of forms.
+    let forms = super::isa_a64_table::FORMS;
+    let start = forms.partition_point(|f| f.mnemonic < mnemonic);
+    for f in &forms[start..] {
         if f.mnemonic != mnemonic {
-            continue;
+            break;
         }
         // Match, allowing a trailing OptLsl slot to be absent.
         let required = f.ops.iter().filter(|o| **o != A64Op::OptLsl).count();

@@ -273,7 +273,10 @@ def main():
                     continue
                 seen.add(key)
                 forms.append(f)
-    # Stable order: mnemonic, then declaration order within the db (preference).
+    # Sort by mnemonic so the consumer can binary-search the catalogue; the sort
+    # is stable, preserving database (preference) order among a mnemonic's forms
+    # for the shortest-encoding tie-break.
+    forms.sort(key=lambda f: f['mnem'])
     emit(forms, args.out)
 
 

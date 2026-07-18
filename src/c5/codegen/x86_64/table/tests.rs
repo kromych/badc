@@ -159,6 +159,17 @@ fn system_and_rng_ops() {
     assert_eq!(enc("movnti", &[m(6, 4), r(0, 4)]), [0x0f, 0xc3, 0x06]); // movnti [rsi], eax
 }
 
+#[test]
+fn catalogue_is_sorted() {
+    // encode() binary-searches the catalogue by mnemonic, which is correct only
+    // if the generator emitted it sorted. Lock the invariant.
+    let forms = super::super::isa_x86_table::FORMS;
+    assert!(
+        forms.windows(2).all(|w| w[0].mnemonic <= w[1].mnemonic),
+        "isa_x86_table::FORMS must be sorted by mnemonic"
+    );
+}
+
 // ------------------------------------------------------------------
 // Differential + fuzz harness against the system assembler.
 // ------------------------------------------------------------------

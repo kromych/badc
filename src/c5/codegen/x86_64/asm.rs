@@ -320,10 +320,10 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
 /// Lets a mnemonic the table encodes but that has no bespoke [`Mnemonic`]
 /// variant still be parsed and routed through the table.
 fn table_mnemonic(name: &str) -> Option<&'static str> {
-    super::isa_x86_table::FORMS
-        .iter()
-        .map(|f| f.mnemonic)
-        .find(|&m| m == name)
+    // The catalogue is sorted by mnemonic; binary-search rather than scan.
+    let forms = super::isa_x86_table::FORMS;
+    let start = forms.partition_point(|f| f.mnemonic < name);
+    forms.get(start).map(|f| f.mnemonic).filter(|&m| m == name)
 }
 
 /// Resolve a mnemonic token to its base form plus any AT&T size suffix.

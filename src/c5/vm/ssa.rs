@@ -2051,6 +2051,9 @@ fn run_inline_asm(
                     None => (frame.regs[args[idx as usize] as usize], sz),
                 }
             }
+            // A label reference is a branch target, never a value operand; the
+            // jmp / jcc that carries it is refused under the interpreter.
+            AsmOpnd::Label { .. } => (0, AsmRegSize::Long),
         }
     };
     // The model register a destination operand writes into.
@@ -2060,7 +2063,7 @@ fn run_inline_asm(
             // segment, marked >= 16) has no modelled slot: no-op.
             AsmOpnd::Reg { reg, .. } => (reg < 16).then_some(reg as usize),
             AsmOpnd::Ref { idx, .. } => op_reg[idx as usize].map(|r| r as usize),
-            AsmOpnd::Imm(_) => None,
+            AsmOpnd::Imm(_) | AsmOpnd::Label { .. } => None,
         }
     };
 

@@ -1145,6 +1145,10 @@ pub(crate) fn emit_ri(code: &mut Vec<u8>, mnem: Mnem, width: u8, dst: Reg, imm: 
 /// `setcc` it is `0F 9X+cc`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Cc {
+    /// Overflow (OF=1).
+    O = 0x0,
+    /// Not overflow (OF=0).
+    No = 0x1,
     /// Equal / zero.
     E = 0x4,
     /// Not equal.
@@ -1190,6 +1194,8 @@ impl Cc {
     /// [`super::aarch64::Cond::flip`].
     fn flip(self) -> Cc {
         match self {
+            Cc::O => Cc::No,
+            Cc::No => Cc::O,
             Cc::E => Cc::Ne,
             Cc::Ne => Cc::E,
             Cc::L => Cc::Ge,

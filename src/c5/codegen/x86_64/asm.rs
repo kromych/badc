@@ -112,6 +112,10 @@ pub(crate) enum AsmOpnd {
     Reg { reg: u8, size: AsmRegSize },
     /// `$imm`: a literal immediate.
     Imm(i64),
+    /// `Nf` / `Nb`: a local-label reference (label number plus direction --
+    /// `f` forward, `b` backward), the target of a `jmp` / `jcc` within the
+    /// block. The emitter resolves it to a rel32 against the label definition.
+    Label { num: u32, forward: bool },
 }
 
 /// One instruction of a parsed template, in AT&T operand order.
@@ -126,6 +130,9 @@ pub(crate) struct AsmInsn {
     /// the target symbol name; the emitter resolves it to a rel32 through a
     /// relocation. `None` for every other instruction.
     pub sym_target: Option<alloc::string::String>,
+    /// A local-label definition `N:` at this point; the emitter records the
+    /// code offset it stands at. Such a piece carries no mnemonic operands.
+    pub label_def: Option<u32>,
 }
 
 /// A resolved operand: a concrete register (with its access size) or an
@@ -362,6 +369,19 @@ fn parse_operand(tok: &str) -> Result<AsmOpnd, String> {
         let v = parse_int(rest).ok_or_else(|| format!("inline asm: bad immediate `{tok}`"))?;
         return Ok(AsmOpnd::Imm(v));
     }
+    // A local-label reference `Nf` / `Nb` (jmp / jcc target). Digits then a
+    // single direction letter; a bare register or `%N` reference never has
+    // this shape.
+    if let Some((digits, dir)) = tok
+        .strip_suffix('f')
+        .map(|d| (d, true))
+        .or_else(|| tok.strip_suffix('b').map(|d| (d, false)))
+        && !digits.is_empty()
+        && digits.bytes().all(|c| c.is_ascii_digit())
+        && let Ok(num) = digits.parse::<u32>()
+    {
+        return Ok(AsmOpnd::Label { num, forward: dir });
+    }
     if let Some(rest) = tok.strip_prefix("%%") {
         let (reg, size) =
             reg_by_name(rest).ok_or_else(|| format!("inline asm: unknown register `{tok}`"))?;
@@ -464,7 +484,30 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         core::str::from_utf8(tmpl).map_err(|_| String::from("inline asm: non-UTF8 template"))?;
     let mut insns = Vec::new();
     for piece in text.split([';', '\n']) {
-        let piece = piece.trim();
+        let mut piece = piece.trim();
+        if piece.is_empty() {
+            continue;
+        }
+        // A leading `N:` (digits then colon) defines a local label at this
+        // point; the rest of the piece, if any, follows on the same line. The
+        // digit-prefix test excludes segment overrides like `%fs:0x0`.
+        while let Some(colon) = piece.find(':')
+            && colon > 0
+            && piece.as_bytes()[..colon].iter().all(u8::is_ascii_digit)
+        {
+            let num: u32 = piece[..colon]
+                .parse()
+                .map_err(|_| format!("inline asm: bad label `{piece}`"))?;
+            insns.push(AsmInsn {
+                mnemonic: Mnemonic::RawBytes,
+                suffix: None,
+                operands: Vec::new(),
+                bytes: Vec::new(),
+                sym_target: None,
+                label_def: Some(num),
+            });
+            piece = piece[colon + 1..].trim();
+        }
         if piece.is_empty() {
             continue;
         }
@@ -477,6 +520,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 operands: Vec::new(),
                 bytes: bytes?,
                 sym_target: None,
+                label_def: None,
             });
             continue;
         }
@@ -505,6 +549,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 operands: Vec::new(),
                 bytes: Vec::new(),
                 sym_target: Some(alloc::string::String::from(rest)),
+                label_def: None,
             });
             continue;
         }
@@ -520,6 +565,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             operands,
             bytes: Vec::new(),
             sym_target: None,
+            label_def: None,
         });
     }
     Ok(insns)

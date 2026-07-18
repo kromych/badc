@@ -2764,6 +2764,37 @@ fn inline_asm_call_symbol_x64() {
 }
 
 #[test]
+fn local_label_jump_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // Numeric local labels resolve within the block: `Nb` branches backward to
+    // the nearest prior `N:`, `Nf` forward to the next. badc emits the rel32
+    // form and patches the displacement against the label offset. The windows
+    // below are self-relative, so they hold regardless of the block's position.
+    let program = super::compile_str_bare(
+        "void f(void){ __asm__ volatile(\n\
+           \"1:\\n\\tnop\\n\\tjmp 1b\\n\\t\
+            jmp 2f\\n\\tnop\\n\\t2:\\n\\t\
+            3:\\n\\tjne 3b\"); }\n\
+         int main(void){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    let has = |w: &[u8]| bytes.windows(w.len()).any(|c| c == w);
+    // `1: nop; jmp 1b` -> nop (90) then E9 with rel32 = -6.
+    assert!(
+        has(&[0x90, 0xe9, 0xfa, 0xff, 0xff, 0xff]),
+        "backward jmp 1b"
+    );
+    // `jmp 2f; nop; 2:` -> E9 with rel32 = +1 (skips the nop 90).
+    assert!(has(&[0xe9, 0x01, 0x00, 0x00, 0x00, 0x90]), "forward jmp 2f");
+    // `3: jne 3b` -> 0F 85 with rel32 = -6.
+    assert!(
+        has(&[0x0f, 0x85, 0xfa, 0xff, 0xff, 0xff]),
+        "backward jne 3b"
+    );
+}
+
+#[test]
 fn in_out_port_forms_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     // The variable-port form uses dx (EC/ED/EE/EF); the immediate-port form

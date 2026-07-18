@@ -5868,12 +5868,41 @@ fn emit_inline_asm(
             emit_asm_load_width(code, reg, SCRATCH_R11, op.width);
         }
     }
+    // Local labels: definitions record the code offset they stand at; a
+    // jmp / jcc to a label records the rel32 site to patch once every
+    // definition's offset is known.
+    let mut label_defs: alloc::vec::Vec<(u32, usize)> = alloc::vec::Vec::new();
+    let mut label_fixups: alloc::vec::Vec<(usize, Option<super::encode::Cc>, u32, bool)> =
+        alloc::vec::Vec::new();
     // Encode each template instruction with its operands resolved to the
     // assigned registers, explicit registers, and immediates.
     for insn in &insns {
+        // A local-label definition marks the current offset; it emits no bytes.
+        if let Some(num) = insn.label_def {
+            label_defs.push((num, code.len()));
+            continue;
+        }
         // A raw-byte piece emits its literal bytes with no operand resolution.
         if insn.mnemonic == super::asm::Mnemonic::RawBytes {
             code.extend_from_slice(&insn.bytes);
+            continue;
+        }
+        // A jmp / jcc to a local label: emit the rel32 form now and record the
+        // site; the displacement is patched below against the label offset.
+        if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
+            let super::asm::Mnemonic::Table(name) = insn.mnemonic else {
+                return fail("inline asm: label operand on a non-jump");
+            };
+            let cc = jcc_cond(name);
+            if cc.is_none() && !matches!(name, "jmp" | "jmpq") {
+                return fail("inline asm: label operand on a non-jump");
+            }
+            let site = code.len();
+            match cc {
+                Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
+                None => super::encode::emit_jmp_rel32(code, 0),
+            }
+            label_fixups.push((site, cc, num, forward));
             continue;
         }
         // A direct `call` / `jmp` to a symbol: resolve the name to its entry
@@ -5925,6 +5954,9 @@ fn emit_inline_asm(
                         },
                     }
                 }
+                // Handled above (jmp / jcc to a local label); a label reaching
+                // operand resolution means it rode a non-branch mnemonic.
+                AsmOpnd::Label { .. } => return fail("inline asm: misplaced label reference"),
             };
             concrete.push(c);
         }
@@ -5932,6 +5964,33 @@ fn emit_inline_asm(
             bail_msg(&m);
             return false;
         }
+    }
+    // Patch each label branch now that every definition's offset is known. A
+    // forward `Nf` takes the nearest matching definition after the site; a
+    // backward `Nb`, the nearest at or before it (GNU as local-label rule).
+    for &(site, cc, num, forward) in &label_fixups {
+        let target = if forward {
+            label_defs
+                .iter()
+                .filter(|&&(n, off)| n == num && off > site)
+                .map(|&(_, off)| off)
+                .min()
+        } else {
+            label_defs
+                .iter()
+                .filter(|&&(n, off)| n == num && off <= site)
+                .map(|&(_, off)| off)
+                .max()
+        };
+        let Some(target) = target else {
+            return fail("inline asm: undefined local label");
+        };
+        // rel32 sits after the opcode (1 byte for jmp, 2 for jcc) and is
+        // measured from the end of the instruction.
+        let opcode_len = if cc.is_some() { 2 } else { 1 };
+        let rel = target as i64 - (site as i64 + opcode_len as i64 + 4);
+        let at = site + opcode_len;
+        code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());
     }
     // Store the register outputs back through their captured addresses. A
     // memory operand needs no store-back: the instruction wrote memory.
@@ -5951,6 +6010,32 @@ fn emit_inline_asm(
         super::encode::emit_pop_r(code, Reg(r));
     }
     true
+}
+
+/// Map a conditional-jump mnemonic to its condition code, folding the
+/// synonym spellings (`jc`==`jb`, `jnae`==`jb`, ...). `None` for `jmp` and
+/// for any non-jcc mnemonic.
+fn jcc_cond(name: &str) -> Option<super::encode::Cc> {
+    use super::encode::Cc;
+    Some(match name {
+        "je" | "jz" => Cc::E,
+        "jne" | "jnz" => Cc::Ne,
+        "js" => Cc::S,
+        "jns" => Cc::Ns,
+        "jl" | "jnge" => Cc::L,
+        "jge" | "jnl" => Cc::Ge,
+        "jg" | "jnle" => Cc::G,
+        "jle" | "jng" => Cc::Le,
+        "jb" | "jc" | "jnae" => Cc::B,
+        "jae" | "jnb" | "jnc" => Cc::Ae,
+        "ja" | "jnbe" => Cc::A,
+        "jbe" | "jna" => Cc::Be,
+        "jo" => Cc::O,
+        "jno" => Cc::No,
+        "jp" | "jpe" => Cc::P,
+        "jnp" | "jpo" => Cc::Np,
+        _ => return None,
+    })
 }
 
 /// Load the low `width` bytes at `[base]` into `dst` (zero-extended).

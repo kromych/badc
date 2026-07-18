@@ -820,15 +820,15 @@ pub(crate) fn encode(
             Ok(())
         }
         Mnemonic::In | Mnemonic::Out => {
-            // Variable-port form: `in accumulator, dx` / `out dx,
-            // accumulator`. Registers are implicit (AL/AX/EAX + DX),
-            // fixed by the operands' constraints, so only the operation
-            // width selects the opcode. Width comes from the AT&T suffix
-            // (inb/inw/inl), else the accumulator operand.
-            let acc = if matches!(mnemonic, Mnemonic::In) {
-                ops.first()
+            // AT&T `in port, acc` / `out acc, port`. The accumulator
+            // (AL/AX/EAX) is implicit; only the width and the port form
+            // select the opcode. Width comes from the suffix (inb/inw/inl),
+            // else the accumulator operand.
+            let is_in = matches!(mnemonic, Mnemonic::In);
+            let (port, acc) = if is_in {
+                (ops.first(), ops.get(1))
             } else {
-                ops.get(1)
+                (ops.get(1), ops.first())
             };
             let size = suffix
                 .or(acc.and_then(|o| match o {
@@ -840,23 +840,25 @@ pub(crate) fn encode(
                 code.push(0x66);
             }
             let byte = size == AsmRegSize::Byte;
-            let opcode = match mnemonic {
-                Mnemonic::In => {
-                    if byte {
-                        0xEC
-                    } else {
-                        0xED
-                    }
+            match port {
+                // Immediate-port form: E4/E5 (in), E6/E7 (out), imm8 port.
+                Some(Concrete::Imm(p)) if (0..=255).contains(p) => {
+                    code.push(match (is_in, byte) {
+                        (true, true) => 0xE4,
+                        (true, false) => 0xE5,
+                        (false, true) => 0xE6,
+                        (false, false) => 0xE7,
+                    });
+                    code.push(*p as u8);
                 }
-                _ => {
-                    if byte {
-                        0xEE
-                    } else {
-                        0xEF
-                    }
-                }
-            };
-            code.push(opcode);
+                // Variable-port form: EC/ED (in), EE/EF (out), port in dx.
+                _ => code.push(match (is_in, byte) {
+                    (true, true) => 0xEC,
+                    (true, false) => 0xED,
+                    (false, true) => 0xEE,
+                    (false, false) => 0xEF,
+                }),
+            }
             Ok(())
         }
         Mnemonic::Shld | Mnemonic::Shrd => {

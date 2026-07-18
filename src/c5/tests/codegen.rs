@@ -2743,6 +2743,28 @@ fn explicit_register_inline_asm_x64() {
 }
 
 #[test]
+fn in_out_port_forms_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // The variable-port form uses dx (EC/ED/EE/EF); the immediate-port form
+    // uses E4/E5/E6/E7 + an imm8 (dropping the immediate would be a silent
+    // miscompile). Word width adds the 0x66 prefix.
+    let program = super::compile_str_bare(
+        "void io(void){ __asm__ volatile(\n\
+           \"inb %dx, %al\\n\\toutb %al, %dx\\n\\tinb $0x20, %al\\n\\t\
+            outb %al, $0x20\\n\\tinw $0x60, %ax\\n\\toutl %eax, $0x70\"); }\n\
+         int main(void){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    let has = |w: &[u8]| bytes.windows(w.len()).any(|c| c == w);
+    assert!(has(&[0xec]) && has(&[0xee]), "dx forms inb/outb = ec/ee");
+    assert!(has(&[0xe4, 0x20]), "inb $0x20 = e4 20");
+    assert!(has(&[0xe6, 0x20]), "outb $0x20 = e6 20");
+    assert!(has(&[0x66, 0xe5, 0x60]), "inw $0x60 = 66 e5 60");
+    assert!(has(&[0xe7, 0x70]), "outl $0x70 = e7 70");
+}
+
+#[test]
 fn fxsave_fxrstor_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     // edk2's BaseLib reaches x87/SSE state save/restore through

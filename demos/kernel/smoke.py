@@ -91,38 +91,44 @@ def main() -> int:
         for source, markers in KERNELS:
             stem = Path(source).stem
             for target, arch, qemu in TARGETS:
-                tag = f"{stem}/{arch}"
-                efi = Path(work) / f"{stem}-{arch}.efi"
-                cmd = [str(badc), f"--target={target}", str(HERE / source), "-o", str(efi)]
-                r = subprocess.run(cmd, capture_output=True, text=True)
-                if r.returncode != 0 or not efi.is_file():
-                    log(f"[{tag}] FAIL: compile\n{r.stderr.strip()}")
-                    failures += 1
-                    continue
-                log(f"[{tag}] compiled {efi.name} ({efi.stat().st_size} bytes)")
+                # Both optimization levels: -O runs the SSA/inliner pipeline the
+                # default build skips, which the naked ISR and the exact context
+                # frame must survive unchanged.
+                for opt_label, opt_flags in (("O0", []), ("O", ["-O"])):
+                    tag = f"{stem}/{arch}/{opt_label}"
+                    efi = Path(work) / f"{stem}-{arch}-{opt_label}.efi"
+                    cmd = [str(badc), *opt_flags, f"--target={target}",
+                           str(HERE / source), "-o", str(efi)]
+                    r = subprocess.run(cmd, capture_output=True, text=True)
+                    if r.returncode != 0 or not efi.is_file():
+                        log(f"[{tag}] FAIL: compile\n{r.stderr.strip()}")
+                        failures += 1
+                        continue
+                    log(f"[{tag}] compiled {efi.name} ({efi.stat().st_size} bytes)")
 
-                # A badc-built emulator (demos/qemu) may stand in for the system
-                # QEMU via $QEMU_SYSTEM_X64 / $QEMU_SYSTEM_AARCH64.
-                qemu_bin = os.environ.get(f"QEMU_SYSTEM_{arch.upper()}", qemu)
-                resolved = shutil.which(qemu_bin) or (qemu_bin if os.path.isfile(qemu_bin) else None)
-                if not resolved:
-                    log(f"[{tag}] skip boot: {qemu_bin} not found")
-                    continue
-                if not firmware_present(arch):
-                    log(f"[{tag}] skip boot: UEFI firmware not found")
-                    continue
+                    # A badc-built emulator (demos/qemu) may stand in for the
+                    # system QEMU via $QEMU_SYSTEM_X64 / $QEMU_SYSTEM_AARCH64.
+                    qemu_bin = os.environ.get(f"QEMU_SYSTEM_{arch.upper()}", qemu)
+                    resolved = shutil.which(qemu_bin) or (
+                        qemu_bin if os.path.isfile(qemu_bin) else None)
+                    if not resolved:
+                        log(f"[{tag}] skip boot: {qemu_bin} not found")
+                        continue
+                    if not firmware_present(arch):
+                        log(f"[{tag}] skip boot: UEFI firmware not found")
+                        continue
 
-                expect = markers[arch]
-                ok, _text, missing = qemu_efi.run(str(efi), expect, arch=arch, timeout=60)
-                if ok:
-                    log(f"[{tag}] boot OK under {os.path.basename(resolved)}: {expect}")
-                elif os.environ.get("BADC_KERNEL_BOOT_OPTIONAL"):
-                    # Build is the hard gate; the boot is best-effort until observed
-                    # green on a given runner, then the flag is dropped.
-                    log(f"[{tag}] boot best-effort: missing {missing} (BADC_KERNEL_BOOT_OPTIONAL)")
-                else:
-                    log(f"[{tag}] FAIL: boot missing {missing}")
-                    failures += 1
+                    expect = markers[arch]
+                    ok, _text, missing = qemu_efi.run(str(efi), expect, arch=arch, timeout=60)
+                    if ok:
+                        log(f"[{tag}] boot OK under {os.path.basename(resolved)}: {expect}")
+                    elif os.environ.get("BADC_KERNEL_BOOT_OPTIONAL"):
+                        # Build is the hard gate; the boot is best-effort until
+                        # observed green on a runner, then the flag is dropped.
+                        log(f"[{tag}] boot best-effort: missing {missing} (BADC_KERNEL_BOOT_OPTIONAL)")
+                    else:
+                        log(f"[{tag}] FAIL: boot missing {missing}")
+                        failures += 1
 
     if failures:
         log(f"FAIL: {failures} kernel/target combination(s) failed")

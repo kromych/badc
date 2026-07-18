@@ -2046,6 +2046,7 @@ fn emit_inline_asm_aarch64(
     use super::asm::{AsmOpndA64, assign_operand_regs, parse_template};
     use super::encode::{enc_add_imm, enc_str_imm, enc_str32_imm, enc_strh_imm, enc_sub_imm};
     use super::table::{self, Opnd};
+    use alloc::string::String;
 
     let insns = match parse_template(&asm.template) {
         Ok(i) => i,
@@ -2133,48 +2134,111 @@ fn emit_inline_asm_aarch64(
             }
         }
     }
+    // Resolve one symbolic operand to a table operand; label references have
+    // no table form and are handled by the branch path below.
+    let conv = |o: &AsmOpndA64| -> Result<Opnd, String> {
+        let resolve_ref = |idx: u8| -> Option<u8> { op_reg.get(idx as usize).copied().flatten() };
+        Ok(match *o {
+            AsmOpndA64::Imm(v) => Opnd::Imm(v),
+            AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
+            AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
+            AsmOpndA64::Reg { num, is64 } => Opnd::Reg { num, is64 },
+            AsmOpndA64::Ref { idx, is64 } => {
+                let Some(r) = resolve_ref(idx) else {
+                    return Err(String::from(
+                        "aarch64 inline asm: operand reference is not a register",
+                    ));
+                };
+                let is64 = is64.unwrap_or(asm.operands[idx as usize].width >= 8);
+                Opnd::Reg { num: r, is64 }
+            }
+            AsmOpndA64::Mem { base, off } => {
+                let base = match base {
+                    super::asm::MemBase::Reg(n) => n,
+                    super::asm::MemBase::Ref(idx) => {
+                        let Some(r) = resolve_ref(idx) else {
+                            return Err(String::from(
+                                "aarch64 inline asm: memory base is not a register",
+                            ));
+                        };
+                        r
+                    }
+                };
+                Opnd::Mem {
+                    base,
+                    off: off as u32,
+                }
+            }
+            AsmOpndA64::Cond(c) => Opnd::Cond(c),
+            AsmOpndA64::Label { .. } => {
+                return Err(String::from(
+                    "aarch64 inline asm: label reference outside a branch",
+                ));
+            }
+        })
+    };
+    // Local labels: definitions record the code offset they stand at; branches
+    // to them emit a placeholder word and are patched once the block's layout
+    // is final (a `Nb` reference binds to the most recent definition of N at
+    // or before the branch, `Nf` to the next one after it).
+    enum LabelBranch {
+        B,
+        BCond(u8),
+        Cb { nz: bool, rt: u8, is64: bool },
+    }
+    let mut label_defs: Vec<(u32, usize)> = Vec::new();
+    let mut label_fixups: Vec<(usize, LabelBranch, u32, bool)> = Vec::new();
+
     // Encode each template instruction; raw-byte pieces emit verbatim.
     for insn in &insns {
+        if let Some(num) = insn.label_def {
+            label_defs.push((num, code.len()));
+            continue;
+        }
         if !insn.bytes.is_empty() {
             code.extend_from_slice(&insn.bytes);
             continue;
         }
-        let mut ops: Vec<Opnd> = Vec::new();
-        for o in &insn.operands {
-            let resolve_ref =
-                |idx: u8| -> Option<u8> { op_reg.get(idx as usize).copied().flatten() };
-            let opnd = match *o {
-                AsmOpndA64::Imm(v) => Opnd::Imm(v),
-                AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
-                AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
-                AsmOpndA64::Reg { num, is64 } => Opnd::Reg { num, is64 },
-                AsmOpndA64::Ref { idx, is64 } => {
-                    let Some(r) = resolve_ref(idx) else {
-                        bail_msg("aarch64 inline asm: operand reference is not a register");
+        if let Some(&AsmOpndA64::Label { num, forward }) = insn.operands.last() {
+            let kind = match insn.mnemonic.as_str() {
+                "b" if insn.operands.len() == 1 => LabelBranch::B,
+                "cbz" | "cbnz" if insn.operands.len() == 2 => match conv(&insn.operands[0]) {
+                    Ok(Opnd::Reg { num: rt, is64 }) => LabelBranch::Cb {
+                        nz: insn.mnemonic == "cbnz",
+                        rt,
+                        is64,
+                    },
+                    Ok(_) => {
+                        bail_msg("aarch64 inline asm: cbz/cbnz operand must be a register");
+                        return false;
+                    }
+                    Err(m) => {
+                        bail_msg(&m);
+                        return false;
+                    }
+                },
+                m => {
+                    let cond = m.strip_prefix("b.").and_then(super::asm::cond_code);
+                    let Some(c) = cond.filter(|_| insn.operands.len() == 1) else {
+                        bail_msg("aarch64 inline asm: label branch must be b/b.cond/cbz/cbnz");
                         return false;
                     };
-                    let is64 = is64.unwrap_or(asm.operands[idx as usize].width >= 8);
-                    Opnd::Reg { num: r, is64 }
+                    LabelBranch::BCond(c)
                 }
-                AsmOpndA64::Mem { base, off } => {
-                    let base = match base {
-                        super::asm::MemBase::Reg(n) => n,
-                        super::asm::MemBase::Ref(idx) => {
-                            let Some(r) = resolve_ref(idx) else {
-                                bail_msg("aarch64 inline asm: memory base is not a register");
-                                return false;
-                            };
-                            r
-                        }
-                    };
-                    Opnd::Mem {
-                        base,
-                        off: off as u32,
-                    }
-                }
-                AsmOpndA64::Cond(c) => Opnd::Cond(c),
             };
-            ops.push(opnd);
+            label_fixups.push((code.len(), kind, num, forward));
+            emit(code, 0);
+            continue;
+        }
+        let mut ops: Vec<Opnd> = Vec::new();
+        for o in &insn.operands {
+            match conv(o) {
+                Ok(opnd) => ops.push(opnd),
+                Err(m) => {
+                    bail_msg(&m);
+                    return false;
+                }
+            }
         }
         match table::encode(&insn.mnemonic, &ops) {
             Ok(word) => emit(code, word),
@@ -2183,6 +2247,64 @@ fn emit_inline_asm_aarch64(
                 return false;
             }
         }
+    }
+    // Patch the label branches now that every definition's offset is known.
+    for &(site, ref kind, num, forward) in &label_fixups {
+        let target = if forward {
+            label_defs
+                .iter()
+                .find(|&&(n, off)| n == num && off > site)
+                .map(|&(_, off)| off)
+        } else {
+            label_defs
+                .iter()
+                .rev()
+                .find(|&&(n, off)| n == num && off <= site)
+                .map(|&(_, off)| off)
+        };
+        let Some(target) = target else {
+            bail_msg("aarch64 inline asm: undefined local label");
+            return false;
+        };
+        let delta = target as i64 - site as i64;
+        if delta % 4 != 0 {
+            bail_msg("aarch64 inline asm: label target is not word-aligned");
+            return false;
+        }
+        let words = (delta / 4) as i32;
+        let fits = |bits: u32| {
+            let lim = 1i32 << (bits - 1);
+            (-lim..lim).contains(&words)
+        };
+        let word = match *kind {
+            LabelBranch::B => {
+                if !fits(26) {
+                    bail_msg("aarch64 inline asm: branch target out of range");
+                    return false;
+                }
+                super::encode::enc_b(words)
+            }
+            // B.cond: 0101_0100 | imm19 << 5 | cond.
+            LabelBranch::BCond(c) => {
+                if !fits(19) {
+                    bail_msg("aarch64 inline asm: branch target out of range");
+                    return false;
+                }
+                0x5400_0000 | (((words as u32) & 0x7_FFFF) << 5) | c as u32
+            }
+            // CBZ/CBNZ: sf | 0011_010z | imm19 << 5 | Rt.
+            LabelBranch::Cb { nz, rt, is64 } => {
+                if !fits(19) {
+                    bail_msg("aarch64 inline asm: branch target out of range");
+                    return false;
+                }
+                (if is64 { 1u32 << 31 } else { 0 })
+                    | (if nz { 0x3500_0000 } else { 0x3400_0000 })
+                    | (((words as u32) & 0x7_FFFF) << 5)
+                    | rt as u32
+            }
+        };
+        code[site..site + 4].copy_from_slice(&word.to_le_bytes());
     }
     // Store the register outputs back through their captured addresses (x16
     // holds the address; the operand pool is untouched).

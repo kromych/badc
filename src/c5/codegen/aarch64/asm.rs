@@ -42,6 +42,10 @@ pub(crate) enum AsmOpndA64 {
     /// A condition code (`eq`, `ne`, ...) as its 4-bit encoding, for the
     /// conditional-select forms.
     Cond(u8),
+    /// A local-label reference `Nb` / `Nf`: label number plus direction
+    /// (`forward` selects the next definition after the branch, otherwise the
+    /// most recent one at or before it).
+    Label { num: u32, forward: bool },
 }
 
 /// The base register of a memory operand.
@@ -104,15 +108,19 @@ fn sysreg_field(name: &str) -> Option<u16> {
 /// One instruction of a parsed template.
 #[derive(Debug, Clone)]
 pub(crate) struct AsmInsnA64 {
-    /// Empty for a raw-byte piece (`bytes` carries the payload).
+    /// Empty for a raw-byte piece (`bytes` carries the payload) and for a
+    /// local-label definition (`label_def` carries the number).
     pub mnemonic: String,
     pub operands: Vec<AsmOpndA64>,
     /// Literal bytes for a raw-byte piece; empty for a mnemonic.
     pub bytes: Vec<u8>,
+    /// A local-label definition `N:`; the emitter records the code offset it
+    /// stands at.
+    pub label_def: Option<u32>,
 }
 
 /// A condition-code mnemonic to its 4-bit encoding.
-fn cond_code(name: &str) -> Option<u8> {
+pub(crate) fn cond_code(name: &str) -> Option<u8> {
     Some(match name {
         "eq" => 0,
         "ne" => 1,
@@ -253,6 +261,17 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     if let Some(c) = cond_code(tok) {
         return Ok(AsmOpndA64::Cond(c));
     }
+    // A local-label reference `Nb` / `Nf` (mnemonics never start with a digit).
+    if let Some((digits, dir)) = tok
+        .strip_suffix('b')
+        .map(|d| (d, false))
+        .or_else(|| tok.strip_suffix('f').map(|d| (d, true)))
+        && !digits.is_empty()
+        && digits.bytes().all(|c| c.is_ascii_digit())
+        && let Ok(num) = digits.parse::<u32>()
+    {
+        return Ok(AsmOpndA64::Label { num, forward: dir });
+    }
     Err(format!("inline asm: unsupported operand `{tok}`"))
 }
 
@@ -265,9 +284,29 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         core::str::from_utf8(tmpl).map_err(|_| String::from("inline asm: non-UTF8 template"))?;
     let mut insns = Vec::new();
     for piece in text.split([';', '\n']) {
-        let piece = piece.trim();
+        let mut piece = piece.trim();
         if piece.is_empty() {
             continue;
+        }
+        // A leading `N:` defines a local label at this point; the rest of the
+        // statement (possibly empty) follows on the same line.
+        if let Some(colon) = piece.find(':')
+            && colon > 0
+            && piece.as_bytes()[..colon].iter().all(u8::is_ascii_digit)
+        {
+            let num: u32 = piece[..colon]
+                .parse()
+                .map_err(|_| format!("inline asm: bad label `{piece}`"))?;
+            insns.push(AsmInsnA64 {
+                mnemonic: String::new(),
+                operands: Vec::new(),
+                bytes: Vec::new(),
+                label_def: Some(num),
+            });
+            piece = piece[colon + 1..].trim();
+            if piece.is_empty() {
+                continue;
+            }
         }
         // Reuse the shared raw-byte recognizer for a single piece.
         if let Some(bytes) = emit_common::parse_raw_template(piece.as_bytes()) {
@@ -275,6 +314,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 mnemonic: String::new(),
                 operands: Vec::new(),
                 bytes,
+                label_def: None,
             });
             continue;
         }
@@ -292,6 +332,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             mnemonic: String::from(mnem),
             operands,
             bytes: Vec::new(),
+            label_def: None,
         });
     }
     Ok(insns)
@@ -454,5 +495,31 @@ mod tests {
         let insns = parse_template(b"csel %0, %1, %2, ne").unwrap();
         assert_eq!(insns[0].mnemonic, "csel");
         assert_eq!(insns[0].operands[3], AsmOpndA64::Cond(1));
+    }
+
+    #[test]
+    fn parse_local_labels() {
+        // A definition alone, one prefixing an instruction, and both reference
+        // directions.
+        let insns = parse_template(b"1:\n\tsub %0, %0, #1\n2: cbnz %0, 1b\n\tb 2f").unwrap();
+        assert_eq!(insns[0].label_def, Some(1));
+        assert_eq!(insns[1].mnemonic, "sub");
+        assert_eq!(insns[2].label_def, Some(2));
+        assert_eq!(insns[3].mnemonic, "cbnz");
+        assert_eq!(
+            insns[3].operands[1],
+            AsmOpndA64::Label {
+                num: 1,
+                forward: false
+            }
+        );
+        assert_eq!(insns[4].mnemonic, "b");
+        assert_eq!(
+            insns[4].operands[0],
+            AsmOpndA64::Label {
+                num: 2,
+                forward: true
+            }
+        );
     }
 }

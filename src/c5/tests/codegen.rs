@@ -2725,6 +2725,24 @@ fn naked_function_emits_body_only() {
 }
 
 #[test]
+fn explicit_register_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // Basic (operand-less) asm names hardware registers with a single `%`,
+    // as an ISR's context-save does. The parser resolves `%rax`/`%r15` to the
+    // register directly rather than treating `%` as an operand reference.
+    let program = super::compile_str_bare(
+        "void isr(void){ __asm__ volatile(\"mov %rax, %rbx\\n\\tpush %r15\\n\\tpop %r15\"); }\n\
+         int main(void){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    let has = |w: &[u8]| bytes.windows(w.len()).any(|c| c == w);
+    assert!(has(&[0x48, 0x89, 0xc3]), "mov %rax,%rbx = 48 89 c3");
+    assert!(has(&[0x41, 0x57]), "push %r15 = 41 57");
+    assert!(has(&[0x41, 0x5f]), "pop %r15 = 41 5f");
+}
+
+#[test]
 fn fxsave_fxrstor_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     // edk2's BaseLib reaches x87/SSE state save/restore through

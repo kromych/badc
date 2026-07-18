@@ -364,9 +364,16 @@ fn parse_operand(tok: &str) -> Result<AsmOpnd, String> {
         return Ok(AsmOpnd::Reg { reg, size });
     }
     if bytes.first() == Some(&b'%') {
+        let body = &tok[1..];
+        // A single `%` before a register name is an explicit register. GCC
+        // uses this in *basic* asm (no operand list); extended asm spells it
+        // `%%reg`. Operand references (`%0`, `%w1`) are never register names,
+        // so trying the register table first is unambiguous.
+        if let Some((reg, size)) = reg_by_name(body) {
+            return Ok(AsmOpnd::Reg { reg, size });
+        }
         // `%N` or `%<size>N`. A leading size modifier is a single
         // letter b/w/k/q before the operand digits.
-        let body = &tok[1..];
         let (size, digits) = match body.as_bytes().first() {
             Some(&b'b') if body.len() > 1 => (Some(AsmRegSize::Byte), &body[1..]),
             Some(&b'w') if body.len() > 1 => (Some(AsmRegSize::Word), &body[1..]),

@@ -67,7 +67,7 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
                	movzwq	0x2(%rax), %rax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	andq	$0x3ff, %rax            # imm = 0x3FF
                	shlq	$0x36, %rax
                	sarq	$0x36, %rax
@@ -198,5 +198,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

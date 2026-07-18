@@ -29,7 +29,7 @@ Disassembly of section .text:
                	sarq	$0x3f, %rcx
                	shrq	$0x3f, %rcx
                	addq	%rcx, %rax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	movslq	(%r12,%rax,4), %rax
                	movq	%r13, %rdx
                	movq	%r8, %rbx
@@ -129,5 +129,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

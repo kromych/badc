@@ -12,10 +12,10 @@ Disassembly of section .text:
 
 <compute>:
                	leaq	(%rdi,%rsi), %rax
-               	shlq	$0x1, %rax
+               	shlq	%rax
                	retq
 
 <main>:
                	movl	$0x2a, %eax
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

@@ -22,7 +22,7 @@ Disassembly of section .text:
                	cvtsi2sd	%r10, %xmm0
                	jmp	<addr>
                	movq	%r10, %r11
-               	shrq	$0x1, %r11
+               	shrq	%r11
                	andq	$0x1, %r10
                	orq	%r10, %r11
                	cvtsi2sd	%r11, %xmm0
@@ -46,7 +46,7 @@ Disassembly of section .text:
                	cvtsi2sd	%r10, %xmm0
                	jmp	<addr>
                	movq	%r10, %r11
-               	shrq	$0x1, %r11
+               	shrq	%r11
                	andq	$0x1, %r10
                	orq	%r10, %r11
                	cvtsi2sd	%r11, %xmm0
@@ -70,7 +70,7 @@ Disassembly of section .text:
                	cvtsi2sd	%r10, %xmm0
                	jmp	<addr>
                	movq	%r10, %r11
-               	shrq	$0x1, %r11
+               	shrq	%r11
                	andq	$0x1, %r10
                	orq	%r10, %r11
                	cvtsi2sd	%r11, %xmm0
@@ -94,7 +94,7 @@ Disassembly of section .text:
                	cvtsi2sd	%r10, %xmm0
                	jmp	<addr>
                	movq	%r10, %r11
-               	shrq	$0x1, %r11
+               	shrq	%r11
                	andq	$0x1, %r10
                	orq	%r10, %r11
                	cvtsi2sd	%r11, %xmm0
@@ -135,7 +135,7 @@ Disassembly of section .text:
                	cvtsi2ss	%r10, %xmm0
                	jmp	<addr>
                	movq	%r10, %r11
-               	shrq	$0x1, %r11
+               	shrq	%r11
                	andq	$0x1, %r10
                	orq	%r10, %r11
                	cvtsi2ss	%r11, %xmm0
@@ -154,3 +154,4 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
+               	addb	%al, 0x41(%rdx)

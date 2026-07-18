@@ -17,7 +17,7 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	andq	$0x1, %rdx
                	addq	%rdx, %rcx
-               	shrq	$0x1, %rax
+               	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
                	cmpq	$0x18, %rcx
@@ -30,7 +30,7 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	andq	$0x1, %rdx
                	addq	%rdx, %rcx
-               	shrq	$0x1, %rax
+               	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
                	testq	%rcx, %rcx
@@ -39,3 +39,4 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
+               	addb	%al, (%rax)

@@ -20,23 +20,24 @@ Disassembly of section .text:
                	jmpq	*%r10
                	xorb	%al, (%rax)
                	addb	%al, (%rax)
-               	<unknown>
+               	popq	%rdi
                	addb	%al, (%rax)
-               	addb	%ah, (%rdx)
+               	addb	%ah, (%rcx)
                	addb	%al, (%rax)
-               	addb	%al, %fs:(%rax)
-               	addb	%ah, (%rsi)
+               	movslq	(%rax), %eax
                	addb	%al, (%rax)
-               	pushq	$0x6a000000             # imm = 0x6A000000
+               	addb	%al, %gs:(%rax)
+               	addb	%ah, (%rdi)
                	addb	%al, (%rax)
-               	addb	%ch, (%rax,%rax)
-               	addb	%ch, (%rsi)
+               	imull	$0x6b0000, (%rax), %eax # imm = 0x6B0000
                	addb	%al, (%rax)
-               	jo	<addr>
+               	insl	%dx, %es:(%rdi)
                	addb	%al, (%rax)
-               	jb	<addr>
+               	addb	%ch, (%rdi)
                	addb	%al, (%rax)
-               	jnp	<addr>
+               	jno	<addr>
+               	addb	%al, (%rax)
+               	jp	<addr>
                	addb	%al, (%rax)
                	incq	%rsi
                	leaq	0x2(%rsi), %rdx
@@ -44,7 +45,7 @@ Disassembly of section .text:
                	leaq	(%rdx,%rdx,2), %rdx
                	subq	%rdx, %rsi
                	addq	%rsi, %rdx
-               	shlq	$0x1, %rsi
+               	shlq	%rsi
                	decq	%rdx
                	addq	$0x7, %rsi
                	addq	%rsi, %rdx
@@ -121,4 +122,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

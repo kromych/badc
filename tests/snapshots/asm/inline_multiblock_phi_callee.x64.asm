@@ -36,7 +36,7 @@ Disassembly of section .text:
                	imulq	$-0x1, %rcx, %rcx
                	movslq	%ecx, %rcx
                	movq	%rcx, %r8
-               	shlq	$0x1, %r8
+               	shlq	%r8
                	andq	$0x1, %rcx
                	addq	%r8, %rcx
                	movslq	%ecx, %r8
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	imulq	$-0x1, %rcx, %rcx
                	movslq	%ecx, %rcx
                	movq	%rcx, %rsi
-               	shlq	$0x1, %rsi
+               	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
                	movslq	%ecx, %rsi
@@ -68,7 +68,7 @@ Disassembly of section .text:
                	imulq	$-0x1, %rcx, %rcx
                	movslq	%ecx, %rcx
                	movq	%rcx, %rsi
-               	shlq	$0x1, %rsi
+               	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
                	movslq	%ecx, %rsi
@@ -83,7 +83,7 @@ Disassembly of section .text:
                	imulq	$-0x1, %rcx, %rcx
                	movslq	%ecx, %rcx
                	movq	%rcx, %rsi
-               	shlq	$0x1, %rsi
+               	shlq	%rsi
                	andq	$0x1, %rcx
                	addq	%rsi, %rcx
                	movslq	%ecx, %rsi

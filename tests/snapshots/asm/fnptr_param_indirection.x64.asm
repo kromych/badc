@@ -18,7 +18,7 @@ Disassembly of section .text:
 
 <dbl>:
                	movq	%rdi, %rax
-               	shlq	$0x1, %rax
+               	shlq	%rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
                	retq
@@ -105,3 +105,4 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

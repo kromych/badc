@@ -13,7 +13,7 @@ Disassembly of section .text:
 <test>:
                	movslq	%edi, %rdi
                	movslq	%edi, %rax
-               	shlq	$0x1, %rax
+               	shlq	%rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rcx
                	leaq	(%rdi,%rdi), %rax
@@ -35,5 +35,3 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

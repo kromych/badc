@@ -31,21 +31,21 @@ Disassembly of section .text:
                	movq	0x38(%rbx), %rbx
                	jmp	<addr>
                	movq	%rbx, %r13
-               	shlq	$0x1, %r13
+               	shlq	%r13
                	addq	%r9, %r13
-               	shlq	$0x1, %r9
+               	shlq	%r9
                	addq	%r8, %r9
-               	shlq	$0x1, %r8
+               	shlq	%r8
                	addq	%rdi, %r8
-               	shlq	$0x1, %rdi
+               	shlq	%rdi
                	addq	%rsi, %rdi
-               	shlq	$0x1, %rsi
+               	shlq	%rsi
                	addq	%rdx, %rsi
-               	shlq	$0x1, %rdx
+               	shlq	%rdx
                	addq	%rcx, %rdx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	addq	%rax, %rcx
-               	shlq	$0x1, %rax
+               	shlq	%rax
                	xorq	%rbx, %rax
                	movq	%r13, %rbx
                	movslq	%r12d, %r13

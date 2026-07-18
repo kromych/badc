@@ -97,10 +97,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movl	%edi, 0x10(%rbp)
-               	leaq	<rip>, %rcx        # <addr>
+               	leaq	<rip>, %rcx         # <addr>
                	movq	%rcx, -0x8(%rbp)
                	movslq	%edi, %rax
-               	shlq	$0x1, %rax
+               	shlq	%rax
                	movl	%eax, -0x10(%rbp)
                	jmpq	*%rcx
                	movslq	-0x10(%rbp), %rax
@@ -145,5 +145,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

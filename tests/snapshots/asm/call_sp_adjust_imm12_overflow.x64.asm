@@ -3684,7 +3684,7 @@ Disassembly of section .text:
                	shlq	$0x4, %rdx
                	addq	%rdx, %rcx
                	movq	%rax, %rdx
-               	shlq	$0x1, %rdx
+               	shlq	%rdx
                	movq	%rdx, 0x8(%rcx)
                	incq	%rax
                	cmpq	$0x105, %rax            # imm = 0x105
@@ -8381,5 +8381,3 @@ Disassembly of section .text:
                	addq	$0x810, %rsp            # imm = 0x810
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

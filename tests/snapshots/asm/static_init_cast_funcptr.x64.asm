@@ -12,7 +12,7 @@ Disassembly of section .text:
 
 <real_double>:
                	movq	%rdi, %rax
-               	shlq	$0x1, %rax
+               	shlq	%rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
                	retq
@@ -118,3 +118,4 @@ Disassembly of section .text:
                	pushq	%r11
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

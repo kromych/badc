@@ -152,7 +152,7 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rcx
                	movslq	(%rax), %rdx
                	movslq	0x4(%rax), %rax
-               	shlq	$0x1, %rax
+               	shlq	%rax
                	addq	%rdx, %rax
                	movslq	(%rcx), %rdx
                	leaq	(%rdx,%rdx,2), %rdx
@@ -200,3 +200,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

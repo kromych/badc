@@ -53,11 +53,10 @@ use super::encode::{
     emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem, emit_movsx_r_mem16,
     emit_movsxd_r_mem, emit_movups_mem_xmm, emit_movups_xmm_mem, emit_movzx_r_mem16,
     emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_pop_r, emit_push_r, emit_ret, emit_rm, emit_rr,
-    emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl, emit_shr_r_imm8,
-    emit_sub_rsp_imm32, emit_subsd, emit_subss, emit_ucomisd, emit_ucomiss, emit_unary_r,
-    emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd,
-    emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss, emit_xchg_mem_r, emit_xchg_rr,
-    emit_xorpd, emit_xorps,
+    emit_setcc_r8, emit_shift_cl, emit_shift_ri, emit_sub_rsp_imm32, emit_subsd, emit_subss,
+    emit_ucomisd, emit_ucomiss, emit_unary_r, emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd,
+    emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss,
+    emit_xchg_mem_r, emit_xchg_rr, emit_xorpd, emit_xorps,
 };
 use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
 use super::ssa::reg_alloc::{Allocation, Place};
@@ -4375,7 +4374,7 @@ fn emit_fp_cast(
             let big = code.len();
             code[js_fixup] = (big - js_fixup - 1) as i8 as u8;
             emit_mov_rr(code, t, rn);
-            emit_shr_r_imm8(code, t, 1);
+            emit_shift_ri(code, Mnem::Shr, 8, t, 1);
             emit_and_r_imm32(code, rn, 1);
             emit_rr(code, Mnem::Or, 8, t, rn);
             if res_f32 {
@@ -5114,10 +5113,10 @@ fn emit_shift_by_count_reg(
         ShiftCount::Imm(_) => None,
     };
     let do_shift = |code: &mut Vec<u8>, target: Reg| match op {
-        BinOp::Shl => emit_shl_r_cl(code, target),
-        BinOp::Shr => emit_sar_r_cl(code, target),
-        BinOp::Shru => emit_shr_r_cl(code, target),
-        BinOp::Ror => super::encode::emit_ror_r_cl(code, target),
+        BinOp::Shl => emit_shift_cl(code, Mnem::Shl, 8, target),
+        BinOp::Shr => emit_shift_cl(code, Mnem::Sar, 8, target),
+        BinOp::Shru => emit_shift_cl(code, Mnem::Shr, 8, target),
+        BinOp::Ror => emit_shift_cl(code, Mnem::Ror, 8, target),
         _ => unreachable!("emit_shift_by_count_reg: non-shift op {op:?}"),
     };
     if rd.0 == Reg::RCX.0 {
@@ -5249,7 +5248,13 @@ fn emit_binop_imm(
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::encode::emit_shl_r_imm8(code, rd, (rhs_imm as u64).trailing_zeros() as u8);
+            emit_shift_ri(
+                code,
+                Mnem::Shl,
+                8,
+                rd,
+                (rhs_imm as u64).trailing_zeros() as u8,
+            );
             true
         }
         // Multiply by 3 / 5 / 9 is one `lea rd, [rn + rn*2/4/8]`: a
@@ -5273,28 +5278,28 @@ fn emit_binop_imm(
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::encode::emit_shl_r_imm8(code, rd, shift_amount.unwrap());
+            emit_shift_ri(code, Mnem::Shl, 8, rd, shift_amount.unwrap());
             true
         }
         BinOp::Shr if shift_amount.is_some() => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::encode::emit_sar_r_imm8(code, rd, shift_amount.unwrap());
+            emit_shift_ri(code, Mnem::Sar, 8, rd, shift_amount.unwrap());
             true
         }
         BinOp::Shru if shift_amount.is_some() => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::encode::emit_shr_r_imm8(code, rd, shift_amount.unwrap());
+            emit_shift_ri(code, Mnem::Shr, 8, rd, shift_amount.unwrap());
             true
         }
         BinOp::Ror if shift_amount.is_some() => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::encode::emit_ror_r_imm8(code, rd, shift_amount.unwrap());
+            emit_shift_ri(code, Mnem::Ror, 8, rd, shift_amount.unwrap());
             true
         }
         // `lea rd, [rn +/- imm]` computes the sum into a different

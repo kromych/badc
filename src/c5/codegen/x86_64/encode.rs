@@ -1122,66 +1122,20 @@ pub(crate) fn emit_cqo(code: &mut Vec<u8>) {
 //      emits constant-shift IR ops (`ShlI N`, `ShrI N`) that benefit
 //      from the immediate path.
 
-/// `SHL r/m64, cl`. ModR/M.reg = 4. `cl` is implicit.
-pub(crate) fn emit_shl_r_cl(code: &mut Vec<u8>, dst: Reg) {
-    emit_byte(code, rex(true, false, false, dst.high()));
-    emit_byte(code, 0xD3);
-    emit_byte(code, modrm(0b11, 4, dst.lo()));
+/// `op dst, cl` -- a shift / rotate by the count in `cl` (the `D3` group; the
+/// reg field is the /N digit the catalogue selects from the mnemonic).
+pub(crate) fn emit_shift_cl(code: &mut Vec<u8>, mnem: Mnem, width: u8, dst: Reg) {
+    super::table::encode_into(code, mnem, Some(width), &[rw(dst, width), rw(Reg::RCX, 1)]);
 }
 
-/// `SAR r/m64, cl` -- arithmetic right shift (signed; sign bit
-/// replicates). ModR/M.reg = 7.
-pub(crate) fn emit_sar_r_cl(code: &mut Vec<u8>, dst: Reg) {
-    emit_byte(code, rex(true, false, false, dst.high()));
-    emit_byte(code, 0xD3);
-    emit_byte(code, modrm(0b11, 7, dst.lo()));
-}
-
-/// `SHR r/m64, cl` -- logical right shift (zero fills high bits).
-/// ModR/M.reg = 5. Used by [`BinOp::Shru`] / unsigned `>>`.
-pub(crate) fn emit_shr_r_cl(code: &mut Vec<u8>, dst: Reg) {
-    emit_byte(code, rex(true, false, false, dst.high()));
-    emit_byte(code, 0xD3);
-    emit_byte(code, modrm(0b11, 5, dst.lo()));
-}
-
-/// `SHL r/m64, imm8`. ModR/M.reg = 4, imm at end.
-pub(crate) fn emit_shl_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
-    emit_byte(code, rex(true, false, false, dst.high()));
-    emit_byte(code, 0xC1);
-    emit_byte(code, modrm(0b11, 4, dst.lo()));
-    emit_byte(code, imm);
-}
-
-/// `SAR r/m64, imm8`. ModR/M.reg = 7, imm at end.
-pub(crate) fn emit_sar_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
-    emit_byte(code, rex(true, false, false, dst.high()));
-    emit_byte(code, 0xC1);
-    emit_byte(code, modrm(0b11, 7, dst.lo()));
-    emit_byte(code, imm);
-}
-
-/// `SHR r/m64, imm8` (logical right shift). ModR/M.reg = 5, imm at end.
-pub(crate) fn emit_shr_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
-    emit_byte(code, rex(true, false, false, dst.high()));
-    emit_byte(code, 0xC1);
-    emit_byte(code, modrm(0b11, 5, dst.lo()));
-    emit_byte(code, imm);
-}
-
-/// `ROR r/m64, imm8` (bit-rotate right). ModR/M.reg = 1, imm at end.
-pub(crate) fn emit_ror_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
-    emit_byte(code, rex(true, false, false, dst.high()));
-    emit_byte(code, 0xC1);
-    emit_byte(code, modrm(0b11, 1, dst.lo()));
-    emit_byte(code, imm);
-}
-
-/// `ROR r/m64, cl` (bit-rotate right by `cl`). ModR/M.reg = 1.
-pub(crate) fn emit_ror_r_cl(code: &mut Vec<u8>, dst: Reg) {
-    emit_byte(code, rex(true, false, false, dst.high()));
-    emit_byte(code, 0xD3);
-    emit_byte(code, modrm(0b11, 1, dst.lo()));
+/// `op dst, imm8` -- a shift / rotate by an immediate count (the `C1` group).
+pub(crate) fn emit_shift_ri(code: &mut Vec<u8>, mnem: Mnem, width: u8, dst: Reg, imm: u8) {
+    super::table::encode_into(
+        code,
+        mnem,
+        Some(width),
+        &[rw(dst, width), super::table::Opnd::Imm(imm as i64)],
+    );
 }
 
 // ---- Immediate-form ALU. `ADD r/m64, imm32` / `SUB r/m64, imm32`,

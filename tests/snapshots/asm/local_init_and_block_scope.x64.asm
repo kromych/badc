@@ -53,7 +53,7 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	shlq	$0x1, %rax
+               	shlq	%rax
                	movslq	%eax, %rax
                	cmpq	$0xc, %rax
                	je	<addr>
@@ -108,3 +108,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

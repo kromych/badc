@@ -247,6 +247,45 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         }
         return Err(String::from("inline asm: bad ldr/str operands"));
     }
+    // Load / store pair with a signed, size-scaled offset: `stp Xt1, Xt2,
+    // [Xn, #off]`. Both data registers share a width; the offset is a multiple
+    // of the access size in the range of a signed 7-bit field.
+    if mnemonic == "stp" || mnemonic == "ldp" {
+        if let [
+            Opnd::Reg { num: t1, is64 },
+            Opnd::Reg { num: t2, is64: w2 },
+            Opnd::Mem { base, off },
+        ] = *ops
+        {
+            if is64 != w2 {
+                return Err(String::from(
+                    "inline asm: stp/ldp registers differ in width",
+                ));
+            }
+            let (base_op, scale): (u32, i64) = if is64 {
+                (0xA900_0000, 8)
+            } else {
+                (0x2900_0000, 4)
+            };
+            if off % scale != 0 {
+                return Err(String::from(
+                    "inline asm: stp/ldp offset not a multiple of the access size",
+                ));
+            }
+            let imm = off / scale;
+            if !(-64..=63).contains(&imm) {
+                return Err(String::from("inline asm: stp/ldp offset out of range"));
+            }
+            let l = if mnemonic == "ldp" { 1u32 << 22 } else { 0 };
+            return Ok(base_op
+                | l
+                | ((imm as u32 & 0x7F) << 15)
+                | ((t2 as u32) << 10)
+                | ((base as u32) << 5)
+                | (t1 as u32));
+        }
+        return Err(String::from("inline asm: bad stp/ldp operands"));
+    }
     // The catalogue is sorted by mnemonic (enforced by the generator and the
     // `catalogue_is_sorted` test): binary-search to the mnemonic's run of forms.
     let forms = super::isa_a64_table::FORMS;

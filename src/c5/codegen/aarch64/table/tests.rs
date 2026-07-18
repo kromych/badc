@@ -75,6 +75,22 @@ fn load_store_immediate() {
 }
 
 #[test]
+fn load_store_pair() {
+    let mem = |base: u8, off: i64| Opnd::Mem { base, off };
+    // stp/ldp Xt1, Xt2, [Xn, #off]: signed offset scaled by the access size.
+    assert_eq!(enc("stp", &[x(0), x(1), mem(2, 0)]), 0xA9000440);
+    assert_eq!(enc("stp", &[x(0), x(1), mem(2, 16)]), 0xA9010440);
+    assert_eq!(enc("ldp", &[x(0), x(1), mem(2, 16)]), 0xA9410440);
+    assert_eq!(enc("stp", &[x(0), x(1), mem(2, -64)]), 0xA93C0440); // min imm7
+    assert_eq!(enc("stp", &[w(0), w(1), mem(2, 8)]), 0x29010440); // W scaled by 4
+    // A mismatched width, an unaligned offset, and an out-of-range offset are
+    // rejected rather than silently mis-encoded.
+    assert!(encode("stp", &[x(0), w(1), mem(2, 0)]).is_err());
+    assert!(encode("stp", &[x(0), x(1), mem(2, 4)]).is_err()); // not a multiple of 8
+    assert!(encode("stp", &[x(0), x(1), mem(2, 512)]).is_err()); // imm7 overflow
+}
+
+#[test]
 fn catalogue_is_sorted() {
     // encode() binary-searches the catalogue by mnemonic; the generator emits it
     // sorted. Lock the invariant.

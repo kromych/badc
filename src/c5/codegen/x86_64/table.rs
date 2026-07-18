@@ -133,11 +133,12 @@ pub(crate) struct Form {
 }
 
 /// A resolved operand handed to [`encode`]. Register numbers are architectural
-/// (0..16). Memory is the inline-asm `(%base)` form: `base` holds the address.
+/// (0..16). Memory is a `disp(%base)` form: `base` holds the address, `disp` is
+/// a byte displacement (0 for the bare `(%base)` form).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Opnd {
     Reg { num: u8, width: u8 },
-    Mem { base: u8, width: u8 },
+    Mem { base: u8, disp: i32, width: u8 },
     Imm(i64),
 }
 
@@ -199,18 +200,29 @@ fn modrm_reg(reg: u8, rm: u8) -> u8 {
     0xC0 | ((reg & 7) << 3) | (rm & 7)
 }
 
-fn emit_modrm_mem(code: &mut Vec<u8>, reg: u8, base: u8) {
+fn emit_modrm_mem(code: &mut Vec<u8>, reg: u8, base: u8, disp: i32) {
     let rm = base & 7;
-    if rm == 5 {
-        // rbp / r13: mod=00 rm=101 is RIP-relative, so use mod=01 disp8=0.
-        code.push(0x40 | ((reg & 7) << 3) | rm);
-        code.push(0x00);
-    } else if rm == 4 {
-        // rsp / r12: rm=100 selects SIB; encode base with no index.
-        code.push((reg & 7) << 3 | rm);
+    // The mod field selects the displacement size. rbp / r13 (rm==5) has no
+    // no-displacement form (mod=00 rm=101 is RIP-relative), so a zero
+    // displacement there is still encoded as disp8=0.
+    let mod_ = if disp == 0 && rm != 5 {
+        0
+    } else if (-128..=127).contains(&disp) {
+        1
+    } else {
+        2
+    };
+    if rm == 4 {
+        // rsp / r12: rm=100 selects SIB; base=100 (rsp/r12), index=100 (none).
+        code.push((mod_ << 6) | ((reg & 7) << 3) | 4);
         code.push(0x24);
     } else {
-        code.push((reg & 7) << 3 | rm);
+        code.push((mod_ << 6) | ((reg & 7) << 3) | rm);
+    }
+    match mod_ {
+        1 => code.push(disp as u8),
+        2 => code.extend_from_slice(&disp.to_le_bytes()),
+        _ => {}
     }
 }
 
@@ -338,7 +350,7 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<Vec<u8>, String> {
     if !f.plus_r && (f.reg != RegField::NoReg || f.rm != 255) {
         match rm_op {
             Some(Opnd::Reg { num, .. }) => code.push(modrm_reg(regfield, num)),
-            Some(Opnd::Mem { base, .. }) => emit_modrm_mem(&mut code, regfield, base),
+            Some(Opnd::Mem { base, disp, .. }) => emit_modrm_mem(&mut code, regfield, base, disp),
             _ => return Err(String::from("inline asm: form needs an r/m operand")),
         }
     }

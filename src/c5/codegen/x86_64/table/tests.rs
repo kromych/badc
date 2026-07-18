@@ -15,7 +15,14 @@ fn r(num: u8, width: u8) -> Opnd {
     Opnd::Reg { num, width }
 }
 fn m(base: u8, width: u8) -> Opnd {
-    Opnd::Mem { base, width }
+    Opnd::Mem {
+        base,
+        disp: 0,
+        width,
+    }
+}
+fn md(base: u8, disp: i32, width: u8) -> Opnd {
+    Opnd::Mem { base, disp, width }
 }
 
 #[test]
@@ -174,6 +181,36 @@ fn sizeless_memory_ops() {
 }
 
 #[test]
+fn memory_displacement() {
+    // mov r64, [base + disp] across the mod-field and special-base cases.
+    assert_eq!(enc("mov", &[r(1, 8), md(0, 0, 8)]), [0x48, 0x8b, 0x08]); // [rax]
+    assert_eq!(
+        enc("mov", &[r(1, 8), md(0, 8, 8)]),
+        [0x48, 0x8b, 0x48, 0x08]
+    ); // [rax+8] disp8
+    assert_eq!(
+        enc("mov", &[r(1, 8), md(0, 0x1000, 8)]),
+        [0x48, 0x8b, 0x88, 0x00, 0x10, 0x00, 0x00]
+    ); // [rax+0x1000] disp32
+    assert_eq!(
+        enc("mov", &[r(1, 8), md(5, 0, 8)]),
+        [0x48, 0x8b, 0x4d, 0x00]
+    ); // [rbp] forced disp8=0
+    assert_eq!(
+        enc("mov", &[r(1, 8), md(5, -4, 8)]),
+        [0x48, 0x8b, 0x4d, 0xfc]
+    ); // [rbp-4]
+    assert_eq!(
+        enc("mov", &[r(1, 8), md(4, 16, 8)]),
+        [0x48, 0x8b, 0x4c, 0x24, 0x10]
+    ); // [rsp+16] SIB
+    assert_eq!(
+        enc("mov", &[r(1, 8), md(13, 8, 8)]),
+        [0x49, 0x8b, 0x4d, 0x08]
+    ); // [r13+8] REX.B
+}
+
+#[test]
 fn catalogue_is_sorted() {
     // encode() binary-searches the catalogue by mnemonic, which is correct only
     // if the generator emitted it sorted. Lock the invariant.
@@ -232,14 +269,20 @@ mod differential {
         for o in ops {
             parts.push(match *o {
                 Opnd::Reg { num, width } => String::from(rname(num, width)),
-                Opnd::Mem { base, width } => {
+                Opnd::Mem { base, disp, width } => {
                     let sz = match width {
                         1 => "byte",
                         2 => "word",
                         4 => "dword",
                         _ => "qword",
                     };
-                    alloc::format!("{sz} ptr [{}]", REG64[base as usize])
+                    let b = REG64[base as usize];
+                    if disp == 0 {
+                        alloc::format!("{sz} ptr [{b}]")
+                    } else {
+                        let sign = if disp < 0 { "-" } else { "+" };
+                        alloc::format!("{sz} ptr [{b} {sign} {}]", disp.unsigned_abs())
+                    }
                 }
                 Opnd::Imm(v) => alloc::format!("{v}"),
             });
@@ -468,7 +511,14 @@ mod differential {
         Opnd::Reg { num, width }
     }
     fn m(base: u8, width: u8) -> Opnd {
-        Opnd::Mem { base, width }
+        Opnd::Mem {
+            base,
+            disp: 0,
+            width,
+        }
+    }
+    fn md(base: u8, disp: i32, width: u8) -> Opnd {
+        Opnd::Mem { base, disp, width }
     }
 
     fn sweep_cases() -> Vec<(&'static str, Vec<Opnd>)> {
@@ -602,6 +652,28 @@ mod differential {
                 for &b in &[0u8, 3, 12] {
                     cases.push((mnem, vec![m(b, w)]));
                 }
+            }
+        }
+        // Base + displacement across the special bases (rbp/r13 forced disp8,
+        // rsp/r12 SIB) and displacement sizes (zero, disp8, disp32, negative).
+        for &(base, disp) in &[
+            (0i32, 0i32),
+            (0, 8),
+            (0, 0x1000),
+            (3, -4),
+            (5, 0),
+            (5, -128),
+            (5, 0x2000),
+            (4, 0),
+            (4, 16),
+            (12, 8),
+            (13, 0),
+            (13, 256),
+        ] {
+            let base = base as u8;
+            for mnem in ["mov", "add", "cmp"] {
+                cases.push((mnem, vec![r(1, 8), md(base, disp, 8)]));
+                cases.push((mnem, vec![md(base, disp, 8), r(1, 8)]));
             }
         }
         cases

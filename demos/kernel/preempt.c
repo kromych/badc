@@ -40,11 +40,11 @@ typedef void *EFI_HANDLE;
 /* ---- Scheduler state (shared; the ISR runs with interrupts masked, so no
  *      concurrent mutation of these between ticks on a single core). ---- */
 
-static unsigned long g_ctx_sp[NCTX]; /* saved stack pointer per context */
-static int g_cur;                    /* running context (0 = efi_main) */
+static UINTN g_ctx_sp[NCTX]; /* saved stack pointer per context */
+static int g_cur;            /* running context (0 = efi_main) */
 static volatile unsigned g_ticks;
 static volatile unsigned g_done;
-static unsigned long g_stacks[NTHREADS][STACK_WORDS];
+static UINTN g_stacks[NTHREADS][STACK_WORDS];
 
 /* The serial port is shared by all threads; the lock keeps each printed line
  * from being split by a context switch mid-write. */
@@ -133,13 +133,13 @@ static unsigned short read_cs(void) {
 static void lidt(void *base, unsigned short limit) {
     struct {
         unsigned short limit;
-        unsigned long base;
-    } __attribute__((packed)) idtr = {limit, (unsigned long)base};
+        UINTN base;
+    } __attribute__((packed)) idtr = {limit, (UINTN)base};
     __asm__ volatile("lidt %0" : : "m"(idtr));
 }
 
 static void idt_set(int vec, void *handler, unsigned short cs) {
-    unsigned long addr = (unsigned long)handler;
+    UINTN addr = (UINTN)handler;
     unsigned char *e = &g_idt[vec * 16];
     e[0] = (unsigned char)(addr & 0xFF);
     e[1] = (unsigned char)((addr >> 8) & 0xFF);
@@ -158,7 +158,7 @@ static void idt_set(int vec, void *handler, unsigned short cs) {
 
 /* The scheduler: called from the ISR with the interrupted context's saved
  * stack pointer; returns the stack pointer to switch to. */
-unsigned long schedule(unsigned long sp) {
+UINTN schedule(UINTN sp) {
     g_ctx_sp[g_cur] = sp;
     g_ticks++;
     int next;
@@ -227,21 +227,21 @@ __attribute__((naked)) void timer_isr(void) {
  * `entry(id)`. The saved block mirrors the ISR's push order (r15 lowest, rax
  * highest) followed by the interrupt frame; the argument register (RCX, MS x64
  * ABI) carries the thread id. */
-static void thread_setup(int slot, void (*entry)(int), int id, unsigned long *stack_top) {
-    unsigned long ss, cs;
+static void thread_setup(int slot, void (*entry)(int), int id, UINTN *stack_top) {
+    UINTN ss, cs;
     __asm__ volatile("mov %%ss, %0" : "=r"(ss));
     cs = read_cs();
-    unsigned long *f = stack_top - 20; /* 15 GP + 5 interrupt-frame words */
+    UINTN *f = stack_top - 20; /* 15 GP + 5 interrupt-frame words */
     for (int i = 0; i < 20; i++) {
         f[i] = 0;
     }
-    f[12] = (unsigned long)id;        /* RCX (pop order: r15..r8,rbp,rdi,rsi,rdx,rcx) */
-    f[15] = (unsigned long)entry;     /* RIP */
-    f[16] = cs;                       /* CS */
-    f[17] = 0x202;                    /* RFLAGS: interrupts enabled */
-    f[18] = (unsigned long)(stack_top - 1); /* RSP after iretq (16-aligned - 8) */
-    f[19] = ss;                       /* SS */
-    g_ctx_sp[slot] = (unsigned long)f;
+    f[12] = (UINTN)id;              /* RCX (pop order: r15..r8,rbp,rdi,rsi,rdx,rcx) */
+    f[15] = (UINTN)entry;           /* RIP */
+    f[16] = cs;                     /* CS */
+    f[17] = 0x202;                  /* RFLAGS: interrupts enabled */
+    f[18] = (UINTN)(stack_top - 1); /* RSP after iretq (16-aligned - 8) */
+    f[19] = ss;                     /* SS */
+    g_ctx_sp[slot] = (UINTN)f;
 }
 
 static void sti(void) { __asm__ volatile("sti"); }
@@ -274,7 +274,7 @@ static void serial_putc(char c) {
 /* Preemptive scheduling on AArch64 needs the generic timer, a GIC, and an EL1
  * vector table; not implemented here yet. */
 static void arch_start_scheduler(void) {}
-static void thread_setup(int slot, void (*entry)(int), int id, unsigned long *stack_top) {
+static void thread_setup(int slot, void (*entry)(int), int id, UINTN *stack_top) {
     (void)slot;
     (void)entry;
     (void)id;

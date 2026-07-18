@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""End-to-end smoke for the demos/kernel UEFI kernel.
+"""End-to-end smoke for the demos/kernel UEFI kernels.
 
-Compiles kernel.c with badc for x86_64 and AArch64 (as PE32+ EFI applications)
-and, when QEMU and UEFI firmware are available, boots each under QEMU/OVMF and
-checks the serial output. A correct boot proves badc's inline assembly works
-end to end on real hardware paths: `cpuid` + a table-encoder `bswap` on x86_64,
-`mrs` on AArch64, and raw-byte templates on both.
+Compiles each kernel with badc for x86_64 and AArch64 (as PE32+ EFI
+applications) and, when QEMU and UEFI firmware are available, boots each under
+QEMU/OVMF and checks the serial output.
+
+kernel.c exercises inline assembly on the boot path: `cpuid` + a table-encoder
+`bswap` on x86_64, `mrs` on AArch64, and raw-byte templates on both. preempt.c
+goes further on x86_64: it installs its own IDT and PIT timer, then round-robins
+three threads through a naked-function interrupt service routine that performs
+the context switch, so a correct boot proves badc emits a working ISR (naked
+prologue suppression, explicit-register operands, push/pop, immediate port I/O,
+and a direct `call` to a C symbol) end to end. On AArch64 preempt.c prints a
+banner and halts (generic-timer preemption not implemented yet).
 
 Override the badc binary via `$BADC` (default: `target/release/badc[.exe]`).
 The boot check is skipped (build-only) when QEMU or the firmware is missing.
@@ -25,20 +32,32 @@ EDK2_DEMO = REPO_ROOT / "demos" / "edk2"
 sys.path.insert(0, str(EDK2_DEMO))
 import qemu_efi  # noqa: E402  (path set above)
 
-# (badc target, qemu-efi arch, qemu binary, expected serial markers).
+# (badc target, qemu-efi arch, qemu binary).
 TARGETS = [
+    ("windows-x64", "x64", "qemu-system-x86_64"),
+    ("windows-arm64", "aarch64", "qemu-system-aarch64"),
+]
+
+# (kernel source, {arch: expected serial markers}).
+KERNELS = [
     (
-        "windows-x64",
-        "x64",
-        "qemu-system-x86_64",
-        ["badc kernel: hello", "cpuid vendor:", "bswap: 0x0807060504030201",
-         "rawbyte: ok", "BADC-KERNEL-OK"],
+        "kernel.c",
+        {
+            "x64": ["badc kernel: hello", "cpuid vendor:",
+                    "bswap: 0x0807060504030201", "rawbyte: ok", "BADC-KERNEL-OK"],
+            "aarch64": ["badc kernel: hello", "ctr_el0: 0x", "rawbyte: ok",
+                        "BADC-KERNEL-OK"],
+        },
     ),
     (
-        "windows-arm64",
-        "aarch64",
-        "qemu-system-aarch64",
-        ["badc kernel: hello", "ctr_el0: 0x", "rawbyte: ok", "BADC-KERNEL-OK"],
+        "preempt.c",
+        {
+            "x64": ["BADC-PREEMPT: start", "[thread 0]", "[thread 1]",
+                    "[thread 2]", "BADC-PREEMPT: scheduler done",
+                    "BADC-PREEMPT-OK"],
+            "aarch64": ["BADC-PREEMPT: start", "aarch64 preemption pending",
+                        "BADC-PREEMPT-OK"],
+        },
     ),
 ]
 
@@ -69,42 +88,46 @@ def main() -> int:
     log(f"badc={badc}")
     failures = 0
     with tempfile.TemporaryDirectory(prefix="badc-kernel-") as work:
-        for target, arch, qemu, expect in TARGETS:
-            efi = Path(work) / f"kernel-{arch}.efi"
-            cmd = [str(badc), f"--target={target}", str(HERE / "kernel.c"), "-o", str(efi)]
-            r = subprocess.run(cmd, capture_output=True, text=True)
-            if r.returncode != 0 or not efi.is_file():
-                log(f"[{arch}] FAIL: compile\n{r.stderr.strip()}")
-                failures += 1
-                continue
-            log(f"[{arch}] compiled {efi.name} ({efi.stat().st_size} bytes)")
+        for source, markers in KERNELS:
+            stem = Path(source).stem
+            for target, arch, qemu in TARGETS:
+                tag = f"{stem}/{arch}"
+                efi = Path(work) / f"{stem}-{arch}.efi"
+                cmd = [str(badc), f"--target={target}", str(HERE / source), "-o", str(efi)]
+                r = subprocess.run(cmd, capture_output=True, text=True)
+                if r.returncode != 0 or not efi.is_file():
+                    log(f"[{tag}] FAIL: compile\n{r.stderr.strip()}")
+                    failures += 1
+                    continue
+                log(f"[{tag}] compiled {efi.name} ({efi.stat().st_size} bytes)")
 
-            # A badc-built emulator (demos/qemu) may stand in for the system
-            # QEMU via $QEMU_SYSTEM_X64 / $QEMU_SYSTEM_AARCH64.
-            qemu_bin = os.environ.get(f"QEMU_SYSTEM_{arch.upper()}", qemu)
-            resolved = shutil.which(qemu_bin) or (qemu_bin if os.path.isfile(qemu_bin) else None)
-            if not resolved:
-                log(f"[{arch}] skip boot: {qemu_bin} not found")
-                continue
-            if not firmware_present(arch):
-                log(f"[{arch}] skip boot: UEFI firmware not found")
-                continue
+                # A badc-built emulator (demos/qemu) may stand in for the system
+                # QEMU via $QEMU_SYSTEM_X64 / $QEMU_SYSTEM_AARCH64.
+                qemu_bin = os.environ.get(f"QEMU_SYSTEM_{arch.upper()}", qemu)
+                resolved = shutil.which(qemu_bin) or (qemu_bin if os.path.isfile(qemu_bin) else None)
+                if not resolved:
+                    log(f"[{tag}] skip boot: {qemu_bin} not found")
+                    continue
+                if not firmware_present(arch):
+                    log(f"[{tag}] skip boot: UEFI firmware not found")
+                    continue
 
-            ok, _text, missing = qemu_efi.run(str(efi), expect, arch=arch, timeout=60)
-            if ok:
-                log(f"[{arch}] boot OK under {os.path.basename(resolved)}: {expect}")
-            elif os.environ.get("BADC_KERNEL_BOOT_OPTIONAL"):
-                # Build is the hard gate; the boot is best-effort until observed
-                # green on a given runner, then the flag is dropped.
-                log(f"[{arch}] boot best-effort: missing {missing} (BADC_KERNEL_BOOT_OPTIONAL)")
-            else:
-                log(f"[{arch}] FAIL: boot missing {missing}")
-                failures += 1
+                expect = markers[arch]
+                ok, _text, missing = qemu_efi.run(str(efi), expect, arch=arch, timeout=60)
+                if ok:
+                    log(f"[{tag}] boot OK under {os.path.basename(resolved)}: {expect}")
+                elif os.environ.get("BADC_KERNEL_BOOT_OPTIONAL"):
+                    # Build is the hard gate; the boot is best-effort until observed
+                    # green on a given runner, then the flag is dropped.
+                    log(f"[{tag}] boot best-effort: missing {missing} (BADC_KERNEL_BOOT_OPTIONAL)")
+                else:
+                    log(f"[{tag}] FAIL: boot missing {missing}")
+                    failures += 1
 
     if failures:
-        log(f"FAIL: {failures} target(s) failed")
+        log(f"FAIL: {failures} kernel/target combination(s) failed")
         return 1
-    log("PASS: kernel built (and, where QEMU was available, booted) on all targets")
+    log("PASS: kernels built (and, where QEMU was available, booted) on all targets")
     return 0
 
 

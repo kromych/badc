@@ -53,8 +53,15 @@ the inline-asm smoke by taking over the interrupt vector table and the timer,
 so it is a live test of badc emitting a real interrupt service routine -- a
 `__attribute__((naked))` function whose body is the context switch.
 
-It is the target spec for two compiler features it depends on:
-`__attribute__((naked))` and inline-asm references to C symbols (the ISR's
-`call schedule`). Until those land it is not built by the smoke; the x86_64
-path is complete and the AArch64 path (generic timer + GIC + EL1 vectors) is
-pending.
+On x86_64 it is complete and the smoke boots it: the serial output shows the
+three threads round-robin under the timer, then `efi_main` resumes after the
+scheduler stops and prints `BADC-PREEMPT-OK`. It exercises the full inline-asm
+surface an ISR needs -- naked prologue suppression, explicit-register operands,
+`push`/`pop`, immediate port I/O, and a direct `call` to a C symbol
+(`call schedule`). The AArch64 path (generic timer + GIC + EL1 vectors) is not
+implemented yet; there the kernel prints a banner and halts.
+
+All addresses and saved stack pointers use the pointer-width `UINTN`
+(`unsigned long long`), not `unsigned long`, because the EFI targets are LLP64
+(`long` is 32-bit); a 32-bit IDT base or saved SP would fault on the first
+tick.

@@ -138,6 +138,22 @@ fn sib(scale: u8, index: u8, base: u8) -> u8 {
 
 /// Append a single byte to the code buffer. Wrapper exists for
 /// symmetry with [`emit_bytes`]; both funnel through `Vec::push`.
+/// A 64-bit register as a table-encoder operand.
+fn r64(r: Reg) -> super::table::Opnd {
+    super::table::Opnd::Reg { num: r.0, width: 8 }
+}
+
+/// A 64-bit `[base + disp]` memory reference as a table-encoder operand.
+fn m64(base: Reg, disp: i32) -> super::table::Opnd {
+    super::table::Opnd::Mem {
+        base: base.0,
+        index: None,
+        scale: 1,
+        disp,
+        width: 8,
+    }
+}
+
 fn emit_byte(code: &mut Vec<u8>, b: u8) {
     code.push(b);
 }
@@ -183,9 +199,7 @@ pub(crate) fn emit_mov_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     if dst == src {
         return;
     }
-    emit_byte(code, rex(true, src.high(), false, dst.high()));
-    emit_byte(code, 0x89);
-    emit_byte(code, modrm(0b11, src.lo(), dst.lo()));
+    super::table::encode_into(code, "mov", Some(8), &[r64(dst), r64(src)]);
 }
 
 /// `mov r32, r32` (89 /r without REX.W). Writing a 32-bit register
@@ -502,32 +516,32 @@ pub(crate) fn emit_add_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
 
 /// `ADD dst, src` -- 64-bit, `dst += src`.
 pub(crate) fn emit_add_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_alu_rr(code, 0x01, dst, src);
+    alu_rr(code, "add", dst, src);
 }
 
 /// `SUB dst, src` -- 64-bit, `dst -= src`.
 pub(crate) fn emit_sub_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_alu_rr(code, 0x29, dst, src);
+    alu_rr(code, "sub", dst, src);
 }
 
 /// `AND dst, src` -- 64-bit, `dst &= src`.
 pub(crate) fn emit_and_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_alu_rr(code, 0x21, dst, src);
+    alu_rr(code, "and", dst, src);
 }
 
 /// `OR dst, src` -- 64-bit, `dst |= src`.
 pub(crate) fn emit_or_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_alu_rr(code, 0x09, dst, src);
+    alu_rr(code, "or", dst, src);
 }
 
 /// `XOR dst, src` -- 64-bit, `dst ^= src`.
 pub(crate) fn emit_xor_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_alu_rr(code, 0x31, dst, src);
+    alu_rr(code, "xor", dst, src);
 }
 
 /// `CMP dst, src` -- 64-bit; sets flags = `dst - src` without storing.
 pub(crate) fn emit_cmp_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_alu_rr(code, 0x39, dst, src);
+    alu_rr(code, "cmp", dst, src);
 }
 
 /// `TEST dst, src` -- `dst & src`, setting ZF / SF (and clearing
@@ -536,22 +550,19 @@ pub(crate) fn emit_cmp_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 /// ZF / SF / CF / OF match, so every dependent `jcc` / `setcc` is
 /// unchanged.
 pub(crate) fn emit_test_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_alu_rr(code, 0x85, dst, src);
+    alu_rr(code, "test", dst, src);
 }
 
-fn emit_alu_rr(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) {
-    emit_byte(code, rex(true, src.high(), false, dst.high()));
-    emit_byte(code, opcode);
-    emit_byte(code, modrm(0b11, src.lo(), dst.lo()));
+/// A 64-bit `op dst, src` between two registers, routed through the table
+/// encoder (the `r/m, r` direction: `dst` is r/m, `src` is reg).
+fn alu_rr(code: &mut Vec<u8>, mnemonic: &str, dst: Reg, src: Reg) {
+    super::table::encode_into(code, mnemonic, Some(8), &[r64(dst), r64(src)]);
 }
 
 /// `IMUL dst, src` -- two-operand signed multiply, `dst = dst * src`.
 /// Encoding: `REX.W + 0F AF /r`.
 pub(crate) fn emit_imul_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_byte(code, rex(true, dst.high(), false, src.high()));
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0xAF);
-    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+    super::table::encode_into(code, "imul", Some(8), &[r64(dst), r64(src)]);
 }
 
 // ---- ALU with a memory source: `OP dst, [base + disp]`. The
@@ -560,40 +571,38 @@ pub(crate) fn emit_imul_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 //      operand is read in place, avoiding a scratch register the
 //      surrounding allocation may not have free.
 
-fn emit_alu_r_mem(code: &mut Vec<u8>, opcode: u8, dst: Reg, base: Reg, disp: i32) {
-    emit_byte(code, rex(true, dst.high(), false, base.high()));
-    emit_byte(code, opcode);
-    emit_modrm_mem(code, dst, base, disp);
+fn emit_alu_r_mem(code: &mut Vec<u8>, mnemonic: &str, dst: Reg, base: Reg, disp: i32) {
+    super::table::encode_into(code, mnemonic, Some(8), &[r64(dst), m64(base, disp)]);
 }
 
 /// `ADD dst, [base + disp]` -- 64-bit, `dst += [mem]`.
 pub(crate) fn emit_add_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_alu_r_mem(code, 0x03, dst, base, disp);
+    emit_alu_r_mem(code, "add", dst, base, disp);
 }
 
 /// `SUB dst, [base + disp]` -- 64-bit, `dst -= [mem]`.
 pub(crate) fn emit_sub_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_alu_r_mem(code, 0x2B, dst, base, disp);
+    emit_alu_r_mem(code, "sub", dst, base, disp);
 }
 
 /// `AND dst, [base + disp]` -- 64-bit, `dst &= [mem]`.
 pub(crate) fn emit_and_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_alu_r_mem(code, 0x23, dst, base, disp);
+    emit_alu_r_mem(code, "and", dst, base, disp);
 }
 
 /// `OR dst, [base + disp]` -- 64-bit, `dst |= [mem]`.
 pub(crate) fn emit_or_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_alu_r_mem(code, 0x0B, dst, base, disp);
+    emit_alu_r_mem(code, "or", dst, base, disp);
 }
 
 /// `XOR dst, [base + disp]` -- 64-bit, `dst ^= [mem]`.
 pub(crate) fn emit_xor_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_alu_r_mem(code, 0x33, dst, base, disp);
+    emit_alu_r_mem(code, "xor", dst, base, disp);
 }
 
 /// `CMP dst, [base + disp]` -- 64-bit; flags = `dst - [mem]`.
 pub(crate) fn emit_cmp_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
-    emit_alu_r_mem(code, 0x3B, dst, base, disp);
+    emit_alu_r_mem(code, "cmp", dst, base, disp);
 }
 
 /// `IMUL dst, [base + disp]` -- two-operand signed multiply with a

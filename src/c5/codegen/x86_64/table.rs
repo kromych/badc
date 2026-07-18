@@ -316,6 +316,21 @@ pub(crate) fn encode(
     })
 }
 
+/// Encode one instruction directly into `code`. The native emitter's migrated
+/// families use this: the operands are always a form the catalogue covers, so a
+/// failure is a codegen invariant violation and panics.
+pub(crate) fn encode_into(
+    code: &mut Vec<u8>,
+    mnemonic: &str,
+    width_override: Option<u8>,
+    ops: &[Opnd],
+) {
+    match encode(mnemonic, width_override, ops) {
+        Ok(bytes) => code.extend_from_slice(&bytes),
+        Err(e) => panic!("native emit: {e}"),
+    }
+}
+
 fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<Vec<u8>, String> {
     let mut code = Vec::new();
     // Operand-size prefix for a 16-bit operation. Suppressed for a form with no

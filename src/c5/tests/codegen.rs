@@ -2672,11 +2672,16 @@ fn external_bool_return_is_masked_before_branch() {
     )
     .expect("emit relocatable");
     let text = elf64_section(&obj, ".text").expect(".text");
-    // `and $0xff, %rax` == 48 81 e0 ff 00 00 00. The bool return must be
-    // reduced to its low byte before the conditional branch.
+    // The bool return must be reduced to its low byte before the conditional
+    // branch. `and $0xff, %rax` is the accumulator form 48 25 ff 00 00 00 --
+    // the catalogue's shortest encoding for rax; 48 81 e0 ff 00 00 00 is the
+    // equivalent 81 /4 form a non-accumulator register would take.
     let masks = text
-        .windows(7)
-        .any(|w| w == [0x48, 0x81, 0xe0, 0xff, 0x00, 0x00, 0x00]);
+        .windows(6)
+        .any(|w| w == [0x48, 0x25, 0xff, 0x00, 0x00, 0x00])
+        || text
+            .windows(7)
+            .any(|w| w == [0x48, 0x81, 0xe0, 0xff, 0x00, 0x00, 0x00]);
     assert!(
         masks,
         "expected the external _Bool return to be masked to its low byte before use"

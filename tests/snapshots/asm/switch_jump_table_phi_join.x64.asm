@@ -20,24 +20,23 @@ Disassembly of section .text:
                	jmpq	*%r10
                	xorb	%al, (%rax)
                	addb	%al, (%rax)
-               	popq	%rdi
+               	popq	%rsp
                	addb	%al, (%rax)
-               	addb	%ah, (%rcx)
+               	addb	%bl, (%rsi)
                	addb	%al, (%rax)
-               	movslq	(%rax), %eax
+               	<unknown>
                	addb	%al, (%rax)
-               	addb	%al, %gs:(%rax)
-               	addb	%ah, (%rdi)
+               	addb	%ah, (%rdx)
                	addb	%al, (%rax)
-               	imull	$0x6b0000, (%rax), %eax # imm = 0x6B0000
+               	addb	%al, %fs:(%rax)
+               	addb	%ah, (%rsi)
                	addb	%al, (%rax)
-               	insl	%dx, %es:(%rdi)
+               	pushq	$0x6a000000             # imm = 0x6A000000
                	addb	%al, (%rax)
-               	addb	%ch, (%rdi)
+               	addb	%ch, (%rax,%rax)
+               	addb	%ch, (%rsi)
                	addb	%al, (%rax)
-               	jno	<addr>
-               	addb	%al, (%rax)
-               	jp	<addr>
+               	ja	<addr>
                	addb	%al, (%rax)
                	incq	%rsi
                	leaq	0x2(%rsi), %rdx

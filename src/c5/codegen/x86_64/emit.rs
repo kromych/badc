@@ -45,18 +45,18 @@ use super::DataFixup;
 use super::GotFixup;
 use super::Target;
 use super::encode::{
-    Cc, Fixup, PltCallFixup, Reg, emit_add_rsp_imm32, emit_addsd, emit_addss, emit_and_r_imm32,
-    emit_cvtsd2ss, emit_cvtsi2sd, emit_cvtsi2ss, emit_cvtss2sd, emit_cvttsd2si, emit_cvttss2si,
-    emit_divsd, emit_divss, emit_imul_r_mem, emit_jcc_rel8, emit_jmp_rel8, emit_lea_r_mem,
+    Cc, Fixup, PltCallFixup, Reg, emit_add_rsp_imm32, emit_addsd, emit_addss, emit_cvtsd2ss,
+    emit_cvtsi2sd, emit_cvtsi2ss, emit_cvtss2sd, emit_cvttsd2si, emit_cvttss2si, emit_divsd,
+    emit_divss, emit_imul_r_mem, emit_jcc_rel8, emit_jmp_rel8, emit_lea_r_mem,
     emit_lock_cmpxchg_mem_r, emit_lock_xadd_mem_r, emit_mov_mem_r, emit_mov_r_imm64,
     emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm, emit_movq_xmm_r, emit_movsd_mem_xmm,
     emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem, emit_movsx_r_mem16,
     emit_movsxd_r_mem, emit_movups_mem_xmm, emit_movups_xmm_mem, emit_movzx_r_mem16,
-    emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_pop_r, emit_push_r, emit_ret, emit_rm, emit_rr,
-    emit_setcc_r8, emit_shift_cl, emit_shift_ri, emit_sub_rsp_imm32, emit_subsd, emit_subss,
-    emit_ucomisd, emit_ucomiss, emit_unary_r, emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd,
-    emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss,
-    emit_xchg_mem_r, emit_xchg_rr, emit_xorpd, emit_xorps,
+    emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_pop_r, emit_push_r, emit_ret, emit_ri, emit_rm,
+    emit_rr, emit_setcc_r8, emit_shift_cl, emit_shift_ri, emit_sub_rsp_imm32, emit_subsd,
+    emit_subss, emit_ucomisd, emit_ucomiss, emit_unary_r, emit_vfmadd231sd, emit_vfmadd231ss,
+    emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd,
+    emit_vfnmsub231ss, emit_xchg_mem_r, emit_xchg_rr, emit_xorpd, emit_xorps,
 };
 use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
 use super::ssa::reg_alloc::{Allocation, Place};
@@ -2329,8 +2329,8 @@ fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, abi: super::Abi) {
     // Touch the freshly-decremented page so the guard-page handler
     // commits it and relocates the guard one page lower.
     super::encode::emit_mov_mem_r(code, Reg::RSP, 0, Reg::R11);
-    super::encode::emit_sub_r_imm32(code, Reg::R11, PAGE as i32);
-    super::encode::emit_cmp_r_imm32(code, Reg::R11, PAGE as i32);
+    super::encode::emit_ri(code, Mnem::Sub, 8, Reg::R11, PAGE as i32);
+    super::encode::emit_ri(code, Mnem::Cmp, 8, Reg::R11, PAGE as i32);
     // jae loop_start (unsigned: r11 still at least one page).
     let after_cmp = code.len();
     super::encode::emit_jcc_rel32(code, super::encode::Cc::Ae, 0);
@@ -4375,7 +4375,7 @@ fn emit_fp_cast(
             code[js_fixup] = (big - js_fixup - 1) as i8 as u8;
             emit_mov_rr(code, t, rn);
             emit_shift_ri(code, Mnem::Shr, 8, t, 1);
-            emit_and_r_imm32(code, rn, 1);
+            emit_ri(code, Mnem::And, 8, rn, 1);
             emit_rr(code, Mnem::Or, 8, t, rn);
             if res_f32 {
                 emit_cvtsi2ss(code, dd, t);
@@ -5348,14 +5348,14 @@ fn emit_binop_imm(
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::encode::emit_add_r_imm32(code, rd, rhs_imm as i32);
+            super::encode::emit_ri(code, Mnem::Add, 8, rd, rhs_imm as i32);
             true
         }
         BinOp::Sub if imm_fits_i32 => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::encode::emit_sub_r_imm32(code, rd, rhs_imm as i32);
+            super::encode::emit_ri(code, Mnem::Sub, 8, rd, rhs_imm as i32);
             true
         }
         // `x & 0xffffffff` is a zero-extension of the low 32 bits. A
@@ -5372,21 +5372,21 @@ fn emit_binop_imm(
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::encode::emit_and_r_imm32(code, rd, rhs_imm as i32);
+            super::encode::emit_ri(code, Mnem::And, 8, rd, rhs_imm as i32);
             true
         }
         BinOp::Or if imm_fits_i32 => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::encode::emit_or_r_imm32(code, rd, rhs_imm as i32);
+            super::encode::emit_ri(code, Mnem::Or, 8, rd, rhs_imm as i32);
             true
         }
         BinOp::Xor if imm_fits_i32 => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
-            super::encode::emit_xor_r_imm32(code, rd, rhs_imm as i32);
+            super::encode::emit_ri(code, Mnem::Xor, 8, rd, rhs_imm as i32);
             true
         }
         _ => false,
@@ -5412,7 +5412,7 @@ fn emit_binop_imm(
         if rhs_imm == 0 {
             super::encode::emit_rr(code, Mnem::Test, 8, rn, rn);
         } else {
-            super::encode::emit_cmp_r_imm32(code, rn, rhs_imm as i32);
+            super::encode::emit_ri(code, Mnem::Cmp, 8, rn, rhs_imm as i32);
         }
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return true;
@@ -6281,7 +6281,7 @@ fn emit_va_arg_sysv(
     // allocator register that an earlier draft overwrote via rcx).
     super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
     // cmp r10d, bound ; jae use_overflow
-    super::encode::emit_cmp_r_imm32(code, SCRATCH_R10, bound);
+    super::encode::emit_ri(code, Mnem::Cmp, 8, SCRATCH_R10, bound);
     super::encode::emit_jcc_rel32(code, Cc::Ae, 0);
     let jae_rel32_at = code.len() - 4;
     // --- register-save path ---
@@ -6454,7 +6454,7 @@ fn emit_inline_asm(
     }
     // Discard the captured slots and restore the saved registers.
     if n > 0 {
-        super::encode::emit_add_r_imm32(code, Reg::RSP, (n * 8) as i32);
+        super::encode::emit_ri(code, Mnem::Add, 8, Reg::RSP, (n * 8) as i32);
     }
     for &r in save_list.iter().rev() {
         super::encode::emit_pop_r(code, Reg(r));
@@ -6893,8 +6893,8 @@ fn emit_intrinsic(
             if n.0 != size_reg.0 {
                 emit_mov_rr(code, size_reg, n);
             }
-            super::encode::emit_add_r_imm32(code, size_reg, 15);
-            super::encode::emit_and_r_imm32(code, size_reg, -16);
+            super::encode::emit_ri(code, Mnem::Add, 8, size_reg, 15);
+            super::encode::emit_ri(code, Mnem::And, 8, size_reg, -16);
             let disp = -(current_alloca_top as i32);
             emit_lea_r_mem(code, addr_reg, Reg::RBP, disp);
             emit_mov_r_mem(code, rd_phys, addr_reg, 0);

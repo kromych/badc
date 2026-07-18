@@ -1130,44 +1130,18 @@ pub(crate) fn emit_shift_ri(code: &mut Vec<u8>, mnem: Mnem, width: u8, dst: Reg,
     );
 }
 
-// ---- Immediate-form ALU. `ADD r/m64, imm32` / `SUB r/m64, imm32`,
-//      etc. All share opcode `81` with a different /N digit.
+// ---- Immediate-form ALU (`ADD r/m, imm`, `SUB r/m, imm`, ...). The catalogue
+//      selects the shortest form: the `83` imm8 group when the value fits a
+//      signed byte, the accumulator form for `rax`, else the `81` imm32 group.
 
-fn emit_alu_r_imm32(code: &mut Vec<u8>, digit: u8, dst: Reg, imm: i32) {
-    emit_byte(code, rex(true, false, false, dst.high()));
-    emit_byte(code, 0x81);
-    emit_byte(code, modrm(0b11, digit, dst.lo()));
-    emit_i32(code, imm);
-}
-
-/// `ADD r64, imm32` -- 32-bit immediate, sign-extended to 64.
-pub(crate) fn emit_add_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
-    emit_alu_r_imm32(code, 0, dst, imm);
-}
-
-/// `SUB r64, imm32`.
-pub(crate) fn emit_sub_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
-    emit_alu_r_imm32(code, 5, dst, imm);
-}
-
-/// `AND r64, imm32`.
-pub(crate) fn emit_and_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
-    emit_alu_r_imm32(code, 4, dst, imm);
-}
-
-/// `OR r64, imm32`.
-pub(crate) fn emit_or_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
-    emit_alu_r_imm32(code, 1, dst, imm);
-}
-
-/// `XOR r64, imm32`.
-pub(crate) fn emit_xor_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
-    emit_alu_r_imm32(code, 6, dst, imm);
-}
-
-/// `CMP r64, imm32` -- sets flags = `dst - imm`.
-pub(crate) fn emit_cmp_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
-    emit_alu_r_imm32(code, 7, dst, imm);
+/// `op dst, imm` -- a register-immediate ALU operation (imm sign-extended).
+pub(crate) fn emit_ri(code: &mut Vec<u8>, mnem: Mnem, width: u8, dst: Reg, imm: i32) {
+    super::table::encode_into(
+        code,
+        mnem,
+        Some(width),
+        &[rw(dst, width), super::table::Opnd::Imm(imm as i64)],
+    );
 }
 
 // ---- 8-bit memory + setcc. Used for `LoadKind::U8` /

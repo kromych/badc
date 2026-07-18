@@ -17,12 +17,29 @@ fn r(num: u8, width: u8) -> Opnd {
 fn m(base: u8, width: u8) -> Opnd {
     Opnd::Mem {
         base,
+        index: None,
+        scale: 1,
         disp: 0,
         width,
     }
 }
 fn md(base: u8, disp: i32, width: u8) -> Opnd {
-    Opnd::Mem { base, disp, width }
+    Opnd::Mem {
+        base,
+        index: None,
+        scale: 1,
+        disp,
+        width,
+    }
+}
+fn msib(base: u8, index: u8, scale: u8, disp: i32, width: u8) -> Opnd {
+    Opnd::Mem {
+        base,
+        index: Some(index),
+        scale,
+        disp,
+        width,
+    }
 }
 
 #[test]
@@ -211,6 +228,27 @@ fn memory_displacement() {
 }
 
 #[test]
+fn memory_sib() {
+    // base + scaled index (+ disp): the SIB byte packs scale / index / base.
+    assert_eq!(
+        enc("mov", &[r(1, 8), msib(0, 3, 4, 0, 8)]),
+        [0x48, 0x8b, 0x0c, 0x98]
+    ); // [rax+rbx*4]
+    assert_eq!(
+        enc("mov", &[r(1, 8), msib(0, 3, 4, 8, 8)]),
+        [0x48, 0x8b, 0x4c, 0x98, 0x08]
+    ); // [rax+rbx*4+8]
+    assert_eq!(
+        enc("mov", &[r(1, 8), msib(8, 9, 8, 0, 8)]),
+        [0x4b, 0x8b, 0x0c, 0xc8]
+    ); // [r8+r9*8] REX.X/B
+    assert_eq!(
+        enc("mov", &[r(1, 8), msib(5, 0, 2, 0, 8)]),
+        [0x48, 0x8b, 0x4c, 0x45, 0x00]
+    ); // [rbp+rax*2] forced disp8=0
+}
+
+#[test]
 fn catalogue_is_sorted() {
     // encode() binary-searches the catalogue by mnemonic, which is correct only
     // if the generator emitted it sorted. Lock the invariant.
@@ -269,7 +307,13 @@ mod differential {
         for o in ops {
             parts.push(match *o {
                 Opnd::Reg { num, width } => String::from(rname(num, width)),
-                Opnd::Mem { base, disp, width } => {
+                Opnd::Mem {
+                    base,
+                    index,
+                    scale,
+                    disp,
+                    width,
+                } => {
                     let sz = match width {
                         1 => "byte",
                         2 => "word",
@@ -277,11 +321,15 @@ mod differential {
                         _ => "qword",
                     };
                     let b = REG64[base as usize];
+                    let idx = match index {
+                        Some(i) => alloc::format!(" + {}*{scale}", REG64[i as usize]),
+                        None => String::new(),
+                    };
                     if disp == 0 {
-                        alloc::format!("{sz} ptr [{b}]")
+                        alloc::format!("{sz} ptr [{b}{idx}]")
                     } else {
                         let sign = if disp < 0 { "-" } else { "+" };
-                        alloc::format!("{sz} ptr [{b} {sign} {}]", disp.unsigned_abs())
+                        alloc::format!("{sz} ptr [{b}{idx} {sign} {}]", disp.unsigned_abs())
                     }
                 }
                 Opnd::Imm(v) => alloc::format!("{v}"),
@@ -513,12 +561,29 @@ mod differential {
     fn m(base: u8, width: u8) -> Opnd {
         Opnd::Mem {
             base,
+            index: None,
+            scale: 1,
             disp: 0,
             width,
         }
     }
     fn md(base: u8, disp: i32, width: u8) -> Opnd {
-        Opnd::Mem { base, disp, width }
+        Opnd::Mem {
+            base,
+            index: None,
+            scale: 1,
+            disp,
+            width,
+        }
+    }
+    fn msib(base: u8, index: u8, scale: u8, disp: i32, width: u8) -> Opnd {
+        Opnd::Mem {
+            base,
+            index: Some(index),
+            scale,
+            disp,
+            width,
+        }
     }
 
     fn sweep_cases() -> Vec<(&'static str, Vec<Opnd>)> {
@@ -674,6 +739,17 @@ mod differential {
             for mnem in ["mov", "add", "cmp"] {
                 cases.push((mnem, vec![r(1, 8), md(base, disp, 8)]));
                 cases.push((mnem, vec![md(base, disp, 8), r(1, 8)]));
+            }
+        }
+        // SIB: base + index*scale (+ disp). Index skips rsp (4), whose SIB slot
+        // means "no index". The high registers exercise REX.X / REX.B.
+        for &base in &[0u8, 3, 5, 8, 12, 13] {
+            for &index in &[0u8, 3, 9, 13] {
+                for &scale in &[1u8, 2, 4, 8] {
+                    for &disp in &[0i32, 8, -4, 0x1000] {
+                        cases.push(("mov", vec![r(1, 8), msib(base, index, scale, disp, 8)]));
+                    }
+                }
             }
         }
         cases

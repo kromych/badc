@@ -133,12 +133,22 @@ pub(crate) struct Form {
 }
 
 /// A resolved operand handed to [`encode`]. Register numbers are architectural
-/// (0..16). Memory is a `disp(%base)` form: `base` holds the address, `disp` is
-/// a byte displacement (0 for the bare `(%base)` form).
+/// (0..16). Memory is a `disp(%base, %index, scale)` form: `base` holds the
+/// address, `disp` is a byte displacement (0 for the bare form), and an optional
+/// scaled `index` selects a SIB encoding (`scale` in {1,2,4,8}).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Opnd {
-    Reg { num: u8, width: u8 },
-    Mem { base: u8, disp: i32, width: u8 },
+    Reg {
+        num: u8,
+        width: u8,
+    },
+    Mem {
+        base: u8,
+        index: Option<u8>,
+        scale: u8,
+        disp: i32,
+        width: u8,
+    },
     Imm(i64),
 }
 
@@ -200,11 +210,14 @@ fn modrm_reg(reg: u8, rm: u8) -> u8 {
     0xC0 | ((reg & 7) << 3) | (rm & 7)
 }
 
-fn emit_modrm_mem(code: &mut Vec<u8>, reg: u8, base: u8, disp: i32) {
+fn emit_modrm_mem(code: &mut Vec<u8>, reg: u8, base: u8, index: Option<u8>, scale: u8, disp: i32) {
     let rm = base & 7;
-    // The mod field selects the displacement size. rbp / r13 (rm==5) has no
-    // no-displacement form (mod=00 rm=101 is RIP-relative), so a zero
-    // displacement there is still encoded as disp8=0.
+    // A SIB byte is required for a scaled index, and for an rsp/r12 base
+    // (rm==100 otherwise means "SIB follows").
+    let use_sib = index.is_some() || rm == 4;
+    // The mod field selects the displacement size. rbp / r13 (rm==5, including
+    // as a SIB base) has no no-displacement form (mod=00 there means RIP or a
+    // base-less SIB), so a zero displacement is still encoded as disp8=0.
     let mod_ = if disp == 0 && rm != 5 {
         0
     } else if (-128..=127).contains(&disp) {
@@ -212,10 +225,17 @@ fn emit_modrm_mem(code: &mut Vec<u8>, reg: u8, base: u8, disp: i32) {
     } else {
         2
     };
-    if rm == 4 {
-        // rsp / r12: rm=100 selects SIB; base=100 (rsp/r12), index=100 (none).
+    if use_sib {
+        let scale_bits = match scale {
+            2 => 1,
+            4 => 2,
+            8 => 3,
+            _ => 0,
+        };
+        // index 100 = no index.
+        let idx = index.map(|i| i & 7).unwrap_or(4);
         code.push((mod_ << 6) | ((reg & 7) << 3) | 4);
-        code.push(0x24);
+        code.push((scale_bits << 6) | (idx << 3) | rm);
     } else {
         code.push((mod_ << 6) | ((reg & 7) << 3) | rm);
     }
@@ -315,13 +335,15 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<Vec<u8>, String> {
     };
     let reg_hi = reg_op.map(|o| reg_num(o) >= 8).unwrap_or(false);
     let rm_hi = rm_op.map(|o| reg_num(o) >= 8).unwrap_or(false);
+    // REX.X extends a SIB index register.
+    let index_hi = matches!(rm_op, Some(Opnd::Mem { index: Some(i), .. }) if i >= 8);
     // A byte operation naming spl/bpl/sil/dil (4..8) needs a REX to reach the
     // new byte registers rather than ah/ch/dh/bh.
     let byte_rex = opw == 1
         && (matches!(reg_op, Some(Opnd::Reg { num, .. }) if (4..8).contains(&num))
             || matches!(rm_op, Some(Opnd::Reg { num, .. }) if (4..8).contains(&num)));
-    if w || reg_hi || rm_hi || byte_rex {
-        code.push(rex(w, reg_hi, false, rm_hi));
+    if w || reg_hi || rm_hi || index_hi || byte_rex {
+        code.push(rex(w, reg_hi, index_hi, rm_hi));
     }
 
     // Opcode map + opcode bytes.
@@ -350,7 +372,13 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<Vec<u8>, String> {
     if !f.plus_r && (f.reg != RegField::NoReg || f.rm != 255) {
         match rm_op {
             Some(Opnd::Reg { num, .. }) => code.push(modrm_reg(regfield, num)),
-            Some(Opnd::Mem { base, disp, .. }) => emit_modrm_mem(&mut code, regfield, base, disp),
+            Some(Opnd::Mem {
+                base,
+                index,
+                scale,
+                disp,
+                ..
+            }) => emit_modrm_mem(&mut code, regfield, base, index, scale, disp),
             _ => return Err(String::from("inline asm: form needs an r/m operand")),
         }
     }

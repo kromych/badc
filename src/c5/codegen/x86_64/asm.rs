@@ -703,6 +703,8 @@ fn table_opnd(c: &Concrete) -> super::table::Opnd {
         },
         Concrete::Mem { base, size } => Opnd::Mem {
             base,
+            index: None,
+            scale: 1,
             disp: 0,
             width: size.bytes(),
         },

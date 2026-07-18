@@ -2185,6 +2185,7 @@ fn emit_inline_asm_aarch64(
         B,
         BCond(u8),
         Cb { nz: bool, rt: u8, is64: bool },
+        Tb { nz: bool, rt: u8, bit: u8 },
     }
     let mut label_defs: Vec<(u32, usize)> = Vec::new();
     let mut label_fixups: Vec<(usize, LabelBranch, u32, bool)> = Vec::new();
@@ -2217,6 +2218,32 @@ fn emit_inline_asm_aarch64(
                         return false;
                     }
                 },
+                "tbz" | "tbnz" if insn.operands.len() == 3 => {
+                    let (rt, is64) = match conv(&insn.operands[0]) {
+                        Ok(Opnd::Reg { num, is64 }) => (num, is64),
+                        Ok(_) => {
+                            bail_msg("aarch64 inline asm: tbz/tbnz operand must be a register");
+                            return false;
+                        }
+                        Err(m) => {
+                            bail_msg(&m);
+                            return false;
+                        }
+                    };
+                    let AsmOpndA64::Imm(bit) = insn.operands[1] else {
+                        bail_msg("aarch64 inline asm: tbz/tbnz bit number must be an immediate");
+                        return false;
+                    };
+                    if bit < 0 || bit >= if is64 { 64 } else { 32 } {
+                        bail_msg("aarch64 inline asm: tbz/tbnz bit number out of range");
+                        return false;
+                    }
+                    LabelBranch::Tb {
+                        nz: insn.mnemonic == "tbnz",
+                        rt,
+                        bit: bit as u8,
+                    }
+                }
                 m => {
                     let cond = m.strip_prefix("b.").and_then(super::asm::cond_code);
                     let Some(c) = cond.filter(|_| insn.operands.len() == 1) else {
@@ -2301,6 +2328,18 @@ fn emit_inline_asm_aarch64(
                 (if is64 { 1u32 << 31 } else { 0 })
                     | (if nz { 0x3500_0000 } else { 0x3400_0000 })
                     | (((words as u32) & 0x7_FFFF) << 5)
+                    | rt as u32
+            }
+            // TBZ/TBNZ: bit<5> | 0011_011z | bit<4:0> << 19 | imm14 << 5 | Rt.
+            LabelBranch::Tb { nz, rt, bit } => {
+                if !fits(14) {
+                    bail_msg("aarch64 inline asm: branch target out of range");
+                    return false;
+                }
+                ((bit as u32 >> 5) << 31)
+                    | (if nz { 0x3700_0000 } else { 0x3600_0000 })
+                    | ((bit as u32 & 31) << 19)
+                    | (((words as u32) & 0x3FFF) << 5)
                     | rt as u32
             }
         };

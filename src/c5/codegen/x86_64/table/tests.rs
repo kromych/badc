@@ -139,6 +139,26 @@ fn accumulator_extend_and_fences() {
     assert_eq!(enc("sfence", &[]), [0x0f, 0xae, 0xf8]);
 }
 
+#[test]
+fn system_and_rng_ops() {
+    // Nullary system opcodes, including the three-byte 0F 01 group and the
+    // REX.W iretq.
+    assert_eq!(enc("syscall", &[]), [0x0f, 0x05]);
+    assert_eq!(enc("sysret", &[]), [0x0f, 0x07]);
+    assert_eq!(enc("swapgs", &[]), [0x0f, 0x01, 0xf8]);
+    assert_eq!(enc("clts", &[]), [0x0f, 0x06]);
+    assert_eq!(enc("ud2", &[]), [0x0f, 0x0b]);
+    assert_eq!(enc("lahf", &[]), [0x9f]);
+    assert_eq!(enc("sahf", &[]), [0x9e]);
+    assert_eq!(enc("xgetbv", &[]), [0x0f, 0x01, 0xd0]);
+    assert_eq!(enc("iretq", &[]), [0x48, 0xcf]);
+    // rdrand / rdseed take the register in r/m (reg field is the extension);
+    // movnti stores a register to memory (MR).
+    assert_eq!(enc("rdrand", &[r(0, 4)]), [0x0f, 0xc7, 0xf0]); // rdrand eax
+    assert_eq!(enc("rdseed", &[r(0, 8)]), [0x48, 0x0f, 0xc7, 0xf8]); // rdseed rax
+    assert_eq!(enc("movnti", &[m(6, 4), r(0, 4)]), [0x0f, 0xc3, 0x06]); // movnti [rsi], eax
+}
+
 // ------------------------------------------------------------------
 // Differential + fuzz harness against the system assembler.
 // ------------------------------------------------------------------
@@ -492,10 +512,50 @@ mod differential {
             }
         }
         for mnem in [
-            "rdtsc", "rdtscp", "cpuid", "cli", "sti", "hlt", "nop", "cwde", "cdqe", "cdq", "cqo",
-            "lfence", "mfence", "sfence",
+            "rdtsc",
+            "rdtscp",
+            "cpuid",
+            "cli",
+            "sti",
+            "hlt",
+            "nop",
+            "cwde",
+            "cdqe",
+            "cdq",
+            "cqo",
+            "lfence",
+            "mfence",
+            "sfence",
+            "syscall",
+            "sysret",
+            "sysenter",
+            "sysexit",
+            "swapgs",
+            "clts",
+            "ud2",
+            "serialize",
+            "lahf",
+            "sahf",
+            "xgetbv",
+            "xsetbv",
+            "iretq",
+            "rdpkru",
         ] {
             cases.push((mnem, vec![]));
+        }
+        // rdrand / rdseed write a 16/32/64-bit register; movnti stores a
+        // 32/64-bit register to memory.
+        for mnem in ["rdrand", "rdseed"] {
+            for &w in &[2u8, 4, 8] {
+                for &a in &[0u8, 8] {
+                    cases.push((mnem, vec![r(a, w)]));
+                }
+            }
+        }
+        for &w in &[4u8, 8] {
+            for &a in &[0u8, 8] {
+                cases.push(("movnti", vec![m(6, w), r(a, w)]));
+            }
         }
         cases
     }

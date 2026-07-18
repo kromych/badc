@@ -35,6 +35,9 @@ cmovb cmovbe cmovl cmovle cmovnb cmovnbe cmovnl cmovnle
 cmovno cmovnp cmovns cmovnz cmovo cmovp cmovs cmovz
 cwde cdqe cdq cqo
 lfence mfence sfence
+syscall sysret sysenter sysexit swapgs clts ud2 serialize
+lahf sahf xgetbv xsetbv iretq rdpkru
+rdrand rdseed movnti
 push pop lea nop
 movzx movsx movsxd
 cmpxchg xadd

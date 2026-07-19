@@ -33,6 +33,10 @@ pub(crate) enum AsmOpndA64 {
     /// A SIMD/FP register: `d5` (64-bit) or `s5` (32-bit). `is_d` selects the
     /// double vs single view; the register file is separate from the GP one.
     VReg { num: u8, is_d: bool },
+    /// A SIMD vector-arrangement register view `v5.4s`: `size` is the element
+    /// size log2 (byte 0, half 1, word 2, dword 3), `q` selects the 128- vs
+    /// 64-bit register (16 vs 8 bytes).
+    VecReg { num: u8, size: u8, q: bool },
     /// A literal immediate `#imm`.
     Imm(i64),
     /// A `lsl #n` shift modifier (move-wide).
@@ -307,6 +311,28 @@ fn parse_vreg(tok: &str) -> Option<(u8, bool)> {
     (n <= 31).then_some((n, is_d))
 }
 
+/// A SIMD vector-arrangement register `vN.T` (e.g. `v5.4s`): the register
+/// number, the element-size log2, and the 128-bit flag.
+fn parse_vec_reg(tok: &str) -> Option<(u8, u8, bool)> {
+    let (num_s, arr) = tok.strip_prefix('v')?.split_once('.')?;
+    let num: u8 = num_s.parse().ok()?;
+    if num > 31 {
+        return None;
+    }
+    let (size, q) = match arr {
+        "8b" => (0, false),
+        "16b" => (0, true),
+        "4h" => (1, false),
+        "8h" => (1, true),
+        "2s" => (2, false),
+        "4s" => (2, true),
+        "1d" => (3, false),
+        "2d" => (3, true),
+        _ => return None,
+    };
+    Some((num, size, q))
+}
+
 fn parse_int(s: &str) -> Option<i64> {
     let s = s.trim();
     let (neg, s) = match s.strip_prefix('-') {
@@ -475,6 +501,9 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             .and_then(parse_int)
             .ok_or_else(|| format!("inline asm: bad shift `{tok}`"))?;
         return Ok(AsmOpndA64::Lsl(amt as u32));
+    }
+    if let Some((num, size, q)) = parse_vec_reg(tok) {
+        return Ok(AsmOpndA64::VecReg { num, size, q });
     }
     if let Some((num, is_d)) = parse_vreg(tok) {
         return Ok(AsmOpndA64::VReg { num, is_d });
@@ -1037,6 +1066,38 @@ mod tests {
                 AsmOpndA64::Reg {
                     num: 3,
                     is64: false
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_vector_registers() {
+        // `vN.T` arrangement views: size = element-size log2, q = 128-bit.
+        assert_eq!(parse_vec_reg("v0.4s"), Some((0, 2, true)));
+        assert_eq!(parse_vec_reg("v31.8b"), Some((31, 0, false)));
+        assert_eq!(parse_vec_reg("v3.2d"), Some((3, 3, true)));
+        assert_eq!(parse_vec_reg("v0.3s"), None); // not an arrangement
+        assert_eq!(parse_vec_reg("v32.4s"), None); // out of range
+        assert_eq!(parse_vec_reg("d0"), None); // scalar view, not a vector one
+        let insns = parse_template(b"add v0.4s, v1.4s, v2.4s").unwrap();
+        assert_eq!(
+            insns[0].operands,
+            [
+                AsmOpndA64::VecReg {
+                    num: 0,
+                    size: 2,
+                    q: true
+                },
+                AsmOpndA64::VecReg {
+                    num: 1,
+                    size: 2,
+                    q: true
+                },
+                AsmOpndA64::VecReg {
+                    num: 2,
+                    size: 2,
+                    q: true
                 },
             ]
         );

@@ -363,6 +363,51 @@ fn fp_load_store() {
 }
 
 #[test]
+fn simd_vector() {
+    // `vN.T`: size is the element-size log2, q the 128- vs 64-bit register.
+    let v = |num: u8, size: u8, q: bool| Opnd::VecReg { num, size, q };
+    // dup Vd.T, Rn: imm5 carries the element size (one-hot); Q the register.
+    assert_eq!(enc("dup", &[v(0, 2, true), w(1)]), 0x4E04_0C20); // v0.4s, w1
+    assert_eq!(enc("dup", &[v(0, 0, false), w(1)]), 0x0E01_0C20); // v0.8b, w1
+    assert_eq!(enc("dup", &[v(0, 3, true), x(1)]), 0x4E08_0C20); // v0.2d, x1
+    // Three-same integer add/sub/mul.
+    assert_eq!(
+        enc("add", &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]),
+        0x4EA2_8420
+    );
+    assert_eq!(
+        enc("add", &[v(0, 0, true), v(1, 0, true), v(2, 0, true)]),
+        0x4E22_8420
+    );
+    assert_eq!(
+        enc("sub", &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]),
+        0x6EA2_8420
+    );
+    assert_eq!(
+        enc("mul", &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]),
+        0x4EA2_9C20
+    );
+    // Logical (byte arrangement only).
+    assert_eq!(
+        enc("and", &[v(0, 0, true), v(1, 0, true), v(2, 0, true)]),
+        0x4E22_1C20
+    );
+    assert_eq!(
+        enc("orr", &[v(0, 0, true), v(1, 0, true), v(2, 0, true)]),
+        0x4EA2_1C20
+    );
+    assert_eq!(
+        enc("eor", &[v(0, 0, true), v(1, 0, true), v(2, 0, true)]),
+        0x6E22_1C20
+    );
+    // Mismatched arrangements and a non-byte logical op are rejected; GP `add`
+    // (register operands) still reaches the catalogue.
+    assert!(encode("add", &[v(0, 2, true), v(1, 0, true), v(2, 2, true)]).is_err());
+    assert!(encode("and", &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]).is_err());
+    assert_eq!(enc("add", &[x(0), x(1), x(2)]), 0x8B02_0020);
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

@@ -100,6 +100,13 @@ pub(crate) enum Opnd {
         num: u8,
         is_d: bool,
     },
+    /// SIMD vector-arrangement register view `vN.T`: `size` is the element-size
+    /// log2 (byte 0 .. dword 3), `q` selects the 128- vs 64-bit register.
+    VecReg {
+        num: u8,
+        size: u8,
+        q: bool,
+    },
     Imm(i64),
     /// An `lsl #shift` modifier operand.
     Lsl(u32),
@@ -433,6 +440,87 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             }
         };
         return Ok(base | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SIMD `dup Vd.T, Rn`: broadcast a GP register into every lane. The imm5
+    // field carries the element size as a one-hot bit.
+    if mnemonic == "dup" {
+        let [Opnd::VecReg { num: rd, size, q }, Opnd::Reg { num: rn, .. }] = *ops else {
+            return Err(String::from("inline asm: bad dup operands"));
+        };
+        let imm5 = 1u32 << size;
+        return Ok((if q { 1u32 << 30 } else { 0 })
+            | 0x0E00_0C00
+            | (imm5 << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD three-same integer arithmetic `<add|sub|mul> Vd.T, Vn.T, Vm.T`, one
+    // arrangement. size at bit 22, Q at 30, U at 29. GP add/sub/mul (Reg
+    // operands) fall through to the catalogue below.
+    if let Some((op_base, u)) = match mnemonic {
+        "add" => Some((0x0E20_8400u32, 0u32)),
+        "sub" => Some((0x0E20_8400, 1)),
+        "mul" => Some((0x0E20_9C00, 0)),
+        _ => None,
+    } && let [
+        Opnd::VecReg { num: rd, size, q },
+        Opnd::VecReg {
+            num: rn,
+            size: s1,
+            q: q1,
+        },
+        Opnd::VecReg {
+            num: rm,
+            size: s2,
+            q: q2,
+        },
+    ] = *ops
+    {
+        if size != s1 || size != s2 || q != q1 || q != q2 {
+            return Err(String::from(
+                "inline asm: vector arithmetic arrangements differ",
+            ));
+        }
+        return Ok((if q { 1u32 << 30 } else { 0 })
+            | op_base
+            | (u << 29)
+            | ((size as u32) << 22)
+            | ((rm as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD logical `<and|orr|eor> Vd.T, Vn.T, Vm.T`, byte arrangement only. GP
+    // forms (Reg operands) fall through to the catalogue.
+    if let Some(variant) = match mnemonic {
+        "and" => Some(0u32),
+        "orr" => Some(0x0080_0000),
+        "eor" => Some(0x2000_0000),
+        _ => None,
+    } && let [
+        Opnd::VecReg { num: rd, size, q },
+        Opnd::VecReg {
+            num: rn,
+            size: s1,
+            q: q1,
+        },
+        Opnd::VecReg {
+            num: rm,
+            size: s2,
+            q: q2,
+        },
+    ] = *ops
+    {
+        if size != 0 || s1 != 0 || s2 != 0 || q != q1 || q != q2 {
+            return Err(String::from(
+                "inline asm: vector logical ops are 8b/16b only",
+            ));
+        }
+        return Ok((if q { 1u32 << 30 } else { 0 })
+            | 0x0E20_1C00
+            | variant
+            | ((rm as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
     }
     // System operation: `dc`/`ic`/`tlbi <op>{, Xt}`. The op is a base word; the
     // Rt field takes the register operand or xzr (31) when there is none.

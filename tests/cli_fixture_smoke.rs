@@ -76,6 +76,8 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_cdqe.c", "linux-aarch64"), // x86-64 cdqe
     ("inline_asm_x64_movnti.c", "linux-aarch64"), // x86-64 movnti/sfence
     ("inline_asm_x64_clflush.c", "linux-aarch64"), // x86-64 clflush/prefetch
+    ("inline_asm_x64_setjmp_label.c", "linux-aarch64"), // x86-64 asm context switch
+    ("inline_asm_x64_mem_disp.c", "linux-aarch64"), // x86-64 disp(%reg) memory operands
 ];
 
 #[test]

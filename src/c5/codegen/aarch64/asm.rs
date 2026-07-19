@@ -781,6 +781,16 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
 pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
     let text =
         core::str::from_utf8(tmpl).map_err(|_| String::from("inline asm: non-UTF8 template"))?;
+    // `%=` expands to a per-instance number (shared helper). TODO: named
+    // local-label definitions / references (the x86-64 parser has them).
+    let expanded;
+    let text = match emit_common::expand_template_uniq(text) {
+        Some(t) => {
+            expanded = t;
+            expanded.as_str()
+        }
+        None => text,
+    };
     let mut insns = Vec::new();
     for piece in text.split([';', '\n']) {
         let mut piece = piece.trim();

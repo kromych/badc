@@ -13,94 +13,81 @@ Disassembly of section .text:
 <cas32>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x50, %rsp
                	leaq	-0x8(%rbp), %rax
                	movl	%edx, %ecx
                	movl	%esi, %edx
-               	pushq	%rax
-               	pushq	%rcx
-               	pushq	%rbx
-               	movq	%rax, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%rcx, %r10
-               	pushq	%r10
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	0x10(%rsp), %rbx
-               	movq	0x8(%rsp), %rcx
-               	movq	(%rsp), %rax
+               	movq	%rax, -0x50(%rbp)
+               	movq	%rcx, -0x48(%rbp)
+               	movq	%rbx, -0x40(%rbp)
+               	movq	%rax, -0x38(%rbp)
+               	movq	%rdi, -0x30(%rbp)
+               	movq	%rcx, -0x28(%rbp)
+               	movq	%rdx, -0x20(%rbp)
+               	movq	-0x30(%rbp), %rbx
+               	movq	-0x28(%rbp), %rcx
+               	movq	-0x20(%rbp), %rax
                	lock
                	cmpxchgl	%ecx, (%rbx)
-               	movq	0x18(%rsp), %r11
+               	movq	-0x38(%rbp), %r11
                	movl	%eax, (%r11)
-               	addq	$0x20, %rsp
-               	popq	%rbx
-               	popq	%rcx
-               	popq	%rax
+               	movq	-0x50(%rbp), %rax
+               	movq	-0x48(%rbp), %rcx
+               	movq	-0x40(%rbp), %rbx
                	movl	-0x8(%rbp), %eax
-               	addq	$0x10, %rsp
+               	addq	$0x50, %rsp
                	popq	%rbp
                	retq
 
 <xadd32>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x30, %rsp
                	movl	%esi, %eax
                	movl	%eax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
-               	pushq	%rax
-               	pushq	%rbx
-               	movq	%rax, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	0x8(%rsp), %r11
+               	movq	%rax, -0x30(%rbp)
+               	movq	%rbx, -0x28(%rbp)
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rdi, -0x18(%rbp)
+               	movq	-0x20(%rbp), %r11
                	movl	(%r11), %eax
-               	movq	(%rsp), %rbx
+               	movq	-0x18(%rbp), %rbx
                	lock
                	xaddl	%eax, (%rbx)
-               	movq	0x8(%rsp), %r11
+               	movq	-0x20(%rbp), %r11
                	movl	%eax, (%r11)
-               	addq	$0x10, %rsp
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x30(%rbp), %rax
+               	movq	-0x28(%rbp), %rbx
                	movl	-0x8(%rbp), %eax
-               	addq	$0x10, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
 
 <cas64>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x50, %rsp
                	leaq	-0x8(%rbp), %rax
-               	pushq	%rax
-               	pushq	%rcx
-               	pushq	%rbx
-               	movq	%rax, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	0x10(%rsp), %rbx
-               	movq	0x8(%rsp), %rcx
-               	movq	(%rsp), %rax
+               	movq	%rax, -0x50(%rbp)
+               	movq	%rcx, -0x48(%rbp)
+               	movq	%rbx, -0x40(%rbp)
+               	movq	%rax, -0x38(%rbp)
+               	movq	%rdi, -0x30(%rbp)
+               	movq	%rdx, -0x28(%rbp)
+               	movq	%rsi, -0x20(%rbp)
+               	movq	-0x30(%rbp), %rbx
+               	movq	-0x28(%rbp), %rcx
+               	movq	-0x20(%rbp), %rax
                	lock
                	cmpxchgq	%rcx, (%rbx)
-               	movq	0x18(%rsp), %r11
+               	movq	-0x38(%rbp), %r11
                	movq	%rax, (%r11)
-               	addq	$0x20, %rsp
-               	popq	%rbx
-               	popq	%rcx
-               	popq	%rax
+               	movq	-0x50(%rbp), %rax
+               	movq	-0x48(%rbp), %rcx
+               	movq	-0x40(%rbp), %rbx
                	movq	-0x8(%rbp), %rax
-               	addq	$0x10, %rsp
+               	addq	$0x50, %rsp
                	popq	%rbp
                	retq
 

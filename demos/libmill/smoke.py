@@ -14,10 +14,11 @@ Pipeline:
     assert-based and must exit 0.
 
 Both -O0 and -O are exercised (with -UNDEBUG at -O so the predefined
-NDEBUG does not strip the tests' asserts). Context switching runs
-sigsetjmp/siglongjmp plus a one-instruction inline-asm stack-pointer
-move on every platform; see setup.py for why the upstream x86-64 asm
-path and the VLA stack switch are patched out under badc.
+NDEBUG does not strip the tests' asserts). On x86-64 context switching
+runs upstream's native asm mill_setjmp_/mill_longjmp_; elsewhere it
+runs sigsetjmp/siglongjmp (MILL_ARCH_FALLBACK). Both use the
+one-instruction inline-asm stack-pointer move; see setup.py for why
+the VLA stack switch is patched out under badc.
 
 The network/fs/timing suites (tcp, udp, unix, file, ssl, dns, sleep)
 stay out: the smoke targets the context-switch core and must stay
@@ -30,6 +31,7 @@ POSIX only. Override the badc binary via the ``BADC`` env var
 from __future__ import annotations
 
 import os
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -58,11 +60,13 @@ def run(cmd, **kw):
 
 
 def base_flags() -> list[str]:
-    # MILL_ARCH_FALLBACK selects the sigsetjmp context switch (the
-    # x86-64 asm path does not compile under badc; see setup.py) and
-    # MILL_BADC_SETSP the asm sp move. --gnu satisfies libmill's
-    # __GNUC__/__clang__ compiler check.
-    flags = ["--gnu", "-DMILL_ARCH_FALLBACK", "-DMILL_BADC_SETSP"]
+    # x86-64 builds upstream's native asm context switch; other
+    # architectures define MILL_ARCH_FALLBACK for the sigsetjmp one.
+    # MILL_BADC_SETSP selects the asm sp move. --gnu satisfies
+    # libmill's __GNUC__/__clang__ compiler check.
+    flags = ["--gnu", "-DMILL_BADC_SETSP"]
+    if platform.machine().lower() not in ("x86_64", "amd64"):
+        flags.append("-DMILL_ARCH_FALLBACK")
     if sys.platform == "darwin":
         # TODO(badc): no bundled <sys/event.h>, so the default kqueue
         # poller cannot build; MILL_POLL is the library's poll(2) knob.

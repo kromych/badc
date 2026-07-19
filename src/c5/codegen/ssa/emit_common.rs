@@ -735,6 +735,40 @@ pub(crate) fn take_bail() -> Option<alloc::string::String> {
     LAST_BAIL.with(|b| b.borrow_mut().take())
 }
 
+/// Per-process counter behind the `%=` template escape.
+static ASM_INSTANCE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Expand the `%=` template escape: every occurrence in one template gets the
+/// same number, unique per expansion (GCC gives each asm instance its own).
+/// `%%` is the literal-percent escape, so its trailing `%` never starts a
+/// `%=`. Returns `None` when the template has no `%=` (the common case).
+pub(crate) fn expand_template_uniq(text: &str) -> Option<alloc::string::String> {
+    if !text.contains("%=") {
+        return None;
+    }
+    let uniq = ASM_INSTANCE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    let mut out = alloc::string::String::with_capacity(text.len() + 8);
+    let mut it = text.chars().peekable();
+    while let Some(c) = it.next() {
+        if c != '%' {
+            out.push(c);
+            continue;
+        }
+        match it.peek() {
+            Some('%') => {
+                out.push_str("%%");
+                it.next();
+            }
+            Some('=') => {
+                out.push_str(&alloc::format!("{uniq}"));
+                it.next();
+            }
+            _ => out.push('%'),
+        }
+    }
+    Some(out)
+}
+
 /// Parse an inline-asm template whose every piece is raw machine bytes,
 /// returning the concatenated little-endian bytes, or `None` when any piece is
 /// a mnemonic the caller must encode itself. A piece is raw bytes when it is a

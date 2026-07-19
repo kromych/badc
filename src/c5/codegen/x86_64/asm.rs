@@ -3,7 +3,10 @@
 //!
 //! [`parse_template`] turns an AT&T template into a sequence of
 //! [`AsmInsn`]s with symbolic operand references (`%N`), explicit
-//! registers (`%%reg`), and immediates (`$imm`). The emitter
+//! registers (`%%reg`), immediates (`$imm`), explicit memory references
+//! (`disp(%%reg)` / `disp(%N)`), and local labels -- numeric (`1:`,
+//! `1b`/`1f`) and named (`name:`, addressable as `name(%%rip)`), with
+//! the `%=` escape expanding to a per-instance number. The emitter
 //! ([`super::emit`]) resolves each reference to a machine register per
 //! the operand constraint, builds a [`Concrete`] operand list, and
 //! calls [`encode`]. The SSA interpreter reuses the same parse to
@@ -186,15 +189,38 @@ pub(crate) enum AsmOpnd {
     Reg { reg: u8, size: AsmRegSize },
     /// `$imm`: a literal immediate.
     Imm(i64),
+    /// `disp(%%reg)` / `disp(%N)`: an explicit memory reference written in
+    /// the template -- a byte displacement off a 64-bit base register (named
+    /// directly or through a register-class operand reference).
+    Mem { base: AsmMemBase, disp: i32 },
     /// `Nf` / `Nb`: a local-label reference (label number plus direction --
     /// `f` forward, `b` backward), the target of a `jmp` / `jcc` within the
     /// block. The emitter resolves it to a rel32 against the label definition.
+    /// Named labels carry `NAMED_LABEL_BASE + intern-index` (direction is
+    /// ignored: a name has exactly one definition).
     Label { num: u32, forward: bool },
+    /// `LABEL(%%rip)`: the address of a template-local label, the source of a
+    /// `lea`. Resolved to a RIP-relative rel32 against the label definition.
+    LabelAddr { num: u32, forward: bool },
     /// `%lK`: an `asm goto` label reference by label-list index (the
     /// frontend canonicalizes `%l[name]` and operand-relative `%lN` to
     /// this form). The emitter branches to the label's target block.
     GotoLabel(u8),
 }
+
+/// Base register of an explicit template memory operand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AsmMemBase {
+    /// An explicit `%%reg` (architectural GP number).
+    Reg(u8),
+    /// An operand reference `%N`; the emitter substitutes its assigned
+    /// register.
+    Ref(u8),
+}
+
+/// Label numbers at and above this mark are interned named labels
+/// (`name:` definitions); below it, GNU-as numeric locals (`1:`).
+pub(crate) const NAMED_LABEL_BASE: u32 = 1 << 31;
 
 /// One instruction of a parsed template, in AT&T operand order.
 #[derive(Debug, Clone)]
@@ -222,10 +248,11 @@ pub(crate) enum Concrete {
         reg: u8,
         size: AsmRegSize,
     },
-    /// A memory reference `(%base)`: `base` holds the operand's address.
-    /// Produced for a memory-constrained (`m`) template operand.
+    /// A memory reference `disp(%base)`: `base` holds the address, `disp` a
+    /// byte displacement (0 for a memory-constrained `m` template operand).
     Mem {
         base: u8,
+        disp: i32,
         size: AsmRegSize,
     },
     Imm(i64),
@@ -706,22 +733,22 @@ fn movq_xmm(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
             code.push(modrm_reg(d & 7, s & 7));
         }
         // mem -> xmm (load).
-        (None, Some(d), Concrete::Mem { base, .. }, _) => {
+        (None, Some(d), Concrete::Mem { base, disp, .. }, _) => {
             code.push(0xF3);
             if d >= 8 || base >= 8 {
                 code.push(rex(false, d >= 8, false, base >= 8));
             }
             code.extend_from_slice(&[0x0F, 0x7E]);
-            modrm_mem(code, d & 7, base);
+            modrm_mem(code, d & 7, base, disp);
         }
         // xmm -> mem (store).
-        (Some(s), None, _, Concrete::Mem { base, .. }) => {
+        (Some(s), None, _, Concrete::Mem { base, disp, .. }) => {
             code.push(0x66);
             if s >= 8 || base >= 8 {
                 code.push(rex(false, s >= 8, false, base >= 8));
             }
             code.extend_from_slice(&[0x0F, 0xD6]);
-            modrm_mem(code, s & 7, base);
+            modrm_mem(code, s & 7, base, disp);
         }
         // No xmm operand: a plain GP move.
         _ => return false,
@@ -764,12 +791,25 @@ fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     table_mnemonic(base).map(|name| (Mnemonic::Table(name), suffix))
 }
 
-/// Parse one operand token (already trimmed).
-fn parse_operand(tok: &str) -> Result<AsmOpnd, String> {
+/// Parse one operand token (already trimmed). `labels` is the template's
+/// named-label intern table (from the definition pre-scan); a bare token
+/// matching an entry is a local-label reference, not a symbol.
+fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
+    // A leading `*` is AT&T's indirect-branch marker (`jmp *%rax`,
+    // `call *8(%rbx)`); the operand kind alone selects the encoding.
+    let tok = tok.strip_prefix('*').unwrap_or(tok);
     let bytes = tok.as_bytes();
     if let Some(rest) = tok.strip_prefix('$') {
         let v = parse_int(rest).ok_or_else(|| format!("inline asm: bad immediate `{tok}`"))?;
         return Ok(AsmOpnd::Imm(v));
+    }
+    // `prefix(inner)`: a memory reference (displacement off a base register)
+    // or, with an `(%rip)` base, the address of a template-local label.
+    if let Some(open) = tok.find('(')
+        && tok.ends_with(')')
+    {
+        return parse_mem_operand(&tok[..open], &tok[open + 1..tok.len() - 1], labels)
+            .ok_or_else(|| format!("inline asm: unsupported operand `{tok}`"));
     }
     // A local-label reference `Nf` / `Nb` (jmp / jcc target). Digits then a
     // single direction letter; a bare register or `%N` reference never has
@@ -783,6 +823,12 @@ fn parse_operand(tok: &str) -> Result<AsmOpnd, String> {
         && let Ok(num) = digits.parse::<u32>()
     {
         return Ok(AsmOpnd::Label { num, forward: dir });
+    }
+    if let Some(idx) = labels.iter().position(|&n| n == tok) {
+        return Ok(AsmOpnd::Label {
+            num: NAMED_LABEL_BASE + idx as u32,
+            forward: true,
+        });
     }
     if let Some(rest) = tok.strip_prefix("%%") {
         let (reg, size) =
@@ -823,6 +869,62 @@ fn parse_operand(tok: &str) -> Result<AsmOpnd, String> {
         return Ok(AsmOpnd::Ref { idx, size });
     }
     Err(format!("inline asm: unsupported operand `{tok}`"))
+}
+
+/// Parse `prefix(inner)`: the `disp(%%reg)` / `disp(%N)` memory forms and
+/// the `LABEL(%rip)` label-address form. `None` for shapes not modelled;
+/// scaled-index bases split at the operand commas and never reach here.
+/// TODO: `disp(%base, %index, scale)` needs comma-aware operand splitting.
+fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOpnd> {
+    let prefix = prefix.trim();
+    let inner = inner.trim();
+    let reg_body = inner
+        .strip_prefix("%%")
+        .or_else(|| inner.strip_prefix('%'))?;
+    if reg_body == "rip" {
+        // The address of a template-local label (named or `Nf` / `Nb`).
+        if let Some(idx) = labels.iter().position(|&n| n == prefix) {
+            return Some(AsmOpnd::LabelAddr {
+                num: NAMED_LABEL_BASE + idx as u32,
+                forward: true,
+            });
+        }
+        let (digits, forward) = prefix
+            .strip_suffix('f')
+            .map(|d| (d, true))
+            .or_else(|| prefix.strip_suffix('b').map(|d| (d, false)))?;
+        if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        return Some(AsmOpnd::LabelAddr {
+            num: digits.parse().ok()?,
+            forward,
+        });
+    }
+    let disp = if prefix.is_empty() {
+        0i32
+    } else {
+        i32::try_from(parse_int(prefix)?).ok()?
+    };
+    // An operand-reference base `%N` (an optional `q` size letter is the
+    // 64-bit name the address requires anyway).
+    let digits = reg_body.strip_prefix('q').unwrap_or(reg_body);
+    if !digits.is_empty() && digits.bytes().all(|c| c.is_ascii_digit()) {
+        return Some(AsmOpnd::Mem {
+            base: AsmMemBase::Ref(digits.parse().ok()?),
+            disp,
+        });
+    }
+    // An explicit base register; only the 64-bit GP names address memory in
+    // long mode (32-bit bases need the 0x67 prefix, not modelled).
+    let (reg, size) = reg_by_name(reg_body)?;
+    if reg >= 16 || size != AsmRegSize::Quad {
+        return None;
+    }
+    Some(AsmOpnd::Mem {
+        base: AsmMemBase::Reg(reg),
+        disp,
+    })
 }
 
 /// Parse a decimal or `0x`-hex integer, optionally signed.
@@ -889,27 +991,70 @@ fn parse_raw_bytes(piece: &str) -> Option<Result<Vec<u8>, String>> {
     None
 }
 
+/// Split a leading `name:` / `N:` local-label definition off `piece`,
+/// returning the label text and the remainder. Names use the assembler
+/// identifier charset (`.` and `$` included); a `%`-prefixed token (a
+/// segment override like `%fs:0x0`) never matches.
+fn split_label_def(piece: &str) -> Option<(&str, &str)> {
+    let colon = piece.find(':')?;
+    if colon == 0 {
+        return None;
+    }
+    let name = &piece.as_bytes()[..colon];
+    let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
+    let named = !name[0].is_ascii_digit() && ident(name[0]) && name.iter().all(|&c| ident(c));
+    if named || name.iter().all(u8::is_ascii_digit) {
+        Some((&piece[..colon], &piece[colon + 1..]))
+    } else {
+        None
+    }
+}
+
 /// Parse an AT&T inline-asm template into its instruction sequence.
 /// Instructions are separated by `;` or newlines; operands by commas.
 pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
     let text =
         core::str::from_utf8(tmpl).map_err(|_| String::from("inline asm: non-UTF8 template"))?;
+    let expanded;
+    let text = match super::super::ssa::emit_common::expand_template_uniq(text) {
+        Some(t) => {
+            expanded = t;
+            expanded.as_str()
+        }
+        None => text,
+    };
+    // Pre-scan the label definitions so operand parsing can tell a local
+    // label from a symbol; named labels intern in definition order.
+    let mut names: Vec<&str> = Vec::new();
+    for piece in text.split([';', '\n']) {
+        let mut p = piece.trim();
+        while let Some((name, rest)) = split_label_def(p) {
+            if !name.as_bytes()[0].is_ascii_digit() && !names.contains(&name) {
+                names.push(name);
+            }
+            p = rest.trim();
+        }
+    }
     let mut insns = Vec::new();
     for piece in text.split([';', '\n']) {
         let mut piece = piece.trim();
         if piece.is_empty() {
             continue;
         }
-        // A leading `N:` (digits then colon) defines a local label at this
-        // point; the rest of the piece, if any, follows on the same line. The
-        // digit-prefix test excludes segment overrides like `%fs:0x0`.
-        while let Some(colon) = piece.find(':')
-            && colon > 0
-            && piece.as_bytes()[..colon].iter().all(u8::is_ascii_digit)
-        {
-            let num: u32 = piece[..colon]
-                .parse()
-                .map_err(|_| format!("inline asm: bad label `{piece}`"))?;
+        // A leading label definition marks this point; the rest of the
+        // piece, if any, follows on the same line.
+        while let Some((name, rest)) = split_label_def(piece) {
+            let num = if name.as_bytes()[0].is_ascii_digit() {
+                let n: u32 = name
+                    .parse()
+                    .ok()
+                    .filter(|&n| n < NAMED_LABEL_BASE)
+                    .ok_or_else(|| format!("inline asm: bad label `{piece}`"))?;
+                n
+            } else {
+                // The pre-scan interned every named definition.
+                NAMED_LABEL_BASE + names.iter().position(|&n| n == name).unwrap() as u32
+            };
             insns.push(AsmInsn {
                 mnemonic: Mnemonic::RawBytes,
                 suffix: None,
@@ -918,9 +1063,15 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 sym_target: None,
                 label_def: Some(num),
             });
-            piece = piece[colon + 1..].trim();
+            piece = rest.trim();
         }
         if piece.is_empty() {
+            continue;
+        }
+        // `.cfi_*` directives describe unwind state to a DWARF consumer and
+        // carry no code bytes. badc emits no unwind info for asm bodies, so
+        // they are accepted and ignored.
+        if piece.starts_with(".cfi_") {
             continue;
         }
         // A raw-byte piece (hex-byte run or `.byte`-family directive) emits its
@@ -947,13 +1098,15 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         // A direct `call` / `jmp` to a bare identifier is a symbol reference
         // (basic-asm `call schedule`); the target is resolved to a rel32 by a
         // relocation, not parsed as a register / immediate / memory operand.
+        // A name the template defines as a label resolves locally instead.
         let is_bare_ident = !rest.is_empty()
             && rest
                 .bytes()
                 .next()
                 .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_')
             && rest.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
-            && reg_by_name(rest).is_none();
+            && reg_by_name(rest).is_none()
+            && !names.contains(&rest);
         if matches!(mnem_tok, "call" | "callq" | "jmp" | "jmpq") && is_bare_ident {
             insns.push(AsmInsn {
                 mnemonic,
@@ -968,7 +1121,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         let mut operands = Vec::new();
         if !rest.is_empty() {
             for op in rest.split(',') {
-                operands.push(parse_operand(op.trim())?);
+                operands.push(parse_operand(op.trim(), &names)?);
             }
         }
         insns.push(AsmInsn {
@@ -1052,21 +1205,29 @@ fn modrm_reg(reg: u8, rm: u8) -> u8 {
     0xC0 | ((reg & 7) << 3) | (rm & 7)
 }
 
-/// Emit a ModR/M (plus SIB / disp8 as the base register requires) for a
-/// `(%base)` memory reference with ModRM.reg = `reg`. REX.B for `base >= 8`
-/// and any operand-size prefix are emitted by the caller.
-fn modrm_mem(code: &mut Vec<u8>, reg: u8, base: u8) {
+/// Emit a ModR/M (plus SIB / displacement as the base register and `disp`
+/// require) for a `disp(%base)` memory reference with ModRM.reg = `reg`.
+/// REX.B for `base >= 8` and any operand-size prefix are emitted by the
+/// caller. rbp / r13 (rm=101) have no mod=00 form (that means RIP-relative),
+/// so a zero displacement still encodes as disp8=0 there; rsp / r12 (rm=100)
+/// take a no-index SIB byte.
+fn modrm_mem(code: &mut Vec<u8>, reg: u8, base: u8, disp: i32) {
     let rm = base & 7;
-    if rm == 5 {
-        // rbp / r13: mod=00 rm=101 is RIP-relative, so use mod=01 disp8=0.
-        code.push(0x40 | ((reg & 7) << 3) | rm);
-        code.push(0x00);
-    } else if rm == 4 {
-        // rsp / r12: rm=100 selects a SIB byte; encode base with no index.
-        code.push(((reg & 7) << 3) | rm);
-        code.push(0x24);
+    let mod_: u8 = if disp == 0 && rm != 5 {
+        0
+    } else if (-128..=127).contains(&disp) {
+        1
     } else {
-        code.push(((reg & 7) << 3) | rm);
+        2
+    };
+    code.push((mod_ << 6) | ((reg & 7) << 3) | rm);
+    if rm == 4 {
+        code.push(0x24);
+    }
+    match mod_ {
+        1 => code.push(disp as u8),
+        2 => code.extend_from_slice(&disp.to_le_bytes()),
+        _ => {}
     }
 }
 
@@ -1234,11 +1395,11 @@ fn table_opnd(c: &Concrete) -> super::table::Opnd {
             num: reg,
             width: size.bytes(),
         },
-        Concrete::Mem { base, size } => Opnd::Mem {
+        Concrete::Mem { base, disp, size } => Opnd::Mem {
             base,
             index: None,
             scale: 1,
-            disp: 0,
+            disp,
             width: size.bytes(),
         },
         Concrete::Imm(v) => Opnd::Imm(v),
@@ -1336,12 +1497,12 @@ pub(crate) fn encode(
                     code.extend_from_slice(&[0x0F, opcode]);
                     code.push(modrm_reg(v_field & 7, gp_reg & 7));
                 }
-                Concrete::Mem { base, .. } => {
+                Concrete::Mem { base, disp, .. } => {
                     if v_field >= 8 || base >= 8 {
                         code.push(rex(false, v_field >= 8, false, base >= 8));
                     }
                     code.extend_from_slice(&[0x0F, opcode]);
-                    modrm_mem(code, v_field & 7, base);
+                    modrm_mem(code, v_field & 7, base, disp);
                 }
                 Concrete::Imm(_) => {
                     return Err(String::from(
@@ -1382,12 +1543,12 @@ pub(crate) fn encode(
                     code.extend_from_slice(&[0x0F, opcode]);
                     code.push(modrm_reg(d & 7, s & 7));
                 }
-                Concrete::Mem { base, .. } => {
+                Concrete::Mem { base, disp, .. } => {
                     if d >= 8 || base >= 8 {
                         code.push(rex(false, d >= 8, false, base >= 8));
                     }
                     code.extend_from_slice(&[0x0F, opcode]);
-                    modrm_mem(code, d & 7, base);
+                    modrm_mem(code, d & 7, base, disp);
                 }
                 _ => {
                     return Err(String::from(
@@ -1424,21 +1585,21 @@ pub(crate) fn encode(
                     code.extend_from_slice(&[0x0F, load_op]);
                     code.push(modrm_reg(dn & 7, sn & 7));
                 }
-                (Concrete::Mem { base, .. }, d) if xmm(&d).is_some() => {
+                (Concrete::Mem { base, disp, .. }, d) if xmm(&d).is_some() => {
                     let dn = xmm(&d).unwrap();
                     if dn >= 8 || base >= 8 {
                         code.push(rex(false, dn >= 8, false, base >= 8));
                     }
                     code.extend_from_slice(&[0x0F, load_op]);
-                    modrm_mem(code, dn & 7, base);
+                    modrm_mem(code, dn & 7, base, disp);
                 }
-                (s, Concrete::Mem { base, .. }) if xmm(&s).is_some() => {
+                (s, Concrete::Mem { base, disp, .. }) if xmm(&s).is_some() => {
                     let sn = xmm(&s).unwrap();
                     if sn >= 8 || base >= 8 {
                         code.push(rex(false, sn >= 8, false, base >= 8));
                     }
                     code.extend_from_slice(&[0x0F, store_op]);
-                    modrm_mem(code, sn & 7, base);
+                    modrm_mem(code, sn & 7, base, disp);
                 }
                 _ => {
                     return Err(String::from(
@@ -1522,13 +1683,13 @@ pub(crate) fn encode(
                     code.push(opcode);
                     code.push(modrm_reg(d & 7, s2 & 7));
                 }
-                Concrete::Mem { base, .. } => {
+                Concrete::Mem { base, disp, .. } => {
                     // src2 is a memory operand: VEX.B carries the base's high bit;
                     // L comes from the register operands.
                     let l = u8::from(dy || s1y);
                     emit_vex(code, d >= 8, false, *base >= 8, map, w, s1, l, pp);
                     code.push(opcode);
-                    modrm_mem(code, d & 7, *base);
+                    modrm_mem(code, d & 7, *base, *disp);
                 }
                 _ => {
                     return Err(String::from(
@@ -1564,7 +1725,7 @@ pub(crate) fn encode(
                         code.push(load_op);
                         code.push(modrm_reg(d & 7, s & 7));
                     }
-                    Concrete::Mem { base, .. } => {
+                    Concrete::Mem { base, disp, .. } => {
                         emit_vex(
                             code,
                             d >= 8,
@@ -1577,7 +1738,7 @@ pub(crate) fn encode(
                             pp,
                         );
                         code.push(load_op);
-                        modrm_mem(code, d & 7, *base);
+                        modrm_mem(code, d & 7, *base, *disp);
                     }
                     _ => {
                         return Err(String::from(
@@ -1585,7 +1746,8 @@ pub(crate) fn encode(
                         ));
                     }
                 }
-            } else if let (Some((s, sy)), Concrete::Mem { base, .. }) = (vec_reg(&src), &dst) {
+            } else if let (Some((s, sy)), Concrete::Mem { base, disp, .. }) = (vec_reg(&src), &dst)
+            {
                 // store: the source register rides ModRM.reg, memory the r/m.
                 emit_vex(
                     code,
@@ -1599,7 +1761,7 @@ pub(crate) fn encode(
                     pp,
                 );
                 code.push(store_op);
-                modrm_mem(code, s & 7, *base);
+                modrm_mem(code, s & 7, *base, *disp);
             } else {
                 return Err(String::from("inline asm: unsupported VEX move operands"));
             }
@@ -1628,7 +1790,7 @@ pub(crate) fn encode(
                     code.push(opcode);
                     code.push(modrm_reg(d & 7, s & 7));
                 }
-                Concrete::Mem { base, .. } => {
+                Concrete::Mem { base, disp, .. } => {
                     emit_vex(
                         code,
                         d >= 8,
@@ -1641,7 +1803,7 @@ pub(crate) fn encode(
                         pp,
                     );
                     code.push(opcode);
-                    modrm_mem(code, d & 7, *base);
+                    modrm_mem(code, d & 7, *base, *disp);
                 }
                 _ => {
                     return Err(String::from(
@@ -1675,11 +1837,11 @@ pub(crate) fn encode(
                     code.push(opcode);
                     code.push(modrm_reg(d & 7, s2 & 7));
                 }
-                Concrete::Mem { base, .. } => {
+                Concrete::Mem { base, disp, .. } => {
                     let l = u8::from(dy || s1y);
                     emit_vex(code, d >= 8, false, *base >= 8, map, false, s1, l, pp);
                     code.push(opcode);
-                    modrm_mem(code, d & 7, *base);
+                    modrm_mem(code, d & 7, *base, *disp);
                 }
                 _ => {
                     return Err(String::from(
@@ -1714,7 +1876,7 @@ pub(crate) fn encode(
                     code.push(opcode);
                     code.push(modrm_reg(d & 7, s & 7));
                 }
-                Concrete::Mem { base, .. } => {
+                Concrete::Mem { base, disp, .. } => {
                     emit_vex(
                         code,
                         d >= 8,
@@ -1727,7 +1889,7 @@ pub(crate) fn encode(
                         pp,
                     );
                     code.push(opcode);
-                    modrm_mem(code, d & 7, *base);
+                    modrm_mem(code, d & 7, *base, *disp);
                 }
                 _ => {
                     return Err(String::from(
@@ -1936,6 +2098,127 @@ mod tests {
         out
     }
 
+    /// Parse a template of explicit-operand instructions (no `%N` refs),
+    /// resolve them the way the emitter does (memory width from the suffix,
+    /// else a GP register operand, else quad), and encode. For templates
+    /// whose expected bytes are byte-verified against clang.
+    fn asm_bytes(tmpl: &[u8]) -> Vec<u8> {
+        let mut out = Vec::new();
+        for insn in parse_template(tmpl).unwrap() {
+            let mem_size = insn.suffix.or_else(|| {
+                insn.operands.iter().find_map(|o| match *o {
+                    AsmOpnd::Reg { reg, size } if reg < 16 => Some(size),
+                    _ => None,
+                })
+            });
+            let ops: Vec<Concrete> = insn
+                .operands
+                .iter()
+                .map(|o| match *o {
+                    AsmOpnd::Reg { reg, size } => Concrete::Reg { reg, size },
+                    AsmOpnd::Imm(v) => Concrete::Imm(v),
+                    AsmOpnd::Mem {
+                        base: AsmMemBase::Reg(r),
+                        disp,
+                    } => Concrete::Mem {
+                        base: r,
+                        disp,
+                        size: mem_size.unwrap_or(AsmRegSize::Quad),
+                    },
+                    other => panic!("unexpected operand {other:?}"),
+                })
+                .collect();
+            encode(&mut out, insn.mnemonic, insn.suffix, &ops).unwrap();
+        }
+        out
+    }
+
+    #[test]
+    fn explicit_memory_operands() {
+        // Every addressing shape vs clang: disp0 / disp8 / disp32, negative
+        // displacements, and the rbp/r13 (no mod=00 form) and rsp/r12 (SIB)
+        // corners. Expected bytes from `clang --target=x86_64-unknown-linux-gnu`.
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"mov %%rbx, (%%rdx)",      &[0x48, 0x89, 0x1a]),
+            (b"mov %%rbp, 8(%%rdx)",     &[0x48, 0x89, 0x6a, 0x08]),
+            (b"mov %%r12, 16(%%rdx)",    &[0x4c, 0x89, 0x62, 0x10]),
+            (b"mov %%rsp, 24(%%rdx)",    &[0x48, 0x89, 0x62, 0x18]),
+            (b"movq (%%rax), %%rbx",     &[0x48, 0x8b, 0x18]),
+            (b"movq 72(%%rax), %%rsi",   &[0x48, 0x8b, 0x70, 0x48]),
+            (b"mov %%rax, (%%rsp)",      &[0x48, 0x89, 0x04, 0x24]),
+            (b"mov %%rax, 8(%%rsp)",     &[0x48, 0x89, 0x44, 0x24, 0x08]),
+            (b"mov %%rax, (%%rbp)",      &[0x48, 0x89, 0x45, 0x00]),
+            (b"mov %%rax, -16(%%rbp)",   &[0x48, 0x89, 0x45, 0xf0]),
+            (b"mov %%rax, (%%r12)",      &[0x49, 0x89, 0x04, 0x24]),
+            (b"mov %%rax, 8(%%r12)",     &[0x49, 0x89, 0x44, 0x24, 0x08]),
+            (b"mov %%rax, (%%r13)",      &[0x49, 0x89, 0x45, 0x00]),
+            (b"mov %%rax, -8(%%r13)",    &[0x49, 0x89, 0x45, 0xf8]),
+            (b"mov %%rax, 127(%%rdx)",   &[0x48, 0x89, 0x42, 0x7f]),
+            (b"mov %%rax, 128(%%rdx)",   &[0x48, 0x89, 0x82, 0x80, 0x00, 0x00, 0x00]),
+            (b"mov %%rax, -128(%%rdx)",  &[0x48, 0x89, 0x42, 0x80]),
+            (b"mov %%rax, -129(%%rdx)",  &[0x48, 0x89, 0x82, 0x7f, 0xff, 0xff, 0xff]),
+            (b"mov %%rax, 4096(%%r15)",  &[0x49, 0x89, 0x87, 0x00, 0x10, 0x00, 0x00]),
+            (b"movl %%ebx, 4(%%rdx)",    &[0x89, 0x5a, 0x04]),
+            (b"movw %%ax, 2(%%rdx)",     &[0x66, 0x89, 0x42, 0x02]),
+            (b"movb %%al, 1(%%rdx)",     &[0x88, 0x42, 0x01]),
+            (b"movb %%al, 1(%%r13)",     &[0x41, 0x88, 0x45, 0x01]),
+            (b"addq $7, 16(%%rdx)",      &[0x48, 0x83, 0x42, 0x10, 0x07]),
+            (b"incq (%%r13)",            &[0x49, 0xff, 0x45, 0x00]),
+            // Indirect branches through a register.
+            (b"jmp *%%rdx",              &[0xff, 0xe2]),
+            (b"jmp *%%r9",               &[0x41, 0xff, 0xe1]),
+            (b"call *%%rax",             &[0xff, 0xd0]),
+            // SSE moves / ops with a displaced memory operand (the bespoke
+            // encode arms, not the table).
+            (b"movdqa %%xmm1, 16(%%rdx)", &[0x66, 0x0f, 0x7f, 0x4a, 0x10]),
+            (b"movdqa 32(%%rsp), %%xmm2", &[0x66, 0x0f, 0x6f, 0x54, 0x24, 0x20]),
+            (b"movups %%xmm3, -16(%%rbp)", &[0x0f, 0x11, 0x5d, 0xf0]),
+            (b"paddd 8(%%rcx), %%xmm5",  &[0x66, 0x0f, 0xfe, 0x69, 0x08]),
+        ];
+        for (tmpl, want) in cases {
+            assert_eq!(
+                asm_bytes(tmpl),
+                *want,
+                "template {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn uniq_escape_and_labels() {
+        // `%=` gets one number per parse, shared across the template; the
+        // label definition and the `lea LABEL(%rip)` reference intern to the
+        // same named-label id.
+        let insns =
+            parse_template(b"lea LJMPRET%=(%%rip), %%rcx\n\tmov %%rbx, (%%rdx)\n\tLJMPRET%=:\n\t")
+                .unwrap();
+        let AsmOpnd::LabelAddr { num, .. } = insns[0].operands[0] else {
+            panic!("lea operand should be a label address");
+        };
+        assert!(num >= NAMED_LABEL_BASE);
+        assert_eq!(insns[2].label_def, Some(num));
+        // `.cfi_*` directives parse to nothing.
+        let insns =
+            parse_template(b".cfi_def_cfa %%rdx, 0\n\t.cfi_offset %%rbx, 0\n\tnop").unwrap();
+        assert_eq!(insns.len(), 1);
+        assert_eq!(insns[0].mnemonic, Mnemonic::Nop);
+        // A jump to a named label parses as a label operand, not a symbol.
+        let insns = parse_template(b"jmp done%=\n\tnop\n\tdone%=:").unwrap();
+        assert!(insns[0].sym_target.is_none());
+        assert!(matches!(insns[0].operands[0], AsmOpnd::Label { .. }));
+        // Numeric-label addresses take a direction suffix.
+        let insns = parse_template(b"1:\n\tlea 1b(%%rip), %%rax").unwrap();
+        assert!(matches!(
+            insns[1].operands[0],
+            AsmOpnd::LabelAddr {
+                num: 1,
+                forward: false
+            }
+        ));
+    }
+
     #[test]
     fn raw_byte_templates() {
         // Bare hex-byte run: each token is one byte (read as hex, so `90` is
@@ -2079,6 +2362,7 @@ mod tests {
         // destination still sets REX.R, a high base REX.B.
         let mem = |base: u8| Concrete::Mem {
             base,
+            disp: 0,
             size: AsmRegSize::Quad,
         };
         assert_eq!(
@@ -2103,6 +2387,7 @@ mod tests {
         };
         let mem = |base: u8| Concrete::Mem {
             base,
+            disp: 0,
             size: AsmRegSize::Quad,
         };
         let mov = |p, l, s| Mnemonic::SseMov {
@@ -2277,6 +2562,7 @@ mod tests {
         };
         let mem = |base: u8| Concrete::Mem {
             base,
+            disp: 0,
             size: AsmRegSize::Quad,
         };
         let mov = |ops: &[Concrete]| enc(Mnemonic::Mov, None, ops);
@@ -2529,6 +2815,7 @@ mod tests {
         // to memory uses store_op. Byte-exact vs clang.
         let mem = |base: u8| Concrete::Mem {
             base,
+            disp: 0,
             size: AsmRegSize::Quad,
         };
         let vmov = |pp, load_op, store_op| Mnemonic::VexMov {
@@ -2599,6 +2886,7 @@ mod tests {
         };
         let mem = |base: u8| Concrete::Mem {
             base,
+            disp: 0,
             size: AsmRegSize::Quad,
         };
         let e = |name: &str, ops: &[Concrete]| enc(vex_op(name).unwrap(), None, ops);

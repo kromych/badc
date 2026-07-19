@@ -1736,10 +1736,14 @@ impl Compiler {
         {
             return Some((AsmConstraint::Mem, is_rw));
         }
-        let has_reg = body.contains(['r', 'm', 'g', 'q']);
+        // A general-register alternative subsumes any specific-register or
+        // FP letter alongside it: `"rax"` is the multi-alternative r|a|x,
+        // not a register name, and GCC may satisfy it with any GP register.
+        let has_general = body.contains(['r', 'q', 'g']);
+        let has_reg = has_general || body.contains('m');
         // A specific-register letter (possibly combined with `i` as in
         // `ci`: the value takes that register, or an immediate).
-        if let Some(reg) = body.chars().find_map(fixed) {
+        if !has_general && let Some(reg) = body.chars().find_map(fixed) {
             if has_imm {
                 return Some((AsmConstraint::RegOrImm(reg), is_rw));
             }
@@ -1749,7 +1753,7 @@ impl Compiler {
         // Neither letter collides with the register/immediate/memory classes
         // handled above, so the mapping is target-independent; the backend
         // emitter reads the constraint to pick the v-register or xmm file.
-        if body.contains('w') || body.contains('x') {
+        if !has_general && (body.contains('w') || body.contains('x')) {
             return Some((AsmConstraint::Fp, is_rw));
         }
         if has_reg {

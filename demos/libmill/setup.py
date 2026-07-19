@@ -11,10 +11,10 @@ tree is re-extracted on every run, so the result is deterministic:
 
   1. The x86-64 asm setjmp/longjmp context switch is put behind
      ``!defined MILL_ARCH_FALLBACK`` (the knob libdill already has
-     upstream). TODO(badc): the asm path needs the `%=` template
-     escape, `lea <label>(%rip), reg`, and explicit-register memory
-     operands (`8(%%rdx)`), none of which the x86-64 inline-asm
-     catalogue accepts yet.
+     upstream). badc compiles the asm path (the `%=` template escape,
+     `lea <label>(%rip), reg`, and explicit-register memory operands
+     like `8(%%rdx)`), so the knob is only defined on non-x86-64
+     architectures.
   2. The sigsetjmp/siglongjmp fallback macros deref through a cast.
      TODO(badc): dereferencing a typedef'd pointer-to-array
      (`mill_ctx` = `sigjmp_buf *`) yields the element type, so the
@@ -24,10 +24,9 @@ tree is re-extracted on every run, so the result is deterministic:
      of upstream's stack-pointer-displacing VLA. TODO(badc): VLA and
      alloca allocate from a fixed 8 KiB frame arena and trap (brk #1)
      on larger sizes, so the VLA form cannot move sp. The move parks
-     sp 64 bytes below the aligned stack top: badc wraps a spilled asm
-     operand in a 16-byte sp-relative block and unwinds it after the
-     asm, so the gap keeps that unwind and the first frame inside the
-     new stack.
+     sp 64 bytes below the aligned stack top; badc keeps its asm
+     operand scratch in the caller's frame (rbp-relative), so nothing
+     it needs sits below the moved sp and the gap is plain headroom.
 
 Without -DMILL_BADC_SETSP and -DMILL_ARCH_FALLBACK the patched tree
 still builds with gcc/clang exactly as upstream does.

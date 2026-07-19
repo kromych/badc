@@ -15,11 +15,11 @@ Pipeline:
     must exit 0.
 
 Both -O0 and -O are exercised (with -UNDEBUG at -O so the predefined
-NDEBUG does not strip the tests' asserts). Context switching runs
-sigsetjmp/siglongjmp (upstream's DILL_ARCH_FALLBACK) plus a
-one-instruction inline-asm stack-pointer move on every platform; see
-setup.py for why the upstream x86-64 asm path and the alloca stack
-switch are patched out under badc.
+NDEBUG does not strip the tests' asserts). On x86-64 context switching
+runs upstream's native asm dill_setjmp/dill_longjmp; elsewhere it runs
+sigsetjmp/siglongjmp (upstream's DILL_ARCH_FALLBACK). Both use the
+one-instruction inline-asm stack-pointer move; see setup.py for why
+the alloca stack switches are patched out under badc.
 
 The socket/tls suites and the timing-sensitive sleep test stay out:
 the smoke targets the context-switch core and must stay deterministic
@@ -32,6 +32,7 @@ POSIX only. Override the badc binary via the ``BADC`` env var
 from __future__ import annotations
 
 import os
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -60,18 +61,20 @@ def run(cmd, **kw):
 
 
 def base_flags() -> list[str]:
-    # DILL_ARCH_FALLBACK is upstream's own sigsetjmp knob;
-    # DILL_BADC_SETSP selects the asm sp move added by setup.py. The
-    # x86intrin.h shim next to this script satisfies now.c's __rdtsc
-    # include on x86 targets. --gnu satisfies the visibility and
-    # __builtin_expect surface.
+    # x86-64 builds upstream's native asm context switch; other
+    # architectures use DILL_ARCH_FALLBACK, upstream's own sigsetjmp
+    # knob. DILL_BADC_SETSP selects the asm sp move added by setup.py.
+    # The x86intrin.h shim next to this script satisfies now.c's
+    # __rdtsc include on x86 targets. --gnu satisfies the visibility
+    # and __builtin_expect surface.
     flags = [
         "--gnu",
         "-I",
         str(DILL_DIR),
-        "-DDILL_ARCH_FALLBACK",
         "-DDILL_BADC_SETSP",
     ]
+    if platform.machine().lower() not in ("x86_64", "amd64"):
+        flags.append("-DDILL_ARCH_FALLBACK")
     if sys.platform == "darwin":
         # TODO(badc): no bundled <sys/event.h>, so the default kqueue
         # pollset cannot build; DILL_POLL is the library's poll(2)

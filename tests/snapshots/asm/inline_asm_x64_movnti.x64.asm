@@ -13,26 +13,23 @@ Disassembly of section .text:
 <store_nt>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x30, %rsp
                	movslq	%edi, %rdi
                	xorq	%rax, %rax
                	movl	%eax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
-               	pushq	%rax
-               	pushq	%rbx
-               	movq	%rax, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	0x8(%rsp), %rax
-               	movq	(%rsp), %rbx
+               	movq	%rax, -0x30(%rbp)
+               	movq	%rbx, -0x28(%rbp)
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rdi, -0x18(%rbp)
+               	movq	-0x20(%rbp), %rax
+               	movq	-0x18(%rbp), %rbx
                	movntil	%ebx, (%rax)
                	sfence
-               	addq	$0x10, %rsp
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x30(%rbp), %rax
+               	movq	-0x28(%rbp), %rbx
                	movslq	-0x8(%rbp), %rax
-               	addq	$0x10, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
 

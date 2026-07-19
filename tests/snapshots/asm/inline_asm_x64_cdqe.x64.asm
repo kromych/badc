@@ -13,22 +13,19 @@ Disassembly of section .text:
 <sext_asm>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x30, %rsp
                	movslq	%edi, %rdi
                	leaq	-0x8(%rbp), %rax
-               	pushq	%rax
-               	movq	%rax, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	(%rsp), %rax
+               	movq	%rax, -0x30(%rbp)
+               	movq	%rax, -0x28(%rbp)
+               	movq	%rdi, -0x20(%rbp)
+               	movq	-0x20(%rbp), %rax
                	cltq
-               	movq	0x8(%rsp), %r11
+               	movq	-0x28(%rbp), %r11
                	movq	%rax, (%r11)
-               	addq	$0x10, %rsp
-               	popq	%rax
+               	movq	-0x30(%rbp), %rax
                	movq	-0x8(%rbp), %rax
-               	addq	$0x10, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
 

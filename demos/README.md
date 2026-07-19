@@ -144,10 +144,12 @@ concurrency), and [tsoding/coroutines](https://github.com/tsoding/coroutines)
 (hand-written SysV asm in naked functions). Pinned upstream commits,
 fetched by each demo's `setup.py`; each smoke builds the library with
 badc at -O0 and -O and runs the upstream tests (spawn / yield /
-channel rendezvous; exact-output examples for coroutines). libmill /
-libdill switch stacks via sigsetjmp plus a one-instruction asm sp
-move (see each setup.py for the badc-motivated patches); coroutines
-compiles unpatched but runs only on linux-x86_64 by upstream design.
+channel rendezvous; exact-output examples for coroutines). On x86-64,
+libmill / libdill run their upstream asm setjmp/longjmp context
+switches; other architectures use sigsetjmp. Both pair with a
+one-instruction asm sp move (see each setup.py for the badc-motivated
+patches); coroutines compiles unpatched but runs only on linux-x86_64
+by upstream design.
 
 ## gui_hello/
 

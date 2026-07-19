@@ -2038,6 +2038,17 @@ fn run_inline_asm(
             "inline asm: asm goto is not supported under --interp",
         )));
     }
+    // Explicit `disp(%reg)` references and label addresses touch machine
+    // memory / code layout the register model does not carry.
+    if insns.iter().any(|i| {
+        i.operands
+            .iter()
+            .any(|o| matches!(o, AsmOpnd::Mem { .. } | AsmOpnd::LabelAddr { .. }))
+    }) {
+        return Err(C5Error::Runtime(alloc::string::String::from(
+            "inline asm: explicit memory operands are not supported under --interp",
+        )));
+    }
     let op_reg =
         crate::c5::codegen::x86_64::asm::assign_operand_regs(&asm.operands, asm.clobber_fp_regs)
             .map_err(C5Error::Runtime)?;
@@ -2083,9 +2094,11 @@ fn run_inline_asm(
                     None => (frame.regs[args[idx as usize] as usize], sz),
                 }
             }
-            // A label reference is a branch target, never a value operand; the
-            // jmp / jcc that carries it is refused under the interpreter.
-            AsmOpnd::Label { .. } | AsmOpnd::GotoLabel(_) => (0, AsmRegSize::Long),
+            // Label / memory references are refused before this loop.
+            AsmOpnd::Label { .. }
+            | AsmOpnd::LabelAddr { .. }
+            | AsmOpnd::GotoLabel(_)
+            | AsmOpnd::Mem { .. } => (0, AsmRegSize::Long),
         }
     };
     // The model register a destination operand writes into.
@@ -2095,7 +2108,11 @@ fn run_inline_asm(
             // segment, marked >= 16) has no modelled slot: no-op.
             AsmOpnd::Reg { reg, .. } => (reg < 16).then_some(reg as usize),
             AsmOpnd::Ref { idx, .. } => op_reg[idx as usize].map(|r| r as usize),
-            AsmOpnd::Imm(_) | AsmOpnd::Label { .. } | AsmOpnd::GotoLabel(_) => None,
+            AsmOpnd::Imm(_)
+            | AsmOpnd::Label { .. }
+            | AsmOpnd::LabelAddr { .. }
+            | AsmOpnd::GotoLabel(_)
+            | AsmOpnd::Mem { .. } => None,
         }
     };
 

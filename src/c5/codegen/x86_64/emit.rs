@@ -85,6 +85,12 @@ pub(crate) struct Frame {
     /// Bytes of saved non-volatile xmm scratch (Win64), 16 per register;
     /// 0 on System V.
     pub saved_fpr_bytes: u32,
+    /// rbp-relative base of the inline-asm scratch region (operand captures
+    /// plus register saves); 0 when the function has no inline asm. Frame
+    /// storage rather than pushes: a setjmp-style template may save rsp and
+    /// be resumed later by a longjmp-style one after the memory below rsp
+    /// was reused, so nothing the block needs afterwards may live there.
+    pub asm_scratch_off: i32,
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
@@ -114,8 +120,21 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
     // Saved non-volatile xmm scratch (Win64): 16 bytes per register,
     // placed at the bottom of the frame below the saved-GPR region.
     let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
-    let frame_bytes =
-        locals_bytes + alloc_spill_bytes + saved_gpr_bytes + va_save_bytes + saved_fpr_bytes;
+    // Inline-asm scratch, directly below the va save area (or the spill
+    // region when there is none) and above the rsp-addressed saved
+    // registers. Sized for the largest block in the function.
+    let asm_bytes = asm_scratch_bytes(func);
+    let asm_scratch_off = if asm_bytes > 0 {
+        -((locals_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes) as i32)
+    } else {
+        0
+    };
+    let frame_bytes = locals_bytes
+        + alloc_spill_bytes
+        + saved_gpr_bytes
+        + va_save_bytes
+        + saved_fpr_bytes
+        + asm_bytes;
     let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
     // A Win64 variadic callee receives every argument (named and
     // variadic) in a contiguous 8-byte-per-argument region: the
@@ -138,7 +157,37 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
         param_cell_stride,
         va_reg_save_off,
         saved_fpr_bytes,
+        asm_scratch_off,
     }
+}
+
+/// Bytes of frame scratch the function's largest inline-asm block needs:
+/// 16 per saved xmm, 8 per saved GP register, 8 per operand capture.
+/// Mirrors the save-list computation in [`emit_inline_asm`].
+fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
+    use super::super::ir::AsmConstraint;
+    let mut max = 0u32;
+    for inst in &func.insts {
+        let Inst::InlineAsm { asm, args } = inst else {
+            continue;
+        };
+        let Ok(op_reg) = super::asm::assign_operand_regs(&asm.operands, asm.clobber_fp_regs) else {
+            continue;
+        };
+        let mut used = asm.clobber_regs;
+        let mut fp_used = asm.clobber_fp_regs;
+        for (i, op) in asm.operands.iter().enumerate() {
+            let Some(r) = op_reg[i] else { continue };
+            if matches!(op.constraint, AsmConstraint::Fp) {
+                fp_used |= 1 << r;
+            } else {
+                used |= 1 << r;
+            }
+        }
+        let bytes = fp_used.count_ones() * 16 + used.count_ones() * 8 + args.len() as u32 * 8;
+        max = max.max(bytes);
+    }
+    super::ssa::emit_common::align16(max)
 }
 
 /// True when the function is a variadic c5 callee compiled for the
@@ -5882,8 +5931,9 @@ fn emit_inline_asm(
         }
     };
     // Registers the asm overwrites: the operand registers plus the explicit
-    // clobber list. GP operands and clobbers push/pop; `x` (xmm) operands and
-    // FP clobbers live in the independent XMM file and spill separately.
+    // clobber list. GP registers save to 8-byte scratch slots; `x` (xmm)
+    // operands and FP clobbers live in the independent XMM file and take
+    // 16-byte slots.
     let mut used = asm.clobber_regs;
     let mut fp_used = asm.clobber_fp_regs;
     for (i, op) in asm.operands.iter().enumerate() {
@@ -5896,42 +5946,37 @@ fn emit_inline_asm(
     }
     let save_list: alloc::vec::Vec<u8> = (0u8..16).filter(|r| used & (1 << r) != 0).collect();
     let fp_save_list: alloc::vec::Vec<u8> = (0u8..16).filter(|r| fp_used & (1 << r) != 0).collect();
-    // Reserve the xmm spill area first (16 bytes each, movups -- no alignment
-    // requirement), so the GP pushes and captures below keep their rsp-relative
-    // offsets; the area sits above the GP saves and is restored last.
+    // Register saves and operand captures live in the frame's asm scratch
+    // region (rbp-relative), never below rsp: a setjmp-style template saves
+    // rsp mid-block and a later longjmp-style one resumes it after the
+    // memory below that rsp was reused by other calls. rbp survives such a
+    // round trip (the resuming template restores it), so frame slots do.
+    // Layout from the region base up: xmm saves, GP saves, captures.
     let fp_area = fp_save_list.len() as i32 * 16;
-    if fp_area > 0 {
-        super::encode::emit_ri(code, Mnem::Sub, 8, Reg::RSP, fp_area);
-        for (k, &r) in fp_save_list.iter().enumerate() {
-            super::encode::emit_movups_mem_xmm(code, Reg::RSP, k as i32 * 16, Reg(r));
-        }
+    let base = frame.asm_scratch_off;
+    debug_assert!(
+        base != 0 || (fp_area == 0 && save_list.is_empty() && asm.operands.is_empty()),
+        "inline asm without a frame scratch region"
+    );
+    let gp_off = |k: usize| -> i32 { base + fp_area + 8 * k as i32 };
+    let cap_off = |i: usize| -> i32 { base + fp_area + 8 * (save_list.len() + i) as i32 };
+    for (k, &r) in fp_save_list.iter().enumerate() {
+        super::encode::emit_movups_mem_xmm(code, Reg::RBP, base + k as i32 * 16, Reg(r));
     }
-    for &r in &save_list {
-        super::encode::emit_push_r(code, Reg(r));
+    for (k, &r) in save_list.iter().enumerate() {
+        super::encode::emit_mov_mem_r(code, Reg::RBP, gp_off(k), Reg(r));
     }
-    // Capture each operand's value (input) / address (output) into a
-    // stack slot via r10, before any asm register is written. rsp has moved
-    // down by the xmm spill area plus the pushes so far, so a place spilled to
-    // an rsp-relative slot must be read through the shifted form; the shift
-    // grows by 8 with each capture push.
-    let n = asm.operands.len();
-    let cap_shift = fp_area as u32 + 8 * save_list.len() as u32;
+    // Capture each operand's value (input) / address (output) into its
+    // slot before any asm register is written (r10 as the load scratch).
     for (i, &a) in args.iter().enumerate() {
         let Some(place) = alloc.places.get(a as usize).copied() else {
             return fail("inline asm: operand place missing");
         };
-        let shift = cap_shift + 8 * i as u32;
-        let Some(r) = materialize_int_shifted(code, place, SCRATCH_R10, frame, shift) else {
+        let Some(r) = materialize_int(code, place, SCRATCH_R10, frame) else {
             return fail("inline asm: operand not an integer place");
         };
-        if r.0 != SCRATCH_R10.0 {
-            emit_mov_rr(code, SCRATCH_R10, r);
-        }
-        super::encode::emit_push_r(code, SCRATCH_R10);
+        super::encode::emit_mov_mem_r(code, Reg::RBP, cap_off(i), r);
     }
-    // The i-th captured slot now sits at `[rsp + (n-1-i)*8]`; rsp does
-    // not move again until the block finishes.
-    let cap_off = |i: usize| -> i32 { ((n - 1 - i) * 8) as i32 };
     // Load inputs into their registers; a `+` output loads its current
     // value from the destination address. A memory operand instead loads its
     // captured address into the register -- the instruction dereferences it.
@@ -5943,7 +5988,7 @@ fn emit_inline_asm(
             // assigned xmm. An output-only `=x` is written by the asm, so skip
             // its load; a `+x` needs the current value.
             if !op.is_output || op.is_rw {
-                super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RSP, cap_off(i));
+                super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RBP, cap_off(i));
                 super::encode::emit_movups_xmm_mem(code, Reg(r), SCRATCH_R11, 0);
             }
             continue;
@@ -5952,18 +5997,17 @@ fn emit_inline_asm(
         if matches!(op.constraint, AsmConstraint::Mem) || !op.is_output {
             // A memory operand loads its captured address; a plain input
             // loads its value. Both come from the captured slot.
-            super::encode::emit_mov_r_mem(code, reg, Reg::RSP, cap_off(i));
+            super::encode::emit_mov_r_mem(code, reg, Reg::RBP, cap_off(i));
         } else if op.is_rw {
-            super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RSP, cap_off(i));
+            super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RBP, cap_off(i));
             emit_asm_load_width(code, reg, SCRATCH_R11, op.width);
         }
     }
     // Local labels: definitions record the code offset they stand at; a
-    // jmp / jcc to a label records the rel32 site to patch once every
-    // definition's offset is known.
+    // jmp / jcc / lea referencing a label records the position of its rel32
+    // field, patched once every definition's offset is known.
     let mut label_defs: alloc::vec::Vec<(u32, usize)> = alloc::vec::Vec::new();
-    let mut label_fixups: alloc::vec::Vec<(usize, Option<super::encode::Cc>, u32, bool)> =
-        alloc::vec::Vec::new();
+    let mut label_fixups: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
     // `asm goto` label branches: `(rel32_site, opcode_len, label_index)`
     // per `%lK` reference, patched to the label's restore trampoline
     // (or to the shared fall-through restore when the label target is
@@ -5992,12 +6036,57 @@ fn emit_inline_asm(
             if cc.is_none() && !matches!(name, "jmp" | "jmpq") {
                 return fail("inline asm: label operand on a non-jump");
             }
-            let site = code.len();
             match cc {
                 Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
                 None => super::encode::emit_jmp_rel32(code, 0),
             }
-            label_fixups.push((site, cc, num, forward));
+            label_fixups.push((code.len() - 4, num, forward));
+            continue;
+        }
+        // `lea LABEL(%rip), %reg`: materialize a template-local label's
+        // address. The table emits the RIP-relative form with a zero rel32
+        // (its last four bytes); the label fixup pass patches it like the
+        // jump displacements.
+        if let Some(&AsmOpnd::LabelAddr { num, forward }) = insn.operands.first() {
+            if !matches!(insn.mnemonic, super::asm::Mnemonic::Table("lea")) {
+                return fail("inline asm: a label address requires `lea`");
+            }
+            let [_, dst] = insn.operands.as_slice() else {
+                return fail("inline asm: `lea` needs a destination register");
+            };
+            let (reg, width) = match *dst {
+                AsmOpnd::Reg { reg, size } if reg < 16 => (reg, size.bytes()),
+                AsmOpnd::Ref { idx, size } => match op_reg[idx as usize] {
+                    Some(r)
+                        if !matches!(
+                            asm.operands[idx as usize].constraint,
+                            AsmConstraint::Fp | AsmConstraint::Mem
+                        ) =>
+                    {
+                        (
+                            r,
+                            size.unwrap_or(AsmRegSize::from_width(
+                                asm.operands[idx as usize].width,
+                            ))
+                            .bytes(),
+                        )
+                    }
+                    _ => return fail("inline asm: `lea` destination must be a register"),
+                },
+                _ => return fail("inline asm: `lea` destination must be a register"),
+            };
+            let tops = [
+                super::table::Opnd::Reg { num: reg, width },
+                super::table::Opnd::RipRel { disp: 0, width },
+            ];
+            match super::table::encode(super::table::Mnem::Lea, None, &tops) {
+                Ok(bytes) => code.extend_from_slice(&bytes),
+                Err(m) => {
+                    bail_msg(&m);
+                    return false;
+                }
+            }
+            label_fixups.push((code.len() - 4, num, forward));
             continue;
         }
         // A jmp / jcc to an `asm goto` label (`%lK`): emit the rel32
@@ -6063,7 +6152,11 @@ fn emit_inline_asm(
                                 AsmConstraint::Mem
                             ) =>
                         {
-                            Concrete::Mem { base: r, size }
+                            Concrete::Mem {
+                                base: r,
+                                disp: 0,
+                                size,
+                            }
                         }
                         Some(r)
                             if matches!(
@@ -6085,9 +6178,50 @@ fn emit_inline_asm(
                         },
                     }
                 }
-                // Handled above (jmp / jcc to a local label); a label reaching
-                // operand resolution means it rode a non-branch mnemonic.
-                AsmOpnd::Label { .. } | AsmOpnd::GotoLabel(_) => {
+                // An explicit `disp(%reg)` memory reference. Its access width
+                // comes from the AT&T suffix, else from a GP register operand
+                // of the same instruction, else the 64-bit default.
+                AsmOpnd::Mem { base, disp } => {
+                    let size = insn.suffix.or_else(|| {
+                        insn.operands.iter().find_map(|o| match *o {
+                            AsmOpnd::Reg { reg, size } if reg < 16 => Some(size),
+                            AsmOpnd::Ref { idx, size }
+                                if !matches!(
+                                    asm.operands[idx as usize].constraint,
+                                    AsmConstraint::Fp | AsmConstraint::Mem
+                                ) =>
+                            {
+                                Some(size.unwrap_or(AsmRegSize::from_width(
+                                    asm.operands[idx as usize].width,
+                                )))
+                            }
+                            _ => None,
+                        })
+                    });
+                    let base = match base {
+                        super::asm::AsmMemBase::Reg(r) => r,
+                        super::asm::AsmMemBase::Ref(idx) => {
+                            match op_reg.get(idx as usize).copied().flatten().filter(|_| {
+                                !matches!(asm.operands[idx as usize].constraint, AsmConstraint::Fp)
+                            }) {
+                                Some(r) => r,
+                                None => {
+                                    return fail(
+                                        "inline asm: memory base must be a register operand",
+                                    );
+                                }
+                            }
+                        }
+                    };
+                    Concrete::Mem {
+                        base,
+                        disp,
+                        size: size.unwrap_or(AsmRegSize::Quad),
+                    }
+                }
+                // Handled above (jmp / jcc / lea referencing a local label); a
+                // label reaching operand resolution rode an unsupported form.
+                AsmOpnd::Label { .. } | AsmOpnd::LabelAddr { .. } | AsmOpnd::GotoLabel(_) => {
                     return fail("inline asm: misplaced label reference");
                 }
             };
@@ -6098,31 +6232,34 @@ fn emit_inline_asm(
             return false;
         }
     }
-    // Patch each label branch now that every definition's offset is known. A
-    // forward `Nf` takes the nearest matching definition after the site; a
-    // backward `Nb`, the nearest at or before it (GNU as local-label rule).
-    for &(site, cc, num, forward) in &label_fixups {
-        let target = if forward {
+    // Patch each label reference now that every definition's offset is
+    // known. A forward `Nf` takes the nearest matching definition after the
+    // reference; a backward `Nb`, the nearest at or before it (GNU as
+    // local-label rule). A named label has exactly one definition, so the
+    // direction is ignored. The rel32 is measured from the end of its field.
+    for &(at, num, forward) in &label_fixups {
+        let target = if num >= super::asm::NAMED_LABEL_BASE {
             label_defs
                 .iter()
-                .filter(|&&(n, off)| n == num && off > site)
+                .find(|&&(n, _)| n == num)
+                .map(|&(_, off)| off)
+        } else if forward {
+            label_defs
+                .iter()
+                .filter(|&&(n, off)| n == num && off > at)
                 .map(|&(_, off)| off)
                 .min()
         } else {
             label_defs
                 .iter()
-                .filter(|&&(n, off)| n == num && off <= site)
+                .filter(|&&(n, off)| n == num && off <= at)
                 .map(|&(_, off)| off)
                 .max()
         };
         let Some(target) = target else {
             return fail("inline asm: undefined local label");
         };
-        // rel32 sits after the opcode (1 byte for jmp, 2 for jcc) and is
-        // measured from the end of the instruction.
-        let opcode_len = if cc.is_some() { 2 } else { 1 };
-        let rel = target as i64 - (site as i64 + opcode_len as i64 + 4);
-        let at = site + opcode_len;
+        let rel = target as i64 - (at as i64 + 4);
         code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());
     }
     // Store the register outputs back through their captured addresses. A
@@ -6132,27 +6269,20 @@ fn emit_inline_asm(
             continue;
         }
         let Some(r) = op_reg[i] else { continue };
-        super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RSP, cap_off(i));
+        super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RBP, cap_off(i));
         if matches!(op.constraint, AsmConstraint::Fp) {
             super::encode::emit_movups_mem_xmm(code, SCRATCH_R11, 0, Reg(r));
         } else {
             emit_asm_store_width(code, SCRATCH_R11, Reg(r), op.width);
         }
     }
-    // Discard the captured slots and restore the saved registers; the
-    // xmm spill area sits above the GP saves and is restored last.
+    // Restore the saved registers from their frame slots.
     let emit_restore = |code: &mut Vec<u8>| {
-        if n > 0 {
-            super::encode::emit_ri(code, Mnem::Add, 8, Reg::RSP, (n * 8) as i32);
+        for (k, &r) in save_list.iter().enumerate() {
+            super::encode::emit_mov_r_mem(code, Reg(r), Reg::RBP, gp_off(k));
         }
-        for &r in save_list.iter().rev() {
-            super::encode::emit_pop_r(code, Reg(r));
-        }
-        if fp_area > 0 {
-            for (k, &r) in fp_save_list.iter().enumerate() {
-                super::encode::emit_movups_xmm_mem(code, Reg(r), Reg::RSP, k as i32 * 16);
-            }
-            super::encode::emit_ri(code, Mnem::Add, 8, Reg::RSP, fp_area);
+        for (k, &r) in fp_save_list.iter().enumerate() {
+            super::encode::emit_movups_xmm_mem(code, Reg(r), Reg::RBP, base + k as i32 * 16);
         }
     };
     let restore_start = code.len();

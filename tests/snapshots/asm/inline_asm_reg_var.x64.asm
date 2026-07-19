@@ -13,58 +13,51 @@ Disassembly of section .text:
 <add_pinned>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x50, %rsp
                	movl	$0x1e, %eax
                	movl	$0xa, %ecx
                	leaq	-0x18(%rbp), %rdx
-               	pushq	%rax
-               	pushq	%r9
-               	pushq	%r12
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rax, %r10
-               	pushq	%r10
-               	movq	%rcx, %r10
-               	pushq	%r10
-               	movq	0x8(%rsp), %r9
-               	movq	(%rsp), %r12
+               	movq	%rax, -0x50(%rbp)
+               	movq	%r9, -0x48(%rbp)
+               	movq	%r12, -0x40(%rbp)
+               	movq	%rdx, -0x38(%rbp)
+               	movq	%rax, -0x30(%rbp)
+               	movq	%rcx, -0x28(%rbp)
+               	movq	-0x30(%rbp), %r9
+               	movq	-0x28(%rbp), %r12
                	movq	%r9, %rax
                	addq	%r12, %rax
-               	movq	0x10(%rsp), %r11
+               	movq	-0x38(%rbp), %r11
                	movq	%rax, (%r11)
-               	addq	$0x18, %rsp
-               	popq	%r12
-               	popq	%r9
-               	popq	%rax
+               	movq	-0x50(%rbp), %rax
+               	movq	-0x48(%rbp), %r9
+               	movq	-0x40(%rbp), %r12
                	movq	-0x18(%rbp), %rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
-               	addq	$0x20, %rsp
+               	addq	$0x50, %rsp
                	popq	%rbp
                	retq
 
 <narrow_pinned>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x30, %rsp
                	movl	$0x1, %eax
                	leaq	-0x10(%rbp), %rcx
-               	pushq	%rax
-               	pushq	%r9
-               	movq	%rcx, %r10
-               	pushq	%r10
-               	movq	%rax, %r10
-               	pushq	%r10
-               	movq	(%rsp), %r9
+               	movq	%rax, -0x30(%rbp)
+               	movq	%r9, -0x28(%rbp)
+               	movq	%rcx, -0x20(%rbp)
+               	movq	%rax, -0x18(%rbp)
+               	movq	-0x18(%rbp), %r9
                	movl	%r9d, %eax
                	addl	%r9d, %eax
-               	movq	0x8(%rsp), %r11
+               	movq	-0x20(%rbp), %r11
                	movl	%eax, (%r11)
-               	addq	$0x10, %rsp
-               	popq	%r9
-               	popq	%rax
+               	movq	-0x30(%rbp), %rax
+               	movq	-0x28(%rbp), %r9
                	movslq	-0x10(%rbp), %rax
-               	addq	$0x10, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
 

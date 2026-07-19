@@ -1039,12 +1039,12 @@ jobs:
         run: python demos/tcl/smoke.py
 
   # Cooperative-concurrency demos: each library's context switch leans
-  # on constructs the fixtures cover only piecemeal -- inline-asm
-  # stack-pointer moves plus sigsetjmp across stacks (libmill /
-  # libdill) and naked functions with hand-written SysV asm
-  # (coroutines) -- so running the upstream tests guards the asm
-  # surface end to end. POSIX only; the smokes print a skip on
-  # Windows.
+  # on constructs the fixtures cover only piecemeal -- the upstream asm
+  # setjmp/longjmp switch on x86-64 (sigsetjmp elsewhere) plus
+  # inline-asm stack-pointer moves (libmill / libdill) and naked
+  # functions with hand-written SysV asm (coroutines) -- so running
+  # the upstream tests guards the asm surface end to end. POSIX only;
+  # the smokes print a skip on Windows.
   libmill:
     name: libmill suite (${{ matrix.os }})
     strategy:

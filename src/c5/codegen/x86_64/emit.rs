@@ -5818,20 +5818,38 @@ fn emit_inline_asm(
             return false;
         }
     };
-    let op_reg = match super::asm::assign_operand_regs(&asm.operands) {
+    let op_reg = match super::asm::assign_operand_regs(&asm.operands, asm.clobber_fp_regs) {
         Ok(r) => r,
         Err(m) => {
             bail_msg(&m);
             return false;
         }
     };
-    // Registers the asm overwrites: the operand registers plus the
-    // explicit clobber list. Save and restore them around the block.
+    // Registers the asm overwrites: the operand registers plus the explicit
+    // clobber list. GP operands and clobbers push/pop; `x` (xmm) operands and
+    // FP clobbers live in the independent XMM file and spill separately.
     let mut used = asm.clobber_regs;
-    for r in op_reg.iter().flatten() {
-        used |= 1 << r;
+    let mut fp_used = asm.clobber_fp_regs;
+    for (i, op) in asm.operands.iter().enumerate() {
+        let Some(r) = op_reg[i] else { continue };
+        if matches!(op.constraint, AsmConstraint::Fp) {
+            fp_used |= 1 << r;
+        } else {
+            used |= 1 << r;
+        }
     }
     let save_list: alloc::vec::Vec<u8> = (0u8..16).filter(|r| used & (1 << r) != 0).collect();
+    let fp_save_list: alloc::vec::Vec<u8> = (0u8..16).filter(|r| fp_used & (1 << r) != 0).collect();
+    // Reserve the xmm spill area first (16 bytes each, movups -- no alignment
+    // requirement), so the GP pushes and captures below keep their rsp-relative
+    // offsets; the area sits above the GP saves and is restored last.
+    let fp_area = fp_save_list.len() as i32 * 16;
+    if fp_area > 0 {
+        super::encode::emit_ri(code, Mnem::Sub, 8, Reg::RSP, fp_area);
+        for (k, &r) in fp_save_list.iter().enumerate() {
+            super::encode::emit_movups_mem_xmm(code, Reg::RSP, k as i32 * 16, Reg(r));
+        }
+    }
     for &r in &save_list {
         super::encode::emit_push_r(code, Reg(r));
     }
@@ -5858,6 +5876,17 @@ fn emit_inline_asm(
     // captured address into the register -- the instruction dereferences it.
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
+        if matches!(op.constraint, AsmConstraint::Fp) {
+            // The captured slot holds the operand's address (a 16-byte value is
+            // addressed, not passed in a register); load its 128 bits into the
+            // assigned xmm. An output-only `=x` is written by the asm, so skip
+            // its load; a `+x` needs the current value.
+            if !op.is_output || op.is_rw {
+                super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RSP, cap_off(i));
+                super::encode::emit_movups_xmm_mem(code, Reg(r), SCRATCH_R11, 0);
+            }
+            continue;
+        }
         let reg = Reg(r);
         if matches!(op.constraint, AsmConstraint::Mem) || !op.is_output {
             // A memory operand loads its captured address; a plain input
@@ -5945,6 +5974,17 @@ fn emit_inline_asm(
                         {
                             Concrete::Mem { base: r, size }
                         }
+                        Some(r)
+                            if matches!(
+                                asm.operands[idx as usize].constraint,
+                                AsmConstraint::Fp
+                            ) =>
+                        {
+                            Concrete::Reg {
+                                reg: super::asm::XMM_BASE + r,
+                                size,
+                            }
+                        }
                         Some(r) => Concrete::Reg { reg: r, size },
                         // A `%N` naming an immediate-only operand: use its
                         // constant value.
@@ -6000,7 +6040,11 @@ fn emit_inline_asm(
         }
         let Some(r) = op_reg[i] else { continue };
         super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RSP, cap_off(i));
-        emit_asm_store_width(code, SCRATCH_R11, Reg(r), op.width);
+        if matches!(op.constraint, AsmConstraint::Fp) {
+            super::encode::emit_movups_mem_xmm(code, SCRATCH_R11, 0, Reg(r));
+        } else {
+            emit_asm_store_width(code, SCRATCH_R11, Reg(r), op.width);
+        }
     }
     // Discard the captured slots and restore the saved registers.
     if n > 0 {
@@ -6008,6 +6052,14 @@ fn emit_inline_asm(
     }
     for &r in save_list.iter().rev() {
         super::encode::emit_pop_r(code, Reg(r));
+    }
+    // rsp now points at the xmm spill area (above the just-popped GP saves);
+    // restore each xmm and release the area.
+    if fp_area > 0 {
+        for (k, &r) in fp_save_list.iter().enumerate() {
+            super::encode::emit_movups_xmm_mem(code, Reg(r), Reg::RSP, k as i32 * 16);
+        }
+        super::encode::emit_ri(code, Mnem::Add, 8, Reg::RSP, fp_area);
     }
     true
 }

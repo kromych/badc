@@ -271,7 +271,7 @@ pub(crate) fn reg_by_name(name: &str) -> Option<(u8, AsmRegSize)> {
 const MMX_BASE: u8 = 16;
 /// XMM registers occupy `XMM_BASE..XMM_BASE+16`, clear of the GPR/MMX/CR/DR/SEG
 /// marks below.
-const XMM_BASE: u8 = 64;
+pub(crate) const XMM_BASE: u8 = 64;
 /// Control / debug / segment registers occupy the ranges below; each is
 /// marked so it never collides with the 0..16 GPRs or the MMX marks.
 const CR_BASE: u8 = 24;
@@ -288,6 +288,7 @@ const SEG_BASE: u8 = 48;
 /// resolve the template's `%N` references to the same registers.
 pub(crate) fn assign_operand_regs(
     operands: &[crate::c5::ir::AsmOperand],
+    clobber_fp_regs: u32,
 ) -> Result<Vec<Option<u8>>, String> {
     use crate::c5::ir::AsmConstraint as C;
     let mut assigned: Vec<Option<u8>> = alloc::vec![None; operands.len()];
@@ -310,6 +311,25 @@ pub(crate) fn assign_operand_regs(
                 .find(|&r| !used[r as usize])
                 .ok_or_else(|| String::from("inline asm: out of registers for operands"))?;
             used[r as usize] = true;
+            assigned[i] = Some(r);
+        }
+    }
+    // `x` operands take an XMM register (xmm0..15). The GP and XMM files are
+    // independent, so a number here does not clash with a GP assignment; the
+    // emitter tells them apart by the operand's constraint. Skip any xmm named
+    // in the clobber list.
+    let mut fp_used = [false; 16];
+    for r in 0..16u8 {
+        if clobber_fp_regs & (1 << r) != 0 {
+            fp_used[r as usize] = true;
+        }
+    }
+    for (i, op) in operands.iter().enumerate() {
+        if matches!(op.constraint, C::Fp) {
+            let r = (0u8..16)
+                .find(|&r| !fp_used[r as usize])
+                .ok_or_else(|| String::from("inline asm: out of XMM registers for operands"))?;
+            fp_used[r as usize] = true;
             assigned[i] = Some(r);
         }
     }
@@ -1896,5 +1916,25 @@ mod tests {
             Some((Mnemonic::Out, Some(AsmRegSize::Byte)))
         );
         assert_eq!(split_mnemonic("in"), Some((Mnemonic::In, None)));
+    }
+
+    #[test]
+    fn assign_fp_operands_to_xmm() {
+        use crate::c5::ir::{AsmConstraint as C, AsmOperand};
+        let op = |constraint| AsmOperand {
+            constraint,
+            is_output: false,
+            is_rw: false,
+            width: 16,
+        };
+        // `x` operands take xmm0, xmm1, ... from a file independent of the GPRs,
+        // so a mixed GP + xmm operand list assigns each from its own pool.
+        let ops = [op(C::Reg), op(C::Fp), op(C::Reg), op(C::Fp)];
+        let a = assign_operand_regs(&ops, 0).unwrap();
+        assert_eq!(a, [Some(0), Some(0), Some(3), Some(1)]); // rax, xmm0, rbx, xmm1
+        // An xmm named in the clobber list is skipped: xmm0 clobbered pushes the
+        // first `x` operand onto xmm1.
+        let a = assign_operand_regs(&[op(C::Fp), op(C::Fp)], 1 << 0).unwrap();
+        assert_eq!(a, [Some(1), Some(2)]);
     }
 }

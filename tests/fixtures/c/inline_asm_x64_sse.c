@@ -124,6 +124,29 @@ static int sse_float_roundtrip(void) {
     return r;
 }
 
+typedef int sse_v4 __attribute__((vector_size(16)));
+
+static int sse_x_constraint(void) {
+    int r;
+#if defined(__x86_64__)
+    sse_v4 a = {10, 20, 30, 40};
+    sse_v4 b = {5, 3, 8, 2};
+    sse_v4 c;
+    /* `x` operands allocate xmm registers (c, a, b avoid the xmm7 clobber);
+     * the explicit %xmm7 scratch exercises the FP-clobber save/restore too. */
+    __asm__("movdqa %1, %%xmm7\n\t"
+            "paddd %2, %%xmm7\n\t"
+            "movdqa %%xmm7, %0"
+            : "=x"(c)
+            : "x"(a), "x"(b)
+            : "xmm7");
+    r = ((int *) &c)[3]; /* 40 + 2 = 42 */
+#else
+    r = 42;
+#endif
+    return r;
+}
+
 int main(void) {
     if (sse_add(19, 23) != 42) return 1;    /* 19 + 23, register paddd     */
     if (sse_mem_add(23) != 42) return 2;    /* 23 + 19, memory-source paddd */
@@ -132,5 +155,6 @@ int main(void) {
     if (sse_shuffle(7, 42) != 42) return 5; /* pshufd picks lane 1 = b      */
     if (movq_roundtrip(42) != 42) return 6; /* movq GP64 <-> xmm            */
     if (sse_float_roundtrip() != 42) return 7; /* cvtdq2ps/cvtps2dq/shufps  */
+    if (sse_x_constraint() != 42) return 8;    /* `x` xmm operand allocation */
     return 42;
 }

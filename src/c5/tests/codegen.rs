@@ -1562,6 +1562,27 @@ fn builtin_overflow_on_128bit_operand_is_rejected() {
     );
 }
 
+/// The x86 `x` (xmm) inline-asm operand path moves a full 128-bit value
+/// (movups), so it requires a 16-byte `__m128i`. A scalar float / double `x`
+/// operand must be rejected at parse rather than over-reading / over-writing
+/// its 4/8-byte storage. TODO: scalar `x` via movss / movsd.
+#[test]
+fn scalar_x_inline_asm_operand_is_rejected() {
+    use crate::{Compiler, Target};
+    let err = Compiler::with_target(
+        "double f(double a){ double r; __asm__(\"movsd %1, %0\" : \"=x\"(r) : \"x\"(a)); \
+             return r; } int main(void){ return (int) f(1.0); }"
+            .to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect_err("a scalar `x` operand must be rejected, not over-moved");
+    assert!(
+        err.to_string().contains("16-byte (__m128i) `x` operands"),
+        "expected the scalar-`x` rejection, got: {err}",
+    );
+}
+
 /// `__int128` <-> scalar conversions run correctly. An integer initializer,
 /// cast, or assignment to `__int128` widens into the 16-byte object (low
 /// half = value, high half = sign); a cast to a narrower integer loads the

@@ -2020,8 +2020,22 @@ fn run_inline_asm(
     use crate::c5::ir::AsmRegSize;
 
     let insns = parse_template(&asm.template).map_err(C5Error::Runtime)?;
-    let op_reg = crate::c5::codegen::x86_64::asm::assign_operand_regs(&asm.operands)
-        .map_err(C5Error::Runtime)?;
+    let op_reg =
+        crate::c5::codegen::x86_64::asm::assign_operand_regs(&asm.operands, asm.clobber_fp_regs)
+            .map_err(C5Error::Runtime)?;
+    // The interpreter models only the 16 GPRs; an `x` (xmm) operand carries a
+    // 128-bit SSE value that has no modelled slot. Such asm also uses SSE
+    // instructions, refused below -- reject the operand up front with a clear
+    // message rather than mis-model it as a GPR.
+    if asm
+        .operands
+        .iter()
+        .any(|op| matches!(op.constraint, crate::c5::ir::AsmConstraint::Fp))
+    {
+        return Err(C5Error::Runtime(alloc::string::String::from(
+            "inline asm: `x` (xmm) register operands are not supported under --interp",
+        )));
+    }
     // Model register file; operand `%N` reads / writes its assigned slot.
     let mut xregs = [0i64; 16];
     // Seed input registers, and the current value of a `+` (read-write)

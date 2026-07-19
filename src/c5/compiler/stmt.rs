@@ -1372,12 +1372,16 @@ impl Compiler {
                         }
                     } else if let Some((reg, _)) =
                         super::super::codegen::x86_64::asm::reg_by_name(name)
-                        && reg < 16
                     {
-                        // clobber_regs is the GP mask (0..15); the vector / system
-                        // register marks (MMX/XMM/CR/DR/SEG, reg >= 16) do not fit
-                        // it and are not tracked here.
-                        clobber_regs |= 1 << reg;
+                        // clobber_regs is the GP mask (0..15); clobber_fp_regs the
+                        // XMM mask. Other register marks (MMX/CR/DR/SEG) are not
+                        // tracked.
+                        use super::super::codegen::x86_64::asm::XMM_BASE;
+                        if reg < 16 {
+                            clobber_regs |= 1 << reg;
+                        } else if (XMM_BASE..XMM_BASE + 16).contains(&reg) {
+                            clobber_fp_regs |= 1 << (reg - XMM_BASE);
+                        }
                     }
                 }
                 continue;
@@ -1399,6 +1403,19 @@ impl Compiler {
             self.next()?; // consume `(`
             self.expr(Token::Assign as i64)?;
             let width = self.size_of_type(self.ty).min(8) as u8;
+            // The x86 `x` operand path moves a full 128-bit value (movups), so
+            // it requires a 16-byte operand (a __m128i / vector). A scalar
+            // float / double `x` operand is not yet supported and is rejected
+            // rather than over-reading / over-writing its storage. AArch64 `w`
+            // has its own (scalar-double) width check in the emitter.
+            if matches!(constraint, AsmConstraint::Fp)
+                && !self.target.is_aarch64()
+                && self.size_of_type(self.ty) != 16
+            {
+                self.data.truncate(data_base);
+                return Err(self
+                    .compile_err("inline asm: only 16-byte (__m128i) `x` operands are supported"));
+            }
             // Outputs pass the destination address; a memory operand (input or
             // output) is likewise reached through its address, so it must be an
             // lvalue. A non-lvalue (a call / cast / arithmetic result) is not
@@ -1550,8 +1567,11 @@ impl Compiler {
             }
             return Some((AsmConstraint::Fixed(reg), is_rw));
         }
-        // AArch64 `w`: the value is held in a SIMD/FP register.
-        if body.contains('w') {
+        // A SIMD/FP-register value: AArch64 `w`, or x86 `x` (an XMM register).
+        // Neither letter collides with the register/immediate/memory classes
+        // handled above, so the mapping is target-independent; the backend
+        // emitter reads the constraint to pick the v-register or xmm file.
+        if body.contains('w') || body.contains('x') {
             return Some((AsmConstraint::Fp, is_rw));
         }
         if has_reg {

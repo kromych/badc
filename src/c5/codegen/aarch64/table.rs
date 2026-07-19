@@ -1403,6 +1403,58 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((base as u32) << 5)
             | (*first as u32));
     }
+    // SIMD load-replicate `ld1r {Vt.T}, [Xn]{, #inc | , Xm}`: load one element
+    // and broadcast it to every lane. A single register; an immediate post-index
+    // must equal the element size (1<<size bytes, Rm = 31), a register post-index
+    // gives Rm, and either sets the writeback bit (23).
+    if let "ld1r" = mnemonic
+        && let [
+            Opnd::VecList {
+                first,
+                count,
+                size,
+                q,
+            },
+            mem,
+            post @ ..,
+        ] = ops
+    {
+        if *count != 1 {
+            return Err(String::from("inline asm: ld1r takes a single register"));
+        }
+        let base = match mem {
+            Opnd::Mem {
+                base,
+                off: 0,
+                pre: false,
+            } => *base,
+            _ => return Err(String::from("inline asm: ld1r needs a plain [Xn] address")),
+        };
+        let (rm, wb) = match post {
+            [] => (0u32, 0u32),
+            [Opnd::Imm(inc)] => {
+                if *inc != 1i64 << size {
+                    return Err(String::from(
+                        "inline asm: ld1r immediate post-index must equal the element size",
+                    ));
+                }
+                (31, 1u32 << 23)
+            }
+            [Opnd::Reg { num, is64: true }] => (*num as u32, 1u32 << 23),
+            _ => {
+                return Err(String::from(
+                    "inline asm: bad ld1r post-index (want `, #imm` or `, Xm`)",
+                ));
+            }
+        };
+        return Ok(0x0D40_C000
+            | wb
+            | (if *q { 1u32 << 30 } else { 0 })
+            | (rm << 16)
+            | ((*size as u32) << 10)
+            | ((base as u32) << 5)
+            | (*first as u32));
+    }
     // SIMD table lookup `<tbl|tbx> Vd.T, {Vn.16b, ..}, Vm.T` (T = 8b/16b): each
     // byte of the index Vm selects a byte from the table register list. `len`
     // (bits 14..13) is the table count minus one; bit 12 selects tbx (which

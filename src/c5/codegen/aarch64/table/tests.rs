@@ -778,6 +778,49 @@ fn simd_ld_st_multi() {
 }
 
 #[test]
+fn simd_ld1r() {
+    let list = |first: u8, size: u8, q: bool| Opnd::VecList {
+        first,
+        count: 1,
+        size,
+        q,
+    };
+    let mem = |base: u8| Opnd::Mem {
+        base,
+        off: 0,
+        pre: false,
+    };
+    // Load-replicate: one element broadcast to all lanes; size in bits 11..10.
+    assert_eq!(enc("ld1r", &[list(0, 2, true), mem(1)]), 0x4D40_C820); // .4s
+    assert_eq!(enc("ld1r", &[list(0, 0, true), mem(1)]), 0x4D40_C020); // .16b
+    assert_eq!(enc("ld1r", &[list(0, 3, true), mem(1)]), 0x4D40_CC20); // .2d
+    assert_eq!(enc("ld1r", &[list(0, 1, true), mem(1)]), 0x4D40_C420); // .8h
+    // Post-index: immediate = element size (1<<size bytes), or a register.
+    assert_eq!(
+        enc("ld1r", &[list(0, 2, true), mem(1), Opnd::Imm(4)]),
+        0x4DDF_C820
+    );
+    assert_eq!(enc("ld1r", &[list(0, 2, true), mem(1), x(2)]), 0x4DC2_C820);
+    // A wrong immediate increment and a multi-register list are rejected.
+    assert!(encode("ld1r", &[list(0, 2, true), mem(1), Opnd::Imm(16)]).is_err());
+    assert!(
+        encode(
+            "ld1r",
+            &[
+                Opnd::VecList {
+                    first: 0,
+                    count: 2,
+                    size: 2,
+                    q: true
+                },
+                mem(1)
+            ]
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn table_lookup() {
     let v = |n: u8, q: bool| Opnd::VecReg { num: n, size: 0, q };
     let tab = |first: u8, count: u8| Opnd::VecList {

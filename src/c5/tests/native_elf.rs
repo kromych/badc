@@ -771,6 +771,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_tbl.c", 42),
     ("inline_asm_a64_ld1_postindex.c", 42),
     ("inline_asm_a64_reduce.c", 42),
+    ("inline_asm_a64_ld1r.c", 42),
     ("inline_asm_a64_dp.c", 42),
     ("inline_asm_a64_labels.c", 42),
     ("compound_assign_int_fp.c", 0),

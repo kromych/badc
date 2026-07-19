@@ -178,6 +178,30 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
+<movq_roundtrip>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	leaq	-0x8(%rbp), %rax
+               	pushq	%rax
+               	pushq	%rbx
+               	movq	%rax, %r10
+               	pushq	%r10
+               	movq	%rdi, %r10
+               	pushq	%r10
+               	movq	(%rsp), %rbx
+               	movq	%rbx, %xmm0
+               	movq	%xmm0, %rax
+               	movq	0x8(%rsp), %r11
+               	movq	%rax, (%r11)
+               	addq	$0x10, %rsp
+               	popq	%rbx
+               	popq	%rax
+               	movq	-0x8(%rbp), %rax
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -216,6 +240,13 @@ Disassembly of section .text:
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x5, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x2a, %edi
+               	callq	<addr>
+               	cmpq	$0x2a, %rax
+               	je	<addr>
+               	movl	$0x6, %eax
                	popq	%rbp
                	retq
                	movl	$0x2a, %eax

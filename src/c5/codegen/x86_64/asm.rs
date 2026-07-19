@@ -452,6 +452,66 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
         .map(|&(_, opcode, digit)| Mnemonic::SseShiftImm { opcode, digit })
 }
 
+/// If `movq src, dst` involves an XMM register, encode the SSE quadword move and
+/// return true; otherwise (a plain GP move) return false. The forms: GP64<->xmm
+/// (66 REX.W 0F 6E/7E), xmm<->xmm and mem->xmm load (F3 0F 7E), xmm->mem store
+/// (66 0F D6). The xmm is always ModRM.reg; the other operand is r/m.
+fn movq_xmm(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
+    let xmm = |c: &Concrete| match c {
+        Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
+            Some(*reg - XMM_BASE)
+        }
+        _ => None,
+    };
+    let (sx, dx) = (xmm(&src), xmm(&dst));
+    match (sx, dx, src, dst) {
+        // GP -> xmm.
+        (None, Some(d), Concrete::Reg { reg: g, .. }, _) => {
+            code.push(0x66);
+            code.push(rex(true, d >= 8, false, g >= 8));
+            code.extend_from_slice(&[0x0F, 0x6E]);
+            code.push(modrm_reg(d & 7, g & 7));
+        }
+        // xmm -> GP.
+        (Some(s), None, _, Concrete::Reg { reg: g, .. }) => {
+            code.push(0x66);
+            code.push(rex(true, s >= 8, false, g >= 8));
+            code.extend_from_slice(&[0x0F, 0x7E]);
+            code.push(modrm_reg(s & 7, g & 7));
+        }
+        // xmm -> xmm.
+        (Some(s), Some(d), _, _) => {
+            code.push(0xF3);
+            if d >= 8 || s >= 8 {
+                code.push(rex(false, d >= 8, false, s >= 8));
+            }
+            code.extend_from_slice(&[0x0F, 0x7E]);
+            code.push(modrm_reg(d & 7, s & 7));
+        }
+        // mem -> xmm (load).
+        (None, Some(d), Concrete::Mem { base, .. }, _) => {
+            code.push(0xF3);
+            if d >= 8 || base >= 8 {
+                code.push(rex(false, d >= 8, false, base >= 8));
+            }
+            code.extend_from_slice(&[0x0F, 0x7E]);
+            modrm_mem(code, d & 7, base);
+        }
+        // xmm -> mem (store).
+        (Some(s), None, _, Concrete::Mem { base, .. }) => {
+            code.push(0x66);
+            if s >= 8 || base >= 8 {
+                code.push(rex(false, s >= 8, false, base >= 8));
+            }
+            code.extend_from_slice(&[0x0F, 0xD6]);
+            modrm_mem(code, s & 7, base);
+        }
+        // No xmm operand: a plain GP move.
+        _ => return false,
+    }
+    true
+}
+
 /// The catalogue mnemonic matching `name`, as a `'static` string, or `None`.
 /// Lets a mnemonic the table encodes but that has no bespoke [`Mnemonic`]
 /// variant still be parsed and routed through the table.
@@ -1256,6 +1316,10 @@ pub(crate) fn encode(
         //   write gpr -> cr/dr/seg : 0F 22 / 0F 23 / 8E
         Mnemonic::Mov => {
             let [src, dst] = two(ops)?;
+            // `movq` with an XMM operand is the SSE quadword move, not a GP mov.
+            if movq_xmm(code, src, dst) {
+                return Ok(());
+            }
             {
                 let class = |c: &Concrete| -> Option<(u8, u8)> {
                     let Concrete::Reg { reg, .. } = c else {
@@ -1610,6 +1674,34 @@ mod tests {
             })
         );
         assert_eq!(sse_imm("not_an_op"), None);
+    }
+
+    #[test]
+    fn movq_xmm_forms() {
+        let xmm = |n: u8| Concrete::Reg {
+            reg: XMM_BASE + n,
+            size: AsmRegSize::Quad,
+        };
+        let gp = |n: u8| Concrete::Reg {
+            reg: n,
+            size: AsmRegSize::Quad,
+        };
+        let mem = |base: u8| Concrete::Mem {
+            base,
+            size: AsmRegSize::Quad,
+        };
+        let mov = |ops: &[Concrete]| enc(Mnemonic::Mov, None, ops);
+        // GP64<->xmm: 66 REX.W 0F 6E/7E.
+        assert_eq!(mov(&[gp(0), xmm(0)]), [0x66, 0x48, 0x0F, 0x6E, 0xC0]); // movq %rax,%xmm0
+        assert_eq!(mov(&[xmm(0), gp(0)]), [0x66, 0x48, 0x0F, 0x7E, 0xC0]); // movq %xmm0,%rax
+        assert_eq!(mov(&[gp(9), xmm(3)]), [0x66, 0x49, 0x0F, 0x6E, 0xD9]); // movq %r9,%xmm3
+        // xmm<->xmm and mem->xmm load: F3 0F 7E; xmm->mem store: 66 0F D6.
+        assert_eq!(mov(&[xmm(0), xmm(1)]), [0xF3, 0x0F, 0x7E, 0xC8]); // movq %xmm0,%xmm1
+        assert_eq!(mov(&[mem(0), xmm(0)]), [0xF3, 0x0F, 0x7E, 0x00]); // movq (%rax),%xmm0
+        assert_eq!(mov(&[xmm(0), mem(0)]), [0x66, 0x0F, 0xD6, 0x00]); // movq %xmm0,(%rax)
+        assert_eq!(mov(&[xmm(9), xmm(10)]), [0xF3, 0x45, 0x0F, 0x7E, 0xD1]); // high xmm
+        // A plain GP move (no xmm) still encodes normally.
+        assert_eq!(mov(&[gp(0), gp(3)]), [0x48, 0x89, 0xC3]); // movq %rax,%rbx
     }
 
     #[test]

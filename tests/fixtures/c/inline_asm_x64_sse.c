@@ -90,11 +90,26 @@ static int sse_shuffle(int a, int b) {
     return r;
 }
 
+static long long movq_roundtrip(long long w) {
+    long long r;
+#if defined(__x86_64__)
+    __asm__("movq %1, %%xmm0\n\t" /* xmm0 = w (64-bit)     */
+            "movq %%xmm0, %0"     /* r = low 64 bits of w  */
+            : "=r"(r)
+            : "r"(w)
+            : "xmm0");
+#else
+    r = w;
+#endif
+    return r;
+}
+
 int main(void) {
-    if (sse_add(19, 23) != 42) return 1;
-    if (sse_mem_add(23) != 42) return 2;   /* 23 + 19, memory-source paddd */
-    if (sse_movdqu(42) != 42) return 3;    /* movdqu load then store       */
-    if (sse_shift(21) != 42) return 4;     /* pslld $1: 21 << 1            */
+    if (sse_add(19, 23) != 42) return 1;    /* 19 + 23, register paddd     */
+    if (sse_mem_add(23) != 42) return 2;    /* 23 + 19, memory-source paddd */
+    if (sse_movdqu(42) != 42) return 3;     /* movdqu load then store       */
+    if (sse_shift(21) != 42) return 4;      /* pslld $1: 21 << 1            */
     if (sse_shuffle(7, 42) != 42) return 5; /* pshufd picks lane 1 = b      */
+    if (movq_roundtrip(42) != 42) return 6; /* movq GP64 <-> xmm            */
     return 42;
 }

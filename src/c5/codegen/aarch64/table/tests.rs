@@ -482,6 +482,33 @@ fn fp_vector() {
 }
 
 #[test]
+fn vector_shift() {
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    let sh = |m: &str, size: u8, q: bool, amt: i64| {
+        enc(m, &[v(0, size, q), v(1, size, q), Opnd::Imm(amt)])
+    };
+    // shl: immh:immb = esize + shift; the arrangement rides the field, not a size
+    // slot. shift 0..esize-1 is valid.
+    assert_eq!(sh("shl", 2, true, 3), 0x4F23_5420); // .4s #3
+    assert_eq!(sh("shl", 0, true, 1), 0x4F09_5420); // .16b #1
+    assert_eq!(sh("shl", 3, true, 7), 0x4F47_5420); // .2d #7
+    assert_eq!(sh("shl", 1, true, 5), 0x4F15_5420); // .8h #5
+    assert_eq!(sh("shl", 2, true, 0), 0x4F20_5420); // .4s #0 (min)
+    // sshr/ushr: immh:immb = 2*esize - shift; U at bit 29 picks unsigned. shift
+    // 1..esize is valid (esize is the max, not esize-1).
+    assert_eq!(sh("sshr", 2, true, 3), 0x4F3D_0420);
+    assert_eq!(sh("ushr", 2, true, 3), 0x6F3D_0420);
+    assert_eq!(sh("sshr", 0, true, 8), 0x4F08_0420); // .16b #8 (max)
+    assert_eq!(sh("ushr", 3, true, 64), 0x6F40_0420); // .2d #64 (max)
+    assert_eq!(sh("sshr", 2, true, 32), 0x4F20_0420); // .4s #32 (max)
+    // Out-of-range amounts and the reserved .1d arrangement are rejected.
+    assert!(encode("shl", &[v(0, 2, true), v(1, 2, true), Opnd::Imm(32)]).is_err());
+    assert!(encode("sshr", &[v(0, 2, true), v(1, 2, true), Opnd::Imm(0)]).is_err());
+    assert!(encode("sshr", &[v(0, 2, true), v(1, 2, true), Opnd::Imm(33)]).is_err());
+    assert!(encode("shl", &[v(0, 3, false), v(1, 3, false), Opnd::Imm(1)]).is_err());
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

@@ -576,6 +576,56 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
+    // SIMD shift by immediate `<shl|sshr|ushr> Vd.T, Vn.T, #shift`. The immh:immb
+    // field (bits 22..16) encodes both element size and amount: left shifts use
+    // esize+shift, right shifts use 2*esize-shift. U at bit 29 selects ushr; the
+    // .1d arrangement is reserved (only .2d exists for vectors).
+    if let Some((base, u, left)) = match mnemonic {
+        "shl" => Some((0x0F00_5400u32, 0u32, true)),
+        "sshr" => Some((0x0F00_0400, 0, false)),
+        "ushr" => Some((0x0F00_0400, 1, false)),
+        _ => None,
+    } && let [
+        Opnd::VecReg { num: rd, size, q },
+        Opnd::VecReg {
+            num: rn,
+            size: s1,
+            q: q1,
+        },
+        Opnd::Imm(shift),
+    ] = *ops
+    {
+        if size != s1 || q != q1 {
+            return Err(String::from("inline asm: vector shift arrangements differ"));
+        }
+        if size == 3 && !q {
+            return Err(String::from(
+                "inline asm: vector shift .1d is reserved (use .2d)",
+            ));
+        }
+        let esize = 8i64 << size;
+        let immhb = if left {
+            if shift < 0 || shift >= esize {
+                return Err(String::from(
+                    "inline asm: vector left-shift amount out of range",
+                ));
+            }
+            esize + shift
+        } else {
+            if shift < 1 || shift > esize {
+                return Err(String::from(
+                    "inline asm: vector right-shift amount out of range",
+                ));
+            }
+            2 * esize - shift
+        };
+        return Ok(base
+            | (u << 29)
+            | (if q { 1u32 << 30 } else { 0 })
+            | ((immhb as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
     // System operation: `dc`/`ic`/`tlbi <op>{, Xt}`. The op is a base word; the
     // Rt field takes the register operand or xzr (31) when there is none.
     if let "dc" | "ic" | "tlbi" = mnemonic {

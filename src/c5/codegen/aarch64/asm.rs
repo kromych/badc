@@ -337,6 +337,27 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             Some(p) => (&piece[..p], piece[p..].trim()),
             None => (piece, ""),
         };
+        // `mov Rd, sp` / `mov sp, Rn` is `add Rd, Rn, #0` -- distinct from the
+        // register move `mov Rd, Rm` (`orr Rd, xzr, Rm`), and only the raw
+        // token tells `sp` from `xzr` (both parse to register 31). Rewrite the
+        // stack-pointer forms here; a plain register / immediate `mov` stays and
+        // is encoded by the alias arm in `super::table::encode`.
+        if mnem == "mov" {
+            let toks: Vec<&str> = split_operands(rest);
+            if toks.len() == 2
+                && (toks[0] == "sp" || toks[0] == "wsp" || toks[1] == "sp" || toks[1] == "wsp")
+            {
+                let dst = parse_operand(toks[0])?;
+                let src = parse_operand(toks[1])?;
+                insns.push(AsmInsnA64 {
+                    mnemonic: String::from("add"),
+                    operands: alloc::vec![dst, src, AsmOpndA64::Imm(0)],
+                    bytes: Vec::new(),
+                    label_def: None,
+                });
+                continue;
+            }
+        }
         let mut operands = Vec::new();
         if !rest.is_empty() {
             for op in split_operands(rest) {
@@ -452,6 +473,34 @@ mod tests {
         assert_eq!(insns[0].bytes, [0x1f, 0x20, 0x03, 0xd5]);
         assert!(insns[0].mnemonic.is_empty());
         assert_eq!(insns[1].mnemonic, "add");
+    }
+
+    #[test]
+    fn parse_mov_stack_pointer_rewrite() {
+        // `mov Rd, sp` / `mov sp, Rn` become `add ..., #0` (only the raw token
+        // separates `sp` from `xzr`); a register move stays `mov`.
+        let insns = parse_template(b"mov x0, sp; mov sp, x1; mov x2, x3").unwrap();
+        assert_eq!(insns[0].mnemonic, "add");
+        assert_eq!(
+            insns[0].operands,
+            [
+                AsmOpndA64::Reg { num: 0, is64: true },
+                AsmOpndA64::Reg {
+                    num: 31,
+                    is64: true
+                },
+                AsmOpndA64::Imm(0),
+            ]
+        );
+        assert_eq!(insns[1].mnemonic, "add");
+        assert_eq!(
+            insns[1].operands[0],
+            AsmOpndA64::Reg {
+                num: 31,
+                is64: true
+            }
+        );
+        assert_eq!(insns[2].mnemonic, "mov"); // register move kept for the encoder
     }
 
     #[test]

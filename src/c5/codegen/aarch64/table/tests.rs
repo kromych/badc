@@ -91,6 +91,20 @@ fn load_store_pair() {
 }
 
 #[test]
+fn mov_alias() {
+    // mov Rd, Rm is orr Rd, xzr, Rm; the width follows the destination.
+    assert_eq!(enc("mov", &[x(0), x(1)]), 0xAA0103E0);
+    assert_eq!(enc("mov", &[w(0), w(1)]), 0x2A0103E0);
+    assert_eq!(enc("mov", &[x(0), x(31)]), 0xAA1F03E0); // mov x0, xzr
+    // mov Rd, #imm is movz Rd, #imm for a 16-bit immediate.
+    assert_eq!(enc("mov", &[x(0), Opnd::Imm(5)]), 0xD28000A0);
+    assert_eq!(enc("mov", &[w(3), Opnd::Imm(42)]), 0x52800543);
+    // A wider immediate needs an explicit movz/movk/movn.
+    assert!(encode("mov", &[x(0), Opnd::Imm(0x10000)]).is_err());
+    // (mov Rd, sp / mov sp, Rd are rewritten to add ..., #0 by the parser.)
+}
+
+#[test]
 fn catalogue_is_sorted() {
     // encode() binary-searches the catalogue by mnemonic; the generator emits it
     // sorted. Lock the invariant.

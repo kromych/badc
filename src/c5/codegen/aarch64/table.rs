@@ -286,6 +286,29 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         }
         return Err(String::from("inline asm: bad stp/ldp operands"));
     }
+    // `mov` is an alias whose expansion is value-dependent, so the generator
+    // omits it. A register move is `orr Rd, xzr, Rm`; a small immediate is
+    // `movz Rd, #imm`. The width comes from the resolved destination register.
+    // The `mov Rd, sp` / `mov sp, Rd` stack-pointer forms are rewritten to
+    // `add ..., #0` earlier (the parser, which can tell `sp` from `xzr`).
+    if mnemonic == "mov" {
+        match *ops {
+            [Opnd::Reg { num: rd, is64 }, Opnd::Reg { num: rm, .. }] => {
+                let base = if is64 { 0xAA00_03E0u32 } else { 0x2A00_03E0 };
+                return Ok(base | ((rm as u32) << 16) | (rd as u32));
+            }
+            [Opnd::Reg { num: rd, is64 }, Opnd::Imm(v)] => {
+                if !(0..=0xFFFF).contains(&v) {
+                    return Err(String::from(
+                        "inline asm: mov immediate out of movz range; use movz/movk/movn",
+                    ));
+                }
+                let base = if is64 { 0xD280_0000u32 } else { 0x5280_0000 };
+                return Ok(base | ((v as u32) << 5) | (rd as u32));
+            }
+            _ => return Err(String::from("inline asm: bad mov operands")),
+        }
+    }
     // The catalogue is sorted by mnemonic (enforced by the generator and the
     // `catalogue_is_sorted` test): binary-search to the mnemonic's run of forms.
     let forms = super::isa_a64_table::FORMS;

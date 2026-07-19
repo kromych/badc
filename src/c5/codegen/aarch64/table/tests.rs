@@ -225,6 +225,25 @@ fn conditional_compare() {
 }
 
 #[test]
+fn bitfield_aliases() {
+    // Xd, Xn, #lsb, #width. Extract keeps immr=lsb, imms=lsb+width-1; insert
+    // sets immr=-lsb mod regsize, imms=width-1. Words match the assembler.
+    let i = Opnd::Imm;
+    assert_eq!(enc("ubfx", &[x(0), x(1), i(4), i(8)]), 0xD344_2C20);
+    assert_eq!(enc("sbfx", &[x(0), x(1), i(4), i(8)]), 0x9344_2C20);
+    assert_eq!(enc("bfxil", &[x(0), x(1), i(4), i(8)]), 0xB344_2C20);
+    assert_eq!(enc("ubfiz", &[x(0), x(1), i(4), i(8)]), 0xD37C_1C20);
+    assert_eq!(enc("sbfiz", &[x(0), x(1), i(4), i(8)]), 0x937C_1C20);
+    assert_eq!(enc("bfi", &[x(0), x(1), i(4), i(8)]), 0xB37C_1C20);
+    assert_eq!(enc("ubfx", &[w(0), w(1), i(4), i(8)]), 0x5304_2C20); // 32-bit
+    // The base ubfm goes through the catalogue with raw immr/imms.
+    assert_eq!(enc("ubfm", &[x(0), x(1), i(4), i(11)]), 0xD344_2C20);
+    // A field running past the register width is rejected.
+    assert!(encode("ubfx", &[w(0), w(1), i(28), i(8)]).is_err());
+    assert!(encode("bfi", &[x(0), w(1), i(4), i(8)]).is_err()); // mixed widths
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

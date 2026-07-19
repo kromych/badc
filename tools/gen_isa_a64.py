@@ -191,6 +191,10 @@ def classify(heads, toks, op, im):
     consumed, ops, fields = set(), [], []
     logm = re.match(r'(?:LogicalImm|ImmLogical)\((\w+), ([01])\)', im or '')
     widem = re.match(r'ImmWide(?:Inv)?\((\w+), (\w+), ([01])\)', im or '')
+    # `ImmBFM(immr, imms)` tags the base bfm/ubfm/sbfm, whose two immediates are
+    # the raw immr/imms fields (unlike the ImmBFX/ImmBFIZ aliases, whose written
+    # lsb/width are value-transformed and stay unexpressible).
+    bfmm = re.match(r'ImmBFM\(', im or '')
     i, rd_width = 0, None
     while i < len(toks):
         t = toks[i]
@@ -290,7 +294,7 @@ def classify(heads, toks, op, im):
                 i += 1
                 continue
             return ('residual', 'shift-alias fields not immr/imms shaped')
-        if (m := re.fullmatch(r'#(\w+)', t0)) and not im:
+        if (m := re.fullmatch(r'#(\w+)', t0)) and (not im or bfmm):
             name = m.group(1)
             if name not in fl:
                 return ('residual', f'immediate token {t0} has no matching field')

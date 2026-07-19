@@ -288,6 +288,43 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         };
         return Ok(base | (rt & 31));
     }
+    // Bitfield extract / insert aliases of sbfm/bfm/ubfm: the written
+    // `Xd, Xn, #lsb, #width` becomes immr/imms. Extract (ubfx/sbfx/bfxil) keeps
+    // immr=lsb, imms=lsb+width-1; insert (ubfiz/sbfiz/bfi) sets immr=-lsb mod
+    // regsize, imms=width-1. The register width picks the field-mask bit N.
+    if let "ubfx" | "sbfx" | "bfxil" | "ubfiz" | "sbfiz" | "bfi" = mnemonic {
+        let [
+            Opnd::Reg { num: rd, is64 },
+            Opnd::Reg { num: rn, is64: n2 },
+            Opnd::Imm(lsb),
+            Opnd::Imm(width),
+        ] = *ops
+        else {
+            return Err(String::from("inline asm: bad bitfield operands"));
+        };
+        if is64 != n2 {
+            return Err(String::from("inline asm: bitfield operand widths differ"));
+        }
+        let regsize = if is64 { 64i64 } else { 32 };
+        if lsb < 0 || width < 1 || lsb >= regsize || lsb + width > regsize {
+            return Err(String::from("inline asm: bitfield lsb/width out of range"));
+        }
+        let (opc, insert): (u32, bool) = match mnemonic {
+            "sbfx" => (0, false),
+            "sbfiz" => (0, true),
+            "bfxil" => (1, false),
+            "bfi" => (1, true),
+            "ubfx" => (2, false),
+            _ => (2, true), // ubfiz
+        };
+        let (immr, imms) = if insert {
+            (((regsize - lsb) % regsize) as u32, (width - 1) as u32)
+        } else {
+            (lsb as u32, (lsb + width - 1) as u32)
+        };
+        let base = 0x1300_0000u32 | (opc << 29) | if is64 { 0x8040_0000 } else { 0 };
+        return Ok(base | (immr << 16) | (imms << 10) | ((rn as u32) << 5) | (rd as u32));
+    }
     // Load / store with a register offset: `<ldr|ldrb|ldrh|ldrsb|ldrsh|ldrsw|
     // str|strb|strh> Xt, [Xn, Rm{, <ext> #s}]` across the access sizes. The base
     // word is `0x38200800 | size<<30 | opc<<22`; a written shift must be zero or

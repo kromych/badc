@@ -54,6 +54,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "autiza", ops: &[X], base: 0xDAC133E0, fields: &[Reg { op: 0, shift: 0 }] },  // autiza Xd
     Form { mnemonic: "autizb", ops: &[X], base: 0xDAC137E0, fields: &[Reg { op: 0, shift: 0 }] },  // autizb Xd
     Form { mnemonic: "axflag", ops: &[], base: 0xD500405F, fields: &[] },  // axflag
+    Form { mnemonic: "bfm", ops: &[W, W, Imm, Imm], base: 0x33000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 16, width: 6 }, UImm { op: 3, shift: 10, width: 6 }] },  // bfm Wd, Wn, #immr, #imms
+    Form { mnemonic: "bfm", ops: &[X, X, Imm, Imm], base: 0xB3400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 16, width: 6 }, UImm { op: 3, shift: 10, width: 6 }] },  // bfm Xd, Xn, #immr, #imms
     Form { mnemonic: "bic", ops: &[W, W, W], base: 0x0A200000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // bic Wd, Wn, Wm, {sop #n}
     Form { mnemonic: "bic", ops: &[X, X, X], base: 0x8A200000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // bic Xd, Xn, Xm, {sop #n}
     Form { mnemonic: "bics", ops: &[W, W, W], base: 0x6A200000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // bics Wd, Wn, Wm, {sop #n}
@@ -493,6 +495,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "sbc", ops: &[X, X, X], base: 0xDA000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // sbc Xd, Xn, Xm
     Form { mnemonic: "sbcs", ops: &[W, W, W], base: 0x7A000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // sbcs Wd, Wn, Wm
     Form { mnemonic: "sbcs", ops: &[X, X, X], base: 0xFA000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // sbcs Xd, Xn, Xm
+    Form { mnemonic: "sbfm", ops: &[W, W, Imm, Imm], base: 0x13000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 16, width: 6 }, UImm { op: 3, shift: 10, width: 6 }] },  // sbfm Wd, Wn, #immr, #imms
+    Form { mnemonic: "sbfm", ops: &[X, X, Imm, Imm], base: 0x93400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 16, width: 6 }, UImm { op: 3, shift: 10, width: 6 }] },  // sbfm Xd, Xn, #immr, #imms
     Form { mnemonic: "sdiv", ops: &[W, W, W], base: 0x1AC00C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // sdiv Wd, Wn, Wm
     Form { mnemonic: "sdiv", ops: &[X, X, X], base: 0x9AC00C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // sdiv Xd, Xn, Xm
     Form { mnemonic: "setf16", ops: &[W], base: 0x3A00480D, fields: &[Reg { op: 0, shift: 5 }] },  // setf16 Wn
@@ -662,6 +666,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "tst", ops: &[X, Imm], base: 0xF200001F, fields: &[Reg { op: 0, shift: 5 }, LogicalImm { op: 1, is64: true }] },  // tst Xn, #imm
     Form { mnemonic: "tstart", ops: &[X], base: 0xD5233060, fields: &[Reg { op: 0, shift: 0 }] },  // tstart Xt
     Form { mnemonic: "ttest", ops: &[X], base: 0xD5233160, fields: &[Reg { op: 0, shift: 0 }] },  // ttest Xd
+    Form { mnemonic: "ubfm", ops: &[W, W, Imm, Imm], base: 0x53000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 16, width: 6 }, UImm { op: 3, shift: 10, width: 6 }] },  // ubfm Wd, Wn, #immr, #imms
+    Form { mnemonic: "ubfm", ops: &[X, X, Imm, Imm], base: 0xD3400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 16, width: 6 }, UImm { op: 3, shift: 10, width: 6 }] },  // ubfm Xd, Xn, #immr, #imms
     Form { mnemonic: "udf", ops: &[Imm], base: 0x00000000, fields: &[UImm { op: 0, shift: 0, width: 16 }] },  // udf #imm
     Form { mnemonic: "udiv", ops: &[W, W, W], base: 0x1AC00800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // udiv Wd, Wn, Wm
     Form { mnemonic: "udiv", ops: &[X, X, X], base: 0x9AC00800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // udiv Xd, Xn, Xm

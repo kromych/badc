@@ -1997,6 +1997,8 @@ pub(crate) fn lower(
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut func_prologue_native,
             };
+            #[cfg(feature = "std")]
+            let _ = super::ssa::emit_common::take_bail();
             super::emit::emit_function(
                 func_ssa,
                 alloc_for,
@@ -2025,6 +2027,16 @@ pub(crate) fn lower(
             eprint!("{}", super::ssa::dump::dump_function(func_ssa, alloc_for),);
         }
         if !ok {
+            // Surface a recorded bail reason (an unencodable inline-asm form,
+            // for one) verbatim; the generic message stands only when a shape
+            // failed without recording one.
+            #[cfg(feature = "std")]
+            if let Some(reason) = super::ssa::emit_common::take_bail() {
+                return Err(C5Error::Compile(alloc::format!(
+                    "{reason} (x86_64, function `{}`)",
+                    func_ssa.name,
+                )));
+            }
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &alloc::format!(
                     "ssa emit (x86_64): function `{}` (ent_pc {ent_pc}) contains an op outside the implemented subset",

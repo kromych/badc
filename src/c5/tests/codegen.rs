@@ -10,6 +10,31 @@ fn entry_pc_points_at_main() {
     assert_eq!(program.entry_pc, 0);
 }
 
+#[test]
+fn unsupported_inline_asm_reports_the_specific_form() {
+    use crate::{NativeOptions, Target};
+    // An inline-asm form the encoder cannot handle must report which mnemonic
+    // failed, not the generic "op outside the implemented subset" fallback that
+    // reads like an internal compiler error. `ldrb` with a register offset has
+    // no catalogue form.
+    let program = super::compile_str(
+        "int main(void){ __asm__ volatile(\"ldrb w0, [x1, x2]\" \
+         ::: \"x0\",\"x1\",\"x2\",\"memory\"); return 0; }",
+    );
+    let err = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect_err("register-offset ldrb is not encodable");
+    let msg = format!("{err}");
+    assert!(msg.contains("ldrb"), "message names the form: {msg}");
+    assert!(
+        !msg.contains("implemented subset"),
+        "specific reason, not the generic fallback: {msg}"
+    );
+}
+
 /// Every emitted binary -- regardless of target -- carries the
 /// `OUTPUT_MARKER` at the tail of the code section so a `strings`
 /// scan reveals the badc version that produced it. The marker is

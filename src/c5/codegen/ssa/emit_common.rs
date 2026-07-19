@@ -688,7 +688,25 @@ pub(crate) fn bail_msg(backend: &str, reason: &str) {
     if std::env::var("BADC_DUMP_SSA").is_ok() {
         eprintln!("ssa emit {backend}: bailed -- {reason}");
     }
+    #[cfg(feature = "std")]
+    LAST_BAIL.with(|b| *b.borrow_mut() = Some(alloc::string::String::from(reason)));
     let _ = (backend, reason);
+}
+
+#[cfg(feature = "std")]
+std::thread_local! {
+    /// The most recent [`bail_msg`] reason on this thread. The native-emit
+    /// driver clears it before each function and reads it on a failure, so an
+    /// unencodable inline-asm form reports its specific cause rather than the
+    /// generic "op outside the implemented subset" fallback.
+    static LAST_BAIL: core::cell::RefCell<Option<alloc::string::String>> =
+        const { core::cell::RefCell::new(None) };
+}
+
+/// Take (and clear) the most recent [`bail_msg`] reason on this thread.
+#[cfg(feature = "std")]
+pub(crate) fn take_bail() -> Option<alloc::string::String> {
+    LAST_BAIL.with(|b| b.borrow_mut().take())
 }
 
 /// Parse an inline-asm template whose every piece is raw machine bytes,

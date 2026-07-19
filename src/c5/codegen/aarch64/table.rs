@@ -1273,13 +1273,14 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => Err(String::from("inline asm: bad FP load/store operands")),
         };
     }
-    // SIMD multiple-structures load/store `<ld1..ld4|st1..st4> {Vt.T, ..}, [Xn]`.
-    // The structure (1..4, from the mnemonic) and register count select the
-    // opcode; L (bit 22) is load vs store, Q and size come from the arrangement,
-    // and Rt is the first register of the list.
-    if let (
-        "ld1" | "st1" | "ld2" | "st2" | "ld3" | "st3" | "ld4" | "st4",
-        [
+    // SIMD multiple-structures load/store `<ld1..ld4|st1..st4> {Vt.T, ..}, [Xn]`
+    // with an optional post-index. The structure (1..4, from the mnemonic) and
+    // register count select the opcode; L (bit 22) is load vs store, Q and size
+    // come from the arrangement, and Rt is the first register of the list. A
+    // trailing `, #imm` (increment = list byte size, Rm = 31) or `, Xm` (Rm =
+    // Xm) is the writeback form (bit 23), leaving the base register incremented.
+    if let "ld1" | "st1" | "ld2" | "st2" | "ld3" | "st3" | "ld4" | "st4" = mnemonic
+        && let [
             Opnd::VecList {
                 first,
                 count,
@@ -1287,8 +1288,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 q,
             },
             mem,
-        ],
-    ) = (mnemonic, ops)
+            post @ ..,
+        ] = ops
     {
         let is_ld = mnemonic.as_bytes()[0] == b'l';
         let structure = mnemonic.as_bytes()[2] - b'0';
@@ -1318,9 +1319,28 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 ));
             }
         };
+        let (rm, wb) = match post {
+            [] => (0u32, 0u32),
+            [Opnd::Imm(inc)] => {
+                if *inc != (*count as i64) * if *q { 16 } else { 8 } {
+                    return Err(String::from(
+                        "inline asm: ld1/st1 immediate post-index must equal the list byte size",
+                    ));
+                }
+                (31, 1u32 << 23)
+            }
+            [Opnd::Reg { num, is64: true }] => (*num as u32, 1u32 << 23),
+            _ => {
+                return Err(String::from(
+                    "inline asm: bad ld1/st1 post-index (want `, #imm` or `, Xm`)",
+                ));
+            }
+        };
         return Ok(0x0C00_0000
+            | wb
             | (if is_ld { 1u32 << 22 } else { 0 })
             | (if *q { 1u32 << 30 } else { 0 })
+            | (rm << 16)
             | (opcode << 12)
             | ((*size as u32) << 10)
             | ((base as u32) << 5)

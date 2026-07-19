@@ -728,6 +728,38 @@ fn simd_ld_st_multi() {
     assert_eq!(enc("ld2", &[list(0, 2, 2, true), mem(1)]), 0x4C40_8820);
     assert!(encode("ld2", &[list(0, 1, 2, true), mem(1)]).is_err());
     assert!(encode("ld3", &[list(0, 2, 2, true), mem(1)]).is_err());
+    // Post-index: `, #imm` (imm = list byte size, Rm = 31) or `, Xm` (Rm = Xm);
+    // the writeback bit (23) is set.
+    assert_eq!(
+        enc("ld1", &[list(0, 1, 2, true), mem(1), Opnd::Imm(16)]),
+        0x4CDF_7820
+    );
+    assert_eq!(
+        enc("ld1", &[list(0, 2, 2, true), mem(1), Opnd::Imm(32)]),
+        0x4CDF_A820
+    );
+    assert_eq!(
+        enc("st1", &[list(0, 1, 0, true), mem(1), Opnd::Imm(16)]),
+        0x4C9F_7020
+    );
+    assert_eq!(
+        enc("ld1", &[list(0, 1, 0, false), mem(1), Opnd::Imm(8)]),
+        0x0CDF_7020
+    );
+    assert_eq!(
+        enc("ld1", &[list(0, 1, 2, true), mem(1), x(2)]),
+        0x4CC2_7820
+    );
+    assert_eq!(
+        enc("st1", &[list(0, 2, 2, true), mem(1), x(2)]),
+        0x4C82_A820
+    );
+    assert_eq!(
+        enc("ld2", &[list(0, 2, 2, true), mem(1), Opnd::Imm(32)]),
+        0x4CDF_8820
+    );
+    // A wrong immediate increment (not the list byte size) is rejected.
+    assert!(encode("ld1", &[list(0, 1, 2, true), mem(1), Opnd::Imm(8)]).is_err());
     // A non-zero offset needs the post-index form, not yet accepted here.
     assert!(
         encode(

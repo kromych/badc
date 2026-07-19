@@ -86,8 +86,18 @@ fn sysreg_field(name: &str) -> Option<u16> {
         Some(match n {
             "midr_el1" => (3, 0, 0, 0, 0),
             "mpidr_el1" => (3, 0, 0, 0, 5),
+            "id_aa64isar0_el1" => (3, 0, 0, 6, 0),
             "ctr_el0" => (3, 3, 0, 0, 1),
+            "dczid_el0" => (3, 3, 0, 0, 7),
+            "fpcr" => (3, 3, 4, 4, 0),
+            "fpsr" => (3, 3, 4, 4, 1),
+            "tcr_el1" => (3, 0, 2, 0, 2),
+            "ttbr0_el1" => (3, 0, 2, 0, 0),
+            "ttbr1_el1" => (3, 0, 2, 0, 1),
+            "mair_el1" => (3, 0, 10, 2, 0),
+            "par_el1" => (3, 0, 7, 4, 0),
             "tpidr_el0" => (3, 3, 13, 0, 2),
+            "tpidrro_el0" => (3, 3, 13, 0, 3),
             "tpidr_el1" => (3, 0, 13, 0, 4),
             "sctlr_el1" => (3, 0, 1, 0, 0),
             "vbar_el1" => (3, 0, 12, 0, 0),
@@ -196,6 +206,34 @@ fn sysop_base(mnem: &str, op: &str) -> Option<u32> {
         _ => return None,
     };
     Some(0xD508_0000 | (op1 << 16) | (crn << 12) | (crm << 8) | (op2 << 5))
+}
+
+/// The 5-bit prefetch-operation code of a `prfm` op name
+/// (`<pld|pli|pst><l1|l2|l3><keep|strm>` = type<<3 | target<<1 | policy), or
+/// None if the name is not one.
+fn prfop_code(name: &str) -> Option<u32> {
+    let n = name.to_ascii_lowercase();
+    if n.len() != 9 {
+        return None;
+    }
+    let ty = match &n[0..3] {
+        "pld" => 0u32,
+        "pli" => 1,
+        "pst" => 2,
+        _ => return None,
+    };
+    let target = match &n[3..5] {
+        "l1" => 0u32,
+        "l2" => 1,
+        "l3" => 2,
+        _ => return None,
+    };
+    let policy = match &n[5..9] {
+        "keep" => 0u32,
+        "strm" => 1,
+        _ => return None,
+    };
+    Some((ty << 3) | (target << 1) | policy)
 }
 
 /// One instruction of a parsed template.
@@ -597,6 +635,36 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             });
             continue;
         }
+        // `prfm <prfop>, [Xn{, #off | , Rm}]` prefetches; the prfop name (or a
+        // raw #imm5) fills the Rt slot, and the memory operand is parsed as for
+        // a load. The encoder scales the immediate offset by 8.
+        if mnem == "prfm" {
+            let toks = split_operands(rest);
+            if toks.len() != 2 {
+                return Err(String::from(
+                    "inline asm: `prfm` takes a prefetch op and a memory operand",
+                ));
+            }
+            let code = match prfop_code(toks[0]) {
+                Some(c) => c as i64,
+                None => match parse_operand(toks[0])? {
+                    AsmOpndA64::Imm(v) if (0..=31).contains(&v) => v,
+                    _ => return Err(format!("inline asm: bad prefetch op `{}`", toks[0])),
+                },
+            };
+            let mem = parse_operand(toks[1])?;
+            if !matches!(mem, AsmOpndA64::Mem { .. } | AsmOpndA64::MemReg { .. }) {
+                return Err(String::from("inline asm: `prfm` needs a memory operand"));
+            }
+            insns.push(AsmInsnA64 {
+                mnemonic: String::from("prfm"),
+                operands: alloc::vec![AsmOpndA64::Imm(code), mem],
+                bytes: Vec::new(),
+                label_def: None,
+                sym_target: None,
+            });
+            continue;
+        }
         // A direct `bl` / `b` to a bare identifier is a call / tail-branch to a
         // symbol (`bl schedule`); the target is resolved to a rel26 by the fixup
         // pass, not parsed as a register operand. A local-label branch (`b 1f`)
@@ -863,6 +931,9 @@ mod tests {
         assert_eq!(sysreg_field("cntvct_el0"), Some(0x5F02));
         assert_eq!(sysreg_field("cntp_ctl_el0"), Some(0x5F11));
         assert_eq!(sysreg_field("tpidr_el1"), Some(0x4684)); // per-CPU pointer
+        assert_eq!(sysreg_field("fpcr"), Some(0x5A20));
+        assert_eq!(sysreg_field("tpidrro_el0"), Some(0x5E83));
+        assert_eq!(sysreg_field("ttbr0_el1"), Some(0x4100));
         // Register names are case-insensitive.
         assert_eq!(sysreg_field("CurrentEL"), sysreg_field("currentel"));
         assert_eq!(sysreg_field("CNTV_CTL_EL0"), Some(0x5F19));
@@ -878,6 +949,24 @@ mod tests {
         );
         assert_eq!(insns[1].mnemonic, "msr");
         assert!(matches!(insns[1].operands[0], AsmOpndA64::SysReg(_)));
+    }
+
+    #[test]
+    fn parse_prefetch() {
+        // `prfm <prfop>, [Xn{, #off}]`: the prfop name resolves to its 5-bit
+        // code in the Rt slot, the memory operand parses as for a load.
+        assert_eq!(prfop_code("pldl1keep"), Some(0));
+        assert_eq!(prfop_code("pstl2strm"), Some(19));
+        assert_eq!(prfop_code("plil1keep"), Some(8));
+        assert_eq!(prfop_code("notaprfop"), None);
+        let insns = parse_template(b"prfm pldl1keep, [%0]; prfm pstl2strm, [x1, #16]").unwrap();
+        assert_eq!(insns[0].mnemonic, "prfm");
+        assert_eq!(insns[0].operands[0], AsmOpndA64::Imm(0));
+        assert!(matches!(insns[0].operands[1], AsmOpndA64::Mem { .. }));
+        assert_eq!(insns[1].operands[0], AsmOpndA64::Imm(19));
+        // A bad prefetch op and a missing memory operand are rejected.
+        assert!(parse_template(b"prfm bogus, [x0]").is_err());
+        assert!(parse_template(b"prfm pldl1keep, x0").is_err());
     }
 
     #[test]

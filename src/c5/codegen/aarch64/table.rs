@@ -325,6 +325,57 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         let base = 0x1300_0000u32 | (opc << 29) | if is64 { 0x8040_0000 } else { 0 };
         return Ok(base | (immr << 16) | (imms << 10) | ((rn as u32) << 5) | (rd as u32));
     }
+    // Prefetch: `prfm <prfop>, [Xn{, #off | , Rm}]`. The prfop code fills the Rt
+    // slot; the immediate offset is scaled by 8, a register offset feeds Rm.
+    if mnemonic == "prfm" {
+        return match ops {
+            [
+                Opnd::Imm(code),
+                Opnd::Mem {
+                    base,
+                    off,
+                    pre: false,
+                },
+            ] => {
+                if *off < 0 || off % 8 != 0 {
+                    return Err(String::from(
+                        "inline asm: prfm offset must be a non-negative multiple of 8",
+                    ));
+                }
+                let imm = (off / 8) as u32;
+                if imm > 0xFFF {
+                    return Err(String::from("inline asm: prfm offset out of range"));
+                }
+                Ok(0xF980_0000 | (imm << 10) | ((*base as u32) << 5) | (*code as u32 & 31))
+            }
+            [
+                Opnd::Imm(code),
+                Opnd::MemReg {
+                    base,
+                    index,
+                    option,
+                    shift,
+                },
+            ] => {
+                let s = match shift {
+                    None | Some(0) => 0u32,
+                    Some(3) => 1,
+                    Some(_) => {
+                        return Err(String::from(
+                            "inline asm: prfm register-offset shift must be 3",
+                        ));
+                    }
+                };
+                Ok(0xF8A0_0800
+                    | ((*index as u32) << 16)
+                    | ((*option as u32) << 13)
+                    | (s << 12)
+                    | ((*base as u32) << 5)
+                    | (*code as u32 & 31))
+            }
+            _ => Err(String::from("inline asm: bad prfm operands")),
+        };
+    }
     // Load / store with a register offset: `<ldr|ldrb|ldrh|ldrsb|ldrsh|ldrsw|
     // str|strb|strh> Xt, [Xn, Rm{, <ext> #s}]` across the access sizes. The base
     // word is `0x38200800 | size<<30 | opc<<22`; a written shift must be zero or

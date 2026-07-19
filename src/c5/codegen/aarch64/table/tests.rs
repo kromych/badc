@@ -244,6 +244,28 @@ fn bitfield_aliases() {
 }
 
 #[test]
+fn prefetch() {
+    // prfm <prfop>, [Xn{, #off | , Rm}]: the prfop code fills the Rt slot; the
+    // immediate offset is scaled by 8, the register offset feeds Rm.
+    let mem = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: false,
+    };
+    assert_eq!(enc("prfm", &[Opnd::Imm(0), mem(1, 0)]), 0xF980_0020); // pldl1keep, [x1]
+    assert_eq!(enc("prfm", &[Opnd::Imm(19), mem(1, 16)]), 0xF980_0833); // pstl2strm, #16
+    let mr = Opnd::MemReg {
+        base: 1,
+        index: 2,
+        option: 0b011,
+        shift: None,
+    };
+    assert_eq!(enc("prfm", &[Opnd::Imm(2), mr]), 0xF8A2_6822); // pldl2keep, [x1, x2]
+    // The immediate offset must be a multiple of the access size.
+    assert!(encode("prfm", &[Opnd::Imm(0), mem(1, 4)]).is_err());
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

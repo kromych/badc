@@ -746,6 +746,65 @@ fn simd_ld_st_multi() {
 }
 
 #[test]
+fn table_lookup() {
+    let v = |n: u8, q: bool| Opnd::VecReg { num: n, size: 0, q };
+    let tab = |first: u8, count: u8| Opnd::VecList {
+        first,
+        count,
+        size: 0,
+        q: true,
+    };
+    // tbl: len (bits 14..13) is the table count minus one; Q from the dst/index.
+    assert_eq!(
+        enc("tbl", &[v(0, true), tab(1, 1), v(2, true)]),
+        0x4E02_0020
+    );
+    assert_eq!(
+        enc("tbl", &[v(0, false), tab(1, 1), v(2, false)]),
+        0x0E02_0020
+    ); // .8b
+    assert_eq!(
+        enc("tbl", &[v(0, true), tab(1, 2), v(3, true)]),
+        0x4E03_2020
+    );
+    assert_eq!(
+        enc("tbl", &[v(0, true), tab(1, 3), v(4, true)]),
+        0x4E04_4020
+    );
+    assert_eq!(
+        enc("tbl", &[v(0, true), tab(1, 4), v(5, true)]),
+        0x4E05_6020
+    );
+    // tbx sets bit 12.
+    assert_eq!(
+        enc("tbx", &[v(0, true), tab(1, 1), v(2, true)]),
+        0x4E02_1020
+    );
+    assert_eq!(
+        enc("tbx", &[v(0, true), tab(1, 2), v(3, true)]),
+        0x4E03_3020
+    );
+    // A mismatched dst/index arrangement and a non-.16b table are rejected.
+    assert!(encode("tbl", &[v(0, true), tab(1, 1), v(2, false)]).is_err());
+    assert!(
+        encode(
+            "tbl",
+            &[
+                v(0, true),
+                Opnd::VecList {
+                    first: 1,
+                    count: 1,
+                    size: 2,
+                    q: true
+                },
+                v(2, true)
+            ]
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn crypto() {
     let v = |n: u8, size: u8| Opnd::VecReg {
         num: n,

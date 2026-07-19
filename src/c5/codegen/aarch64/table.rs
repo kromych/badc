@@ -1326,6 +1326,51 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((base as u32) << 5)
             | (*first as u32));
     }
+    // SIMD table lookup `<tbl|tbx> Vd.T, {Vn.16b, ..}, Vm.T` (T = 8b/16b): each
+    // byte of the index Vm selects a byte from the table register list. `len`
+    // (bits 14..13) is the table count minus one; bit 12 selects tbx (which
+    // keeps the destination byte for an out-of-range index) over tbl (zero).
+    if let (
+        "tbl" | "tbx",
+        [
+            Opnd::VecReg {
+                num: rd,
+                size: 0,
+                q,
+            },
+            Opnd::VecList {
+                first,
+                count,
+                size: tsize,
+                q: tq,
+            },
+            Opnd::VecReg {
+                num: rm,
+                size: 0,
+                q: mq,
+            },
+        ],
+    ) = (mnemonic, ops)
+    {
+        if q != mq {
+            return Err(String::from(
+                "inline asm: table lookup destination and index must share the arrangement",
+            ));
+        }
+        if *tsize != 0 || !*tq {
+            return Err(String::from(
+                "inline asm: table lookup registers must be .16b",
+            ));
+        }
+        let op = if mnemonic == "tbx" { 1u32 << 12 } else { 0 };
+        return Ok(0x0E00_0000
+            | (if *q { 1u32 << 30 } else { 0 })
+            | op
+            | ((*rm as u32) << 16)
+            | (((*count - 1) as u32) << 13)
+            | ((*first as u32) << 5)
+            | (*rd as u32));
+    }
     // Load / store with a register offset: `<ldr|ldrb|ldrh|ldrsb|ldrsh|ldrsw|
     // str|strb|strh> Xt, [Xn, Rm{, <ext> #s}]` across the access sizes. The base
     // word is `0x38200800 | size<<30 | opc<<22`; a written shift must be zero or

@@ -3087,3 +3087,90 @@ fn interlocked_and_halt_inline_asm_x64() {
     assert!(has_ff(0), "expected `inc r/m` (FF /0)");
     assert!(has_ff(1), "expected `dec r/m` (FF /1)");
 }
+
+/// A `register T v asm("reg")` local used as an `r` operand must be
+/// carried in exactly the named register: the template instruction's
+/// encoding fixes both source registers, so the bytes prove the pin.
+#[test]
+fn register_asm_variable_pins_the_named_register() {
+    use crate::{Compiler, NativeOptions, Target};
+    // x86-64: `movq %r9, %rax` (4C 89 C8) then `addq %r12, %rax`
+    // (4C 01 E0) -- %0 is rax (first pool register), %1 = r9, %2 = r12.
+    let src_x64 = "int main(void) { \
+        register long a asm(\"r9\") = 30; \
+        register long b asm(\"r12\") = 10; \
+        long out; \
+        __asm__(\"movq %1, %0; addq %2, %0\" : \"=r\"(out) : \"r\"(a), \"r\"(b)); \
+        return (int)out - 40; }";
+    let program = Compiler::with_target(src_x64.to_string(), Target::LinuxX64)
+        .compile()
+        .expect("register-asm x64 source compiles");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxX64,
+        NativeOptions::default(),
+    )
+    .expect("emit_native(LinuxX64)");
+    let has = |pat: &[u8]| bytes.windows(pat.len()).any(|w| w == pat);
+    assert!(has(&[0x4C, 0x89, 0xC8]), "expected `movq %r9, %rax`");
+    assert!(has(&[0x4C, 0x01, 0xE0]), "expected `addq %r12, %rax`");
+
+    // AArch64: `add x0, x9, x12` = 0x8B0C0120 little-endian.
+    let src_a64 = "int main(void) { \
+        register long a asm(\"x9\") = 30; \
+        register long b asm(\"x12\") = 10; \
+        long out; \
+        __asm__(\"add %0, %1, %2\" : \"=r\"(out) : \"r\"(a), \"r\"(b)); \
+        return (int)out - 40; }";
+    let program = Compiler::with_target(src_a64.to_string(), Target::LinuxAarch64)
+        .compile()
+        .expect("register-asm a64 source compiles");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("emit_native(LinuxAarch64)");
+    let word = 0x8B0C0120u32.to_le_bytes();
+    assert!(
+        bytes.windows(4).any(|w| w == word),
+        "expected `add x0, x9, x12`"
+    );
+}
+
+/// `asm goto` lowers on both targets at -O0 and -O: the label branch
+/// leaves through a restore trampoline patched to the label's block.
+#[test]
+fn asm_goto_emits_for_both_targets() {
+    use crate::{Compiler, NativeOptions, Target};
+    let cases = [
+        (
+            Target::LinuxX64,
+            "int f(int v) { \
+                 __asm__ goto(\"testl %0, %0; jnz %l[out]\" : : \"r\"(v) : : out); \
+                 return 1; out: return 2; } \
+             int main(void) { return f(1) + f(0); }",
+        ),
+        (
+            Target::LinuxAarch64,
+            "int f(int v) { \
+                 __asm__ goto(\"cbnz %w0, %l[out]\" : : \"r\"(v) : : out); \
+                 return 1; out: return 2; } \
+             int main(void) { return f(1) + f(0); }",
+        ),
+    ];
+    for (target, src) in cases {
+        for optimize in [false, true] {
+            let program = Compiler::with_target(src.to_string(), target)
+                .compile()
+                .unwrap_or_else(|e| panic!("asm goto compiles for {target:?}: {e}"));
+            let opts = if optimize {
+                NativeOptions::new().with_optimize()
+            } else {
+                NativeOptions::default()
+            };
+            crate::c5::object::emit_native_single_tu_for_test(&program, target, opts)
+                .unwrap_or_else(|e| panic!("emit_native({target:?}, -O={optimize}): {e}"));
+        }
+    }
+}

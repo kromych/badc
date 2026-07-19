@@ -1608,4 +1608,34 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn parse_goto_label_reference() {
+        let insns = parse_template(b"cbnz %w0, %l1").unwrap();
+        assert_eq!(insns[0].mnemonic, "cbnz");
+        assert_eq!(insns[0].operands[1], AsmOpndA64::GotoLabel(1));
+    }
+
+    #[test]
+    fn assign_honors_fixed_registers() {
+        use crate::c5::ir::{AsmConstraint, AsmOperand};
+        let op = |constraint| AsmOperand {
+            constraint,
+            is_output: false,
+            is_rw: false,
+            width: 8,
+        };
+        // A register-asm operand keeps its register; the pool operand
+        // avoids it.
+        let ops = [op(AsmConstraint::Fixed(9)), op(AsmConstraint::Reg)];
+        let assigned = assign_operand_regs(&ops, 0, 0).unwrap();
+        assert_eq!(assigned[0], Some(9));
+        assert_ne!(assigned[1], Some(9));
+        // Two operands pinned to one register collide.
+        let dup = [op(AsmConstraint::Fixed(9)), op(AsmConstraint::Fixed(9))];
+        assert!(assign_operand_regs(&dup, 0, 0).is_err());
+        // x16/x17 (emit scratch) and beyond are rejected.
+        let hi = [op(AsmConstraint::Fixed(16))];
+        assert!(assign_operand_regs(&hi, 0, 0).is_err());
+    }
 }

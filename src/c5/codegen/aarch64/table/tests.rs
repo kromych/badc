@@ -803,20 +803,25 @@ fn simd_ld1r() {
     assert_eq!(enc("ld1r", &[list(0, 2, true), mem(1), x(2)]), 0x4DC2_C820);
     // A wrong immediate increment and a multi-register list are rejected.
     assert!(encode("ld1r", &[list(0, 2, true), mem(1), Opnd::Imm(16)]).is_err());
-    assert!(
-        encode(
-            "ld1r",
-            &[
-                Opnd::VecList {
-                    first: 0,
-                    count: 2,
-                    size: 2,
-                    q: true
-                },
-                mem(1)
-            ]
-        )
-        .is_err()
+    let l = |first: u8, count: u8, size: u8, q: bool| Opnd::VecList {
+        first,
+        count,
+        size,
+        q,
+    };
+    assert!(encode("ld1r", &[l(0, 2, 2, true), mem(1)]).is_err());
+    // ld2r/ld3r/ld4r replicate 2/3/4 registers: opcode 0xC (1/2) or 0xE (3/4),
+    // R (bit 21) set for the even counts.
+    assert_eq!(enc("ld2r", &[l(0, 2, 2, true), mem(1)]), 0x4D60_C820);
+    assert_eq!(enc("ld3r", &[l(0, 3, 0, true), mem(1)]), 0x4D40_E020);
+    assert_eq!(enc("ld4r", &[l(0, 4, 3, true), mem(1)]), 0x4D60_EC20);
+    // The register count must match the structure.
+    assert!(encode("ld2r", &[l(0, 1, 2, true), mem(1)]).is_err());
+    assert!(encode("ld3r", &[l(0, 4, 2, true), mem(1)]).is_err());
+    // Post-index by the replicated byte size (count << size).
+    assert_eq!(
+        enc("ld2r", &[l(0, 2, 2, true), mem(1), Opnd::Imm(8)]),
+        0x4DFF_C820
     );
 }
 

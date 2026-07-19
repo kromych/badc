@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=1 n_params=0 variadic=false locals=2
+fn ent_pc=2 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -11,18 +11,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v5   Imm(42)                                          -> x0
     v6   Imm(180388626432)                                -> x0
     v7   Imm(42)                                          -> x0
-    v8   Imm(1)                                           -> x0
+    v8   Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v8)
   block 1  start_pc=0
-    v9   Imm(42)                                          -> x0
-    v10  Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v9)
-  block 2  start_pc=0
-    v13  Phi { incoming=[b1:v9], kind=I64 }               -> x0
-    v14  LoadLocal { off=-2, kind=I64 }                   -> x0
-    v15  Imm(180388626432)                                -> x0
+    v10  Imm(19)                                          -> x0
+    v11  Imm(23)                                          -> x0
+    v12  Imm(19)                                          -> x0
+    v13  Imm(0)                                           -> x0
+    v14  Imm(23)                                          -> x0
+    v15  Imm(0)                                           -> x0
     v16  Imm(42)                                          -> x0
-    terminator Return(v16)   (exit_acc=v16)
+    v17  Imm(180388626432)                                -> x0
+    v18  Imm(42)                                          -> x0
+    v19  Imm(180388626432)                                -> x0
+    v20  Imm(42)                                          -> x0
+    v21  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v21)
+  block 2  start_pc=0
+    v23  Imm(42)                                          -> x0
+    terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

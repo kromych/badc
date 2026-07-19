@@ -193,6 +193,17 @@ fn catalogue_load_rejects_pre_index_writeback() {
 }
 
 #[test]
+fn sys_op_dc_ic_tlbi() {
+    // The base word carries op1/CRn/CRm/op2 with Rt empty; the encoder ORs in
+    // the register operand, or xzr (31) when there is none. Words match clang.
+    assert_eq!(enc("dc", &[Opnd::SysOp(0xD50B_7A20), x(0)]), 0xD50B_7A20); // dc cvac, x0
+    assert_eq!(enc("dc", &[Opnd::SysOp(0xD50B_7A20)]), 0xD50B_7A3F); // dc cvac (xzr)
+    assert_eq!(enc("tlbi", &[Opnd::SysOp(0xD508_8700)]), 0xD508_871F); // tlbi vmalle1
+    assert_eq!(enc("tlbi", &[Opnd::SysOp(0xD508_8720), x(3)]), 0xD508_8723); // tlbi vae1, x3
+    assert_eq!(enc("ic", &[Opnd::SysOp(0xD508_7100)]), 0xD508_711F); // ic ialluis
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

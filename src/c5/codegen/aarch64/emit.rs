@@ -2162,6 +2162,7 @@ fn emit_inline_asm_aarch64(
             AsmOpndA64::Imm(v) => Opnd::Imm(v),
             AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
             AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
+            AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
             AsmOpndA64::Reg { num, is64 } => Opnd::Reg { num, is64 },
             AsmOpndA64::Ref { idx, is64 } => {
                 let Some(r) = resolve_ref(idx) else {

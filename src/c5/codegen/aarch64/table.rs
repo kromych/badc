@@ -101,6 +101,9 @@ pub(crate) enum Opnd {
     /// A system register, as its 15-bit `mrs`/`msr` field
     /// (`(op0-2)<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2`).
     SysReg(u16),
+    /// A `dc`/`ic`/`tlbi` system-operation base word (Rt field left zero); the
+    /// encoder ORs in the register operand or xzr.
+    SysOp(u32),
     /// A memory reference `[base, #off]` (`off` in bytes). `off` is signed for
     /// the unscaled/unprivileged imm9 forms; the scaled `ldr`/`str` path treats
     /// it as an unsigned scaled offset.
@@ -274,6 +277,16 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => return Err(String::from("inline asm: bad mrs/msr operands")),
         };
         return Ok(base | ((field as u32) << 5) | (rt as u32 & 31));
+    }
+    // System operation: `dc`/`ic`/`tlbi <op>{, Xt}`. The op is a base word; the
+    // Rt field takes the register operand or xzr (31) when there is none.
+    if let "dc" | "ic" | "tlbi" = mnemonic {
+        let (base, rt) = match ops {
+            [Opnd::SysOp(b)] => (*b, 31u32),
+            [Opnd::SysOp(b), Opnd::Reg { num, .. }] => (*b, *num as u32),
+            _ => return Err(String::from("inline asm: bad dc/ic/tlbi operands")),
+        };
+        return Ok(base | (rt & 31));
     }
     // Load / store with a register offset: `<ldr|ldrb|ldrh|ldrsb|ldrsh|ldrsw|
     // str|strb|strh> Xt, [Xn, Rm{, <ext> #s}]` across the access sizes. The base

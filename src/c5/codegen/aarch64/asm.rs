@@ -36,6 +36,10 @@ pub(crate) enum AsmOpndA64 {
     Lsl(u32),
     /// A system register named in a `mrs` / `msr`, resolved to its 15-bit field.
     SysReg(u16),
+    /// A `dc` / `ic` / `tlbi` system operation, resolved to its base word
+    /// (`0xD5080000 | op1<<16 | CRn<<12 | CRm<<8 | op2<<5`, Rt absent). The
+    /// encoder folds in the register operand (or xzr when there is none).
+    SysOp(u32),
     /// A memory reference `[base, #off]` (the `off` defaults to 0). The base is
     /// an operand reference or an explicit register. `pre` marks the
     /// pre-index writeback form `[base, #off]!`; post-index (`[base], #off`)
@@ -148,6 +152,50 @@ fn pstate_field(name: &str) -> Option<(u16, u16)> {
         "allint" => (1, 0),
         _ => return None,
     })
+}
+
+/// The base word of a `dc` / `ic` / `tlbi` system operation
+/// (`0xD5080000 | op1<<16 | CRn<<12 | CRm<<8 | op2<<5`, no Rt), or None if the
+/// mnemonic/op pair is not a known one. The (op1, CRn, CRm, op2) selectors are
+/// the reference-assembler encodings.
+fn sysop_base(mnem: &str, op: &str) -> Option<u32> {
+    let (op1, crn, crm, op2): (u32, u32, u32, u32) = match (mnem, op.to_ascii_lowercase().as_str())
+    {
+        ("dc", "ivac") => (0, 7, 6, 1),
+        ("dc", "isw") => (0, 7, 6, 2),
+        ("dc", "csw") => (0, 7, 10, 2),
+        ("dc", "cisw") => (0, 7, 14, 2),
+        ("dc", "zva") => (3, 7, 4, 1),
+        ("dc", "cvac") => (3, 7, 10, 1),
+        ("dc", "cvau") => (3, 7, 11, 1),
+        ("dc", "cvap") => (3, 7, 12, 1),
+        ("dc", "civac") => (3, 7, 14, 1),
+        ("ic", "ialluis") => (0, 7, 1, 0),
+        ("ic", "iallu") => (0, 7, 5, 0),
+        ("ic", "ivau") => (3, 7, 5, 1),
+        ("tlbi", "vmalle1is") => (0, 8, 3, 0),
+        ("tlbi", "vae1is") => (0, 8, 3, 1),
+        ("tlbi", "aside1is") => (0, 8, 3, 2),
+        ("tlbi", "vaae1is") => (0, 8, 3, 3),
+        ("tlbi", "vale1is") => (0, 8, 3, 5),
+        ("tlbi", "vaale1is") => (0, 8, 3, 7),
+        ("tlbi", "vmalle1") => (0, 8, 7, 0),
+        ("tlbi", "vae1") => (0, 8, 7, 1),
+        ("tlbi", "aside1") => (0, 8, 7, 2),
+        ("tlbi", "vaae1") => (0, 8, 7, 3),
+        ("tlbi", "vale1") => (0, 8, 7, 5),
+        ("tlbi", "vaale1") => (0, 8, 7, 7),
+        ("tlbi", "alle1") => (4, 8, 7, 4),
+        ("tlbi", "alle1is") => (4, 8, 3, 4),
+        ("tlbi", "alle2") => (4, 8, 7, 0),
+        ("tlbi", "alle3") => (6, 8, 7, 0),
+        ("tlbi", "vae2") => (4, 8, 7, 1),
+        ("tlbi", "vae3") => (6, 8, 7, 1),
+        ("tlbi", "ipas2e1is") => (4, 8, 0, 1),
+        ("tlbi", "vmalls12e1is") => (4, 8, 3, 6),
+        _ => return None,
+    };
+    Some(0xD508_0000 | (op1 << 16) | (crn << 12) | (crm << 8) | (op2 << 5))
 }
 
 /// One instruction of a parsed template.
@@ -491,6 +539,35 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 continue;
             }
         }
+        // `dc` / `ic` / `tlbi` name a system operation as the first token and
+        // take an optional address register. The op resolves to a base word; the
+        // register -- explicit, an operand reference, or absent (xzr) -- is
+        // folded in by the encoder. This is the general path; the frontend still
+        // pattern-matches the bare `dc cvau, %0` / `ic ivau, %0` forms to
+        // intrinsics before an inline-asm block reaches here.
+        if matches!(mnem, "dc" | "ic" | "tlbi") {
+            let toks = split_operands(rest);
+            if toks.is_empty() || toks.len() > 2 {
+                return Err(format!(
+                    "inline asm: `{mnem}` takes an op and an optional register"
+                ));
+            }
+            let Some(base) = sysop_base(mnem, toks[0]) else {
+                return Err(format!("inline asm: unknown `{mnem}` op `{}`", toks[0]));
+            };
+            let mut operands = alloc::vec![AsmOpndA64::SysOp(base)];
+            if let Some(reg) = toks.get(1) {
+                operands.push(parse_operand(reg)?);
+            }
+            insns.push(AsmInsnA64 {
+                mnemonic: String::from(mnem),
+                operands,
+                bytes: Vec::new(),
+                label_def: None,
+                sym_target: None,
+            });
+            continue;
+        }
         // A direct `bl` / `b` to a bare identifier is a call / tail-branch to a
         // symbol (`bl schedule`); the target is resolved to a rel26 by the fixup
         // pass, not parsed as a register operand. A local-label branch (`b 1f`)
@@ -791,6 +868,25 @@ mod tests {
         assert!(parse_template(b"msr daifset, x0").is_err());
         // The immediate must fit in four bits.
         assert!(parse_template(b"msr daifset, #16").is_err());
+    }
+
+    #[test]
+    fn parse_sys_op_operands() {
+        // `dc`/`ic`/`tlbi` name an op (resolved to its base word) and take an
+        // optional register, explicit or an operand reference.
+        let insns = parse_template(b"dc cvac, x0; tlbi vmalle1; dc civac, %0").unwrap();
+        assert_eq!(insns[0].mnemonic, "dc");
+        assert_eq!(insns[0].operands[0], AsmOpndA64::SysOp(0xD50B_7A20));
+        assert_eq!(insns[0].operands[1], AsmOpndA64::Reg { num: 0, is64: true });
+        assert_eq!(insns[1].operands, [AsmOpndA64::SysOp(0xD508_8700)]); // no register
+        assert_eq!(insns[2].operands[0], AsmOpndA64::SysOp(0xD50B_7E20));
+        assert!(matches!(
+            insns[2].operands[1],
+            AsmOpndA64::Ref { idx: 0, .. }
+        ));
+        // An unknown op and an over-long operand list are rejected.
+        assert!(parse_template(b"dc frobnicate, x0").is_err());
+        assert!(parse_template(b"tlbi vae1, x0, x1").is_err());
     }
 
     #[test]

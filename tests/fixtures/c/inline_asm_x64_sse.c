@@ -160,6 +160,32 @@ static int cpu_has_avx(void) {
 #endif
 }
 
+static int cpu_has_avx2(void) {
+#if defined(__x86_64__)
+    unsigned a, b, c, d;
+    __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(7), "c"(0));
+    (void) a;
+    (void) c;
+    (void) d;
+    return cpu_has_avx() && ((b >> 5) & 1u); /* CPUID.7.0:EBX.AVX2[bit 5] */
+#else
+    return 0;
+#endif
+}
+
+static int cpu_has_fma(void) {
+#if defined(__x86_64__)
+    unsigned a, b, c, d;
+    __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1), "c"(0));
+    (void) a;
+    (void) b;
+    (void) d;
+    return cpu_has_avx() && ((c >> 12) & 1u); /* CPUID.1:ECX.FMA[bit 12] */
+#else
+    return 0;
+#endif
+}
+
 static int avx_vpaddd(void) {
     int r = 42;
 #if defined(__x86_64__)
@@ -216,6 +242,78 @@ static int avx_shuf_mul(void) {
     return r;
 }
 
+static int fma_vfmadd(void) {
+    int r = 42;
+#if defined(__x86_64__)
+    if (cpu_has_fma()) {
+        sse_v4 ai = {4, 5, 6, 10};
+        sse_v4 bi = {4, 4, 4, 4};
+        sse_v4 ci = {2, 2, 2, 2};
+        sse_v4 out;
+        /* Floats made from the int vectors; vfmadd231ps (0F38): xmm2 += b * a
+         * per lane, then back to int. */
+        __asm__("cvtdq2ps %1, %%xmm0\n\t"
+                "cvtdq2ps %2, %%xmm1\n\t"
+                "cvtdq2ps %3, %%xmm2\n\t"
+                "vfmadd231ps %%xmm0, %%xmm1, %%xmm2\n\t"
+                "cvtps2dq %%xmm2, %0"
+                : "=x"(out)
+                : "x"(ai), "x"(bi), "x"(ci)
+                : "xmm0", "xmm1", "xmm2");
+        r = ((int *) &out)[3]; /* 2 + 4*10 = 42 */
+    }
+#endif
+    return r;
+}
+
+static int avx2_vpbroadcastd(void) {
+    int r = 42;
+#if defined(__x86_64__)
+    if (cpu_has_avx2()) {
+        sse_v4 out;
+        __asm__("movd %1, %%xmm0\n\t"
+                "vpbroadcastd %%xmm0, %%xmm1\n\t" /* all lanes = 21 */
+                "vpaddd %%xmm1, %%xmm1, %0"
+                : "=x"(out)
+                : "r"(21)
+                : "xmm0", "xmm1");
+        r = ((int *) &out)[2]; /* 21 + 21 = 42 */
+    }
+#endif
+    return r;
+}
+
+static int avx2_vpsllvd(void) {
+    int r = 42;
+#if defined(__x86_64__)
+    if (cpu_has_avx2()) {
+        sse_v4 val = {1, 2, 3, 21};
+        sse_v4 cnt = {0, 1, 2, 1};
+        sse_v4 out;
+        /* Per-lane variable shift: {1<<0, 2<<1, 3<<2, 21<<1}. */
+        __asm__("vpsllvd %2, %1, %0" : "=x"(out) : "x"(val), "x"(cnt));
+        r = ((int *) &out)[3]; /* 21 << 1 = 42 */
+    }
+#endif
+    return r;
+}
+
+static int avx2_vpblendd(void) {
+    int r = 42;
+#if defined(__x86_64__)
+    if (cpu_has_avx2()) {
+        sse_v4 a = {1, 2, 3, 4};
+        sse_v4 b = {0, 0, 0, 42};
+        sse_v4 out;
+        /* vpblendd (0F3A + imm): imm bit set picks the first-listed source
+         * (ModRM.rm), clear the middle one (VEX.vvvv). */
+        __asm__("vpblendd $0x8, %2, %1, %0" : "=x"(out) : "x"(a), "x"(b));
+        r = ((int *) &out)[3] + ((int *) &out)[0] - 1; /* 42 + 1 - 1 */
+    }
+#endif
+    return r;
+}
+
 int main(void) {
     if (sse_add(19, 23) != 42) return 1;    /* 19 + 23, register paddd     */
     if (sse_mem_add(23) != 42) return 2;    /* 23 + 19, memory-source paddd */
@@ -228,5 +326,9 @@ int main(void) {
     if (avx_vpaddd() != 42) return 9;          /* 3-operand VEX (AVX), guarded */
     if (avx_vmem() != 42) return 10;           /* VEX moves + memory operand   */
     if (avx_shuf_mul() != 42) return 11;       /* vpmulld (0F38) + vpshufd imm  */
+    if (fma_vfmadd() != 42) return 12;         /* vfmadd231ps (FMA), guarded    */
+    if (avx2_vpbroadcastd() != 42) return 13;  /* vpbroadcastd (0F38), guarded  */
+    if (avx2_vpsllvd() != 42) return 14;       /* vpsllvd (0F38), guarded       */
+    if (avx2_vpblendd() != 42) return 15;      /* vpblendd (0F3A imm), guarded  */
     return 42;
 }

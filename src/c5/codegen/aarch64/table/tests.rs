@@ -204,6 +204,27 @@ fn sys_op_dc_ic_tlbi() {
 }
 
 #[test]
+fn conditional_compare() {
+    // ccmp/ccmn Xn, Xm|#imm5, #nzcv, cond -- cond at bit 12, nzcv at bit 0.
+    assert_eq!(
+        enc("ccmp", &[x(0), x(1), Opnd::Imm(0), Opnd::Cond(0)]),
+        0xFA41_0000
+    ); // eq
+    assert_eq!(
+        enc("ccmp", &[x(0), Opnd::Imm(5), Opnd::Imm(2), Opnd::Cond(1)]),
+        0xFA45_1802
+    ); // #5, ne
+    assert_eq!(
+        enc("ccmn", &[x(0), x(1), Opnd::Imm(4), Opnd::Cond(10)]),
+        0xBA41_A004
+    ); // ge
+    assert_eq!(
+        enc("ccmp", &[w(0), w(1), Opnd::Imm(0), Opnd::Cond(0)]),
+        0x7A41_0000
+    ); // 32-bit
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

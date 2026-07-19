@@ -85,6 +85,14 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "casl", ops: &[X, X, Mem], base: 0xC8A0FC00, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // casl Xs, Xd, [Xn|SP]
     Form { mnemonic: "caslb", ops: &[W, W, Mem], base: 0x08A0FC00, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // caslb Ws, Wd, [Xn|SP]
     Form { mnemonic: "caslh", ops: &[W, W, Mem], base: 0x48A0FC00, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // caslh Ws, Wd, [Xn|SP]
+    Form { mnemonic: "ccmn", ops: &[W, W, Imm, A64Op::Cond], base: 0x3A400000, fields: &[Reg { op: 0, shift: 5 }, Reg { op: 1, shift: 16 }, UImm { op: 2, shift: 0, width: 4 }, Field::Cond { op: 3, inv: false }] },  // ccmn Wn, Wm, #nzcv, #cond
+    Form { mnemonic: "ccmn", ops: &[X, X, Imm, A64Op::Cond], base: 0xBA400000, fields: &[Reg { op: 0, shift: 5 }, Reg { op: 1, shift: 16 }, UImm { op: 2, shift: 0, width: 4 }, Field::Cond { op: 3, inv: false }] },  // ccmn Xn, Xm, #nzcv, #cond
+    Form { mnemonic: "ccmn", ops: &[W, Imm, Imm, A64Op::Cond], base: 0x3A400800, fields: &[Reg { op: 0, shift: 5 }, UImm { op: 1, shift: 16, width: 5 }, UImm { op: 2, shift: 0, width: 4 }, Field::Cond { op: 3, inv: false }] },  // ccmn Wn, #imm, #nzcv, #cond
+    Form { mnemonic: "ccmn", ops: &[X, Imm, Imm, A64Op::Cond], base: 0xBA400800, fields: &[Reg { op: 0, shift: 5 }, UImm { op: 1, shift: 16, width: 5 }, UImm { op: 2, shift: 0, width: 4 }, Field::Cond { op: 3, inv: false }] },  // ccmn Xn, #imm, #nzcv, #cond
+    Form { mnemonic: "ccmp", ops: &[W, W, Imm, A64Op::Cond], base: 0x7A400000, fields: &[Reg { op: 0, shift: 5 }, Reg { op: 1, shift: 16 }, UImm { op: 2, shift: 0, width: 4 }, Field::Cond { op: 3, inv: false }] },  // ccmp Wn, Wm, #nzcv, #cond
+    Form { mnemonic: "ccmp", ops: &[X, X, Imm, A64Op::Cond], base: 0xFA400000, fields: &[Reg { op: 0, shift: 5 }, Reg { op: 1, shift: 16 }, UImm { op: 2, shift: 0, width: 4 }, Field::Cond { op: 3, inv: false }] },  // ccmp Xn, Xm, #nzcv, #cond
+    Form { mnemonic: "ccmp", ops: &[W, Imm, Imm, A64Op::Cond], base: 0x7A400800, fields: &[Reg { op: 0, shift: 5 }, UImm { op: 1, shift: 16, width: 5 }, UImm { op: 2, shift: 0, width: 4 }, Field::Cond { op: 3, inv: false }] },  // ccmp Wn, #imm, #nzcv, #cond
+    Form { mnemonic: "ccmp", ops: &[X, Imm, Imm, A64Op::Cond], base: 0xFA400800, fields: &[Reg { op: 0, shift: 5 }, UImm { op: 1, shift: 16, width: 5 }, UImm { op: 2, shift: 0, width: 4 }, Field::Cond { op: 3, inv: false }] },  // ccmp Xn, #imm, #nzcv, #cond
     Form { mnemonic: "cfinv", ops: &[], base: 0xD500401F, fields: &[] },  // cfinv
     Form { mnemonic: "chkfeat", ops: &[], base: 0xD503251F, fields: &[] },  // chkfeat
     Form { mnemonic: "clrbhb", ops: &[], base: 0xD50322DF, fields: &[] },  // clrbhb

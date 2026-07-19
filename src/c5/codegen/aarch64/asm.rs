@@ -508,6 +508,35 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 continue;
             }
         }
+        // `cinc`/`cinv`/`cneg Xd, Xn, cond` are aliases of `csinc`/`csinv`/
+        // `csneg Xd, Xn, Xn, invert(cond)` -- the same source twice, the
+        // condition inverted. al/nv have no inverse and are rejected, as in the
+        // reference assembler.
+        if let "cinc" | "cinv" | "cneg" = mnem {
+            let toks = split_operands(rest);
+            if toks.len() == 3
+                && let Some(c) = cond_code(toks[2])
+            {
+                if c >= 14 {
+                    return Err(format!("inline asm: `{mnem}` condition must not be al/nv"));
+                }
+                let dst = parse_operand(toks[0])?;
+                let src = parse_operand(toks[1])?;
+                let base = match mnem {
+                    "cinc" => "csinc",
+                    "cinv" => "csinv",
+                    _ => "csneg",
+                };
+                insns.push(AsmInsnA64 {
+                    mnemonic: String::from(base),
+                    operands: alloc::vec![dst, src.clone(), src, AsmOpndA64::Cond(c ^ 1)],
+                    bytes: Vec::new(),
+                    label_def: None,
+                    sym_target: None,
+                });
+                continue;
+            }
+        }
         // `msr <pstate>, #imm` sets a PSTATE field. The immediate is a 4-bit
         // literal, never an operand reference, so the whole instruction is
         // constant and encodes to bytes here. `msr <sysreg>, Rn` (a register
@@ -887,6 +916,29 @@ mod tests {
         // An unknown op and an over-long operand list are rejected.
         assert!(parse_template(b"dc frobnicate, x0").is_err());
         assert!(parse_template(b"tlbi vae1, x0, x1").is_err());
+    }
+
+    #[test]
+    fn parse_conditional_aliases() {
+        // cinc/cinv/cneg Xd, Xn, cond expand to csinc/csinv/csneg Xd, Xn, Xn,
+        // invert(cond) -- the same source register twice, the condition inverted.
+        let insns = parse_template(b"cinc x0, x1, eq; cinv x2, x3, lt; cneg x4, x5, ne").unwrap();
+        assert_eq!(insns[0].mnemonic, "csinc");
+        assert_eq!(
+            insns[0].operands,
+            [
+                AsmOpndA64::Reg { num: 0, is64: true },
+                AsmOpndA64::Reg { num: 1, is64: true },
+                AsmOpndA64::Reg { num: 1, is64: true },
+                AsmOpndA64::Cond(1), // ne == invert(eq)
+            ]
+        );
+        assert_eq!(insns[1].mnemonic, "csinv");
+        assert!(matches!(insns[1].operands[3], AsmOpndA64::Cond(10))); // ge == invert(lt)
+        assert_eq!(insns[2].mnemonic, "csneg");
+        assert!(matches!(insns[2].operands[3], AsmOpndA64::Cond(0))); // eq == invert(ne)
+        // al/nv have no inverse.
+        assert!(parse_template(b"cinc x0, x1, al").is_err());
     }
 
     #[test]

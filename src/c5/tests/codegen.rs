@@ -13,23 +13,24 @@ fn entry_pc_points_at_main() {
 #[test]
 fn unsupported_inline_asm_reports_the_specific_form() {
     use crate::{NativeOptions, Target};
-    // An inline-asm form the encoder cannot handle must report which mnemonic
-    // failed, not the generic "op outside the implemented subset" fallback that
-    // reads like an internal compiler error. `ccmp` has no encoding.
+    // An inline-asm form the encoder cannot handle must report the specific
+    // reason, not the generic "op outside the implemented subset" fallback that
+    // reads like an internal compiler error. `add` with too many registers has
+    // no encoding -- a stable trigger, since no `add` form ever takes five.
     let program = super::compile_str(
-        "int main(void){ __asm__ volatile(\"ccmp x0, x1, #0, eq\" ::: \"cc\"); return 0; }",
+        "int main(void){ __asm__ volatile(\"add x0, x1, x2, x3, x5\" ::: \"x0\"); return 0; }",
     );
     let err = crate::c5::object::emit_native_single_tu_for_test(
         &program,
         Target::LinuxAarch64,
         NativeOptions::default(),
     )
-    .expect_err("ccmp is not encodable");
+    .expect_err("add with five registers is not encodable");
     let msg = format!("{err}");
-    assert!(msg.contains("ccmp"), "message names the form: {msg}");
+    assert!(msg.contains("no A64 encoding"), "specific reason: {msg}");
     assert!(
         !msg.contains("implemented subset"),
-        "specific reason, not the generic fallback: {msg}"
+        "not the generic fallback: {msg}"
     );
 }
 

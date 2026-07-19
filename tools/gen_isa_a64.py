@@ -120,8 +120,8 @@ EXCLUDED_ROWS = {
 # Bare op-string tokens whose bit width is not written inline (widths verified
 # by the 32-bit row-sum constraint in the design spike).
 BARE = {'Rm': 5, 'Rn': 5, 'Rd': 5, 'Ra': 5, 'Rt': 5, 'Rt2': 5, 'Rs': 5,
-        'Rs2': 5, 'Rd2': 5, 'cond': 4, 'CRm': 4, 'CRn': 4, 'sop': 2,
-        'option': 3}
+        'Rs2': 5, 'Rd2': 5, 'cond': 4, 'nzcv': 4, 'CRm': 4, 'CRn': 4,
+        'sop': 2, 'option': 3}
 
 # Aliases that store the inverted written condition (al/nv invalid there).
 COND_INV = {'cset', 'csetm', 'cinc', 'cinv', 'cneg'}

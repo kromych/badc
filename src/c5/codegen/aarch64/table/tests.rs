@@ -577,6 +577,34 @@ fn vector_immediate() {
 }
 
 #[test]
+fn vector_one_source() {
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    let u = |m: &str, size: u8| enc(m, &[v(0, size, true), v(1, size, true)]);
+    // Sign, bitwise, popcount, reverses -- each base bakes U and the opcode.
+    assert_eq!(u("abs", 2), 0x4EA0_B820); // .4s
+    assert_eq!(u("neg", 2), 0x6EA0_B820);
+    assert_eq!(u("not", 0), 0x6E20_5820); // .16b
+    assert_eq!(u("cnt", 0), 0x4E20_5820);
+    assert_eq!(u("rev64", 2), 0x4EA0_0820);
+    assert_eq!(u("rev32", 0), 0x6E20_0820);
+    assert_eq!(u("rev16", 0), 0x4E20_1820);
+    // FP unary on 2s/4s/2d.
+    assert_eq!(u("fneg", 2), 0x6EA0_F820); // .4s
+    assert_eq!(u("fabs", 3), 0x4EE0_F820); // .2d
+    assert_eq!(u("fsqrt", 2), 0x6EA1_F820);
+    // Scalar fneg/fabs (VReg) still reach the scalar arm.
+    let d = |n: u8| Opnd::VReg { num: n, is_d: true };
+    assert_eq!(enc("fneg", &[d(0), d(1)]), 0x1E61_4020);
+    assert_eq!(enc("fabs", &[d(0), d(1)]), 0x1E60_C020);
+    // Element-size bounds: rev16 is byte-only, cnt is byte-only, fneg needs
+    // 2s/4s/2d, and .1d is reserved for the all-size ops.
+    assert!(encode("rev16", &[v(0, 2, true), v(1, 2, true)]).is_err()); // not .4s
+    assert!(encode("cnt", &[v(0, 1, true), v(1, 1, true)]).is_err()); // not .8h
+    assert!(encode("fneg", &[v(0, 0, true), v(1, 0, true)]).is_err()); // not .16b
+    assert!(encode("neg", &[v(0, 3, false), v(1, 3, false)]).is_err()); // .1d
+}
+
+#[test]
 fn vector_permute() {
     let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
     let p = |m: &str| enc(m, &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]);

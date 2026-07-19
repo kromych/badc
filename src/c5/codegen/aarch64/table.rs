@@ -379,21 +379,19 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         let base = 0x1E20_0800u32 | if d0 { 0x40_0000 } else { 0 };
         return Ok(base | (opc << 12) | ((rm as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
     }
-    // FP one-source: `<fneg|fabs|fsqrt> Vd, Vn`, one width (single = double base
-    // less the type bit).
+    // Scalar FP one-source: `<fneg|fabs|fsqrt> Dd|Sd, ...`, one width (single =
+    // double base less the type bit). The same mnemonics on vector (VecReg)
+    // operands fall through to the SIMD two-register-misc arm.
     if let Some(base_d) = match mnemonic {
         "fabs" => Some(0x1E60_C000u32),
         "fneg" => Some(0x1E61_4000),
         "fsqrt" => Some(0x1E61_C000),
         _ => None,
-    } {
-        let [
-            Opnd::VReg { num: rd, is_d: d0 },
-            Opnd::VReg { num: rn, is_d: d1 },
-        ] = *ops
-        else {
-            return Err(String::from("inline asm: bad FP unary operands"));
-        };
+    } && let [
+        Opnd::VReg { num: rd, is_d: d0 },
+        Opnd::VReg { num: rn, is_d: d1 },
+    ] = *ops
+    {
         if d0 != d1 {
             return Err(String::from("inline asm: FP unary operand widths differ"));
         }
@@ -811,6 +809,54 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((v >> 5) << 16)
             | (cmode << 12)
             | ((v & 0x1F) << 5)
+            | (rd as u32));
+    }
+    // SIMD two-register misc (one source): the sign ops abs/neg, bitwise
+    // not/mvn, popcount cnt, the reverses rev16/rev32/rev64, and the FP unary
+    // fabs/fneg/fsqrt. Each base word bakes U and the opcode; `lo..=hi` bounds
+    // the element size (byte-only for not/cnt/rev16, up to word for rev64, all
+    // sizes for abs/neg, 2s/4s/2d for the FP ops). GP neg/mvn and scalar
+    // fabs/fneg/fsqrt (Reg/VReg operands) fall through.
+    if let Some((base, lo, hi)) = match mnemonic {
+        "rev64" => Some((0x0E20_0800u32, 0u8, 2u8)),
+        "rev32" => Some((0x2E20_0800, 0, 1)),
+        "rev16" => Some((0x0E20_1800, 0, 0)),
+        "cnt" => Some((0x0E20_5800, 0, 0)),
+        "not" | "mvn" => Some((0x2E20_5800, 0, 0)),
+        "abs" => Some((0x0E20_B800, 0, 3)),
+        "neg" => Some((0x2E20_B800, 0, 3)),
+        "fabs" => Some((0x0E20_F800, 2, 3)),
+        "fneg" => Some((0x2E20_F800, 2, 3)),
+        "fsqrt" => Some((0x2E21_F800, 2, 3)),
+        _ => None,
+    } && let [
+        Opnd::VecReg { num: rd, size, q },
+        Opnd::VecReg {
+            num: rn,
+            size: s1,
+            q: q1,
+        },
+    ] = *ops
+    {
+        if size != s1 || q != q1 {
+            return Err(String::from(
+                "inline asm: vector 1-source arrangements differ",
+            ));
+        }
+        if size < lo || size > hi {
+            return Err(String::from(
+                "inline asm: element size invalid for this vector op",
+            ));
+        }
+        if size == 3 && !q {
+            return Err(String::from(
+                "inline asm: .1d arrangement is reserved (use .2d)",
+            ));
+        }
+        return Ok(base
+            | (if q { 1u32 << 30 } else { 0 })
+            | ((size as u32) << 22)
+            | ((rn as u32) << 5)
             | (rd as u32));
     }
     // SIMD element to GP register: `umov Rd, Vn.T[i]` (zero-extended) or

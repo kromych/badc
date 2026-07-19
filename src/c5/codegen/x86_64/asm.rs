@@ -56,9 +56,16 @@ pub(crate) enum Mnemonic {
     Pushfq,
     /// Pop a 64-bit register, `pop reg`.
     Pop,
-    /// `movd` between an MMX register and a GPR / memory (no operand-size
-    /// prefix -- the 0x66-prefixed form is the XMM variant).
+    /// `movd` between an MMX / XMM register and a GPR / memory. The MMX form has
+    /// no operand-size prefix; the XMM form (an `xmm` operand) adds the 0x66.
     Movd,
+    /// An SSE2 two-operand register form `<op> %xmm_src, %xmm_dst` encoded as
+    /// `<prefix> [REX] 0F <opcode> /r` with the destination in ModRM.reg and the
+    /// source in ModRM.rm (pxor, paddd, pand, movdqa, ...).
+    Sse2Rr {
+        prefix: u8,
+        opcode: u8,
+    },
     /// Privileged / model-specific operandless forms (operands, where any,
     /// ride fixed registers via the statement's constraints). `cli` / `sti`
     /// clear / set the interrupt flag; `invd` / `wbinvd` invalidate caches;
@@ -194,6 +201,16 @@ pub(crate) fn reg_by_name(name: &str) -> Option<(u8, AsmRegSize)> {
     // MMX registers mm0..mm7. Marked with register numbers 16..24 so they
     // never collide with the 0..16 GPRs; only `movd` reads them, masking
     // the mark back to the 0..8 ModRM.reg field.
+    if let Some(rest) = n.strip_prefix("xmm")
+        && let Ok(i) = rest.parse::<u8>()
+        && i < 16
+    {
+        // XMM registers, marked with XMM_BASE so they never collide with the
+        // GPRs/MMX; the SSE encode arms mask back to the ModRM field and set
+        // REX.R/REX.B for xmm8..15. The size marker is unused (the mnemonic
+        // fixes the operation width).
+        return Some((XMM_BASE + i, Quad));
+    }
     if let Some(rest) = n.strip_prefix("mm")
         && let Ok(i) = rest.parse::<u8>()
         && i < 8
@@ -229,6 +246,9 @@ pub(crate) fn reg_by_name(name: &str) -> Option<(u8, AsmRegSize)> {
 /// The register number a `reg_by_name` result carries for `mm0`; MMX
 /// registers occupy `MMX_BASE..MMX_BASE+8`.
 const MMX_BASE: u8 = 16;
+/// XMM registers occupy `XMM_BASE..XMM_BASE+16`, clear of the GPR/MMX/CR/DR/SEG
+/// marks below.
+const XMM_BASE: u8 = 64;
 /// Control / debug / segment registers occupy the ranges below; each is
 /// marked so it never collides with the 0..16 GPRs or the MMX marks.
 const CR_BASE: u8 = 24;
@@ -308,6 +328,35 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "pushfq" => Mnemonic::Pushfq,
         "pop" => Mnemonic::Pop,
         "movd" => Mnemonic::Movd,
+        // SSE2 two-xmm integer forms (0x66 0F <opcode> /r).
+        "pxor" => Mnemonic::Sse2Rr {
+            prefix: 0x66,
+            opcode: 0xEF,
+        },
+        "pand" => Mnemonic::Sse2Rr {
+            prefix: 0x66,
+            opcode: 0xDB,
+        },
+        "por" => Mnemonic::Sse2Rr {
+            prefix: 0x66,
+            opcode: 0xEB,
+        },
+        "paddd" => Mnemonic::Sse2Rr {
+            prefix: 0x66,
+            opcode: 0xFE,
+        },
+        "paddq" => Mnemonic::Sse2Rr {
+            prefix: 0x66,
+            opcode: 0xD4,
+        },
+        "psubd" => Mnemonic::Sse2Rr {
+            prefix: 0x66,
+            opcode: 0xFA,
+        },
+        "movdqa" => Mnemonic::Sse2Rr {
+            prefix: 0x66,
+            opcode: 0x6F,
+        },
         "cli" => Mnemonic::Cli,
         "sti" => Mnemonic::Sti,
         "invd" => Mnemonic::Invd,
@@ -848,40 +897,46 @@ pub(crate) fn encode(
             Ok(())
         }
         Mnemonic::Movd => {
-            // One operand is an MMX register (marked reg MMX_BASE..+8), the
-            // other a GPR. `movd %%mm, %gp` stores the mm register to the
-            // GPR (0F 7E /r); `movd %gp, %%mm` loads it (0F 6E /r). The mm
-            // register is the ModRM.reg field, the GPR the r/m; no 66 prefix
-            // (that selects the XMM form), no REX.W (movd is 32-bit).
+            // One operand is a vector register (MMX MMX_BASE..+8 or XMM
+            // XMM_BASE..+16), the other a GPR / memory. `movd %vec, %gp` stores
+            // (0F 7E /r), `movd %gp, %vec` loads (0F 6E /r). The vector register
+            // is the ModRM.reg field, the GPR / memory the r/m. MMX has no
+            // prefix; XMM adds 0x66. movd is 32-bit (no REX.W); a high XMM sets
+            // REX.R, a high GPR / base REX.B.
             let [a, b] = two(ops)?;
-            let mmx = |c: &Concrete| matches!(c, Concrete::Reg { reg, .. } if (MMX_BASE..MMX_BASE + 8).contains(reg));
-            let (mm, other, opcode) = if mmx(&a) {
-                (a, b, 0x7E)
-            } else if mmx(&b) {
-                (b, a, 0x6E)
+            let vec = |c: &Concrete| match c {
+                Concrete::Reg { reg, .. } if (MMX_BASE..MMX_BASE + 8).contains(reg) => {
+                    Some((*reg - MMX_BASE, false))
+                }
+                Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
+                    Some((*reg - XMM_BASE, true))
+                }
+                _ => None,
+            };
+            let ((v_field, is_xmm), other, opcode) = if let Some(v) = vec(&a) {
+                (v, b, 0x7E)
+            } else if let Some(v) = vec(&b) {
+                (v, a, 0x6E)
             } else {
-                return Err(String::from("inline asm: `movd` needs one MMX operand"));
+                return Err(String::from("inline asm: `movd` needs one MMX/XMM operand"));
             };
-            let Concrete::Reg { reg: mm_reg, .. } = mm else {
-                return Err(String::from("inline asm: `movd` MMX operand expected"));
-            };
-            let mm_field = mm_reg - MMX_BASE;
+            if is_xmm {
+                code.push(0x66);
+            }
             match other {
-                // r/m = a GPR (register-direct) or a memory reference
-                // (`movd m32, mm` / `movd mm, m32`, the `"m"` operand form).
                 Concrete::Reg { reg: gp_reg, .. } => {
-                    if gp_reg >= 8 {
-                        code.push(rex(false, false, false, true)); // REX.B
+                    if v_field >= 8 || gp_reg >= 8 {
+                        code.push(rex(false, v_field >= 8, false, gp_reg >= 8));
                     }
                     code.extend_from_slice(&[0x0F, opcode]);
-                    code.push(modrm_reg(mm_field, gp_reg));
+                    code.push(modrm_reg(v_field & 7, gp_reg & 7));
                 }
                 Concrete::Mem { base, .. } => {
-                    if base >= 8 {
-                        code.push(rex(false, false, false, true)); // REX.B for base
+                    if v_field >= 8 || base >= 8 {
+                        code.push(rex(false, v_field >= 8, false, base >= 8));
                     }
                     code.extend_from_slice(&[0x0F, opcode]);
-                    modrm_mem(code, mm_field, base);
+                    modrm_mem(code, v_field & 7, base);
                 }
                 Concrete::Imm(_) => {
                     return Err(String::from(
@@ -889,6 +944,30 @@ pub(crate) fn encode(
                     ));
                 }
             }
+            Ok(())
+        }
+        Mnemonic::Sse2Rr { prefix, opcode } => {
+            // `<op> %xmm_src, %xmm_dst`: <prefix> [REX] 0F <opcode> /r, with the
+            // AT&T destination in ModRM.reg and the source in ModRM.rm. A high
+            // destination sets REX.R, a high source REX.B.
+            let [src, dst] = two(ops)?;
+            let xmm = |c: &Concrete| match c {
+                Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
+                    Some(*reg - XMM_BASE)
+                }
+                _ => None,
+            };
+            let (Some(d), Some(s)) = (xmm(&dst), xmm(&src)) else {
+                return Err(String::from(
+                    "inline asm: this SSE op needs two XMM register operands",
+                ));
+            };
+            code.push(prefix);
+            if d >= 8 || s >= 8 {
+                code.push(rex(false, d >= 8, false, s >= 8));
+            }
+            code.extend_from_slice(&[0x0F, opcode]);
+            code.push(modrm_reg(d & 7, s & 7));
             Ok(())
         }
         Mnemonic::In | Mnemonic::Out => {
@@ -1104,6 +1183,57 @@ mod tests {
         assert_eq!(mixed[1].mnemonic, Mnemonic::Nop);
         // A single alphabetic token stays a mnemonic, not a raw byte.
         assert_eq!(parse_template(b"nop").unwrap()[0].mnemonic, Mnemonic::Nop);
+    }
+
+    #[test]
+    fn sse2_xmm_ops() {
+        let xmm = |n: u8| Concrete::Reg {
+            reg: XMM_BASE + n,
+            size: AsmRegSize::Quad,
+        };
+        let gp = |n: u8| Concrete::Reg {
+            reg: n,
+            size: AsmRegSize::Long,
+        };
+        let sse = |prefix, opcode| Mnemonic::Sse2Rr { prefix, opcode };
+        // Two-xmm SSE2: `<prefix> [REX] 0F <opcode>` with ModRM.reg = dst,
+        // rm = src (AT&T `op src, dst`, ops in source-first order).
+        assert_eq!(
+            enc(sse(0x66, 0xEF), None, &[xmm(1), xmm(2)]),
+            [0x66, 0x0F, 0xEF, 0xD1]
+        ); // pxor %xmm1,%xmm2
+        assert_eq!(
+            enc(sse(0x66, 0xFE), None, &[xmm(1), xmm(2)]),
+            [0x66, 0x0F, 0xFE, 0xD1]
+        ); // paddd
+        assert_eq!(
+            enc(sse(0x66, 0xD4), None, &[xmm(3), xmm(4)]),
+            [0x66, 0x0F, 0xD4, 0xE3]
+        ); // paddq %xmm3,%xmm4
+        assert_eq!(
+            enc(sse(0x66, 0x6F), None, &[xmm(1), xmm(2)]),
+            [0x66, 0x0F, 0x6F, 0xD1]
+        ); // movdqa
+        assert_eq!(
+            enc(sse(0x66, 0xEF), None, &[xmm(9), xmm(10)]),
+            [0x66, 0x45, 0x0F, 0xEF, 0xD1]
+        ); // pxor high xmm -> REX.R+REX.B
+        // movd GP<->xmm: the xmm form of the MMX movd adds the 0x66 prefix; the
+        // vector register is ModRM.reg, the GPR rm.
+        assert_eq!(
+            enc(Mnemonic::Movd, None, &[gp(0), xmm(0)]),
+            [0x66, 0x0F, 0x6E, 0xC0]
+        ); // movd %eax,%xmm0
+        assert_eq!(
+            enc(Mnemonic::Movd, None, &[xmm(0), gp(0)]),
+            [0x66, 0x0F, 0x7E, 0xC0]
+        ); // movd %xmm0,%eax
+        assert_eq!(
+            enc(Mnemonic::Movd, None, &[gp(9), xmm(3)]),
+            [0x66, 0x41, 0x0F, 0x6E, 0xD9]
+        ); // movd %r9d,%xmm3 -> REX.B
+        // A non-xmm operand pair is rejected.
+        assert!(encode(&mut Vec::new(), sse(0x66, 0xEF), None, &[gp(0), gp(1)]).is_err());
     }
 
     #[test]

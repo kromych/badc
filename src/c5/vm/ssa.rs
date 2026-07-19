@@ -2081,6 +2081,13 @@ fn run_inline_asm(
                     "inline asm: `{name}` is not supported under --interp"
                 )));
             }
+            Mnemonic::Sse2Rr { .. } => {
+                // The interpreter has no XMM register file; SSE inline asm is a
+                // native / JIT construct, refused here rather than mis-modelled.
+                return Err(C5Error::Runtime(alloc::string::String::from(
+                    "inline asm: SSE register ops are not supported under --interp",
+                )));
+            }
             Mnemonic::Nop | Mnemonic::Rdtsc | Mnemonic::Rdtscp => {
                 // No host clock: the timestamp read produces zero in the
                 // registers it defines (rax/rdx, and rcx for rdtscp).

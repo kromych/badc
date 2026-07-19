@@ -1372,7 +1372,11 @@ impl Compiler {
                         }
                     } else if let Some((reg, _)) =
                         super::super::codegen::x86_64::asm::reg_by_name(name)
+                        && reg < 16
                     {
+                        // clobber_regs is the GP mask (0..15); the vector / system
+                        // register marks (MMX/XMM/CR/DR/SEG, reg >= 16) do not fit
+                        // it and are not tracked here.
                         clobber_regs |= 1 << reg;
                     }
                 }

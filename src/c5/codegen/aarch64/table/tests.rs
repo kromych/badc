@@ -360,6 +360,15 @@ fn fp_load_store() {
     assert_eq!(enc("str", &[d(0), mr(Some(3))]), 0xFC22_7820);
     // A misaligned immediate offset is rejected.
     assert!(encode("ldr", &[d(0), mem(1, 4)]).is_err());
+    // The 128-bit `qN` register: immediate offset scaled by 16, register offset
+    // with the size-4 shift.
+    let q = Opnd::QReg;
+    assert_eq!(enc("ldr", &[q(0), mem(1, 0)]), 0x3DC0_0020);
+    assert_eq!(enc("ldr", &[q(0), mem(1, 16)]), 0x3DC0_0420);
+    assert_eq!(enc("str", &[q(0), mem(1, 32)]), 0x3D80_0820);
+    assert_eq!(enc("ldr", &[q(0), mr(None)]), 0x3CE2_6820);
+    assert_eq!(enc("ldr", &[q(0), mr(Some(4))]), 0x3CE2_7820);
+    assert!(encode("ldr", &[q(0), mem(1, 8)]).is_err()); // not a multiple of 16
 }
 
 #[test]

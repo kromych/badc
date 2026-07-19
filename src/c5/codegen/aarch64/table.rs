@@ -100,6 +100,9 @@ pub(crate) enum Opnd {
         num: u8,
         is_d: bool,
     },
+    /// The 128-bit `qN` view of a SIMD register, used by the vector load/store
+    /// forms (`ldr`/`str qN`).
+    QReg(u8),
     /// SIMD vector-arrangement register view `vN.T`: `size` is the element-size
     /// log2 (byte 0 .. dword 3), `q` selects the 128- vs 64-bit register.
     VecReg {
@@ -279,6 +282,34 @@ fn ld_st_size_opc(mnem: &str, rt_is64: bool) -> Option<(u32, u32, u8)> {
         "str" => (w, 0, w as u8),
         "ldr" => (w, 1, w as u8),
         "ldrsw" => (2, 2, 2),
+        _ => return None,
+    })
+}
+
+/// For an FP/SIMD `ldr`/`str` whose transfer register is `rt`, resolve the
+/// register number, the access-size log2 (2 for s, 3 for d, 4 for q), and the
+/// immediate- and register-offset base words. Returns None for a non-FP operand.
+fn fp_ldst_reg(mnem: &str, rt: &Opnd) -> Option<(u8, u32, u32, u32)> {
+    let is_ld = mnem == "ldr";
+    Some(match *rt {
+        Opnd::VReg { num, is_d: false } => (
+            num,
+            2,
+            if is_ld { 0xBD40_0000 } else { 0xBD00_0000 },
+            if is_ld { 0xBC60_0800 } else { 0xBC20_0800 },
+        ),
+        Opnd::VReg { num, is_d: true } => (
+            num,
+            3,
+            if is_ld { 0xFD40_0000 } else { 0xFD00_0000 },
+            if is_ld { 0xFC60_0800 } else { 0xFC20_0800 },
+        ),
+        Opnd::QReg(num) => (
+            num,
+            4,
+            if is_ld { 0x3DC0_0000 } else { 0x3D80_0000 },
+            if is_ld { 0x3CE0_0800 } else { 0x3CA0_0800 },
+        ),
         _ => return None,
     })
 }
@@ -860,24 +891,12 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => Err(String::from("inline asm: bad prfm operands")),
         };
     }
-    // FP/SIMD scalar load/store: `ldr|str Dt|St, [Xn{, #off | , Rm}]`. These use
-    // the FP register file; the immediate offset scales by the access size (8
-    // for d, 4 for s), a register offset feeds Rm with the size-scaled shift.
-    if let ("ldr" | "str", [Opnd::VReg { num: rt, is_d }, mem]) = (mnemonic, ops) {
-        let is_ld = mnemonic == "ldr";
-        let (imm_base, reg_base, log2) = if *is_d {
-            (
-                if is_ld { 0xFD40_0000u32 } else { 0xFD00_0000 },
-                if is_ld { 0xFC60_0800u32 } else { 0xFC20_0800 },
-                3u32,
-            )
-        } else {
-            (
-                if is_ld { 0xBD40_0000u32 } else { 0xBD00_0000 },
-                if is_ld { 0xBC60_0800u32 } else { 0xBC20_0800 },
-                2,
-            )
-        };
+    // FP/SIMD load/store: `ldr|str St|Dt|Qt, [Xn{, #off | , Rm}]`. These use the
+    // FP register file; the immediate offset scales by the access size (4 for s,
+    // 8 for d, 16 for q), a register offset feeds Rm with the size-scaled shift.
+    if let ("ldr" | "str", [rt_opnd, mem]) = (mnemonic, ops)
+        && let Some((rt, log2, imm_base, reg_base)) = fp_ldst_reg(mnemonic, rt_opnd)
+    {
         return match mem {
             Opnd::Mem {
                 base,
@@ -896,7 +915,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                         "inline asm: FP load/store offset out of range",
                     ));
                 }
-                Ok(imm_base | (imm << 10) | ((*base as u32) << 5) | (*rt as u32))
+                Ok(imm_base | (imm << 10) | ((*base as u32) << 5) | (rt as u32))
             }
             Opnd::MemReg {
                 base,
@@ -918,7 +937,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                     | ((*option as u32) << 13)
                     | (s << 12)
                     | ((*base as u32) << 5)
-                    | (*rt as u32))
+                    | (rt as u32))
             }
             _ => Err(String::from("inline asm: bad FP load/store operands")),
         };

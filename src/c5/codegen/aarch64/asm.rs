@@ -33,6 +33,9 @@ pub(crate) enum AsmOpndA64 {
     /// A SIMD/FP register: `d5` (64-bit) or `s5` (32-bit). `is_d` selects the
     /// double vs single view; the register file is separate from the GP one.
     VReg { num: u8, is_d: bool },
+    /// The 128-bit `q5` view of a SIMD register, used by the vector load/store
+    /// forms (`ldr`/`str qN`).
+    QReg(u8),
     /// A SIMD vector-arrangement register view `v5.4s`: `size` is the element
     /// size log2 (byte 0, half 1, word 2, dword 3), `q` selects the 128- vs
     /// 64-bit register (16 vs 8 bytes).
@@ -314,6 +317,12 @@ fn parse_vreg(tok: &str) -> Option<(u8, bool)> {
     (n <= 31).then_some((n, is_d))
 }
 
+/// The 128-bit SIMD register `q0`..`q31`.
+fn parse_qreg(tok: &str) -> Option<u8> {
+    let n: u8 = tok.strip_prefix('q')?.parse().ok()?;
+    (n <= 31).then_some(n)
+}
+
 /// A SIMD vector-arrangement register `vN.T` (e.g. `v5.4s`): the register
 /// number, the element-size log2, and the 128-bit flag.
 fn parse_vec_reg(tok: &str) -> Option<(u8, u8, bool)> {
@@ -537,6 +546,9 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     }
     if let Some((num, is_d)) = parse_vreg(tok) {
         return Ok(AsmOpndA64::VReg { num, is_d });
+    }
+    if let Some(num) = parse_qreg(tok) {
+        return Ok(AsmOpndA64::QReg(num));
     }
     if let Some((num, is64)) = parse_reg(tok) {
         return Ok(AsmOpndA64::Reg { num, is64 });
@@ -1078,6 +1090,11 @@ mod tests {
         assert_eq!(parse_vreg("s31"), Some((31, false)));
         assert_eq!(parse_vreg("d32"), None); // out of range
         assert_eq!(parse_vreg("sp"), None); // stack pointer, not S-reg
+        // `q0`..`q31` are the 128-bit views, used by vector load/store.
+        assert_eq!(parse_qreg("q0"), Some(0));
+        assert_eq!(parse_qreg("q31"), Some(31));
+        assert_eq!(parse_qreg("q32"), None); // out of range
+        assert_eq!(parse_qreg("d0"), None); // a D-register, not a Q one
         let insns = parse_template(b"fmov x0, d1; fmov s2, w3").unwrap();
         assert_eq!(
             insns[0].operands,

@@ -886,6 +886,29 @@ fn poly_multiply() {
 }
 
 #[test]
+fn fp_immediate() {
+    let d = |n: u8| Opnd::VReg { num: n, is_d: true };
+    let s = |n: u8| Opnd::VReg {
+        num: n,
+        is_d: false,
+    };
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    let fp = Opnd::FpImm;
+    // Scalar fmov: type bit selects double, the 8-bit VFP value sits at bit 13.
+    assert_eq!(enc("fmov", &[d(0), fp(0x70)]), 0x1E6E_1000); // 1.0
+    assert_eq!(enc("fmov", &[d(0), fp(0x00)]), 0x1E60_1000); // 2.0
+    assert_eq!(enc("fmov", &[d(0), fp(0xF0)]), 0x1E7E_1000); // -1.0
+    assert_eq!(enc("fmov", &[s(0), fp(0x70)]), 0x1E2E_1000); // 1.0 single
+    // Vector fmov: cmode 1111, op (bit 29) selects the .2d form.
+    assert_eq!(enc("fmov", &[v(0, 2, true), fp(0x70)]), 0x4F03_F600); // .4s 1.0
+    assert_eq!(enc("fmov", &[v(0, 3, true), fp(0x70)]), 0x6F03_F600); // .2d 1.0
+    assert_eq!(enc("fmov", &[v(0, 2, true), fp(0x80)]), 0x4F04_F400); // .4s -2.0
+    // Vector fmov immediate needs 2s/4s/2d; a byte arrangement and .1d reject.
+    assert!(encode("fmov", &[v(0, 0, true), fp(0x70)]).is_err());
+    assert!(encode("fmov", &[v(0, 3, false), fp(0x70)]).is_err());
+}
+
+#[test]
 fn table_lookup() {
     let v = |n: u8, q: bool| Opnd::VecReg { num: n, size: 0, q };
     let tab = |first: u8, count: u8| Opnd::VecList {

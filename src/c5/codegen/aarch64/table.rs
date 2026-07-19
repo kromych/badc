@@ -133,6 +133,8 @@ pub(crate) enum Opnd {
         q: bool,
     },
     Imm(i64),
+    /// A floating-point immediate as its 8-bit VFP encoding (`fmov Vd, #imm`).
+    FpImm(u8),
     /// An `lsl #shift` modifier operand.
     Lsl(u32),
     /// A system register, as its 15-bit `mrs`/`msr` field
@@ -373,8 +375,34 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 let base = if *d1 { 0x1E60_4000u32 } else { 0x1E20_4000 };
                 Ok(base | ((*vn as u32) << 5) | (*vd as u32))
             }
+            // Scalar FP immediate `fmov Dd|Sd, #imm`: type bit selects double,
+            // the 8-bit VFP value sits at bit 13.
+            [Opnd::VReg { num: rd, is_d }, Opnd::FpImm(imm8)] => {
+                let base = if *is_d { 0x1E60_1000u32 } else { 0x1E20_1000 };
+                Ok(base | ((*imm8 as u32) << 13) | (*rd as u32))
+            }
+            // Vector FP immediate `fmov Vd.T, #imm` (T = 2s/4s/2d): the modified-
+            // immediate cmode 1111; op (bit 29) selects the .2d double form and
+            // the 8-bit value splits abc:defgh.
+            [Opnd::VecReg { num: rd, size, q }, Opnd::FpImm(imm8)] => {
+                if *size < 2 {
+                    return Err(String::from(
+                        "inline asm: vector fmov immediate needs 2s/4s/2d",
+                    ));
+                }
+                if *size == 3 && !*q {
+                    return Err(String::from("inline asm: .1d is reserved (use .2d)"));
+                }
+                let v = *imm8 as u32;
+                Ok(0x0F00_F400
+                    | (if *size == 3 { 1u32 << 29 } else { 0 })
+                    | (if *q { 1u32 << 30 } else { 0 })
+                    | ((v >> 5) << 16)
+                    | ((v & 0x1F) << 5)
+                    | (*rd as u32))
+            }
             _ => Err(String::from(
-                "inline asm: bad fmov operands (D<->X, S<->W, D<->D, or S<->S)",
+                "inline asm: bad fmov operands (D<->X, S<->W, D<->D, S<->S, or #imm)",
             )),
         };
     }

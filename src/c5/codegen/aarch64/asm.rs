@@ -56,6 +56,9 @@ pub(crate) enum AsmOpndA64 {
     },
     /// A literal immediate `#imm`.
     Imm(i64),
+    /// A floating-point immediate `#1.5`, resolved at parse time to its 8-bit
+    /// VFP encoding (`fmov Vd, #imm`).
+    FpImm(u8),
     /// A `lsl #n` shift modifier (move-wide).
     Lsl(u32),
     /// A system register named in a `mrs` / `msr`, resolved to its 15-bit field.
@@ -346,6 +349,51 @@ fn parse_vscalar(tok: &str) -> Option<(u8, u8)> {
     (n <= 31).then_some((n, size))
 }
 
+/// Parse a decimal floating-point immediate (e.g. `1.5`, `-2.0`) to its 8-bit
+/// VFP encoding, or None if the value is not one of the representable
+/// +/-(16+m)/16 * 2^e forms (m in 0..=15, e in -3..=4). Uses exact rational
+/// arithmetic on the decimal (num/den, den a power of ten) to avoid rounding.
+fn parse_fp_imm(s: &str) -> Option<u8> {
+    let s = s.trim();
+    let (neg, s) = match s.strip_prefix('-') {
+        Some(r) => (true, r),
+        None => (false, s.strip_prefix('+').unwrap_or(s)),
+    };
+    let (int_part, frac_part) = s.split_once('.').unwrap_or((s, ""));
+    if int_part.is_empty() && frac_part.is_empty() {
+        return None;
+    }
+    let mut num: i64 = 0;
+    for c in int_part.bytes().chain(frac_part.bytes()) {
+        if !c.is_ascii_digit() {
+            return None;
+        }
+        num = num.checked_mul(10)?.checked_add((c - b'0') as i64)?;
+    }
+    if num == 0 {
+        return None; // 0.0 is not representable (its own fcmp marker elsewhere)
+    }
+    let mut den: i64 = 1;
+    for _ in 0..frac_part.len() {
+        den = den.checked_mul(10)?;
+    }
+    // value = num/den = (16+m) * 2^(e-4); for each e, num * 2^(4-e) must be a
+    // multiple of den whose quotient is in 16..=31.
+    for e in -3i32..=4 {
+        let scaled = num.checked_mul(1i64 << (4 - e))?;
+        if scaled % den != 0 {
+            continue;
+        }
+        let q = scaled / den;
+        if (16..=31).contains(&q) {
+            let m = (q - 16) as u8;
+            let exp3 = (if e <= 0 { 4u8 } else { 0 }) | (((e + 3) & 3) as u8);
+            return Some((if neg { 0x80u8 } else { 0 }) | (exp3 << 4) | m);
+        }
+    }
+    None
+}
+
 /// A SIMD vector-arrangement register `vN.T` (e.g. `v5.4s`): the register
 /// number, the element-size log2, and the 128-bit flag.
 fn parse_vec_reg(tok: &str) -> Option<(u8, u8, bool)> {
@@ -604,6 +652,10 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
                 .all(|c| matches!(c, b'0' | b'.' | b'+' | b'-' | b'e' | b'E'))
         {
             return Ok(AsmOpndA64::Imm(0));
+        }
+        // A representable floating-point immediate (`fmov Vd, #1.5`).
+        if let Some(fp) = parse_fp_imm(rest) {
+            return Ok(AsmOpndA64::FpImm(fp));
         }
         return Err(format!("inline asm: bad immediate `{tok}`"));
     }
@@ -1204,6 +1256,17 @@ mod tests {
         assert_eq!(parse_vscalar("h31"), Some((31, 1)));
         assert_eq!(parse_vscalar("s0"), None); // an S-register (VReg), not b/h
         assert_eq!(parse_vscalar("b32"), None); // out of range
+        // Representable FP immediates decode to their 8-bit VFP value exactly.
+        assert_eq!(parse_fp_imm("1.0"), Some(0x70));
+        assert_eq!(parse_fp_imm("2.0"), Some(0x00));
+        assert_eq!(parse_fp_imm("0.5"), Some(0x60));
+        assert_eq!(parse_fp_imm("-1.0"), Some(0xF0));
+        assert_eq!(parse_fp_imm("1.5"), Some(0x78));
+        assert_eq!(parse_fp_imm("31.0"), Some(0x3F));
+        assert_eq!(parse_fp_imm("-2.0"), Some(0x80));
+        assert_eq!(parse_fp_imm("0.0"), None); // its own fcmp marker, not fpimm
+        assert_eq!(parse_fp_imm("0.1"), None); // not a dyadic fpimm value
+        assert_eq!(parse_fp_imm("100.0"), None); // out of range
         let insns = parse_template(b"fmov x0, d1; fmov s2, w3").unwrap();
         assert_eq!(
             insns[0].operands,

@@ -454,13 +454,23 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
-    // SIMD three-same integer arithmetic `<add|sub|mul> Vd.T, Vn.T, Vm.T`, one
-    // arrangement. size at bit 22, Q at 30, U at 29. GP add/sub/mul (Reg
-    // operands) fall through to the catalogue below.
+    // SIMD three-same integer ops `Vd.T, Vn.T, Vm.T`, one arrangement:
+    // add/sub/mul, the compares cmeq/cmgt/cmge/cmhi/cmhs, and smax/smin/umax/
+    // umin. size at bit 22, Q at 30, U at 29, the opcode in the base word. GP
+    // add/sub/mul (Reg operands) fall through to the catalogue below.
     if let Some((op_base, u)) = match mnemonic {
         "add" => Some((0x0E20_8400u32, 0u32)),
         "sub" => Some((0x0E20_8400, 1)),
         "mul" => Some((0x0E20_9C00, 0)),
+        "cmeq" => Some((0x0E20_8C00, 1)),
+        "cmgt" => Some((0x0E20_3400, 0)),
+        "cmge" => Some((0x0E20_3C00, 0)),
+        "cmhi" => Some((0x0E20_3400, 1)),
+        "cmhs" => Some((0x0E20_3C00, 1)),
+        "smax" => Some((0x0E20_6400, 0)),
+        "smin" => Some((0x0E20_6C00, 0)),
+        "umax" => Some((0x0E20_6400, 1)),
+        "umin" => Some((0x0E20_6C00, 1)),
         _ => None,
     } && let [
         Opnd::VecReg { num: rd, size, q },
@@ -489,11 +499,14 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
-    // SIMD logical `<and|orr|eor> Vd.T, Vn.T, Vm.T`, byte arrangement only. GP
-    // forms (Reg operands) fall through to the catalogue.
+    // SIMD logical `<and|bic|orr|orn|eor> Vd.T, Vn.T, Vm.T`, byte arrangement
+    // only; the (U, size) fields select the operation. GP forms (Reg operands)
+    // fall through to the catalogue.
     if let Some(variant) = match mnemonic {
         "and" => Some(0u32),
+        "bic" => Some(0x0040_0000),
         "orr" => Some(0x0080_0000),
+        "orn" => Some(0x00C0_0000),
         "eor" => Some(0x2000_0000),
         _ => None,
     } && let [

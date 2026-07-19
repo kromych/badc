@@ -19,6 +19,23 @@ static int lane0_doubled(int w) {
     return r;
 }
 
+/* Lane-wise signed maximum of two broadcast words, read back from lane 0. */
+static int lane0_max(int a, int b) {
+    int r;
+#if defined(__aarch64__)
+    __asm__("dup v0.4s, %w1\n\t"
+            "dup v1.4s, %w2\n\t"
+            "smax v0.4s, v0.4s, v1.4s\n\t"
+            "fmov %w0, s0"
+            : "=r"(r)
+            : "r"(a), "r"(b)
+            : "d0", "d1", "memory");
+#else
+    r = a > b ? a : b;
+#endif
+    return r;
+}
+
 int main(void) {
-    return lane0_doubled(21); /* 42 */
+    return (lane0_doubled(21) == 42 && lane0_max(42, 10) == 42) ? 42 : 0;
 }

@@ -672,6 +672,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("return_void_expression.c", 0),
     ("macro_operators.c", 0),
     ("typedef_basic.c", 0),
+    ("ptr_to_array_typedef.c", 42),
     ("local_init_and_block_scope.c", 0),
     ("arrays_basic.c", 0),
     ("function_pointer_typedefs.c", 0),

@@ -2895,6 +2895,65 @@ fn pointer_to_array_typedef_member_subscript() {
 }
 
 #[test]
+fn typedef_of_pointer_to_array_deref() {
+    // C99 6.7.7p3: a typedef of pointer-to-array (`typedef arr *arrp`)
+    // denotes the same type as `arr *`. The alias previously dropped the
+    // array layer, so `(*p)[2]` on the alias failed with "pointer type
+    // expected" while the direct spelling worked.
+    let src = r#"
+        typedef long arr[4];
+        typedef arr *arrp;
+        int direct(arr *p) { return (int)(*p)[2]; }
+        int viatd(arrp p)  { return (int)(*p)[2]; }
+        int main(void) { arr a; a[2] = 21; return direct(&a) + viatd(&a); }
+    "#;
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn store_through_pointer_to_pointer_to_array() {
+    // `*out = &b` where `out` is `jb **` is a real dereference followed
+    // by a pointer store. The first deref was previously treated as the
+    // pointer-to-array row-decay no-op, the assignment rewrote the
+    // parameter's own load as the lvalue, and the store was silently
+    // dropped (with a spurious unused-parameter warning).
+    let src = r#"
+        typedef long jb[8];
+        void prologue(jb **out) { static jb b; *out = &b; }
+        int main(void) { jb *p = 0; prologue(&p); return p ? 42 : 1; }
+    "#;
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn multi_dim_array_typedef_object() {
+    // A multi-dim array typedef binds objects with per-level strides
+    // (C99 6.7.7p3); the dimension carrier previously kept only the
+    // element product, so `g[i][j]` failed with "pointer type expected".
+    let src = r#"
+        typedef long grid[3][4];
+        int main(void) {
+            grid g;
+            int i, j;
+            for (i = 0; i < 3; i++)
+                for (j = 0; j < 4; j++)
+                    g[i][j] = (long)(i * 4 + j);
+            if (sizeof(g) != 12 * sizeof(long)) return 1;
+            return (int)(g[1][2] + g[2][3] + g[0][1] * 25);  /* 6+11+25 */
+        }
+    "#;
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn ptr_to_array_typedef_roundtrip() {
+    // End-to-end fixture for the pointer-to-array type layer: typedef
+    // alias deref, pointer-to-pointer store, subscripts, sizeof, and a
+    // multi-dim array typedef.
+    assert_eq!(run_fixture("ptr_to_array_typedef.c"), 42);
+}
+
+#[test]
 fn shadowed_fn_signature_restored() {
     // C99 6.2.1p4: a fn-ptr parameter or block-scope local that reuses
     // a function name hides it only for its scope; the function's

@@ -548,6 +548,35 @@ fn vector_lane_transfer() {
 }
 
 #[test]
+fn vector_immediate() {
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    // movi: 8-bit value split abc:defgh; cmode picks element size and shift.
+    assert_eq!(enc("movi", &[v(0, 2, true), Opnd::Imm(0)]), 0x4F00_0400); // .4s #0
+    assert_eq!(enc("movi", &[v(0, 0, true), Opnd::Imm(0)]), 0x4F00_E400); // .16b #0
+    assert_eq!(enc("movi", &[v(0, 2, true), Opnd::Imm(1)]), 0x4F00_0420); // .4s #1
+    assert_eq!(enc("movi", &[v(0, 2, true), Opnd::Imm(0xFF)]), 0x4F07_07E0); // .4s #0xff
+    assert_eq!(enc("movi", &[v(0, 1, true), Opnd::Imm(2)]), 0x4F00_8440); // .8h #2
+    assert_eq!(enc("movi", &[v(0, 3, true), Opnd::Imm(0)]), 0x6F00_E400); // .2d #0
+    // The lsl shift selects the higher-cmode word/half variants.
+    assert_eq!(
+        enc("movi", &[v(0, 2, true), Opnd::Imm(1), Opnd::Lsl(8)]),
+        0x4F00_2420
+    );
+    assert_eq!(
+        enc("movi", &[v(0, 2, true), Opnd::Imm(1), Opnd::Lsl(16)]),
+        0x4F00_4420
+    );
+    // mvni sets the op bit; not defined for byte or .2d.
+    assert_eq!(enc("mvni", &[v(0, 2, true), Opnd::Imm(0)]), 0x6F00_0400);
+    assert!(encode("mvni", &[v(0, 0, true), Opnd::Imm(0)]).is_err());
+    // .2d replicates each immediate bit to a byte; non-0x00/0xFF bytes and an
+    // out-of-range 8-bit value are rejected.
+    assert!(encode("movi", &[v(0, 3, true), Opnd::Imm(0x1122)]).is_err());
+    assert!(encode("movi", &[v(0, 2, true), Opnd::Imm(256)]).is_err());
+    assert!(encode("movi", &[v(0, 2, true), Opnd::Imm(1), Opnd::Lsl(20)]).is_err());
+}
+
+#[test]
 fn vector_permute() {
     let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
     let p = |m: &str| enc(m, &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]);

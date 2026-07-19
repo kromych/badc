@@ -739,6 +739,80 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
+    // SIMD modified immediate `movi|mvni Vd.T, #imm{, lsl #s}`. The 8-bit value
+    // splits abc:defgh across bits 18..16 and 9..5; cmode selects the element
+    // size and shift. Byte and .2d use cmode 1110 (the .2d form, op=1,
+    // replicates each immediate bit to a byte); half/word use the shifted-
+    // immediate cmodes. mvni sets op and is not defined for byte or .2d.
+    if let "movi" | "mvni" = mnemonic
+        && let Some((rd, size, q, imm, shift)) = match *ops {
+            [Opnd::VecReg { num, size, q }, Opnd::Imm(v)] => Some((num, size, q, v, 0i64)),
+            [Opnd::VecReg { num, size, q }, Opnd::Imm(v), Opnd::Lsl(s)] => {
+                Some((num, size, q, v, s as i64))
+            }
+            _ => None,
+        }
+    {
+        let is_mvni = mnemonic == "mvni";
+        let qbit = if q { 1u32 << 30 } else { 0 };
+        if size == 3 {
+            if is_mvni || shift != 0 {
+                return Err(String::from(
+                    "inline asm: movi .2d takes no shift; mvni .2d is not defined",
+                ));
+            }
+            // Each of the 8 immediate bits fills a byte of the 64-bit element.
+            let mut bits = 0u32;
+            for (i, b) in (imm as u64).to_le_bytes().iter().enumerate() {
+                match b {
+                    0x00 => {}
+                    0xFF => bits |= 1 << i,
+                    _ => {
+                        return Err(String::from(
+                            "inline asm: movi .2d immediate bytes must be 0x00 or 0xFF",
+                        ));
+                    }
+                }
+            }
+            return Ok(0x2F00_E400
+                | qbit
+                | ((bits >> 5) << 16)
+                | ((bits & 0x1F) << 5)
+                | (rd as u32));
+        }
+        if !(0..=0xFF).contains(&imm) {
+            return Err(String::from(
+                "inline asm: movi/mvni immediate must be 0..255",
+            ));
+        }
+        let cmode = match (size, shift) {
+            (0, 0) => 0b1110u32,
+            (1, 0) => 0b1000,
+            (1, 8) => 0b1010,
+            (2, 0) => 0b0000,
+            (2, 8) => 0b0010,
+            (2, 16) => 0b0100,
+            (2, 24) => 0b0110,
+            _ => {
+                return Err(String::from(
+                    "inline asm: invalid movi/mvni shift for this arrangement",
+                ));
+            }
+        };
+        if is_mvni && size == 0 {
+            return Err(String::from(
+                "inline asm: mvni is not defined for a byte arrangement",
+            ));
+        }
+        let v = imm as u32;
+        return Ok(0x0F00_0400
+            | qbit
+            | (if is_mvni { 1u32 << 29 } else { 0 })
+            | ((v >> 5) << 16)
+            | (cmode << 12)
+            | ((v & 0x1F) << 5)
+            | (rd as u32));
+    }
     // SIMD element to GP register: `umov Rd, Vn.T[i]` (zero-extended) or
     // `smov Rd, Vn.T[i]` (sign-extended). imm5 = (index << (size+1)) | (1<<size)
     // carries element size and lane. umov's destination width is fixed by the

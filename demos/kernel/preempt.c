@@ -441,10 +441,10 @@ static void arch_start_scheduler(void *st) {
     __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frq));
     __asm__ volatile("msr cntv_tval_el0, %0" : : "r"(frq / 100));
     __asm__ volatile("msr cntv_ctl_el0, %0" : : "r"((UINTN)1)); /* enable */
-    __asm__ volatile("msr daif, %0" : : "r"((UINTN)0));         /* unmask IRQ */
+    __asm__ volatile("msr daifclr, #2"); /* unmask IRQ (PSTATE.I) */
 }
 
-static void cli(void) { __asm__ volatile("msr daif, %0" : : "r"((UINTN)0x3C0)); }
+static void cli(void) { __asm__ volatile("msr daifset, #2"); } /* mask IRQ */
 static void halt(void) { __asm__ volatile("wfi"); }
 
 #endif

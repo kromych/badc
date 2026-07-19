@@ -122,6 +122,25 @@ fn sysreg_field(name: &str) -> Option<u16> {
     None
 }
 
+/// The (op1, op2) selector of an MSR-immediate PSTATE field, or None if the
+/// name is an ordinary system register. The immediate form is
+/// `1101 0101 0000 0 op1 0100 CRm op2 11111` with CRm the 4-bit operand;
+/// `daifset` / `daifclr` mask and unmask interrupts, the common handler idiom.
+fn pstate_field(name: &str) -> Option<(u16, u16)> {
+    Some(match name.to_ascii_lowercase().as_str() {
+        "spsel" => (0, 5),
+        "daifset" => (3, 6),
+        "daifclr" => (3, 7),
+        "uao" => (0, 3),
+        "pan" => (0, 4),
+        "dit" => (3, 2),
+        "ssbs" => (3, 1),
+        "tco" => (3, 4),
+        "allint" => (1, 0),
+        _ => return None,
+    })
+}
+
 /// One instruction of a parsed template.
 #[derive(Debug, Clone)]
 pub(crate) struct AsmInsnA64 {
@@ -376,6 +395,37 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 continue;
             }
         }
+        // `msr <pstate>, #imm` sets a PSTATE field. The immediate is a 4-bit
+        // literal, never an operand reference, so the whole instruction is
+        // constant and encodes to bytes here. `msr <sysreg>, Rn` (a register
+        // move, e.g. `msr nzcv, %0`) names a system register, not a PSTATE
+        // field, so it falls through to the operand parse.
+        if mnem == "msr" {
+            let toks = split_operands(rest);
+            if toks.len() == 2
+                && let Some((op1, op2)) = pstate_field(toks[0])
+            {
+                let AsmOpndA64::Imm(v) = parse_operand(toks[1])? else {
+                    return Err(format!("inline asm: `msr {}` needs a #imm4", toks[0]));
+                };
+                if !(0..=15).contains(&v) {
+                    return Err(format!(
+                        "inline asm: `msr {}` immediate out of range",
+                        toks[0]
+                    ));
+                }
+                let word =
+                    0xD500_401F | ((op1 as u32) << 16) | ((v as u32) << 8) | ((op2 as u32) << 5);
+                insns.push(AsmInsnA64 {
+                    mnemonic: String::new(),
+                    operands: Vec::new(),
+                    bytes: word.to_le_bytes().to_vec(),
+                    label_def: None,
+                    sym_target: None,
+                });
+                continue;
+            }
+        }
         // A direct `bl` / `b` to a bare identifier is a call / tail-branch to a
         // symbol (`bl schedule`); the target is resolved to a rel26 by the fixup
         // pass, not parsed as a register operand. A local-label branch (`b 1f`)
@@ -622,6 +672,25 @@ mod tests {
         );
         assert_eq!(insns[1].mnemonic, "msr");
         assert!(matches!(insns[1].operands[0], AsmOpndA64::SysReg(_)));
+    }
+
+    #[test]
+    fn parse_msr_pstate_immediate() {
+        // `msr <pstate>, #imm` is a constant instruction; each word matches the
+        // reference assembler. A trailing `msr nzcv, %0` stays a register move.
+        let insns =
+            parse_template(b"msr daifset, #15; msr daifclr, #2; msr spsel, #1; msr nzcv, %0")
+                .unwrap();
+        let word = |i: usize| u32::from_le_bytes(insns[i].bytes.as_slice().try_into().unwrap());
+        assert_eq!(word(0), 0xD503_4FDF); // msr daifset, #15
+        assert_eq!(word(1), 0xD503_42FF); // msr daifclr, #2
+        assert_eq!(word(2), 0xD500_41BF); // msr spsel, #1
+        assert_eq!(insns[3].mnemonic, "msr"); // register move kept for the encoder
+        assert!(matches!(insns[3].operands[0], AsmOpndA64::SysReg(_)));
+        // A PSTATE field with a register operand is rejected.
+        assert!(parse_template(b"msr daifset, x0").is_err());
+        // The immediate must fit in four bits.
+        assert!(parse_template(b"msr daifset, #16").is_err());
     }
 
     #[test]

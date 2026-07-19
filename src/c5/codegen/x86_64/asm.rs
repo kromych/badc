@@ -328,35 +328,6 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "pushfq" => Mnemonic::Pushfq,
         "pop" => Mnemonic::Pop,
         "movd" => Mnemonic::Movd,
-        // SSE2 two-xmm integer forms (0x66 0F <opcode> /r).
-        "pxor" => Mnemonic::Sse2Rr {
-            prefix: 0x66,
-            opcode: 0xEF,
-        },
-        "pand" => Mnemonic::Sse2Rr {
-            prefix: 0x66,
-            opcode: 0xDB,
-        },
-        "por" => Mnemonic::Sse2Rr {
-            prefix: 0x66,
-            opcode: 0xEB,
-        },
-        "paddd" => Mnemonic::Sse2Rr {
-            prefix: 0x66,
-            opcode: 0xFE,
-        },
-        "paddq" => Mnemonic::Sse2Rr {
-            prefix: 0x66,
-            opcode: 0xD4,
-        },
-        "psubd" => Mnemonic::Sse2Rr {
-            prefix: 0x66,
-            opcode: 0xFA,
-        },
-        "movdqa" => Mnemonic::Sse2Rr {
-            prefix: 0x66,
-            opcode: 0x6F,
-        },
         "cli" => Mnemonic::Cli,
         "sti" => Mnemonic::Sti,
         "invd" => Mnemonic::Invd,
@@ -372,8 +343,42 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "cmpxchg" => Mnemonic::Cmpxchg,
         "inc" => Mnemonic::Inc,
         "dec" => Mnemonic::Dec,
-        _ => return None,
+        _ => return sse2_op(name),
     })
+}
+
+/// SSE2 two-xmm register ops as `(name, mandatory-prefix, 0F-opcode)`; a zero
+/// prefix is the no-mandatory-prefix packed-single form. A table rather than a
+/// per-op match arm since they all share the `Sse2Rr` encoding. Byte-verified
+/// against clang.
+fn sse2_op(name: &str) -> Option<Mnemonic> {
+    #[rustfmt::skip]
+    const OPS: &[(&str, u8, u8)] = &[
+        // Integer (0x66 prefix).
+        ("pxor", 0x66, 0xEF), ("pand", 0x66, 0xDB), ("por", 0x66, 0xEB), ("pandn", 0x66, 0xDF),
+        ("paddb", 0x66, 0xFC), ("paddw", 0x66, 0xFD), ("paddd", 0x66, 0xFE), ("paddq", 0x66, 0xD4),
+        ("psubb", 0x66, 0xF8), ("psubw", 0x66, 0xF9), ("psubd", 0x66, 0xFA), ("psubq", 0x66, 0xFB),
+        ("pmullw", 0x66, 0xD5), ("pmuludq", 0x66, 0xF4),
+        ("pcmpeqb", 0x66, 0x74), ("pcmpeqw", 0x66, 0x75), ("pcmpeqd", 0x66, 0x76), ("pcmpgtd", 0x66, 0x66),
+        ("pminub", 0x66, 0xDA), ("pmaxub", 0x66, 0xDE),
+        ("punpcklbw", 0x66, 0x60), ("punpcklwd", 0x66, 0x61), ("punpckldq", 0x66, 0x62), ("punpckhdq", 0x66, 0x6A),
+        ("movdqa", 0x66, 0x6F), ("movdqu", 0xF3, 0x6F),
+        // Scalar double (0xF2) / single (0xF3).
+        ("addsd", 0xF2, 0x58), ("subsd", 0xF2, 0x5C), ("mulsd", 0xF2, 0x59), ("divsd", 0xF2, 0x5E),
+        ("minsd", 0xF2, 0x5D), ("maxsd", 0xF2, 0x5F), ("sqrtsd", 0xF2, 0x51),
+        ("addss", 0xF3, 0x58), ("subss", 0xF3, 0x5C), ("mulss", 0xF3, 0x59), ("divss", 0xF3, 0x5E),
+        ("minss", 0xF3, 0x5D), ("maxss", 0xF3, 0x5F), ("sqrtss", 0xF3, 0x51),
+        // Packed single (no prefix) / double (0x66).
+        ("addps", 0, 0x58), ("subps", 0, 0x5C), ("mulps", 0, 0x59), ("divps", 0, 0x5E),
+        ("minps", 0, 0x5D), ("maxps", 0, 0x5F),
+        ("andps", 0, 0x54), ("andnps", 0, 0x55), ("orps", 0, 0x56), ("xorps", 0, 0x57),
+        ("addpd", 0x66, 0x58), ("subpd", 0x66, 0x5C), ("mulpd", 0x66, 0x59), ("divpd", 0x66, 0x5E),
+        ("andpd", 0x66, 0x54), ("orpd", 0x66, 0x56), ("xorpd", 0x66, 0x57),
+        ("unpcklpd", 0x66, 0x14), ("unpckhpd", 0x66, 0x15),
+    ];
+    OPS.iter()
+        .find(|(n, _, _)| *n == name)
+        .map(|&(_, prefix, opcode)| Mnemonic::Sse2Rr { prefix, opcode })
 }
 
 /// The catalogue mnemonic matching `name`, as a `'static` string, or `None`.
@@ -962,7 +967,11 @@ pub(crate) fn encode(
                     "inline asm: this SSE op needs two XMM register operands",
                 ));
             };
-            code.push(prefix);
+            // A zero prefix means the no-mandatory-prefix packed forms (addps,
+            // xorps, ...); 0x66/0xF2/0xF3 select the double / scalar variants.
+            if prefix != 0 {
+                code.push(prefix);
+            }
             if d >= 8 || s >= 8 {
                 code.push(rex(false, d >= 8, false, s >= 8));
             }
@@ -1234,6 +1243,33 @@ mod tests {
         ); // movd %r9d,%xmm3 -> REX.B
         // A non-xmm operand pair is rejected.
         assert!(encode(&mut Vec::new(), sse(0x66, 0xEF), None, &[gp(0), gp(1)]).is_err());
+        // The prefix byte selects the variant: 0xF2/0xF3 scalar, 0x66 packed
+        // double, and a zero prefix the no-prefix packed single (no leading
+        // byte).
+        assert_eq!(
+            enc(sse(0xF2, 0x58), None, &[xmm(1), xmm(2)]),
+            [0xF2, 0x0F, 0x58, 0xD1]
+        ); // addsd
+        assert_eq!(
+            enc(sse(0, 0x58), None, &[xmm(3), xmm(4)]),
+            [0x0F, 0x58, 0xE3]
+        ); // addps (no mandatory prefix)
+        // The mnemonic table resolves names to their Sse2Rr encoding.
+        assert_eq!(
+            sse2_op("addsd"),
+            Some(Mnemonic::Sse2Rr {
+                prefix: 0xF2,
+                opcode: 0x58
+            })
+        );
+        assert_eq!(
+            sse2_op("xorps"),
+            Some(Mnemonic::Sse2Rr {
+                prefix: 0,
+                opcode: 0x57
+            })
+        );
+        assert_eq!(sse2_op("not_an_sse_op"), None);
     }
 
     #[test]

@@ -357,21 +357,25 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         let base = if d0 { base_d } else { base_d - 0x40_0000 };
         return Ok(base | ((rn as u32) << 5) | (rd as u32));
     }
-    // FP compare: `fcmp Vn, Vm` sets the flags. The result register field is the
-    // compare opcode (zero for the register form).
-    if mnemonic == "fcmp" {
-        let [
-            Opnd::VReg { num: rn, is_d },
-            Opnd::VReg { num: rm, is_d: d2 },
-        ] = *ops
-        else {
-            return Err(String::from("inline asm: bad fcmp operands"));
+    // FP compare `fcmp`/`fcmpe Vn, {Vm | #0.0}` sets the flags. The result field
+    // is the compare opcode: the register form is zero, the `#0.0` form sets
+    // bit 3, and the exception-signalling `fcmpe` adds bit 4.
+    if let "fcmp" | "fcmpe" = mnemonic {
+        let e = if mnemonic == "fcmpe" { 0x10u32 } else { 0 };
+        return match *ops {
+            [
+                Opnd::VReg { num: rn, is_d },
+                Opnd::VReg { num: rm, is_d: d2 },
+            ] if is_d == d2 => {
+                let base = if is_d { 0x1E60_2000u32 } else { 0x1E20_2000 };
+                Ok(base | ((rm as u32) << 16) | ((rn as u32) << 5) | e)
+            }
+            [Opnd::VReg { num: rn, is_d }, Opnd::Imm(0)] => {
+                let base = if is_d { 0x1E60_2000u32 } else { 0x1E20_2000 };
+                Ok(base | ((rn as u32) << 5) | 8 | e)
+            }
+            _ => Err(String::from("inline asm: bad fcmp/fcmpe operands")),
         };
-        if is_d != d2 {
-            return Err(String::from("inline asm: fcmp operand widths differ"));
-        }
-        let base = if is_d { 0x1E60_2000u32 } else { 0x1E20_2000 };
-        return Ok(base | ((rm as u32) << 16) | ((rn as u32) << 5));
     }
     // Integer -> FP: `scvtf|ucvtf Vd, Rn`. sf (bit 31) is the integer width,
     // the type bit (22) the FP width, bit 16 selects unsigned.

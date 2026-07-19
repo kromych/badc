@@ -298,9 +298,14 @@ fn fp_arithmetic() {
     assert_eq!(enc("fneg", &[d(0), d(1)]), 0x1E61_4020);
     assert_eq!(enc("fsqrt", &[d(0), d(1)]), 0x1E61_C020);
     assert_eq!(enc("fneg", &[s(0), s(1)]), 0x1E21_4020);
-    // fcmp sets the flags; the result field is the compare opcode.
+    // fcmp/fcmpe set the flags; the result field is the compare opcode: the
+    // register form is zero, `#0.0` sets bit 3, and `fcmpe` adds bit 4.
     assert_eq!(enc("fcmp", &[d(1), d(2)]), 0x1E62_2020);
     assert_eq!(enc("fcmp", &[s(1), s(2)]), 0x1E22_2020);
+    assert_eq!(enc("fcmp", &[d(1), Opnd::Imm(0)]), 0x1E60_2028); // fcmp d1, #0.0
+    assert_eq!(enc("fcmp", &[s(1), Opnd::Imm(0)]), 0x1E20_2028);
+    assert_eq!(enc("fcmpe", &[d(1), d(2)]), 0x1E62_2030);
+    assert_eq!(enc("fcmpe", &[d(1), Opnd::Imm(0)]), 0x1E60_2038);
     // Mismatched widths and a GP operand have no encoding.
     assert!(encode("fadd", &[d(0), s(1), d(2)]).is_err());
     assert!(encode("fadd", &[d(0), d(1), x(2)]).is_err());

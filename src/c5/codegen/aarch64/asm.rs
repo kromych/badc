@@ -441,8 +441,19 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
         return parse_mem(inner, true);
     }
     if let Some(rest) = tok.strip_prefix('#') {
-        let v = parse_int(rest).ok_or_else(|| format!("inline asm: bad immediate `{tok}`"))?;
-        return Ok(AsmOpndA64::Imm(v));
+        if let Some(v) = parse_int(rest) {
+            return Ok(AsmOpndA64::Imm(v));
+        }
+        // A floating-point zero (`#0.0`) is the immediate form of fcmp/fcmpe;
+        // it carries no other value, so it maps to the integer marker 0.
+        if rest.bytes().any(|c| c == b'0')
+            && rest
+                .bytes()
+                .all(|c| matches!(c, b'0' | b'.' | b'+' | b'-' | b'e' | b'E'))
+        {
+            return Ok(AsmOpndA64::Imm(0));
+        }
+        return Err(format!("inline asm: bad immediate `{tok}`"));
     }
     if let Some(rest) = tok.strip_prefix('%') {
         // `%N`, `%wN`, `%xN`.

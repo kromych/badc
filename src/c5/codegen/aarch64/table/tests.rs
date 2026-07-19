@@ -335,6 +335,34 @@ fn fp_conversions() {
 }
 
 #[test]
+fn fp_load_store() {
+    let d = |num: u8| Opnd::VReg { num, is_d: true };
+    let s = |num: u8| Opnd::VReg { num, is_d: false };
+    let mem = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: false,
+    };
+    // Immediate offset scaled by the access size (8 for d, 4 for s).
+    assert_eq!(enc("ldr", &[d(0), mem(1, 0)]), 0xFD40_0020);
+    assert_eq!(enc("ldr", &[d(0), mem(1, 16)]), 0xFD40_0820);
+    assert_eq!(enc("str", &[d(0), mem(1, 8)]), 0xFD00_0420);
+    assert_eq!(enc("ldr", &[s(0), mem(1, 0)]), 0xBD40_0020);
+    assert_eq!(enc("str", &[s(0), mem(1, 4)]), 0xBD00_0420);
+    // Register offset (option 3 = LSL, S selects the size scale).
+    let mr = |shift| Opnd::MemReg {
+        base: 1,
+        index: 2,
+        option: 0b011,
+        shift,
+    };
+    assert_eq!(enc("ldr", &[d(0), mr(None)]), 0xFC62_6820);
+    assert_eq!(enc("str", &[d(0), mr(Some(3))]), 0xFC22_7820);
+    // A misaligned immediate offset is rejected.
+    assert!(encode("ldr", &[d(0), mem(1, 4)]).is_err());
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

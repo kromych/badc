@@ -532,6 +532,69 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => Err(String::from("inline asm: bad prfm operands")),
         };
     }
+    // FP/SIMD scalar load/store: `ldr|str Dt|St, [Xn{, #off | , Rm}]`. These use
+    // the FP register file; the immediate offset scales by the access size (8
+    // for d, 4 for s), a register offset feeds Rm with the size-scaled shift.
+    if let ("ldr" | "str", [Opnd::VReg { num: rt, is_d }, mem]) = (mnemonic, ops) {
+        let is_ld = mnemonic == "ldr";
+        let (imm_base, reg_base, log2) = if *is_d {
+            (
+                if is_ld { 0xFD40_0000u32 } else { 0xFD00_0000 },
+                if is_ld { 0xFC60_0800u32 } else { 0xFC20_0800 },
+                3u32,
+            )
+        } else {
+            (
+                if is_ld { 0xBD40_0000u32 } else { 0xBD00_0000 },
+                if is_ld { 0xBC60_0800u32 } else { 0xBC20_0800 },
+                2,
+            )
+        };
+        return match mem {
+            Opnd::Mem {
+                base,
+                off,
+                pre: false,
+            } => {
+                let scale = 1i64 << log2;
+                if *off < 0 || off % scale != 0 {
+                    return Err(String::from(
+                        "inline asm: FP load/store offset must be a non-negative multiple of the access size",
+                    ));
+                }
+                let imm = (off / scale) as u32;
+                if imm > 0xFFF {
+                    return Err(String::from(
+                        "inline asm: FP load/store offset out of range",
+                    ));
+                }
+                Ok(imm_base | (imm << 10) | ((*base as u32) << 5) | (*rt as u32))
+            }
+            Opnd::MemReg {
+                base,
+                index,
+                option,
+                shift,
+            } => {
+                let s = match shift {
+                    None | Some(0) => 0u32,
+                    Some(a) if *a as u32 == log2 => 1,
+                    Some(_) => {
+                        return Err(String::from(
+                            "inline asm: FP load/store register-offset shift must match the access size",
+                        ));
+                    }
+                };
+                Ok(reg_base
+                    | ((*index as u32) << 16)
+                    | ((*option as u32) << 13)
+                    | (s << 12)
+                    | ((*base as u32) << 5)
+                    | (*rt as u32))
+            }
+            _ => Err(String::from("inline asm: bad FP load/store operands")),
+        };
+    }
     // Load / store with a register offset: `<ldr|ldrb|ldrh|ldrsb|ldrsh|ldrsw|
     // str|strb|strh> Xt, [Xn, Rm{, <ext> #s}]` across the access sizes. The base
     // word is `0x38200800 | size<<30 | opc<<22`; a written shift must be zero or

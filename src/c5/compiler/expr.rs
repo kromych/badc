@@ -1189,9 +1189,13 @@ impl Compiler {
                             let arg_ty = self.ty;
                             let zero = self.last_emit_is_zero();
                             let untyped = self.last_emit_was_indirect_call();
-                            if let Some(reason) =
-                                Self::type_warning_with_flags(want, self.ty, zero, untyped)
-                            {
+                            if let Some(reason) = Self::type_warning_with_flags(
+                                &self.structs,
+                                want,
+                                self.ty,
+                                zero,
+                                untyped,
+                            ) {
                                 let got = self.ty;
                                 let want_s = format_type(want, &self.structs);
                                 let got_s = format_type(got, &self.structs);
@@ -1745,6 +1749,7 @@ impl Compiler {
                 // element type before the pointer loop rewrites `t`.
                 let cast_array_elem_ty = t;
                 let cast_typedef_array = core::mem::take(&mut self.pending.typedef_base_array_size);
+                let cast_typedef_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
                 let mut cast_ptr_levels: i64 = 0;
                 // Fn-pointer lineage: if the base type came from a
                 // typedef-of-fn-pointer, parse_decl_base_type seeded
@@ -1900,6 +1905,26 @@ impl Compiler {
                             }
                         }
                     }
+                    // `(A *)e` for an array typedef `A` names a
+                    // pointer-to-array; rebuild the flat tag into the
+                    // aggregate-backed form (extra `*`s add levels).
+                    // Pointer casts convert no bits, so only the result
+                    // type changes; a following `*` / `[i]` then takes
+                    // the array-decay path off the type.
+                    if cast_typedef_array > 0
+                        && cast_ptr_levels >= 1
+                        && cast_fn_proto.is_none()
+                        && !cast_is_array
+                    {
+                        let dims: alloc::vec::Vec<i64> = if cast_typedef_dims.len() >= 2 {
+                            cast_typedef_dims.clone()
+                        } else {
+                            alloc::vec![cast_typedef_array]
+                        };
+                        let agg = self.array_agg_type(cast_array_elem_ty, &dims);
+                        t = (agg + cast_ptr_levels * (Ty::Ptr as i64))
+                            | (t & super::types::VOLATILE_BIT);
+                    }
                     self.ty = t;
                     // Overwrite the AST acc with a canonical Cast
                     // node so any intermediate Binary nodes the
@@ -1926,7 +1951,6 @@ impl Compiler {
                     // narrows each argument and splits the variadic
                     // tail per the cast, whatever the operand's own
                     // declared type said.
-                    let cast_had_fn_proto = cast_fn_proto.is_some();
                     if let Some(pp) = cast_fn_proto {
                         self.pending.indirect_callee_is_variadic = pp.is_variadic;
                         self.pending.indirect_callee_params = if pp.types.is_empty() {
@@ -1934,22 +1958,6 @@ impl Compiler {
                         } else {
                             Some(pp.types)
                         };
-                    }
-                    // Pointer-to-array cast `(A *)p` where `A` is an array
-                    // typedef of `N` elements: seed the row stride so a
-                    // following unary `*` (or `[i]`) takes the array-decay
-                    // no-load path, reproducing `p` rather than loading
-                    // through it -- the same decay an `N`-element array
-                    // variable gets. Only the single-`*` shape is a
-                    // pointer-to-array; more levels are ordinary pointers
-                    // and a bracketed / fn-proto declarator is not an array.
-                    if cast_typedef_array > 0
-                        && cast_ptr_levels == 1
-                        && !cast_had_fn_proto
-                        && !cast_is_array
-                    {
-                        let elem_size = self.size_of_type(cast_array_elem_ty) as i64;
-                        self.seed_multi_dim_strides(&[1, cast_typedef_array], elem_size);
                     }
                 }
             } else {
@@ -2036,6 +2044,12 @@ impl Compiler {
                 // result is itself a fn-ptr rvalue, so any
                 // further `*`s also decay. No scalar load fired,
                 // so the chain depth is preserved.
+            } else if let Some(id) = self.ptr_array_id_depth1(self.ty) {
+                // Pointer-to-array at the last level: `*p` reaches the
+                // array itself, which decays to the element pointer
+                // (C99 6.3.2.1p3). The operand's load already produced
+                // the row address; no further load, no Ptr peel.
+                self.decay_ptr_array_value(id);
             } else if leftover_stride > 0 {
                 // Pointer-to-array operand: `*p` is the row
                 // deref, equivalent to `p[0]`. The row's address
@@ -2744,9 +2758,13 @@ impl Compiler {
                     self.expr(Token::Assign as i64)?;
                     let rhs_is_zero = self.last_emit_is_zero();
                     let rhs_is_untyped = self.last_emit_was_indirect_call();
-                    if let Some(reason) =
-                        Self::type_warning_with_flags(t, self.ty, rhs_is_zero, rhs_is_untyped)
-                    {
+                    if let Some(reason) = Self::type_warning_with_flags(
+                        &self.structs,
+                        t,
+                        self.ty,
+                        rhs_is_zero,
+                        rhs_is_untyped,
+                    ) {
                         let lhs_s = format_type(t, &self.structs);
                         let rhs_s = format_type(self.ty, &self.structs);
                         self.warn_at(
@@ -3445,7 +3463,7 @@ impl Compiler {
                     self.require_both_float(t, "-")?;
                     self.ast_binop(crate::c5::ir::BinOp::Fsub);
                     self.ty = fp_result_ty(t, self.ty);
-                } else if is_pointer_ty(t) && t == self.ty {
+                } else if is_pointer_ty(t) && self.ptr_diff_compatible(t, self.ty) {
                     // ptr - ptr -> element count (Int). Divide by
                     // the pointee size to convert raw byte distance
                     // into element distance (skipped for `char*`,
@@ -3729,7 +3747,19 @@ impl Compiler {
                 if !is_pointer_ty(t) {
                     return Err(self.compile_err("pointer type expected"));
                 }
-                if multi_dim_stride > 0 {
+                if let Some(id) = self.ptr_array_id_depth1(t) {
+                    // `p[i]` on a single-level pointer-to-array selects
+                    // row `i` (stride = whole row) and decays to the
+                    // element pointer: an address, no load (C99
+                    // 6.3.2.1p3). Deeper levels take the generic path
+                    // below as ordinary pointer loads.
+                    let row = self.structs[id].size as i64;
+                    if row > 1 {
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, row);
+                    }
+                    self.ast_binop(crate::c5::ir::BinOp::Add);
+                    self.decay_ptr_array_value(id);
+                } else if multi_dim_stride > 0 {
                     self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, multi_dim_stride);
                     self.ast_binop(crate::c5::ir::BinOp::Add);
                     // Multi-dim row pointer -- ty stays at the same
@@ -4082,21 +4112,6 @@ impl Compiler {
                             self.ty -= array_ptrs * (Ty::Ptr as i64);
                             let elem_size = self.size_of_type(scalar_ty) as i64;
                             self.seed_multi_dim_strides(&dims, elem_size);
-                        } else if field.array_dims.len() >= 2
-                            && field.array_dims[0] == 1
-                            && is_pointer_ty(self.ty)
-                        {
-                            // Pointer-to-array-typedef field (`Node *f`
-                            // where `Node` is `T[N]`): the declarator
-                            // recorded `[1, N]` with no positional Ptr
-                            // levels (the single Ptr is the real `*`), so
-                            // seed the row stride without collapsing.
-                            // `f[i]` then strides by the row width and
-                            // decays to the element pointer, matching the
-                            // parameter path.
-                            let dims = field.array_dims.clone();
-                            let elem_size = self.size_of_type(field.ty - Ty::Ptr as i64) as i64;
-                            self.seed_multi_dim_strides(&dims, elem_size);
                         }
                     }
                 }
@@ -4140,6 +4155,27 @@ impl Compiler {
             core::mem::take(&mut self.pending.index_strides_tail);
         self.pending.index_stride = 0;
         Ok(())
+    }
+
+    /// C99 6.3.2.1p3 at the last level of a pointer-to-array: the
+    /// value already holds the array's address, so the "dereference"
+    /// decays to the element pointer without a load. Retags `self.ty`
+    /// to the element pointer, seeds the remaining-dimension stride
+    /// queue for the following subscripts, and surfaces the row byte
+    /// count for an enclosing `sizeof`. `id` is the array aggregate's
+    /// struct id (see `ptr_array_id_depth1`).
+    fn decay_ptr_array_value(&mut self, id: usize) {
+        let f = &self.structs[id].fields[0];
+        let elem_ty = f.ty;
+        let dims: alloc::vec::Vec<i64> = if f.array_dims.len() >= 2 {
+            f.array_dims.clone()
+        } else {
+            alloc::vec![f.array_size]
+        };
+        let elem_size = self.size_of_type(elem_ty) as i64;
+        self.seed_multi_dim_strides(&dims, elem_size);
+        self.pending.last_array_decay_bytes = self.structs[id].size as i64;
+        self.ty = elem_ty + Ty::Ptr as i64;
     }
 
     /// Seed the multi-dim subscript stride queue for an N-dim

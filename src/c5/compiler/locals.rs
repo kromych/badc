@@ -328,6 +328,7 @@ impl Compiler {
             if typedef_dim > 0 && array_size == 0 && self.pending.declarator_leading_ptr_count == 0
             {
                 array_size = typedef_dim;
+                self.apply_typedef_array_dims(loc_idx);
             }
             self.ty = ty;
             // C99 6.2.2p4: a block-scope `extern` declaration of an

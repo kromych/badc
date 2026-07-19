@@ -17,7 +17,7 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, is_type_start_token,
-    pointee_size_no_struct, struct_id_of, struct_ptr_depth, struct_ty_for,
+    pointee_size_no_struct, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
 };
 use super::{StructDef, StructField};
 
@@ -124,6 +124,7 @@ impl Compiler {
             fields: Vec::new(),
             is_union: false,
             is_vector: false,
+            is_array: false,
         });
         let id = self.structs.len() - 1;
         if let Some(scope) = self.tag_scopes.last_mut() {
@@ -178,6 +179,7 @@ impl Compiler {
             fields: alloc::vec![half("__lo", 0), half("__hi", 8)],
             is_union: false,
             is_vector: false,
+            is_array: false,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -227,8 +229,115 @@ impl Compiler {
             fields: alloc::vec![field],
             is_union: false,
             is_vector: true,
+            is_array: false,
         });
         struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// Synthesize the aggregate modeling the pointee of a
+    /// pointer-to-array type: a single array field of `elem_ty` with the
+    /// given dimensions (outermost first), flagged `is_array`. Interned
+    /// by (element, dims) via the synthesized name, mirroring
+    /// `make_vector_type`. The entry's size is the row byte count, so
+    /// `pointee_size` scales `p[i]` / `p + 1` by the whole row.
+    pub(super) fn array_agg_type(&mut self, elem_ty: i64, dims: &[i64]) -> i64 {
+        let count: i64 = dims.iter().product::<i64>().max(1);
+        let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
+        let mut name = alloc::format!("__array_{}", elem_ty);
+        for d in dims {
+            name.push_str(&alloc::format!("_{d}"));
+        }
+        if let Some(id) = self.structs.iter().position(|s| s.name == name) {
+            return struct_ty_for(id);
+        }
+        let field = StructField {
+            name: alloc::string::String::new(),
+            offset: 0,
+            ty: elem_ty,
+            array_size: count,
+            inner_array_size: if dims.len() >= 2 { dims[1] } else { 0 },
+            array_dims: if dims.len() >= 2 {
+                dims.to_vec()
+            } else {
+                Vec::new()
+            },
+            bit_offset: 0,
+            bit_width: 0,
+            bit_unit_size: 0,
+            fn_ptr_indirection: 0,
+            params: alloc::vec::Vec::new(),
+            is_variadic: false,
+            anon_union_group: 0,
+            anon_struct_group: 0,
+        };
+        self.structs.push(StructDef {
+            name,
+            size: (count * elem_size) as usize,
+            align: self.align_of_type(elem_ty),
+            fields: alloc::vec![field],
+            is_union: false,
+            is_vector: false,
+            is_array: true,
+        });
+        struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// Struct id of `ty` when it is a pointer (any depth >= 1) whose
+    /// bottom type is a synthesized array aggregate; `None` otherwise.
+    pub(super) fn ptr_array_id(&self, ty: i64) -> Option<usize> {
+        if !is_struct_ty(ty) || struct_ptr_depth(ty) == 0 {
+            return None;
+        }
+        let id = struct_id_of(ty);
+        (id < self.structs.len() && self.structs[id].is_array).then_some(id)
+    }
+
+    /// As [`Self::ptr_array_id`] but only for the single-level pointer,
+    /// where a dereference or subscript reaches the array itself and
+    /// must decay to the element pointer.
+    pub(super) fn ptr_array_id_depth1(&self, ty: i64) -> Option<usize> {
+        (struct_ptr_depth(ty) == 1)
+            .then(|| self.ptr_array_id(ty))
+            .flatten()
+    }
+
+    /// True when `a` and `b` may form a C99 6.5.6p9 pointer
+    /// difference: identical tags, or a single-level pointer-to-array
+    /// on one side with the flat element-pointer spelling (a decayed
+    /// outer array row) on the other.
+    pub(super) fn ptr_diff_compatible(&self, a: i64, b: i64) -> bool {
+        if a == b {
+            return true;
+        }
+        let flat_matches = |pa: i64, flat: i64| {
+            self.ptr_array_id_depth1(pa).is_some_and(|id| {
+                let elem = strip_unsigned(self.structs[id].fields[0].ty);
+                strip_unsigned(flat) == elem + Ty::Ptr as i64
+            })
+        };
+        flat_matches(a, b) || flat_matches(b, a)
+    }
+
+    /// Build the pointer-to-array tag for a declarator with
+    /// `ptr_levels` leading `*`s over an array-typedef base: the
+    /// aggregate-backed pointee plus one pointer level per `*`. The
+    /// dims come from the pending typedef carrier (the multi-dim list
+    /// when present, else the flat element count). Qualifier bits on
+    /// `ty` carry over; `elem_ty` keeps its own bits so element loads
+    /// see the alias's signedness.
+    pub(super) fn ptr_to_array_typedef_ty(
+        &mut self,
+        elem_ty: i64,
+        ty: i64,
+        ptr_levels: i64,
+    ) -> i64 {
+        let dims: Vec<i64> = if self.pending.typedef_base_array_dims.len() >= 2 {
+            self.pending.typedef_base_array_dims.clone()
+        } else {
+            alloc::vec![self.pending.typedef_base_array_size]
+        };
+        let agg = self.array_agg_type(elem_ty, &dims);
+        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & VOLATILE_BIT)
     }
 
     /// True when the current lexer position starts a type. The free

@@ -482,6 +482,7 @@ impl Compiler {
             if typedef_dim > 0 && array_size == 0 && self.pending.declarator_leading_ptr_count == 0
             {
                 array_size = typedef_dim;
+                self.apply_typedef_array_dims(loc_idx);
             }
             self.ty = ty;
 
@@ -2721,7 +2722,8 @@ impl Compiler {
                     // if by assignment. Diagnose a return of an
                     // incompatible struct type, matching the assignment
                     // path.
-                    if let Some(reason) = Self::type_warning(ret_ty, self.ty, false) {
+                    if let Some(reason) = Self::type_warning(&self.structs, ret_ty, self.ty, false)
+                    {
                         let want = super::types::format_type(ret_ty, &self.structs);
                         let got = super::types::format_type(self.ty, &self.structs);
                         self.warn_at(
@@ -2747,9 +2749,13 @@ impl Compiler {
                     // rewrites `self.ty`.
                     let rhs_is_zero = self.last_emit_is_zero();
                     let rhs_is_untyped = self.last_emit_was_indirect_call();
-                    if let Some(reason) =
-                        Self::type_warning_with_flags(ret_ty, self.ty, rhs_is_zero, rhs_is_untyped)
-                    {
+                    if let Some(reason) = Self::type_warning_with_flags(
+                        &self.structs,
+                        ret_ty,
+                        self.ty,
+                        rhs_is_zero,
+                        rhs_is_untyped,
+                    ) {
                         let want = super::types::format_type(ret_ty, &self.structs);
                         let got = super::types::format_type(self.ty, &self.structs);
                         self.warn_at(

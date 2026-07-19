@@ -738,6 +738,19 @@ impl Compiler {
             )
     }
 
+    /// Fold a multi-dim typedef alias's dimension list onto the bound
+    /// symbol, mirroring what a literal `T x[A][B]` declarator records.
+    /// Callers gate on the same condition as the element-count fold
+    /// (`typedef_base_array_size` consumed, declarator added no `*`s
+    /// and no brackets of its own).
+    pub(super) fn apply_typedef_array_dims(&mut self, idx: usize) {
+        if self.pending.typedef_base_array_dims.len() >= 2 {
+            let dims = self.pending.typedef_base_array_dims.clone();
+            self.symbols[idx].inner_array_size = dims[1];
+            self.symbols[idx].array_dims = dims;
+        }
+    }
+
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
@@ -872,6 +885,8 @@ impl Compiler {
             // to a pointer to the element (C99 6.7.5.3p7).
             if typedef_array != 0 {
                 self.pending.typedef_base_array_size = typedef_array;
+                self.pending.typedef_base_array_dims =
+                    self.symbols[self.lex.curr_id_idx].array_dims.clone();
             }
             self.next()?;
             aliased

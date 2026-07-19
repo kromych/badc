@@ -292,6 +292,8 @@ impl Compiler {
                 let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
                 if typedef_array != 0 {
                     self.pending.typedef_base_array_size = typedef_array;
+                    self.pending.typedef_base_array_dims =
+                        self.symbols[self.lex.curr_id_idx].array_dims.clone();
                 }
                 self.next()?;
             } else if m.saw_int_mod {
@@ -472,6 +474,7 @@ impl Compiler {
                     && self.pending.declarator_leading_ptr_count == 0
                 {
                     array_size = typedef_dim;
+                    self.apply_typedef_array_dims(id_idx);
                 }
                 self.ty = ty;
                 let prior_array_size = self.symbols[id_idx].array_size;

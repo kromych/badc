@@ -80,6 +80,15 @@ pub struct StructDef {
     /// as a vector (reinterpret casts, element-wise operators) rather than a
     /// plain struct.
     pub is_vector: bool,
+    /// `true` for the synthesized aggregate that models the pointee of a
+    /// pointer-to-array type (`T (*)[N]`, or `A *` for an array typedef
+    /// `A`). It has one array field of the element type; the entry gives
+    /// the pointer-to-array tag a first-class type id, so the array layer
+    /// survives typedefs and extra pointer levels, and `pointee_size`
+    /// yields the row size. Only pointer depths >= 1 of the tag occur:
+    /// the last dereference decays to the element pointer (C99 6.3.2.1p3)
+    /// instead of producing the depth-0 value.
+    pub is_array: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -483,6 +492,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// the array length. Cleared by every base-type parse
     /// (`0` means "not from an array typedef").
     pub typedef_base_array_size: i64,
+    /// Dimension list (outermost first) accompanying
+    /// `typedef_base_array_size` when the typedef alias is a
+    /// multi-dimensional array; empty for a 1-D alias. Written by the
+    /// same three base-type sites that set the element count and only
+    /// meaningful while that count is non-zero, so the count's
+    /// clear-discipline covers this field too.
+    pub typedef_base_array_dims: alloc::vec::Vec<i64>,
     /// Count of leading `*` levels the most recent declarator added.
     /// A use of an array typedef folds the typedef's dimension onto the
     /// object (`typedef T A[N]; A x;` -> `x` is `T[N]`) unless the
@@ -738,6 +754,7 @@ impl Default for Pending {
             init_inner_dims: alloc::vec::Vec::new(),
             init_target_array_size: 0,
             typedef_base_array_size: 0,
+            typedef_base_array_dims: alloc::vec::Vec::new(),
             declarator_leading_ptr_count: 0,
             vla_allowed: false,
             vla_dim_expr: None,

@@ -757,6 +757,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fcmp.c", 42),
     ("inline_asm_a64_fp_ldst.c", 42),
     ("inline_asm_a64_neon.c", 42),
+    ("inline_asm_a64_fp_vector.c", 42),
     ("inline_asm_a64_dp.c", 42),
     ("inline_asm_a64_labels.c", 42),
     ("compound_assign_int_fp.c", 0),

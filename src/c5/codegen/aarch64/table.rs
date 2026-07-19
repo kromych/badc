@@ -315,8 +315,9 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             )),
         };
     }
-    // FP two-source: `<fadd|fsub|fmul|fdiv|fmax|fmin|fnmul> Vd, Vn, Vm`, all one
-    // width. `type` bit 22 selects double; the opcode sits at bit 12.
+    // Scalar FP two-source: `<fadd|fsub|fmul|fdiv|fmax|fmin|fnmul> Dd|Sd, ...`,
+    // one width. `type` bit 22 selects double; the opcode sits at bit 12. The
+    // same mnemonics on vector (VecReg) operands fall through to the SIMD arm.
     if let Some(opc) = match mnemonic {
         "fmul" => Some(0u32),
         "fdiv" => Some(1),
@@ -326,15 +327,12 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fmin" => Some(5),
         "fnmul" => Some(8),
         _ => None,
-    } {
-        let [
-            Opnd::VReg { num: rd, is_d: d0 },
-            Opnd::VReg { num: rn, is_d: d1 },
-            Opnd::VReg { num: rm, is_d: d2 },
-        ] = *ops
-        else {
-            return Err(String::from("inline asm: bad FP arithmetic operands"));
-        };
+    } && let [
+        Opnd::VReg { num: rd, is_d: d0 },
+        Opnd::VReg { num: rn, is_d: d1 },
+        Opnd::VReg { num: rm, is_d: d2 },
+    ] = *ops
+    {
         if d0 != d1 || d1 != d2 {
             return Err(String::from(
                 "inline asm: FP arithmetic operand widths differ",
@@ -531,6 +529,49 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         return Ok((if q { 1u32 << 30 } else { 0 })
             | 0x0E20_1C00
             | variant
+            | ((rm as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD FP three-same `<fadd|fsub|fmul|fdiv|fmax|fmin|fcmeq|fcmgt|fcmge>
+    // Vd.T, Vn.T, Vm.T` (T = 2s/4s/2d). The sz bit (22) selects double; each
+    // op's base word carries its opcode plus the U and sub/min flags. Scalar
+    // f-arith (VReg operands) is handled elsewhere; VReg here falls through.
+    if let Some(base) = match mnemonic {
+        "fadd" => Some(0x0E20_D400u32),
+        "fsub" => Some(0x0EA0_D400),
+        "fmul" => Some(0x2E20_DC00),
+        "fdiv" => Some(0x2E20_FC00),
+        "fmax" => Some(0x0E20_F400),
+        "fmin" => Some(0x0EA0_F400),
+        "fcmeq" => Some(0x0E20_E400),
+        "fcmgt" => Some(0x2EA0_E400),
+        "fcmge" => Some(0x2E20_E400),
+        _ => None,
+    } && let [
+        Opnd::VecReg { num: rd, size, q },
+        Opnd::VecReg {
+            num: rn,
+            size: s1,
+            q: q1,
+        },
+        Opnd::VecReg {
+            num: rm,
+            size: s2,
+            q: q2,
+        },
+    ] = *ops
+    {
+        if size != s1 || size != s2 || q != q1 || q != q2 {
+            return Err(String::from("inline asm: FP vector arrangements differ"));
+        }
+        if size < 2 {
+            return Err(String::from("inline asm: FP vector ops are 2s/4s/2d only"));
+        }
+        let sz = if size == 3 { 0x40_0000u32 } else { 0 };
+        return Ok(base
+            | (if q { 1u32 << 30 } else { 0 })
+            | sz
             | ((rm as u32) << 16)
             | ((rn as u32) << 5)
             | (rd as u32));

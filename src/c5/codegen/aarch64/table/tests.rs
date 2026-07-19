@@ -423,6 +423,65 @@ fn simd_vector() {
 }
 
 #[test]
+fn fp_vector() {
+    let s4 = |m: &str| {
+        enc(
+            m,
+            &[
+                Opnd::VecReg {
+                    num: 0,
+                    size: 2,
+                    q: true,
+                },
+                Opnd::VecReg {
+                    num: 1,
+                    size: 2,
+                    q: true,
+                },
+                Opnd::VecReg {
+                    num: 2,
+                    size: 2,
+                    q: true,
+                },
+            ],
+        )
+    };
+    // FP three-same on .4s; sz bit selects double, each base bakes the opcode.
+    assert_eq!(s4("fadd"), 0x4E22_D420);
+    assert_eq!(s4("fsub"), 0x4EA2_D420);
+    assert_eq!(s4("fmul"), 0x6E22_DC20);
+    assert_eq!(s4("fdiv"), 0x6E22_FC20);
+    assert_eq!(s4("fmax"), 0x4E22_F420);
+    assert_eq!(s4("fmin"), 0x4EA2_F420);
+    assert_eq!(s4("fcmeq"), 0x4E22_E420);
+    assert_eq!(s4("fcmgt"), 0x6EA2_E420);
+    assert_eq!(s4("fcmge"), 0x6E22_E420);
+    // The sz bit for .2d, the Q bit for .2s.
+    let d2 = |n: u8| Opnd::VecReg {
+        num: n,
+        size: 3,
+        q: true,
+    };
+    assert_eq!(enc("fadd", &[d2(0), d2(1), d2(2)]), 0x4E62_D420);
+    let s2 = |n: u8| Opnd::VecReg {
+        num: n,
+        size: 2,
+        q: false,
+    };
+    assert_eq!(enc("fadd", &[s2(0), s2(1), s2(2)]), 0x0E22_D420);
+    // FP vector needs 2s/4s/2d; a byte arrangement is rejected. Scalar fadd
+    // (VReg operands) still reaches the scalar arm.
+    let b8 = |n: u8| Opnd::VecReg {
+        num: n,
+        size: 0,
+        q: false,
+    };
+    assert!(encode("fadd", &[b8(0), b8(1), b8(2)]).is_err());
+    let d = |n: u8| Opnd::VReg { num: n, is_d: true };
+    assert_eq!(enc("fadd", &[d(0), d(1), d(2)]), 0x1E62_2820);
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

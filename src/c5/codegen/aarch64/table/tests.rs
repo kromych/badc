@@ -266,6 +266,22 @@ fn prefetch() {
 }
 
 #[test]
+fn fmov_gp_fp() {
+    let d = |num: u8| Opnd::VReg { num, is_d: true };
+    let s = |num: u8| Opnd::VReg { num, is_d: false };
+    assert_eq!(enc("fmov", &[x(0), d(0)]), 0x9E66_0000); // Xd, Dn
+    assert_eq!(enc("fmov", &[d(0), x(0)]), 0x9E67_0000); // Dd, Xn
+    assert_eq!(enc("fmov", &[w(0), s(0)]), 0x1E26_0000); // Wd, Sn
+    assert_eq!(enc("fmov", &[s(0), w(0)]), 0x1E27_0000); // Sd, Wn
+    assert_eq!(enc("fmov", &[d(0), d(1)]), 0x1E60_4020); // Dd, Dn
+    assert_eq!(enc("fmov", &[s(0), s(1)]), 0x1E20_4020); // Sd, Sn
+    assert_eq!(enc("fmov", &[x(3), d(5)]), 0x9E66_00A3);
+    // A width mismatch (X<->S or W<->D) has no encoding.
+    assert!(encode("fmov", &[x(0), s(0)]).is_err());
+    assert!(encode("fmov", &[d(0), w(0)]).is_err());
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

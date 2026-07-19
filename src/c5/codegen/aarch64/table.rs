@@ -95,6 +95,11 @@ pub(crate) enum Opnd {
         num: u8,
         is64: bool,
     },
+    /// SIMD/FP register: `num` 0..31, `is_d` selects the D (64) vs S (32) view.
+    VReg {
+        num: u8,
+        is_d: bool,
+    },
     Imm(i64),
     /// An `lsl #shift` modifier operand.
     Lsl(u32),
@@ -277,6 +282,31 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => return Err(String::from("inline asm: bad mrs/msr operands")),
         };
         return Ok(base | ((field as u32) << 5) | (rt as u32 & 31));
+    }
+    // fmov between a SIMD/FP register and a GP register (bridging the two
+    // register files), or an FP-to-FP move. The GP<->FP forms require matching
+    // widths (Xd<->Dn, Wd<->Sn); Rn/Rd sit at their usual positions.
+    if mnemonic == "fmov" {
+        return match ops {
+            [Opnd::Reg { num: rd, is64 }, Opnd::VReg { num: vn, is_d }] if is64 == is_d => {
+                let base = if *is64 { 0x9E66_0000u32 } else { 0x1E26_0000 };
+                Ok(base | ((*vn as u32) << 5) | (*rd as u32))
+            }
+            [Opnd::VReg { num: vd, is_d }, Opnd::Reg { num: rn, is64 }] if is64 == is_d => {
+                let base = if *is_d { 0x9E67_0000u32 } else { 0x1E27_0000 };
+                Ok(base | ((*rn as u32) << 5) | (*vd as u32))
+            }
+            [
+                Opnd::VReg { num: vd, is_d: d1 },
+                Opnd::VReg { num: vn, is_d: d2 },
+            ] if d1 == d2 => {
+                let base = if *d1 { 0x1E60_4000u32 } else { 0x1E20_4000 };
+                Ok(base | ((*vn as u32) << 5) | (*vd as u32))
+            }
+            _ => Err(String::from(
+                "inline asm: bad fmov operands (D<->X, S<->W, D<->D, or S<->S)",
+            )),
+        };
     }
     // System operation: `dc`/`ic`/`tlbi <op>{, Xt}`. The op is a base word; the
     // Rt field takes the register operand or xzr (31) when there is none.

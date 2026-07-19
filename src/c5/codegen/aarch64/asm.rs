@@ -30,6 +30,9 @@ pub(crate) enum AsmOpndA64 {
     /// An explicit register: `x5` / `w5` / `sp` / `xzr` (`num == 31` is the
     /// zero register or SP, per the instruction).
     Reg { num: u8, is64: bool },
+    /// A SIMD/FP register: `d5` (64-bit) or `s5` (32-bit). `is_d` selects the
+    /// double vs single view; the register file is separate from the GP one.
+    VReg { num: u8, is_d: bool },
     /// A literal immediate `#imm`.
     Imm(i64),
     /// A `lsl #n` shift modifier (move-wide).
@@ -292,6 +295,18 @@ fn parse_reg(tok: &str) -> Option<(u8, bool)> {
     (n <= 30).then_some((n, is64))
 }
 
+/// A SIMD/FP register: `d0`..`d31` (returns `is_d = true`) or `s0`..`s31`
+/// (`is_d = false`). `sp`/`sN`-vs-`s` is disambiguated by the numeric parse.
+fn parse_vreg(tok: &str) -> Option<(u8, bool)> {
+    let (is_d, rest) = match tok.as_bytes().first()? {
+        b'd' => (true, &tok[1..]),
+        b's' => (false, &tok[1..]),
+        _ => return None,
+    };
+    let n: u8 = rest.parse().ok()?;
+    (n <= 31).then_some((n, is_d))
+}
+
 fn parse_int(s: &str) -> Option<i64> {
     let s = s.trim();
     let (neg, s) = match s.strip_prefix('-') {
@@ -449,6 +464,9 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             .and_then(parse_int)
             .ok_or_else(|| format!("inline asm: bad shift `{tok}`"))?;
         return Ok(AsmOpndA64::Lsl(amt as u32));
+    }
+    if let Some((num, is_d)) = parse_vreg(tok) {
+        return Ok(AsmOpndA64::VReg { num, is_d });
     }
     if let Some((num, is64)) = parse_reg(tok) {
         return Ok(AsmOpndA64::Reg { num, is64 });
@@ -967,6 +985,37 @@ mod tests {
         // A bad prefetch op and a missing memory operand are rejected.
         assert!(parse_template(b"prfm bogus, [x0]").is_err());
         assert!(parse_template(b"prfm pldl1keep, x0").is_err());
+    }
+
+    #[test]
+    fn parse_fp_registers() {
+        // `d0`..`d31` / `s0`..`s31` are SIMD/FP registers, distinct from the GP
+        // file and from `sp`. fmov bridges the two files.
+        assert_eq!(parse_vreg("d5"), Some((5, true)));
+        assert_eq!(parse_vreg("s31"), Some((31, false)));
+        assert_eq!(parse_vreg("d32"), None); // out of range
+        assert_eq!(parse_vreg("sp"), None); // stack pointer, not S-reg
+        let insns = parse_template(b"fmov x0, d1; fmov s2, w3").unwrap();
+        assert_eq!(
+            insns[0].operands,
+            [
+                AsmOpndA64::Reg { num: 0, is64: true },
+                AsmOpndA64::VReg { num: 1, is_d: true },
+            ]
+        );
+        assert_eq!(
+            insns[1].operands,
+            [
+                AsmOpndA64::VReg {
+                    num: 2,
+                    is_d: false
+                },
+                AsmOpndA64::Reg {
+                    num: 3,
+                    is64: false
+                },
+            ]
+        );
     }
 
     #[test]

@@ -349,9 +349,10 @@ pub(crate) enum Inst {
         asm: alloc::boxed::Box<AsmBlock>,
         args: Vec<ValueId>,
     },
-    /// Per-frame alloca arena bookkeeping setup. Slot index is
-    /// the alloca-top FP-slot offset. Produces no SSA value;
-    /// emitted purely for the side effect.
+    /// Marks the function as using `alloca` / VLAs when the slot is
+    /// non-zero (the parser's reserved slot index): the body moves sp
+    /// at runtime, so the codegen switches spill addressing to the
+    /// frame pointer. Zero means no alloca. Produces no SSA value.
     AllocaInit(i64),
     /// The i-th declared parameter's incoming value, tagged with
     /// the parameter's natural load width. The walker emits one

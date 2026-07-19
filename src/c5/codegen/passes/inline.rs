@@ -1094,7 +1094,7 @@ fn splice_multi_block(
                     // A multi-block splice callee has no aggregate parameter or
                     // return (the candidate filter rejects those), so every
                     // negative slot is one of the callee's own locals. A
-                    // parameter cell (off >= 0) and the alloca-arena init carry
+                    // parameter cell (off >= 0) and the alloca init carry
                     // no live value into the body and are dropped.
                     Inst::LocalAddr(s) if *s < 0 => {
                         callee_remap[ce_pc as usize] = new_insts.len() as u32;

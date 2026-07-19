@@ -1,18 +1,15 @@
-/* `alloca(n)` carves `n` bytes out of the current function's
- * frame and returns a pointer. The memory is reclaimed when the
- * function returns; no per-call free. c5 lowers it via
- * `Op::Intrinsic(Alloca)` against a fixed-size per-frame arena
- * reserved by `Op::Ent` (the compiler patches the local count on
- * first emit) -- this sidesteps the unified-SP stack-discipline
- * conflict that would arise from a runtime `sub sp, n` in the
- * middle of an expression.
+/* `alloca(n)` carves `n` bytes off the stack and returns a pointer.
+ * The memory is reclaimed when the function returns; no per-call
+ * free. c5 lowers it via `Op::Intrinsic(Alloca)` to a runtime
+ * stack-pointer move; the frame's own slots stay reachable through
+ * the frame pointer.
  *
  * Exercise:
  *   - single small alloca with write/read round-trip
  *   - dynamic size driven by a function arg
  *   - multiple allocas in one frame land at distinct addresses
- *   - alloca inside a loop (each iteration grows the arena
- *     until the function returns)
+ *   - alloca inside a loop (each iteration allocates more,
+ *     freed only at function return)
  *   - nested alloca-using calls don't leak memory across frames
  */
 
@@ -54,9 +51,8 @@ static int distinct(void) {
 }
 
 static int looped(int rounds) {
-    /* Each iteration adds another 8 bytes to the arena's used
-     * portion. With a default 8 KB arena, ~1000 rounds is the
-     * upper bound before overflow; keep the test well under it. */
+    /* Each iteration moves the stack pointer another 16 bytes
+     * down; the storage is freed only at function return. */
     int sum = 0;
     int i;
     for (i = 0; i < rounds; i++) {
@@ -67,8 +63,8 @@ static int looped(int rounds) {
     return sum;
 }
 
-/* Nested alloca: inner's arena is freed when inner returns, so
- * outer's alloca'd memory is unaffected. */
+/* Nested alloca: inner's allocations are freed when inner returns,
+ * so outer's alloca'd memory is unaffected. */
 static int inner_alloca_disturbs_outer(int marker) {
     char *outer = (char *)alloca(64);
     memset(outer, marker, 64);

@@ -3399,8 +3399,8 @@ fn ternary_arith_conversion() {
 
 #[test]
 fn alloca_arena_in_bounds() {
-    // The alloca underflow trap fires only past the per-frame arena
-    // floor; an allocation just under the arena size still succeeds.
+    // An 8000-byte alloca succeeds and every byte is writable (the
+    // historical fixed-arena bound; kept as a size regression).
     assert_eq!(run_fixture("alloca_arena_in_bounds.c"), 0);
 }
 

@@ -10,24 +10,15 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x2, lsl #12   // =0x2000
-               	sub	sp, sp, #0x40
-               	str	x19, [sp]
-               	sub	x16, x29, #0x28
-               	str	x16, [x16]
+               	str	x19, [sp, #-0x50]!
+               	stp	x29, x30, [sp, #0x40]
+               	add	x29, sp, #0x40
                	mov	x2, #0x1f40             // =8000
                	add	x17, x2, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	sub	x16, x29, #0x28
-               	ldr	x0, [x16]
+               	mov	x0, sp
                	sub	x0, x0, x17
-               	sub	x17, x16, #0x2, lsl #12 // =0x2000
-               	cmp	x0, x17
-               	b.hs	<addr>
-               	brk	#0x1
-               	str	x0, [x16]
+               	mov	sp, x0
                	stur	x0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	mov	x1, #0x3                // =3
@@ -55,20 +46,13 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	sub	x17, x29, #0x2, lsl #12 // =0x2000
-               	sub	x17, x17, #0x30
-               	str	x0, [x17]
-               	sub	x16, x29, #0x2, lsl #12 // =0x2000
-               	sub	x16, x16, #0x30
-               	ldr	x0, [x16]
+               	stur	x0, [x29, #-0x30]
+               	ldur	x0, [x29, #-0x30]
                	sxtw	x0, w0
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x2, lsl #12   // =0x2000
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
+               	sub	sp, x29, #0x40
+               	ldp	x29, x30, [sp, #0x40]
+               	ldr	x19, [sp], #0x50
                	ret
                	mov	x0, #0x1                // =1
-               	sub	x17, x29, #0x2, lsl #12 // =0x2000
-               	sub	x17, x17, #0x30
-               	str	x0, [x17]
+               	stur	x0, [x29, #-0x30]
                	b	<addr>

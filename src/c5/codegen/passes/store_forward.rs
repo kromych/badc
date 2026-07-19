@@ -130,7 +130,7 @@ struct SlotEntry {
 /// Slots whose store -> load pairs may forward: reachable only through
 /// `LoadLocal` / `StoreLocal`, so every write is visible in the SSA.
 /// Starts from `mem2reg::promotable_slots` (no `LocalAddr`, no volatile
-/// access, no alloca-arena slot) and removes the slots the emit writes
+/// access, no alloca slot) and removes the slots the emit writes
 /// through `FunctionSsa` fields or call metadata rather than an
 /// instruction. A function with a runtime-growing frame is skipped
 /// entirely, as in mem2reg.

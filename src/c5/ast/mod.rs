@@ -466,12 +466,12 @@ pub(crate) enum Stmt {
     /// `parse_block_stmt` can capture decls alongside stmts via a
     /// single stmt-id sequence.
     Decl(DeclId),
-    /// Snapshot the per-frame alloca-arena top into `save_slot` on
-    /// entry to a block that declares a variable-length array. Paired
-    /// with `VlaScopeExit` so the VLA storage is reclaimed on block
-    /// exit and, for a loop body, on every iteration (C99 6.2.4p2).
+    /// Snapshot the stack pointer into `save_slot` on entry to a
+    /// block that declares a variable-length array. Paired with
+    /// `VlaScopeExit` so the VLA storage is reclaimed on block exit
+    /// and, for a loop body, on every iteration (C99 6.2.4p2).
     VlaScopeEnter { save_slot: i64 },
-    /// Restore the alloca-arena top from `save_slot` on block exit.
+    /// Restore the stack pointer from `save_slot` on block exit.
     VlaScopeExit { save_slot: i64 },
 }
 
@@ -544,8 +544,8 @@ pub(crate) enum Decl {
     /// Variable-length array declaration (C99 6.7.6.2). `dim` is the
     /// runtime element-count expression; `elem_size` is the element's
     /// byte size. The walker evaluates `dim * elem_size`, allocates
-    /// that many bytes from the per-frame alloca arena, stores the
-    /// base pointer into `ptr_slot`, and the byte count into
+    /// that many bytes from the stack via the alloca intrinsic, stores
+    /// the base pointer into `ptr_slot`, and the byte count into
     /// `size_slot` (read back by `sizeof`). `elem_ty` carries the
     /// element type for struct-size remapping.
     Vla {

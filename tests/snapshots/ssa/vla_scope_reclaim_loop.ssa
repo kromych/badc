@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=1035
+fn ent_pc=0 n_params=0 variadic=false locals=11
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(10)                                   -> -
@@ -88,16 +88,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=1035
     terminator Bz { cond=v57, target=b15, fall=b13 }   (exit_acc=v57)
   block 13  start_pc=0
     v58  Imm(0)                                           -> x0
-    v59  StoreLocal { off=-1035, value=v58, kind=I64 }    -> -
+    v59  StoreLocal { off=-11, value=v58, kind=I64 }      -> -
     terminator Jmp(b14)   (exit_acc=v59)
   block 14  start_pc=0
-    v62  LoadLocal { off=-1035, kind=I64 }                -> x0
+    v62  LoadLocal { off=-11, kind=I64 }                  -> x0
     v63  BinopI { op=shl, lhs=v62, rhs_imm=32 }           -> x1
     v64  Extend { value=v62, kind=I32 }                   -> x0
     terminator Return(v64)   (exit_acc=v64)
   block 15  start_pc=0
     v60  Imm(1)                                           -> x0
-    v61  StoreLocal { off=-1035, value=v60, kind=I64 }    -> -
+    v61  StoreLocal { off=-11, value=v60, kind=I64 }      -> -
     terminator Jmp(b14)   (exit_acc=v61)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

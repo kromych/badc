@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
-fn ent_pc=1 n_params=0 variadic=false locals=1034
+fn ent_pc=1 n_params=0 variadic=false locals=10
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(6)                                    -> -
@@ -66,7 +66,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1034
     v56  LoadLocal { off=-1, kind=I64 }                   -> x0
     v57  Load { addr=v56, disp=0, kind=I8 }               -> x0
     v58  BinopI { op=eq, lhs=v57, rhs_imm=11 }            -> x0
-    v59  StoreLocal { off=-1033, value=v34, kind=I64 }    -> -
+    v59  StoreLocal { off=-9, value=v34, kind=I64 }       -> -
     terminator Bz { cond=v58, target=b4, fall=b3 }   (exit_acc=v58)
   block 3  start_pc=0
     v60  LoadLocal { off=-2, kind=I64 }                   -> x0
@@ -75,12 +75,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=1034
     v63  Load { addr=v60, disp=6, kind=I8 }               -> x0
     v64  BinopI { op=eq, lhs=v63, rhs_imm=22 }            -> x0
     v65  BinopI { op=ne, lhs=v64, rhs_imm=0 }             -> x0
-    v66  StoreLocal { off=-1033, value=v65, kind=I64 }    -> -
+    v66  StoreLocal { off=-9, value=v65, kind=I64 }       -> -
     terminator Jmp(b4)   (exit_acc=v66)
   block 4  start_pc=0
-    v67  LoadLocal { off=-1033, kind=I64 }                -> x0
+    v67  LoadLocal { off=-9, kind=I64 }                   -> x0
     v68  Imm(0)                                           -> x1
-    v69  StoreLocal { off=-1032, value=v68, kind=I64 }    -> -
+    v69  StoreLocal { off=-8, value=v68, kind=I64 }       -> -
     terminator Bz { cond=v67, target=b6, fall=b5 }   (exit_acc=v67)
   block 5  start_pc=0
     v70  LoadLocal { off=-3, kind=I64 }                   -> x0
@@ -89,11 +89,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=1034
     v73  Load { addr=v70, disp=32, kind=I8 }              -> x0
     v74  BinopI { op=eq, lhs=v73, rhs_imm=33 }            -> x0
     v75  BinopI { op=ne, lhs=v74, rhs_imm=0 }             -> x0
-    v76  StoreLocal { off=-1032, value=v75, kind=I64 }    -> -
+    v76  StoreLocal { off=-8, value=v75, kind=I64 }       -> -
     terminator Jmp(b6)   (exit_acc=v76)
   block 6  start_pc=0
-    v77  LoadLocal { off=-1032, kind=I64 }                -> x0
-    v78  StoreLocal { off=-1031, value=v77, kind=I64 }    -> -
+    v77  LoadLocal { off=-8, kind=I64 }                   -> x0
+    v78  StoreLocal { off=-7, value=v77, kind=I64 }       -> -
     terminator Bz { cond=v77, target=b8, fall=b7 }   (exit_acc=v77)
   block 7  start_pc=0
     v79  LoadLocal { off=-4, kind=I64 }                   -> x0
@@ -101,23 +101,23 @@ fn ent_pc=1 n_params=0 variadic=false locals=1034
     v81  BinopI { op=add, lhs=v79, rhs_imm=99 }           -> x1
     v82  Load { addr=v79, disp=99, kind=I8 }              -> x0
     v83  BinopI { op=eq, lhs=v82, rhs_imm=44 }            -> x0
-    v84  StoreLocal { off=-1031, value=v83, kind=I64 }    -> -
+    v84  StoreLocal { off=-7, value=v83, kind=I64 }       -> -
     terminator Jmp(b8)   (exit_acc=v84)
   block 8  start_pc=0
-    v85  LoadLocal { off=-1031, kind=I64 }                -> x0
+    v85  LoadLocal { off=-7, kind=I64 }                   -> x0
     terminator Bz { cond=v85, target=b11, fall=b9 }   (exit_acc=v85)
   block 9  start_pc=0
     v86  Imm(0)                                           -> x0
-    v87  StoreLocal { off=-1034, value=v86, kind=I64 }    -> -
+    v87  StoreLocal { off=-10, value=v86, kind=I64 }      -> -
     terminator Jmp(b10)   (exit_acc=v87)
   block 10  start_pc=0
-    v90  LoadLocal { off=-1034, kind=I64 }                -> x0
+    v90  LoadLocal { off=-10, kind=I64 }                  -> x0
     v91  BinopI { op=shl, lhs=v90, rhs_imm=32 }           -> x1
     v92  Extend { value=v90, kind=I32 }                   -> x0
     terminator Return(v92)   (exit_acc=v92)
   block 11  start_pc=0
     v88  Imm(1)                                           -> x0
-    v89  StoreLocal { off=-1034, value=v88, kind=I64 }    -> -
+    v89  StoreLocal { off=-10, value=v88, kind=I64 }      -> -
     terminator Jmp(b10)   (exit_acc=v89)
 info: auto-including <alloca.h> for undeclared `__builtin_alloca`
 ; --- SSA dump (ok=true) ent_pc=0 ---

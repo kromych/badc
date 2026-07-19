@@ -48,9 +48,10 @@ pub(crate) fn slots16(n_slots: u32) -> u32 {
 }
 
 /// True when the emitted form of `inst` addresses the locals region
-/// (negative slot offset): slot loads / stores / address-takes, the
-/// alloca-arena bookkeeping store, and a call gathering an aggregate
-/// return into its result-temp slot. Purely structural; whether the
+/// (negative slot offset): slot loads / stores / address-takes, a
+/// non-zero `AllocaInit` (its reserved slot keeps the locals region
+/// live), and a call gathering an aggregate return into its
+/// result-temp slot. Purely structural; whether the
 /// instruction is emitted at all is `is_dead_pure`'s decision, and the
 /// frame gate below combines the two so it cannot disagree with the
 /// per-inst emit skip.
@@ -871,6 +872,17 @@ pub(crate) fn c5_slot_to_fp_offset(off: i64, param_stride: i64) -> i64 {
 /// `sp = fp - frame_bytes` then yields the SP-relative offset.
 pub(crate) fn spill_slot_sp_offset(frame_bytes: u32, alloc_spill_base: u32, slot: u32) -> u32 {
     frame_bytes - alloc_spill_base - (slot + 1) * 8
+}
+
+/// True when the body allocates stack at runtime (`alloca` or a C99
+/// 6.7.6.2 VLA): the walker emits a non-zero `AllocaInit` slot for such
+/// functions. The per-arch emits then address spill slots through the
+/// frame pointer, since sp moves at the allocation sites, and their
+/// epilogues re-establish sp from the frame pointer.
+pub(crate) fn uses_dynamic_alloca(func: &super::super::ir::FunctionSsa) -> bool {
+    func.insts
+        .iter()
+        .any(|i| matches!(i, super::super::ir::Inst::AllocaInit(slot) if *slot != 0))
 }
 
 /// Record a `.debug_line` row for the instruction `v`. The

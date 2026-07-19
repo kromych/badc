@@ -83,27 +83,24 @@ pub(crate) fn walk_function(
 ) -> Result<FunctionSsa, WalkError> {
     let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
     b.set_end_pc(end_pc);
-    // C99 6.8: the function's stack frame holds the declared
-    // locals plus, when the body calls `alloca`, the per-frame
-    // arena. The arena occupies the slots above the alloca-top
-    // bookkeeping slot; its size is `ALLOCA_ARENA_SLOTS` per the
-    // parser's Ent patch in `run_compile`. Without this addition
-    // the codegen prologue reserves too little stack and alloca
-    // writes scribble over the caller's frame.
+    // C99 6.8: the frame holds the declared locals; alloca / VLA
+    // storage is carved from the stack at runtime (the per-arch
+    // emit moves sp), so no extra slots are reserved for it. With
+    // alloca the parser's Ent patch appends one reserved slot
+    // (`alloca_top_slot = regular locals + 1`), which also covers
+    // every regular slot.
     let effective_locals = if alloca_top_slot > 0 {
-        alloca_top_slot + super::super::op::ALLOCA_ARENA_SLOTS
+        alloca_top_slot
     } else {
         n_locals
     };
     if effective_locals != 0 {
         b.set_locals(effective_locals);
     }
-    // Per-function alloca-arena bookkeeping setup.
-    // `alloca_top_slot == 0` means the body has no `alloca` call;
-    // the per-arch emit short-circuits a zero slot without
-    // writing native code. A non-zero slot tells the codegen to
-    // reserve the per-frame arena and store the running top into
-    // the named local slot.
+    // `alloca_top_slot == 0` means the body has no `alloca` call.
+    // A non-zero slot marks the function dynamic-sp for the
+    // codegen: spill slots move to fp-based addressing and the
+    // epilogue re-establishes sp.
     b.alloca_init(alloca_top_slot);
     // C99 6.8.6.4 + AAPCS64 6.9: classify the return convention. An
     // integer aggregate of at most 16 bytes returns in x0/x1; a larger
@@ -1335,7 +1332,7 @@ impl<'a> Walker<'a> {
                 self.walk_decl(b, decl_id)?;
                 Ok(false)
             }
-            // C99 6.2.4p2: snapshot the alloca-arena top on entry to a
+            // C99 6.2.4p2: snapshot the stack pointer on entry to a
             // VLA-declaring block, restore it on exit so the storage is
             // reclaimed (per loop iteration for a loop body).
             Stmt::VlaScopeEnter { save_slot } => {
@@ -1391,8 +1388,8 @@ impl<'a> Walker<'a> {
                 ..
             } => {
                 // C99 6.7.6.2: allocate `count * sizeof(elem)` bytes
-                // from the per-frame alloca arena, store the base
-                // pointer for decay and the byte count for `sizeof`.
+                // from the stack via the alloca intrinsic, store the
+                // base pointer for decay and the byte count for `sizeof`.
                 let elem_size = *elem_size;
                 let ptr_slot = *ptr_slot;
                 let size_slot = *size_slot;

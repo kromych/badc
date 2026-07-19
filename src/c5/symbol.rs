@@ -114,7 +114,7 @@ pub(crate) struct Symbol {
 
     /// True for a C99 6.7.6.2 variable-length array local: the
     /// element count is a runtime expression, so the storage is
-    /// allocated from the per-frame alloca arena rather than a fixed
+    /// allocated from the stack at runtime rather than a fixed
     /// frame slot. `type_` holds the element type; `array_size` stays
     /// 0 (it is not a constant array). `vla_ptr_slot` is the hidden
     /// frame slot holding the runtime base pointer; `vla_size_slot`

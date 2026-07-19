@@ -93,6 +93,10 @@ pub(crate) struct Frame {
     pub va_n_params: usize,
     /// ABI carried for the redirect's slot mapping.
     pub va_abi: super::Abi,
+    /// The body moves sp at runtime (`alloca` / C99 6.7.6.2 VLA), so
+    /// spill slots are addressed through fp and the epilogue
+    /// re-establishes sp from fp before tearing the frame down.
+    pub dynamic_sp: bool,
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target: Target) -> Frame {
@@ -145,6 +149,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
         va_param_fp_mask: func.param_fp_mask,
         va_n_params: func.n_params,
         va_abi: abi,
+        dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func),
     }
 }
 
@@ -523,6 +528,122 @@ fn emit_sp_ldr_d_auto(code: &mut Vec<u8>, dt: u8, off: u32) {
     emit_sp_ldr_d(code, dt, off, Reg(16));
 }
 
+/// Allocator-spill accessors. A static frame reads the slot at
+/// `[sp + sp_off]`; a dynamic-sp frame (alloca / VLA,
+/// `Frame::dynamic_sp`) reads the same byte at
+/// `[fp - (frame_bytes - sp_off)]`, since sp moves at runtime while fp
+/// stays put. The fp displacement uses the unscaled-signed `ldur` /
+/// `stur` form in reach, else builds the address with the imm12 +
+/// shift-12 split.
+fn fp_spill_delta(frame: Frame, sp_off: u32) -> u32 {
+    frame.frame_bytes - sp_off
+}
+
+/// Materialise `fp - delta` into `dst` (imm12 + shift-12 split).
+fn emit_fp_minus_off(code: &mut Vec<u8>, dst: Reg, delta: u32) {
+    let hi = delta & !0xfff;
+    let lo = delta & 0xfff;
+    if hi != 0 {
+        emit(
+            code,
+            super::encode::enc_sub_imm_lsl12(dst, Reg(29), hi >> 12),
+        );
+        if lo != 0 {
+            emit(code, enc_sub_imm(dst, dst, lo));
+        }
+    } else {
+        emit(code, enc_sub_imm(dst, Reg(29), lo));
+    }
+}
+
+/// Spill-slot 8-byte load into `rt`. The fp-based out-of-reach form
+/// builds the address into `rt` itself, mirroring [`emit_sp_ldr_x`].
+fn emit_spill_ldr_x(code: &mut Vec<u8>, frame: Frame, rt: Reg, sp_off: u32) {
+    if !frame.dynamic_sp {
+        emit_sp_ldr_x(code, rt, sp_off);
+        return;
+    }
+    let delta = fp_spill_delta(frame, sp_off);
+    if delta <= 255 {
+        emit(code, super::encode::enc_ldur(rt, Reg(29), -(delta as i32)));
+    } else {
+        emit_fp_minus_off(code, rt, delta);
+        emit(code, enc_ldr_imm(rt, rt, 0));
+    }
+}
+
+/// Spill-slot 8-byte store of `rt`; `addr_scratch` (distinct from
+/// `rt`) carries the base when the displacement is out of reach.
+fn emit_spill_str_x(code: &mut Vec<u8>, frame: Frame, rt: Reg, sp_off: u32, addr_scratch: Reg) {
+    if !frame.dynamic_sp {
+        emit_sp_str_x(code, rt, sp_off, addr_scratch);
+        return;
+    }
+    let delta = fp_spill_delta(frame, sp_off);
+    if delta <= 255 {
+        emit(code, super::encode::enc_stur(rt, Reg(29), -(delta as i32)));
+    } else {
+        debug_assert_ne!(rt.0, addr_scratch.0, "spill str: addr scratch aliases data");
+        emit_fp_minus_off(code, addr_scratch, delta);
+        emit(code, enc_str_imm(rt, addr_scratch, 0));
+    }
+}
+
+/// Spill-slot 8-byte store picking an IP-pool address scratch that
+/// differs from the data register.
+fn emit_spill_str_x_auto(code: &mut Vec<u8>, frame: Frame, rt: Reg, sp_off: u32) {
+    let addr_scratch = if rt.0 == 16 { Reg(17) } else { Reg(16) };
+    emit_spill_str_x(code, frame, rt, sp_off, addr_scratch);
+}
+
+/// Spill-slot 8-byte store at a site where only `borrow` (a live
+/// register, stack-saved around the store) can carry the base.
+fn emit_spill_str_x_borrow(code: &mut Vec<u8>, frame: Frame, rt: Reg, sp_off: u32, borrow: Reg) {
+    if !frame.dynamic_sp {
+        emit_sp_str_x_borrow(code, rt, sp_off, borrow);
+        return;
+    }
+    let delta = fp_spill_delta(frame, sp_off);
+    if delta <= 255 {
+        emit(code, super::encode::enc_stur(rt, Reg(29), -(delta as i32)));
+        return;
+    }
+    debug_assert_ne!(rt.0, borrow.0, "spill str borrow: borrow aliases data");
+    emit(code, super::encode::enc_str_pre(borrow, Reg(31), -16));
+    emit_fp_minus_off(code, borrow, delta);
+    emit(code, enc_str_imm(rt, borrow, 0));
+    emit(code, super::encode::enc_ldr_post(borrow, Reg(31), 16));
+}
+
+/// Spill-slot 8-byte FP load into d-reg `dt`; `addr_scratch` is a GPR.
+fn emit_spill_ldr_d(code: &mut Vec<u8>, frame: Frame, dt: u8, sp_off: u32, addr_scratch: Reg) {
+    if !frame.dynamic_sp {
+        emit_sp_ldr_d(code, dt, sp_off, addr_scratch);
+        return;
+    }
+    emit_fp_minus_off(code, addr_scratch, fp_spill_delta(frame, sp_off));
+    emit(code, enc_ldr_d_imm(dt, addr_scratch, 0));
+}
+
+/// Spill-slot 8-byte FP store of d-reg `dt`; `addr_scratch` is a GPR.
+fn emit_spill_str_d(code: &mut Vec<u8>, frame: Frame, dt: u8, sp_off: u32, addr_scratch: Reg) {
+    if !frame.dynamic_sp {
+        emit_sp_str_d(code, dt, sp_off, addr_scratch);
+        return;
+    }
+    emit_fp_minus_off(code, addr_scratch, fp_spill_delta(frame, sp_off));
+    emit(code, enc_str_d_imm(dt, addr_scratch, 0));
+}
+
+/// Spill-slot FP store / load with x16 as the address scratch.
+fn emit_spill_str_d_auto(code: &mut Vec<u8>, frame: Frame, dt: u8, sp_off: u32) {
+    emit_spill_str_d(code, frame, dt, sp_off, Reg(16));
+}
+
+fn emit_spill_ldr_d_auto(code: &mut Vec<u8>, frame: Frame, dt: u8, sp_off: u32) {
+    emit_spill_ldr_d(code, frame, dt, sp_off, Reg(16));
+}
+
 /// Branch placeholder recorded mid-walk; resolved once every
 /// block's start offset is known.
 #[derive(Debug, Clone, Copy)]
@@ -705,9 +826,9 @@ pub(crate) fn emit_function(
                     Place::IntReg(r) => ext(code, Reg(r)),
                     Place::Spill(slot) => {
                         let sp_off = spill_off(frame, slot);
-                        emit_sp_ldr_x(code, scratch.primary, sp_off);
+                        emit_spill_ldr_x(code, frame, scratch.primary, sp_off);
                         ext(code, scratch.primary);
-                        emit_sp_str_x(code, scratch.primary, sp_off, scratch.secondary);
+                        emit_spill_str_x(code, frame, scratch.primary, sp_off, scratch.secondary);
                     }
                     Place::None | Place::FpReg(_) => {}
                 }
@@ -780,11 +901,6 @@ pub(crate) fn emit_function(
     // `Terminator::JumpTable`. Each 32-bit entry is patched to
     // `block_offset - table_start` once every block is laid out.
     let mut jump_table_fixups: Vec<(usize, u32)> = Vec::new();
-    // Per-function alloca bookkeeping. Set by `Inst::AllocaInit`
-    // and read by `Inst::Intrinsic { kind: Alloca }`; zero
-    // means the function doesn't use alloca.
-    let mut current_alloca_top: u32 = 0;
-
     for (block_idx, block) in func.blocks.iter().enumerate() {
         block_offsets[block_idx] = code.len();
         super::ssa::emit_common::record_block_start_pc(
@@ -843,7 +959,7 @@ pub(crate) fn emit_function(
                 block_addr_fixups.push((adr_site, *tb, rd));
                 if let Place::Spill(slot) = place {
                     let sp_off = spill_off(frame, slot);
-                    emit_sp_str_x_auto(code, rd, sp_off);
+                    emit_spill_str_x_auto(code, frame, rd, sp_off);
                 }
                 continue;
             }
@@ -917,7 +1033,6 @@ pub(crate) fn emit_function(
                     fixups,
                     macho_tlv_fixups,
                     macho_tlv_descriptors,
-                    &mut current_alloca_top,
                 )
             };
             if !inst_ok {
@@ -1887,6 +2002,24 @@ fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame
     debug_assert!(!alloc_pending, "frame fold requested with no callee save");
 }
 
+/// Re-establish `sp = fp - frame_bytes` in a dynamic-sp frame before
+/// the epilogue's sp-relative restores. No-op for static frames. A
+/// split displacement is computed into x16 and committed with one
+/// write, so sp never rests above still-unrestored frame bytes (a
+/// signal delivered mid-sequence pushes its frame below sp).
+fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
+    if !frame.dynamic_sp {
+        return;
+    }
+    let bytes = frame.frame_bytes;
+    if bytes < 4096 {
+        emit(code, enc_sub_imm(Reg(31), Reg(29), bytes));
+    } else {
+        emit_fp_minus_off(code, Reg(16), bytes);
+        emit(code, enc_add_imm(Reg(31), Reg(16), 0));
+    }
+}
+
 /// Restore what [`emit_prologue_saved_regs`] saved, in mirror order
 /// (x19, gprs descending, fp regs descending) so the offset-0 access
 /// comes last and, when `fold != 0`, tears the frame down as a
@@ -2706,7 +2839,6 @@ fn emit_inst(
     fixups: &mut Vec<Fixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
-    current_alloca_top: &mut u32,
 ) -> bool {
     // Unpack the read-only per-function context into the per-field names the
     // lowering below uses, so the body is unchanged.
@@ -2733,32 +2865,11 @@ fn emit_inst(
     let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
     match inst {
         Inst::AllocaInit(slot) => {
-            // Slot 0: this function doesn't use alloca; emit
-            // nothing (matches the pool path). Non-zero: the
-            // bookkeeping slot lives at `[fp - slot*8]` and the
-            // first alloca call subtracts from the value stored
-            // there. Initialise the slot with its own address so
-            // alloca(n) lands at `address - n`, the top of the
-            // arena reserved by the prologue's local-slot count.
-            if *slot == 0 {
-                return true;
-            }
-            let top_offset = (*slot as u32) * 8;
-            *current_alloca_top = top_offset;
-            if top_offset < 4096 {
-                emit(code, enc_sub_imm(Reg(16), Reg(29), top_offset));
-            } else {
-                let high = top_offset & !0xfff;
-                let low = top_offset & 0xfff;
-                emit(
-                    code,
-                    super::encode::enc_sub_imm_lsl12(Reg(16), Reg(29), high >> 12),
-                );
-                if low != 0 {
-                    emit(code, enc_sub_imm(Reg(16), Reg(16), low));
-                }
-            }
-            emit(code, enc_str_imm(Reg(16), Reg(16), 0));
+            // Slot 0: this function doesn't use alloca. Non-zero:
+            // the function moves sp at runtime; `Frame::dynamic_sp`
+            // carries the fact to the spill addressing, the alloca
+            // intrinsics, and the epilogue. No code either way.
+            let _ = slot;
             true
         }
         Inst::ParamRef { idx, kind } => {
@@ -2790,7 +2901,7 @@ fn emit_inst(
                     }
                     Place::Spill(slot) => {
                         let sp_off = spill_off(frame, slot);
-                        emit_sp_str_d_auto(code, d, sp_off);
+                        emit_spill_str_d_auto(code, frame, d, sp_off);
                     }
                     _ => {
                         bail_msg("ParamRef: FP param dst not fp reg / spill");
@@ -2823,7 +2934,7 @@ fn emit_inst(
                 Place::Spill(slot) => {
                     sign_extend(code, scratch.primary);
                     let sp_off = spill_off(frame, slot);
-                    emit_sp_str_x(code, scratch.primary, sp_off, scratch.secondary);
+                    emit_spill_str_x(code, frame, scratch.primary, sp_off, scratch.secondary);
                 }
                 _ => {
                     bail_msg("ParamRef: dst not int reg / spill");
@@ -2840,7 +2951,7 @@ fn emit_inst(
             load_imm64(code, rd, *value as u64);
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_x_auto(code, rd, sp_off);
+                emit_spill_str_x_auto(code, frame, rd, sp_off);
             }
             true
         }
@@ -2862,7 +2973,7 @@ fn emit_inst(
             });
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_x_auto(code, rd, sp_off);
+                emit_spill_str_x_auto(code, frame, rd, sp_off);
             }
             true
         }
@@ -2877,7 +2988,7 @@ fn emit_inst(
             pending_func_fixups.push((adrp_offset, *target_ent_pc));
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_x_auto(code, rd, sp_off);
+                emit_spill_str_x_auto(code, frame, rd, sp_off);
             }
             true
         }
@@ -2907,7 +3018,7 @@ fn emit_inst(
             emit(code, enc_add_imm(rd, rd, 0));
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_x_auto(code, rd, sp_off);
+                emit_spill_str_x_auto(code, frame, rd, sp_off);
             }
             true
         }
@@ -3077,19 +3188,9 @@ fn emit_inst(
             frame,
             scratch,
         ),
-        Inst::Intrinsic { kind, args } => emit_intrinsic(
-            code,
-            func,
-            abi,
-            *kind,
-            args,
-            dst,
-            v,
-            alloc,
-            frame,
-            scratch,
-            *current_alloca_top,
-        ),
+        Inst::Intrinsic { kind, args } => {
+            emit_intrinsic(code, func, abi, *kind, args, dst, v, alloc, frame, scratch)
+        }
         Inst::Fneg(src) => {
             let src_place = alloc
                 .places
@@ -3119,7 +3220,7 @@ fn emit_inst(
             }
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_d_auto(code, dd, sp_off);
+                emit_spill_str_d_auto(code, frame, dd, sp_off);
             }
             true
         }
@@ -3180,7 +3281,7 @@ fn emit_inst(
             );
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_d_auto(code, dd, sp_off);
+                emit_spill_str_d_auto(code, frame, dd, sp_off);
             }
             true
         }
@@ -3221,7 +3322,7 @@ fn emit_inst(
                     emit(code, enc);
                     if let Place::Spill(slot) = dst {
                         let sp_off = spill_off(frame, slot);
-                        emit_sp_str_d_auto(code, dd, sp_off);
+                        emit_spill_str_d_auto(code, frame, dd, sp_off);
                     }
                     true
                 }
@@ -3256,7 +3357,7 @@ fn emit_inst(
                     emit(code, enc);
                     if let Place::Spill(slot) = dst {
                         let sp_off = spill_off(frame, slot);
-                        emit_sp_str_x_auto(code, rd, sp_off);
+                        emit_spill_str_x_auto(code, frame, rd, sp_off);
                     }
                     true
                 }
@@ -3279,7 +3380,7 @@ fn emit_inst(
                     emit(code, enc_fcvt_d_s(dd, dn));
                     if let Place::Spill(slot) = dst {
                         let sp_off = spill_off(frame, slot);
-                        emit_sp_str_d_auto(code, dd, sp_off);
+                        emit_spill_str_d_auto(code, frame, dd, sp_off);
                     }
                     true
                 }
@@ -3296,7 +3397,7 @@ fn emit_inst(
                     emit(code, enc_fcvt_s_d(dd, dn));
                     if let Place::Spill(slot) = dst {
                         let sp_off = spill_off(frame, slot);
-                        emit_sp_str_d_auto(code, dd, sp_off);
+                        emit_spill_str_d_auto(code, frame, dd, sp_off);
                     }
                     true
                 }
@@ -3631,7 +3732,7 @@ fn emit_va_arg_aapcs64(
         Place::IntReg(_) => {}
         Place::Spill(slot) => {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, scratch.primary, sp_off);
+            emit_spill_str_x_auto(code, frame, scratch.primary, sp_off);
         }
         Place::None => {}
         Place::FpReg(_) => {
@@ -3657,7 +3758,6 @@ fn emit_intrinsic(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-    current_alloca_top: u32,
 ) -> bool {
     use crate::c5::op::Intrinsic as I;
     let intrinsic = match I::from_i64(kind) {
@@ -3901,7 +4001,7 @@ fn emit_intrinsic(
                 Place::IntReg(r) if rd.0 != r => emit_mov_reg(code, Reg(r), rd),
                 Place::Spill(slot) => {
                     let sp_off = spill_off(frame, slot);
-                    emit_sp_str_x_auto(code, rd, sp_off);
+                    emit_spill_str_x_auto(code, frame, rd, sp_off);
                 }
                 _ => {}
             }
@@ -3986,13 +4086,14 @@ fn emit_intrinsic(
             true
         }
         I::Alloca => {
-            // alloca(n): round n up to 16-byte alignment, load
-            // the current arena top from the bookkeeping slot
-            // (initialised by `Inst::AllocaInit`), subtract n
-            // to get the new top, write it back, return the new
-            // top. `args[0]` carries the requested size; the
-            // result of the intrinsic is the new top pointer.
-            if current_alloca_top == 0 {
+            // alloca(n): move sp down by `n` rounded up to 16 bytes
+            // and return the new sp. The 16-byte rounding keeps sp
+            // aligned (AAPCS64 5.2.2.1); the frame's spill slots and
+            // locals stay reachable through fp (`Frame::dynamic_sp`).
+            // The storage is reclaimed by the epilogue's
+            // `sub sp, fp, #frame_bytes`, or earlier by an
+            // `AllocaRestore` closing a VLA scope (C99 6.2.4p2).
+            if !frame.dynamic_sp {
                 bail_msg("Alloca: AllocaInit didn't run for this function");
                 return false;
             }
@@ -4000,8 +4101,8 @@ fn emit_intrinsic(
                 bail_msg("Alloca: expected 1 arg");
                 return false;
             }
-            let Some(rd) = int_reg(dst) else {
-                bail_msg("Alloca: dst not int reg");
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                bail_msg("Alloca: dst not int reg / spill");
                 return false;
             };
             let size_place = alloc
@@ -4019,47 +4120,37 @@ fn emit_intrinsic(
                 code,
                 super::encode::enc_and_imm_neg16(scratch.secondary, scratch.secondary),
             );
-            // x16 = &arena_top -- the bookkeeping slot's address.
-            let top_offset = current_alloca_top;
-            if top_offset < 4096 {
-                emit(code, enc_sub_imm(scratch.primary, Reg(29), top_offset));
-            } else {
-                let high = top_offset & !0xfff;
-                let low = top_offset & 0xfff;
+            // rd = sp - aligned_size, the final sp value. rd is an
+            // allocator register or x16; x17 holds the size, so the
+            // two never alias.
+            emit(code, enc_add_imm(rd, Reg(31), 0));
+            emit(code, enc_sub_reg(rd, rd, scratch.secondary));
+            if abi.stack_probe {
+                // Windows commits stack on demand behind a guard page:
+                // walk sp down page by page, touching each, before
+                // committing the final value (mirrors the prologue's
+                // `emit_stack_alloc` probe loop). x17 (the dead size)
+                // carries the page count.
                 emit(
                     code,
-                    super::encode::enc_sub_imm_lsl12(scratch.primary, Reg(29), high >> 12),
+                    super::encode::enc_lsr_imm(scratch.secondary, scratch.secondary, 12),
                 );
-                if low != 0 {
-                    emit(code, enc_sub_imm(scratch.primary, scratch.primary, low));
-                }
+                emit(code, enc_cbz(scratch.secondary, 5));
+                emit(code, super::encode::enc_sub_imm_lsl12(Reg(31), Reg(31), 1));
+                emit(code, enc_str_imm(scratch.secondary, Reg(31), 0));
+                emit(
+                    code,
+                    super::encode::enc_subs_imm(scratch.secondary, scratch.secondary, 1),
+                );
+                emit(code, super::encode::enc_b_cond(super::encode::Cond::Ne, -3));
             }
-            // *x16 -= aligned_size; rd = new top.
-            emit(code, enc_ldr_imm(rd, scratch.primary, 0));
-            emit(code, enc_sub_reg(rd, rd, scratch.secondary));
-            // Trap on arena underflow: a bumped pointer below the
-            // per-frame arena floor (x16 - ALLOCA_ARENA_SLOTS*8) would
-            // scribble the saved-register area, so fault deterministically
-            // rather than corrupt the stack. TODO: lower alloca to a real
-            // SP decrement for unbounded sizes.
-            let arena_bytes = (crate::c5::op::ALLOCA_ARENA_SLOTS * 8) as u32;
-            emit(
-                code,
-                super::encode::enc_sub_imm_lsl12(
-                    scratch.secondary,
-                    scratch.primary,
-                    arena_bytes >> 12,
-                ),
-            );
-            emit(code, super::encode::enc_cmp_reg(rd, scratch.secondary));
-            emit(code, super::encode::enc_b_cond(super::encode::Cond::Hs, 2));
-            emit(code, 0xD420_0020); // brk #1
-            emit(code, enc_str_imm(rd, scratch.primary, 0));
+            emit(code, enc_add_imm(Reg(31), rd, 0));
+            spill_local_addr_to_dst(code, dst, rd, frame);
             true
         }
         I::AllocaSave => {
-            // Read the arena top for a VLA block snapshot (C99 6.7.6.2).
-            if current_alloca_top == 0 {
+            // Snapshot sp for a VLA block (C99 6.2.4p2).
+            if !frame.dynamic_sp {
                 bail_msg("AllocaSave: AllocaInit didn't run for this function");
                 return false;
             }
@@ -4067,14 +4158,14 @@ fn emit_intrinsic(
                 bail_msg("AllocaSave: dst not int reg / spill");
                 return false;
             };
-            emit_arena_top_addr(code, scratch.secondary, current_alloca_top);
-            emit(code, enc_ldr_imm(rd, scratch.secondary, 0));
+            emit(code, enc_add_imm(rd, Reg(31), 0));
             spill_local_addr_to_dst(code, dst, rd, frame);
             true
         }
         I::AllocaRestore => {
-            // Restore the arena top on VLA block exit.
-            if current_alloca_top == 0 {
+            // Restore the saved sp on VLA block exit, reclaiming the
+            // block's VLA storage (per iteration for a loop body).
+            if !frame.dynamic_sp {
                 bail_msg("AllocaRestore: AllocaInit didn't run for this function");
                 return false;
             }
@@ -4094,8 +4185,7 @@ fn emit_intrinsic(
                     return false;
                 }
             };
-            emit_arena_top_addr(code, scratch.secondary, current_alloca_top);
-            emit(code, enc_str_imm(v, scratch.secondary, 0));
+            emit(code, enc_add_imm(Reg(31), v, 0));
             true
         }
         I::SetjmpAArch64 => {
@@ -4384,7 +4474,7 @@ fn emit_intrinsic(
             emit(code, inst);
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_d_auto(code, dd, sp_off);
+                emit_spill_str_d_auto(code, frame, dd, sp_off);
             }
             true
         }
@@ -4601,7 +4691,7 @@ fn emit_call_ext(
         }
     } else if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, Reg(0), sp_off);
+        emit_spill_str_x_auto(code, frame, Reg(0), sp_off);
     }
     true
 }
@@ -4873,7 +4963,7 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: boo
             Place::IntReg(r) => emit(code, enc_fmov_d_to_x(Reg(r), 0)),
             Place::Spill(slot) => {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_d_auto(code, 0, sp_off);
+                emit_spill_str_d_auto(code, frame, 0, sp_off);
             }
             Place::None => {}
         }
@@ -4895,7 +4985,7 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: boo
             // The allocator gives Spill the same 8-byte slot
             // regardless of result kind, so store the wide
             // pattern via x0 directly.
-            emit_sp_str_x_auto(code, Reg(0), sp_off);
+            emit_spill_str_x_auto(code, frame, Reg(0), sp_off);
         }
         Place::None => {}
     }
@@ -5156,7 +5246,7 @@ fn emit_mcpy(
         }
     } else if let Place::Spill(slot) = dst_place {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, dst_r, sp_off);
+        emit_spill_str_x_auto(code, frame, dst_r, sp_off);
     }
     true
 }
@@ -5840,26 +5930,7 @@ fn spill_local_addr_to_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Fram
         // the other scratch carries the base when the slot is beyond
         // the scaled-imm12 reach.
         let addr_scratch = if src.0 == 16 { Reg(17) } else { Reg(16) };
-        emit_sp_str_x(code, src, sp_off, addr_scratch);
-    }
-}
-
-/// Materialize the per-frame alloca-arena bookkeeping slot address
-/// (`fp - top_offset`) into `reg`. Mirrors the `AllocaInit` /
-/// `Alloca` address computation for the VLA save / restore ops.
-fn emit_arena_top_addr(code: &mut Vec<u8>, reg: Reg, top_offset: u32) {
-    if top_offset < 4096 {
-        emit(code, enc_sub_imm(reg, Reg(29), top_offset));
-    } else {
-        let high = top_offset & !0xfff;
-        let low = top_offset & 0xfff;
-        emit(
-            code,
-            super::encode::enc_sub_imm_lsl12(reg, Reg(29), high >> 12),
-        );
-        if low != 0 {
-            emit(code, enc_sub_imm(reg, reg, low));
-        }
+        emit_spill_str_x(code, frame, src, sp_off, addr_scratch);
     }
 }
 
@@ -5951,7 +6022,7 @@ fn emit_load(
         }
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dd, sp_off);
+            emit_spill_str_d_auto(code, frame, dd, sp_off);
         }
         return true;
     }
@@ -5968,7 +6039,7 @@ fn emit_load(
         emit(code, enc_ldr_d_imm(dd, rn, disp));
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dd, sp_off);
+            emit_spill_str_d_auto(code, frame, dd, sp_off);
         }
         return true;
     }
@@ -5989,7 +6060,7 @@ fn emit_load(
     }
     if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, rd, sp_off);
+        emit_spill_str_x_auto(code, frame, rd, sp_off);
     }
     true
 }
@@ -6040,7 +6111,7 @@ fn emit_load_local(
         }
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dd, sp_off);
+            emit_spill_str_d_auto(code, frame, dd, sp_off);
         }
         return true;
     }
@@ -6068,7 +6139,7 @@ fn emit_load_local(
         }
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dd, sp_off);
+            emit_spill_str_d_auto(code, frame, dd, sp_off);
         }
         return true;
     }
@@ -6096,7 +6167,7 @@ fn emit_load_local(
         emit(code, word);
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -6119,7 +6190,7 @@ fn emit_load_local(
     emit(code, word);
     if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, rd, sp_off);
+        emit_spill_str_x_auto(code, frame, rd, sp_off);
     }
     true
 }
@@ -6182,7 +6253,7 @@ fn emit_store_local(
                     emit(code, super::encode::enc_fmov_s_s(rd, sn));
                 }
             } else if let Place::Spill(slot) = dst {
-                emit_sp_str_d_auto(code, sn, spill_off(frame, slot));
+                emit_spill_str_d_auto(code, frame, sn, spill_off(frame, slot));
             }
             return true;
         }
@@ -6214,7 +6285,7 @@ fn emit_store_local(
                 emit(code, enc_fmov_x_to_d(rd, scratch.primary));
             }
         } else if let Place::Spill(slot) = dst {
-            emit_sp_str_d_auto(code, dn, spill_off(frame, slot));
+            emit_spill_str_d_auto(code, frame, dn, spill_off(frame, slot));
         }
         return true;
     }
@@ -6249,7 +6320,7 @@ fn emit_store_local(
             }
             Place::Spill(slot) => {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_d_auto(code, dn, sp_off);
+                emit_spill_str_d_auto(code, frame, dn, sp_off);
             }
             _ => {}
         }
@@ -6309,7 +6380,7 @@ fn emit_store_local(
         }
         Place::Spill(slot) => {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rv, sp_off);
+            emit_spill_str_x_auto(code, frame, rv, sp_off);
         }
         Place::None => {}
         Place::FpReg(_) => return false,
@@ -6410,7 +6481,7 @@ fn emit_load_indexed(
     emit(code, word);
     if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, rd, sp_off);
+        emit_spill_str_x_auto(code, frame, rd, sp_off);
     }
     true
 }
@@ -6524,7 +6595,7 @@ fn emit_store_indexed(
         }
         Place::Spill(slot) => {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rv, sp_off);
+            emit_spill_str_x_auto(code, frame, rv, sp_off);
         }
         Place::None => {}
         Place::FpReg(_) => return false,
@@ -6585,7 +6656,7 @@ fn emit_store(
                 }
             } else if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_d_auto(code, sn, sp_off);
+                emit_spill_str_d_auto(code, frame, sn, sp_off);
             }
             return true;
         }
@@ -6621,7 +6692,7 @@ fn emit_store(
             }
         } else if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dn, sp_off);
+            emit_spill_str_d_auto(code, frame, dn, sp_off);
         }
         return true;
     }
@@ -6637,7 +6708,7 @@ fn emit_store(
             }
         } else if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dn, sp_off);
+            emit_spill_str_d_auto(code, frame, dn, sp_off);
         }
         return true;
     }
@@ -6671,7 +6742,7 @@ fn emit_store(
         }
     } else if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, rs, sp_off);
+        emit_spill_str_x_auto(code, frame, rs, sp_off);
     }
     true
 }
@@ -6746,7 +6817,7 @@ fn emit_binop(
         emit(code, word);
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dd, sp_off);
+            emit_spill_str_d_auto(code, frame, dd, sp_off);
         }
         return true;
     }
@@ -6775,7 +6846,7 @@ fn emit_binop(
         emit(code, enc_cset(rd, cond));
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -6820,7 +6891,7 @@ fn emit_binop(
         emit(code, word);
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -6840,7 +6911,7 @@ fn emit_binop(
         emit(code, enc_cset(rd, cond));
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -6869,7 +6940,7 @@ fn emit_binop(
         emit(code, enc_msub(rd, quot, rm, rn));
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -6891,7 +6962,7 @@ fn emit_binop(
     emit(code, word);
     if let Some(slot) = spill_to {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, rd, sp_off);
+        emit_spill_str_x_auto(code, frame, rd, sp_off);
     }
     true
 }
@@ -6993,7 +7064,7 @@ fn emit_binop_imm(
         emit(code, word);
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -7065,7 +7136,7 @@ fn emit_binop_imm(
         emit(code, word);
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -7084,7 +7155,7 @@ fn emit_binop_imm(
         emit(code, enc_cset(rd, cond));
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -7102,7 +7173,7 @@ fn emit_binop_imm(
         emit(code, enc_cset(rd, cond));
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -7130,7 +7201,7 @@ fn emit_binop_imm(
     emit(code, word);
     if let Some(slot) = spill_to {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, rd, sp_off);
+        emit_spill_str_x_auto(code, frame, rd, sp_off);
     }
     true
 }
@@ -7159,8 +7230,11 @@ fn materialize_int_shifted(
     match place {
         Place::IntReg(r) => Some(Reg(r)),
         Place::Spill(slot) => {
-            let sp_off = spill_off(frame, slot) + sp_shift;
-            emit_sp_ldr_x(code, scratch, sp_off);
+            // The shift compensates a temporary sp move; the fp-based
+            // dynamic-sp form is immune to it.
+            let shift = if frame.dynamic_sp { 0 } else { sp_shift };
+            let sp_off = spill_off(frame, slot) + shift;
+            emit_spill_ldr_x(code, frame, scratch, sp_off);
             Some(scratch)
         }
         Place::FpReg(_) | Place::None => None,
@@ -7185,11 +7259,14 @@ fn materialize_fp_shifted(
     match place {
         Place::FpReg(r) => Some(r),
         Place::Spill(slot) => {
-            let sp_off = spill_off(frame, slot) + sp_shift;
+            // The shift compensates a temporary sp move; the fp-based
+            // dynamic-sp form is immune to it.
+            let shift = if frame.dynamic_sp { 0 } else { sp_shift };
+            let sp_off = spill_off(frame, slot) + shift;
             // FP spill reloads need a GPR base when the slot is beyond
             // the scaled-imm12 reach; x16 is the primary scratch and
             // holds no int operand during an FP-value lowering.
-            emit_sp_ldr_d(code, scratch_d, sp_off, Reg(16));
+            emit_spill_ldr_d(code, frame, scratch_d, sp_off, Reg(16));
             Some(scratch_d)
         }
         // c5's constant-folder emits FP values as `Imm` of the
@@ -7217,7 +7294,7 @@ fn materialize_fp_f32(code: &mut Vec<u8>, place: Place, scratch_d: u8, frame: Fr
         Place::FpReg(r) => Some(r),
         Place::Spill(slot) => {
             let sp_off = spill_off(frame, slot);
-            emit_sp_ldr_d(code, scratch_d, sp_off, Reg(16));
+            emit_spill_ldr_d(code, frame, scratch_d, sp_off, Reg(16));
             Some(scratch_d)
         }
         Place::IntReg(r) => {
@@ -7366,19 +7443,19 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
     fn fp_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
         // FP phi moves keep all values in d-regs, so the GPR scratch x16 is
         // free to carry the base for out-of-reach slots.
-        emit_sp_str_d_auto(code, src, spill_off(frame, slot));
+        emit_spill_str_d_auto(code, frame, src, spill_off(frame, slot));
     }
     fn fp_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
-        emit_sp_ldr_d_auto(code, dst, spill_off(frame, slot));
+        emit_spill_ldr_d_auto(code, frame, dst, spill_off(frame, slot));
     }
     fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_mov_reg(code, Reg(dst), Reg(src));
     }
     fn int_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8, base: u8) {
-        emit_sp_str_x(code, Reg(src), spill_off(frame, slot), Reg(base));
+        emit_spill_str_x(code, frame, Reg(src), spill_off(frame, slot), Reg(base));
     }
     fn int_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
-        emit_sp_ldr_x(code, Reg(dst), spill_off(frame, slot));
+        emit_spill_ldr_x(code, frame, Reg(dst), spill_off(frame, slot));
     }
     fn int_spill_to_spill(
         &self,
@@ -7389,14 +7466,14 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
         stage: u8,
         hold: u8,
     ) {
-        emit_sp_ldr_x(code, Reg(stage), spill_off(frame, src));
+        emit_spill_ldr_x(code, frame, Reg(stage), spill_off(frame, src));
         // The value occupies `stage` and `hold` may carry a live cycle
         // source, so the store borrows `hold` via a stack save/restore when
         // the destination slot is out of reach.
-        emit_sp_str_x_borrow(code, Reg(stage), spill_off(frame, dst), Reg(hold));
+        emit_spill_str_x_borrow(code, frame, Reg(stage), spill_off(frame, dst), Reg(hold));
     }
     fn int_spill_store_auto(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
-        emit_sp_str_x_auto(code, Reg(src), spill_off(frame, slot));
+        emit_spill_str_x_auto(code, frame, Reg(src), spill_off(frame, slot));
     }
     fn break_place_cycle(
         &self,
@@ -7849,7 +7926,7 @@ fn emit_return(
             match place {
                 Place::Spill(slot) => {
                     let sp_off = spill_off(frame, slot);
-                    emit_sp_ldr_d_auto(code, 0, sp_off);
+                    emit_spill_ldr_d_auto(code, frame, 0, sp_off);
                 }
                 _ => {
                     let src = materialize_int(code, place, scratch.primary, frame)
@@ -7872,6 +7949,10 @@ fn emit_return(
         emit(code, enc_ret(Reg(30)));
         return;
     }
+    // A dynamic-sp frame re-establishes `sp = fp - frame_bytes` first,
+    // so the sp-relative restores below read the prologue-time
+    // addresses regardless of the body's alloca moves.
+    restore_dynamic_sp(code, frame);
     // Restore fp/lr first in the folded shape (the lr load feeds `ret`,
     // so it issues off sp before the writeback chain), then x19 and the
     // callee-saved GPRs / FP regs in mirror order of the prologue's

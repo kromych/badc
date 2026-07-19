@@ -91,6 +91,10 @@ pub(crate) struct Frame {
     /// be resumed later by a longjmp-style one after the memory below rsp
     /// was reused, so nothing the block needs afterwards may live there.
     pub asm_scratch_off: i32,
+    /// The body moves rsp at runtime (`alloca` / C99 6.7.6.2 VLA), so
+    /// spill slots are addressed through rbp and the epilogue
+    /// re-establishes rsp from rbp before tearing the frame down.
+    pub dynamic_sp: bool,
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
@@ -158,6 +162,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
         va_reg_save_off,
         saved_fpr_bytes,
         asm_scratch_off,
+        dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func),
     }
 }
 
@@ -712,8 +717,8 @@ fn materialize_fp_shifted(
     match place {
         Place::FpReg(r) => Some(Reg(r)),
         Place::Spill(slot) => {
-            let sp_off = spill_slot_sp_offset(frame, slot) + sp_shift as i32;
-            emit_movsd_xmm_mem(code, scratch, Reg::RSP, sp_off);
+            let (sb, sp_off) = spill_slot_addr_shifted(frame, slot, sp_shift);
+            emit_movsd_xmm_mem(code, scratch, sb, sp_off);
             Some(scratch)
         }
         Place::IntReg(r) => {
@@ -728,8 +733,8 @@ fn materialize_fp_shifted(
 /// matching spill slot. No-op for FpReg / IntReg / None.
 fn fp_spill_dst_to_slot(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
     if let Place::Spill(slot) = dst {
-        let sp_off = spill_slot_sp_offset(frame, slot);
-        emit_movsd_mem_xmm(code, Reg::RSP, sp_off, src);
+        let (sb, sp_off) = spill_slot_addr(frame, slot);
+        emit_movsd_mem_xmm(code, sb, sp_off, src);
     }
 }
 
@@ -835,7 +840,8 @@ fn int_operand_into_rd(code: &mut Vec<u8>, place: Place, rd: Reg, frame: Frame) 
     match place {
         Place::IntReg(r) => Some(Reg(r)),
         Place::Spill(slot) => {
-            emit_mov_r_mem(code, rd, Reg::RSP, spill_slot_sp_offset(frame, slot));
+            let (sb, off) = spill_slot_addr(frame, slot);
+            emit_mov_r_mem(code, rd, sb, off);
             Some(rd)
         }
         _ => None,
@@ -854,17 +860,36 @@ fn int_or_spill_dst(dst: Place) -> Option<Reg> {
     }
 }
 
-/// Byte offset from rsp of allocator spill slot `slot`. Spill
-/// slot 0 sits at the top of the allocator-spill region (next to
-/// the accumulator slot); slot N+1 sits 8 bytes below slot N. The
-/// region itself lives at `[rbp - alloc_spill_base ..
-/// rbp - alloc_spill_base - alloc_spill_bytes]`, and rsp =
-/// rbp - frame_bytes, so a slot at `rbp - alloc_spill_base
-/// - (N+1)*8` is `frame_bytes - alloc_spill_base - (N+1)*8` from
-/// rsp. Mirror of the aarch64 module's formula.
-fn spill_slot_sp_offset(frame: Frame, slot: u32) -> i32 {
-    super::ssa::emit_common::spill_slot_sp_offset(frame.frame_bytes, frame.alloc_spill_base, slot)
-        as i32
+/// `(base, disp)` pair addressing allocator spill slot `slot`. Every
+/// spill access routes through here so the dynamic-sp choice cannot be
+/// bypassed. A static frame uses `[rsp + off]`; a dynamic-sp frame
+/// (alloca / VLA) uses `[rbp + off - frame_bytes]`, the same byte,
+/// since rsp no longer has a fixed relation to the slot once the body
+/// moves it.
+fn spill_slot_addr(frame: Frame, slot: u32) -> (Reg, i32) {
+    spill_slot_addr_shifted(frame, slot, 0)
+}
+
+/// Like [`spill_slot_addr`], but for callers that temporarily pushed
+/// rsp down by `sp_shift` bytes. The shift applies only to the
+/// rsp-based form; the rbp-based form is immune to rsp moves.
+///
+/// The base offset: spill slot 0 sits at the top of the allocator-spill
+/// region, slot N+1 eight bytes below slot N. The region lives at
+/// `[rbp - alloc_spill_base .. - alloc_spill_bytes]` and rsp =
+/// rbp - frame_bytes, so the slot is `frame_bytes - alloc_spill_base
+/// - (N+1)*8` from rsp. Mirror of the aarch64 module's formula.
+fn spill_slot_addr_shifted(frame: Frame, slot: u32, sp_shift: u32) -> (Reg, i32) {
+    let off = super::ssa::emit_common::spill_slot_sp_offset(
+        frame.frame_bytes,
+        frame.alloc_spill_base,
+        slot,
+    ) as i32;
+    if frame.dynamic_sp {
+        (Reg::RBP, off - frame.frame_bytes as i32)
+    } else {
+        (Reg::RSP, off + sp_shift as i32)
+    }
 }
 
 /// If `dst` is a `Spill` place, write the just-produced value in
@@ -872,8 +897,8 @@ fn spill_slot_sp_offset(frame: Frame, slot: u32) -> i32 {
 /// caller already wrote into the allocator's chosen reg).
 fn spill_dst_to_slot(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
     if let Place::Spill(slot) = dst {
-        let sp_off = spill_slot_sp_offset(frame, slot);
-        emit_mov_mem_r(code, Reg::RSP, sp_off, src);
+        let (sb, sp_off) = spill_slot_addr(frame, slot);
+        emit_mov_mem_r(code, sb, sp_off, src);
     }
 }
 
@@ -942,8 +967,8 @@ fn materialize_int_shifted(
     match place {
         Place::IntReg(r) => Some(Reg(r)),
         Place::Spill(slot) => {
-            let sp_off = spill_slot_sp_offset(frame, slot) + sp_shift as i32;
-            emit_mov_r_mem(code, scratch, Reg::RSP, sp_off);
+            let (sb, sp_off) = spill_slot_addr_shifted(frame, slot, sp_shift);
+            emit_mov_r_mem(code, scratch, sb, sp_off);
             Some(scratch)
         }
         Place::FpReg(r) => {
@@ -1058,19 +1083,23 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
         emit_movapd_xmm_xmm(code, Reg(dst), Reg(src));
     }
     fn fp_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
-        emit_movsd_mem_xmm(code, Reg::RSP, spill_slot_sp_offset(frame, slot), Reg(src));
+        let (sb, off) = spill_slot_addr(frame, slot);
+        emit_movsd_mem_xmm(code, sb, off, Reg(src));
     }
     fn fp_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
-        emit_movsd_xmm_mem(code, Reg(dst), Reg::RSP, spill_slot_sp_offset(frame, slot));
+        let (sb, off) = spill_slot_addr(frame, slot);
+        emit_movsd_xmm_mem(code, Reg(dst), sb, off);
     }
     fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_mov_rr(code, Reg(dst), Reg(src));
     }
     fn int_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8, _base: u8) {
-        emit_mov_mem_r(code, Reg::RSP, spill_slot_sp_offset(frame, slot), Reg(src));
+        let (sb, off) = spill_slot_addr(frame, slot);
+        emit_mov_mem_r(code, sb, off, Reg(src));
     }
     fn int_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
-        emit_mov_r_mem(code, Reg(dst), Reg::RSP, spill_slot_sp_offset(frame, slot));
+        let (sb, off) = spill_slot_addr(frame, slot);
+        emit_mov_r_mem(code, Reg(dst), sb, off);
     }
     fn int_spill_to_spill(
         &self,
@@ -1081,11 +1110,14 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
         stage: u8,
         _hold: u8,
     ) {
-        emit_mov_r_mem(code, Reg(stage), Reg::RSP, spill_slot_sp_offset(frame, src));
-        emit_mov_mem_r(code, Reg::RSP, spill_slot_sp_offset(frame, dst), Reg(stage));
+        let (sb, src_off) = spill_slot_addr(frame, src);
+        let (_, dst_off) = spill_slot_addr(frame, dst);
+        emit_mov_r_mem(code, Reg(stage), sb, src_off);
+        emit_mov_mem_r(code, sb, dst_off, Reg(stage));
     }
     fn int_spill_store_auto(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
-        emit_mov_mem_r(code, Reg::RSP, spill_slot_sp_offset(frame, slot), Reg(src));
+        let (sb, off) = spill_slot_addr(frame, slot);
+        emit_mov_mem_r(code, sb, off, Reg(src));
     }
     fn break_place_cycle(
         &self,
@@ -1657,10 +1689,10 @@ pub(crate) fn emit_function(
                 match dst {
                     Place::IntReg(r) => ext(code, Reg(r)),
                     Place::Spill(slot) => {
-                        let sp_off = spill_slot_sp_offset(frame, slot);
-                        emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, sp_off);
+                        let (sb, sp_off) = spill_slot_addr(frame, slot);
+                        emit_mov_r_mem(code, SCRATCH_R10, sb, sp_off);
                         ext(code, SCRATCH_R10);
-                        emit_mov_mem_r(code, Reg::RSP, sp_off, SCRATCH_R10);
+                        emit_mov_mem_r(code, sb, sp_off, SCRATCH_R10);
                     }
                     Place::None | Place::FpReg(_) => {}
                 }
@@ -1702,10 +1734,6 @@ pub(crate) fn emit_function(
     let body_line_rows = ssa_line_rows.len();
 
     'emit: loop {
-        // Set by `Inst::AllocaInit` (slot != 0) and read by the
-        // matching `Inst::Intrinsic(Alloca)`. Zero means the
-        // function doesn't use alloca.
-        let mut current_alloca_top: u32 = 0;
         // Re-collected each relaxation pass; resolved after the loop.
         block_addr_fixups.clear();
         jump_table_fixups.clear();
@@ -1821,15 +1849,7 @@ pub(crate) fn emit_function(
                         param_plan: &param_plan,
                         name2entpc,
                     };
-                    emit_inst(
-                        &mut cx,
-                        inst,
-                        v,
-                        place,
-                        &fcx,
-                        fixups,
-                        &mut current_alloca_top,
-                    )
+                    emit_inst(&mut cx, inst, v, place, &fcx, fixups)
                 };
                 if !inst_ok {
                     #[cfg(feature = "codegen_test")]
@@ -2402,6 +2422,15 @@ fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
     }
 }
 
+/// Re-establish `rsp = rbp - frame_bytes` in a dynamic-sp frame before
+/// the epilogue's rsp-relative restores. No-op for static frames. Every
+/// return path calls this ahead of [`restore_callee_saved`].
+fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
+    if frame.dynamic_sp {
+        emit_lea_r_mem(code, Reg::RSP, Reg::RBP, -(frame.frame_bytes as i32));
+    }
+}
+
 /// Restore what [`save_callee_saved`] saved, in mirror order. Every return
 /// path routes through this so the saved-region offsets cannot drift.
 fn restore_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
@@ -2763,7 +2792,6 @@ fn emit_inst(
     dst: Place,
     fcx: &FnCtx,
     fixups: &mut Vec<Fixup>,
-    current_alloca_top: &mut u32,
 ) -> bool {
     // Unpack the read-only per-function context into the per-field names the
     // lowering below uses, so the body is unchanged.
@@ -2791,22 +2819,11 @@ fn emit_inst(
     let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
     match inst {
         Inst::AllocaInit(slot) => {
-            // Slot 0: this function doesn't use alloca; emit
-            // nothing. Non-zero: the bookkeeping slot lives at
-            // `[rbp - slot*8]`; the matching `Inst::Intrinsic`
-            // (alloca) reads + writes it to allocate from a
-            // per-frame arena. Initialise the slot with its own
-            // address so `alloca(n)` lands at `address - n`, the
-            // top of the arena reserved by the prologue's
-            // local-slot count.
-            if *slot == 0 {
-                return true;
-            }
-            let top_offset = (*slot as u32) * 8;
-            *current_alloca_top = top_offset;
-            let disp = -(top_offset as i32);
-            emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, disp);
-            emit_mov_mem_r(code, SCRATCH_R10, 0, SCRATCH_R10);
+            // Slot 0: this function doesn't use alloca. Non-zero:
+            // the function moves rsp at runtime; `Frame::dynamic_sp`
+            // carries the fact to the spill addressing, the alloca
+            // intrinsics, and the epilogue. No code either way.
+            let _ = slot;
             true
         }
         Inst::ParamRef { idx, kind } => {
@@ -3121,18 +3138,9 @@ fn emit_inst(
             *ret_slot_local,
             func,
         ),
-        Inst::Intrinsic { kind, args } => emit_intrinsic(
-            code,
-            *kind,
-            args,
-            dst,
-            v,
-            func,
-            alloc,
-            frame,
-            abi,
-            *current_alloca_top,
-        ),
+        Inst::Intrinsic { kind, args } => {
+            emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
+        }
         Inst::InlineAsm { asm, args } => emit_inline_asm(
             code, asm, args, func, alloc, frame, fixups, name2entpc, None,
         ),
@@ -4408,7 +4416,7 @@ fn emit_binop(
     // register under high pressure. Shifts are excluded: x86 reads the
     // shift count from cl, not from a memory operand.
     if let Place::Spill(rhs_slot) = rhs_place {
-        let rhs_off = spill_slot_sp_offset(frame, rhs_slot);
+        let (rhs_base, rhs_off) = spill_slot_addr(frame, rhs_slot);
         let cmp_cc = int_cmp_cc(op);
         let arith = matches!(
             op,
@@ -4419,7 +4427,7 @@ fn emit_binop(
                 return fail("Binop: lhs not int reg / spill");
             };
             if let Some(cc) = cmp_cc {
-                emit_rm(code, Mnem::Cmp, 8, rn, Reg::RSP, rhs_off);
+                emit_rm(code, Mnem::Cmp, 8, rn, rhs_base, rhs_off);
                 if finish_int_cmp(code, v, cc, rd, alloc) {
                     return true;
                 }
@@ -4428,12 +4436,12 @@ fn emit_binop(
                     emit_mov_rr(code, rd, rn);
                 }
                 match op {
-                    BinOp::Add => emit_rm(code, Mnem::Add, 8, rd, Reg::RSP, rhs_off),
-                    BinOp::Sub => emit_rm(code, Mnem::Sub, 8, rd, Reg::RSP, rhs_off),
-                    BinOp::Mul => emit_imul_r_mem(code, rd, Reg::RSP, rhs_off),
-                    BinOp::And => emit_rm(code, Mnem::And, 8, rd, Reg::RSP, rhs_off),
-                    BinOp::Or => emit_rm(code, Mnem::Or, 8, rd, Reg::RSP, rhs_off),
-                    BinOp::Xor => emit_rm(code, Mnem::Xor, 8, rd, Reg::RSP, rhs_off),
+                    BinOp::Add => emit_rm(code, Mnem::Add, 8, rd, rhs_base, rhs_off),
+                    BinOp::Sub => emit_rm(code, Mnem::Sub, 8, rd, rhs_base, rhs_off),
+                    BinOp::Mul => emit_imul_r_mem(code, rd, rhs_base, rhs_off),
+                    BinOp::And => emit_rm(code, Mnem::And, 8, rd, rhs_base, rhs_off),
+                    BinOp::Or => emit_rm(code, Mnem::Or, 8, rd, rhs_base, rhs_off),
+                    BinOp::Xor => emit_rm(code, Mnem::Xor, 8, rd, rhs_base, rhs_off),
                     _ => unreachable!(),
                 }
             }
@@ -4688,11 +4696,14 @@ fn emit_binop_divmod(
     // free unless it already holds the dividend (a spilled lhs).
     enum DivOperand {
         Reg(Reg),
-        Mem(i32),
+        Mem(Reg, i32),
     }
     let div_operand = match rhs_place {
         Place::IntReg(r) if r != Reg::RAX.0 && r != Reg::RDX.0 => DivOperand::Reg(Reg(r)),
-        Place::Spill(slot) => DivOperand::Mem(spill_slot_sp_offset(frame, slot) + pushed_bytes),
+        Place::Spill(slot) => {
+            let (sb, off) = spill_slot_addr_shifted(frame, slot, pushed_bytes as u32);
+            DivOperand::Mem(sb, off)
+        }
         Place::IntReg(r) => {
             // A divisor in rax / rdx must be copied out before the
             // dividend setup overwrites those registers. The copy
@@ -4729,13 +4740,13 @@ fn emit_binop_divmod(
         emit_rr(code, Mnem::Xor, 8, Reg::RDX, Reg::RDX);
         match div_operand {
             DivOperand::Reg(r) => super::encode::emit_unary_r(code, Mnem::Div, 8, r),
-            DivOperand::Mem(off) => super::encode::emit_unary_m(code, Mnem::Div, 8, Reg::RSP, off),
+            DivOperand::Mem(sb, off) => super::encode::emit_unary_m(code, Mnem::Div, 8, sb, off),
         }
     } else {
         super::encode::emit_cqo(code);
         match div_operand {
             DivOperand::Reg(r) => super::encode::emit_unary_r(code, Mnem::Idiv, 8, r),
-            DivOperand::Mem(off) => super::encode::emit_unary_m(code, Mnem::Idiv, 8, Reg::RSP, off),
+            DivOperand::Mem(sb, off) => super::encode::emit_unary_m(code, Mnem::Idiv, 8, sb, off),
         }
     }
     // Capture result into rd before restoring rdx / rax.
@@ -6384,7 +6395,6 @@ fn emit_intrinsic(
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
-    current_alloca_top: u32,
 ) -> bool {
     use crate::c5::op::Intrinsic as I;
     // Byte stride between adjacent variadic arguments in the cursor
@@ -6612,8 +6622,8 @@ fn emit_intrinsic(
                     }
                 }
                 Place::Spill(slot) => {
-                    let sp_off = spill_slot_sp_offset(frame, slot);
-                    emit_mov_r_mem(code, SCRATCH_R11, Reg::RSP, sp_off);
+                    let (sb, sp_off) = spill_slot_addr(frame, slot);
+                    emit_mov_r_mem(code, SCRATCH_R11, sb, sp_off);
                     SCRATCH_R11
                 }
                 _ => return fail("VaArg: &ap not in int reg / spill"),
@@ -6680,12 +6690,14 @@ fn emit_intrinsic(
             true
         }
         I::Alloca => {
-            // alloca(n): bump the per-frame arena's top down by
-            // `n` rounded up to 16 bytes. The bookkeeping slot
-            // lives at `[rbp - current_alloca_top]` (initialised
-            // by the matching `Inst::AllocaInit`); the new top is
-            // returned in `dst`.
-            if current_alloca_top == 0 {
+            // alloca(n): move rsp down by `n` rounded up to 16 bytes
+            // and return the new rsp. The 16-byte rounding keeps rsp
+            // aligned for the call sites that follow; the frame's
+            // spill slots and locals stay reachable through rbp
+            // (`Frame::dynamic_sp`). The storage is reclaimed by the
+            // epilogue's `lea rsp, [rbp - frame_bytes]`, or earlier by
+            // an `AllocaRestore` closing a VLA scope (C99 6.2.4p2).
+            if !frame.dynamic_sp {
                 return fail("Alloca: AllocaInit didn't run for this function");
             }
             if args.len() != 1 {
@@ -6695,77 +6707,55 @@ fn emit_intrinsic(
                 return fail("Alloca: dst not int reg / spill");
             };
             let size_place = place_of(alloc, args[0]);
-            // The op needs three working registers (size, bookkeeping
-            // address, and the result it writes back) all distinct.
-            // r11 carries the bookkeeping address and rd_phys carries
-            // the result; both are reserved outside the allocator banks
-            // (rd_phys is rd for a register dst, else r10 for a spill
-            // dst). The size register must be disjoint from those two.
-            // r10 covers the register-dst case; the spill-dst case
-            // already used r10 for rd_phys, so the size lands in rcx,
-            // preserved with push / pop (rcx is in the caller-saved
-            // pool). The body issues no call, so the transient 8-byte
-            // misalignment is irrelevant.
-            let addr_reg = SCRATCH_R11;
+            // rd_phys receives the result (rd for a register dst, r10
+            // for a spill dst); the rounded size rides r11. Both
+            // scratches sit outside the allocator banks, and rd is
+            // never r11, so size and result stay distinct.
             let rd_phys = if matches!(dst, Place::Spill(_)) {
                 SCRATCH_R10
             } else {
                 rd
             };
-            let size_reg = if rd_phys.0 == SCRATCH_R10.0 {
-                Reg::RCX
-            } else {
-                SCRATCH_R10
-            };
-            let preserve_size_reg = size_reg.0 == Reg::RCX.0;
-            if preserve_size_reg {
-                emit_push_r(code, size_reg);
-            }
-            // After a `push` the spill slots sit 8 bytes higher
-            // relative to rsp, so a spilled size is read through the
-            // shifted offset (mirrors the divmod `DivOperand::Mem`
-            // adjustment); register / immediate sizes are unaffected.
-            let n = match size_place {
-                Place::Spill(slot) if preserve_size_reg => {
-                    let off = spill_slot_sp_offset(frame, slot) + 8;
-                    emit_mov_r_mem(code, size_reg, Reg::RSP, off);
-                    size_reg
-                }
-                _ => match materialize_int(code, size_place, size_reg, frame) {
-                    Some(r) => r,
-                    None => return fail("Alloca: size not int reg / spill / fp"),
-                },
+            let size_reg = SCRATCH_R11;
+            let Some(n) = materialize_int(code, size_place, size_reg, frame) else {
+                return fail("Alloca: size not int reg / spill / fp");
             };
             if n.0 != size_reg.0 {
                 emit_mov_rr(code, size_reg, n);
             }
             super::encode::emit_ri(code, Mnem::Add, 8, size_reg, 15);
             super::encode::emit_ri(code, Mnem::And, 8, size_reg, -16);
-            let disp = -(current_alloca_top as i32);
-            emit_lea_r_mem(code, addr_reg, Reg::RBP, disp);
-            emit_mov_r_mem(code, rd_phys, addr_reg, 0);
+            // rd_phys = rsp - rounded_size, the final rsp value.
+            emit_mov_rr(code, rd_phys, Reg::RSP);
             super::encode::emit_rr(code, Mnem::Sub, 8, rd_phys, size_reg);
-            // Trap on arena underflow: a bumped pointer below the
-            // per-frame arena floor (addr_reg - ALLOCA_ARENA_SLOTS*8)
-            // would scribble the saved-register area, so fault
-            // deterministically rather than corrupt the stack. TODO:
-            // lower alloca to a real SP decrement for unbounded sizes.
-            let arena_bytes = (crate::c5::op::ALLOCA_ARENA_SLOTS * 8) as i32;
-            emit_lea_r_mem(code, size_reg, addr_reg, -arena_bytes);
-            super::encode::emit_rr(code, Mnem::Cmp, 8, rd_phys, size_reg);
-            super::encode::emit_jcc_rel8(code, super::encode::Cc::Ae, 2);
-            code.push(0x0F);
-            code.push(0x0B); // ud2
-            emit_mov_mem_r(code, addr_reg, 0, rd_phys);
-            if preserve_size_reg {
-                emit_pop_r(code, size_reg);
+            if abi.stack_probe {
+                // Windows commits stack on demand behind a guard page:
+                // walk rsp down page by page, touching each, before
+                // committing the final value (mirrors the prologue's
+                // probe loop for frames of one page or more).
+                const PAGE: i32 = 4096;
+                super::encode::emit_shift_ri(code, Mnem::Shr, 8, size_reg, 12);
+                super::encode::emit_rr(code, Mnem::Test, 8, size_reg, size_reg);
+                super::encode::emit_jcc_rel32(code, Cc::E, 0);
+                let skip_at = code.len() - 4;
+                let loop_start = code.len();
+                emit_sub_rsp_imm32(code, PAGE as u32);
+                emit_mov_mem_r(code, Reg::RSP, 0, size_reg);
+                super::encode::emit_ri(code, Mnem::Sub, 8, size_reg, 1);
+                super::encode::emit_jcc_rel32(code, Cc::Ne, 0);
+                let back_at = code.len() - 4;
+                let back = (loop_start as i64 - code.len() as i64) as i32;
+                code[back_at..back_at + 4].copy_from_slice(&back.to_le_bytes());
+                let skip = (code.len() as i64 - (skip_at + 4) as i64) as i32;
+                code[skip_at..skip_at + 4].copy_from_slice(&skip.to_le_bytes());
             }
+            emit_mov_rr(code, Reg::RSP, rd_phys);
             spill_dst_to_slot(code, dst, rd_phys, frame);
             true
         }
         I::AllocaSave => {
-            // Read the arena top for a VLA block snapshot (C99 6.7.6.2).
-            if current_alloca_top == 0 {
+            // Snapshot rsp for a VLA block (C99 6.2.4p2).
+            if !frame.dynamic_sp {
                 return fail("AllocaSave: AllocaInit didn't run for this function");
             }
             let Some(rd) = int_or_spill_dst(dst) else {
@@ -6776,13 +6766,14 @@ fn emit_intrinsic(
             } else {
                 rd
             };
-            emit_mov_r_mem(code, rd_phys, Reg::RBP, -(current_alloca_top as i32));
+            emit_mov_rr(code, rd_phys, Reg::RSP);
             spill_dst_to_slot(code, dst, rd_phys, frame);
             true
         }
         I::AllocaRestore => {
-            // Restore the arena top on VLA block exit.
-            if current_alloca_top == 0 {
+            // Restore the saved rsp on VLA block exit, reclaiming the
+            // block's VLA storage (per iteration for a loop body).
+            if !frame.dynamic_sp {
                 return fail("AllocaRestore: AllocaInit didn't run for this function");
             }
             if args.len() != 1 {
@@ -6792,7 +6783,7 @@ fn emit_intrinsic(
             let Some(v) = materialize_int(code, v_place, SCRATCH_R10, frame) else {
                 return fail("AllocaRestore: arg not int reg / spill / fp");
             };
-            emit_mov_mem_r(code, Reg::RBP, -(current_alloca_top as i32), v);
+            emit_mov_rr(code, Reg::RSP, v);
             true
         }
         I::SetjmpAArch64 | I::LongjmpAArch64 => {
@@ -7565,6 +7556,12 @@ fn detect_tail_call<'a>(
     if func.insts.iter().any(|i| matches!(i, Inst::LocalAddr(_))) {
         return None;
     }
+    // An alloca / VLA frame keeps its runtime allocations live until
+    // the function returns; a tail jmp would tear them down under the
+    // callee (same reason `LocalAddr` disqualifies above).
+    if super::ssa::emit_common::uses_dynamic_alloca(func) {
+        return None;
+    }
     Some((v as usize, target_pc, args))
 }
 
@@ -7587,6 +7584,10 @@ fn emit_tail_call(
     func: &FunctionSsa,
     fp_arg_mask: u32,
 ) -> bool {
+    debug_assert!(
+        !frame.dynamic_sp,
+        "detect_tail_call rejects dynamic-sp frames"
+    );
     // Marshal arguments into their ABI-prescribed registers. The
     // caller-saved arg-reg window is disjoint from `alloc.gpr_used`
     // (only callee-saved regs land there), so the epilogue's
@@ -7697,11 +7698,12 @@ fn emit_return(
                 }
             }
             Place::Spill(slot) => {
-                let sp_off = spill_slot_sp_offset(frame, slot);
-                super::encode::emit_mov_r_mem(code, Reg::RCX, Reg::RSP, sp_off);
+                let (sb, sp_off) = spill_slot_addr(frame, slot);
+                super::encode::emit_mov_r_mem(code, Reg::RCX, sb, sp_off);
             }
             _ => {}
         }
+        restore_dynamic_sp(code, frame);
         // Restore callee-saved GPRs and saved non-volatile xmm scratch
         // (the prologue places xmm at the bottom, GPRs above by
         // saved_fpr_bytes). rcx already holds the struct address and is
@@ -7759,8 +7761,8 @@ fn emit_return(
             }
             Place::IntReg(_) => true,
             Place::Spill(slot) => {
-                let sp_off = spill_slot_sp_offset(frame, slot);
-                super::encode::emit_mov_r_mem(code, Reg::RCX, Reg::RSP, sp_off);
+                let (sb, sp_off) = spill_slot_addr(frame, slot);
+                super::encode::emit_mov_r_mem(code, Reg::RCX, sb, sp_off);
                 true
             }
             _ => false,
@@ -7780,6 +7782,7 @@ fn emit_return(
     }
     // Restore callee-saved GPRs and saved non-volatile xmm scratch
     // (mirror of the prologue's saves: xmm at the bottom, GPRs above).
+    restore_dynamic_sp(code, frame);
     restore_callee_saved(code, alloc, frame);
     if staged_int {
         emit_mov_rr(code, Reg::RAX, Reg::RCX);
@@ -7792,8 +7795,8 @@ fn emit_return(
                 emit_mov_rr(code, Reg::RAX, Reg(r));
             }
             Place::Spill(slot) => {
-                let sp_off = spill_slot_sp_offset(frame, slot);
-                super::encode::emit_mov_r_mem(code, Reg::RAX, Reg::RSP, sp_off);
+                let (sb, sp_off) = spill_slot_addr(frame, slot);
+                super::encode::emit_mov_r_mem(code, Reg::RAX, sb, sp_off);
             }
             _ => {}
         }

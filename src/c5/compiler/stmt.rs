@@ -777,7 +777,7 @@ impl Compiler {
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
         // C99 6.2.4p2: a VLA declared directly in this block has its
         // storage reclaimed on block exit. Track whether any appears so
-        // the block is bracketed with the alloca-arena save / restore.
+        // the block is bracketed with the stack save / restore.
         let mut block_has_vla = false;
         while self.lex.tk != '}' {
             // C23 6.7.13 / 6.8: an attribute-specifier-sequence may
@@ -873,9 +873,9 @@ impl Compiler {
             }
         }
         self.cleanup_scopes.pop();
-        // C99 6.2.4p2: bracket a VLA-declaring block so the arena top
-        // is snapshotted on entry and restored on exit, reclaiming the
-        // VLA storage (per iteration when the block is a loop body).
+        // C99 6.2.4p2: bracket a VLA-declaring block so the stack
+        // pointer is snapshotted on entry and restored on exit,
+        // reclaiming the VLA storage (per iteration for a loop body).
         if block_has_vla {
             let save_slot = self.reserve_slots(1);
             let pos = self.ast_src_pos();

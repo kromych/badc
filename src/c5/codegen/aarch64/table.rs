@@ -102,6 +102,15 @@ pub(crate) enum Opnd {
         /// forms leave it false.
         pre: bool,
     },
+    /// A register-offset memory reference `[base, Rm, <option> {#shift}]`. The
+    /// `option` is the 3-bit extend selector (UXTW 2, LSL/UXTX 3, SXTW 6,
+    /// SXTX 7); `shift` is the written scale amount, `None` when absent.
+    MemReg {
+        base: u8,
+        index: u8,
+        option: u8,
+        shift: Option<u8>,
+    },
     /// A 4-bit condition code for the conditional-select forms.
     Cond(u8),
 }
@@ -232,6 +241,45 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => return Err(String::from("inline asm: bad mrs/msr operands")),
         };
         return Ok(base | ((field as u32) << 5) | (rt as u32 & 31));
+    }
+    // Load / store with a register offset: `ldr Xt, [Xn, Rm{, <ext> #s}]`. A
+    // written shift must be zero or the access-size log2 (the S bit selects the
+    // latter); anything else is rejected, matching the reference assembler.
+    if let (
+        "ldr" | "str",
+        [
+            Opnd::Reg { num: rt, is64 },
+            Opnd::MemReg {
+                base,
+                index,
+                option,
+                shift,
+            },
+        ],
+    ) = (mnemonic, ops)
+    {
+        let access_log2 = if *is64 { 3u8 } else { 2 };
+        let s = match shift {
+            None | Some(0) => 0u32,
+            Some(a) if *a == access_log2 => 1,
+            Some(_) => {
+                return Err(String::from(
+                    "inline asm: ldr/str register-offset shift must match the access size",
+                ));
+            }
+        };
+        let base_word = match (mnemonic, is64) {
+            ("ldr", true) => 0xF860_0800u32,
+            ("ldr", false) => 0xB860_0800,
+            ("str", true) => 0xF820_0800,
+            _ => 0xB820_0800,
+        };
+        return Ok(base_word
+            | ((*index as u32) << 16)
+            | ((*option as u32) << 13)
+            | (s << 12)
+            | ((*base as u32) << 5)
+            | (*rt as u32));
     }
     // Load / store with an immediate offset: `ldr Xt, [Xn, #off]` etc. The
     // access width comes from the register operand (X vs W).

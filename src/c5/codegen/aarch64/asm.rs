@@ -41,6 +41,15 @@ pub(crate) enum AsmOpndA64 {
     /// pre-index writeback form `[base, #off]!`; post-index (`[base], #off`)
     /// is the separate trailing-immediate operand shape the encoder folds in.
     Mem { base: MemBase, off: i64, pre: bool },
+    /// A register-offset memory reference `[base, index, <ext> {#shift}]`. The
+    /// `option` is the resolved 3-bit extend selector; `shift` is the written
+    /// scale amount, checked against the access size by the encoder.
+    MemReg {
+        base: MemBase,
+        index: MemBase,
+        option: u8,
+        shift: Option<u8>,
+    },
     /// A condition code (`eq`, `ne`, ...) as its 4-bit encoding, for the
     /// conditional-select forms.
     Cond(u8),
@@ -238,18 +247,44 @@ fn split_operands(rest: &str) -> Vec<&str> {
 /// writeback (`[base, #off]!`).
 fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
     let parts = split_operands(inner);
-    if parts.is_empty() || parts.len() > 2 {
+    if parts.is_empty() || parts.len() > 3 {
         return Err(format!("inline asm: bad memory operand `[{inner}]`"));
     }
-    let base = match parse_operand(parts[0])? {
-        AsmOpndA64::Ref { idx, .. } => MemBase::Ref(idx),
-        AsmOpndA64::Reg { num, .. } => MemBase::Reg(num),
-        _ => {
+    let mem_base = |tok: &str| match parse_operand(tok) {
+        Ok(AsmOpndA64::Ref { idx, .. }) => Ok(MemBase::Ref(idx)),
+        Ok(AsmOpndA64::Reg { num, .. }) => Ok(MemBase::Reg(num)),
+        _ => Err(format!("inline asm: expected a register `[{inner}]`")),
+    };
+    let base = mem_base(parts[0])?;
+    // A second part that is not a `#immediate` is a register index: the
+    // register-offset form `[base, Rm{, <extend> #s}]`.
+    if parts.len() >= 2 && !parts[1].starts_with('#') {
+        if pre {
             return Err(format!(
-                "inline asm: memory base must be a register `[{inner}]`"
+                "inline asm: register offset has no writeback `[{inner}]`"
             ));
         }
-    };
+        let (index, idx_is64) = match parse_operand(parts[1])? {
+            AsmOpndA64::Reg { num, is64 } => (MemBase::Reg(num), is64),
+            AsmOpndA64::Ref { idx, is64 } => (MemBase::Ref(idx), is64.unwrap_or(true)),
+            _ => return Err(format!("inline asm: bad index register `{}`", parts[1])),
+        };
+        let (option, shift) = if parts.len() == 3 {
+            parse_extend(parts[2], idx_is64)?
+        } else if idx_is64 {
+            (0b011, None) // LSL / UXTX #0
+        } else {
+            return Err(format!(
+                "inline asm: a 32-bit index needs uxtw/sxtw `[{inner}]`"
+            ));
+        };
+        return Ok(AsmOpndA64::MemReg {
+            base,
+            index,
+            option,
+            shift,
+        });
+    }
     let off = if parts.len() == 2 {
         parts[1]
             .strip_prefix('#')
@@ -259,6 +294,36 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
         0
     };
     Ok(AsmOpndA64::Mem { base, off, pre })
+}
+
+/// Parse the index extend of a register-offset memory operand (`<kw> {#amt}`).
+/// The keyword resolves to the 3-bit option and must match the index width:
+/// `uxtw`/`sxtw` take a 32-bit index, `lsl`/`uxtx`/`sxtx` a 64-bit one.
+fn parse_extend(spec: &str, idx_is64: bool) -> Result<(u8, Option<u8>), String> {
+    let mut it = spec.split_ascii_whitespace();
+    let kw = it.next().unwrap_or("");
+    let (option, want64) = match kw {
+        "lsl" | "uxtx" => (0b011u8, true),
+        "sxtx" => (0b111, true),
+        "uxtw" => (0b010, false),
+        "sxtw" => (0b110, false),
+        _ => return Err(format!("inline asm: bad index extend `{kw}`")),
+    };
+    if want64 != idx_is64 {
+        return Err(format!(
+            "inline asm: extend `{kw}` does not match the index width"
+        ));
+    }
+    let shift = match it.next() {
+        Some(a) => Some(
+            a.strip_prefix('#')
+                .and_then(parse_int)
+                .filter(|v| (0..=4).contains(v))
+                .ok_or_else(|| format!("inline asm: bad index shift `{a}`"))? as u8,
+        ),
+        None => None,
+    };
+    Ok((option, shift))
 }
 
 /// Parse one operand token (already trimmed).
@@ -642,6 +707,41 @@ mod tests {
                 pre: true,
             }
         );
+    }
+
+    #[test]
+    fn parse_register_offset_operands() {
+        // `[Xn, Rm]` is a register offset; a bare 64-bit index is LSL/UXTX #0.
+        let insns = parse_template(b"ldr x0, [x1, x2]").unwrap();
+        assert_eq!(
+            insns[0].operands[1],
+            AsmOpndA64::MemReg {
+                base: MemBase::Reg(1),
+                index: MemBase::Reg(2),
+                option: 0b011,
+                shift: None,
+            }
+        );
+        // A scaling shift and a 32-bit index with a sign/zero extend.
+        let insns = parse_template(b"ldr x0, [x1, x2, lsl #3]; ldr x0, [x1, w2, sxtw]").unwrap();
+        assert_eq!(
+            insns[0].operands[1],
+            AsmOpndA64::MemReg {
+                base: MemBase::Reg(1),
+                index: MemBase::Reg(2),
+                option: 0b011,
+                shift: Some(3),
+            }
+        );
+        assert!(matches!(
+            insns[1].operands[1],
+            AsmOpndA64::MemReg { option: 0b110, .. }
+        ));
+        // A bare 32-bit index is ambiguous without an extend; the extend must
+        // match the index width; and the writeback form does not apply.
+        assert!(parse_template(b"ldr x0, [x1, w2]").is_err());
+        assert!(parse_template(b"ldr x0, [x1, x2, uxtw]").is_err());
+        assert!(parse_template(b"ldr x0, [x1, x2]!").is_err());
     }
 
     #[test]

@@ -136,6 +136,30 @@ fn load_store_immediate() {
 }
 
 #[test]
+fn load_store_register_offset() {
+    // ldr/str Xt, [Xn, Rm{, <ext> #s}]: option 3 = LSL/UXTX, 6 = SXTW, 2 = UXTW.
+    // A shift selects the S bit only at the access-size log2 (3 for X, 2 for W).
+    let mr = |index: u8, option: u8, shift: Option<u8>| Opnd::MemReg {
+        base: 1,
+        index,
+        option,
+        shift,
+    };
+    assert_eq!(enc("ldr", &[x(0), mr(2, 0b011, None)]), 0xF8626820);
+    assert_eq!(enc("ldr", &[x(0), mr(2, 0b011, Some(3))]), 0xF8627820);
+    assert_eq!(enc("str", &[x(0), mr(2, 0b011, None)]), 0xF8226820);
+    assert_eq!(enc("str", &[x(0), mr(2, 0b011, Some(3))]), 0xF8227820);
+    assert_eq!(enc("ldr", &[w(0), mr(2, 0b011, None)]), 0xB8626820);
+    assert_eq!(enc("ldr", &[w(0), mr(2, 0b011, Some(2))]), 0xB8627820);
+    assert_eq!(enc("ldr", &[x(0), mr(2, 0b110, None)]), 0xF862C820); // sxtw
+    assert_eq!(enc("ldr", &[x(0), mr(2, 0b110, Some(3))]), 0xF862D820);
+    assert_eq!(enc("ldr", &[x(0), mr(2, 0b010, None)]), 0xF8624820); // uxtw
+    assert_eq!(enc("str", &[w(0), mr(2, 0b010, Some(2))]), 0xB8225820);
+    // A shift that is neither zero nor the access-size log2 is rejected.
+    assert!(encode("ldr", &[x(0), mr(2, 0b011, Some(2))]).is_err());
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

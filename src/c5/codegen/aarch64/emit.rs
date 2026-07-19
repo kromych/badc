@@ -2186,6 +2186,28 @@ fn emit_inline_asm_aarch64(
                 };
                 Opnd::Mem { base, off, pre }
             }
+            AsmOpndA64::MemReg {
+                base,
+                index,
+                option,
+                shift,
+            } => {
+                let reg_of = |b: super::asm::MemBase| match b {
+                    super::asm::MemBase::Reg(n) => Some(n),
+                    super::asm::MemBase::Ref(idx) => resolve_ref(idx),
+                };
+                let (Some(base), Some(index)) = (reg_of(base), reg_of(index)) else {
+                    return Err(String::from(
+                        "aarch64 inline asm: memory operand is not a register",
+                    ));
+                };
+                Opnd::MemReg {
+                    base,
+                    index,
+                    option,
+                    shift,
+                }
+            }
             AsmOpndA64::Cond(c) => Opnd::Cond(c),
             AsmOpndA64::Label { .. } => {
                 return Err(String::from(

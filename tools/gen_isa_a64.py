@@ -101,6 +101,10 @@ DB_FIXES = {
         (None, "01111000|110|offS:9|00|Rn|Rd"),
     ("ldursh Xd, [Xn|SP, #offS]", "01111000|110|offS:9|00|Rn|Rd"):
         (None, "01111000|100|offS:9|00|Rn|Rd"),
+    # prfm's immediate offset is scaled by 8 like the doubleword loads; the
+    # database ships the row without the multiplier.
+    ("prfm #prf_op, [Xn|SP, #offZ]", "11111001|10|offZ:12|Rn|prf_op:5"):
+        ("prfm #prf_op, [Xn|SP, #offZ*8]", None),
 }
 
 # The store-form atomic aliases (ST<op> = LD<op> with the result discarded)
@@ -176,7 +180,7 @@ REG_FIELD = {'d': 'Rd', 'n': 'Rn', 'm': 'Rm', 'a': 'Ra', 's': 'Rs',
              't': 'Rt', 't2': 'Rt2', 'd2': 'Rd2', 's2': 'Rs2'}
 
 
-def classify(heads, toks, op, im):
+def classify(heads, toks, op, im, scaled_wb=False):
     """Map one row's written operands onto the field model.
     -> ('ok', ops, fields, base) or ('residual', reason)."""
     if 'mov' in heads:
@@ -213,35 +217,66 @@ def classify(heads, toks, op, im):
                 rd_width = w
             i += 1
             continue
-        if (mm := re.fullmatch(r'\[Xn(?:\|SP)?(?:, #(\w+)(?:\*(\d+))?)?\]', t)):
+        if (mm := re.fullmatch(
+                r'\[Xn(?:\|SP)?(?:, #(\w+)(?:\*(\d+))?)?\]([!@]?)', t)):
             # A memory reference: the base feeds Rn, an optional immediate
-            # offset feeds its named field. The unscaled/unprivileged forms
-            # take a two's-complement offset (`#offS`, signed); the byte
-            # unsigned form takes `#offZ`. A `*N` multiplier scales the written
-            # byte offset (the halfword/word loads: `#offZ*2`, `#offZ*4`).
+            # offset feeds its named field. `#offS` is a two's-complement
+            # offset, `#offZ` unsigned; a `*N` multiplier scales the written
+            # byte offset. A `!` suffix is the pre-index writeback form; `@`
+            # the post-index form, whose offset is a trailing written operand.
             fv = fl.get('Rn')
             if fv is None or fv[0] != 5:
                 return ('residual', 'memory base field Rn not a 5-bit field')
+            mode = mm.group(3)
             consumed.add('Rn')
-            ops.append('Mem')
+            ops.append('MemPre' if mode == '!' else 'Mem')
             fields.append(f'Reg {{ op: {i}, shift: {fv[1]} }}')
-            if (offname := mm.group(1)) is not None:
+            offname = mm.group(1)
+            if mode and offname is None:
+                return ('residual', 'writeback form without an offset field')
+            if mode == '@' and i != len(toks) - 1:
+                return ('residual', 'post-index memory operand not last')
+            if offname is not None:
                 ov = fl.get(offname)
                 if ov is None:
                     return ('residual', f'memory offset #{offname} has no field')
                 consumed.add(offname)
-                scale = mm.group(2)
-                if scale and int(scale) > 1:
-                    # A scaled offset in the database is always the unsigned
-                    # form; the signed scaled offsets are the pre/post-index
-                    # rows, which carry a `@`/`!` suffix and are handled apart.
+                scale = int(mm.group(2) or 1)
+                if mode and not scaled_wb:
+                    # The one-row-per-mode pre/post loads write the offset
+                    # with the access-size multiplier, but the imm9 field
+                    # holds the raw byte offset (assembler-verified). The
+                    # `{@}{!}`-expanded pair/tag rows scale in every mode.
+                    scale = 1
+                opi = i + 1 if mode == '@' else i
+                signed = offname.endswith('S')
+                if scale > 1:
+                    kind = 'ScaledSImm' if signed else 'ScaledUImm'
                     fields.append(
-                        f'ScaledUImm {{ op: {i}, shift: {ov[1]}, '
+                        f'{kind} {{ op: {opi}, shift: {ov[1]}, '
                         f'width: {ov[0]}, scale: {scale} }}')
                 else:
-                    kind = 'SImm' if offname.endswith('S') else 'UImm'
+                    kind = 'SImm' if signed else 'UImm'
                     fields.append(
-                        f'{kind} {{ op: {i}, shift: {ov[1]}, width: {ov[0]} }}')
+                        f'{kind} {{ op: {opi}, shift: {ov[1]}, width: {ov[0]} }}')
+            if mode == '@':
+                ops.append('Imm')
+                i += 1
+            i += 1
+            continue
+        if re.fullmatch(r'\[Xn(?:\|SP)?, Rm, '
+                        r'\{uxtw\|lsl\|sxtw\|sxtx #n(?:\*\d+)?\}\]', t):
+            # A register-offset memory reference: Rm/option/S at the class
+            # positions; the S bit's valid shift amount is the access-size
+            # log2, which this encoding class carries in bits 31:30.
+            sname = 's' if 's' in fl else 'n'
+            if (fl.get('Rn') != (5, 5) or fl.get('Rm') != (5, 16)
+                    or fl.get('option') != (3, 13) or fl.get(sname) != (1, 12)):
+                return ('residual', 'register-offset fields not at the class positions')
+            consumed.update(('Rn', 'Rm', 'option', sname))
+            ops.append('MemReg')
+            fields.append(f'Reg {{ op: {i}, shift: 5 }}')
+            fields.append(f'MemRegIdx {{ op: {i}, sl2: {(base >> 30) & 3} }}')
             i += 1
             continue
         if t0 == '#sysreg':
@@ -294,7 +329,9 @@ def classify(heads, toks, op, im):
                 i += 1
                 continue
             return ('residual', 'shift-alias fields not immr/imms shaped')
-        if (m := re.fullmatch(r'#(\w+)', t0)) and (not im or bfmm):
+        # ImmPRF tags prfm's prefetch-op slot, a raw 5-bit code.
+        if (m := re.fullmatch(r'#(\w+)', t0)) and (
+                not im or bfmm or im.startswith('ImmPRF')):
             name = m.group(1)
             if name not in fl:
                 return ('residual', f'immediate token {t0} has no matching field')
@@ -322,6 +359,19 @@ def classify(heads, toks, op, im):
     return ('ok', ops, fields, base)
 
 
+def expand_wb(inst, op):
+    """A `]{@}{!}` row covers the offset, pre-, and post-index modes in one
+    entry, with the mode in the `!post` / `W` encoding tokens; concretize each
+    mode. Unlike the one-row-per-mode loads, these rows (the pairs and the tag
+    stores) scale the written offset in every mode -> scaled_wb."""
+    if '{@}{!}' not in inst:
+        yield inst, op, False
+        return
+    for suffix, post, w in (('', '1', '0'), ('!', '1', '1'), ('@', '0', '1')):
+        yield (inst.replace('{@}{!}', suffix),
+               op.replace('!post', post).replace('|W|', f'|{w}|'), True)
+
+
 def load_rows(db):
     rows = []
     for g in json.load(open(db))['instructions']:
@@ -332,18 +382,19 @@ def load_rows(db):
             if inst in EXCLUDED_ROWS or UNDEFINED_ROW(inst):
                 continue
             fi, fo = DB_FIXES.get((inst, op), (None, None))
-            rows.append((fi or inst, fo or op, it.get('imm', '')))
+            for einst, eop, scaled_wb in expand_wb(fi or inst, fo or op):
+                rows.append((einst, eop, it.get('imm', ''), scaled_wb))
     return rows
 
 
 def catalogue(rows, residuals=None):
     """Classify every row; -> {(mnemonic, ops-tuple): (base, fields, inst)}."""
     forms = {}
-    for inst, op, im in rows:
+    for inst, op, im, scaled_wb in rows:
         headpart, _, rest = inst.partition(' ')
         toks = tuple(split_ops(rest)) if rest else ()
         heads = headpart.split('|')
-        r = classify(heads, toks, op, im)
+        r = classify(heads, toks, op, im, scaled_wb)
         if r[0] == 'residual':
             if residuals is not None:
                 sig = ' '.join(t.split('|')[0] if not t.startswith('{') else t

@@ -133,6 +133,28 @@ fn load_store_immediate() {
     assert_eq!(enc("ldr", &[w(0), pre(1, 4)]), 0xB8404C20);
     assert_eq!(enc("ldr", &[x(0), off0(1), Opnd::Imm(16)]), 0xF8410420); // post
     assert!(encode("ldr", &[x(0), pre(1, 256)]).is_err()); // > imm9
+    // An offset the scaled form cannot represent falls back to the unscaled
+    // simm9 sibling, exactly as the assembler selects; where neither fits it
+    // is an error. Words match the assembler at the selection boundaries.
+    let mem = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: false,
+    };
+    assert_eq!(enc("ldr", &[x(0), mem(1, -8)]), 0xF85F8020); // ldur
+    assert_eq!(enc("ldr", &[x(0), mem(1, 4)]), 0xF8404020); // ldur (misaligned)
+    assert_eq!(enc("ldr", &[x(0), mem(1, 255)]), 0xF84FF020); // ldur (max imm9)
+    assert_eq!(enc("ldr", &[x(0), mem(1, 256)]), 0xF9408020); // scaled again
+    assert_eq!(enc("ldr", &[x(0), mem(1, 32760)]), 0xF97FFC20); // max scaled
+    assert_eq!(enc("ldrsw", &[x(0), mem(1, -4)]), 0xB89FC020); // ldursw
+    assert_eq!(enc("ldrsh", &[x(0), mem(1, 1)]), 0x78801020); // ldursh
+    assert_eq!(enc("strh", &[w(0), mem(1, 255)]), 0x780FF020); // sturh
+    assert!(encode("ldr", &[x(0), mem(1, 257)]).is_err()); // fits neither
+    assert!(encode("ldr", &[x(0), mem(1, 32768)]).is_err());
+    assert!(encode("ldr", &[x(0), mem(1, -257)]).is_err());
+    // The explicit unscaled/unprivileged mnemonics stay as written.
+    assert_eq!(enc("ldur", &[x(0), mem(1, 8)]), 0xF8408020);
+    assert_eq!(enc("prfum", &[Opnd::Imm(0), mem(1, -8)]), 0xF89F8020);
 }
 
 #[test]
@@ -167,29 +189,52 @@ fn load_store_register_offset() {
     assert_eq!(enc("ldrsh", &[x(0), mr(2, 0b011, None)]), 0x78A26820);
     assert_eq!(enc("ldrsw", &[x(0), mr(2, 0b011, None)]), 0xB8A26820);
     assert_eq!(enc("ldrsw", &[x(0), mr(2, 0b011, Some(2))]), 0xB8A27820);
-    // A byte access has no scaling shift (log2 zero): a #1 shift is rejected.
+    // A byte access has no scaling shift (log2 zero): a #1 shift is rejected,
+    // and a written `lsl #0` is the S = 1 encoding, as the assembler emits.
     assert!(encode("ldrb", &[w(0), mr(2, 0b011, Some(1))]).is_err());
+    assert_eq!(enc("ldrb", &[w(0), mr(2, 0b011, Some(0))]), 0x38627820);
+    // For wider accesses a written #0 keeps S = 0.
+    assert_eq!(enc("ldrh", &[w(0), mr(2, 0b011, Some(0))]), 0x78626820);
 }
 
 #[test]
-fn catalogue_load_rejects_pre_index_writeback() {
-    // The catalogue carries only offset forms. A pre-index `[Xn, #off]!` operand
-    // must not match one and silently drop the writeback (the subword loads have
-    // no writeback form), so it is a clear error rather than a miscompile.
-    let offset = |base: u8, off: i64| Opnd::Mem {
-        base,
-        off,
-        pre: false,
-    };
-    let writeback = |base: u8, off: i64| Opnd::Mem {
+fn load_store_writeback() {
+    // Pre-index `[Xn, #off]!` and post-index `[Xn], #off` are distinct
+    // catalogue shapes taking an unscaled simm9, across every access size.
+    // Words match the assembler.
+    let pre = |base: u8, off: i64| Opnd::Mem {
         base,
         off,
         pre: true,
     };
-    assert!(encode("ldrb", &[w(0), offset(1, 4)]).is_ok());
-    assert!(encode("ldrb", &[w(0), writeback(1, 4)]).is_err());
-    assert!(encode("ldrh", &[w(0), writeback(1, 4)]).is_err());
-    assert!(encode("strh", &[w(0), writeback(1, 2)]).is_err());
+    let post0 = |base: u8| Opnd::Mem {
+        base,
+        off: 0,
+        pre: false,
+    };
+    assert_eq!(enc("ldrb", &[w(0), pre(1, 4)]), 0x38404C20);
+    assert_eq!(enc("ldrh", &[w(0), pre(1, 4)]), 0x78404C20);
+    assert_eq!(enc("strh", &[w(0), pre(1, 2)]), 0x78002C20);
+    assert_eq!(enc("strb", &[w(0), pre(1, 255)]), 0x380FFC20);
+    assert_eq!(enc("ldrsw", &[x(0), pre(1, -8)]), 0xB89F8C20);
+    assert_eq!(enc("str", &[w(0), pre(1, -256)]), 0xB8100C20);
+    assert_eq!(enc("ldrsb", &[x(0), post0(1), Opnd::Imm(-4)]), 0x389FC420);
+    assert_eq!(enc("ldrsh", &[w(0), post0(1), Opnd::Imm(6)]), 0x78C06420);
+    assert_eq!(enc("ldrb", &[w(0), post0(1), Opnd::Imm(-256)]), 0x38500420);
+    assert_eq!(enc("strb", &[w(0), post0(1), Opnd::Imm(17)]), 0x38011420);
+    assert_eq!(enc("ldr", &[w(0), post0(1), Opnd::Imm(255)]), 0xB84FF420);
+    // A post-index offset must ride the trailing operand: an offset inside the
+    // brackets has no encoding (it would be silently dropped otherwise).
+    let mem = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: false,
+    };
+    assert!(encode("ldr", &[x(0), mem(1, 8), Opnd::Imm(16)]).is_err());
+    // A base-only shape rejects a nonzero offset outright (ldar has no
+    // offset field).
+    assert!(encode("ldar", &[w(0), mem(1, 8)]).is_err());
+    assert!(encode("ldar", &[w(0), mem(1, 0)]).is_ok());
 }
 
 #[test]
@@ -1436,6 +1481,8 @@ mod differential {
         f.fields.iter().copied().find(|fl| match *fl {
             Field::UImm { op, .. }
             | Field::SImm { op, .. }
+            | Field::ScaledUImm { op, .. }
+            | Field::ScaledSImm { op, .. }
             | Field::LogicalImm { op, .. }
             | Field::MovImm { op }
             | Field::MovHw { op }
@@ -1447,12 +1494,14 @@ mod differential {
     }
 
     /// A representative in-range offset for a memory slot that carries one
-    /// (negative for the signed imm9 forms, positive for the byte unsigned
-    /// form), or None for a base-only memory operand.
+    /// (negative for the signed forms, positive for the unsigned ones, scaled
+    /// where the field scales), or None for a base-only memory operand.
     fn mem_off(f: &Form, idx: usize) -> Option<i64> {
         f.fields.iter().find_map(|fl| match *fl {
             Field::SImm { op, .. } if op as usize == idx => Some(-8),
             Field::UImm { op, .. } if op as usize == idx => Some(8),
+            Field::ScaledSImm { op, scale, .. } if op as usize == idx => Some(-(scale as i64)),
+            Field::ScaledUImm { op, scale, .. } if op as usize == idx => Some(scale as i64),
             _ => None,
         })
     }
@@ -1474,6 +1523,17 @@ mod differential {
                 // Two's-complement field: exercise the extremes and a negative.
                 let bound = 1i64 << (width - 1);
                 [-bound, -1, bound - 1].iter().map(|&v| imm(v)).collect()
+            }
+            Some(Field::ScaledSImm { width, scale, .. }) => {
+                let (bound, scale) = (1i64 << (width - 1), scale as i64);
+                [-bound * scale, -scale, (bound - 1) * scale]
+                    .iter()
+                    .map(|&v| imm(v))
+                    .collect()
+            }
+            Some(Field::ScaledUImm { width, scale, .. }) => {
+                let (max, scale) = ((1i64 << width) - 1, scale as i64);
+                [scale, max * scale].iter().map(|&v| imm(v)).collect()
             }
             Some(Field::LogicalImm { is64, .. }) => if is64 {
                 &[
@@ -1537,7 +1597,7 @@ mod differential {
                 .iter()
                 .enumerate()
                 .map(|(i, p)| match p {
-                    A64Op::X | A64Op::W | A64Op::Mem => Vec::new(),
+                    A64Op::X | A64Op::W | A64Op::Mem | A64Op::MemPre | A64Op::MemReg => Vec::new(),
                     _ => slot_cands(f, i),
                 })
                 .collect();
@@ -1573,6 +1633,26 @@ mod differential {
                                 });
                             }
                         },
+                        A64Op::MemPre => {
+                            let off = mem_off(f, i).unwrap_or(0);
+                            txt.push(alloc::format!("[x{}, #{off}]!", regs[i]));
+                            ops.push(Opnd::Mem {
+                                base: regs[i],
+                                off,
+                                pre: true,
+                            });
+                        }
+                        // x7 is outside every regset, so the index never
+                        // collides with a base or data register.
+                        A64Op::MemReg => {
+                            txt.push(alloc::format!("[x{}, x7]", regs[i]));
+                            ops.push(Opnd::MemReg {
+                                base: regs[i],
+                                index: 7,
+                                option: 0b011,
+                                shift: None,
+                            });
+                        }
                         _ => {
                             if let Some((t, o)) = &cands[i][if i == slot { pick } else { 0 }] {
                                 txt.push(t.clone());
@@ -1595,6 +1675,31 @@ mod differential {
             for (i, c) in cands.iter().enumerate() {
                 for pick in 1..c.len() {
                     cases.push(build(&regsets[0], i, pick));
+                }
+            }
+            // Register-offset extend variants: every option, both S encodings.
+            if let Some(mi) = f.ops.iter().position(|p| matches!(p, A64Op::MemReg))
+                && let Some(sl2) = f.fields.iter().find_map(|fl| match *fl {
+                    Field::MemRegIdx { sl2, .. } => Some(sl2),
+                    _ => None,
+                })
+            {
+                let variants: [(String, u8, Option<u8>); 4] = [
+                    (alloc::format!("x7, lsl #{sl2}"), 0b011, Some(sl2)),
+                    (String::from("w7, uxtw"), 0b010, None),
+                    (alloc::format!("w7, sxtw #{sl2}"), 0b110, Some(sl2)),
+                    (String::from("x7, sxtx"), 0b111, None),
+                ];
+                for (itxt, option, shift) in variants {
+                    let (txt, mut ops, m) = build(&regsets[0], usize::MAX, 0);
+                    let txt = txt.replace("x7]", &alloc::format!("{itxt}]"));
+                    ops[mi] = Opnd::MemReg {
+                        base: regsets[0][mi],
+                        index: 7,
+                        option,
+                        shift,
+                    };
+                    cases.push((txt, ops, m));
                 }
             }
         }

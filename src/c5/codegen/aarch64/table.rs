@@ -40,6 +40,21 @@ pub(crate) enum Field {
         width: u8,
         scale: u16,
     },
+    /// A scaled two's-complement immediate offset: the written byte offset
+    /// must be a multiple of `scale`, and the signed `width`-bit field at
+    /// `shift` holds offset/scale (the `ldp`/`stp` imm7 pair offsets).
+    ScaledSImm {
+        op: u8,
+        shift: u8,
+        width: u8,
+        scale: u16,
+    },
+    /// The index-register group of a register-offset memory operand: Rm at
+    /// bit 16, the extend option at 13, and the S bit at 12. A written shift
+    /// must be the access-size log2 `sl2` (S = 1) or 0 (S = 0; for a byte
+    /// access `lsl #0` written out is the S = 1 form, as the assembler
+    /// encodes it). The base register is a separate `Reg` field.
+    MemRegIdx { op: u8, sl2: u8 },
     /// The 13-bit logical-immediate bitmask field (`N:immr:imms` at bit 10),
     /// computed from the operand value. `is64` selects the 64/32-bit element.
     LogicalImm { op: u8, is64: bool },
@@ -83,8 +98,13 @@ pub(crate) enum A64Op {
     OptLsl,
     /// A condition code.
     Cond,
-    /// A base-register memory reference `[Xn|SP]`.
+    /// A base-register memory reference `[Xn|SP]`, with or without an
+    /// immediate offset.
     Mem,
+    /// A pre-index writeback memory reference `[Xn|SP, #off]!`.
+    MemPre,
+    /// A register-offset memory reference `[Xn|SP, Rm{, <ext> #s}]`.
+    MemReg,
 }
 
 /// A resolved operand handed to [`encode`].
@@ -143,14 +163,13 @@ pub(crate) enum Opnd {
     /// A `dc`/`ic`/`tlbi` system-operation base word (Rt field left zero); the
     /// encoder ORs in the register operand or xzr.
     SysOp(u32),
-    /// A memory reference `[base, #off]` (`off` in bytes). `off` is signed for
-    /// the unscaled/unprivileged imm9 forms; the scaled `ldr`/`str` path treats
-    /// it as an unsigned scaled offset.
+    /// A memory reference `[base, #off]` (`off` in bytes, signed); the form's
+    /// offset field decides the scaling and range.
     Mem {
         base: u8,
         off: i64,
-        /// Pre-index writeback (`[base, #off]!`); the offset-only and scaled
-        /// forms leave it false.
+        /// Pre-index writeback (`[base, #off]!`); the offset forms leave it
+        /// false.
         pre: bool,
     },
     /// A register-offset memory reference `[base, Rm, <option> {#shift}]`. The
@@ -237,7 +256,7 @@ fn reg(o: Opnd) -> Result<u8, String> {
     match o {
         Opnd::Reg { num, .. } => Ok(num),
         // A memory reference contributes its base register (the Rn field).
-        Opnd::Mem { base, .. } => Ok(base),
+        Opnd::Mem { base, .. } | Opnd::MemReg { base, .. } => Ok(base),
         _ => Err(String::from("inline asm: register operand expected")),
     }
 }
@@ -274,31 +293,48 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
         (A64Op::Imm, Opnd::Imm(_)) => true,
         (A64Op::OptLsl, Opnd::Lsl(_)) => true,
         (A64Op::Cond, Opnd::Cond(_)) => true,
-        // Only the offset form matches: a pre-index `[Xn, #off]!` operand must
-        // not silently take an offset-only encoding and drop its writeback. The
-        // catalogue carries no writeback forms, so pre-index falls through to a
-        // clear "no encoding" error. A register-offset `MemReg` never matches.
+        // The offset and writeback addressing modes are distinct catalogue
+        // shapes, so a pre-index operand never takes an offset-only encoding.
         (A64Op::Mem, Opnd::Mem { pre, .. }) => !pre,
+        (A64Op::MemPre, Opnd::Mem { pre, .. }) => pre,
+        (A64Op::MemReg, Opnd::MemReg { .. }) => true,
         _ => false,
     }
 }
 
-/// The `size` (bits 31:30), `opc` (23:22), and access-size log2 of a scalar
-/// load/store, or None if the mnemonic is not one. `rt_is64` selects the opc of
-/// the sign-extending loads (X target 10, W target 11) and the size of the
-/// plain word/dword `ldr`/`str`.
-fn ld_st_size_opc(mnem: &str, rt_is64: bool) -> Option<(u32, u32, u8)> {
-    let w = if rt_is64 { 3u32 } else { 2 };
+/// A memory operand with a nonzero offset must feed an immediate field of the
+/// form; otherwise a base-only shape would silently drop the written offset.
+fn mem_offsets_consumed(f: &Form, ops: &[Opnd]) -> bool {
+    ops.iter().enumerate().all(|(i, o)| {
+        let Opnd::Mem { off, .. } = o else {
+            return true;
+        };
+        *off == 0
+            || f.fields.iter().any(|fl| match *fl {
+                Field::UImm { op, .. }
+                | Field::SImm { op, .. }
+                | Field::ScaledUImm { op, .. }
+                | Field::ScaledSImm { op, .. } => op as usize == i,
+                _ => false,
+            })
+    })
+}
+
+/// The unscaled-offset (simm9) sibling of a scaled-offset load/store. The
+/// assembler encodes a written offset the scaled uimm12 form cannot represent
+/// through the sibling when simm9 can; the encoder does the same after the
+/// scaled form's fields reject.
+fn unscaled_sibling(mnem: &str) -> Option<&'static str> {
     Some(match mnem {
-        "strb" => (0, 0, 0),
-        "ldrb" => (0, 1, 0),
-        "ldrsb" => (0, if rt_is64 { 2 } else { 3 }, 0),
-        "strh" => (1, 0, 1),
-        "ldrh" => (1, 1, 1),
-        "ldrsh" => (1, if rt_is64 { 2 } else { 3 }, 1),
-        "str" => (w, 0, w as u8),
-        "ldr" => (w, 1, w as u8),
-        "ldrsw" => (2, 2, 2),
+        "ldr" => "ldur",
+        "ldrb" => "ldurb",
+        "ldrh" => "ldurh",
+        "ldrsb" => "ldursb",
+        "ldrsh" => "ldursh",
+        "ldrsw" => "ldursw",
+        "str" => "stur",
+        "strb" => "sturb",
+        "strh" => "sturh",
         _ => return None,
     })
 }
@@ -1315,57 +1351,6 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         let base = 0x1300_0000u32 | (opc << 29) | if is64 { 0x8040_0000 } else { 0 };
         return Ok(base | (immr << 16) | (imms << 10) | ((rn as u32) << 5) | (rd as u32));
     }
-    // Prefetch: `prfm <prfop>, [Xn{, #off | , Rm}]`. The prfop code fills the Rt
-    // slot; the immediate offset is scaled by 8, a register offset feeds Rm.
-    if mnemonic == "prfm" {
-        return match ops {
-            [
-                Opnd::Imm(code),
-                Opnd::Mem {
-                    base,
-                    off,
-                    pre: false,
-                },
-            ] => {
-                if *off < 0 || off % 8 != 0 {
-                    return Err(String::from(
-                        "inline asm: prfm offset must be a non-negative multiple of 8",
-                    ));
-                }
-                let imm = (off / 8) as u32;
-                if imm > 0xFFF {
-                    return Err(String::from("inline asm: prfm offset out of range"));
-                }
-                Ok(0xF980_0000 | (imm << 10) | ((*base as u32) << 5) | (*code as u32 & 31))
-            }
-            [
-                Opnd::Imm(code),
-                Opnd::MemReg {
-                    base,
-                    index,
-                    option,
-                    shift,
-                },
-            ] => {
-                let s = match shift {
-                    None | Some(0) => 0u32,
-                    Some(3) => 1,
-                    Some(_) => {
-                        return Err(String::from(
-                            "inline asm: prfm register-offset shift must be 3",
-                        ));
-                    }
-                };
-                Ok(0xF8A0_0800
-                    | ((*index as u32) << 16)
-                    | ((*option as u32) << 13)
-                    | (s << 12)
-                    | ((*base as u32) << 5)
-                    | (*code as u32 & 31))
-            }
-            _ => Err(String::from("inline asm: bad prfm operands")),
-        };
-    }
     // FP/SIMD load/store: `ldr|str St|Dt|Qt, [Xn{, #off | , Rm}]`. These use the
     // FP register file; the immediate offset scales by the access size (4 for s,
     // 8 for d, 16 for q), a register offset feeds Rm with the size-scaled shift.
@@ -1657,161 +1642,6 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((*first as u32) << 5)
             | (*rd as u32));
     }
-    // Load / store with a register offset: `<ldr|ldrb|ldrh|ldrsb|ldrsh|ldrsw|
-    // str|strb|strh> Xt, [Xn, Rm{, <ext> #s}]` across the access sizes. The base
-    // word is `0x38200800 | size<<30 | opc<<22`; a written shift must be zero or
-    // the access-size log2 (the S bit selects the latter).
-    if let [
-        Opnd::Reg { num: rt, is64 },
-        Opnd::MemReg {
-            base,
-            index,
-            option,
-            shift,
-        },
-    ] = ops
-        && let Some((size, opc, access_log2)) = ld_st_size_opc(mnemonic, *is64)
-    {
-        let s = match shift {
-            None | Some(0) => 0u32,
-            Some(a) if *a == access_log2 => 1,
-            Some(_) => {
-                return Err(String::from(
-                    "inline asm: load/store register-offset shift must match the access size",
-                ));
-            }
-        };
-        let base_word = 0x3820_0800u32 | (size << 30) | (opc << 22);
-        return Ok(base_word
-            | ((*index as u32) << 16)
-            | ((*option as u32) << 13)
-            | (s << 12)
-            | ((*base as u32) << 5)
-            | (*rt as u32));
-    }
-    // Load / store with an immediate offset: `ldr Xt, [Xn, #off]` etc. The
-    // access width comes from the register operand (X vs W).
-    if mnemonic == "ldr" || mnemonic == "str" {
-        // The offset form `[Xn, #off]` scales the unsigned offset by the access
-        // size (imm12); the pre-index `[Xn, #off]!` and post-index `[Xn], #off`
-        // writeback forms take an unscaled signed byte offset (imm9).
-        if let [
-            Opnd::Reg { num, is64 },
-            Opnd::Mem {
-                base,
-                off,
-                pre: false,
-            },
-        ] = *ops
-        {
-            use super::encode::{Reg, enc_ldr_imm, enc_ldr32_imm, enc_str_imm, enc_str32_imm};
-            let rt = Reg(num);
-            let rn = Reg(base);
-            let off = off as u32; // scaled unsigned offset (imm12)
-            return Ok(match (mnemonic, is64) {
-                ("ldr", true) => enc_ldr_imm(rt, rn, off),
-                ("ldr", false) => enc_ldr32_imm(rt, rn, off),
-                ("str", true) => enc_str_imm(rt, rn, off),
-                _ => enc_str32_imm(rt, rn, off),
-            });
-        }
-        let (rt, is64, base, off, pre) = match *ops {
-            [
-                Opnd::Reg { num, is64 },
-                Opnd::Mem {
-                    base,
-                    off,
-                    pre: true,
-                },
-            ] => (num, is64, base, off, true),
-            [
-                Opnd::Reg { num, is64 },
-                Opnd::Mem {
-                    base,
-                    off: 0,
-                    pre: false,
-                },
-                Opnd::Imm(o),
-            ] => (num, is64, base, o, false),
-            _ => return Err(String::from("inline asm: bad ldr/str operands")),
-        };
-        if !(-256..=255).contains(&off) {
-            return Err(String::from(
-                "inline asm: ldr/str writeback offset out of range",
-            ));
-        }
-        let size = if is64 { 0xF800_0000u32 } else { 0xB800_0000 };
-        let opc = if mnemonic == "ldr" { 0x0040_0000 } else { 0 };
-        let idx = if pre { 0xC00u32 } else { 0x400 };
-        return Ok(size
-            | opc
-            | idx
-            | ((off as u32 & 0x1FF) << 12)
-            | ((base as u32) << 5)
-            | (rt as u32));
-    }
-    // Load / store pair with a signed, size-scaled offset. The index mode is
-    // the offset form `[Xn, #off]`, the pre-index `[Xn, #off]!`, or the
-    // post-index `[Xn], #off` (the offset a trailing operand). Both data
-    // registers share a width; the offset is a multiple of the access size in
-    // the range of a signed 7-bit field.
-    if mnemonic == "stp" || mnemonic == "ldp" {
-        enum Idx {
-            Off,
-            Pre,
-            Post,
-        }
-        let (t1, t2, is64, base, off, mode) = match *ops {
-            [
-                Opnd::Reg { num: t1, is64 },
-                Opnd::Reg { num: t2, is64: w2 },
-                Opnd::Mem { base, off, pre },
-            ] if is64 == w2 => (
-                t1,
-                t2,
-                is64,
-                base,
-                off,
-                if pre { Idx::Pre } else { Idx::Off },
-            ),
-            [
-                Opnd::Reg { num: t1, is64 },
-                Opnd::Reg { num: t2, is64: w2 },
-                Opnd::Mem {
-                    base,
-                    off: 0,
-                    pre: false,
-                },
-                Opnd::Imm(o),
-            ] if is64 == w2 => (t1, t2, is64, base, o, Idx::Post),
-            _ => return Err(String::from("inline asm: bad stp/ldp operands")),
-        };
-        let scale: i64 = if is64 { 8 } else { 4 };
-        if off % scale != 0 {
-            return Err(String::from(
-                "inline asm: stp/ldp offset not a multiple of the access size",
-            ));
-        }
-        let imm = off / scale;
-        if !(-64..=63).contains(&imm) {
-            return Err(String::from("inline asm: stp/ldp offset out of range"));
-        }
-        let base_op: u32 = match (is64, mode) {
-            (true, Idx::Off) => 0xA900_0000,
-            (false, Idx::Off) => 0x2900_0000,
-            (true, Idx::Pre) => 0xA980_0000,
-            (false, Idx::Pre) => 0x2980_0000,
-            (true, Idx::Post) => 0xA880_0000,
-            (false, Idx::Post) => 0x2880_0000,
-        };
-        let l = if mnemonic == "ldp" { 1u32 << 22 } else { 0 };
-        return Ok(base_op
-            | l
-            | ((imm as u32 & 0x7F) << 15)
-            | ((t2 as u32) << 10)
-            | ((base as u32) << 5)
-            | (t1 as u32));
-    }
     // `mov` is an alias whose expansion is value-dependent, so the generator
     // omits it. A register move is `orr Rd, xzr, Rm`; a small immediate is
     // `movz Rd, #imm`. The width comes from the resolved destination register.
@@ -1852,8 +1682,18 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             .iter()
             .zip(ops.iter())
             .all(|(&p, &o)| op_matches(p, o))
+            && mem_offsets_consumed(f, ops)
         {
-            return pack(f, ops);
+            return match pack(f, ops) {
+                // An offset the scaled uimm12 field rejects may still have the
+                // sibling's unscaled simm9 encoding; keep the scaled form's
+                // error when the sibling rejects too.
+                Err(e) => match unscaled_sibling(mnemonic) {
+                    Some(sib) => encode(sib, ops).map_err(|_| e),
+                    None => Err(e),
+                },
+                ok => ok,
+            };
         }
     }
     Err(format!(
@@ -1909,6 +1749,51 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                     ));
                 }
                 word |= ((f as u32) & mask as u32) << shift;
+            }
+            Field::ScaledSImm {
+                op,
+                shift,
+                width,
+                scale,
+            } => {
+                let v = imm_or_off(ops[op as usize])?;
+                let scale = scale as i64;
+                if v % scale != 0 {
+                    return Err(format!("inline asm: offset must be a multiple of {scale}"));
+                }
+                let q = v / scale;
+                let bound = 1i64 << (width - 1);
+                if q < -bound || q >= bound {
+                    return Err(format!(
+                        "inline asm: scaled offset out of the signed {width}-bit range"
+                    ));
+                }
+                let mask = (1u64 << width) - 1;
+                word |= (((q as u64) & mask) as u32) << shift;
+            }
+            Field::MemRegIdx { op, sl2 } => {
+                let Opnd::MemReg {
+                    index,
+                    option,
+                    shift,
+                    ..
+                } = ops[op as usize]
+                else {
+                    return Err(String::from(
+                        "inline asm: register-offset memory operand expected",
+                    ));
+                };
+                let s = match shift {
+                    None => 0u32,
+                    Some(0) if sl2 > 0 => 0,
+                    Some(a) if a == sl2 => 1,
+                    Some(_) => {
+                        return Err(String::from(
+                            "inline asm: register-offset shift must match the access size",
+                        ));
+                    }
+                };
+                word |= ((index as u32) << 16) | ((option as u32) << 13) | (s << 12);
             }
             Field::LogicalImm { op, is64 } => {
                 let v = imm(ops[op as usize])? as u64;

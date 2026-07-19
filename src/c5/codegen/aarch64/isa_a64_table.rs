@@ -238,7 +238,7 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "ldeorl", ops: &[X, X, Mem], base: 0xF8602000, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // ldeorl Xs, Xd, [Xn|SP]
     Form { mnemonic: "ldeorlb", ops: &[W, W, Mem], base: 0x38602000, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // ldeorlb Ws, Wd, [Xn|SP]
     Form { mnemonic: "ldeorlh", ops: &[W, W, Mem], base: 0x78602000, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // ldeorlh Ws, Wd, [Xn|SP]
-    Form { mnemonic: "ldg", ops: &[X, Mem], base: 0xD9600000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledUImm { op: 1, shift: 12, width: 9, scale: 16 }] },  // ldg Xd, [Xn|SP, #offS*16]
+    Form { mnemonic: "ldg", ops: &[X, Mem], base: 0xD9600000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 1, shift: 12, width: 9, scale: 16 }] },  // ldg Xd, [Xn|SP, #offS*16]
     Form { mnemonic: "ldgm", ops: &[X, Mem], base: 0xD9E00000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // ldgm Xd, [Xn|SP]
     Form { mnemonic: "ldiapp", ops: &[W, W, Mem], base: 0x99401800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Reg { op: 2, shift: 5 }] },  // ldiapp Wd, Wd2, [Xn|SP]
     Form { mnemonic: "ldiapp", ops: &[X, X, Mem], base: 0xD9401800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Reg { op: 2, shift: 5 }] },  // ldiapp Xd, Xd2, [Xn|SP]
@@ -246,17 +246,53 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "ldlar", ops: &[X, Mem], base: 0xC8DF7C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // ldlar Xd, [Xn|SP]
     Form { mnemonic: "ldlarb", ops: &[W, Mem], base: 0x08DF7C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // ldlarb Wd, [Xn|SP]
     Form { mnemonic: "ldlarh", ops: &[W, Mem], base: 0x48DF7C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // ldlarh Wd, [Xn|SP]
-    Form { mnemonic: "ldnp", ops: &[W, W, Mem], base: 0x28400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledUImm { op: 2, shift: 15, width: 7, scale: 4 }] },  // ldnp Wd, Wd2, [Xn|SP, #offS*4]
-    Form { mnemonic: "ldnp", ops: &[X, X, Mem], base: 0xA8400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledUImm { op: 2, shift: 15, width: 7, scale: 8 }] },  // ldnp Xd, Xd2, [Xn|SP, #offS*8]
+    Form { mnemonic: "ldnp", ops: &[W, W, Mem], base: 0x28400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 4 }] },  // ldnp Wd, Wd2, [Xn|SP, #offS*4]
+    Form { mnemonic: "ldnp", ops: &[X, X, Mem], base: 0xA8400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 8 }] },  // ldnp Xd, Xd2, [Xn|SP, #offS*8]
+    Form { mnemonic: "ldp", ops: &[W, W, Mem], base: 0x29400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 4 }] },  // ldp Wd, Wd2, [Xn|SP, #offS*4]
+    Form { mnemonic: "ldp", ops: &[W, W, MemPre], base: 0x29C00000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 4 }] },  // ldp Wd, Wd2, [Xn|SP, #offS*4]!
+    Form { mnemonic: "ldp", ops: &[W, W, Mem, Imm], base: 0x28C00000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 3, shift: 15, width: 7, scale: 4 }] },  // ldp Wd, Wd2, [Xn|SP, #offS*4]@
+    Form { mnemonic: "ldp", ops: &[X, X, Mem], base: 0xA9400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 8 }] },  // ldp Xd, Xd2, [Xn|SP, #offS*8]
+    Form { mnemonic: "ldp", ops: &[X, X, MemPre], base: 0xA9C00000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 8 }] },  // ldp Xd, Xd2, [Xn|SP, #offS*8]!
+    Form { mnemonic: "ldp", ops: &[X, X, Mem, Imm], base: 0xA8C00000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 3, shift: 15, width: 7, scale: 8 }] },  // ldp Xd, Xd2, [Xn|SP, #offS*8]@
+    Form { mnemonic: "ldpsw", ops: &[X, X, Mem], base: 0x69400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 4 }] },  // ldpsw Xd, Xd2, [Xn|SP, #offS*4]
+    Form { mnemonic: "ldpsw", ops: &[X, X, MemPre], base: 0x69C00000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 4 }] },  // ldpsw Xd, Xd2, [Xn|SP, #offS*4]!
+    Form { mnemonic: "ldpsw", ops: &[X, X, Mem, Imm], base: 0x68C00000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 3, shift: 15, width: 7, scale: 4 }] },  // ldpsw Xd, Xd2, [Xn|SP, #offS*4]@
     Form { mnemonic: "ldr", ops: &[W, Mem], base: 0xB9400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledUImm { op: 1, shift: 10, width: 12, scale: 4 }] },  // ldr Wd, [Xn|SP, #offZ*4]
     Form { mnemonic: "ldr", ops: &[X, Mem], base: 0xF9400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledUImm { op: 1, shift: 10, width: 12, scale: 8 }] },  // ldr Xd, [Xn|SP, #offZ*8]
+    Form { mnemonic: "ldr", ops: &[W, Mem, Imm], base: 0xB8400400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 2, shift: 12, width: 9 }] },  // ldr Wd, [Xn|SP, #offS*4]@
+    Form { mnemonic: "ldr", ops: &[X, Mem, Imm], base: 0xF8400400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 2, shift: 12, width: 9 }] },  // ldr Xd, [Xn|SP, #offS*8]@
+    Form { mnemonic: "ldr", ops: &[W, MemPre], base: 0xB8400C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // ldr Wd, [Xn|SP, #offS*4]!
+    Form { mnemonic: "ldr", ops: &[X, MemPre], base: 0xF8400C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // ldr Xd, [Xn|SP, #offS*8]!
+    Form { mnemonic: "ldr", ops: &[W, MemReg], base: 0xB8600800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 2 }] },  // ldr Wd, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n}]
+    Form { mnemonic: "ldr", ops: &[X, MemReg], base: 0xF8600800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 3 }] },  // ldr Xd, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n}]
     Form { mnemonic: "ldrb", ops: &[W, Mem], base: 0x39400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 1, shift: 10, width: 12 }] },  // ldrb Wd, [Xn|SP, #offZ]
+    Form { mnemonic: "ldrb", ops: &[W, Mem, Imm], base: 0x38400400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 2, shift: 12, width: 9 }] },  // ldrb Wd, [Xn|SP, #offS]@
+    Form { mnemonic: "ldrb", ops: &[W, MemPre], base: 0x38400C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // ldrb Wd, [Xn|SP, #offS]!
+    Form { mnemonic: "ldrb", ops: &[W, MemReg], base: 0x38600800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 0 }] },  // ldrb Wd, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n}]
     Form { mnemonic: "ldrh", ops: &[W, Mem], base: 0x79400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledUImm { op: 1, shift: 10, width: 12, scale: 2 }] },  // ldrh Wd, [Xn|SP, #offZ*2]
+    Form { mnemonic: "ldrh", ops: &[W, Mem, Imm], base: 0x78400400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 2, shift: 12, width: 9 }] },  // ldrh Wd, [Xn|SP, #offS*2]@
+    Form { mnemonic: "ldrh", ops: &[W, MemPre], base: 0x78400C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // ldrh Wd, [Xn|SP, #offS*2]!
+    Form { mnemonic: "ldrh", ops: &[W, MemReg], base: 0x78600800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 1 }] },  // ldrh Wd, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n}]
     Form { mnemonic: "ldrsb", ops: &[W, Mem], base: 0x39C00000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 1, shift: 10, width: 12 }] },  // ldrsb Wd, [Xn|SP, #offZ]
     Form { mnemonic: "ldrsb", ops: &[X, Mem], base: 0x39800000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 1, shift: 10, width: 12 }] },  // ldrsb Xd, [Xn|SP, #offZ]
+    Form { mnemonic: "ldrsb", ops: &[W, Mem, Imm], base: 0x38C00400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 2, shift: 12, width: 9 }] },  // ldrsb Wd, [Xn|SP, #offS]@
+    Form { mnemonic: "ldrsb", ops: &[X, Mem, Imm], base: 0x38800400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 2, shift: 12, width: 9 }] },  // ldrsb Xd, [Xn|SP, #offS]@
+    Form { mnemonic: "ldrsb", ops: &[W, MemPre], base: 0x38C00C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // ldrsb Wd, [Xn|SP, #offS]!
+    Form { mnemonic: "ldrsb", ops: &[X, MemPre], base: 0x38800C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // ldrsb Xd, [Xn|SP, #offS]!
+    Form { mnemonic: "ldrsb", ops: &[W, MemReg], base: 0x38E00800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 0 }] },  // ldrsb Wd, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n}]
+    Form { mnemonic: "ldrsb", ops: &[X, MemReg], base: 0x38A00800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 0 }] },  // ldrsb Xd, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n}]
     Form { mnemonic: "ldrsh", ops: &[W, Mem], base: 0x79C00000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledUImm { op: 1, shift: 10, width: 12, scale: 2 }] },  // ldrsh Wd, [Xn|SP, #offZ*2]
     Form { mnemonic: "ldrsh", ops: &[X, Mem], base: 0x79800000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledUImm { op: 1, shift: 10, width: 12, scale: 2 }] },  // ldrsh Xd, [Xn|SP, #offZ*2]
+    Form { mnemonic: "ldrsh", ops: &[W, Mem, Imm], base: 0x78C00400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 2, shift: 12, width: 9 }] },  // ldrsh Wd, [Xn|SP, #offS*2]@
+    Form { mnemonic: "ldrsh", ops: &[X, Mem, Imm], base: 0x78800400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 2, shift: 12, width: 9 }] },  // ldrsh Xd, [Xn|SP, #offS*2]@
+    Form { mnemonic: "ldrsh", ops: &[W, MemPre], base: 0x78C00C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // ldrsh Wd, [Xn|SP, #offS*2]!
+    Form { mnemonic: "ldrsh", ops: &[X, MemPre], base: 0x78800C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // ldrsh Xd, [Xn|SP, #offS*2]!
+    Form { mnemonic: "ldrsh", ops: &[W, MemReg], base: 0x78E00800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 1 }] },  // ldrsh Wd, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n}]
+    Form { mnemonic: "ldrsh", ops: &[X, MemReg], base: 0x78A00800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 1 }] },  // ldrsh Xd, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n}]
     Form { mnemonic: "ldrsw", ops: &[X, Mem], base: 0xB9800000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledUImm { op: 1, shift: 10, width: 12, scale: 4 }] },  // ldrsw Xd, [Xn|SP, #offZ*4]
+    Form { mnemonic: "ldrsw", ops: &[X, Mem, Imm], base: 0xB8800400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 2, shift: 12, width: 9 }] },  // ldrsw Xd, [Xn|SP, #offS*4]@
+    Form { mnemonic: "ldrsw", ops: &[X, MemPre], base: 0xB8800C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // ldrsw Xd, [Xn|SP, #offS*4]!
+    Form { mnemonic: "ldrsw", ops: &[X, MemReg], base: 0xB8A00800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 2 }] },  // ldrsw Xd, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n}]
     Form { mnemonic: "ldset", ops: &[W, W, Mem], base: 0xB8203000, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // ldset Ws, Wd, [Xn|SP]
     Form { mnemonic: "ldset", ops: &[X, X, Mem], base: 0xF8203000, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // ldset Xs, Xd, [Xn|SP]
     Form { mnemonic: "ldseta", ops: &[W, W, Mem], base: 0xB8A03000, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // ldseta Ws, Wd, [Xn|SP]
@@ -417,6 +453,9 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "pacibz", ops: &[], base: 0xD503235F, fields: &[] },  // pacibz
     Form { mnemonic: "paciza", ops: &[X], base: 0xDAC123E0, fields: &[Reg { op: 0, shift: 0 }] },  // paciza Xd
     Form { mnemonic: "pacizb", ops: &[X], base: 0xDAC127E0, fields: &[Reg { op: 0, shift: 0 }] },  // pacizb Xd
+    Form { mnemonic: "prfm", ops: &[Imm, MemReg], base: 0xF8A00800, fields: &[UImm { op: 0, shift: 0, width: 5 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 3 }] },  // prfm #prf_op, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n*8}]
+    Form { mnemonic: "prfm", ops: &[Imm, Mem], base: 0xF9800000, fields: &[UImm { op: 0, shift: 0, width: 5 }, Reg { op: 1, shift: 5 }, ScaledUImm { op: 1, shift: 10, width: 12, scale: 8 }] },  // prfm #prf_op, [Xn|SP, #offZ*8]
+    Form { mnemonic: "prfum", ops: &[Imm, Mem], base: 0xF8800000, fields: &[UImm { op: 0, shift: 0, width: 5 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // prfum #prf_op, [Xn|SP, #offS]
     Form { mnemonic: "pssbb", ops: &[], base: 0xD503349F, fields: &[] },  // pssbb
     Form { mnemonic: "rbit", ops: &[W, W], base: 0x5AC00000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // rbit Wd, Wn
     Form { mnemonic: "rbit", ops: &[X, X], base: 0xDAC00000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // rbit Xd, Xn
@@ -518,6 +557,9 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "smulh", ops: &[X, X, X], base: 0x9B407C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // smulh Xd, Xn, Xm
     Form { mnemonic: "smull", ops: &[X, W, W], base: 0x9B207C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // smull Xd, Wn, Wm
     Form { mnemonic: "ssbb", ops: &[], base: 0xD503309F, fields: &[] },  // ssbb
+    Form { mnemonic: "st2g", ops: &[X, Mem], base: 0xD9A00800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 1, shift: 12, width: 9, scale: 16 }] },  // st2g Xs|SP, [Xn|SP, #offS*16]
+    Form { mnemonic: "st2g", ops: &[X, MemPre], base: 0xD9A00C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 1, shift: 12, width: 9, scale: 16 }] },  // st2g Xs|SP, [Xn|SP, #offS*16]!
+    Form { mnemonic: "st2g", ops: &[X, Mem, Imm], base: 0xD9A00400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 2, shift: 12, width: 9, scale: 16 }] },  // st2g Xs|SP, [Xn|SP, #offS*16]@
     Form { mnemonic: "stadd", ops: &[W, Mem], base: 0xB820001F, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 5 }] },  // stadd Ws, [Xn|SP]
     Form { mnemonic: "stadd", ops: &[X, Mem], base: 0xF820001F, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 5 }] },  // stadd Xs, [Xn|SP]
     Form { mnemonic: "staddb", ops: &[W, Mem], base: 0x3820001F, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 5 }] },  // staddb Ws, [Xn|SP]
@@ -542,7 +584,13 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "steorl", ops: &[X, Mem], base: 0xF860201F, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 5 }] },  // steorl Xs, [Xn|SP]
     Form { mnemonic: "steorlb", ops: &[W, Mem], base: 0x3860201F, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 5 }] },  // steorlb Ws, [Xn|SP]
     Form { mnemonic: "steorlh", ops: &[W, Mem], base: 0x7860201F, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 5 }] },  // steorlh Ws, [Xn|SP]
+    Form { mnemonic: "stg", ops: &[X, Mem], base: 0xD9200800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 1, shift: 12, width: 9, scale: 16 }] },  // stg Xs|SP, [Xn|SP, #offS*16]
+    Form { mnemonic: "stg", ops: &[X, MemPre], base: 0xD9200C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 1, shift: 12, width: 9, scale: 16 }] },  // stg Xs|SP, [Xn|SP, #offS*16]!
+    Form { mnemonic: "stg", ops: &[X, Mem, Imm], base: 0xD9200400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 2, shift: 12, width: 9, scale: 16 }] },  // stg Xs|SP, [Xn|SP, #offS*16]@
     Form { mnemonic: "stgm", ops: &[X, Mem], base: 0xD9A00000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // stgm Xs, [Xn|SP]
+    Form { mnemonic: "stgp", ops: &[X, X, Mem], base: 0x69000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 16 }] },  // stgp Xs, Xs2, [Xn|SP, #offS*16]
+    Form { mnemonic: "stgp", ops: &[X, X, MemPre], base: 0x69800000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 16 }] },  // stgp Xs, Xs2, [Xn|SP, #offS*16]!
+    Form { mnemonic: "stgp", ops: &[X, X, Mem, Imm], base: 0x68800000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 3, shift: 15, width: 7, scale: 16 }] },  // stgp Xs, Xs2, [Xn|SP, #offS*16]@
     Form { mnemonic: "stilp", ops: &[W, W, Mem], base: 0x99001800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Reg { op: 2, shift: 5 }] },  // stilp Ws, Ws2, [Xn|SP]
     Form { mnemonic: "stilp", ops: &[X, X, Mem], base: 0xD9001800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Reg { op: 2, shift: 5 }] },  // stilp Xs, Xs2, [Xn|SP]
     Form { mnemonic: "stllr", ops: &[W, Mem], base: 0x889F7C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // stllr Ws, [Xn|SP]
@@ -563,12 +611,30 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "stlxr", ops: &[W, X, Mem], base: 0xC800FC00, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // stlxr Wd, Xs, [Xn|SP]
     Form { mnemonic: "stlxrb", ops: &[W, W, Mem], base: 0x0800FC00, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // stlxrb Wd, Ws, [Xn|SP]
     Form { mnemonic: "stlxrh", ops: &[W, W, Mem], base: 0x4800FC00, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // stlxrh Wd, Ws, [Xn|SP]
-    Form { mnemonic: "stnp", ops: &[W, W, Mem], base: 0x28000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledUImm { op: 2, shift: 15, width: 7, scale: 4 }] },  // stnp Ws, Ws2, [Xn|SP, #offS*4]
-    Form { mnemonic: "stnp", ops: &[X, X, Mem], base: 0xA8000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledUImm { op: 2, shift: 15, width: 7, scale: 8 }] },  // stnp Xs, Xs2, [Xn|SP, #offS*8]
+    Form { mnemonic: "stnp", ops: &[W, W, Mem], base: 0x28000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 4 }] },  // stnp Ws, Ws2, [Xn|SP, #offS*4]
+    Form { mnemonic: "stnp", ops: &[X, X, Mem], base: 0xA8000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 8 }] },  // stnp Xs, Xs2, [Xn|SP, #offS*8]
+    Form { mnemonic: "stp", ops: &[W, W, Mem], base: 0x29000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 4 }] },  // stp Ws, Ws2, [Xn|SP, #offS*4]
+    Form { mnemonic: "stp", ops: &[W, W, MemPre], base: 0x29800000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 4 }] },  // stp Ws, Ws2, [Xn|SP, #offS*4]!
+    Form { mnemonic: "stp", ops: &[W, W, Mem, Imm], base: 0x28800000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 3, shift: 15, width: 7, scale: 4 }] },  // stp Ws, Ws2, [Xn|SP, #offS*4]@
+    Form { mnemonic: "stp", ops: &[X, X, Mem], base: 0xA9000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 8 }] },  // stp Xs, Xs2, [Xn|SP, #offS*8]
+    Form { mnemonic: "stp", ops: &[X, X, MemPre], base: 0xA9800000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 2, shift: 15, width: 7, scale: 8 }] },  // stp Xs, Xs2, [Xn|SP, #offS*8]!
+    Form { mnemonic: "stp", ops: &[X, X, Mem, Imm], base: 0xA8800000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }, ScaledSImm { op: 3, shift: 15, width: 7, scale: 8 }] },  // stp Xs, Xs2, [Xn|SP, #offS*8]@
     Form { mnemonic: "str", ops: &[W, Mem], base: 0xB9000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledUImm { op: 1, shift: 10, width: 12, scale: 4 }] },  // str Ws, [Xn|SP, #offZ*4]
     Form { mnemonic: "str", ops: &[X, Mem], base: 0xF9000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledUImm { op: 1, shift: 10, width: 12, scale: 8 }] },  // str Xs, [Xn|SP, #offZ*8]
+    Form { mnemonic: "str", ops: &[W, Mem, Imm], base: 0xB8000400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 2, shift: 12, width: 9 }] },  // str Ws, [Xn|SP, #offS*4]@
+    Form { mnemonic: "str", ops: &[X, Mem, Imm], base: 0xF8000400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 2, shift: 12, width: 9 }] },  // str Xs, [Xn|SP, #offS*8]@
+    Form { mnemonic: "str", ops: &[W, MemPre], base: 0xB8000C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // str Ws, [Xn|SP, #offS*4]!
+    Form { mnemonic: "str", ops: &[X, MemPre], base: 0xF8000C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // str Xs, [Xn|SP, #offS*8]!
+    Form { mnemonic: "str", ops: &[W, MemReg], base: 0xB8200800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 2 }] },  // str Ws, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n}]
+    Form { mnemonic: "str", ops: &[X, MemReg], base: 0xF8200800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 3 }] },  // str Xs, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n}]
     Form { mnemonic: "strb", ops: &[W, Mem], base: 0x39000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 1, shift: 10, width: 12 }] },  // strb Ws, [Xn|SP, #offZ]
+    Form { mnemonic: "strb", ops: &[W, Mem, Imm], base: 0x38000400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 2, shift: 12, width: 9 }] },  // strb Ws, [Xn|SP, #offS]@
+    Form { mnemonic: "strb", ops: &[W, MemPre], base: 0x38000C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // strb Ws, [Xn|SP, #offS]!
+    Form { mnemonic: "strb", ops: &[W, MemReg], base: 0x38200800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 0 }] },  // strb Ws, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n}]
     Form { mnemonic: "strh", ops: &[W, Mem], base: 0x79000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledUImm { op: 1, shift: 10, width: 12, scale: 2 }] },  // strh Ws, [Xn|SP, #offZ*2]
+    Form { mnemonic: "strh", ops: &[W, Mem, Imm], base: 0x78000400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 2, shift: 12, width: 9 }] },  // strh Ws, [Xn|SP, #offS*2]@
+    Form { mnemonic: "strh", ops: &[W, MemPre], base: 0x78000C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // strh Ws, [Xn|SP, #offS*2]!
+    Form { mnemonic: "strh", ops: &[W, MemReg], base: 0x78200800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, MemRegIdx { op: 1, sl2: 1 }] },  // strh Ws, [Xn|SP, Rm, {uxtw|lsl|sxtw|sxtx #n}]
     Form { mnemonic: "stset", ops: &[W, Mem], base: 0xB820301F, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 5 }] },  // stset Ws, [Xn|SP]
     Form { mnemonic: "stset", ops: &[X, Mem], base: 0xF820301F, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 5 }] },  // stset Xs, [Xn|SP]
     Form { mnemonic: "stsetb", ops: &[W, Mem], base: 0x3820301F, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 5 }] },  // stsetb Ws, [Xn|SP]
@@ -623,6 +689,12 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "stxr", ops: &[W, X, Mem], base: 0xC8007C00, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // stxr Wd, Xs, [Xn|SP]
     Form { mnemonic: "stxrb", ops: &[W, W, Mem], base: 0x08007C00, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // stxrb Wd, Ws, [Xn|SP]
     Form { mnemonic: "stxrh", ops: &[W, W, Mem], base: 0x48007C00, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // stxrh Wd, Ws, [Xn|SP]
+    Form { mnemonic: "stz2g", ops: &[X, Mem], base: 0xD9E00800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 1, shift: 12, width: 9, scale: 16 }] },  // stz2g Xs|SP, [Xn|SP, #offS*16]
+    Form { mnemonic: "stz2g", ops: &[X, MemPre], base: 0xD9E00C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 1, shift: 12, width: 9, scale: 16 }] },  // stz2g Xs|SP, [Xn|SP, #offS*16]!
+    Form { mnemonic: "stz2g", ops: &[X, Mem, Imm], base: 0xD9E00400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 2, shift: 12, width: 9, scale: 16 }] },  // stz2g Xs|SP, [Xn|SP, #offS*16]@
+    Form { mnemonic: "stzg", ops: &[X, Mem], base: 0xD9600800, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 1, shift: 12, width: 9, scale: 16 }] },  // stzg Xs|SP, [Xn|SP, #offS*16]
+    Form { mnemonic: "stzg", ops: &[X, MemPre], base: 0xD9600C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 1, shift: 12, width: 9, scale: 16 }] },  // stzg Xs|SP, [Xn|SP, #offS*16]!
+    Form { mnemonic: "stzg", ops: &[X, Mem, Imm], base: 0xD9600400, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 2, shift: 12, width: 9, scale: 16 }] },  // stzg Xs|SP, [Xn|SP, #offS*16]@
     Form { mnemonic: "stzgm", ops: &[X, Mem], base: 0xD9200000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // stzgm Xs, [Xn|SP]
     Form { mnemonic: "sub", ops: &[W, W, W], base: 0x4B000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // sub Wd, Wn, Wm, {lsl|lsr|asr #n}
     Form { mnemonic: "sub", ops: &[X, X, X], base: 0xCB000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // sub Xd, Xn, Xm, {lsl|lsr|asr #n}

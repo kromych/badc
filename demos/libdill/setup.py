@@ -5,7 +5,7 @@ Pins the head of `sustrik/libdill@master` by full commit SHA and
 verifies a sha256 before extraction; the tree lands under
 ``demos/libdill/.cache/libdill-<sha>/``.
 
-After extraction three source patches are applied so badc can build
+After extraction two source patches are applied so badc can build
 the coroutine core; each is an exact-match string replacement and the
 tree is re-extracted on every run, so the result is deterministic:
 
@@ -23,16 +23,9 @@ tree is re-extracted on every run, so the result is deterministic:
      badc keeps its asm operand scratch in the caller's frame
      (rbp-relative), so nothing it needs sits below the moved sp and
      the gap is plain headroom.
-  2. ``dill_prologue`` hands the resumption context out through array
-     decay (`*(void **)jb = (void *)ctx->r->ctx`). TODO(badc): the
-     upstream form `*jb = &ctx->r->ctx` -- a store of an array's
-     address through `sigjmp_buf **` -- is silently dropped (the
-     parameter is even reported unused), leaving the caller's context
-     pointer uninitialized.
 
 Without -DDILL_BADC_SETSP the patched tree builds with gcc/clang
-exactly as upstream does; the cr.c change is form-equivalent for any
-compiler.
+exactly as upstream does.
 
 Idempotent: safe to call from CI before each smoke run. Output is
 suppressed unless something fails -- pass ``-v`` to see every step.
@@ -92,11 +85,6 @@ SETSP_X64_BADC = """#if defined DILL_BADC_SETSP
 PATCHES = (
     ("libdill.h", SETSP_X64_STOCK, SETSP_X64_BADC),
     ("libdill.h", SETSP_STOCK, SETSP_BADC),
-    (
-        "cr.c",
-        "    *jb = &ctx->r->ctx;",
-        "    *(void **)jb = (void *)ctx->r->ctx;",
-    ),
 )
 
 

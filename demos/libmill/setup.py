@@ -5,7 +5,7 @@ Pins the head of `sustrik/libmill@master` by full commit SHA and
 verifies a sha256 before extraction; the tree lands under
 ``demos/libmill/.cache/libmill-<sha>/``.
 
-After extraction three source patches are applied so badc can build
+After extraction two source patches are applied so badc can build
 the coroutine core; each is an exact-match string replacement and the
 tree is re-extracted on every run, so the result is deterministic:
 
@@ -14,12 +14,10 @@ tree is re-extracted on every run, so the result is deterministic:
      upstream). badc compiles the asm path (the `%=` template escape,
      `lea <label>(%rip), reg`, and explicit-register memory operands
      like `8(%%rdx)`), so the knob is only defined on non-x86-64
-     architectures.
-  2. The sigsetjmp/siglongjmp fallback macros deref through a cast.
-     TODO(badc): dereferencing a typedef'd pointer-to-array
-     (`mill_ctx` = `sigjmp_buf *`) yields the element type, so the
-     uncast form passes a loaded long where libc expects `long *`.
-  3. ``mill_go_()`` switches to the new coroutine stack with a
+     architectures. The fallback's ``sigsetjmp(*ctx, 0)`` --
+     dereferencing the typedef'd pointer-to-array ``mill_ctx`` --
+     compiles as-is.
+  2. ``mill_go_()`` switches to the new coroutine stack with a
      one-instruction asm sp move (guarded by MILL_BADC_SETSP) instead
      of upstream's stack-pointer-displacing VLA. TODO(badc): VLA and
      alloca allocate from a fixed 8 KiB frame arena and trap (brk #1)
@@ -113,13 +111,6 @@ PATCHES = (
         "libmill.h",
         "#if defined(__x86_64__)\n#if defined(__AVX__)",
         "#if defined(__x86_64__) && !defined MILL_ARCH_FALLBACK\n#if defined(__AVX__)",
-    ),
-    (
-        "libmill.h",
-        "#define mill_setjmp_(ctx) \\\n    sigsetjmp(*ctx, 0)\n"
-        "#define mill_longjmp_(ctx) \\\n    siglongjmp(*ctx, 1)",
-        "#define mill_setjmp_(ctx) \\\n    sigsetjmp(*(sigjmp_buf *)(ctx), 0)\n"
-        "#define mill_longjmp_(ctx) \\\n    siglongjmp(*(sigjmp_buf *)(ctx), 1)",
     ),
     ("libmill.h", GO_STOCK, GO_BADC),
 )

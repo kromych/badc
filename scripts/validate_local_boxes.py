@@ -54,6 +54,12 @@ GATING_DEMOS = (
     "demos/quickjs/smoke.py",
     "demos/raylib/smoke.py",
     "demos/curl/smoke.py",
+    # Cooperative-concurrency demos gate the inline-asm context switch
+    # (sp move + setjmp/longjmp); POSIX-gated, they skip cleanly on
+    # Windows and off x86-64.
+    "demos/libmill/smoke.py",
+    "demos/libdill/smoke.py",
+    "demos/coroutines/smoke.py",
 )
 
 

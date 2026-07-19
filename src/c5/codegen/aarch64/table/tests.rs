@@ -636,6 +636,72 @@ fn vector_three_same_batch3() {
 }
 
 #[test]
+fn vector_widen_narrow() {
+    let vr = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    // Widening (long): dst element is twice the source width; size field is the
+    // source width, U selects unsigned, the `2` suffix reads 128-bit sources.
+    assert_eq!(
+        enc("saddl", &[vr(0, 1, true), vr(1, 0, false), vr(2, 0, false)]),
+        0x0E22_0020
+    ); // .8h <- .8b
+    assert_eq!(
+        enc("uaddl", &[vr(0, 1, true), vr(1, 0, false), vr(2, 0, false)]),
+        0x2E22_0020
+    );
+    assert_eq!(
+        enc("ssubl", &[vr(0, 2, true), vr(1, 1, false), vr(2, 1, false)]),
+        0x0E62_2020
+    ); // .4s <- .4h
+    assert_eq!(
+        enc("smull", &[vr(0, 1, true), vr(1, 0, false), vr(2, 0, false)]),
+        0x0E22_C020
+    );
+    assert_eq!(
+        enc("umlal", &[vr(0, 2, true), vr(1, 1, false), vr(2, 1, false)]),
+        0x2E62_8020
+    );
+    assert_eq!(
+        enc("smlsl", &[vr(0, 1, true), vr(1, 0, false), vr(2, 0, false)]),
+        0x0E22_A020
+    );
+    // `2` variants read the upper half of 128-bit sources.
+    assert_eq!(
+        enc("saddl2", &[vr(0, 1, true), vr(1, 0, true), vr(2, 0, true)]),
+        0x4E22_0020
+    );
+    assert_eq!(
+        enc("smull2", &[vr(0, 3, true), vr(1, 2, true), vr(2, 2, true)]),
+        0x4EA2_C020
+    );
+    // Narrowing: dst element is half the source; size field is the destination.
+    assert_eq!(enc("xtn", &[vr(0, 0, false), vr(1, 1, true)]), 0x0E21_2820); // .8b <- .8h
+    assert_eq!(enc("xtn2", &[vr(0, 0, true), vr(1, 1, true)]), 0x4E21_2820); // .16b <- .8h
+    assert_eq!(
+        enc("sqxtn", &[vr(0, 0, false), vr(1, 1, true)]),
+        0x0E21_4820
+    );
+    assert_eq!(
+        enc("uqxtn", &[vr(0, 1, false), vr(1, 2, true)]),
+        0x2E61_4820
+    ); // .4h <- .4s
+    assert_eq!(
+        enc("sqxtun", &[vr(0, 0, false), vr(1, 1, true)]),
+        0x2E21_2820
+    );
+    // Bad size relationships are rejected: widen dst not one wider, narrow
+    // source not 128-bit, and a `2` form on 64-bit sources.
+    assert!(encode("saddl", &[vr(0, 2, true), vr(1, 0, false), vr(2, 0, false)]).is_err());
+    assert!(encode("xtn", &[vr(0, 0, false), vr(1, 1, false)]).is_err());
+    assert!(
+        encode(
+            "saddl2",
+            &[vr(0, 1, true), vr(1, 0, false), vr(2, 0, false)]
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn crypto() {
     let v = |n: u8, size: u8| Opnd::VecReg {
         num: n,

@@ -286,6 +286,16 @@ fn ld_st_size_opc(mnem: &str, rt_is64: bool) -> Option<(u32, u32, u8)> {
     })
 }
 
+/// Split the trailing `2` off a widening/narrowing mnemonic (`saddl2` yields
+/// `("saddl", true)`); a plain mnemonic yields `is_upper = false`. Always
+/// returns a value; the caller's own opcode table decides which names are real.
+fn strip_widen2(mnem: &str) -> Option<(&str, bool)> {
+    Some(match mnem.strip_suffix('2') {
+        Some(base) => (base, true),
+        None => (mnem, false),
+    })
+}
+
 /// For an FP/SIMD `ldr`/`str` whose transfer register is `rt`, resolve the
 /// register number, the access-size log2 (2 for s, 3 for d, 4 for q), and the
 /// immediate- and register-offset base words. Returns None for a non-FP operand.
@@ -949,6 +959,108 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             return Err(String::from("inline asm: sha256su1 operands must be .4s"));
         }
         return Ok(0x5E00_6000 | ((rm as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SIMD widening three-register (long) `Vd.<2T>, Vn.<T>, Vm.<T>`: the sum,
+    // difference, product, or multiply-accumulate of two narrow vectors into a
+    // vector whose element is twice as wide. size (bit 22) is the SOURCE width;
+    // the `2` mnemonic reads the top half of 128-bit sources (Q at 30). U at 29
+    // selects the unsigned op.
+    if let Some((wmnem, upper)) = strip_widen2(mnemonic)
+        && let Some((base, u)) = match wmnem {
+            "saddl" => Some((0x0E20_0000u32, 0u32)),
+            "uaddl" => Some((0x0E20_0000, 1)),
+            "ssubl" => Some((0x0E20_2000, 0)),
+            "usubl" => Some((0x0E20_2000, 1)),
+            "smull" => Some((0x0E20_C000, 0)),
+            "umull" => Some((0x0E20_C000, 1)),
+            "smlal" => Some((0x0E20_8000, 0)),
+            "umlal" => Some((0x0E20_8000, 1)),
+            "smlsl" => Some((0x0E20_A000, 0)),
+            "umlsl" => Some((0x0E20_A000, 1)),
+            _ => None,
+        }
+        && let [
+            Opnd::VecReg {
+                num: rd,
+                size: ds,
+                q: dq,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: ss,
+                q: sq,
+            },
+            Opnd::VecReg {
+                num: rm,
+                size: ms,
+                q: mq,
+            },
+        ] = *ops
+    {
+        if ss != ms || sq != mq {
+            return Err(String::from(
+                "inline asm: widening source arrangements differ",
+            ));
+        }
+        if !dq || ds != ss + 1 || ss > 2 {
+            return Err(String::from(
+                "inline asm: widening destination must be one element size wider (8h/4s/2d)",
+            ));
+        }
+        if sq != upper {
+            return Err(String::from(
+                "inline asm: the `2` form reads 128-bit sources; the base form reads 64-bit",
+            ));
+        }
+        return Ok(base
+            | (u << 29)
+            | (if upper { 1u32 << 30 } else { 0 })
+            | ((ss as u32) << 22)
+            | ((rm as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD narrowing two-register `Vd.<T>, Vn.<2T>`: extract narrow elements
+    // from a wide vector. size (bit 22) is the DESTINATION width; the `2`
+    // mnemonic writes the top half of a 128-bit destination (Q at 30). U at 29
+    // selects the unsigned-saturating (uqxtn) or signed-to-unsigned (sqxtun) op.
+    if let Some((nmnem, upper)) = strip_widen2(mnemonic)
+        && let Some((base, u)) = match nmnem {
+            "xtn" => Some((0x0E21_2800u32, 0u32)),
+            "sqxtun" => Some((0x0E21_2800, 1)),
+            "sqxtn" => Some((0x0E21_4800, 0)),
+            "uqxtn" => Some((0x0E21_4800, 1)),
+            _ => None,
+        }
+        && let [
+            Opnd::VecReg {
+                num: rd,
+                size: ds,
+                q: dq,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: ss,
+                q: sq,
+            },
+        ] = *ops
+    {
+        if !sq || ss == 0 || ds + 1 != ss {
+            return Err(String::from(
+                "inline asm: narrowing source must be one element size wider (8h/4s/2d)",
+            ));
+        }
+        if dq != upper {
+            return Err(String::from(
+                "inline asm: the `2` form writes the top half; the base form writes the low half",
+            ));
+        }
+        return Ok(base
+            | (u << 29)
+            | (if upper { 1u32 << 30 } else { 0 })
+            | ((ds as u32) << 22)
+            | ((rn as u32) << 5)
+            | (rd as u32));
     }
     // SIMD element to GP register: `umov Rd, Vn.T[i]` (zero-extended) or
     // `smov Rd, Vn.T[i]` (sign-extended). imm5 = (index << (size+1)) | (1<<size)

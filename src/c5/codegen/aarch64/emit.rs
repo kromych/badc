@@ -2083,18 +2083,32 @@ fn emit_inline_asm_aarch64(
         }
     };
     // Registers the block overwrites: the operand registers plus the explicit
-    // clobber list, restricted to the x0..x15 pool.
+    // clobber list. GP operands and clobbers land in the x0..x15 save set; `w`
+    // operands are in the independent d0..d7 file and are saved separately. A
+    // `w` operand must be a double (the SSA model's only FP width is f64).
     let mut used_mask: u32 = asm.clobber_regs & 0xFFFF;
-    for r in op_reg.iter().flatten() {
-        used_mask |= 1 << r;
+    let mut fp_used_mask: u32 = 0;
+    for (i, op) in asm.operands.iter().enumerate() {
+        let Some(r) = op_reg[i] else { continue };
+        if matches!(op.constraint, AsmConstraint::Fp) {
+            if op.width != 8 {
+                bail_msg("aarch64 inline asm: only double `w` operands are supported");
+                return false;
+            }
+            fp_used_mask |= 1 << r;
+        } else {
+            used_mask |= 1 << r;
+        }
     }
     let save_list: Vec<u8> = (0u8..16).filter(|r| used_mask & (1 << r) != 0).collect();
+    let fp_save_list: Vec<u8> = (0u8..8).filter(|r| fp_used_mask & (1 << r) != 0).collect();
 
     let n = asm.operands.len();
     let n_saved = save_list.len();
-    // Stack region: captures at [sp + i*8], saved registers above them. Kept
-    // 16-byte aligned per AAPCS64.
-    let size = (((n + n_saved) * 8) as u32 + 15) & !15;
+    let n_fp_saved = fp_save_list.len();
+    // Stack region: captures at [sp + i*8], then the saved GP registers, then
+    // the saved FP registers. Kept 16-byte aligned per AAPCS64.
+    let size = (((n + n_saved + n_fp_saved) * 8) as u32 + 15) & !15;
     if size >= 4096 {
         bail_msg("aarch64 inline asm: operand frame too large");
         return false;
@@ -2104,27 +2118,52 @@ fn emit_inline_asm_aarch64(
     }
     let cap_off = |i: usize| (i * 8) as u32;
     let save_off = |j: usize| ((n + j) * 8) as u32;
+    let fp_save_off = |k: usize| ((n + n_saved + k) * 8) as u32;
 
     // Save the clobbered registers, then capture each operand's value (input) /
     // address (output) -- both before any operand register is overwritten.
     for (j, &r) in save_list.iter().enumerate() {
         emit_sp_str_x_auto(code, Reg(r), save_off(j));
     }
+    for (k, &r) in fp_save_list.iter().enumerate() {
+        emit_sp_str_d_auto(code, r, fp_save_off(k));
+    }
     for (i, &a) in args.iter().enumerate() {
         let Some(place) = alloc.places.get(a as usize).copied() else {
             bail_msg("aarch64 inline asm: operand place missing");
             return false;
         };
-        let Some(r) = materialize_int(code, place, Reg(16), frame) else {
-            bail_msg("aarch64 inline asm: operand not an integer place");
-            return false;
-        };
-        emit_sp_str_x_auto(code, r, cap_off(i));
+        // A `w` input captures its FP value; every other operand captures an
+        // integer value (input) or a destination address (output).
+        if matches!(asm.operands[i].constraint, AsmConstraint::Fp) && !asm.operands[i].is_output {
+            let Some(d) = materialize_fp(code, place, 16, frame) else {
+                bail_msg("aarch64 inline asm: `w` operand not a floating-point place");
+                return false;
+            };
+            emit_sp_str_d_auto(code, d, cap_off(i));
+        } else {
+            let Some(r) = materialize_int(code, place, Reg(16), frame) else {
+                bail_msg("aarch64 inline asm: operand not an integer place");
+                return false;
+            };
+            emit_sp_str_x_auto(code, r, cap_off(i));
+        }
     }
     // Load inputs and memory addresses into their assigned registers; a `+`
     // read-write output loads its current value from the destination address.
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
+        if matches!(op.constraint, AsmConstraint::Fp) {
+            // A `w` input loads its captured FP value into the d-register; a
+            // read-write `w` output loads the current value from the address.
+            if !op.is_output {
+                emit_sp_ldr_d_auto(code, r, cap_off(i));
+            } else if op.is_rw {
+                emit_sp_ldr_x(code, Reg(16), cap_off(i)); // x16 = destination address
+                emit(code, super::encode::enc_ldr_d_imm(r, Reg(16), 0));
+            }
+            continue;
+        }
         if matches!(op.constraint, AsmConstraint::Mem) || !op.is_output {
             emit_sp_ldr_x(code, Reg(r), cap_off(i));
         } else if op.is_rw {
@@ -2171,8 +2210,12 @@ fn emit_inline_asm_aarch64(
                         "aarch64 inline asm: operand reference is not a register",
                     ));
                 };
-                let is64 = is64.unwrap_or(asm.operands[idx as usize].width >= 8);
-                Opnd::Reg { num: r, is64 }
+                if matches!(asm.operands[idx as usize].constraint, AsmConstraint::Fp) {
+                    Opnd::VReg { num: r, is_d: true }
+                } else {
+                    let is64 = is64.unwrap_or(asm.operands[idx as usize].width >= 8);
+                    Opnd::Reg { num: r, is64 }
+                }
             }
             AsmOpndA64::Mem { base, off, pre } => {
                 let base = match base {
@@ -2441,6 +2484,10 @@ fn emit_inline_asm_aarch64(
         }
         let Some(r) = op_reg[i] else { continue };
         emit_sp_ldr_x(code, Reg(16), cap_off(i));
+        if matches!(op.constraint, AsmConstraint::Fp) {
+            emit(code, super::encode::enc_str_d_imm(r, Reg(16), 0));
+            continue;
+        }
         match op.width {
             8 => emit(code, enc_str_imm(Reg(r), Reg(16), 0)),
             4 => emit(code, enc_str32_imm(Reg(r), Reg(16), 0)),
@@ -2455,6 +2502,9 @@ fn emit_inline_asm_aarch64(
     // Restore the saved registers and free the frame.
     for (j, &r) in save_list.iter().enumerate() {
         emit_sp_ldr_x(code, Reg(r), save_off(j));
+    }
+    for (k, &r) in fp_save_list.iter().enumerate() {
+        emit_sp_ldr_d_auto(code, r, fp_save_off(k));
     }
     if size > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), size));

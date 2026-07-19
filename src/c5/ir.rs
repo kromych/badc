@@ -557,6 +557,9 @@ pub(crate) enum AsmConstraint {
     /// Any allocatable general register (`r`, or the register arm of
     /// `rm`/`g`).
     Reg,
+    /// Any allocatable SIMD/FP register (AArch64 `w`): the operand value is
+    /// held in a `d`/`s` register and `%N` resolves to it.
+    Fp,
     /// A specific general register named by a class letter (`a`->rax,
     /// `b`->rbx, `c`->rcx, `d`->rdx, `S`->rsi, `D`->rdi); the value is
     /// the architectural register number.

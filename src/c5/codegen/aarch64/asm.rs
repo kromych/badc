@@ -748,6 +748,19 @@ pub(crate) fn assign_operand_regs(
             assigned[i] = Some(r);
         }
     }
+    // SIMD/FP register pool for `w` operands (d0..d7). The GP and FP files are
+    // independent, so a number here does not clash with a GP assignment; the
+    // emitter tells them apart by the operand's constraint.
+    let mut fp_used = [false; 32];
+    for (i, op) in operands.iter().enumerate() {
+        if matches!(op.constraint, C::Fp) {
+            let r = (0u8..8)
+                .find(|&r| !fp_used[r as usize])
+                .ok_or_else(|| String::from("inline asm: out of FP registers for operands"))?;
+            fp_used[r as usize] = true;
+            assigned[i] = Some(r);
+        }
+    }
     for i in 0..operands.len() {
         if let C::Match(n) = operands[i].constraint {
             let r = assigned.get(n as usize).copied().flatten().ok_or_else(|| {

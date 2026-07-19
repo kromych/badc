@@ -1496,6 +1496,10 @@ impl Compiler {
             }
             return Some((AsmConstraint::Fixed(reg), is_rw));
         }
+        // AArch64 `w`: the value is held in a SIMD/FP register.
+        if body.contains('w') {
+            return Some((AsmConstraint::Fp, is_rw));
+        }
         if has_reg {
             return Some((AsmConstraint::Reg, is_rw));
         }

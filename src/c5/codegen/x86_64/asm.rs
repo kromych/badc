@@ -75,6 +75,18 @@ pub(crate) enum Mnemonic {
         load_op: u8,
         store_op: u8,
     },
+    /// A packed shuffle `pshuf{d,lw,hw} $imm8, %xmm_src, %xmm_dst`, encoded as
+    /// `<prefix> [REX] 0F 70 /r ib` (destination in ModRM.reg, source in r/m).
+    SseShufImm {
+        prefix: u8,
+    },
+    /// A packed shift by immediate `<op> $imm8, %xmm`, encoded as
+    /// `66 [REX] 0F <opcode> /digit ib`: the op rides ModRM.reg as an opcode
+    /// extension, the (source = destination) xmm sits in r/m.
+    SseShiftImm {
+        opcode: u8,
+        digit: u8,
+    },
     /// Privileged / model-specific operandless forms (operands, where any,
     /// ride fixed registers via the statement's constraints). `cli` / `sti`
     /// clear / set the interrupt flag; `invd` / `wbinvd` invalidate caches;
@@ -352,7 +364,11 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "cmpxchg" => Mnemonic::Cmpxchg,
         "inc" => Mnemonic::Inc,
         "dec" => Mnemonic::Dec,
-        _ => return sse2_op(name).or_else(|| sse_mov(name)),
+        _ => {
+            return sse2_op(name)
+                .or_else(|| sse_mov(name))
+                .or_else(|| sse_imm(name));
+        }
     })
 }
 
@@ -408,6 +424,32 @@ fn sse_mov(name: &str) -> Option<Mnemonic> {
             load_op,
             store_op,
         })
+}
+
+/// SSE immediate-operand ops: the packed shuffles `pshuf{d,lw,hw}` (opcode 0x70,
+/// the prefix selecting the variant) and the shifts-by-immediate `ps{ll,rl,ra}
+/// {w,d,q}` / `ps{ll,rl}dq` (opcode 0x71/0x72/0x73, a `/digit` opcode extension).
+fn sse_imm(name: &str) -> Option<Mnemonic> {
+    let shuf_prefix = match name {
+        "pshufd" => Some(0x66u8),
+        "pshuflw" => Some(0xF2),
+        "pshufhw" => Some(0xF3),
+        _ => None,
+    };
+    if let Some(prefix) = shuf_prefix {
+        return Some(Mnemonic::SseShufImm { prefix });
+    }
+    #[rustfmt::skip]
+    const SHIFTS: &[(&str, u8, u8)] = &[
+        ("psllw", 0x71, 6), ("pslld", 0x72, 6), ("psllq", 0x73, 6),
+        ("psrlw", 0x71, 2), ("psrld", 0x72, 2), ("psrlq", 0x73, 2),
+        ("psraw", 0x71, 4), ("psrad", 0x72, 4),
+        ("pslldq", 0x73, 7), ("psrldq", 0x73, 3),
+    ];
+    SHIFTS
+        .iter()
+        .find(|(n, _, _)| *n == name)
+        .map(|&(_, opcode, digit)| Mnemonic::SseShiftImm { opcode, digit })
 }
 
 /// The catalogue mnemonic matching `name`, as a `'static` string, or `None`.
@@ -1077,6 +1119,61 @@ pub(crate) fn encode(
             }
             Ok(())
         }
+        Mnemonic::SseShufImm { prefix } => {
+            // `pshuf* $imm, %xmm_src, %xmm_dst`: <prefix> [REX] 0F 70 /r ib.
+            let xmm = |c: &Concrete| match c {
+                Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
+                    Some(*reg - XMM_BASE)
+                }
+                _ => None,
+            };
+            let [imm, src, dst] = ops else {
+                return Err(String::from(
+                    "inline asm: pshuf needs $imm, %xmm_src, %xmm_dst",
+                ));
+            };
+            let Concrete::Imm(ib) = imm else {
+                return Err(String::from("inline asm: pshuf immediate expected"));
+            };
+            let (Some(d), Some(s)) = (xmm(dst), xmm(src)) else {
+                return Err(String::from("inline asm: pshuf operands must be xmm"));
+            };
+            code.push(prefix);
+            if d >= 8 || s >= 8 {
+                code.push(rex(false, d >= 8, false, s >= 8));
+            }
+            code.extend_from_slice(&[0x0F, 0x70]);
+            code.push(modrm_reg(d & 7, s & 7));
+            code.push(*ib as u8);
+            Ok(())
+        }
+        Mnemonic::SseShiftImm { opcode, digit } => {
+            // `<op> $imm, %xmm`: 66 [REX.B] 0F <opcode> /digit ib. The opcode
+            // extension `digit` rides ModRM.reg, the xmm sits in r/m.
+            let xmm = |c: &Concrete| match c {
+                Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
+                    Some(*reg - XMM_BASE)
+                }
+                _ => None,
+            };
+            let [imm, reg] = ops else {
+                return Err(String::from("inline asm: packed shift needs $imm, %xmm"));
+            };
+            let Concrete::Imm(ib) = imm else {
+                return Err(String::from("inline asm: packed shift immediate expected"));
+            };
+            let Some(r) = xmm(reg) else {
+                return Err(String::from("inline asm: packed shift operand must be xmm"));
+            };
+            code.push(0x66);
+            if r >= 8 {
+                code.push(rex(false, false, false, true));
+            }
+            code.extend_from_slice(&[0x0F, opcode]);
+            code.push(modrm_reg(digit, r & 7));
+            code.push(*ib as u8);
+            Ok(())
+        }
         Mnemonic::In | Mnemonic::Out => {
             // AT&T `in port, acc` / `out acc, port`. The accumulator
             // (AL/AX/EAX) is implicit; only the width and the port form
@@ -1431,6 +1528,88 @@ mod tests {
             })
         );
         assert_eq!(sse_mov("not_a_mov"), None);
+    }
+
+    #[test]
+    fn sse_imm_ops() {
+        let xmm = |n: u8| Concrete::Reg {
+            reg: XMM_BASE + n,
+            size: AsmRegSize::Quad,
+        };
+        let imm = Concrete::Imm;
+        // pshuf*: <prefix> 0F 70 /r ib, dst in ModRM.reg, src in r/m.
+        assert_eq!(
+            enc(
+                Mnemonic::SseShufImm { prefix: 0x66 },
+                None,
+                &[imm(0x1b), xmm(1), xmm(2)]
+            ),
+            [0x66, 0x0F, 0x70, 0xD1, 0x1B]
+        ); // pshufd $0x1b,%xmm1,%xmm2
+        assert_eq!(
+            enc(
+                Mnemonic::SseShufImm { prefix: 0xF2 },
+                None,
+                &[imm(0x4e), xmm(1), xmm(2)]
+            ),
+            [0xF2, 0x0F, 0x70, 0xD1, 0x4E]
+        ); // pshuflw
+        assert_eq!(
+            enc(
+                Mnemonic::SseShufImm { prefix: 0x66 },
+                None,
+                &[imm(0x1b), xmm(9), xmm(10)]
+            ),
+            [0x66, 0x45, 0x0F, 0x70, 0xD1, 0x1B]
+        ); // high xmm -> REX.R+REX.B
+        // shift-by-imm: 66 0F opcode /digit ib; the digit is the opcode
+        // extension in ModRM.reg, the xmm in r/m.
+        assert_eq!(
+            enc(
+                Mnemonic::SseShiftImm {
+                    opcode: 0x72,
+                    digit: 6
+                },
+                None,
+                &[imm(3), xmm(0)]
+            ),
+            [0x66, 0x0F, 0x72, 0xF0, 0x03]
+        ); // pslld $3,%xmm0
+        assert_eq!(
+            enc(
+                Mnemonic::SseShiftImm {
+                    opcode: 0x73,
+                    digit: 3
+                },
+                None,
+                &[imm(8), xmm(1)]
+            ),
+            [0x66, 0x0F, 0x73, 0xD9, 0x08]
+        ); // psrldq $8,%xmm1
+        assert_eq!(
+            enc(
+                Mnemonic::SseShiftImm {
+                    opcode: 0x72,
+                    digit: 6
+                },
+                None,
+                &[imm(3), xmm(11)]
+            ),
+            [0x66, 0x41, 0x0F, 0x72, 0xF3, 0x03]
+        ); // high xmm -> REX.B
+        // The tables resolve names.
+        assert_eq!(
+            sse_imm("pshufd"),
+            Some(Mnemonic::SseShufImm { prefix: 0x66 })
+        );
+        assert_eq!(
+            sse_imm("psllq"),
+            Some(Mnemonic::SseShiftImm {
+                opcode: 0x73,
+                digit: 6
+            })
+        );
+        assert_eq!(sse_imm("not_an_op"), None);
     }
 
     #[test]

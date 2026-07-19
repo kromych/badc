@@ -57,9 +57,44 @@ static int sse_movdqu(int w) {
     return r;
 }
 
+static int sse_shift(int w) {
+    int r;
+#if defined(__x86_64__)
+    __asm__("movd %1, %%xmm0\n\t"
+            "pslld $1, %%xmm0\n\t" /* each lane <<= 1 */
+            "movd %%xmm0, %0"
+            : "=r"(r)
+            : "r"(w)
+            : "xmm0");
+#else
+    r = w << 1;
+#endif
+    return r;
+}
+
+static int sse_shuffle(int a, int b) {
+    int r;
+#if defined(__x86_64__)
+    __asm__("movd %1, %%xmm0\n\t"           /* xmm0 = [a,0,0,0]     */
+            "movd %2, %%xmm1\n\t"           /* xmm1 = [b,0,0,0]     */
+            "punpckldq %%xmm1, %%xmm0\n\t"  /* xmm0 = [a,b,0,0]     */
+            "pshufd $1, %%xmm0, %%xmm0\n\t" /* lane0 <- old lane1=b */
+            "movd %%xmm0, %0"
+            : "=r"(r)
+            : "r"(a), "r"(b)
+            : "xmm0", "xmm1");
+#else
+    (void) a;
+    r = b;
+#endif
+    return r;
+}
+
 int main(void) {
     if (sse_add(19, 23) != 42) return 1;
-    if (sse_mem_add(23) != 42) return 2; /* 23 + 19, memory-source paddd */
-    if (sse_movdqu(42) != 42) return 3;  /* movdqu load then store       */
+    if (sse_mem_add(23) != 42) return 2;   /* 23 + 19, memory-source paddd */
+    if (sse_movdqu(42) != 42) return 3;    /* movdqu load then store       */
+    if (sse_shift(21) != 42) return 4;     /* pslld $1: 21 << 1            */
+    if (sse_shuffle(7, 42) != 42) return 5; /* pshufd picks lane 1 = b      */
     return 42;
 }

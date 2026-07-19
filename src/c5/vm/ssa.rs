@@ -2081,7 +2081,10 @@ fn run_inline_asm(
                     "inline asm: `{name}` is not supported under --interp"
                 )));
             }
-            Mnemonic::Sse2Rr { .. } | Mnemonic::SseMov { .. } => {
+            Mnemonic::Sse2Rr { .. }
+            | Mnemonic::SseMov { .. }
+            | Mnemonic::SseShufImm { .. }
+            | Mnemonic::SseShiftImm { .. } => {
                 // The interpreter has no XMM register file; SSE inline asm is a
                 // native / JIT construct, refused here rather than mis-modelled.
                 return Err(C5Error::Runtime(alloc::string::String::from(

@@ -307,6 +307,29 @@ fn fp_arithmetic() {
 }
 
 #[test]
+fn fp_conversions() {
+    let d = |num: u8| Opnd::VReg { num, is_d: true };
+    let s = |num: u8| Opnd::VReg { num, is_d: false };
+    // int -> fp: sf (int width) at bit 31, type (fp width) at bit 22.
+    assert_eq!(enc("scvtf", &[d(0), x(1)]), 0x9E62_0020);
+    assert_eq!(enc("scvtf", &[s(0), w(1)]), 0x1E22_0020);
+    assert_eq!(enc("scvtf", &[d(0), w(1)]), 0x1E62_0020); // int32 -> double
+    assert_eq!(enc("scvtf", &[s(0), x(1)]), 0x9E22_0020); // int64 -> single
+    assert_eq!(enc("ucvtf", &[d(0), x(1)]), 0x9E63_0020);
+    // fp -> int (toward zero).
+    assert_eq!(enc("fcvtzs", &[x(0), d(1)]), 0x9E78_0020);
+    assert_eq!(enc("fcvtzs", &[w(0), s(1)]), 0x1E38_0020);
+    assert_eq!(enc("fcvtzs", &[w(0), d(1)]), 0x1E78_0020);
+    assert_eq!(enc("fcvtzu", &[x(0), d(1)]), 0x9E79_0020);
+    // fp size conversion.
+    assert_eq!(enc("fcvt", &[s(0), d(1)]), 0x1E62_4020); // double -> single
+    assert_eq!(enc("fcvt", &[d(0), s(1)]), 0x1E22_C020); // single -> double
+    // fcvt needs different widths; a swapped register file has no encoding.
+    assert!(encode("fcvt", &[d(0), d(1)]).is_err());
+    assert!(encode("scvtf", &[x(0), d(1)]).is_err());
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

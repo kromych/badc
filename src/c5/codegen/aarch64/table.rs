@@ -373,6 +373,63 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         let base = if is_d { 0x1E60_2000u32 } else { 0x1E20_2000 };
         return Ok(base | ((rm as u32) << 16) | ((rn as u32) << 5));
     }
+    // Integer -> FP: `scvtf|ucvtf Vd, Rn`. sf (bit 31) is the integer width,
+    // the type bit (22) the FP width, bit 16 selects unsigned.
+    if let Some(uns) = match mnemonic {
+        "scvtf" => Some(0u32),
+        "ucvtf" => Some(0x1_0000),
+        _ => None,
+    } {
+        let [Opnd::VReg { num: rd, is_d }, Opnd::Reg { num: rn, is64 }] = *ops else {
+            return Err(String::from("inline asm: bad scvtf/ucvtf operands"));
+        };
+        let base = if is64 { 0x8000_0000u32 } else { 0 }
+            | 0x1E22_0000
+            | if is_d { 0x40_0000 } else { 0 }
+            | uns;
+        return Ok(base | ((rn as u32) << 5) | (rd as u32));
+    }
+    // FP -> integer, rounding toward zero: `fcvtzs|fcvtzu Rd, Vn`.
+    if let Some(uns) = match mnemonic {
+        "fcvtzs" => Some(0u32),
+        "fcvtzu" => Some(0x1_0000),
+        _ => None,
+    } {
+        let [Opnd::Reg { num: rd, is64 }, Opnd::VReg { num: rn, is_d }] = *ops else {
+            return Err(String::from("inline asm: bad fcvtzs/fcvtzu operands"));
+        };
+        let base = if is64 { 0x8000_0000u32 } else { 0 }
+            | 0x1E38_0000
+            | if is_d { 0x40_0000 } else { 0 }
+            | uns;
+        return Ok(base | ((rn as u32) << 5) | (rd as u32));
+    }
+    // FP size conversion between single and double: `fcvt Vd, Vn`.
+    if mnemonic == "fcvt" {
+        let [
+            Opnd::VReg {
+                num: rd,
+                is_d: dst_d,
+            },
+            Opnd::VReg {
+                num: rn,
+                is_d: src_d,
+            },
+        ] = *ops
+        else {
+            return Err(String::from("inline asm: bad fcvt operands"));
+        };
+        let base = match (dst_d, src_d) {
+            (false, true) => 0x1E62_4000u32, // Sd, Dn (double -> single)
+            (true, false) => 0x1E22_C000,    // Dd, Sn (single -> double)
+            _ => {
+                return Err(String::from(
+                    "inline asm: fcvt needs different source and destination widths",
+                ));
+            }
+        };
+        return Ok(base | ((rn as u32) << 5) | (rd as u32));
+    }
     // System operation: `dc`/`ic`/`tlbi <op>{, Xt}`. The op is a base word; the
     // Rt field takes the register operand or xzr (31) when there is none.
     if let "dc" | "ic" | "tlbi" = mnemonic {

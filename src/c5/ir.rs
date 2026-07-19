@@ -658,6 +658,15 @@ pub(crate) enum Terminator {
     /// The target list lives in [`FunctionSsa::jump_tables`]
     /// because `Terminator` is `Copy`.
     JumpTable { idx: ValueId, table: u32 },
+    /// GCC `asm goto`: the block's last instruction is an
+    /// `Inst::InlineAsm` whose template may branch to any listed C
+    /// label. `jump_tables[table][0]` is the fall-through successor;
+    /// entries 1.. are the label targets in label-list order (a
+    /// template `%lK` reference names entry `1 + K`). The row rides
+    /// [`FunctionSsa::jump_tables`] like `JumpTable` because
+    /// `Terminator` is `Copy`; every edge is opaque to the branch
+    /// folds (the asm decides at runtime).
+    AsmGoto { table: u32 },
     /// Synthetic fall-through to a successor block. Preserved
     /// on the variant for object-file round-trips of SSA bodies
     /// that already carry it; new IR producers should use the

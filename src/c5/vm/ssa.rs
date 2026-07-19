@@ -761,6 +761,13 @@ fn run_func<H: Host>(
                     "vm_ssa: Terminator::TailExt not implemented".to_string(),
                 ));
             }
+            Terminator::AsmGoto { .. } => {
+                // The template's label branches have no interpreted
+                // form; asm goto is native-only.
+                break Err(C5Error::Runtime(
+                    "vm_ssa: asm goto is not supported by the interpreter".to_string(),
+                ));
+            }
             Terminator::Unreachable => {
                 // Sealed after a noreturn call; reaching it means the call
                 // returned when it should not have.
@@ -2020,6 +2027,17 @@ fn run_inline_asm(
     use crate::c5::ir::AsmRegSize;
 
     let insns = parse_template(&asm.template).map_err(C5Error::Runtime)?;
+    // An `asm goto` label branch transfers control between blocks,
+    // which this per-instruction evaluator cannot model.
+    if insns.iter().any(|i| {
+        i.operands
+            .iter()
+            .any(|o| matches!(o, AsmOpnd::GotoLabel(_)))
+    }) {
+        return Err(C5Error::Runtime(alloc::string::String::from(
+            "inline asm: asm goto is not supported under --interp",
+        )));
+    }
     let op_reg =
         crate::c5::codegen::x86_64::asm::assign_operand_regs(&asm.operands, asm.clobber_fp_regs)
             .map_err(C5Error::Runtime)?;
@@ -2067,7 +2085,7 @@ fn run_inline_asm(
             }
             // A label reference is a branch target, never a value operand; the
             // jmp / jcc that carries it is refused under the interpreter.
-            AsmOpnd::Label { .. } => (0, AsmRegSize::Long),
+            AsmOpnd::Label { .. } | AsmOpnd::GotoLabel(_) => (0, AsmRegSize::Long),
         }
     };
     // The model register a destination operand writes into.
@@ -2077,7 +2095,7 @@ fn run_inline_asm(
             // segment, marked >= 16) has no modelled slot: no-op.
             AsmOpnd::Reg { reg, .. } => (reg < 16).then_some(reg as usize),
             AsmOpnd::Ref { idx, .. } => op_reg[idx as usize].map(|r| r as usize),
-            AsmOpnd::Imm(_) | AsmOpnd::Label { .. } => None,
+            AsmOpnd::Imm(_) | AsmOpnd::Label { .. } | AsmOpnd::GotoLabel(_) => None,
         }
     };
 

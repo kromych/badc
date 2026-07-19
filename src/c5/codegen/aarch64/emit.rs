@@ -847,6 +847,40 @@ pub(crate) fn emit_function(
                 }
                 continue;
             }
+            // `asm goto`: the label branches patch against block
+            // offsets via the enclosing `branch_fixups`, which
+            // `emit_inst` has no access to; lower it here (same
+            // pattern as `Inst::BlockAddr` above).
+            if let Inst::InlineAsm { asm, args } = inst
+                && let Terminator::AsmGoto { table } = block.terminator
+            {
+                if !emit_inline_asm_aarch64(
+                    code,
+                    asm,
+                    args,
+                    alloc,
+                    frame,
+                    fixups,
+                    name2entpc,
+                    Some(AsmGotoCtxA64 {
+                        row: &func.jump_tables[table as usize],
+                        branch_fixups: &mut branch_fixups,
+                    }),
+                ) {
+                    code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
+                    macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                    macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
+                    return false;
+                }
+                continue;
+            }
             let data_fixups_pre_inst = data_fixups.len();
             let inst_ok = {
                 let mut cx = super::ssa::emit_common::EmitCtx {
@@ -1184,6 +1218,20 @@ pub(crate) fn emit_function(
                 jump_table_fixups.push((code.len(), table));
                 let entries = func.jump_tables[table as usize].len();
                 code.resize(code.len() + entries * 4, 0);
+            }
+            Terminator::AsmGoto { table } => {
+                // The label branches were lowered inside the
+                // `Inst::InlineAsm`; only the fall-through edge (row
+                // entry 0) is emitted here.
+                let fall = func.jump_tables[table as usize][0];
+                if fall as usize != block_idx + 1 {
+                    branch_fixups.push(BranchFixup {
+                        site: code.len(),
+                        target: fall,
+                        kind: LocalBranchKind::B,
+                    });
+                    emit(code, enc_b(0));
+                }
             }
             Terminator::TailExt(binding_idx) => {
                 // Tail-jump through the GOT-patched trampoline:
@@ -2046,13 +2094,102 @@ struct FnCtx<'a> {
     name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
 }
 
+/// Block-target branch context for an `asm goto` statement: the
+/// `jump_tables` row (`[fall_through, label targets...]`) and the
+/// enclosing function's branch-fixup list. Template `%lK` branches
+/// land on local restore trampolines whose final `b` is patched to the
+/// label's block like any other block-local branch.
+struct AsmGotoCtxA64<'a> {
+    row: &'a [super::super::ir::BlockId],
+    branch_fixups: &'a mut Vec<BranchFixup>,
+}
+
+/// A template branch to a local (`Nf` / `Nb`) or `asm goto` (`%lK`)
+/// label, recorded as a placeholder word and patched once the target
+/// offset is known.
+enum LabelBranch {
+    B,
+    BCond(u8),
+    Cb { nz: bool, rt: u8, is64: bool },
+    Tb { nz: bool, rt: u8, bit: u8 },
+    Adr { rd: u8 },
+}
+
+/// Encode a resolved label branch; `delta` is the byte displacement
+/// from the branch instruction to its target. `Adr` is byte-granular
+/// and handled by the caller.
+fn label_branch_word(kind: &LabelBranch, delta: i64) -> Result<u32, alloc::string::String> {
+    use alloc::string::String;
+    if delta % 4 != 0 {
+        return Err(String::from(
+            "aarch64 inline asm: label target is not word-aligned",
+        ));
+    }
+    let words = (delta / 4) as i32;
+    let fits = |bits: u32| {
+        let lim = 1i32 << (bits - 1);
+        (-lim..lim).contains(&words)
+    };
+    Ok(match *kind {
+        LabelBranch::B => {
+            if !fits(26) {
+                return Err(String::from(
+                    "aarch64 inline asm: branch target out of range",
+                ));
+            }
+            super::encode::enc_b(words)
+        }
+        // B.cond: 0101_0100 | imm19 << 5 | cond.
+        LabelBranch::BCond(c) => {
+            if !fits(19) {
+                return Err(String::from(
+                    "aarch64 inline asm: branch target out of range",
+                ));
+            }
+            0x5400_0000 | (((words as u32) & 0x7_FFFF) << 5) | c as u32
+        }
+        // CBZ/CBNZ: sf | 0011_010z | imm19 << 5 | Rt.
+        LabelBranch::Cb { nz, rt, is64 } => {
+            if !fits(19) {
+                return Err(String::from(
+                    "aarch64 inline asm: branch target out of range",
+                ));
+            }
+            (if is64 { 1u32 << 31 } else { 0 })
+                | (if nz { 0x3500_0000 } else { 0x3400_0000 })
+                | (((words as u32) & 0x7_FFFF) << 5)
+                | rt as u32
+        }
+        // TBZ/TBNZ: bit<5> | 0011_011z | bit<4:0> << 19 | imm14 << 5 | Rt.
+        LabelBranch::Tb { nz, rt, bit } => {
+            if !fits(14) {
+                return Err(String::from(
+                    "aarch64 inline asm: branch target out of range",
+                ));
+            }
+            ((bit as u32 >> 5) << 31)
+                | (if nz { 0x3700_0000 } else { 0x3600_0000 })
+                | ((bit as u32 & 31) << 19)
+                | (((words as u32) & 0x3FFF) << 5)
+                | rt as u32
+        }
+        LabelBranch::Adr { .. } => {
+            return Err(String::from(
+                "aarch64 inline asm: adr is not a branch encoding",
+            ));
+        }
+    })
+}
+
 /// Lower an `Inst::InlineAsm` (GCC extended asm) on AArch64. Assigns each
 /// register operand a machine register per its constraint, saves the registers
 /// the block overwrites, captures the operand values / addresses to a stack
 /// region, loads the inputs, encodes the register-concrete template through the
 /// table encoder, and stores the outputs back through their addresses. Raw-byte
 /// pieces emit their literal bytes verbatim. `x16` / `x17` are the bridge
-/// scratch, so the operand pool is `x0..x15`.
+/// scratch, so the operand pool is `x0..x15`. `goto_ctx` is present for
+/// the `asm goto` form (the statement is the last instruction of a
+/// `Terminator::AsmGoto` block).
 fn emit_inline_asm_aarch64(
     code: &mut Vec<u8>,
     asm: &super::super::ir::AsmBlock,
@@ -2061,6 +2198,7 @@ fn emit_inline_asm_aarch64(
     frame: Frame,
     fixups: &mut Vec<super::encode::Fixup>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> bool {
     use super::super::ir::AsmConstraint;
     use super::asm::{AsmOpndA64, assign_operand_regs, parse_template};
@@ -2277,7 +2415,7 @@ fn emit_inline_asm_aarch64(
                 }
             }
             AsmOpndA64::Cond(c) => Opnd::Cond(c),
-            AsmOpndA64::Label { .. } => {
+            AsmOpndA64::Label { .. } | AsmOpndA64::GotoLabel(_) => {
                 return Err(String::from(
                     "aarch64 inline asm: label reference outside a branch",
                 ));
@@ -2288,15 +2426,13 @@ fn emit_inline_asm_aarch64(
     // to them emit a placeholder word and are patched once the block's layout
     // is final (a `Nb` reference binds to the most recent definition of N at
     // or before the branch, `Nf` to the next one after it).
-    enum LabelBranch {
-        B,
-        BCond(u8),
-        Cb { nz: bool, rt: u8, is64: bool },
-        Tb { nz: bool, rt: u8, bit: u8 },
-        Adr { rd: u8 },
-    }
     let mut label_defs: Vec<(u32, usize)> = Vec::new();
     let mut label_fixups: Vec<(usize, LabelBranch, u32, bool)> = Vec::new();
+    // `asm goto` label branches: `(site, kind, label_index)` per `%lK`
+    // reference, patched to the label's restore trampoline (or to the
+    // shared fall-through restore when the target is the fall-through
+    // block).
+    let mut goto_sites: Vec<(usize, LabelBranch, usize)> = Vec::new();
 
     // Encode each template instruction; raw-byte pieces emit verbatim.
     for insn in &insns {
@@ -2331,7 +2467,11 @@ fn emit_inline_asm_aarch64(
             emit(code, word);
             continue;
         }
-        if let Some(&AsmOpndA64::Label { num, forward }) = insn.operands.last() {
+        let goto_label = match insn.operands.last() {
+            Some(&AsmOpndA64::GotoLabel(k)) => Some(k),
+            _ => None,
+        };
+        if matches!(insn.operands.last(), Some(AsmOpndA64::Label { .. })) || goto_label.is_some() {
             let kind = match insn.mnemonic.as_str() {
                 "b" if insn.operands.len() == 1 => LabelBranch::B,
                 "cbz" | "cbnz" if insn.operands.len() == 2 => match conv(&insn.operands[0]) {
@@ -2395,6 +2535,26 @@ fn emit_inline_asm_aarch64(
                     LabelBranch::BCond(c)
                 }
             };
+            if let Some(k) = goto_label {
+                let Some(ctx) = goto_ctx.as_ref() else {
+                    bail_msg("aarch64 inline asm: `%l` label reference outside `asm goto`");
+                    return false;
+                };
+                if 1 + k as usize >= ctx.row.len() {
+                    bail_msg("aarch64 inline asm: `%l` label index out of range");
+                    return false;
+                }
+                if matches!(kind, LabelBranch::Adr { .. }) {
+                    bail_msg("aarch64 inline asm: adr cannot take an `asm goto` label");
+                    return false;
+                }
+                goto_sites.push((code.len(), kind, k as usize));
+                emit(code, 0);
+                continue;
+            }
+            let Some(&AsmOpndA64::Label { num, forward }) = insn.operands.last() else {
+                unreachable!("guard admits Label or GotoLabel only");
+            };
             label_fixups.push((code.len(), kind, num, forward));
             emit(code, 0);
             continue;
@@ -2447,57 +2607,13 @@ fn emit_inline_asm_aarch64(
             code[site..site + 4].copy_from_slice(&word.to_le_bytes());
             continue;
         }
-        if delta % 4 != 0 {
-            bail_msg("aarch64 inline asm: label target is not word-aligned");
-            return false;
+        match label_branch_word(kind, delta) {
+            Ok(word) => code[site..site + 4].copy_from_slice(&word.to_le_bytes()),
+            Err(m) => {
+                bail_msg(&m);
+                return false;
+            }
         }
-        let words = (delta / 4) as i32;
-        let fits = |bits: u32| {
-            let lim = 1i32 << (bits - 1);
-            (-lim..lim).contains(&words)
-        };
-        let word = match *kind {
-            LabelBranch::B => {
-                if !fits(26) {
-                    bail_msg("aarch64 inline asm: branch target out of range");
-                    return false;
-                }
-                super::encode::enc_b(words)
-            }
-            // B.cond: 0101_0100 | imm19 << 5 | cond.
-            LabelBranch::BCond(c) => {
-                if !fits(19) {
-                    bail_msg("aarch64 inline asm: branch target out of range");
-                    return false;
-                }
-                0x5400_0000 | (((words as u32) & 0x7_FFFF) << 5) | c as u32
-            }
-            // CBZ/CBNZ: sf | 0011_010z | imm19 << 5 | Rt.
-            LabelBranch::Cb { nz, rt, is64 } => {
-                if !fits(19) {
-                    bail_msg("aarch64 inline asm: branch target out of range");
-                    return false;
-                }
-                (if is64 { 1u32 << 31 } else { 0 })
-                    | (if nz { 0x3500_0000 } else { 0x3400_0000 })
-                    | (((words as u32) & 0x7_FFFF) << 5)
-                    | rt as u32
-            }
-            // TBZ/TBNZ: bit<5> | 0011_011z | bit<4:0> << 19 | imm14 << 5 | Rt.
-            LabelBranch::Tb { nz, rt, bit } => {
-                if !fits(14) {
-                    bail_msg("aarch64 inline asm: branch target out of range");
-                    return false;
-                }
-                ((bit as u32 >> 5) << 31)
-                    | (if nz { 0x3700_0000 } else { 0x3600_0000 })
-                    | ((bit as u32 & 31) << 19)
-                    | (((words as u32) & 0x3FFF) << 5)
-                    | rt as u32
-            }
-            LabelBranch::Adr { .. } => unreachable!("adr patched above"),
-        };
-        code[site..site + 4].copy_from_slice(&word.to_le_bytes());
     }
     // Store the register outputs back through their captured addresses (x16
     // holds the address; the operand pool is untouched).
@@ -2523,14 +2639,60 @@ fn emit_inline_asm_aarch64(
         }
     }
     // Restore the saved registers and free the frame.
-    for (j, &r) in save_list.iter().enumerate() {
-        emit_sp_ldr_x(code, Reg(r), save_off(j));
-    }
-    for (k, &r) in fp_save_list.iter().enumerate() {
-        emit_sp_ldr_d_auto(code, r, fp_save_off(k));
-    }
-    if size > 0 {
-        emit(code, enc_add_imm(Reg(31), Reg(31), size));
+    let emit_restore = |code: &mut Vec<u8>| {
+        for (j, &r) in save_list.iter().enumerate() {
+            emit_sp_ldr_x(code, Reg(r), save_off(j));
+        }
+        for (k, &r) in fp_save_list.iter().enumerate() {
+            emit_sp_ldr_d_auto(code, r, fp_save_off(k));
+        }
+        if size > 0 {
+            emit(code, enc_add_imm(Reg(31), Reg(31), size));
+        }
+    };
+    let restore_start = code.len();
+    emit_restore(code);
+    // `asm goto`: each `%lK` branch leaves mid-template, before the
+    // restore just emitted on the fall-through path, so it lands on a
+    // trampoline that repeats the restore and branches to the label's
+    // block through the enclosing function's branch fixups. A label
+    // whose target is the fall-through block reuses the fall-through
+    // restore instead.
+    if let Some(ctx) = goto_ctx {
+        let mut tramp_at: Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
+        if goto_sites
+            .iter()
+            .any(|&(_, _, k)| ctx.row[1 + k] != ctx.row[0])
+        {
+            let skip_site = code.len();
+            emit(code, 0); // b over the trampolines, patched below
+            for &(_, _, k) in &goto_sites {
+                if ctx.row[1 + k] == ctx.row[0] || tramp_at[k].is_some() {
+                    continue;
+                }
+                tramp_at[k] = Some(code.len());
+                emit_restore(code);
+                ctx.branch_fixups.push(BranchFixup {
+                    site: code.len(),
+                    target: ctx.row[1 + k],
+                    kind: LocalBranchKind::B,
+                });
+                emit(code, super::encode::enc_b(0));
+            }
+            let words = ((code.len() - skip_site) / 4) as i32;
+            let word = super::encode::enc_b(words);
+            code[skip_site..skip_site + 4].copy_from_slice(&word.to_le_bytes());
+        }
+        for &(site, ref kind, k) in &goto_sites {
+            let target = tramp_at[k].unwrap_or(restore_start);
+            match label_branch_word(kind, target as i64 - site as i64) {
+                Ok(word) => code[site..site + 4].copy_from_slice(&word.to_le_bytes()),
+                Err(m) => {
+                    bail_msg(&m);
+                    return false;
+                }
+            }
+        }
     }
     true
 }
@@ -3160,7 +3322,7 @@ fn emit_inst(
             true
         }
         Inst::InlineAsm { asm, args } => {
-            emit_inline_asm_aarch64(code, asm, args, alloc, frame, fixups, name2entpc)
+            emit_inline_asm_aarch64(code, asm, args, alloc, frame, fixups, name2entpc, None)
         }
         _ => false,
     }

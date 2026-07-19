@@ -88,6 +88,10 @@ pub(crate) enum AsmOpndA64 {
     /// (`forward` selects the next definition after the branch, otherwise the
     /// most recent one at or before it).
     Label { num: u32, forward: bool },
+    /// `%lK`: an `asm goto` label reference by label-list index (the
+    /// frontend canonicalizes `%l[name]` and operand-relative `%lN` to
+    /// this form). The emitter branches to the label's target block.
+    GotoLabel(u8),
 }
 
 /// The base register of a memory operand.
@@ -686,6 +690,16 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
         return Err(format!("inline asm: bad immediate `{tok}`"));
     }
     if let Some(rest) = tok.strip_prefix('%') {
+        // `%lK`: an `asm goto` label-list reference.
+        if let Some(digits) = rest.strip_prefix('l')
+            && !digits.is_empty()
+            && digits.bytes().all(|c| c.is_ascii_digit())
+        {
+            let k: u8 = digits
+                .parse()
+                .map_err(|_| format!("inline asm: bad goto-label reference `{tok}`"))?;
+            return Ok(AsmOpndA64::GotoLabel(k));
+        }
         // `%N` (natural width); the GP views `%wN` (32) / `%xN` (64); and the FP
         // scalar views `%sN` (single) / `%dN` (double). A view flag rides `is64`
         // (w/s = 32, x/d = 64) and the emitter resolves it against the operand's

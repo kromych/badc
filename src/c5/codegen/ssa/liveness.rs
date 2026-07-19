@@ -77,6 +77,7 @@ impl Liveness {
                 Terminator::Jmp(_)
                 | Terminator::TailExt(_)
                 | Terminator::FallThrough(_)
+                | Terminator::AsmGoto { .. }
                 | Terminator::Unreachable => {}
             }
         }

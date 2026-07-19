@@ -218,6 +218,12 @@ fn is_inline_candidate(
                 say(format_args!("JumpTable terminator"));
                 return false;
             }
+            Terminator::AsmGoto { .. } => {
+                // Same block-id / jump_tables-row shift problem as
+                // JumpTable; the asm-goto edges stay out of line.
+                say(format_args!("AsmGoto terminator"));
+                return false;
+            }
             // A block sealed after a `_Noreturn` call is not a return:
             // control never reaches its end, so the splice needs no
             // postfix merge for it. The multi-block splice preserves it
@@ -712,6 +718,7 @@ pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
         Terminator::Jmp(_)
         | Terminator::FallThrough(_)
         | Terminator::TailExt(_)
+        | Terminator::AsmGoto { .. }
         | Terminator::Unreachable => {}
         Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
             *cond = map_v(*cond, remap);
@@ -799,7 +806,7 @@ fn splice_multi_block(
             // Multi-block splicing is skipped for jump-table callers
             // (block_id_shift_unsafe); the table entries would need the
             // same shift. TODO: remap via the shared BlockId utility.
-            Terminator::JumpTable { .. } => {
+            Terminator::JumpTable { .. } | Terminator::AsmGoto { .. } => {
                 unreachable!("multi-block splice skips jump-table callers")
             }
         }
@@ -1189,6 +1196,9 @@ fn splice_multi_block(
                 }
                 Terminator::JumpTable { .. } => {
                     unreachable!("filter rejects JumpTable")
+                }
+                Terminator::AsmGoto { .. } => {
+                    unreachable!("filter rejects AsmGoto")
                 }
             };
             let exit_acc = if cblock.exit_acc != NO_VALUE {

@@ -144,8 +144,11 @@ fn run_one(func: &mut FunctionSsa) {
             },
             // Retarget every table entry naming the split successor;
             // repeated entries (case-value holes on the default block)
-            // all route through the one synthetic block.
-            Terminator::JumpTable { table, .. } => {
+            // all route through the one synthetic block. An asm-goto
+            // row is retargeted the same way: the label branch lands
+            // on the synthetic block, which runs the phi-moves and
+            // jumps on.
+            Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } => {
                 for t in func.jump_tables[table as usize].iter_mut() {
                     if *t == original_succ {
                         *t = new_id;
@@ -191,7 +194,7 @@ fn successors(term: &Terminator, jump_tables: &[Vec<BlockId>]) -> Vec<BlockId> {
         } => alloc::vec![*target, *fall_through],
         // Distinct targets only, so a table's repeated entries yield
         // one split per (pred, succ) edge.
-        Terminator::JumpTable { table, .. } => {
+        Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } => {
             let mut out: Vec<BlockId> = Vec::new();
             for &t in &jump_tables[*table as usize] {
                 if !out.contains(&t) {

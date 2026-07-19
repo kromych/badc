@@ -454,6 +454,11 @@ pub(crate) enum Stmt {
         text: alloc::string::String,
         clobbers: alloc::string::String,
     },
+    /// GCC `asm goto`: extended asm whose template may branch to the
+    /// C labels listed in `asm_blocks[idx].labels`. A statement (not
+    /// an expression) because it ends the current basic block;
+    /// control either falls through or jumps to a listed label.
+    AsmGoto(u32),
     /// Local declaration that lives inline in a block. C99 6.8.2
     /// allows `block-item-list` to interleave declarations and
     /// statements; the parser wraps each block-scope declaration
@@ -645,6 +650,9 @@ pub(crate) struct FinishedFunction {
 pub(crate) struct AsmBlockAst {
     pub block: crate::c5::ir::AsmBlock,
     pub operand_exprs: Vec<ExprId>,
+    /// `asm goto` label list, in source order; a template `%lK`
+    /// reference names `labels[K]`. Empty for plain extended asm.
+    pub labels: Vec<LabelId>,
 }
 
 #[derive(Debug, Default, Clone)]

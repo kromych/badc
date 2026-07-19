@@ -1128,6 +1128,28 @@ impl<'a> Walker<'a> {
                 b.jmp(cont);
                 Ok(true)
             }
+            Stmt::AsmGoto(idx) => {
+                // GCC `asm goto`: evaluate the inputs, then close the
+                // block with `Terminator::AsmGoto`. Row entry 0 is the
+                // fall-through successor; the label-block targets
+                // follow in label-list order, sharing the C-label
+                // machinery with `goto` (forward references included).
+                let asm = self.ast.asm_blocks[*idx as usize].clone();
+                let mut args: alloc::vec::Vec<super::super::ir::ValueId> =
+                    alloc::vec::Vec::with_capacity(asm.operand_exprs.len());
+                for &e in &asm.operand_exprs {
+                    args.push(self.walk_expr_rvalue(b, e)?);
+                }
+                let fall = b.new_block();
+                let mut targets = alloc::vec::Vec::with_capacity(1 + asm.labels.len());
+                targets.push(fall);
+                for &l in &asm.labels {
+                    targets.push(self.block_for_label(b, l));
+                }
+                b.asm_goto(alloc::boxed::Box::new(asm.block), args, targets);
+                b.switch_to(fall);
+                Ok(false)
+            }
             Stmt::Goto(label) => {
                 let target = self.block_for_label(b, *label);
                 b.jmp(target);

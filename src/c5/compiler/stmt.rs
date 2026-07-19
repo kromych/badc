@@ -1056,14 +1056,21 @@ impl Compiler {
     fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
         self.next()?; // asm / __asm__ / __asm
         // Optional qualifiers (`volatile` / `__volatile__`, `inline`,
-        // `goto`). Only `volatile` carries a code-generation effect
-        // (it must not be elided); it rides the parsed asm block.
+        // `goto`). `volatile` must not be elided and rides the parsed
+        // asm block; `goto` selects the label-list grammar and is
+        // implicitly volatile.
         let mut is_volatile = false;
+        let mut is_goto = false;
         while self.lex.tk == Token::TypeQual
             || self.lex.tk == Token::Inline
             || self.lex.tk == Token::ForceInline
+            || self.lex.tk == Token::Goto
         {
             if self.lex.tk == Token::TypeQual {
+                is_volatile = true;
+            }
+            if self.lex.tk == Token::Goto {
+                is_goto = true;
                 is_volatile = true;
             }
             self.next()?;
@@ -1085,6 +1092,12 @@ impl Compiler {
             self.next()?;
         }
         let template: alloc::vec::Vec<u8> = self.data[tstart..].to_vec();
+        // `asm goto` takes the general extended-asm path directly: the
+        // operand-free template shortcuts below have no label grammar.
+        if is_goto {
+            self.data.truncate(tstart);
+            return self.parse_extended_asm(template, is_volatile, true);
+        }
         // The x87 FPU control-word forms carry exactly one memory operand.
         // Detect them from the template before the operand-rejection loop.
         // Collapse interior whitespace runs to a single space so templates
@@ -1301,7 +1314,7 @@ impl Compiler {
         // are dropped from the data section; the parsed block references
         // its operand expressions by AST id.
         self.data.truncate(tstart);
-        self.parse_extended_asm(template, is_volatile)
+        self.parse_extended_asm(template, is_volatile, false)
     }
 
     /// Consume the `: outputs : inputs : clobbers` region and the
@@ -1323,16 +1336,20 @@ impl Compiler {
     }
 
     /// Parse the operand lists of a GCC extended-asm statement into an
-    /// [`ast::AsmBlockAst`] and emit an [`ast::Expr::InlineAsm`]. The
-    /// grammar is `: outputs : inputs : clobbers`, each operand a
-    /// constraint string and a parenthesised expression (an lvalue for
-    /// an output, an rvalue for an input); a clobber is a bare string.
-    /// On entry the template is consumed and the cursor is at the first
-    /// `:` (or `)` when there is no operand list).
+    /// [`ast::AsmBlockAst`] and emit an [`ast::Expr::InlineAsm`] (or an
+    /// [`ast::Stmt::AsmGoto`] for `asm goto`). The grammar is
+    /// `: outputs : inputs : clobbers`, plus `: labels` for `asm goto`;
+    /// each operand is a constraint string and a parenthesised
+    /// expression (an lvalue for an output, an rvalue for an input); a
+    /// clobber is a bare string; a label is an identifier naming a C
+    /// label of the enclosing function. On entry the template is
+    /// consumed and the cursor is at the first `:` (or `)` when there
+    /// is no operand list).
     fn parse_extended_asm(
         &mut self,
         template: alloc::vec::Vec<u8>,
         volatile: bool,
+        is_goto: bool,
     ) -> Result<(), C5Error> {
         use super::super::ast::{AsmBlockAst, Expr, UnOp};
         use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand};
@@ -1342,17 +1359,40 @@ impl Compiler {
         let mut clobber_fp_regs: u32 = 0;
         let mut clobber_memory = false;
         let mut n_outputs = 0usize;
-        // Section 1 = outputs, 2 = inputs, 3+ = clobbers.
+        let mut label_ids: alloc::vec::Vec<super::super::ast::LabelId> = alloc::vec::Vec::new();
+        let mut label_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
+        // Section 1 = outputs, 2 = inputs, 3 = clobbers; 4 = labels
+        // for `asm goto` (3+ folds into clobbers otherwise).
         let mut section: u8 = 0;
         let data_base = self.data.len();
         while self.lex.tk != ')' {
             if self.lex.tk == ':' {
                 section += 1;
+                if is_goto && section > 4 {
+                    self.data.truncate(data_base);
+                    return Err(self.compile_err("inline asm goto: too many `:` sections"));
+                }
                 self.next()?;
                 continue;
             }
             if self.lex.tk == ',' {
                 self.next()?;
+                continue;
+            }
+            if is_goto && section >= 4 {
+                // Label list: identifiers naming C labels (forward
+                // references allowed, as for `goto`).
+                if self.lex.tk != Token::Id {
+                    self.data.truncate(data_base);
+                    return Err(self.compile_err("inline asm goto: label identifier expected"));
+                }
+                let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+                if !self.labels.iter().any(|n| n == &name) {
+                    self.unresolved_gotos.push(name.clone());
+                }
+                label_ids.push(self.ast_label_by_name(&name));
+                label_names.push(name);
                 continue;
             }
             if self.lex.tk != '"' {
@@ -1405,6 +1445,12 @@ impl Compiler {
                 continue;
             }
             let is_output = section == 1;
+            // TODO: support `asm goto` output operands (GCC 11 added
+            // them; the label paths would need output store-back).
+            if is_goto && is_output {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("inline asm goto: output operands are not supported"));
+            }
             let (constraint, is_rw) = match Self::parse_asm_constraint(cstr, is_output, n_outputs) {
                 Some(c) => c,
                 None => {
@@ -1507,6 +1553,20 @@ impl Compiler {
                 clobber_regs |= 1 << r;
             }
         }
+        // `asm goto` requires a label list; canonicalize the template's
+        // `%l[name]` / `%lN` references to label-list indices while the
+        // names and operand count are at hand.
+        let template = if is_goto {
+            if label_ids.is_empty() {
+                return Err(self.compile_err("inline asm goto: at least one label is required"));
+            }
+            match Self::rewrite_goto_label_refs(&template, &label_names, operands.len()) {
+                Ok(t) => t,
+                Err(m) => return Err(self.compile_err(m)),
+            }
+        } else {
+            template
+        };
         let block = AsmBlock {
             template,
             operands,
@@ -1519,14 +1579,98 @@ impl Compiler {
         self.ast.asm_blocks.push(AsmBlockAst {
             block,
             operand_exprs,
+            labels: label_ids,
         });
         self.mark_emit_other();
+        if is_goto {
+            // A statement with successors, not an expression: the
+            // walker closes the block with `Terminator::AsmGoto`.
+            self.flush_pending_stores();
+            let pos = self.ast_src_pos();
+            self.ast
+                .push_stmt(super::super::ast::Stmt::AsmGoto(idx), pos);
+            return Ok(());
+        }
         self.ty = Ty::Int as i64;
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(Expr::InlineAsm(idx), pos);
         self.ast_acc = Some(id);
         let _ = self.ast_emit_expr_stmt();
         Ok(())
+    }
+
+    /// Canonicalize `asm goto` label references: `%l[name]` and `%lN`
+    /// (GCC numbers labels after all operands) both become `%lK` with
+    /// `K` the label-list index, so the per-arch template parsers need
+    /// no operand-count context. Unknown names and out-of-range
+    /// numbers are rejected here, where the source position is known.
+    fn rewrite_goto_label_refs(
+        template: &[u8],
+        label_names: &[alloc::string::String],
+        n_operands: usize,
+    ) -> Result<alloc::vec::Vec<u8>, alloc::string::String> {
+        let mut out: alloc::vec::Vec<u8> = alloc::vec::Vec::with_capacity(template.len());
+        let mut i = 0usize;
+        while i < template.len() {
+            if template[i] != b'%' {
+                out.push(template[i]);
+                i += 1;
+                continue;
+            }
+            if template.get(i + 1) == Some(&b'%') {
+                out.extend_from_slice(&template[i..i + 2]);
+                i += 2;
+                continue;
+            }
+            if template.get(i + 1) != Some(&b'l') {
+                out.push(template[i]);
+                i += 1;
+                continue;
+            }
+            if template.get(i + 2) == Some(&b'[') {
+                let start = i + 3;
+                let Some(len) = template[start..].iter().position(|&c| c == b']') else {
+                    return Err(alloc::string::String::from(
+                        "inline asm goto: unterminated `%l[` label reference",
+                    ));
+                };
+                let name = core::str::from_utf8(&template[start..start + len]).unwrap_or("");
+                let Some(k) = label_names.iter().position(|n| n == name) else {
+                    return Err(alloc::format!(
+                        "inline asm goto: `%l[{name}]` names no listed label"
+                    ));
+                };
+                out.extend_from_slice(alloc::format!("%l{k}").as_bytes());
+                i = start + len + 1;
+                continue;
+            }
+            let ds = i + 2;
+            let mut de = ds;
+            while template.get(de).is_some_and(u8::is_ascii_digit) {
+                de += 1;
+            }
+            if de == ds {
+                return Err(alloc::string::String::from(
+                    "inline asm goto: `%l` needs a number or `[name]`",
+                ));
+            }
+            let n: usize = core::str::from_utf8(&template[ds..de])
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(|| {
+                    alloc::string::String::from("inline asm goto: bad `%l` label number")
+                })?;
+            if n < n_operands || n - n_operands >= label_names.len() {
+                return Err(alloc::format!(
+                    "inline asm goto: `%l{n}` is out of range \
+                     ({n_operands} operands, {} labels)",
+                    label_names.len()
+                ));
+            }
+            out.extend_from_slice(alloc::format!("%l{}", n - n_operands).as_bytes());
+            i = de;
+        }
+        Ok(out)
     }
 
     /// Classify a GCC operand constraint string into an

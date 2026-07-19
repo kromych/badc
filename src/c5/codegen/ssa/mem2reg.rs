@@ -88,7 +88,7 @@ pub(crate) fn successors(
             ..
         } => alloc::vec![*target, *fall_through],
         Terminator::GotoIndirect { .. } => cg_targets.to_vec(),
-        Terminator::JumpTable { table, .. } => {
+        Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } => {
             let mut out: Vec<BlockId> = Vec::new();
             for &t in &jump_tables[*table as usize] {
                 if !out.contains(&t) {
@@ -456,6 +456,7 @@ pub(crate) fn insert_phis(
             Terminator::Jmp(_)
             | Terminator::FallThrough(_)
             | Terminator::TailExt(_)
+            | Terminator::AsmGoto { .. }
             | Terminator::Unreachable => {}
         }
     }
@@ -1258,6 +1259,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             Terminator::Jmp(_)
             | Terminator::FallThrough(_)
             | Terminator::TailExt(_)
+            | Terminator::AsmGoto { .. }
             | Terminator::Unreachable => {}
         }
     }

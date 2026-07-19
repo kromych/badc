@@ -1718,6 +1718,32 @@ pub(crate) fn emit_function(
                     spill_dst_to_slot(code, place, rd, frame);
                     continue;
                 }
+                // `asm goto`: the label branches patch against block
+                // offsets via the enclosing `branch_fixups`, which
+                // `emit_inst` has no access to; lower it here (same
+                // pattern as `Inst::BlockAddr` above).
+                if let Inst::InlineAsm { asm, args } = inst
+                    && let Terminator::AsmGoto { table } = block.terminator
+                {
+                    if !emit_inline_asm(
+                        code,
+                        asm,
+                        args,
+                        func,
+                        alloc,
+                        frame,
+                        fixups,
+                        name2entpc,
+                        Some(AsmGotoCtx {
+                            row: &func.jump_tables[table as usize],
+                            branch_fixups: &mut branch_fixups,
+                            branch_short: &branch_short,
+                        }),
+                    ) {
+                        bail_rollback!(tls);
+                    }
+                    continue;
+                }
                 let data_fixups_pre_inst = data_fixups.len();
                 let inst_ok = {
                     let mut cx = super::ssa::emit_common::EmitCtx {
@@ -1977,6 +2003,21 @@ pub(crate) fn emit_function(
                     jump_table_fixups.push((table_start, table));
                     let entries = func.jump_tables[table as usize].len();
                     code.resize(code.len() + entries * 4, 0);
+                }
+                Terminator::AsmGoto { table } => {
+                    // The label branches were lowered inside the
+                    // `Inst::InlineAsm`; only the fall-through edge
+                    // (row entry 0) is emitted here.
+                    let fall = func.jump_tables[table as usize][0];
+                    if fall as usize != block_idx + 1 {
+                        emit_local_branch(
+                            code,
+                            &mut branch_fixups,
+                            &branch_short,
+                            LocalBranchKind::Jmp,
+                            fall,
+                        );
+                    }
                 }
                 Terminator::TailExt(binding_idx) => {
                     // The parser emits `Terminator::TailExt` for the
@@ -3043,9 +3084,9 @@ fn emit_inst(
             abi,
             *current_alloca_top,
         ),
-        Inst::InlineAsm { asm, args } => {
-            emit_inline_asm(code, asm, args, func, alloc, frame, fixups, name2entpc)
-        }
+        Inst::InlineAsm { asm, args } => emit_inline_asm(
+            code, asm, args, func, alloc, frame, fixups, name2entpc, None,
+        ),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
         Inst::Fma {
             a,
@@ -5791,6 +5832,18 @@ fn emit_va_arg_sysv(
     true
 }
 
+/// Block-target branch context for an `asm goto` statement. The
+/// template's `%lK` branches leave the statement, so they must run the
+/// register-restore sequence first; each referenced label gets a local
+/// trampoline (restore + jump) whose final jump rides the enclosing
+/// function's `BranchFixup` machinery to the target block.
+struct AsmGotoCtx<'a> {
+    /// `jump_tables` row: `[fall_through, label targets...]`.
+    row: &'a [super::super::ir::BlockId],
+    branch_fixups: &'a mut alloc::vec::Vec<BranchFixup>,
+    branch_short: &'a [bool],
+}
+
 /// Lower an `Inst::InlineAsm` (GCC extended asm with operands). Assigns
 /// each register operand a machine register per its constraint, saves
 /// the registers it and the clobber list overwrite, loads the inputs,
@@ -5799,6 +5852,8 @@ fn emit_va_arg_sysv(
 /// the stack first (via r10) so an operand living in a register the asm
 /// then overwrites is read before it is clobbered -- the shape the
 /// register-tied intrinsics above use, generalised over the constraints.
+/// `goto_ctx` is present for the `asm goto` form (the statement is the
+/// last instruction of a `Terminator::AsmGoto` block).
 fn emit_inline_asm(
     code: &mut Vec<u8>,
     asm: &super::super::ir::AsmBlock,
@@ -5808,6 +5863,7 @@ fn emit_inline_asm(
     frame: Frame,
     fixups: &mut Vec<super::encode::Fixup>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    mut goto_ctx: Option<AsmGotoCtx<'_>>,
 ) -> bool {
     use super::super::ir::{AsmConstraint, AsmRegSize, Inst};
     use super::asm::{AsmOpnd, Concrete};
@@ -5908,6 +5964,11 @@ fn emit_inline_asm(
     let mut label_defs: alloc::vec::Vec<(u32, usize)> = alloc::vec::Vec::new();
     let mut label_fixups: alloc::vec::Vec<(usize, Option<super::encode::Cc>, u32, bool)> =
         alloc::vec::Vec::new();
+    // `asm goto` label branches: `(rel32_site, opcode_len, label_index)`
+    // per `%lK` reference, patched to the label's restore trampoline
+    // (or to the shared fall-through restore when the label target is
+    // the fall-through block).
+    let mut goto_sites: alloc::vec::Vec<(usize, usize, usize)> = alloc::vec::Vec::new();
     // Encode each template instruction with its operands resolved to the
     // assigned registers, explicit registers, and immediates.
     for insn in &insns {
@@ -5937,6 +5998,31 @@ fn emit_inline_asm(
                 None => super::encode::emit_jmp_rel32(code, 0),
             }
             label_fixups.push((site, cc, num, forward));
+            continue;
+        }
+        // A jmp / jcc to an `asm goto` label (`%lK`): emit the rel32
+        // form and record the site for the trampoline patch below.
+        if let Some(&AsmOpnd::GotoLabel(k)) = insn.operands.first() {
+            let Some(ctx) = goto_ctx.as_ref() else {
+                return fail("inline asm: `%l` label reference outside `asm goto`");
+            };
+            if 1 + k as usize >= ctx.row.len() {
+                return fail("inline asm: `%l` label index out of range");
+            }
+            let super::asm::Mnemonic::Table(name) = insn.mnemonic else {
+                return fail("inline asm: label operand on a non-jump");
+            };
+            let cc = jcc_cond(name);
+            if cc.is_none() && !matches!(name, "jmp" | "jmpq") {
+                return fail("inline asm: label operand on a non-jump");
+            }
+            let site = code.len();
+            match cc {
+                Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
+                None => super::encode::emit_jmp_rel32(code, 0),
+            }
+            let opcode_len = if cc.is_some() { 2 } else { 1 };
+            goto_sites.push((site, opcode_len, k as usize));
             continue;
         }
         // A direct `call` / `jmp` to a symbol: resolve the name to its entry
@@ -6001,7 +6087,9 @@ fn emit_inline_asm(
                 }
                 // Handled above (jmp / jcc to a local label); a label reaching
                 // operand resolution means it rode a non-branch mnemonic.
-                AsmOpnd::Label { .. } => return fail("inline asm: misplaced label reference"),
+                AsmOpnd::Label { .. } | AsmOpnd::GotoLabel(_) => {
+                    return fail("inline asm: misplaced label reference");
+                }
             };
             concrete.push(c);
         }
@@ -6051,20 +6139,61 @@ fn emit_inline_asm(
             emit_asm_store_width(code, SCRATCH_R11, Reg(r), op.width);
         }
     }
-    // Discard the captured slots and restore the saved registers.
-    if n > 0 {
-        super::encode::emit_ri(code, Mnem::Add, 8, Reg::RSP, (n * 8) as i32);
-    }
-    for &r in save_list.iter().rev() {
-        super::encode::emit_pop_r(code, Reg(r));
-    }
-    // rsp now points at the xmm spill area (above the just-popped GP saves);
-    // restore each xmm and release the area.
-    if fp_area > 0 {
-        for (k, &r) in fp_save_list.iter().enumerate() {
-            super::encode::emit_movups_xmm_mem(code, Reg(r), Reg::RSP, k as i32 * 16);
+    // Discard the captured slots and restore the saved registers; the
+    // xmm spill area sits above the GP saves and is restored last.
+    let emit_restore = |code: &mut Vec<u8>| {
+        if n > 0 {
+            super::encode::emit_ri(code, Mnem::Add, 8, Reg::RSP, (n * 8) as i32);
         }
-        super::encode::emit_ri(code, Mnem::Add, 8, Reg::RSP, fp_area);
+        for &r in save_list.iter().rev() {
+            super::encode::emit_pop_r(code, Reg(r));
+        }
+        if fp_area > 0 {
+            for (k, &r) in fp_save_list.iter().enumerate() {
+                super::encode::emit_movups_xmm_mem(code, Reg(r), Reg::RSP, k as i32 * 16);
+            }
+            super::encode::emit_ri(code, Mnem::Add, 8, Reg::RSP, fp_area);
+        }
+    };
+    let restore_start = code.len();
+    emit_restore(code);
+    // `asm goto`: each `%lK` branch leaves mid-template, before the
+    // restore just emitted on the fall-through path, so it lands on a
+    // trampoline that repeats the restore and jumps to the label's
+    // block through the enclosing function's branch fixups. A label
+    // whose target is the fall-through block reuses the fall-through
+    // restore instead.
+    if let Some(ctx) = goto_ctx.as_mut() {
+        let mut tramp_at: alloc::vec::Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
+        if goto_sites
+            .iter()
+            .any(|&(_, _, k)| ctx.row[1 + k] != ctx.row[0])
+        {
+            let skip_site = code.len() + 1;
+            super::encode::emit_jmp_rel32(code, 0);
+            for &(_, _, k) in &goto_sites {
+                if ctx.row[1 + k] == ctx.row[0] || tramp_at[k].is_some() {
+                    continue;
+                }
+                tramp_at[k] = Some(code.len());
+                emit_restore(code);
+                emit_local_branch(
+                    code,
+                    ctx.branch_fixups,
+                    ctx.branch_short,
+                    LocalBranchKind::Jmp,
+                    ctx.row[1 + k],
+                );
+            }
+            let rel = (code.len() - (skip_site + 4)) as i32;
+            code[skip_site..skip_site + 4].copy_from_slice(&rel.to_le_bytes());
+        }
+        for &(site, opcode_len, k) in &goto_sites {
+            let target = tramp_at[k].unwrap_or(restore_start);
+            let at = site + opcode_len;
+            let rel = target as i64 - (at + 4) as i64;
+            code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());
+        }
     }
     true
 }

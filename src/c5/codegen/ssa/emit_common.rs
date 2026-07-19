@@ -468,6 +468,32 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                 }
                 out
             }
+            Terminator::AsmGoto { table } => {
+                // Moves emitted here run on the fall-through path only;
+                // the template's label branches bypass them. A label
+                // target with a phi fed by this block therefore needs
+                // the synthetic edge block `split_crit_edges` inserts;
+                // seeing one here is an invariant violation, so fail
+                // the emit rather than run the wrong moves.
+                let row = &func.jump_tables[table as usize];
+                for &t in &row[1..] {
+                    if t == row[0] {
+                        // Same block as the fall-through: the label
+                        // trampoline reuses the fall-through path.
+                        continue;
+                    }
+                    let range = func.blocks[t as usize].inst_range.clone();
+                    for id in range {
+                        let Inst::Phi { incoming, .. } = &func.insts[id as usize] else {
+                            break;
+                        };
+                        if incoming.iter().any(|(p, _)| *p == self_block) {
+                            return false;
+                        }
+                    }
+                }
+                alloc::vec![row[0]]
+            }
             Terminator::Return(_) | Terminator::TailExt(_) | Terminator::Unreachable => {
                 alloc::vec![]
             }

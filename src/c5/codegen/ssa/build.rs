@@ -1219,6 +1219,23 @@ impl SsaBuilder {
         self.push(Inst::InlineAsm { asm, args })
     }
 
+    /// GCC `asm goto`: push the `Inst::InlineAsm` as the block's last
+    /// instruction and close the block with `Terminator::AsmGoto`.
+    /// `targets[0]` is the fall-through block; entries 1.. are the
+    /// label targets in label-list order.
+    pub(crate) fn asm_goto(
+        &mut self,
+        asm: alloc::boxed::Box<crate::c5::ir::AsmBlock>,
+        args: Vec<ValueId>,
+        targets: alloc::vec::Vec<BlockId>,
+    ) {
+        self.local_cache.clear();
+        let _ = self.push(Inst::InlineAsm { asm, args });
+        let table = self.func.jump_tables.len() as u32;
+        self.func.jump_tables.push(targets);
+        self.close(Terminator::AsmGoto { table }, NO_VALUE);
+    }
+
     /// Record that the function calls a returns-twice function (the
     /// setjmp family / vfork). See
     /// [`FunctionSsa::has_returns_twice_call`].

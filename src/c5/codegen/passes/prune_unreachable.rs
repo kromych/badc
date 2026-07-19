@@ -43,7 +43,8 @@ fn push_successors(t: &Terminator, out: &mut Vec<BlockId>) {
         | Terminator::TailExt(_)
         | Terminator::Unreachable
         | Terminator::GotoIndirect { .. }
-        | Terminator::JumpTable { .. } => {}
+        | Terminator::JumpTable { .. }
+        | Terminator::AsmGoto { .. } => {}
     }
 }
 
@@ -67,7 +68,9 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     while let Some(b) = stack.pop() {
         succ.clear();
         push_successors(&func.blocks[b as usize].terminator, &mut succ);
-        if let Terminator::JumpTable { table, .. } = &func.blocks[b as usize].terminator {
+        if let Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } =
+            &func.blocks[b as usize].terminator
+        {
             succ.extend_from_slice(&func.jump_tables[*table as usize]);
         }
         for &s in &succ {

@@ -190,6 +190,10 @@ pub(crate) enum AsmOpnd {
     /// `f` forward, `b` backward), the target of a `jmp` / `jcc` within the
     /// block. The emitter resolves it to a rel32 against the label definition.
     Label { num: u32, forward: bool },
+    /// `%lK`: an `asm goto` label reference by label-list index (the
+    /// frontend canonicalizes `%l[name]` and operand-relative `%lN` to
+    /// this form). The emitter branches to the label's target block.
+    GotoLabel(u8),
 }
 
 /// One instruction of a parsed template, in AT&T operand order.
@@ -793,6 +797,16 @@ fn parse_operand(tok: &str) -> Result<AsmOpnd, String> {
         // so trying the register table first is unambiguous.
         if let Some((reg, size)) = reg_by_name(body) {
             return Ok(AsmOpnd::Reg { reg, size });
+        }
+        // `%lK`: an `asm goto` label-list reference.
+        if let Some(digits) = body.strip_prefix('l')
+            && !digits.is_empty()
+            && digits.bytes().all(|c| c.is_ascii_digit())
+        {
+            let k: u8 = digits
+                .parse()
+                .map_err(|_| format!("inline asm: bad goto-label reference `{tok}`"))?;
+            return Ok(AsmOpnd::GotoLabel(k));
         }
         // `%N` or `%<size>N`. A leading size modifier is a single
         // letter b/w/k/q before the operand digits.

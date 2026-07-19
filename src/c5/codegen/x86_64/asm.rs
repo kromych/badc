@@ -61,10 +61,19 @@ pub(crate) enum Mnemonic {
     Movd,
     /// An SSE2 two-operand register form `<op> %xmm_src, %xmm_dst` encoded as
     /// `<prefix> [REX] 0F <opcode> /r` with the destination in ModRM.reg and the
-    /// source in ModRM.rm (pxor, paddd, pand, movdqa, ...).
+    /// source in ModRM.rm (pxor, paddd, pand, ...).
     Sse2Rr {
         prefix: u8,
         opcode: u8,
+    },
+    /// An SSE move `mov{dqa,dqu,aps,ups,sd,ss}` between xmm and xmm / memory. The
+    /// register-register and load (memory-source) forms use `load_op`; the store
+    /// (memory-destination) form uses `store_op`. The xmm register is always
+    /// ModRM.reg; the other operand is r/m.
+    SseMov {
+        prefix: u8,
+        load_op: u8,
+        store_op: u8,
     },
     /// Privileged / model-specific operandless forms (operands, where any,
     /// ride fixed registers via the statement's constraints). `cli` / `sti`
@@ -343,7 +352,7 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "cmpxchg" => Mnemonic::Cmpxchg,
         "inc" => Mnemonic::Inc,
         "dec" => Mnemonic::Dec,
-        _ => return sse2_op(name),
+        _ => return sse2_op(name).or_else(|| sse_mov(name)),
     })
 }
 
@@ -362,7 +371,6 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("pcmpeqb", 0x66, 0x74), ("pcmpeqw", 0x66, 0x75), ("pcmpeqd", 0x66, 0x76), ("pcmpgtd", 0x66, 0x66),
         ("pminub", 0x66, 0xDA), ("pmaxub", 0x66, 0xDE),
         ("punpcklbw", 0x66, 0x60), ("punpcklwd", 0x66, 0x61), ("punpckldq", 0x66, 0x62), ("punpckhdq", 0x66, 0x6A),
-        ("movdqa", 0x66, 0x6F), ("movdqu", 0xF3, 0x6F),
         // Scalar double (0xF2) / single (0xF3).
         ("addsd", 0xF2, 0x58), ("subsd", 0xF2, 0x5C), ("mulsd", 0xF2, 0x59), ("divsd", 0xF2, 0x5E),
         ("minsd", 0xF2, 0x5D), ("maxsd", 0xF2, 0x5F), ("sqrtsd", 0xF2, 0x51),
@@ -379,6 +387,27 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
     OPS.iter()
         .find(|(n, _, _)| *n == name)
         .map(|&(_, prefix, opcode)| Mnemonic::Sse2Rr { prefix, opcode })
+}
+
+/// SSE move ops as `(name, prefix, load-opcode, store-opcode)`: the register-
+/// register and load forms use the load opcode, the store form the store one.
+fn sse_mov(name: &str) -> Option<Mnemonic> {
+    #[rustfmt::skip]
+    const MOVS: &[(&str, u8, u8, u8)] = &[
+        ("movdqa", 0x66, 0x6F, 0x7F),
+        ("movdqu", 0xF3, 0x6F, 0x7F),
+        ("movaps", 0x00, 0x28, 0x29),
+        ("movups", 0x00, 0x10, 0x11),
+        ("movsd",  0xF2, 0x10, 0x11),
+        ("movss",  0xF3, 0x10, 0x11),
+    ];
+    MOVS.iter()
+        .find(|(n, _, _, _)| *n == name)
+        .map(|&(_, prefix, load_op, store_op)| Mnemonic::SseMov {
+            prefix,
+            load_op,
+            store_op,
+        })
 }
 
 /// The catalogue mnemonic matching `name`, as a `'static` string, or `None`.
@@ -952,9 +981,10 @@ pub(crate) fn encode(
             Ok(())
         }
         Mnemonic::Sse2Rr { prefix, opcode } => {
-            // `<op> %xmm_src, %xmm_dst`: <prefix> [REX] 0F <opcode> /r, with the
-            // AT&T destination in ModRM.reg and the source in ModRM.rm. A high
-            // destination sets REX.R, a high source REX.B.
+            // `<op> %xmm_src/mem, %xmm_dst`: <prefix> [REX] 0F <opcode> /r, with
+            // the AT&T destination in ModRM.reg and the source (an xmm register
+            // or a `(%base)` memory operand) in r/m. A high destination sets
+            // REX.R, a high source register / base REX.B.
             let [src, dst] = two(ops)?;
             let xmm = |c: &Concrete| match c {
                 Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
@@ -962,9 +992,9 @@ pub(crate) fn encode(
                 }
                 _ => None,
             };
-            let (Some(d), Some(s)) = (xmm(&dst), xmm(&src)) else {
+            let Some(d) = xmm(&dst) else {
                 return Err(String::from(
-                    "inline asm: this SSE op needs two XMM register operands",
+                    "inline asm: this SSE op's destination must be an XMM register",
                 ));
             };
             // A zero prefix means the no-mandatory-prefix packed forms (addps,
@@ -972,11 +1002,79 @@ pub(crate) fn encode(
             if prefix != 0 {
                 code.push(prefix);
             }
-            if d >= 8 || s >= 8 {
-                code.push(rex(false, d >= 8, false, s >= 8));
+            match src {
+                _ if xmm(&src).is_some() => {
+                    let s = xmm(&src).unwrap();
+                    if d >= 8 || s >= 8 {
+                        code.push(rex(false, d >= 8, false, s >= 8));
+                    }
+                    code.extend_from_slice(&[0x0F, opcode]);
+                    code.push(modrm_reg(d & 7, s & 7));
+                }
+                Concrete::Mem { base, .. } => {
+                    if d >= 8 || base >= 8 {
+                        code.push(rex(false, d >= 8, false, base >= 8));
+                    }
+                    code.extend_from_slice(&[0x0F, opcode]);
+                    modrm_mem(code, d & 7, base);
+                }
+                _ => {
+                    return Err(String::from(
+                        "inline asm: this SSE op's source must be an XMM register or memory",
+                    ));
+                }
             }
-            code.extend_from_slice(&[0x0F, opcode]);
-            code.push(modrm_reg(d & 7, s & 7));
+            Ok(())
+        }
+        Mnemonic::SseMov {
+            prefix,
+            load_op,
+            store_op,
+        } => {
+            // `mov* %src, %dst`: the xmm register is always ModRM.reg; a
+            // `(%base)` memory operand is r/m. reg<-reg and reg<-mem (load) use
+            // load_op, mem<-reg (store) store_op.
+            let [src, dst] = two(ops)?;
+            let xmm = |c: &Concrete| match c {
+                Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
+                    Some(*reg - XMM_BASE)
+                }
+                _ => None,
+            };
+            if prefix != 0 {
+                code.push(prefix);
+            }
+            match (src, dst) {
+                (s, d) if xmm(&s).is_some() && xmm(&d).is_some() => {
+                    let (sn, dn) = (xmm(&s).unwrap(), xmm(&d).unwrap());
+                    if dn >= 8 || sn >= 8 {
+                        code.push(rex(false, dn >= 8, false, sn >= 8));
+                    }
+                    code.extend_from_slice(&[0x0F, load_op]);
+                    code.push(modrm_reg(dn & 7, sn & 7));
+                }
+                (Concrete::Mem { base, .. }, d) if xmm(&d).is_some() => {
+                    let dn = xmm(&d).unwrap();
+                    if dn >= 8 || base >= 8 {
+                        code.push(rex(false, dn >= 8, false, base >= 8));
+                    }
+                    code.extend_from_slice(&[0x0F, load_op]);
+                    modrm_mem(code, dn & 7, base);
+                }
+                (s, Concrete::Mem { base, .. }) if xmm(&s).is_some() => {
+                    let sn = xmm(&s).unwrap();
+                    if sn >= 8 || base >= 8 {
+                        code.push(rex(false, sn >= 8, false, base >= 8));
+                    }
+                    code.extend_from_slice(&[0x0F, store_op]);
+                    modrm_mem(code, sn & 7, base);
+                }
+                _ => {
+                    return Err(String::from(
+                        "inline asm: SSE move needs an xmm register with an xmm or memory operand",
+                    ));
+                }
+            }
             Ok(())
         }
         Mnemonic::In | Mnemonic::Out => {
@@ -1270,6 +1368,69 @@ mod tests {
             })
         );
         assert_eq!(sse2_op("not_an_sse_op"), None);
+        // A `(%base)` memory source rides r/m through modrm_mem; a high
+        // destination still sets REX.R, a high base REX.B.
+        let mem = |base: u8| Concrete::Mem {
+            base,
+            size: AsmRegSize::Quad,
+        };
+        assert_eq!(
+            enc(sse(0x66, 0xFE), None, &[mem(0), xmm(0)]),
+            [0x66, 0x0F, 0xFE, 0x00]
+        ); // paddd (%rax),%xmm0
+        assert_eq!(
+            enc(sse(0xF2, 0x58), None, &[mem(0), xmm(3)]),
+            [0xF2, 0x0F, 0x58, 0x18]
+        ); // addsd (%rax),%xmm3
+        assert_eq!(
+            enc(sse(0x66, 0xFE), None, &[mem(0), xmm(9)]),
+            [0x66, 0x44, 0x0F, 0xFE, 0x08]
+        ); // paddd (%rax),%xmm9 -> REX.R
+    }
+
+    #[test]
+    fn sse_mov_ops() {
+        let xmm = |n: u8| Concrete::Reg {
+            reg: XMM_BASE + n,
+            size: AsmRegSize::Quad,
+        };
+        let mem = |base: u8| Concrete::Mem {
+            base,
+            size: AsmRegSize::Quad,
+        };
+        let mov = |p, l, s| Mnemonic::SseMov {
+            prefix: p,
+            load_op: l,
+            store_op: s,
+        };
+        // reg-reg and load use the load opcode; store uses the store opcode; the
+        // xmm register is always ModRM.reg.
+        assert_eq!(
+            enc(mov(0, 0x28, 0x29), None, &[xmm(1), xmm(2)]),
+            [0x0F, 0x28, 0xD1]
+        ); // movaps %xmm1,%xmm2
+        assert_eq!(
+            enc(mov(0x66, 0x6F, 0x7F), None, &[mem(0), xmm(0)]),
+            [0x66, 0x0F, 0x6F, 0x00]
+        ); // movdqa (%rax),%xmm0
+        assert_eq!(
+            enc(mov(0x66, 0x6F, 0x7F), None, &[xmm(0), mem(0)]),
+            [0x66, 0x0F, 0x7F, 0x00]
+        ); // movdqa %xmm0,(%rax)
+        assert_eq!(
+            enc(mov(0xF2, 0x10, 0x11), None, &[xmm(4), mem(0)]),
+            [0xF2, 0x0F, 0x11, 0x20]
+        ); // movsd %xmm4,(%rax)
+        // The mov table resolves names to their SseMov encoding.
+        assert_eq!(
+            sse_mov("movdqa"),
+            Some(Mnemonic::SseMov {
+                prefix: 0x66,
+                load_op: 0x6F,
+                store_op: 0x7F
+            })
+        );
+        assert_eq!(sse_mov("not_a_mov"), None);
     }
 
     #[test]

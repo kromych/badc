@@ -1038,6 +1038,93 @@ jobs:
       - name: tcl smoke (build tclsh + run tests/all.tcl)
         run: python demos/tcl/smoke.py
 
+  # Cooperative-concurrency demos: each library's context switch leans
+  # on constructs the fixtures cover only piecemeal -- inline-asm
+  # stack-pointer moves plus sigsetjmp across stacks (libmill /
+  # libdill) and naked functions with hand-written SysV asm
+  # (coroutines) -- so running the upstream tests guards the asm
+  # surface end to end. POSIX only; the smokes print a skip on
+  # Windows.
+  libmill:
+    name: libmill suite (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    # The badc build dominates (~8-10 min on a cold rust-cache); the
+    # smoke itself runs in seconds.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: libmill-${{ matrix.os }}
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: libmill smoke (coroutine core tests, -O0 and -O)
+        run: python demos/libmill/smoke.py
+
+  libdill:
+    name: libdill suite (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: libdill-${{ matrix.os }}
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: libdill smoke (coroutine core tests, -O0 and -O)
+        run: python demos/libdill/smoke.py
+
+  coroutines:
+    name: coroutines suite (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: coroutines-${{ matrix.os }}
+      # Every lane cross-compiles the linux-x64 binaries (naked-fn asm
+      # encoding); only ubuntu-latest also runs them -- upstream is
+      # linux-x86_64 only (SysV asm + MAP_GROWSDOWN).
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: coroutines smoke (naked-asm switch, exact outputs)
+        run: python demos/coroutines/smoke.py
+
   cpython:
     # One no-make build for every target: build.py compiles CPython's
     # all-builtin link set with badc (POSIX from the committed per-target

@@ -141,6 +141,20 @@ demos/tcl/*
 !demos/tcl/setup.py
 !demos/tcl/smoke.py
 !demos/tcl/README.md
+# Cooperative-concurrency demos: `setup.py` fetches each pinned
+# upstream commit archive from github and extracts it under
+# `demos/<name>/.cache/`. Only the runner scripts (plus libdill's
+# x86intrin.h shim) are committed.
+demos/libmill/*
+!demos/libmill/setup.py
+!demos/libmill/smoke.py
+demos/libdill/*
+!demos/libdill/setup.py
+!demos/libdill/smoke.py
+!demos/libdill/x86intrin.h
+demos/coroutines/*
+!demos/coroutines/setup.py
+!demos/coroutines/smoke.py
 # nasm -- NASM 2.16.03 assembler. `setup.py` fetches the pinned release
 # tarball from the vendor-deps mirror and extracts the source (with the
 # pre-generated instruction tables and the travis/ test suite) under

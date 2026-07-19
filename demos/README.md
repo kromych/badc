@@ -134,6 +134,21 @@ End-to-end of the upstream [bzip2](https://sourceware.org/bzip2/)
 exercises a different code shape from miniz's deflate.
 See [`bzip2/README.md`](./bzip2/README.md).
 
+## libmill/, libdill/, coroutines/
+
+Cooperative-concurrency libraries whose context switches stress the
+inline-asm surface: [libmill](https://github.com/sustrik/libmill)
+(Go-style CSP coroutines + channels),
+[libdill](https://github.com/sustrik/libdill) (structured
+concurrency), and [tsoding/coroutines](https://github.com/tsoding/coroutines)
+(hand-written SysV asm in naked functions). Pinned upstream commits,
+fetched by each demo's `setup.py`; each smoke builds the library with
+badc at -O0 and -O and runs the upstream tests (spawn / yield /
+channel rendezvous; exact-output examples for coroutines). libmill /
+libdill switch stacks via sigsetjmp plus a one-instruction asm sp
+move (see each setup.py for the badc-motivated patches); coroutines
+compiles unpatched but runs only on linux-x86_64 by upstream design.
+
 ## gui_hello/
 
 Three "show a window with a label" demos -- Win32 (using the

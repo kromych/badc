@@ -383,10 +383,12 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("pxor", 0x66, 0xEF), ("pand", 0x66, 0xDB), ("por", 0x66, 0xEB), ("pandn", 0x66, 0xDF),
         ("paddb", 0x66, 0xFC), ("paddw", 0x66, 0xFD), ("paddd", 0x66, 0xFE), ("paddq", 0x66, 0xD4),
         ("psubb", 0x66, 0xF8), ("psubw", 0x66, 0xF9), ("psubd", 0x66, 0xFA), ("psubq", 0x66, 0xFB),
-        ("pmullw", 0x66, 0xD5), ("pmuludq", 0x66, 0xF4),
+        ("pmullw", 0x66, 0xD5), ("pmuludq", 0x66, 0xF4), ("pmaddwd", 0x66, 0xF5), ("pmulhw", 0x66, 0xE5),
         ("pcmpeqb", 0x66, 0x74), ("pcmpeqw", 0x66, 0x75), ("pcmpeqd", 0x66, 0x76), ("pcmpgtd", 0x66, 0x66),
         ("pminub", 0x66, 0xDA), ("pmaxub", 0x66, 0xDE),
-        ("punpcklbw", 0x66, 0x60), ("punpcklwd", 0x66, 0x61), ("punpckldq", 0x66, 0x62), ("punpckhdq", 0x66, 0x6A),
+        ("packsswb", 0x66, 0x63), ("packssdw", 0x66, 0x6B), ("packuswb", 0x66, 0x67),
+        ("punpcklbw", 0x66, 0x60), ("punpcklwd", 0x66, 0x61), ("punpckldq", 0x66, 0x62),
+        ("punpckhbw", 0x66, 0x68), ("punpckhwd", 0x66, 0x69), ("punpckhdq", 0x66, 0x6A),
         // Scalar double (0xF2) / single (0xF3).
         ("addsd", 0xF2, 0x58), ("subsd", 0xF2, 0x5C), ("mulsd", 0xF2, 0x59), ("divsd", 0xF2, 0x5E),
         ("minsd", 0xF2, 0x5D), ("maxsd", 0xF2, 0x5F), ("sqrtsd", 0xF2, 0x51),
@@ -1529,6 +1531,29 @@ mod tests {
             })
         );
         assert_eq!(sse2_op("not_an_sse_op"), None);
+        // Integer pack / multiply-add / high-multiply / high-unpack forms
+        // (byte-verified against clang: `<66> 0F <op> C1` for src=xmm1,dst=xmm0).
+        for (name, op) in [
+            ("packsswb", 0x63u8),
+            ("packssdw", 0x6B),
+            ("packuswb", 0x67),
+            ("pmaddwd", 0xF5),
+            ("pmulhw", 0xE5),
+            ("punpckhbw", 0x68),
+            ("punpckhwd", 0x69),
+        ] {
+            assert_eq!(
+                sse2_op(name),
+                Some(Mnemonic::Sse2Rr {
+                    prefix: 0x66,
+                    opcode: op
+                })
+            );
+            assert_eq!(
+                enc(sse(0x66, op), None, &[xmm(1), xmm(0)]),
+                [0x66, 0x0F, op, 0xC1]
+            );
+        }
         // A `(%base)` memory source rides r/m through modrm_mem; a high
         // destination still sets REX.R, a high base REX.B.
         let mem = |base: u8| Concrete::Mem {

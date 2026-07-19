@@ -117,6 +117,14 @@ pub(crate) enum Opnd {
         size: u8,
         index: u8,
     },
+    /// A SIMD register list `{v0.T, ..}` of `count` consecutive registers (1..4)
+    /// starting at `first`, all of one arrangement. Used by ld1..ld4/st1..st4.
+    VecList {
+        first: u8,
+        count: u8,
+        size: u8,
+        q: bool,
+    },
     Imm(i64),
     /// An `lsl #shift` modifier operand.
     Lsl(u32),
@@ -1264,6 +1272,59 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             }
             _ => Err(String::from("inline asm: bad FP load/store operands")),
         };
+    }
+    // SIMD multiple-structures load/store `<ld1..ld4|st1..st4> {Vt.T, ..}, [Xn]`.
+    // The structure (1..4, from the mnemonic) and register count select the
+    // opcode; L (bit 22) is load vs store, Q and size come from the arrangement,
+    // and Rt is the first register of the list.
+    if let (
+        "ld1" | "st1" | "ld2" | "st2" | "ld3" | "st3" | "ld4" | "st4",
+        [
+            Opnd::VecList {
+                first,
+                count,
+                size,
+                q,
+            },
+            mem,
+        ],
+    ) = (mnemonic, ops)
+    {
+        let is_ld = mnemonic.as_bytes()[0] == b'l';
+        let structure = mnemonic.as_bytes()[2] - b'0';
+        let opcode = match (structure, *count) {
+            (1, 1) => 0x7u32,
+            (1, 2) => 0xA,
+            (1, 3) => 0x6,
+            (1, 4) => 0x2,
+            (2, 2) => 0x8,
+            (3, 3) => 0x4,
+            (4, 4) => 0x0,
+            _ => {
+                return Err(String::from(
+                    "inline asm: register count does not match the ld/st structure",
+                ));
+            }
+        };
+        let base = match mem {
+            Opnd::Mem {
+                base,
+                off: 0,
+                pre: false,
+            } => *base,
+            _ => {
+                return Err(String::from(
+                    "inline asm: ld1/st1 need a plain [Xn] address",
+                ));
+            }
+        };
+        return Ok(0x0C00_0000
+            | (if is_ld { 1u32 << 22 } else { 0 })
+            | (if *q { 1u32 << 30 } else { 0 })
+            | (opcode << 12)
+            | ((*size as u32) << 10)
+            | ((base as u32) << 5)
+            | (*first as u32));
     }
     // Load / store with a register offset: `<ldr|ldrb|ldrh|ldrsb|ldrsh|ldrsw|
     // str|strb|strh> Xt, [Xn, Rm{, <ext> #s}]` across the access sizes. The base

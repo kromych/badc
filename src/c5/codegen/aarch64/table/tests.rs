@@ -702,6 +702,50 @@ fn vector_widen_narrow() {
 }
 
 #[test]
+fn simd_ld_st_multi() {
+    let list = |first: u8, count: u8, size: u8, q: bool| Opnd::VecList {
+        first,
+        count,
+        size,
+        q,
+    };
+    let mem = |base: u8| Opnd::Mem {
+        base,
+        off: 0,
+        pre: false,
+    };
+    // ld1 with 1..4 registers of one arrangement; Rt is the first register, the
+    // opcode encodes the count, L (bit 22) marks the load.
+    assert_eq!(enc("ld1", &[list(0, 1, 2, true), mem(1)]), 0x4C40_7820); // {v0.4s}
+    assert_eq!(enc("ld1", &[list(0, 1, 0, true), mem(1)]), 0x4C40_7020); // {v0.16b}
+    assert_eq!(enc("st1", &[list(0, 1, 2, true), mem(1)]), 0x4C00_7820);
+    assert_eq!(enc("ld1", &[list(0, 2, 2, true), mem(1)]), 0x4C40_A820);
+    assert_eq!(enc("ld1", &[list(0, 3, 2, true), mem(1)]), 0x4C40_6820);
+    assert_eq!(enc("ld1", &[list(0, 4, 2, true), mem(1)]), 0x4C40_2820);
+    assert_eq!(enc("st1", &[list(0, 2, 3, true), mem(1)]), 0x4C00_AC20); // {v0,v1}.2d
+    assert_eq!(enc("ld1", &[list(0, 1, 0, false), mem(1)]), 0x0C40_7020); // {v0.8b}
+    // ld2/ld3/ld4 need exactly 2/3/4 registers.
+    assert_eq!(enc("ld2", &[list(0, 2, 2, true), mem(1)]), 0x4C40_8820);
+    assert!(encode("ld2", &[list(0, 1, 2, true), mem(1)]).is_err());
+    assert!(encode("ld3", &[list(0, 2, 2, true), mem(1)]).is_err());
+    // A non-zero offset needs the post-index form, not yet accepted here.
+    assert!(
+        encode(
+            "ld1",
+            &[
+                list(0, 1, 2, true),
+                Opnd::Mem {
+                    base: 1,
+                    off: 16,
+                    pre: false
+                }
+            ]
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn crypto() {
     let v = |n: u8, size: u8| Opnd::VecReg {
         num: n,

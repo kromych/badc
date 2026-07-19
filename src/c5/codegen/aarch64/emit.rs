@@ -2207,6 +2207,17 @@ fn emit_inline_asm_aarch64(
             AsmOpndA64::QReg(num) => Opnd::QReg(num),
             AsmOpndA64::VecReg { num, size, q } => Opnd::VecReg { num, size, q },
             AsmOpndA64::VecElem { num, size, index } => Opnd::VecElem { num, size, index },
+            AsmOpndA64::VecList {
+                first,
+                count,
+                size,
+                q,
+            } => Opnd::VecList {
+                first,
+                count,
+                size,
+                q,
+            },
             AsmOpndA64::Ref { idx, is64 } => {
                 let Some(r) = resolve_ref(idx) else {
                     return Err(String::from(

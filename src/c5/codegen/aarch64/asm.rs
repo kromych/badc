@@ -43,6 +43,14 @@ pub(crate) enum AsmOpndA64 {
     /// A single SIMD element `v5.s[3]`: `size` is the element-size log2, `index`
     /// the lane. Used by the lane-transfer forms (umov/smov/ins).
     VecElem { num: u8, size: u8, index: u8 },
+    /// A SIMD register list `{v0.T, ..}` of `count` consecutive registers (1..4)
+    /// starting at `first`, all of one arrangement. Used by ld1..ld4/st1..st4.
+    VecList {
+        first: u8,
+        count: u8,
+        size: u8,
+        q: bool,
+    },
     /// A literal immediate `#imm`.
     Imm(i64),
     /// A `lsl #n` shift modifier (move-wide).
@@ -369,6 +377,40 @@ fn parse_vec_elem(tok: &str) -> Option<(u8, u8, u8)> {
     Some((num, size, index))
 }
 
+/// Parse a SIMD register list `{v0.T, v1.T, ..}` or the range form
+/// `{v0.T-v3.T}` into the first register number, the count (1..4), and the
+/// shared arrangement. The registers must be consecutive (modulo 32) and share
+/// one arrangement.
+fn parse_vec_list(tok: &str) -> Option<(u8, u8, u8, bool)> {
+    let inner = tok.strip_prefix('{')?.strip_suffix('}')?.trim();
+    let regs: Vec<(u8, u8, bool)> = if let Some((lo, hi)) = inner.split_once('-') {
+        let (f, fs, fq) = parse_vec_reg(lo.trim())?;
+        let (l, ls, lq) = parse_vec_reg(hi.trim())?;
+        if fs != ls || fq != lq {
+            return None;
+        }
+        let count = (l.wrapping_sub(f) & 31) as usize + 1;
+        (0..count)
+            .map(|i| (f.wrapping_add(i as u8) & 31, fs, fq))
+            .collect()
+    } else {
+        inner
+            .split(',')
+            .map(|p| parse_vec_reg(p.trim()))
+            .collect::<Option<Vec<_>>>()?
+    };
+    if regs.is_empty() || regs.len() > 4 {
+        return None;
+    }
+    let (first, size, q) = regs[0];
+    for (i, &(n, s, qq)) in regs.iter().enumerate() {
+        if s != size || qq != q || n != (first.wrapping_add(i as u8) & 31) {
+            return None;
+        }
+    }
+    Some((first, regs.len() as u8, size, q))
+}
+
 fn parse_int(s: &str) -> Option<i64> {
     let s = s.trim();
     let (neg, s) = match s.strip_prefix('-') {
@@ -390,8 +432,8 @@ fn split_operands(rest: &str) -> Vec<&str> {
     let (mut depth, mut start) = (0i32, 0usize);
     for (i, c) in rest.char_indices() {
         match c {
-            '[' => depth += 1,
-            ']' => depth -= 1,
+            '[' | '{' => depth += 1,
+            ']' | '}' => depth -= 1,
             ',' if depth == 0 => {
                 out.push(rest[start..i].trim());
                 start = i + 1;
@@ -537,6 +579,14 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             .and_then(parse_int)
             .ok_or_else(|| format!("inline asm: bad shift `{tok}`"))?;
         return Ok(AsmOpndA64::Lsl(amt as u32));
+    }
+    if let Some((first, count, size, q)) = parse_vec_list(tok) {
+        return Ok(AsmOpndA64::VecList {
+            first,
+            count,
+            size,
+            q,
+        });
     }
     if let Some((num, size, index)) = parse_vec_elem(tok) {
         return Ok(AsmOpndA64::VecElem { num, size, index });
@@ -1175,6 +1225,30 @@ mod tests {
                     is64: false
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn parse_vector_lists() {
+        // `{v0.T, ..}` lists: consecutive registers of one arrangement. The
+        // comma form and the `v0.T-vN.T` range form are equivalent.
+        assert_eq!(parse_vec_list("{v0.4s}"), Some((0, 1, 2, true)));
+        assert_eq!(parse_vec_list("{v0.4s, v1.4s}"), Some((0, 2, 2, true)));
+        assert_eq!(parse_vec_list("{v0.16b-v3.16b}"), Some((0, 4, 0, true)));
+        assert_eq!(parse_vec_list("{v30.2d, v31.2d}"), Some((30, 2, 3, true)));
+        assert_eq!(parse_vec_list("{v31.8b-v1.8b}"), Some((31, 3, 0, false))); // wraps
+        assert_eq!(parse_vec_list("{v0.4s, v2.4s}"), None); // not consecutive
+        assert_eq!(parse_vec_list("{v0.4s, v1.8b}"), None); // arrangements differ
+        assert_eq!(parse_vec_list("{v0.4s, v1.4s, v2.4s, v3.4s, v4.4s}"), None); // > 4
+        let insns = parse_template(b"ld1 {v0.4s, v1.4s}, [x2]").unwrap();
+        assert_eq!(
+            insns[0].operands[0],
+            AsmOpndA64::VecList {
+                first: 0,
+                count: 2,
+                size: 2,
+                q: true
+            }
         );
     }
 

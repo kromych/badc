@@ -99,6 +99,21 @@ pub(crate) enum Mnemonic {
         pp: u8,
         opcode: u8,
     },
+    /// A 2-operand VEX move `v-op %src, %dst` (VEX.vvvv unused). A register or
+    /// memory source into a register uses `load_op`; a register into memory uses
+    /// `store_op`. Covers vmovups/vmovaps/vmovdqu/vmovdqa (128/256-bit).
+    VexMov {
+        pp: u8,
+        load_op: u8,
+        store_op: u8,
+    },
+    /// A 2-operand VEX op `v-op %src, %dst` (VEX.vvvv unused), src a register or
+    /// memory operand. Covers vsqrtps/vsqrtpd/vrcpps/vrsqrtps and the packed
+    /// int<->float conversions.
+    Vex2 {
+        pp: u8,
+        opcode: u8,
+    },
     /// Privileged / model-specific operandless forms (operands, where any,
     /// ride fixed registers via the statement's constraints). `cli` / `sti`
     /// clear / set the interrupt flag; `invd` / `wbinvd` invalidate caches;
@@ -508,6 +523,37 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
 /// non-destructive 3-operand form `v-op %src2, %src1, %dst` mirrors the SSE
 /// two-operand op with an extra source. Byte-verified against clang.
 fn vex_op(name: &str) -> Option<Mnemonic> {
+    // 2-operand VEX moves as `(pp, load-op, store-op)`.
+    let mov = match name {
+        "vmovups" => Some((0u8, 0x10u8, 0x11u8)),
+        "vmovupd" => Some((1, 0x10, 0x11)),
+        "vmovaps" => Some((0, 0x28, 0x29)),
+        "vmovapd" => Some((1, 0x28, 0x29)),
+        "vmovdqu" => Some((2, 0x6F, 0x7F)),
+        "vmovdqa" => Some((1, 0x6F, 0x7F)),
+        _ => None,
+    };
+    if let Some((pp, load_op, store_op)) = mov {
+        return Some(Mnemonic::VexMov {
+            pp,
+            load_op,
+            store_op,
+        });
+    }
+    // 2-operand VEX compute (single source) as `(pp, 0F-opcode)`.
+    let two = match name {
+        "vsqrtps" => Some((0u8, 0x51u8)),
+        "vsqrtpd" => Some((1, 0x51)),
+        "vrcpps" => Some((0, 0x53)),
+        "vrsqrtps" => Some((0, 0x52)),
+        "vcvtdq2ps" => Some((0, 0x5B)),
+        "vcvtps2dq" => Some((1, 0x5B)),
+        "vcvttps2dq" => Some((2, 0x5B)),
+        _ => None,
+    };
+    if let Some((pp, opcode)) = two {
+        return Some(Mnemonic::Vex2 { pp, opcode });
+    }
     #[rustfmt::skip]
     const OPS: &[(&str, u8, u8)] = &[
         // Packed single (no prefix).
@@ -844,6 +890,25 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
 // Encoding primitives (local copies of the shared REX / ModR/M
 // helpers so this module needs no wider visibility into `encode`).
 // ------------------------------------------------------------------
+
+/// Emit a VEX prefix. `r`/`x`/`b` are the (non-inverted) high bits of ModRM.reg,
+/// SIB.index, and ModRM.rm/base; VEX stores them inverted. `map` is the opcode
+/// map (1 = 0F, 2 = 0F38, 3 = 0F3A), `vvvv` the src1 register 0..15 (inverted
+/// here), `l` the 256-bit bit, `pp` the SSE-prefix selector (0/1/2/3). Uses the
+/// 2-byte form (C5) when x, b are clear and the map is 0F (VEX.W is 0 for the
+/// ops modelled); else the 3-byte form (C4).
+#[allow(clippy::too_many_arguments)]
+fn emit_vex(code: &mut Vec<u8>, r: bool, x: bool, b: bool, map: u8, vvvv: u8, l: u8, pp: u8) {
+    let inv_vvvv = !vvvv & 0x0F;
+    if !x && !b && map == 1 {
+        code.push(0xC5);
+        code.push((u8::from(!r) << 7) | (inv_vvvv << 3) | (l << 2) | pp);
+    } else {
+        code.push(0xC4);
+        code.push((u8::from(!r) << 7) | (u8::from(!x) << 6) | (u8::from(!b) << 5) | map);
+        code.push((inv_vvvv << 3) | (l << 2) | pp);
+    }
+}
 
 fn rex(w: bool, r: bool, x: bool, b: bool) -> u8 {
     let mut v = 0x40;
@@ -1337,32 +1402,118 @@ pub(crate) fn encode(
                 }
             };
             let [src2, src1, dst] = ops else {
-                return Err(String::from(
-                    "inline asm: VEX op needs %src2, %src1, %dst vector registers",
-                ));
+                return Err(String::from("inline asm: VEX op needs %src2, %src1, %dst"));
             };
-            let (Some((d, dy)), Some((s1, s1y)), Some((s2, s2y))) =
-                (vreg(dst), vreg(src1), vreg(src2))
-            else {
-                return Err(String::from(
-                    "inline asm: VEX operands must be xmm/ymm registers",
-                ));
+            let (Some((d, dy)), Some((s1, s1y))) = (vreg(dst), vreg(src1)) else {
+                return Err(String::from("inline asm: VEX dst / src1 must be xmm/ymm"));
             };
-            let l = u8::from(dy || s1y || s2y);
-            let vvvv = !s1 & 0x0F;
-            if s2 < 8 {
-                // 2-byte VEX (C5): [R.vvvv.L.pp], R stored inverted.
-                code.push(0xC5);
-                code.push((u8::from(d < 8) << 7) | (vvvv << 3) | (l << 2) | pp);
-            } else {
-                // 3-byte VEX (C4): [R.X.B.map][W.vvvv.L.pp], R/X/B stored inverted,
-                // X = 1 (no index), map = 0F (00001), W = 0.
-                code.push(0xC4);
-                code.push((u8::from(d < 8) << 7) | (1 << 6) | (u8::from(s2 < 8) << 5) | 0x01);
-                code.push((vvvv << 3) | (l << 2) | pp);
+            match src2 {
+                _ if vreg(src2).is_some() => {
+                    let (s2, s2y) = vreg(src2).unwrap();
+                    let l = u8::from(dy || s1y || s2y);
+                    emit_vex(code, d >= 8, false, s2 >= 8, 1, s1, l, pp);
+                    code.push(opcode);
+                    code.push(modrm_reg(d & 7, s2 & 7));
+                }
+                Concrete::Mem { base, .. } => {
+                    // src2 is a memory operand: VEX.B carries the base's high bit;
+                    // L comes from the register operands.
+                    let l = u8::from(dy || s1y);
+                    emit_vex(code, d >= 8, false, *base >= 8, 1, s1, l, pp);
+                    code.push(opcode);
+                    modrm_mem(code, d & 7, *base);
+                }
+                _ => {
+                    return Err(String::from(
+                        "inline asm: VEX src2 must be xmm/ymm or memory",
+                    ));
+                }
             }
-            code.push(opcode);
-            code.push(modrm_reg(d & 7, s2 & 7));
+            Ok(())
+        }
+        Mnemonic::VexMov {
+            pp,
+            load_op,
+            store_op,
+        } => {
+            // 2-operand VEX move (VEX.vvvv = 1111, passed as 0 to `emit_vex`).
+            let vreg = |c: &Concrete| -> Option<(u8, bool)> {
+                match c {
+                    Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
+                        Some((*reg - XMM_BASE, false))
+                    }
+                    Concrete::Reg { reg, .. } if (YMM_BASE..YMM_BASE + 16).contains(reg) => {
+                        Some((*reg - YMM_BASE, true))
+                    }
+                    _ => None,
+                }
+            };
+            let [src, dst] = two(ops)?;
+            if let Some((d, dy)) = vreg(&dst) {
+                // reg-reg or load: the destination register rides ModRM.reg.
+                match &src {
+                    _ if vreg(&src).is_some() => {
+                        let (s, sy) = vreg(&src).unwrap();
+                        emit_vex(code, d >= 8, false, s >= 8, 1, 0, u8::from(dy || sy), pp);
+                        code.push(load_op);
+                        code.push(modrm_reg(d & 7, s & 7));
+                    }
+                    Concrete::Mem { base, .. } => {
+                        emit_vex(code, d >= 8, false, *base >= 8, 1, 0, u8::from(dy), pp);
+                        code.push(load_op);
+                        modrm_mem(code, d & 7, *base);
+                    }
+                    _ => {
+                        return Err(String::from(
+                            "inline asm: VEX move source must be xmm/ymm/mem",
+                        ));
+                    }
+                }
+            } else if let (Some((s, sy)), Concrete::Mem { base, .. }) = (vreg(&src), &dst) {
+                // store: the source register rides ModRM.reg, memory the r/m.
+                emit_vex(code, s >= 8, false, *base >= 8, 1, 0, u8::from(sy), pp);
+                code.push(store_op);
+                modrm_mem(code, s & 7, *base);
+            } else {
+                return Err(String::from("inline asm: unsupported VEX move operands"));
+            }
+            Ok(())
+        }
+        Mnemonic::Vex2 { pp, opcode } => {
+            // 2-operand VEX op (VEX.vvvv = 1111), src a register or memory.
+            let vreg = |c: &Concrete| -> Option<(u8, bool)> {
+                match c {
+                    Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
+                        Some((*reg - XMM_BASE, false))
+                    }
+                    Concrete::Reg { reg, .. } if (YMM_BASE..YMM_BASE + 16).contains(reg) => {
+                        Some((*reg - YMM_BASE, true))
+                    }
+                    _ => None,
+                }
+            };
+            let [src, dst] = two(ops)?;
+            let Some((d, dy)) = vreg(&dst) else {
+                return Err(String::from("inline asm: VEX2 destination must be xmm/ymm"));
+            };
+            match &src {
+                _ if vreg(&src).is_some() => {
+                    let (s, sy) = vreg(&src).unwrap();
+                    emit_vex(code, d >= 8, false, s >= 8, 1, 0, u8::from(dy || sy), pp);
+                    code.push(opcode);
+                    code.push(modrm_reg(d & 7, s & 7));
+                }
+                Concrete::Mem { base, .. } => {
+                    emit_vex(code, d >= 8, false, *base >= 8, 1, 0, u8::from(dy), pp);
+                    code.push(opcode);
+                    modrm_mem(code, d & 7, *base);
+                }
+                _ => {
+                    return Err(String::from(
+                        "inline asm: VEX2 source must be xmm/ymm or memory",
+                    ));
+                }
+            }
             Ok(())
         }
         Mnemonic::In | Mnemonic::Out => {
@@ -2096,5 +2247,63 @@ mod tests {
             })
         );
         assert_eq!(vex_op("not_a_vex"), None);
+        // 2-operand VEX moves (VEX.vvvv = 1111): reg-reg uses load_op, a store
+        // to memory uses store_op. Byte-exact vs clang.
+        let mem = |base: u8| Concrete::Mem {
+            base,
+            size: AsmRegSize::Quad,
+        };
+        let vmov = |pp, load_op, store_op| Mnemonic::VexMov {
+            pp,
+            load_op,
+            store_op,
+        };
+        // vmovdqu %ymm1,%ymm0 (F3, L=1): c5 fe 6f c1.
+        assert_eq!(
+            enc(vmov(2, 0x6F, 0x7F), None, &[ymm(1), ymm(0)]),
+            [0xC5, 0xFE, 0x6F, 0xC1]
+        );
+        // vmovdqu %ymm0,(%rax) store: c5 fe 7f 00.
+        assert_eq!(
+            enc(vmov(2, 0x6F, 0x7F), None, &[ymm(0), mem(0)]),
+            [0xC5, 0xFE, 0x7F, 0x00]
+        );
+        // vmovups (%rcx),%ymm2 load (no prefix): c5 fc 10 11.
+        assert_eq!(
+            enc(vmov(0, 0x10, 0x11), None, &[mem(1), ymm(2)]),
+            [0xC5, 0xFC, 0x10, 0x11]
+        );
+        // 2-operand VEX compute: vsqrtps %ymm1,%ymm0: c5 fc 51 c1.
+        assert_eq!(
+            enc(
+                Mnemonic::Vex2 {
+                    pp: 0,
+                    opcode: 0x51
+                },
+                None,
+                &[ymm(1), ymm(0)]
+            ),
+            [0xC5, 0xFC, 0x51, 0xC1]
+        );
+        // 3-operand VEX with a memory src2: vaddps (%rax),%ymm1,%ymm0: c5 f4 58 00.
+        assert_eq!(
+            enc(vex(0, 0x58), None, &[mem(0), ymm(1), ymm(0)]),
+            [0xC5, 0xF4, 0x58, 0x00]
+        );
+        assert_eq!(
+            vex_op("vmovdqu"),
+            Some(Mnemonic::VexMov {
+                pp: 2,
+                load_op: 0x6F,
+                store_op: 0x7F
+            })
+        );
+        assert_eq!(
+            vex_op("vsqrtps"),
+            Some(Mnemonic::Vex2 {
+                pp: 0,
+                opcode: 0x51
+            })
+        );
     }
 }

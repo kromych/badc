@@ -175,6 +175,29 @@ static int avx_vpaddd(void) {
     return r;
 }
 
+static int avx_vmem(void) {
+    int r = 42;
+#if defined(__x86_64__)
+    if (cpu_has_avx()) {
+        /* VEX move load + store (2-operand, memory operands). */
+        static _Alignas(16) const int in[4] = {40, 1, 1, 2};
+        int out[4];
+        __asm__("vmovdqu %1, %%xmm0\n\t"
+                "vmovdqu %%xmm0, %0"
+                : "=m"(out[0])
+                : "m"(in[0])
+                : "xmm0");
+        /* 3-operand VEX with a memory source operand. */
+        sse_v4 a = {10, 20, 30, 40};
+        sse_v4 c;
+        static _Alignas(16) const int add[4] = {5, 3, 8, 2};
+        __asm__("vpaddd %2, %1, %0" : "=x"(c) : "x"(a), "m"(add[0]));
+        r = out[0] + out[3] - 42 + ((int *) &c)[3]; /* (40+2-42) + 42 = 42 */
+    }
+#endif
+    return r;
+}
+
 int main(void) {
     if (sse_add(19, 23) != 42) return 1;    /* 19 + 23, register paddd     */
     if (sse_mem_add(23) != 42) return 2;    /* 23 + 19, memory-source paddd */
@@ -185,5 +208,6 @@ int main(void) {
     if (sse_float_roundtrip() != 42) return 7; /* cvtdq2ps/cvtps2dq/shufps  */
     if (sse_x_constraint() != 42) return 8;    /* `x` xmm operand allocation */
     if (avx_vpaddd() != 42) return 9;          /* 3-operand VEX (AVX), guarded */
+    if (avx_vmem() != 42) return 10;           /* VEX moves + memory operand   */
     return 42;
 }

@@ -282,6 +282,31 @@ fn fmov_gp_fp() {
 }
 
 #[test]
+fn fp_arithmetic() {
+    let d = |num: u8| Opnd::VReg { num, is_d: true };
+    let s = |num: u8| Opnd::VReg { num, is_d: false };
+    // Two-source: type bit 22 selects double, opcode sits at bit 12.
+    assert_eq!(enc("fmul", &[d(0), d(1), d(2)]), 0x1E62_0820);
+    assert_eq!(enc("fdiv", &[d(0), d(1), d(2)]), 0x1E62_1820);
+    assert_eq!(enc("fadd", &[d(0), d(1), d(2)]), 0x1E62_2820);
+    assert_eq!(enc("fsub", &[d(0), d(1), d(2)]), 0x1E62_3820);
+    assert_eq!(enc("fmax", &[d(0), d(1), d(2)]), 0x1E62_4820);
+    assert_eq!(enc("fnmul", &[d(0), d(1), d(2)]), 0x1E62_8820);
+    assert_eq!(enc("fadd", &[s(0), s(1), s(2)]), 0x1E22_2820); // single
+    // One-source: single = double base less the type bit.
+    assert_eq!(enc("fabs", &[d(0), d(1)]), 0x1E60_C020);
+    assert_eq!(enc("fneg", &[d(0), d(1)]), 0x1E61_4020);
+    assert_eq!(enc("fsqrt", &[d(0), d(1)]), 0x1E61_C020);
+    assert_eq!(enc("fneg", &[s(0), s(1)]), 0x1E21_4020);
+    // fcmp sets the flags; the result field is the compare opcode.
+    assert_eq!(enc("fcmp", &[d(1), d(2)]), 0x1E62_2020);
+    assert_eq!(enc("fcmp", &[s(1), s(2)]), 0x1E22_2020);
+    // Mismatched widths and a GP operand have no encoding.
+    assert!(encode("fadd", &[d(0), s(1), d(2)]).is_err());
+    assert!(encode("fadd", &[d(0), d(1), x(2)]).is_err());
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

@@ -308,6 +308,71 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             )),
         };
     }
+    // FP two-source: `<fadd|fsub|fmul|fdiv|fmax|fmin|fnmul> Vd, Vn, Vm`, all one
+    // width. `type` bit 22 selects double; the opcode sits at bit 12.
+    if let Some(opc) = match mnemonic {
+        "fmul" => Some(0u32),
+        "fdiv" => Some(1),
+        "fadd" => Some(2),
+        "fsub" => Some(3),
+        "fmax" => Some(4),
+        "fmin" => Some(5),
+        "fnmul" => Some(8),
+        _ => None,
+    } {
+        let [
+            Opnd::VReg { num: rd, is_d: d0 },
+            Opnd::VReg { num: rn, is_d: d1 },
+            Opnd::VReg { num: rm, is_d: d2 },
+        ] = *ops
+        else {
+            return Err(String::from("inline asm: bad FP arithmetic operands"));
+        };
+        if d0 != d1 || d1 != d2 {
+            return Err(String::from(
+                "inline asm: FP arithmetic operand widths differ",
+            ));
+        }
+        let base = 0x1E20_0800u32 | if d0 { 0x40_0000 } else { 0 };
+        return Ok(base | (opc << 12) | ((rm as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
+    }
+    // FP one-source: `<fneg|fabs|fsqrt> Vd, Vn`, one width (single = double base
+    // less the type bit).
+    if let Some(base_d) = match mnemonic {
+        "fabs" => Some(0x1E60_C000u32),
+        "fneg" => Some(0x1E61_4000),
+        "fsqrt" => Some(0x1E61_C000),
+        _ => None,
+    } {
+        let [
+            Opnd::VReg { num: rd, is_d: d0 },
+            Opnd::VReg { num: rn, is_d: d1 },
+        ] = *ops
+        else {
+            return Err(String::from("inline asm: bad FP unary operands"));
+        };
+        if d0 != d1 {
+            return Err(String::from("inline asm: FP unary operand widths differ"));
+        }
+        let base = if d0 { base_d } else { base_d - 0x40_0000 };
+        return Ok(base | ((rn as u32) << 5) | (rd as u32));
+    }
+    // FP compare: `fcmp Vn, Vm` sets the flags. The result register field is the
+    // compare opcode (zero for the register form).
+    if mnemonic == "fcmp" {
+        let [
+            Opnd::VReg { num: rn, is_d },
+            Opnd::VReg { num: rm, is_d: d2 },
+        ] = *ops
+        else {
+            return Err(String::from("inline asm: bad fcmp operands"));
+        };
+        if is_d != d2 {
+            return Err(String::from("inline asm: fcmp operand widths differ"));
+        }
+        let base = if is_d { 0x1E60_2000u32 } else { 0x1E20_2000 };
+        return Ok(base | ((rm as u32) << 16) | ((rn as u32) << 5));
+    }
     // System operation: `dc`/`ic`/`tlbi <op>{, Xt}`. The op is a base word; the
     // Rt field takes the register operand or xzr (31) when there is none.
     if let "dc" | "ic" | "tlbi" = mnemonic {

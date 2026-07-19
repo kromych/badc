@@ -54,6 +54,24 @@ fn bare_return_in_void_function_is_allowed() {
 }
 
 #[test]
+fn block_scope_array_and_vector_typedef_keep_dimension() {
+    // A block-scope array or vector typedef must keep its dimension across
+    // several declarations. The dimension used to be dropped after the first
+    // use: `A4 a = {..}` compiled but a following `A4 b = {..}` saw a scalar
+    // (the file-scope path preserved it; the block-scope path did not).
+    Compiler::new(
+        "int main(void) { \
+             typedef int A4[4]; A4 a = {1, 2, 3, 4}; A4 b = {5, 6, 7, 8}; \
+             typedef int v4 __attribute__((vector_size(16))); \
+             v4 x = {1, 2, 3, 4}; v4 y = {5, 6, 7, 8}; \
+             return a[0] + b[0] + ((int *) &x)[0] + ((int *) &y)[0]; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("block-scope array / vector typedefs must keep their dimension across decls");
+}
+
+#[test]
 fn asm_memory_operand_rvalue_is_rejected() {
     // A memory (`"m"`) operand is reached through its address, so it must be an
     // lvalue. An rvalue (here a call result) is not directly addressable; the

@@ -278,9 +278,17 @@ impl Compiler {
         self.next()?; // consume `typedef`
         let lbt = self.parse_decl_base_type()?;
         while self.lex.tk != ';' {
-            let (id_idx, ty, _) = self.parse_declarator(lbt)?;
+            let (id_idx, mut ty, mut td_array) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
                 return Err(self.compile_err("typedef requires a name"));
+            }
+            // `__attribute__((vector_size(N)))` on the typedef rebuilds its type
+            // into a GCC vector here, matching the file-scope path. Without it
+            // the attribute leaked to the first subsequent declaration and was
+            // then consumed, so a second use of the typedef resolved as a scalar.
+            if self.pending.attr_vector_size > 0 {
+                let n = core::mem::take(&mut self.pending.attr_vector_size);
+                ty = self.make_vector_type(ty, n);
             }
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             // C99 function-type typedef: `typedef RET NAME(args);`
@@ -315,6 +323,16 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
+            // Preserve an array / vector typedef's element count (C99 6.7.7):
+            // the file-scope path stores this (run_compile), but the block-scope
+            // path dropped it, so a second declaration using the typedef
+            // (`typedef int A4[4]; A4 a; A4 b;`) resolved A4 as a scalar. Fold
+            // in a base-typedef dimension too (`typedef A4 B;`).
+            let typedef_dim = self.pending.typedef_base_array_size;
+            if typedef_dim != 0 && td_array == 0 {
+                td_array = typedef_dim;
+            }
+            self.symbols[id_idx].array_size = td_array;
             if typedef_fpi > 0 {
                 self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
             }

@@ -509,6 +509,36 @@ fn vector_shift() {
 }
 
 #[test]
+fn vector_lane_transfer() {
+    let ve = |n: u8, size: u8, index: u8| Opnd::VecElem {
+        num: n,
+        size,
+        index,
+    };
+    // umov Rd, Vn.T[i]: imm5 = (index << (size+1)) | (1<<size); the destination
+    // width is fixed by the element (W for b/h/s, X for d, Q following).
+    assert_eq!(enc("umov", &[w(0), ve(1, 2, 0)]), 0x0E04_3C20); // .s[0]
+    assert_eq!(enc("umov", &[w(0), ve(1, 2, 3)]), 0x0E1C_3C20); // .s[3]
+    assert_eq!(enc("umov", &[x(0), ve(1, 3, 1)]), 0x4E18_3C20); // .d[1]
+    assert_eq!(enc("umov", &[w(0), ve(1, 0, 5)]), 0x0E0B_3C20); // .b[5]
+    assert_eq!(enc("umov", &[w(0), ve(1, 1, 2)]), 0x0E0A_3C20); // .h[2]
+    // smov Rd, Vn.T[i]: sign-extends; Q follows the chosen destination width.
+    assert_eq!(enc("smov", &[w(0), ve(1, 0, 5)]), 0x0E0B_2C20); // Wd <- b
+    assert_eq!(enc("smov", &[x(0), ve(1, 1, 2)]), 0x4E0A_2C20); // Xd <- h
+    // ins Vd.T[i], Rn (and the `mov` alias): Q fixed, source width follows the
+    // element.
+    assert_eq!(enc("ins", &[ve(0, 2, 1), w(2)]), 0x4E0C_1C40); // .s[1] <- w2
+    assert_eq!(enc("ins", &[ve(0, 3, 1), x(2)]), 0x4E18_1C40); // .d[1] <- x2
+    assert_eq!(enc("ins", &[ve(0, 0, 5), w(2)]), 0x4E0B_1C40); // .b[5] <- w2
+    assert_eq!(enc("mov", &[ve(0, 2, 1), w(2)]), 0x4E0C_1C40); // alias
+    // Width mismatches are rejected: umov of a d element into W, smov whose
+    // element is as wide as the destination, ins of a d element from W.
+    assert!(encode("umov", &[w(0), ve(1, 3, 0)]).is_err());
+    assert!(encode("smov", &[w(0), ve(1, 2, 0)]).is_err());
+    assert!(encode("ins", &[ve(0, 3, 0), w(2)]).is_err());
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

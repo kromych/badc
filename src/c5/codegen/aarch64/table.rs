@@ -107,6 +107,13 @@ pub(crate) enum Opnd {
         size: u8,
         q: bool,
     },
+    /// A single SIMD element `vN.T[index]`: `size` is the element-size log2,
+    /// `index` the lane. Used by the lane-transfer forms (umov/smov/ins).
+    VecElem {
+        num: u8,
+        size: u8,
+        index: u8,
+    },
     Imm(i64),
     /// An `lsl #shift` modifier operand.
     Lsl(u32),
@@ -625,6 +632,60 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((immhb as u32) << 16)
             | ((rn as u32) << 5)
             | (rd as u32));
+    }
+    // SIMD element to GP register: `umov Rd, Vn.T[i]` (zero-extended) or
+    // `smov Rd, Vn.T[i]` (sign-extended). imm5 = (index << (size+1)) | (1<<size)
+    // carries element size and lane. umov's destination width is fixed by the
+    // element (X for d, W otherwise), Q following; smov's Q follows the chosen
+    // destination, which must be wider than the element.
+    if let Some((base, signed)) = match mnemonic {
+        "umov" => Some((0x0E00_3C00u32, false)),
+        "smov" => Some((0x0E00_2C00, true)),
+        _ => None,
+    } && let [
+        Opnd::Reg { num: rd, is64 },
+        Opnd::VecElem {
+            num: rn,
+            size,
+            index,
+        },
+    ] = *ops
+    {
+        if signed {
+            if size as u32 >= if is64 { 3 } else { 2 } {
+                return Err(String::from(
+                    "inline asm: smov element must be narrower than the destination",
+                ));
+            }
+        } else if is64 != (size == 3) {
+            return Err(String::from(
+                "inline asm: umov destination width must match the element (X for d, W otherwise)",
+            ));
+        }
+        let imm5 = ((index as u32) << (size + 1)) | (1u32 << size);
+        let q = if is64 { 1u32 << 30 } else { 0 };
+        return Ok(base | q | (imm5 << 16) | ((rn as u32) << 5) | (rd as u32));
+    }
+    // GP register to SIMD element: `ins Vd.T[i], Rn` (also spelled `mov`). The
+    // vector register is 128-bit so Q is fixed; imm5 carries element size and
+    // lane. The source width follows the element (X for d, W otherwise).
+    if let "ins" | "mov" = mnemonic
+        && let [
+            Opnd::VecElem {
+                num: rd,
+                size,
+                index,
+            },
+            Opnd::Reg { num: rn, is64 },
+        ] = *ops
+    {
+        if is64 != (size == 3) {
+            return Err(String::from(
+                "inline asm: ins source width must match the element (X for d, W otherwise)",
+            ));
+        }
+        let imm5 = ((index as u32) << (size + 1)) | (1u32 << size);
+        return Ok(0x4E00_1C00 | (imm5 << 16) | ((rn as u32) << 5) | (rd as u32));
     }
     // System operation: `dc`/`ic`/`tlbi <op>{, Xt}`. The op is a base word; the
     // Rt field takes the register operand or xzr (31) when there is none.

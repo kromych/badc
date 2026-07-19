@@ -2205,6 +2205,7 @@ fn emit_inline_asm_aarch64(
             AsmOpndA64::Reg { num, is64 } => Opnd::Reg { num, is64 },
             AsmOpndA64::VReg { num, is_d } => Opnd::VReg { num, is_d },
             AsmOpndA64::VecReg { num, size, q } => Opnd::VecReg { num, size, q },
+            AsmOpndA64::VecElem { num, size, index } => Opnd::VecElem { num, size, index },
             AsmOpndA64::Ref { idx, is64 } => {
                 let Some(r) = resolve_ref(idx) else {
                     return Err(String::from(

@@ -37,6 +37,9 @@ pub(crate) enum AsmOpndA64 {
     /// size log2 (byte 0, half 1, word 2, dword 3), `q` selects the 128- vs
     /// 64-bit register (16 vs 8 bytes).
     VecReg { num: u8, size: u8, q: bool },
+    /// A single SIMD element `v5.s[3]`: `size` is the element-size log2, `index`
+    /// the lane. Used by the lane-transfer forms (umov/smov/ins).
+    VecElem { num: u8, size: u8, index: u8 },
     /// A literal immediate `#imm`.
     Imm(i64),
     /// A `lsl #n` shift modifier (move-wide).
@@ -333,6 +336,30 @@ fn parse_vec_reg(tok: &str) -> Option<(u8, u8, bool)> {
     Some((num, size, q))
 }
 
+/// Parse a single SIMD element `vN.T[index]` (e.g. `v5.s[3]`) into register
+/// number, element-size log2, and lane index. The element letter selects the
+/// size; the bracketed index selects the lane, checked against the lane count.
+fn parse_vec_elem(tok: &str) -> Option<(u8, u8, u8)> {
+    let (num_s, rest) = tok.strip_prefix('v')?.split_once('.')?;
+    let num: u8 = num_s.parse().ok()?;
+    if num > 31 {
+        return None;
+    }
+    let (letter, idx_s) = rest.split_once('[')?;
+    let size = match letter {
+        "b" => 0u8,
+        "h" => 1,
+        "s" => 2,
+        "d" => 3,
+        _ => return None,
+    };
+    let index: u8 = idx_s.strip_suffix(']')?.trim().parse().ok()?;
+    if index >= (16u8 >> size) {
+        return None;
+    }
+    Some((num, size, index))
+}
+
 fn parse_int(s: &str) -> Option<i64> {
     let s = s.trim();
     let (neg, s) = match s.strip_prefix('-') {
@@ -501,6 +528,9 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             .and_then(parse_int)
             .ok_or_else(|| format!("inline asm: bad shift `{tok}`"))?;
         return Ok(AsmOpndA64::Lsl(amt as u32));
+    }
+    if let Some((num, size, index)) = parse_vec_elem(tok) {
+        return Ok(AsmOpndA64::VecElem { num, size, index });
     }
     if let Some((num, size, q)) = parse_vec_reg(tok) {
         return Ok(AsmOpndA64::VecReg { num, size, q });
@@ -1098,6 +1128,34 @@ mod tests {
                     num: 2,
                     size: 2,
                     q: true
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_vector_elements() {
+        // `vN.T[index]` single-element views: size = element-size log2, index the
+        // lane, checked against the lane count (16 >> size).
+        assert_eq!(parse_vec_elem("v0.s[3]"), Some((0, 2, 3)));
+        assert_eq!(parse_vec_elem("v31.b[15]"), Some((31, 0, 15)));
+        assert_eq!(parse_vec_elem("v3.d[1]"), Some((3, 3, 1)));
+        assert_eq!(parse_vec_elem("v0.s[4]"), None); // lane out of range (4 words)
+        assert_eq!(parse_vec_elem("v0.d[2]"), None); // lane out of range (2 dwords)
+        assert_eq!(parse_vec_elem("v0.4s"), None); // arrangement, not an element
+        assert_eq!(parse_vec_elem("v0.q[0]"), None); // no q element
+        let insns = parse_template(b"ins v0.s[1], w2").unwrap();
+        assert_eq!(
+            insns[0].operands,
+            [
+                AsmOpndA64::VecElem {
+                    num: 0,
+                    size: 2,
+                    index: 1
+                },
+                AsmOpndA64::Reg {
+                    num: 2,
+                    is64: false
                 },
             ]
         );

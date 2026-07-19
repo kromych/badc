@@ -160,6 +160,27 @@ fn load_store_register_offset() {
 }
 
 #[test]
+fn catalogue_load_rejects_pre_index_writeback() {
+    // The catalogue carries only offset forms. A pre-index `[Xn, #off]!` operand
+    // must not match one and silently drop the writeback (the subword loads have
+    // no writeback form), so it is a clear error rather than a miscompile.
+    let offset = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: false,
+    };
+    let writeback = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: true,
+    };
+    assert!(encode("ldrb", &[w(0), offset(1, 4)]).is_ok());
+    assert!(encode("ldrb", &[w(0), writeback(1, 4)]).is_err());
+    assert!(encode("ldrh", &[w(0), writeback(1, 4)]).is_err());
+    assert!(encode("strh", &[w(0), writeback(1, 2)]).is_err());
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

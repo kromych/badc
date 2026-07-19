@@ -232,7 +232,11 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
         (A64Op::Imm, Opnd::Imm(_)) => true,
         (A64Op::OptLsl, Opnd::Lsl(_)) => true,
         (A64Op::Cond, Opnd::Cond(_)) => true,
-        (A64Op::Mem, Opnd::Mem { .. }) => true,
+        // Only the offset form matches: a pre-index `[Xn, #off]!` operand must
+        // not silently take an offset-only encoding and drop its writeback. The
+        // catalogue carries no writeback forms, so pre-index falls through to a
+        // clear "no encoding" error. A register-offset `MemReg` never matches.
+        (A64Op::Mem, Opnd::Mem { pre, .. }) => !pre,
         _ => false,
     }
 }

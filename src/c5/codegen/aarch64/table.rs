@@ -1455,6 +1455,68 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((base as u32) << 5)
             | (*first as u32));
     }
+    // SIMD single-structure lane load/store `<ld1|st1> {Vt.T}[i], [Xn]{, #inc |
+    // , Xm}`: transfer one lane. The lane index is bit-sliced across Q (30), S
+    // (12), and the size field (11..10): field4 = (index << size) | (size==3 ? 1
+    // : 0); the opcode (15..13) is the element class. L (bit 22) marks the load.
+    // The immediate post-index increment is the element size (1<<size bytes).
+    if let "ld1" | "st1" = mnemonic
+        && let [
+            Opnd::VecElem {
+                num: rt,
+                size,
+                index,
+            },
+            mem,
+            post @ ..,
+        ] = ops
+    {
+        let base = match mem {
+            Opnd::Mem {
+                base,
+                off: 0,
+                pre: false,
+            } => *base,
+            _ => {
+                return Err(String::from(
+                    "inline asm: single-lane ld1/st1 need a plain [Xn] address",
+                ));
+            }
+        };
+        let (rm, wb) = match post {
+            [] => (0u32, 0u32),
+            [Opnd::Imm(inc)] => {
+                if *inc != 1i64 << size {
+                    return Err(String::from(
+                        "inline asm: single-lane post-index must equal the element size",
+                    ));
+                }
+                (31, 1u32 << 23)
+            }
+            [Opnd::Reg { num, is64: true }] => (*num as u32, 1u32 << 23),
+            _ => {
+                return Err(String::from(
+                    "inline asm: bad single-lane post-index (want `, #imm` or `, Xm`)",
+                ));
+            }
+        };
+        let field4 = ((*index as u32) << size) | if *size == 3 { 1 } else { 0 };
+        let opcode = if *size == 3 {
+            0b100u32
+        } else {
+            (*size as u32) << 1
+        };
+        return Ok(0x0D00_0000
+            | wb
+            | (if mnemonic == "ld1" { 1u32 << 22 } else { 0 })
+            | (((field4 >> 3) & 1) << 30)
+            | (opcode << 13)
+            | (rm << 16)
+            | (((field4 >> 2) & 1) << 12)
+            | ((field4 & 0b11) << 10)
+            | ((base as u32) << 5)
+            | (*rt as u32));
+    }
     // SIMD table lookup `<tbl|tbx> Vd.T, {Vn.16b, ..}, Vm.T` (T = 8b/16b): each
     // byte of the index Vm selects a byte from the table register list. `len`
     // (bits 14..13) is the table count minus one; bit 12 selects tbx (which

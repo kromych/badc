@@ -821,6 +821,32 @@ fn simd_ld1r() {
 }
 
 #[test]
+fn simd_ld_st_single_lane() {
+    let el = |num: u8, size: u8, index: u8| Opnd::VecElem { num, size, index };
+    let mem = |base: u8| Opnd::Mem {
+        base,
+        off: 0,
+        pre: false,
+    };
+    // The lane index is bit-sliced across Q (30), S (12), and size (11..10); the
+    // opcode (15..13) is the element class. L (bit 22) marks the load.
+    assert_eq!(enc("ld1", &[el(0, 2, 2), mem(1)]), 0x4D40_8020); // {v0.s}[2]
+    assert_eq!(enc("st1", &[el(0, 2, 2), mem(1)]), 0x4D00_8020);
+    assert_eq!(enc("ld1", &[el(0, 0, 5), mem(1)]), 0x0D40_1420); // {v0.b}[5]
+    assert_eq!(enc("ld1", &[el(0, 3, 1), mem(1)]), 0x4D40_8420); // {v0.d}[1]
+    assert_eq!(enc("ld1", &[el(0, 1, 3), mem(1)]), 0x0D40_5820); // {v0.h}[3]
+    assert_eq!(enc("st1", &[el(0, 3, 0), mem(1)]), 0x0D00_8420); // {v0.d}[0]
+    // Post-index by the element size, or a register.
+    assert_eq!(
+        enc("ld1", &[el(0, 2, 2), mem(1), Opnd::Imm(4)]),
+        0x4DDF_8020
+    );
+    assert_eq!(enc("ld1", &[el(0, 2, 2), mem(1), x(2)]), 0x4DC2_8020);
+    // A wrong immediate increment is rejected.
+    assert!(encode("ld1", &[el(0, 2, 2), mem(1), Opnd::Imm(8)]).is_err());
+}
+
+#[test]
 fn table_lookup() {
     let v = |n: u8, q: bool| Opnd::VecReg { num: n, size: 0, q };
     let tab = |first: u8, count: u8| Opnd::VecList {

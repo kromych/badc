@@ -392,6 +392,36 @@ fn parse_vec_elem(tok: &str) -> Option<(u8, u8, u8)> {
     Some((num, size, index))
 }
 
+/// Parse a single-element register list with a lane `{v0.s}[2]` into the
+/// register number, element-size log2, and lane index (as a `VecElem`). Used by
+/// the single-structure lane load/store forms; the lane rides outside the
+/// braces, unlike the arrangement lists `parse_vec_list` handles.
+fn parse_vec_list_lane(tok: &str) -> Option<(u8, u8, u8)> {
+    let (reg_part, lane_part) = tok.strip_prefix('{')?.split_once('}')?;
+    let lane = lane_part
+        .trim()
+        .strip_prefix('[')?
+        .strip_suffix(']')?
+        .trim();
+    let (num_s, letter) = reg_part.trim().strip_prefix('v')?.split_once('.')?;
+    let num: u8 = num_s.trim().parse().ok()?;
+    if num > 31 {
+        return None;
+    }
+    let size = match letter.trim() {
+        "b" => 0u8,
+        "h" => 1,
+        "s" => 2,
+        "d" => 3,
+        _ => return None,
+    };
+    let index: u8 = lane.parse().ok()?;
+    if index >= (16u8 >> size) {
+        return None;
+    }
+    Some((num, size, index))
+}
+
 /// Parse a SIMD register list `{v0.T, v1.T, ..}` or the range form
 /// `{v0.T-v3.T}` into the first register number, the count (1..4), and the
 /// shared arrangement. The registers must be consecutive (modulo 32) and share
@@ -594,6 +624,9 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             .and_then(parse_int)
             .ok_or_else(|| format!("inline asm: bad shift `{tok}`"))?;
         return Ok(AsmOpndA64::Lsl(amt as u32));
+    }
+    if let Some((num, size, index)) = parse_vec_list_lane(tok) {
+        return Ok(AsmOpndA64::VecElem { num, size, index });
     }
     if let Some((first, count, size, q)) = parse_vec_list(tok) {
         return Ok(AsmOpndA64::VecList {
@@ -1271,6 +1304,21 @@ mod tests {
                 count: 2,
                 size: 2,
                 q: true
+            }
+        );
+        // The lane form `{vN.T}[i]` is a single element (the lane rides outside
+        // the braces), parsed as a VecElem shared with the umov/ins forms.
+        assert_eq!(parse_vec_list_lane("{v0.s}[2]"), Some((0, 2, 2)));
+        assert_eq!(parse_vec_list_lane("{v5.b}[15]"), Some((5, 0, 15)));
+        assert_eq!(parse_vec_list_lane("{v0.d}[2]"), None); // lane out of range
+        assert_eq!(parse_vec_list_lane("{v0.4s}"), None); // an arrangement list
+        let insns = parse_template(b"ld1 {v3.s}[2], [x2]").unwrap();
+        assert_eq!(
+            insns[0].operands[0],
+            AsmOpndA64::VecElem {
+                num: 3,
+                size: 2,
+                index: 2
             }
         );
     }

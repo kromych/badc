@@ -198,6 +198,24 @@ static int avx_vmem(void) {
     return r;
 }
 
+static int avx_shuf_mul(void) {
+    int r = 42;
+#if defined(__x86_64__)
+    if (cpu_has_avx()) {
+        sse_v4 a = {1, 2, 3, 6};
+        sse_v4 b = {7, 7, 7, 7};
+        sse_v4 c;
+        sse_v4 d;
+        /* vpmulld (0F38 map): c = a * b = {7, 14, 21, 42}. */
+        __asm__("vpmulld %2, %1, %0" : "=x"(c) : "x"(a), "x"(b));
+        /* vpshufd $0x1b (VEX imm): reverse lanes -> {42, 21, 14, 7}. */
+        __asm__("vpshufd $0x1b, %1, %0" : "=x"(d) : "x"(c));
+        r = ((int *) &d)[0]; /* reversed lane 0 = c lane 3 = 6*7 = 42 */
+    }
+#endif
+    return r;
+}
+
 int main(void) {
     if (sse_add(19, 23) != 42) return 1;    /* 19 + 23, register paddd     */
     if (sse_mem_add(23) != 42) return 2;    /* 23 + 19, memory-source paddd */
@@ -209,5 +227,6 @@ int main(void) {
     if (sse_x_constraint() != 42) return 8;    /* `x` xmm operand allocation */
     if (avx_vpaddd() != 42) return 9;          /* 3-operand VEX (AVX), guarded */
     if (avx_vmem() != 42) return 10;           /* VEX moves + memory operand   */
+    if (avx_shuf_mul() != 42) return 11;       /* vpmulld (0F38) + vpshufd imm  */
     return 42;
 }

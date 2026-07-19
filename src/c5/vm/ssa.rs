@@ -2101,7 +2101,9 @@ fn run_inline_asm(
             | Mnemonic::SseShiftImm { .. }
             | Mnemonic::Vex { .. }
             | Mnemonic::VexMov { .. }
-            | Mnemonic::Vex2 { .. } => {
+            | Mnemonic::Vex2 { .. }
+            | Mnemonic::VexImm3 { .. }
+            | Mnemonic::VexImm2 { .. } => {
                 // The interpreter has no XMM register file; SSE inline asm is a
                 // native / JIT construct, refused here rather than mis-modelled.
                 return Err(C5Error::Runtime(alloc::string::String::from(

@@ -2165,7 +2165,7 @@ fn emit_inline_asm_aarch64(
                 let is64 = is64.unwrap_or(asm.operands[idx as usize].width >= 8);
                 Opnd::Reg { num: r, is64 }
             }
-            AsmOpndA64::Mem { base, off } => {
+            AsmOpndA64::Mem { base, off, pre } => {
                 let base = match base {
                     super::asm::MemBase::Reg(n) => n,
                     super::asm::MemBase::Ref(idx) => {
@@ -2177,7 +2177,7 @@ fn emit_inline_asm_aarch64(
                         r
                     }
                 };
-                Opnd::Mem { base, off }
+                Opnd::Mem { base, off, pre }
             }
             AsmOpndA64::Cond(c) => Opnd::Cond(c),
             AsmOpndA64::Label { .. } => {

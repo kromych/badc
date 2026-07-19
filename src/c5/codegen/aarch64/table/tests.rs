@@ -18,7 +18,11 @@ fn w(n: u8) -> Opnd {
     }
 }
 fn m(base: u8) -> Opnd {
-    Opnd::Mem { base, off: 0 }
+    Opnd::Mem {
+        base,
+        off: 0,
+        pre: false,
+    }
 }
 fn enc(mnem: &str, ops: &[Opnd]) -> u32 {
     encode(mnem, ops).unwrap_or_else(|e| panic!("{mnem}: {e}"))
@@ -56,33 +60,90 @@ fn move_wide() {
 fn load_store_immediate() {
     // ldr/str Xt, [Xn, #off]: the offset is scaled by the access size (8).
     assert_eq!(
-        enc("ldr", &[x(0), Opnd::Mem { base: 1, off: 0 }]),
+        enc(
+            "ldr",
+            &[
+                x(0),
+                Opnd::Mem {
+                    base: 1,
+                    off: 0,
+                    pre: false
+                }
+            ]
+        ),
         0xF9400020
     );
     assert_eq!(
-        enc("ldr", &[x(0), Opnd::Mem { base: 1, off: 8 }]),
+        enc(
+            "ldr",
+            &[
+                x(0),
+                Opnd::Mem {
+                    base: 1,
+                    off: 8,
+                    pre: false
+                }
+            ]
+        ),
         0xF9400420
     );
     assert_eq!(
-        enc("str", &[x(0), Opnd::Mem { base: 1, off: 0 }]),
+        enc(
+            "str",
+            &[
+                x(0),
+                Opnd::Mem {
+                    base: 1,
+                    off: 0,
+                    pre: false
+                }
+            ]
+        ),
         0xF9000020
     );
     // 32-bit access uses the W-register form (scaled by 4).
     assert_eq!(
-        enc("ldr", &[w(2), Opnd::Mem { base: 3, off: 4 }]),
+        enc(
+            "ldr",
+            &[
+                w(2),
+                Opnd::Mem {
+                    base: 3,
+                    off: 4,
+                    pre: false
+                }
+            ]
+        ),
         0xB9400462
     );
 }
 
 #[test]
 fn load_store_pair() {
-    let mem = |base: u8, off: i64| Opnd::Mem { base, off };
+    let mem = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: false,
+    };
     // stp/ldp Xt1, Xt2, [Xn, #off]: signed offset scaled by the access size.
     assert_eq!(enc("stp", &[x(0), x(1), mem(2, 0)]), 0xA9000440);
     assert_eq!(enc("stp", &[x(0), x(1), mem(2, 16)]), 0xA9010440);
     assert_eq!(enc("ldp", &[x(0), x(1), mem(2, 16)]), 0xA9410440);
     assert_eq!(enc("stp", &[x(0), x(1), mem(2, -64)]), 0xA93C0440); // min imm7
     assert_eq!(enc("stp", &[w(0), w(1), mem(2, 8)]), 0x29010440); // W scaled by 4
+    // Pre-index writeback `[Xn, #off]!` and post-index `[Xn], #off` (the offset
+    // a trailing operand); both write the base back.
+    let mem_pre = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: true,
+    };
+    assert_eq!(enc("stp", &[x(0), x(1), mem_pre(31, -16)]), 0xA9BF07E0);
+    assert_eq!(enc("stp", &[w(0), w(1), mem_pre(31, -8)]), 0x29BF07E0);
+    assert_eq!(
+        enc("ldp", &[x(0), x(1), mem(31, 0), Opnd::Imm(16)]),
+        0xA8C107E0
+    );
     // A mismatched width, an unaligned offset, and an out-of-range offset are
     // rejected rather than silently mis-encoded.
     assert!(encode("stp", &[x(0), w(1), mem(2, 0)]).is_err());
@@ -296,7 +357,11 @@ fn memory_and_positional_registers() {
 /// operand whose base feeds `Rn`.
 #[test]
 fn signed_and_offset_immediates() {
-    let mem = |base: u8, off: i64| Opnd::Mem { base, off };
+    let mem = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: false,
+    };
     // Unscaled/unprivileged signed imm9 (bit 12): sign-encoded two's complement.
     assert_eq!(enc("ldtr", &[w(0), mem(1, -4)]), 0xB85FC820); // ldtr w0, [x1, #-4]
     assert_eq!(enc("ldtr", &[x(2), mem(3, 255)]), 0xF84FF862); // max imm9
@@ -543,13 +608,18 @@ mod differential {
                         A64Op::Mem => match mem_off(f, i) {
                             Some(off) => {
                                 txt.push(alloc::format!("[x{}, #{off}]", regs[i]));
-                                ops.push(Opnd::Mem { base: regs[i], off });
+                                ops.push(Opnd::Mem {
+                                    base: regs[i],
+                                    off,
+                                    pre: false,
+                                });
                             }
                             None => {
                                 txt.push(alloc::format!("[x{}]", regs[i]));
                                 ops.push(Opnd::Mem {
                                     base: regs[i],
                                     off: 0,
+                                    pre: false,
                                 });
                             }
                         },

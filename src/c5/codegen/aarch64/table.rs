@@ -98,6 +98,9 @@ pub(crate) enum Opnd {
     Mem {
         base: u8,
         off: i64,
+        /// Pre-index writeback (`[base, #off]!`); the offset-only and scaled
+        /// forms leave it false.
+        pre: bool,
     },
     /// A 4-bit condition code for the conditional-select forms.
     Cond(u8),
@@ -233,7 +236,12 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // Load / store with an immediate offset: `ldr Xt, [Xn, #off]` etc. The
     // access width comes from the register operand (X vs W).
     if mnemonic == "ldr" || mnemonic == "str" {
-        if let [Opnd::Reg { num, is64 }, Opnd::Mem { base, off }] = *ops {
+        if let [Opnd::Reg { num, is64 }, Opnd::Mem { base, off, pre }] = *ops {
+            if pre {
+                return Err(String::from(
+                    "inline asm: ldr/str pre/post-index not supported",
+                ));
+            }
             use super::encode::{Reg, enc_ldr_imm, enc_ldr32_imm, enc_str_imm, enc_str32_imm};
             let rt = Reg(num);
             let rn = Reg(base);
@@ -247,44 +255,67 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         }
         return Err(String::from("inline asm: bad ldr/str operands"));
     }
-    // Load / store pair with a signed, size-scaled offset: `stp Xt1, Xt2,
-    // [Xn, #off]`. Both data registers share a width; the offset is a multiple
-    // of the access size in the range of a signed 7-bit field.
+    // Load / store pair with a signed, size-scaled offset. The index mode is
+    // the offset form `[Xn, #off]`, the pre-index `[Xn, #off]!`, or the
+    // post-index `[Xn], #off` (the offset a trailing operand). Both data
+    // registers share a width; the offset is a multiple of the access size in
+    // the range of a signed 7-bit field.
     if mnemonic == "stp" || mnemonic == "ldp" {
-        if let [
-            Opnd::Reg { num: t1, is64 },
-            Opnd::Reg { num: t2, is64: w2 },
-            Opnd::Mem { base, off },
-        ] = *ops
-        {
-            if is64 != w2 {
-                return Err(String::from(
-                    "inline asm: stp/ldp registers differ in width",
-                ));
-            }
-            let (base_op, scale): (u32, i64) = if is64 {
-                (0xA900_0000, 8)
-            } else {
-                (0x2900_0000, 4)
-            };
-            if off % scale != 0 {
-                return Err(String::from(
-                    "inline asm: stp/ldp offset not a multiple of the access size",
-                ));
-            }
-            let imm = off / scale;
-            if !(-64..=63).contains(&imm) {
-                return Err(String::from("inline asm: stp/ldp offset out of range"));
-            }
-            let l = if mnemonic == "ldp" { 1u32 << 22 } else { 0 };
-            return Ok(base_op
-                | l
-                | ((imm as u32 & 0x7F) << 15)
-                | ((t2 as u32) << 10)
-                | ((base as u32) << 5)
-                | (t1 as u32));
+        enum Idx {
+            Off,
+            Pre,
+            Post,
         }
-        return Err(String::from("inline asm: bad stp/ldp operands"));
+        let (t1, t2, is64, base, off, mode) = match *ops {
+            [
+                Opnd::Reg { num: t1, is64 },
+                Opnd::Reg { num: t2, is64: w2 },
+                Opnd::Mem { base, off, pre },
+            ] if is64 == w2 => (
+                t1,
+                t2,
+                is64,
+                base,
+                off,
+                if pre { Idx::Pre } else { Idx::Off },
+            ),
+            [
+                Opnd::Reg { num: t1, is64 },
+                Opnd::Reg { num: t2, is64: w2 },
+                Opnd::Mem {
+                    base,
+                    off: 0,
+                    pre: false,
+                },
+                Opnd::Imm(o),
+            ] if is64 == w2 => (t1, t2, is64, base, o, Idx::Post),
+            _ => return Err(String::from("inline asm: bad stp/ldp operands")),
+        };
+        let scale: i64 = if is64 { 8 } else { 4 };
+        if off % scale != 0 {
+            return Err(String::from(
+                "inline asm: stp/ldp offset not a multiple of the access size",
+            ));
+        }
+        let imm = off / scale;
+        if !(-64..=63).contains(&imm) {
+            return Err(String::from("inline asm: stp/ldp offset out of range"));
+        }
+        let base_op: u32 = match (is64, mode) {
+            (true, Idx::Off) => 0xA900_0000,
+            (false, Idx::Off) => 0x2900_0000,
+            (true, Idx::Pre) => 0xA980_0000,
+            (false, Idx::Pre) => 0x2980_0000,
+            (true, Idx::Post) => 0xA880_0000,
+            (false, Idx::Post) => 0x2880_0000,
+        };
+        let l = if mnemonic == "ldp" { 1u32 << 22 } else { 0 };
+        return Ok(base_op
+            | l
+            | ((imm as u32 & 0x7F) << 15)
+            | ((t2 as u32) << 10)
+            | ((base as u32) << 5)
+            | (t1 as u32));
     }
     // `mov` is an alias whose expansion is value-dependent, so the generator
     // omits it. A register move is `orr Rd, xzr, Rm`; a small immediate is

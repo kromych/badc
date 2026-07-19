@@ -37,8 +37,10 @@ pub(crate) enum AsmOpndA64 {
     /// A system register named in a `mrs` / `msr`, resolved to its 15-bit field.
     SysReg(u16),
     /// A memory reference `[base, #off]` (the `off` defaults to 0). The base is
-    /// an operand reference or an explicit register.
-    Mem { base: MemBase, off: i64 },
+    /// an operand reference or an explicit register. `pre` marks the
+    /// pre-index writeback form `[base, #off]!`; post-index (`[base], #off`)
+    /// is the separate trailing-immediate operand shape the encoder folds in.
+    Mem { base: MemBase, off: i64, pre: bool },
     /// A condition code (`eq`, `ne`, ...) as its 4-bit encoding, for the
     /// conditional-select forms.
     Cond(u8),
@@ -209,8 +211,9 @@ fn split_operands(rest: &str) -> Vec<&str> {
     out
 }
 
-/// Parse a `[base]` / `[base, #off]` memory reference.
-fn parse_mem(inner: &str) -> Result<AsmOpndA64, String> {
+/// Parse a `[base]` / `[base, #off]` memory reference; `pre` is the pre-index
+/// writeback (`[base, #off]!`).
+fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
     let parts = split_operands(inner);
     if parts.is_empty() || parts.len() > 2 {
         return Err(format!("inline asm: bad memory operand `[{inner}]`"));
@@ -232,13 +235,21 @@ fn parse_mem(inner: &str) -> Result<AsmOpndA64, String> {
     } else {
         0
     };
-    Ok(AsmOpndA64::Mem { base, off })
+    Ok(AsmOpndA64::Mem { base, off, pre })
 }
 
 /// Parse one operand token (already trimmed).
 fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
+    // `[...]` is an offset reference; `[...]!` a pre-index writeback.
     if let Some(inner) = tok.strip_prefix('[').and_then(|t| t.strip_suffix(']')) {
-        return parse_mem(inner);
+        return parse_mem(inner, false);
+    }
+    if let Some(inner) = tok
+        .strip_prefix('[')
+        .and_then(|t| t.strip_suffix('!'))
+        .and_then(|t| t.strip_suffix(']'))
+    {
+        return parse_mem(inner, true);
     }
     if let Some(rest) = tok.strip_prefix('#') {
         let v = parse_int(rest).ok_or_else(|| format!("inline asm: bad immediate `{tok}`"))?;
@@ -514,7 +525,8 @@ mod tests {
                 AsmOpndA64::Ref { idx: 0, is64: None },
                 AsmOpndA64::Mem {
                     base: MemBase::Ref(1),
-                    off: 8
+                    off: 8,
+                    pre: false,
                 },
             ]
         );
@@ -524,7 +536,8 @@ mod tests {
                 AsmOpndA64::Reg { num: 3, is64: true },
                 AsmOpndA64::Mem {
                     base: MemBase::Reg(4),
-                    off: 0
+                    off: 0,
+                    pre: false,
                 },
             ]
         );
@@ -534,7 +547,18 @@ mod tests {
             insns[0].operands[1],
             AsmOpndA64::Mem {
                 base: MemBase::Reg(1),
-                off: -4
+                off: -4,
+                pre: false,
+            }
+        );
+        // A pre-index writeback `[base, #off]!`.
+        let insns = parse_template(b"stp x0, x1, [sp, #-16]!").unwrap();
+        assert_eq!(
+            insns[0].operands[2],
+            AsmOpndA64::Mem {
+                base: MemBase::Reg(31),
+                off: -16,
+                pre: true,
             }
         );
     }

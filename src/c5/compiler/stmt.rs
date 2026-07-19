@@ -1466,6 +1466,22 @@ impl Compiler {
             }
             self.next()?; // consume `(`
             self.expr(Token::Assign as i64)?;
+            // A `register T v asm("reg")` local used as an `r`-class
+            // operand binds to its named register (the one placement
+            // GCC guarantees for asm-declared register variables).
+            let constraint = match constraint {
+                AsmConstraint::Reg => {
+                    let pinned = self.ast_acc.and_then(|id| match self.ast.expr(id) {
+                        Expr::Ident { sym, .. } => self.symbols[*sym as usize].asm_reg,
+                        _ => None,
+                    });
+                    match pinned {
+                        Some(r) => AsmConstraint::Fixed(r),
+                        None => constraint,
+                    }
+                }
+                c => c,
+            };
             let width = self.size_of_type(self.ty).min(8) as u8;
             // The x86 `x` operand path moves a full 128-bit value (movups), so
             // it requires a 16-byte operand (a __m128i / vector). A scalar

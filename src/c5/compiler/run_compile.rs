@@ -403,6 +403,11 @@ impl Compiler {
                 // function body's opening brace parsed further below.
                 let signature_line = self.lex.line;
                 let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
+                // TODO: file-scope declarator `asm("name")` -- both the
+                // linkage-name rename and the global register variable.
+                if self.lex.tk == Token::Asm {
+                    return Err(self.compile_err("declarator `asm` is not supported at file scope"));
+                }
                 // `__declspec(dllexport)` on the declarator exports the name,
                 // the equivalent of `#pragma export(name)`. resolve_exports
                 // validates the name resolves to a defined function.

@@ -593,6 +593,9 @@ impl Compiler {
         sym.is_zero_len_array = sym.h_is_zero_len_array;
         sym.is_scope_static = false;
         sym.is_scope_typedef = false;
+        // The register-asm binding belongs to the block-scope local
+        // being unbound, never to the restored outer symbol.
+        sym.asm_reg = None;
     }
 
     // ---- AST helpers ----

@@ -1018,6 +1018,25 @@ pub(crate) fn assign_operand_regs(
     use crate::c5::ir::AsmConstraint as C;
     let mut assigned: Vec<Option<u8>> = alloc::vec![None; operands.len()];
     let mut used = [false; 32];
+    // Fixed constraints (register-asm variables) own their register;
+    // assign them before the clobber marks, whose bits include the
+    // fixed operands' own registers.
+    for (i, op) in operands.iter().enumerate() {
+        if let C::Fixed(r) = op.constraint {
+            if (r as usize) >= 16 {
+                return Err(String::from(
+                    "inline asm: fixed operand register outside x0..x15",
+                ));
+            }
+            if used[r as usize] {
+                return Err(String::from(
+                    "inline asm: two operands bound to one fixed register",
+                ));
+            }
+            used[r as usize] = true;
+            assigned[i] = Some(r);
+        }
+    }
     // A clobbered register is unavailable for an operand: the asm template
     // overwrites it, so an operand placed there would be corrupted.
     for r in 0..32u8 {
@@ -1064,12 +1083,12 @@ pub(crate) fn assign_operand_regs(
             assigned[i] = Some(r);
         }
     }
-    // Fixed / register-or-immediate constraints are x86-specific and do not
-    // occur in AArch64 templates; reject them rather than mis-assign.
+    // The register-or-immediate class letters are x86-specific and do
+    // not occur in AArch64 templates; reject rather than mis-assign.
     for op in operands {
-        if matches!(op.constraint, C::Fixed(_) | C::RegOrImm(_)) {
+        if matches!(op.constraint, C::RegOrImm(_)) {
             return Err(String::from(
-                "inline asm: fixed-register constraint not supported on AArch64",
+                "inline asm: register-class-letter constraint not supported on AArch64",
             ));
         }
     }

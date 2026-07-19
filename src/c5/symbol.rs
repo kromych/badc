@@ -372,6 +372,13 @@ pub(crate) struct Symbol {
     /// and dead-store diagnostics for this symbol, matching the
     /// documented effect of the attribute.
     pub maybe_unused: bool,
+
+    /// GCC `register T v asm("reg")`: the architectural number of the
+    /// named general register. GCC guarantees the binding only when
+    /// the variable is an `r`-class inline-asm operand; such an
+    /// operand's constraint resolves to `AsmConstraint::Fixed` with
+    /// this number. `None` for ordinary symbols.
+    pub asm_reg: Option<u8>,
 }
 
 /// C99 6.2.2 linkage class. `None` is the default for block-scope

@@ -36,6 +36,9 @@ pub(crate) enum AsmOpndA64 {
     /// The 128-bit `q5` view of a SIMD register, used by the vector load/store
     /// forms (`ldr`/`str qN`).
     QReg(u8),
+    /// A byte/half scalar-SIMD view `b5`/`h5` (`size` 0 or 1); `s`/`d` views are
+    /// `VReg`. These name the scalar destination of the across-lane reductions.
+    VScalar { num: u8, size: u8 },
     /// A SIMD vector-arrangement register view `v5.4s`: `size` is the element
     /// size log2 (byte 0, half 1, word 2, dword 3), `q` selects the 128- vs
     /// 64-bit register (16 vs 8 bytes).
@@ -331,6 +334,18 @@ fn parse_qreg(tok: &str) -> Option<u8> {
     (n <= 31).then_some(n)
 }
 
+/// A byte/half scalar-SIMD register `b0`..`b31` / `h0`..`h31` (the `s`/`d`
+/// views are `VReg`). Returns the register number and the element-size log2.
+fn parse_vscalar(tok: &str) -> Option<(u8, u8)> {
+    let (size, rest) = match tok.as_bytes().first()? {
+        b'b' => (0u8, &tok[1..]),
+        b'h' => (1, &tok[1..]),
+        _ => return None,
+    };
+    let n: u8 = rest.parse().ok()?;
+    (n <= 31).then_some((n, size))
+}
+
 /// A SIMD vector-arrangement register `vN.T` (e.g. `v5.4s`): the register
 /// number, the element-size log2, and the 128-bit flag.
 fn parse_vec_reg(tok: &str) -> Option<(u8, u8, bool)> {
@@ -599,6 +614,9 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     }
     if let Some(num) = parse_qreg(tok) {
         return Ok(AsmOpndA64::QReg(num));
+    }
+    if let Some((num, size)) = parse_vscalar(tok) {
+        return Ok(AsmOpndA64::VScalar { num, size });
     }
     if let Some((num, is64)) = parse_reg(tok) {
         return Ok(AsmOpndA64::Reg { num, is64 });
@@ -1145,6 +1163,11 @@ mod tests {
         assert_eq!(parse_qreg("q31"), Some(31));
         assert_eq!(parse_qreg("q32"), None); // out of range
         assert_eq!(parse_qreg("d0"), None); // a D-register, not a Q one
+        // `b0`/`h0` are the byte/half scalar-SIMD views (reduction destinations).
+        assert_eq!(parse_vscalar("b0"), Some((0, 0)));
+        assert_eq!(parse_vscalar("h31"), Some((31, 1)));
+        assert_eq!(parse_vscalar("s0"), None); // an S-register (VReg), not b/h
+        assert_eq!(parse_vscalar("b32"), None); // out of range
         let insns = parse_template(b"fmov x0, d1; fmov s2, w3").unwrap();
         assert_eq!(
             insns[0].operands,

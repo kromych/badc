@@ -2205,6 +2205,7 @@ fn emit_inline_asm_aarch64(
             AsmOpndA64::Reg { num, is64 } => Opnd::Reg { num, is64 },
             AsmOpndA64::VReg { num, is_d } => Opnd::VReg { num, is_d },
             AsmOpndA64::QReg(num) => Opnd::QReg(num),
+            AsmOpndA64::VScalar { num, size } => Opnd::VScalar { num, size },
             AsmOpndA64::VecReg { num, size, q } => Opnd::VecReg { num, size, q },
             AsmOpndA64::VecElem { num, size, index } => Opnd::VecElem { num, size, index },
             AsmOpndA64::VecList {

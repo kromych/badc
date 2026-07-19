@@ -837,6 +837,35 @@ fn table_lookup() {
 }
 
 #[test]
+fn across_lane_reduction() {
+    let b = |n: u8| Opnd::VScalar { num: n, size: 0 };
+    let h = |n: u8| Opnd::VScalar { num: n, size: 1 };
+    let s = |n: u8| Opnd::VReg {
+        num: n,
+        is_d: false,
+    };
+    let d = |n: u8| Opnd::VReg { num: n, is_d: true };
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    // addv/maxv/minv reduce to a scalar at the source element size (b/h/s).
+    assert_eq!(enc("addv", &[b(0), v(1, 0, true)]), 0x4E31_B820); // .16b -> b
+    assert_eq!(enc("addv", &[h(0), v(1, 1, true)]), 0x4E71_B820); // .8h  -> h
+    assert_eq!(enc("addv", &[s(0), v(1, 2, true)]), 0x4EB1_B820); // .4s  -> s
+    assert_eq!(enc("smaxv", &[b(0), v(1, 0, true)]), 0x4E30_A820);
+    assert_eq!(enc("sminv", &[h(0), v(1, 1, true)]), 0x4E71_A820);
+    assert_eq!(enc("umaxv", &[s(0), v(1, 2, true)]), 0x6EB0_A820);
+    assert_eq!(enc("uminv", &[b(0), v(1, 0, true)]), 0x6E31_A820);
+    // Long reductions widen the destination one element size.
+    assert_eq!(enc("saddlv", &[h(0), v(1, 0, true)]), 0x4E30_3820); // .16b -> h
+    assert_eq!(enc("uaddlv", &[s(0), v(1, 1, true)]), 0x6E70_3820); // .8h  -> s
+    assert_eq!(enc("saddlv", &[d(0), v(1, 2, true)]), 0x4EB0_3820); // .4s  -> d
+    // A destination of the wrong width, a .2d source, and a long reduction whose
+    // destination is not widened are all rejected.
+    assert!(encode("addv", &[s(0), v(1, 0, true)]).is_err()); // .16b needs b
+    assert!(encode("addv", &[b(0), v(1, 3, true)]).is_err()); // .2d not a reduction
+    assert!(encode("saddlv", &[b(0), v(1, 0, true)]).is_err()); // needs the wider h
+}
+
+#[test]
 fn crypto() {
     let v = |n: u8, size: u8| Opnd::VecReg {
         num: n,

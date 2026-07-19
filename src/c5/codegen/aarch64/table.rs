@@ -103,6 +103,13 @@ pub(crate) enum Opnd {
     /// The 128-bit `qN` view of a SIMD register, used by the vector load/store
     /// forms (`ldr`/`str qN`).
     QReg(u8),
+    /// A byte/half scalar-SIMD view `bN`/`hN` (`size` 0 or 1). The word/dword
+    /// views `sN`/`dN` are `VReg`; together they name the scalar destination of
+    /// the across-lane reductions.
+    VScalar {
+        num: u8,
+        size: u8,
+    },
     /// SIMD vector-arrangement register view `vN.T`: `size` is the element-size
     /// log2 (byte 0 .. dword 3), `q` selects the 128- vs 64-bit register.
     VecReg {
@@ -900,6 +907,56 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | (if q { 1u32 << 30 } else { 0 })
             | ((size as u32) << 22)
             | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD across-lane reduction `<addv|smaxv|sminv|umaxv|uminv> Vd, Vn.T`
+    // reduces a vector to a scalar at the source element size; the long
+    // reductions saddlv/uaddlv widen the scalar one size. size (bit 22) is the
+    // source element (8b/16b/4h/8h/4s only), U at 29 selects unsigned, and the
+    // destination is a scalar-SIMD register whose width must match (b/h are
+    // VScalar, s/d are VReg).
+    if let Some((base, u, widen)) = match mnemonic {
+        "addv" => Some((0x0E31_B800u32, 0u32, false)),
+        "smaxv" => Some((0x0E30_A800, 0, false)),
+        "sminv" => Some((0x0E31_A800, 0, false)),
+        "umaxv" => Some((0x0E30_A800, 1, false)),
+        "uminv" => Some((0x0E31_A800, 1, false)),
+        "saddlv" => Some((0x0E30_3800, 0, true)),
+        "uaddlv" => Some((0x0E30_3800, 1, true)),
+        _ => None,
+    } && let [
+        dst,
+        Opnd::VecReg {
+            num: rn,
+            size: ss,
+            q,
+        },
+    ] = ops
+    {
+        let (rd, dsize) = match dst {
+            Opnd::VScalar { num, size } => (*num, *size),
+            Opnd::VReg { num, is_d } => (*num, if *is_d { 3u8 } else { 2 }),
+            _ => {
+                return Err(String::from(
+                    "inline asm: reduction destination must be a scalar-SIMD register (b/h/s/d)",
+                ));
+            }
+        };
+        if *ss > 2 {
+            return Err(String::from(
+                "inline asm: reduction source must be 8b/16b/4h/8h/4s",
+            ));
+        }
+        if dsize != ss + if widen { 1 } else { 0 } {
+            return Err(String::from(
+                "inline asm: reduction destination width must match the source element",
+            ));
+        }
+        return Ok(base
+            | (u << 29)
+            | (if *q { 1u32 << 30 } else { 0 })
+            | ((*ss as u32) << 22)
+            | ((*rn as u32) << 5)
             | (rd as u32));
     }
     // Crypto two-register, fixed arrangement `<op> Vd.T, Vn.T`: the AES round

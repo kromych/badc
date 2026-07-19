@@ -116,6 +116,23 @@ fn load_store_immediate() {
         ),
         0xB9400462
     );
+    // Pre-index `[Xn, #off]!` and post-index `[Xn], #off` take an unscaled
+    // signed byte offset (imm9), unlike the scaled offset form above.
+    let pre = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: true,
+    };
+    let off0 = |base: u8| Opnd::Mem {
+        base,
+        off: 0,
+        pre: false,
+    };
+    assert_eq!(enc("ldr", &[x(0), pre(1, 16)]), 0xF8410C20);
+    assert_eq!(enc("str", &[x(0), pre(1, -8)]), 0xF81F8C20);
+    assert_eq!(enc("ldr", &[w(0), pre(1, 4)]), 0xB8404C20);
+    assert_eq!(enc("ldr", &[x(0), off0(1), Opnd::Imm(16)]), 0xF8410420); // post
+    assert!(encode("ldr", &[x(0), pre(1, 256)]).is_err()); // > imm9
 }
 
 #[test]

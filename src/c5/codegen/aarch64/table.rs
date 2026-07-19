@@ -236,12 +236,18 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // Load / store with an immediate offset: `ldr Xt, [Xn, #off]` etc. The
     // access width comes from the register operand (X vs W).
     if mnemonic == "ldr" || mnemonic == "str" {
-        if let [Opnd::Reg { num, is64 }, Opnd::Mem { base, off, pre }] = *ops {
-            if pre {
-                return Err(String::from(
-                    "inline asm: ldr/str pre/post-index not supported",
-                ));
-            }
+        // The offset form `[Xn, #off]` scales the unsigned offset by the access
+        // size (imm12); the pre-index `[Xn, #off]!` and post-index `[Xn], #off`
+        // writeback forms take an unscaled signed byte offset (imm9).
+        if let [
+            Opnd::Reg { num, is64 },
+            Opnd::Mem {
+                base,
+                off,
+                pre: false,
+            },
+        ] = *ops
+        {
             use super::encode::{Reg, enc_ldr_imm, enc_ldr32_imm, enc_str_imm, enc_str32_imm};
             let rt = Reg(num);
             let rn = Reg(base);
@@ -253,7 +259,40 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 _ => enc_str32_imm(rt, rn, off),
             });
         }
-        return Err(String::from("inline asm: bad ldr/str operands"));
+        let (rt, is64, base, off, pre) = match *ops {
+            [
+                Opnd::Reg { num, is64 },
+                Opnd::Mem {
+                    base,
+                    off,
+                    pre: true,
+                },
+            ] => (num, is64, base, off, true),
+            [
+                Opnd::Reg { num, is64 },
+                Opnd::Mem {
+                    base,
+                    off: 0,
+                    pre: false,
+                },
+                Opnd::Imm(o),
+            ] => (num, is64, base, o, false),
+            _ => return Err(String::from("inline asm: bad ldr/str operands")),
+        };
+        if !(-256..=255).contains(&off) {
+            return Err(String::from(
+                "inline asm: ldr/str writeback offset out of range",
+            ));
+        }
+        let size = if is64 { 0xF800_0000u32 } else { 0xB800_0000 };
+        let opc = if mnemonic == "ldr" { 0x0040_0000 } else { 0 };
+        let idx = if pre { 0xC00u32 } else { 0x400 };
+        return Ok(size
+            | opc
+            | idx
+            | ((off as u32 & 0x1FF) << 12)
+            | ((base as u32) << 5)
+            | (rt as u32));
     }
     // Load / store pair with a signed, size-scaled offset. The index mode is
     // the offset form `[Xn, #off]`, the pre-index `[Xn, #off]!`, or the

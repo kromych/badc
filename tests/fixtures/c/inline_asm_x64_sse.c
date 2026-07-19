@@ -104,6 +104,26 @@ static long long movq_roundtrip(long long w) {
     return r;
 }
 
+static int sse_float_roundtrip(void) {
+    int r;
+#if defined(__x86_64__)
+    static _Alignas(16) const int in[4] = {10, 20, 30, 42};
+    int out[4];
+    __asm__("movdqu %1, %%xmm0\n\t"          /* xmm0 = [10,20,30,42] int   */
+            "cvtdq2ps %%xmm0, %%xmm0\n\t"    /* -> [10.,20.,30.,42.] float */
+            "cvtps2dq %%xmm0, %%xmm0\n\t"    /* -> back to int (identity)  */
+            "shufps $0x1b, %%xmm0, %%xmm0\n\t" /* reverse lanes: [42,..]   */
+            "movdqu %%xmm0, %0"
+            : "=m"(out[0])
+            : "m"(in[0])
+            : "xmm0", "memory");
+    r = out[0]; /* reversed lane 0 = original lane 3 = 42 */
+#else
+    r = 42;
+#endif
+    return r;
+}
+
 int main(void) {
     if (sse_add(19, 23) != 42) return 1;    /* 19 + 23, register paddd     */
     if (sse_mem_add(23) != 42) return 2;    /* 23 + 19, memory-source paddd */
@@ -111,5 +131,6 @@ int main(void) {
     if (sse_shift(21) != 42) return 4;      /* pslld $1: 21 << 1            */
     if (sse_shuffle(7, 42) != 42) return 5; /* pshufd picks lane 1 = b      */
     if (movq_roundtrip(42) != 42) return 6; /* movq GP64 <-> xmm            */
+    if (sse_float_roundtrip() != 42) return 7; /* cvtdq2ps/cvtps2dq/shufps  */
     return 42;
 }

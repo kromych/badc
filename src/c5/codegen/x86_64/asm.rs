@@ -75,10 +75,12 @@ pub(crate) enum Mnemonic {
         load_op: u8,
         store_op: u8,
     },
-    /// A packed shuffle `pshuf{d,lw,hw} $imm8, %xmm_src, %xmm_dst`, encoded as
-    /// `<prefix> [REX] 0F 70 /r ib` (destination in ModRM.reg, source in r/m).
+    /// A packed shuffle-with-immediate `<op> $imm8, %xmm_src, %xmm_dst`, encoded
+    /// as `<prefix> [REX] 0F <opcode> /r ib` (destination in ModRM.reg, source in
+    /// r/m). Covers pshuf{d,lw,hw} (opcode 0x70) and shuf{ps,pd} (opcode 0xC6).
     SseShufImm {
         prefix: u8,
+        opcode: u8,
     },
     /// A packed shift by immediate `<op> $imm8, %xmm`, encoded as
     /// `66 [REX] 0F <opcode> /digit ib`: the op rides ModRM.reg as an opcode
@@ -396,8 +398,11 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("minss", 0xF3, 0x5D), ("maxss", 0xF3, 0x5F), ("sqrtss", 0xF3, 0x51),
         // Packed single (no prefix) / double (0x66).
         ("addps", 0, 0x58), ("subps", 0, 0x5C), ("mulps", 0, 0x59), ("divps", 0, 0x5E),
-        ("minps", 0, 0x5D), ("maxps", 0, 0x5F),
+        ("minps", 0, 0x5D), ("maxps", 0, 0x5F), ("sqrtps", 0, 0x51),
         ("andps", 0, 0x54), ("andnps", 0, 0x55), ("orps", 0, 0x56), ("xorps", 0, 0x57),
+        ("unpcklps", 0, 0x14), ("unpckhps", 0, 0x15),
+        // Packed int <-> single-float conversions (cvtdq2ps / cvtps2dq / cvttps2dq).
+        ("cvtdq2ps", 0, 0x5B), ("cvtps2dq", 0x66, 0x5B), ("cvttps2dq", 0xF3, 0x5B),
         ("addpd", 0x66, 0x58), ("subpd", 0x66, 0x5C), ("mulpd", 0x66, 0x59), ("divpd", 0x66, 0x5E),
         ("andpd", 0x66, 0x54), ("orpd", 0x66, 0x56), ("xorpd", 0x66, 0x57),
         ("unpcklpd", 0x66, 0x14), ("unpckhpd", 0x66, 0x15),
@@ -432,14 +437,15 @@ fn sse_mov(name: &str) -> Option<Mnemonic> {
 /// the prefix selecting the variant) and the shifts-by-immediate `ps{ll,rl,ra}
 /// {w,d,q}` / `ps{ll,rl}dq` (opcode 0x71/0x72/0x73, a `/digit` opcode extension).
 fn sse_imm(name: &str) -> Option<Mnemonic> {
-    let shuf_prefix = match name {
-        "pshufd" => Some(0x66u8),
-        "pshuflw" => Some(0xF2),
-        "pshufhw" => Some(0xF3),
-        _ => None,
-    };
-    if let Some(prefix) = shuf_prefix {
-        return Some(Mnemonic::SseShufImm { prefix });
+    // Shuffle-with-immediate ops as `(name, prefix, 0F-opcode)`: pshuf* select
+    // by prefix over opcode 0x70; shuf{ps,pd} use opcode 0xC6.
+    #[rustfmt::skip]
+    const SHUFS: &[(&str, u8, u8)] = &[
+        ("pshufd", 0x66, 0x70), ("pshuflw", 0xF2, 0x70), ("pshufhw", 0xF3, 0x70),
+        ("shufps", 0, 0xC6), ("shufpd", 0x66, 0xC6),
+    ];
+    if let Some(&(_, prefix, opcode)) = SHUFS.iter().find(|(n, _, _)| *n == name) {
+        return Some(Mnemonic::SseShufImm { prefix, opcode });
     }
     #[rustfmt::skip]
     const SHIFTS: &[(&str, u8, u8)] = &[
@@ -1181,8 +1187,8 @@ pub(crate) fn encode(
             }
             Ok(())
         }
-        Mnemonic::SseShufImm { prefix } => {
-            // `pshuf* $imm, %xmm_src, %xmm_dst`: <prefix> [REX] 0F 70 /r ib.
+        Mnemonic::SseShufImm { prefix, opcode } => {
+            // `<op> $imm, %xmm_src, %xmm_dst`: <prefix> [REX] 0F <opcode> /r ib.
             let xmm = |c: &Concrete| match c {
                 Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
                     Some(*reg - XMM_BASE)
@@ -1191,20 +1197,22 @@ pub(crate) fn encode(
             };
             let [imm, src, dst] = ops else {
                 return Err(String::from(
-                    "inline asm: pshuf needs $imm, %xmm_src, %xmm_dst",
+                    "inline asm: shuffle needs $imm, %xmm_src, %xmm_dst",
                 ));
             };
             let Concrete::Imm(ib) = imm else {
-                return Err(String::from("inline asm: pshuf immediate expected"));
+                return Err(String::from("inline asm: shuffle immediate expected"));
             };
             let (Some(d), Some(s)) = (xmm(dst), xmm(src)) else {
-                return Err(String::from("inline asm: pshuf operands must be xmm"));
+                return Err(String::from("inline asm: shuffle operands must be xmm"));
             };
-            code.push(prefix);
+            if prefix != 0 {
+                code.push(prefix);
+            }
             if d >= 8 || s >= 8 {
                 code.push(rex(false, d >= 8, false, s >= 8));
             }
-            code.extend_from_slice(&[0x0F, 0x70]);
+            code.extend_from_slice(&[0x0F, opcode]);
             code.push(modrm_reg(d & 7, s & 7));
             code.push(*ib as u8);
             Ok(())
@@ -1554,6 +1562,25 @@ mod tests {
                 [0x66, 0x0F, op, 0xC1]
             );
         }
+        // Packed-single float ops: unpck/sqrt (no prefix) and the int<->float
+        // convert trio (cvtdq2ps none, cvtps2dq 0x66, cvttps2dq 0xF3). Prefix 0
+        // emits no leading byte. Byte-exact vs clang.
+        for (name, prefix, op) in [
+            ("unpcklps", 0u8, 0x14u8),
+            ("unpckhps", 0, 0x15),
+            ("sqrtps", 0, 0x51),
+            ("cvtdq2ps", 0, 0x5B),
+            ("cvtps2dq", 0x66, 0x5B),
+            ("cvttps2dq", 0xF3, 0x5B),
+        ] {
+            assert_eq!(sse2_op(name), Some(Mnemonic::Sse2Rr { prefix, opcode: op }));
+            let got = enc(sse(prefix, op), None, &[xmm(1), xmm(0)]);
+            if prefix == 0 {
+                assert_eq!(got, [0x0F, op, 0xC1]);
+            } else {
+                assert_eq!(got, [prefix, 0x0F, op, 0xC1]);
+            }
+        }
         // A `(%base)` memory source rides r/m through modrm_mem; a high
         // destination still sets REX.R, a high base REX.B.
         let mem = |base: u8| Concrete::Mem {
@@ -1629,7 +1656,10 @@ mod tests {
         // pshuf*: <prefix> 0F 70 /r ib, dst in ModRM.reg, src in r/m.
         assert_eq!(
             enc(
-                Mnemonic::SseShufImm { prefix: 0x66 },
+                Mnemonic::SseShufImm {
+                    prefix: 0x66,
+                    opcode: 0x70
+                },
                 None,
                 &[imm(0x1b), xmm(1), xmm(2)]
             ),
@@ -1637,7 +1667,10 @@ mod tests {
         ); // pshufd $0x1b,%xmm1,%xmm2
         assert_eq!(
             enc(
-                Mnemonic::SseShufImm { prefix: 0xF2 },
+                Mnemonic::SseShufImm {
+                    prefix: 0xF2,
+                    opcode: 0x70
+                },
                 None,
                 &[imm(0x4e), xmm(1), xmm(2)]
             ),
@@ -1645,7 +1678,10 @@ mod tests {
         ); // pshuflw
         assert_eq!(
             enc(
-                Mnemonic::SseShufImm { prefix: 0x66 },
+                Mnemonic::SseShufImm {
+                    prefix: 0x66,
+                    opcode: 0x70
+                },
                 None,
                 &[imm(0x1b), xmm(9), xmm(10)]
             ),
@@ -1689,8 +1725,42 @@ mod tests {
         // The tables resolve names.
         assert_eq!(
             sse_imm("pshufd"),
-            Some(Mnemonic::SseShufImm { prefix: 0x66 })
+            Some(Mnemonic::SseShufImm {
+                prefix: 0x66,
+                opcode: 0x70
+            })
         );
+        // shuf{ps,pd}: opcode 0xC6, ps with no prefix, pd with 0x66. Byte-exact
+        // vs clang: `0f c6 c1 1b` and `66 0f c6 c1 01`.
+        assert_eq!(
+            sse_imm("shufps"),
+            Some(Mnemonic::SseShufImm {
+                prefix: 0,
+                opcode: 0xC6
+            })
+        );
+        assert_eq!(
+            enc(
+                Mnemonic::SseShufImm {
+                    prefix: 0,
+                    opcode: 0xC6
+                },
+                None,
+                &[imm(0x1b), xmm(1), xmm(0)]
+            ),
+            [0x0F, 0xC6, 0xC1, 0x1B]
+        ); // shufps $0x1b,%xmm1,%xmm0
+        assert_eq!(
+            enc(
+                Mnemonic::SseShufImm {
+                    prefix: 0x66,
+                    opcode: 0xC6
+                },
+                None,
+                &[imm(1), xmm(1), xmm(0)]
+            ),
+            [0x66, 0x0F, 0xC6, 0xC1, 0x01]
+        ); // shufpd $1,%xmm1,%xmm0
         assert_eq!(
             sse_imm("psllq"),
             Some(Mnemonic::SseShiftImm {

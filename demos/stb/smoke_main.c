@@ -48,13 +48,13 @@
  * path lowers cleanly on the Windows lanes. */
 #define __mingw_fprintf fprintf
 
-/* SIMD opt-outs. On x86-64 Linux, stb_image's SSE2 JPEG IDCT / YCbCr path is
- * provided through badc's inline-asm <emmintrin.h> shim (demos/include/simd).
- * Windows keeps the plain-C fallback: with _MSC_VER (from msvc_compat.h) stb's
- * runtime SSE2 detection calls the __cpuid MSVC intrinsic, which badc does not
- * provide. The NEON path and stb_image_resize2's wider AVX surface likewise
- * stay on the plain-C fallback. */
-#if !(defined(__x86_64__) && defined(__linux__))
+/* SIMD opt-outs. On x86-64 Linux and Windows, stb_image's SSE2 JPEG IDCT /
+ * YCbCr path is provided through badc's inline-asm <emmintrin.h> shim
+ * (demos/include/simd); on Windows, stb's runtime SSE2 detection under
+ * _MSC_VER (from msvc_compat.h) calls the __cpuid MSVC intrinsic, supplied
+ * by the same directory's <intrin.h>. The NEON path and stb_image_resize2's
+ * wider AVX surface stay on the plain-C fallback. */
+#if !(defined(__x86_64__) && (defined(__linux__) || defined(_WIN32)))
 #define STBI_NO_SIMD
 #endif
 #define STBIR_NO_SIMD

@@ -31,6 +31,15 @@ pub(crate) enum Field {
     /// count. Fed by the operand at `op` -- either a plain immediate (`smax`
     /// imm8) or a memory reference's offset (`ldur`/`ldtr` unscaled imm9).
     SImm { op: u8, shift: u8, width: u8 },
+    /// A scaled unsigned immediate offset: the written byte offset must be a
+    /// non-negative multiple of `scale`, and the `width`-bit field at `shift`
+    /// holds offset/scale (the `ldrh` #imm*2, `ldrsw` #imm*4 loads/stores).
+    ScaledUImm {
+        op: u8,
+        shift: u8,
+        width: u8,
+        scale: u16,
+    },
     /// The 13-bit logical-immediate bitmask field (`N:immr:imms` at bit 10),
     /// computed from the operand value. `is64` selects the 64/32-bit element.
     LogicalImm { op: u8, is64: bool },
@@ -479,6 +488,28 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                 }
                 let mask = (1u64 << width) - 1;
                 word |= (((v as u64) & mask) as u32) << shift;
+            }
+            Field::ScaledUImm {
+                op,
+                shift,
+                width,
+                scale,
+            } => {
+                let v = imm_or_off(ops[op as usize])?;
+                let scale = scale as i64;
+                if v < 0 || v % scale != 0 {
+                    return Err(format!(
+                        "inline asm: offset must be a non-negative multiple of {scale}"
+                    ));
+                }
+                let f = v / scale;
+                let mask = (1u64 << width) - 1;
+                if (f as u64) & !mask != 0 {
+                    return Err(format!(
+                        "inline asm: scaled immediate out of {width}-bit range"
+                    ));
+                }
+                word |= ((f as u32) & mask as u32) << shift;
             }
             Field::LogicalImm { op, is64 } => {
                 let v = imm(ops[op as usize])? as u64;

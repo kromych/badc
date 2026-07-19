@@ -209,12 +209,12 @@ def classify(heads, toks, op, im):
                 rd_width = w
             i += 1
             continue
-        if (mm := re.fullmatch(r'\[Xn(?:\|SP)?(?:, #(\w+))?\]', t)):
+        if (mm := re.fullmatch(r'\[Xn(?:\|SP)?(?:, #(\w+)(?:\*(\d+))?)?\]', t)):
             # A memory reference: the base feeds Rn, an optional immediate
             # offset feeds its named field. The unscaled/unprivileged forms
             # take a two's-complement offset (`#offS`, signed); the byte
-            # unsigned form takes `#offZ`. Scaled offsets carry a `*N`
-            # multiplier and do not match here (the raw model cannot scale).
+            # unsigned form takes `#offZ`. A `*N` multiplier scales the written
+            # byte offset (the halfword/word loads: `#offZ*2`, `#offZ*4`).
             fv = fl.get('Rn')
             if fv is None or fv[0] != 5:
                 return ('residual', 'memory base field Rn not a 5-bit field')
@@ -225,10 +225,19 @@ def classify(heads, toks, op, im):
                 ov = fl.get(offname)
                 if ov is None:
                     return ('residual', f'memory offset #{offname} has no field')
-                kind = 'SImm' if offname.endswith('S') else 'UImm'
                 consumed.add(offname)
-                fields.append(
-                    f'{kind} {{ op: {i}, shift: {ov[1]}, width: {ov[0]} }}')
+                scale = mm.group(2)
+                if scale and int(scale) > 1:
+                    # A scaled offset in the database is always the unsigned
+                    # form; the signed scaled offsets are the pre/post-index
+                    # rows, which carry a `@`/`!` suffix and are handled apart.
+                    fields.append(
+                        f'ScaledUImm {{ op: {i}, shift: {ov[1]}, '
+                        f'width: {ov[0]}, scale: {scale} }}')
+                else:
+                    kind = 'SImm' if offname.endswith('S') else 'UImm'
+                    fields.append(
+                        f'{kind} {{ op: {i}, shift: {ov[1]}, width: {ov[0]} }}')
             i += 1
             continue
         if t0 == '#sysreg':

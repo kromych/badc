@@ -884,6 +884,72 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
+    // Crypto two-register, fixed arrangement `<op> Vd.T, Vn.T`: the AES round
+    // steps aese/aesd/aesmc/aesimc (.16b) and the SHA update steps sha256su0/
+    // sha1su1 (.4s). The whole encoding but Rn/Rd is fixed per op.
+    if let Some((base, req)) = match mnemonic {
+        "aese" => Some((0x4E28_4800u32, 0u8)),
+        "aesd" => Some((0x4E28_5800, 0)),
+        "aesmc" => Some((0x4E28_6800, 0)),
+        "aesimc" => Some((0x4E28_7800, 0)),
+        "sha256su0" => Some((0x5E28_2800, 2)),
+        "sha1su1" => Some((0x5E28_1800, 2)),
+        _ => None,
+    } && let [
+        Opnd::VecReg { num: rd, size, q },
+        Opnd::VecReg {
+            num: rn,
+            size: s1,
+            q: q1,
+        },
+    ] = *ops
+    {
+        if size != req || s1 != req || !q || !q1 {
+            return Err(String::from(
+                "inline asm: crypto operands need the op's fixed arrangement (.16b for AES, .4s for SHA)",
+            ));
+        }
+        return Ok(base | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SHA256 hash update `<sha256h|sha256h2> Qd, Qn, Vm.4s`: the accumulator is a
+    // 128-bit Q register, the schedule a word vector.
+    if let Some(base) = match mnemonic {
+        "sha256h" => Some(0x5E00_4000u32),
+        "sha256h2" => Some(0x5E00_5000),
+        _ => None,
+    } && let [
+        Opnd::QReg(rd),
+        Opnd::QReg(rn),
+        Opnd::VecReg {
+            num: rm,
+            size: 2,
+            q: true,
+        },
+    ] = *ops
+    {
+        return Ok(base | ((rm as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SHA256 schedule update `sha256su1 Vd.4s, Vn.4s, Vm.4s`.
+    if mnemonic == "sha256su1"
+        && let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+            Opnd::VecReg {
+                num: rm,
+                size: s2,
+                q: q2,
+            },
+        ] = *ops
+    {
+        if size != 2 || s1 != 2 || s2 != 2 || !q || !q1 || !q2 {
+            return Err(String::from("inline asm: sha256su1 operands must be .4s"));
+        }
+        return Ok(0x5E00_6000 | ((rm as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
+    }
     // SIMD element to GP register: `umov Rd, Vn.T[i]` (zero-extended) or
     // `smov Rd, Vn.T[i]` (sign-extended). imm5 = (index << (size+1)) | (1<<size)
     // carries element size and lane. umov's destination width is fixed by the

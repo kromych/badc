@@ -636,6 +636,32 @@ fn vector_three_same_batch3() {
 }
 
 #[test]
+fn crypto() {
+    let v = |n: u8, size: u8| Opnd::VecReg {
+        num: n,
+        size,
+        q: true,
+    };
+    // AES round steps on .16b.
+    assert_eq!(enc("aese", &[v(0, 0), v(1, 0)]), 0x4E28_4820);
+    assert_eq!(enc("aesd", &[v(0, 0), v(1, 0)]), 0x4E28_5820);
+    assert_eq!(enc("aesmc", &[v(0, 0), v(1, 0)]), 0x4E28_6820);
+    assert_eq!(enc("aesimc", &[v(0, 0), v(1, 0)]), 0x4E28_7820);
+    // SHA update steps on .4s.
+    assert_eq!(enc("sha256su0", &[v(0, 2), v(1, 2)]), 0x5E28_2820);
+    assert_eq!(enc("sha1su1", &[v(0, 2), v(1, 2)]), 0x5E28_1820);
+    assert_eq!(enc("sha256su1", &[v(0, 2), v(1, 2), v(2, 2)]), 0x5E02_6020);
+    // SHA256 hash update: Qd, Qn, Vm.4s.
+    let q = Opnd::QReg;
+    assert_eq!(enc("sha256h", &[q(0), q(1), v(2, 2)]), 0x5E02_4020);
+    assert_eq!(enc("sha256h2", &[q(0), q(1), v(2, 2)]), 0x5E02_5020);
+    // Wrong arrangements are rejected (AES needs .16b, SHA needs .4s).
+    assert!(encode("aese", &[v(0, 2), v(1, 2)]).is_err());
+    assert!(encode("sha256su0", &[v(0, 0), v(1, 0)]).is_err());
+    assert!(encode("sha256h", &[q(0), q(1), v(2, 0)]).is_err());
+}
+
+#[test]
 fn vector_permute() {
     let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
     let p = |m: &str| enc(m, &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]);

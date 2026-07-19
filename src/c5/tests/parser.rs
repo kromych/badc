@@ -54,6 +54,28 @@ fn bare_return_in_void_function_is_allowed() {
 }
 
 #[test]
+fn asm_memory_operand_rvalue_is_rejected() {
+    // A memory (`"m"`) operand is reached through its address, so it must be an
+    // lvalue. An rvalue (here a call result) is not directly addressable; the
+    // compiler must reject it, not reach the address path as an internal error.
+    expect_compile_error(
+        "int g(void); \
+         int main(void) { int r = 0; __asm__(\"mov %1, %0\" : \"=r\"(r) : \"m\"(g())); return r; }",
+        "not directly addressable",
+    );
+}
+
+#[test]
+fn asm_output_operand_rvalue_is_rejected() {
+    // An output operand names where the result is written, so an rvalue output
+    // is likewise rejected with a diagnostic rather than an internal error.
+    expect_compile_error(
+        "int g(void); int main(void) { __asm__(\"mov %%eax, %0\" : \"=m\"(g())); return 0; }",
+        "output operand must be an lvalue",
+    );
+}
+
+#[test]
 fn fall_off_end_of_non_void_function_warns() {
     // C99 6.9.1p12: control reaching the closing brace of a
     // value-returning function with no `return value;` leaves the value

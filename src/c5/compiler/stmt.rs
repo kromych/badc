@@ -1400,8 +1400,42 @@ impl Compiler {
             self.expr(Token::Assign as i64)?;
             let width = self.size_of_type(self.ty).min(8) as u8;
             // Outputs pass the destination address; a memory operand (input or
-            // output) is likewise reached through its address.
+            // output) is likewise reached through its address, so it must be an
+            // lvalue. A non-lvalue (a call / cast / arithmetic result) is not
+            // directly addressable; reject it with a diagnostic rather than
+            // taking the address of an rvalue, which the walker cannot lower
+            // (it would reach `walk_expr_lvalue`'s unsupported-expression path
+            // as an internal error). Matches GCC ("... is not directly
+            // addressable" / an output operand must be an lvalue). An empty
+            // accumulator falls through to the "operand expression expected"
+            // check below.
             if is_output || matches!(constraint, AsmConstraint::Mem) {
+                let addressable = match self.ast_acc {
+                    Some(id) => {
+                        use super::super::ast::Expr;
+                        matches!(
+                            self.ast.expr(id),
+                            Expr::Ident { .. }
+                                | Expr::Index { .. }
+                                | Expr::Member { .. }
+                                | Expr::CompoundLiteral { .. }
+                                | Expr::Binary { .. }
+                                | Expr::Unary {
+                                    op: UnOp::Deref,
+                                    ..
+                                }
+                        )
+                    }
+                    None => true,
+                };
+                if !addressable {
+                    self.data.truncate(data_base);
+                    return Err(self.compile_err(if is_output {
+                        "inline asm: output operand must be an lvalue"
+                    } else {
+                        "inline asm: memory operand is not directly addressable (must be an lvalue)"
+                    }));
+                }
                 self.ty += Ty::Ptr as i64;
                 self.ast_apply_unary(UnOp::AddrOf);
             }

@@ -2226,6 +2226,7 @@ fn emit_inline_asm_aarch64(
         BCond(u8),
         Cb { nz: bool, rt: u8, is64: bool },
         Tb { nz: bool, rt: u8, bit: u8 },
+        Adr { rd: u8 },
     }
     let mut label_defs: Vec<(u32, usize)> = Vec::new();
     let mut label_fixups: Vec<(usize, LabelBranch, u32, bool)> = Vec::new();
@@ -2307,6 +2308,17 @@ fn emit_inline_asm_aarch64(
                         bit: bit as u8,
                     }
                 }
+                "adr" if insn.operands.len() == 2 => match conv(&insn.operands[0]) {
+                    Ok(Opnd::Reg { num, is64: true }) => LabelBranch::Adr { rd: num },
+                    Ok(_) => {
+                        bail_msg("aarch64 inline asm: adr destination must be a 64-bit register");
+                        return false;
+                    }
+                    Err(m) => {
+                        bail_msg(&m);
+                        return false;
+                    }
+                },
                 m => {
                     let cond = m.strip_prefix("b.").and_then(super::asm::cond_code);
                     let Some(c) = cond.filter(|_| insn.operands.len() == 1) else {
@@ -2357,6 +2369,17 @@ fn emit_inline_asm_aarch64(
             return false;
         };
         let delta = target as i64 - site as i64;
+        // `adr` materializes a byte-granular PC-relative address (rel21,
+        // unscaled), unlike the word-aligned, word-scaled branch offsets.
+        if let LabelBranch::Adr { rd } = *kind {
+            if !(-(1i64 << 20)..(1i64 << 20)).contains(&delta) {
+                bail_msg("aarch64 inline asm: adr target out of +/-1MiB range");
+                return false;
+            }
+            let word = super::encode::enc_adr(Reg(rd), delta as i32);
+            code[site..site + 4].copy_from_slice(&word.to_le_bytes());
+            continue;
+        }
         if delta % 4 != 0 {
             bail_msg("aarch64 inline asm: label target is not word-aligned");
             return false;
@@ -2405,6 +2428,7 @@ fn emit_inline_asm_aarch64(
                     | (((words as u32) & 0x3FFF) << 5)
                     | rt as u32
             }
+            LabelBranch::Adr { .. } => unreachable!("adr patched above"),
         };
         code[site..site + 4].copy_from_slice(&word.to_le_bytes());
     }

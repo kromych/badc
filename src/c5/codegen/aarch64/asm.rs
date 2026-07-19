@@ -686,10 +686,13 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
         return Err(format!("inline asm: bad immediate `{tok}`"));
     }
     if let Some(rest) = tok.strip_prefix('%') {
-        // `%N`, `%wN`, `%xN`.
+        // `%N` (natural width); the GP views `%wN` (32) / `%xN` (64); and the FP
+        // scalar views `%sN` (single) / `%dN` (double). A view flag rides `is64`
+        // (w/s = 32, x/d = 64) and the emitter resolves it against the operand's
+        // register file (GP -> W/X, FP -> S/D).
         let (is64, digits) = match rest.as_bytes().first() {
-            Some(b'w') => (Some(false), &rest[1..]),
-            Some(b'x') => (Some(true), &rest[1..]),
+            Some(b'w') | Some(b's') => (Some(false), &rest[1..]),
+            Some(b'x') | Some(b'd') => (Some(true), &rest[1..]),
             _ => (None, rest),
         };
         let idx: u8 = digits
@@ -1338,6 +1341,22 @@ mod tests {
         assert_eq!(parse_fp_imm("0.0"), None); // its own fcmp marker, not fpimm
         assert_eq!(parse_fp_imm("0.1"), None); // not a dyadic fpimm value
         assert_eq!(parse_fp_imm("100.0"), None); // out of range
+        // The FP operand view modifiers `%dN` / `%sN` ride the is64 flag (d = 64,
+        // s = 32) like the GP `%xN` / `%wN`; the emitter resolves it per file.
+        let refs = parse_template(b"fmov %d0, %s1").unwrap();
+        assert_eq!(
+            refs[0].operands,
+            [
+                AsmOpndA64::Ref {
+                    idx: 0,
+                    is64: Some(true)
+                },
+                AsmOpndA64::Ref {
+                    idx: 1,
+                    is64: Some(false)
+                },
+            ]
+        );
         let insns = parse_template(b"fmov x0, d1; fmov s2, w3").unwrap();
         assert_eq!(
             insns[0].operands,

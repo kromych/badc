@@ -2228,7 +2228,11 @@ fn emit_inline_asm_aarch64(
                     ));
                 };
                 if matches!(asm.operands[idx as usize].constraint, AsmConstraint::Fp) {
-                    Opnd::VReg { num: r, is_d: true }
+                    // `%sN` selects the single view, `%dN` / bare the double.
+                    Opnd::VReg {
+                        num: r,
+                        is_d: is64.unwrap_or(true),
+                    }
                 } else {
                     let is64 = is64.unwrap_or(asm.operands[idx as usize].width >= 8);
                     Opnd::Reg { num: r, is64 }

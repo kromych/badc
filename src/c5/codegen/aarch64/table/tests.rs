@@ -157,6 +157,18 @@ fn load_store_register_offset() {
     assert_eq!(enc("str", &[w(0), mr(2, 0b010, Some(2))]), 0xB8225820);
     // A shift that is neither zero nor the access-size log2 is rejected.
     assert!(encode("ldr", &[x(0), mr(2, 0b011, Some(2))]).is_err());
+    // The subword sizes share the base word `0x38200800 | size<<30 | opc<<22`.
+    assert_eq!(enc("ldrb", &[w(0), mr(2, 0b011, None)]), 0x38626820);
+    assert_eq!(enc("strb", &[w(0), mr(2, 0b011, None)]), 0x38226820);
+    assert_eq!(enc("ldrh", &[w(0), mr(2, 0b011, None)]), 0x78626820);
+    assert_eq!(enc("ldrh", &[w(0), mr(2, 0b011, Some(1))]), 0x78627820);
+    assert_eq!(enc("strh", &[w(0), mr(2, 0b011, None)]), 0x78226820);
+    assert_eq!(enc("ldrsb", &[x(0), mr(2, 0b011, None)]), 0x38A26820);
+    assert_eq!(enc("ldrsh", &[x(0), mr(2, 0b011, None)]), 0x78A26820);
+    assert_eq!(enc("ldrsw", &[x(0), mr(2, 0b011, None)]), 0xB8A26820);
+    assert_eq!(enc("ldrsw", &[x(0), mr(2, 0b011, Some(2))]), 0xB8A27820);
+    // A byte access has no scaling shift (log2 zero): a #1 shift is rejected.
+    assert!(encode("ldrb", &[w(0), mr(2, 0b011, Some(1))]).is_err());
 }
 
 #[test]

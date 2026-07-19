@@ -241,6 +241,26 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
     }
 }
 
+/// The `size` (bits 31:30), `opc` (23:22), and access-size log2 of a scalar
+/// load/store, or None if the mnemonic is not one. `rt_is64` selects the opc of
+/// the sign-extending loads (X target 10, W target 11) and the size of the
+/// plain word/dword `ldr`/`str`.
+fn ld_st_size_opc(mnem: &str, rt_is64: bool) -> Option<(u32, u32, u8)> {
+    let w = if rt_is64 { 3u32 } else { 2 };
+    Some(match mnem {
+        "strb" => (0, 0, 0),
+        "ldrb" => (0, 1, 0),
+        "ldrsb" => (0, if rt_is64 { 2 } else { 3 }, 0),
+        "strh" => (1, 0, 1),
+        "ldrh" => (1, 1, 1),
+        "ldrsh" => (1, if rt_is64 { 2 } else { 3 }, 1),
+        "str" => (w, 0, w as u8),
+        "ldr" => (w, 1, w as u8),
+        "ldrsw" => (2, 2, 2),
+        _ => return None,
+    })
+}
+
 /// Encode one A64 instruction to its 32-bit word. Operand order is the written
 /// (assembly) order. `OptLsl` slots may be omitted by the caller (a missing
 /// trailing shift defaults to 0).
@@ -255,38 +275,31 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         };
         return Ok(base | ((field as u32) << 5) | (rt as u32 & 31));
     }
-    // Load / store with a register offset: `ldr Xt, [Xn, Rm{, <ext> #s}]`. A
-    // written shift must be zero or the access-size log2 (the S bit selects the
-    // latter); anything else is rejected, matching the reference assembler.
-    if let (
-        "ldr" | "str",
-        [
-            Opnd::Reg { num: rt, is64 },
-            Opnd::MemReg {
-                base,
-                index,
-                option,
-                shift,
-            },
-        ],
-    ) = (mnemonic, ops)
+    // Load / store with a register offset: `<ldr|ldrb|ldrh|ldrsb|ldrsh|ldrsw|
+    // str|strb|strh> Xt, [Xn, Rm{, <ext> #s}]` across the access sizes. The base
+    // word is `0x38200800 | size<<30 | opc<<22`; a written shift must be zero or
+    // the access-size log2 (the S bit selects the latter).
+    if let [
+        Opnd::Reg { num: rt, is64 },
+        Opnd::MemReg {
+            base,
+            index,
+            option,
+            shift,
+        },
+    ] = ops
+        && let Some((size, opc, access_log2)) = ld_st_size_opc(mnemonic, *is64)
     {
-        let access_log2 = if *is64 { 3u8 } else { 2 };
         let s = match shift {
             None | Some(0) => 0u32,
             Some(a) if *a == access_log2 => 1,
             Some(_) => {
                 return Err(String::from(
-                    "inline asm: ldr/str register-offset shift must match the access size",
+                    "inline asm: load/store register-offset shift must match the access size",
                 ));
             }
         };
-        let base_word = match (mnemonic, is64) {
-            ("ldr", true) => 0xF860_0800u32,
-            ("ldr", false) => 0xB860_0800,
-            ("str", true) => 0xF820_0800,
-            _ => 0xB820_0800,
-        };
+        let base_word = 0x3820_0800u32 | (size << 30) | (opc << 22);
         return Ok(base_word
             | ((*index as u32) << 16)
             | ((*option as u32) << 13)

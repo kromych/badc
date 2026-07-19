@@ -15,20 +15,18 @@ fn unsupported_inline_asm_reports_the_specific_form() {
     use crate::{NativeOptions, Target};
     // An inline-asm form the encoder cannot handle must report which mnemonic
     // failed, not the generic "op outside the implemented subset" fallback that
-    // reads like an internal compiler error. `ldrb` with a register offset has
-    // no catalogue form.
+    // reads like an internal compiler error. `ccmp` has no encoding.
     let program = super::compile_str(
-        "int main(void){ __asm__ volatile(\"ldrb w0, [x1, x2]\" \
-         ::: \"x0\",\"x1\",\"x2\",\"memory\"); return 0; }",
+        "int main(void){ __asm__ volatile(\"ccmp x0, x1, #0, eq\" ::: \"cc\"); return 0; }",
     );
     let err = crate::c5::object::emit_native_single_tu_for_test(
         &program,
         Target::LinuxAarch64,
         NativeOptions::default(),
     )
-    .expect_err("register-offset ldrb is not encodable");
+    .expect_err("ccmp is not encodable");
     let msg = format!("{err}");
-    assert!(msg.contains("ldrb"), "message names the form: {msg}");
+    assert!(msg.contains("ccmp"), "message names the form: {msg}");
     assert!(
         !msg.contains("implemented subset"),
         "specific reason, not the generic fallback: {msg}"

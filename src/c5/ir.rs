@@ -607,6 +607,10 @@ pub(crate) struct AsmBlock {
     /// Registers preserved across the statement (explicit clobbers plus
     /// the operand registers), as a bitmask over register numbers 0..15.
     pub clobber_regs: u32,
+    /// SIMD/FP registers named in the clobber list, as a bitmask over the FP
+    /// register file (independent of `clobber_regs`). Empty for x86 targets,
+    /// whose FP clobbers ride the shared mask.
+    pub clobber_fp_regs: u32,
     /// A `"memory"` clobber was listed: an ordering barrier for memory
     /// accesses (C practice for `asm volatile("" ::: "memory")`).
     pub clobber_memory: bool,

@@ -110,6 +110,15 @@ impl Target {
         matches!(self, Target::WindowsX64 | Target::WindowsAarch64)
     }
 
+    /// Whether the target is AArch64 (any OS). Selects the AArch64 inline-asm
+    /// register-name parsing for clobbers.
+    pub fn is_aarch64(self) -> bool {
+        matches!(
+            self,
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
+        )
+    }
+
     /// Whether plain `char` is signed. C99 6.2.5p15 leaves the
     /// signedness of unqualified `char` implementation-defined; to
     /// interoperate with the host toolchain and match the platform

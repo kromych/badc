@@ -1321,6 +1321,7 @@ impl Compiler {
         let mut operands: alloc::vec::Vec<AsmOperand> = alloc::vec::Vec::new();
         let mut operand_exprs: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
         let mut clobber_regs: u32 = 0;
+        let mut clobber_fp_regs: u32 = 0;
         let mut clobber_memory = false;
         let mut n_outputs = 0usize;
         // Section 1 = outputs, 2 = inputs, 3+ = clobbers.
@@ -1355,11 +1356,25 @@ impl Compiler {
                 let name = cstr.trim_start_matches('%');
                 if name == "memory" {
                     clobber_memory = true;
-                } else if name != "cc"
-                    && !name.is_empty()
-                    && let Some((reg, _)) = super::super::codegen::x86_64::asm::reg_by_name(name)
-                {
-                    clobber_regs |= 1 << reg;
+                } else if name != "cc" && !name.is_empty() {
+                    // The register-name spelling is arch-specific; badc knows the
+                    // target, so AArch64 clobbers resolve through the AArch64
+                    // names (GP and the independent SIMD/FP file), x86 through its.
+                    if self.target.is_aarch64() {
+                        if let Some((is_fp, num)) =
+                            super::super::codegen::aarch64::asm::clobber_reg_name(name)
+                        {
+                            if is_fp {
+                                clobber_fp_regs |= 1 << num;
+                            } else {
+                                clobber_regs |= 1 << num;
+                            }
+                        }
+                    } else if let Some((reg, _)) =
+                        super::super::codegen::x86_64::asm::reg_by_name(name)
+                    {
+                        clobber_regs |= 1 << reg;
+                    }
                 }
                 continue;
             }
@@ -1423,6 +1438,7 @@ impl Compiler {
             template,
             operands,
             clobber_regs,
+            clobber_fp_regs,
             clobber_memory,
             volatile,
         };

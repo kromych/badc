@@ -18,12 +18,13 @@ Disassembly of section .text:
                	sxtw	x2, w2
                	sxtw	x3, w3
                	sub	x4, x29, #0x8
-               	sub	sp, sp, #0x50
+               	sub	sp, sp, #0x60
                	str	x0, [sp, #0x28]
                	str	x1, [sp, #0x30]
                	str	x2, [sp, #0x38]
                	str	x3, [sp, #0x40]
                	str	x4, [sp, #0x48]
+               	str	d0, [sp, #0x50]
                	str	x4, [sp]
                	str	x0, [sp, #0x8]
                	str	x1, [sp, #0x10]
@@ -46,7 +47,8 @@ Disassembly of section .text:
                	ldr	x2, [sp, #0x38]
                	ldr	x3, [sp, #0x40]
                	ldr	x4, [sp, #0x48]
-               	add	sp, sp, #0x50
+               	ldr	d0, [sp, #0x50]
+               	add	sp, sp, #0x60
                	ldursw	x0, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -58,9 +60,10 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	sxtw	x0, w0
                	sub	x1, x29, #0x8
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x30
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
+               	str	d0, [sp, #0x20]
                	str	x1, [sp]
                	str	x0, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
@@ -71,7 +74,8 @@ Disassembly of section .text:
                	str	w0, [x16]
                	ldr	x0, [sp, #0x10]
                	ldr	x1, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	d0, [sp, #0x20]
+               	add	sp, sp, #0x30
                	ldursw	x0, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

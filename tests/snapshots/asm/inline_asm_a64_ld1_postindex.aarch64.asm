@@ -31,10 +31,12 @@ Disassembly of section .text:
                	sub	x0, x29, #0x28
                	sub	x1, x29, #0x30
                	sub	x2, x29, #0x38
-               	sub	sp, sp, #0x30
+               	sub	sp, sp, #0x40
                	str	x0, [sp, #0x18]
                	str	x1, [sp, #0x20]
                	str	x2, [sp, #0x28]
+               	str	d0, [sp, #0x30]
+               	str	d1, [sp, #0x38]
                	str	x0, [sp]
                	str	x1, [sp, #0x8]
                	str	x2, [sp, #0x10]
@@ -53,7 +55,9 @@ Disassembly of section .text:
                	ldr	x0, [sp, #0x18]
                	ldr	x1, [sp, #0x20]
                	ldr	x2, [sp, #0x28]
-               	add	sp, sp, #0x30
+               	ldr	d0, [sp, #0x30]
+               	ldr	d1, [sp, #0x38]
+               	add	sp, sp, #0x40
                	ldursw	x0, [x29, #-0x28]
                	ldursw	x1, [x29, #-0x30]
                	add	x0, x0, x1

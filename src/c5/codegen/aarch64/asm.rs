@@ -349,6 +349,32 @@ fn parse_vscalar(tok: &str) -> Option<(u8, u8)> {
     (n <= 31).then_some((n, size))
 }
 
+/// Resolve an AArch64 clobber register name to `(is_fp, number)`. GP names
+/// (`x0`..`x30`, `w0`..`w30`, `sp`) map to the GP file; the SIMD/FP views
+/// (`b`/`h`/`s`/`d`/`q`/`vN`) map to the FP file. Returns None for a name that
+/// is not a register (e.g. `cc`).
+pub(crate) fn clobber_reg_name(name: &str) -> Option<(bool, u8)> {
+    if let Some((num, _)) = parse_reg(name) {
+        return Some((false, num));
+    }
+    if let Some((num, _)) = parse_vreg(name) {
+        return Some((true, num));
+    }
+    if let Some(num) = parse_qreg(name) {
+        return Some((true, num));
+    }
+    if let Some((num, _)) = parse_vscalar(name) {
+        return Some((true, num));
+    }
+    // A bare `vN` names the same SIMD register file as `dN`/`qN`.
+    if let Some(num) = name.strip_prefix('v').and_then(|s| s.parse::<u8>().ok())
+        && num <= 31
+    {
+        return Some((true, num));
+    }
+    None
+}
+
 /// Parse a decimal floating-point immediate (e.g. `1.5`, `-2.0`) to its 8-bit
 /// VFP encoding, or None if the value is not one of the representable
 /// +/-(16+m)/16 * 2^e forms (m in 0..=15, e in -3..=4). Uses exact rational
@@ -969,10 +995,19 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
 /// register of the operand they name.
 pub(crate) fn assign_operand_regs(
     operands: &[crate::c5::ir::AsmOperand],
+    clobber_regs: u32,
+    clobber_fp_regs: u32,
 ) -> Result<Vec<Option<u8>>, String> {
     use crate::c5::ir::AsmConstraint as C;
     let mut assigned: Vec<Option<u8>> = alloc::vec![None; operands.len()];
     let mut used = [false; 32];
+    // A clobbered register is unavailable for an operand: the asm template
+    // overwrites it, so an operand placed there would be corrupted.
+    for r in 0..32u8 {
+        if clobber_regs & (1 << r) != 0 {
+            used[r as usize] = true;
+        }
+    }
     // x0..x15 are the allocatable pool; x16/x17 are the emitter's scratch.
     let pool: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
     for (i, op) in operands.iter().enumerate() {
@@ -990,6 +1025,11 @@ pub(crate) fn assign_operand_regs(
     // independent, so a number here does not clash with a GP assignment; the
     // emitter tells them apart by the operand's constraint.
     let mut fp_used = [false; 32];
+    for r in 0..32u8 {
+        if clobber_fp_regs & (1 << r) != 0 {
+            fp_used[r as usize] = true;
+        }
+    }
     for (i, op) in operands.iter().enumerate() {
         if matches!(op.constraint, C::Fp) {
             let r = (0u8..8)
@@ -1035,6 +1075,37 @@ mod tests {
                 AsmOpndA64::Ref { idx: 1, is64: None },
                 AsmOpndA64::Ref { idx: 2, is64: None },
             ]
+        );
+    }
+
+    #[test]
+    fn clobber_names_and_avoidance() {
+        use crate::c5::ir::{AsmConstraint as C, AsmOperand};
+        // GP names resolve to (false, num); the SIMD/FP views to (true, num).
+        assert_eq!(clobber_reg_name("x2"), Some((false, 2)));
+        assert_eq!(clobber_reg_name("w9"), Some((false, 9)));
+        assert_eq!(clobber_reg_name("d1"), Some((true, 1)));
+        assert_eq!(clobber_reg_name("q3"), Some((true, 3)));
+        assert_eq!(clobber_reg_name("v5"), Some((true, 5)));
+        assert_eq!(clobber_reg_name("h7"), Some((true, 7)));
+        assert_eq!(clobber_reg_name("cc"), None);
+        let op = |constraint| AsmOperand {
+            constraint,
+            is_output: false,
+            is_rw: false,
+            width: 8,
+        };
+        // With x0 and x2 clobbered, three GP operands take x1, x3, x4.
+        let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
+        let a = assign_operand_regs(&gp, (1 << 0) | (1 << 2), 0).unwrap();
+        assert_eq!(a, [Some(1), Some(3), Some(4)]);
+        // An FP (d0) clobber pushes a `w` operand off d0 onto d1.
+        let a = assign_operand_regs(&[op(C::Fp)], 0, 1 << 0).unwrap();
+        assert_eq!(a, [Some(1)]);
+        // No clobbers: the base assignment is unchanged.
+        assert_eq!(
+            assign_operand_regs(&gp, 0, 0).unwrap(),
+            [Some(0), Some(1), Some(2)]
         );
     }
 

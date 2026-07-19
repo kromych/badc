@@ -2075,7 +2075,7 @@ fn emit_inline_asm_aarch64(
             return false;
         }
     };
-    let op_reg = match assign_operand_regs(&asm.operands) {
+    let op_reg = match assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs) {
         Ok(r) => r,
         Err(m) => {
             bail_msg(&m);
@@ -2084,10 +2084,11 @@ fn emit_inline_asm_aarch64(
     };
     // Registers the block overwrites: the operand registers plus the explicit
     // clobber list. GP operands and clobbers land in the x0..x15 save set; `w`
-    // operands are in the independent d0..d7 file and are saved separately. A
-    // `w` operand must be a double (the SSA model's only FP width is f64).
+    // operands and FP clobbers are in the independent d0..d7 file and are saved
+    // separately. A `w` operand must be a double (the SSA model's only FP width
+    // is f64).
     let mut used_mask: u32 = asm.clobber_regs & 0xFFFF;
-    let mut fp_used_mask: u32 = 0;
+    let mut fp_used_mask: u32 = asm.clobber_fp_regs & 0xFF;
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
         if matches!(op.constraint, AsmConstraint::Fp) {

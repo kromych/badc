@@ -12,7 +12,10 @@ Each lane:
      builds + fetches its own caches.
   2. Build release with `cargo build --release --locked`.
   3. Run `cargo test --release --lib`.
-  4. Run the demos sqlite3 / lua / miniz / monocypher / stb / tweetnacl.
+  4. On Linux lanes, rerun the suite under the register-pressure caps
+     (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--features "codegen_test full"`)
+     as CI's pressure matrix does.
+  5. Run the demos sqlite3 / lua / miniz / monocypher / stb / tweetnacl.
 
 Usage (one `--box` flag per remote lane):
 
@@ -138,6 +141,11 @@ def remote_run_linux(box: Box, github_token: str) -> int:
         f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
         f"cargo build --release --locked --features full 2>&1 | tail -3 && "
         f"cargo test --release --lib --features full 2>&1 | tail -3 && "
+        # CI additionally runs the suite under register-pressure caps
+        # (BADC_MAX_GPR / BADC_MAX_FPR over several N); N=2 is the value
+        # that has caught spill-interaction bugs the default banks hide.
+        f"BADC_MAX_GPR=2 BADC_MAX_FPR=2 "
+        f'cargo test --release --lib --features "codegen_test full" 2>&1 | tail -3 && '
         + " && ".join(f"python3 {d} 2>&1 | tail -2" for d in GATING_DEMOS)
     )
     return stream(box.short, ["ssh", box.host, inner])

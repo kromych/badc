@@ -6140,15 +6140,19 @@ fn emit_intrinsic(
     };
     // Force args[idx]'s value into `scratch`; the register-tied arms
     // below stage operands into fixed registers around a clobber
-    // window.
-    let materialize = |code: &mut Vec<u8>, idx: usize, scratch: Reg| -> Option<Reg> {
-        let place = alloc.places.get(args[idx] as usize).copied()?;
-        let r = materialize_int(code, place, scratch, frame)?;
-        if r.0 != scratch.0 {
-            super::encode::emit_mov_rr(code, scratch, r);
-        }
-        Some(scratch)
-    };
+    // window. `pushed` is the number of 8-byte pushes the arm has
+    // emitted so far: rsp has moved by that much since the allocator
+    // laid out its rsp-relative spill slots, so a spilled place must be
+    // read through the shifted form.
+    let materialize_at =
+        |code: &mut Vec<u8>, idx: usize, scratch: Reg, pushed: u32| -> Option<Reg> {
+            let place = alloc.places.get(args[idx] as usize).copied()?;
+            let r = materialize_int_shifted(code, place, scratch, frame, 8 * pushed)?;
+            if r.0 != scratch.0 {
+                super::encode::emit_mov_rr(code, scratch, r);
+            }
+            Some(scratch)
+        };
     match intrinsic {
         I::VaStart if sysv_variadic_callee(func, abi) => {
             // System V AMD64 `va_start` (ABI 3.5.7). args[0] = the
@@ -6636,9 +6640,10 @@ fn emit_intrinsic(
             super::encode::emit_push_r(code, RCX);
             super::encode::emit_push_r(code, RDX);
             // Push the output addresses (args[0..n_out]); they survive the
-            // clobber on the stack and are popped in reverse below.
+            // clobber on the stack and are popped in reverse below. Four
+            // registers are already pushed, plus one per address.
             for i in 0..n_out {
-                if materialize(code, i, R10).is_none() {
+                if materialize_at(code, i, R10, 4 + i as u32).is_none() {
                     return fail("cpuid / xgetbv: output operand not an address");
                 }
                 super::encode::emit_push_r(code, R10);
@@ -6646,11 +6651,12 @@ fn emit_intrinsic(
             // Inputs into r10 (eax) and, for cpuid, r11 (ecx); then move into
             // the fixed registers. eax/ecx are not touched until both inputs
             // are safely in scratch.
-            if materialize(code, n_out, R10).is_none() {
+            let in_depth = 4 + n_out as u32;
+            if materialize_at(code, n_out, R10, in_depth).is_none() {
                 return fail("cpuid / xgetbv: input operand missing");
             }
             if is_cpuid {
-                if materialize(code, n_out + 1, R11).is_none() {
+                if materialize_at(code, n_out + 1, R11, in_depth).is_none() {
                     return fail("cpuid: subleaf operand missing");
                 }
                 super::encode::emit_mov_rr(code, RAX, R10); // eax = leaf
@@ -6697,24 +6703,25 @@ fn emit_intrinsic(
             super::encode::emit_push_r(code, RAX);
             super::encode::emit_push_r(code, RDX);
             // Push the output addresses (quotient then remainder, so the
-            // remainder address is popped first below).
-            if materialize(code, 0, R10).is_none() {
+            // remainder address is popped first below); the shift tracks
+            // the pushes emitted so far.
+            if materialize_at(code, 0, R10, 2).is_none() {
                 return fail("divq: quotient output not an address");
             }
             super::encode::emit_push_r(code, R10);
-            if materialize(code, 1, R10).is_none() {
+            if materialize_at(code, 1, R10, 3).is_none() {
                 return fail("divq: remainder output not an address");
             }
             super::encode::emit_push_r(code, R10);
             // Divisor -> r10, dividend high -> r11, then load rax/rdx last
             // so an input the allocator placed in rax/rdx is read first.
-            if materialize(code, 4, R10).is_none() {
+            if materialize_at(code, 4, R10, 4).is_none() {
                 return fail("divq: divisor operand missing");
             }
-            if materialize(code, 3, R11).is_none() {
+            if materialize_at(code, 3, R11, 4).is_none() {
                 return fail("divq: dividend-high operand missing");
             }
-            if materialize(code, 2, RAX).is_none() {
+            if materialize_at(code, 2, RAX, 4).is_none() {
                 return fail("divq: dividend-low operand missing");
             }
             super::encode::emit_mov_rr(code, RDX, R11); // rdx = n1
@@ -6744,11 +6751,11 @@ fn emit_intrinsic(
             }
             super::encode::emit_push_r(code, RAX);
             super::encode::emit_push_r(code, RDX);
-            if materialize(code, 0, R10).is_none() {
+            if materialize_at(code, 0, R10, 2).is_none() {
                 return fail("rdtsc: low output not an address");
             }
             super::encode::emit_push_r(code, R10);
-            if materialize(code, 1, R10).is_none() {
+            if materialize_at(code, 1, R10, 3).is_none() {
                 return fail("rdtsc: high output not an address");
             }
             super::encode::emit_push_r(code, R10);

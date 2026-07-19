@@ -89,6 +89,16 @@ pub(crate) enum Mnemonic {
         opcode: u8,
         digit: u8,
     },
+    /// A 3-operand VEX (AVX) op `<v-op> %{x,y}mm_src2, %{x,y}mm_src1,
+    /// %{x,y}mm_dst`, encoded `VEX(vvvv=src1, L=ymm, pp) 0F <opcode>
+    /// ModRM(reg=dst, rm=src2)`. `pp` is the SSE-prefix selector (0 none, 1 0x66,
+    /// 2 0xF3, 3 0xF2); the opcode map is 0F and VEX.W is 0 (packed int / single
+    /// / double ops). A 2-byte VEX (C5) is emitted unless src2 is a high register
+    /// (r8..15), which needs the 3-byte form (C4) for VEX.B.
+    Vex {
+        pp: u8,
+        opcode: u8,
+    },
     /// Privileged / model-specific operandless forms (operands, where any,
     /// ride fixed registers via the statement's constraints). `cli` / `sti`
     /// clear / set the interrupt flag; `invd` / `wbinvd` invalidate caches;
@@ -234,6 +244,14 @@ pub(crate) fn reg_by_name(name: &str) -> Option<(u8, AsmRegSize)> {
         // fixes the operation width).
         return Some((XMM_BASE + i, Quad));
     }
+    if let Some(rest) = n.strip_prefix("ymm")
+        && let Ok(i) = rest.parse::<u8>()
+        && i < 16
+    {
+        // YMM registers, marked with YMM_BASE; the VEX encode arm reads the mark
+        // to set the 256-bit `L` bit and masks back to the ModRM / vvvv field.
+        return Some((YMM_BASE + i, Quad));
+    }
     if let Some(rest) = n.strip_prefix("mm")
         && let Ok(i) = rest.parse::<u8>()
         && i < 8
@@ -272,6 +290,10 @@ const MMX_BASE: u8 = 16;
 /// XMM registers occupy `XMM_BASE..XMM_BASE+16`, clear of the GPR/MMX/CR/DR/SEG
 /// marks below.
 pub(crate) const XMM_BASE: u8 = 64;
+/// YMM registers (AVX 256-bit) occupy `YMM_BASE..YMM_BASE+16`. A VEX-encoded op
+/// reads the mark to set the `L` bit (256-bit) and masks back to the low xmm
+/// number for ModRM / VEX.vvvv.
+pub(crate) const YMM_BASE: u8 = 96;
 /// Control / debug / segment registers occupy the ranges below; each is
 /// marked so it never collides with the 0..16 GPRs or the MMX marks.
 const CR_BASE: u8 = 24;
@@ -389,7 +411,8 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         _ => {
             return sse2_op(name)
                 .or_else(|| sse_mov(name))
-                .or_else(|| sse_imm(name));
+                .or_else(|| sse_imm(name))
+                .or_else(|| vex_op(name));
         }
     })
 }
@@ -478,6 +501,39 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
         .iter()
         .find(|(n, _, _)| *n == name)
         .map(|&(_, opcode, digit)| Mnemonic::SseShiftImm { opcode, digit })
+}
+
+/// 3-operand VEX (AVX) ops as `(name, pp, 0F-opcode)`, where `pp` selects the
+/// SSE prefix (0 none, 1 0x66, 2 0xF3, 3 0xF2). All are 0F-map, VEX.W 0. The
+/// non-destructive 3-operand form `v-op %src2, %src1, %dst` mirrors the SSE
+/// two-operand op with an extra source. Byte-verified against clang.
+fn vex_op(name: &str) -> Option<Mnemonic> {
+    #[rustfmt::skip]
+    const OPS: &[(&str, u8, u8)] = &[
+        // Packed single (no prefix).
+        ("vaddps", 0, 0x58), ("vsubps", 0, 0x5C), ("vmulps", 0, 0x59), ("vdivps", 0, 0x5E),
+        ("vminps", 0, 0x5D), ("vmaxps", 0, 0x5F),
+        ("vandps", 0, 0x54), ("vandnps", 0, 0x55), ("vorps", 0, 0x56), ("vxorps", 0, 0x57),
+        ("vunpcklps", 0, 0x14), ("vunpckhps", 0, 0x15),
+        // Packed double (0x66).
+        ("vaddpd", 1, 0x58), ("vsubpd", 1, 0x5C), ("vmulpd", 1, 0x59), ("vdivpd", 1, 0x5E),
+        ("vminpd", 1, 0x5D), ("vmaxpd", 1, 0x5F),
+        ("vandpd", 1, 0x54), ("vorpd", 1, 0x56), ("vxorpd", 1, 0x57),
+        ("vunpcklpd", 1, 0x14), ("vunpckhpd", 1, 0x15),
+        // Packed integer (0x66).
+        ("vpaddb", 1, 0xFC), ("vpaddw", 1, 0xFD), ("vpaddd", 1, 0xFE), ("vpaddq", 1, 0xD4),
+        ("vpsubb", 1, 0xF8), ("vpsubw", 1, 0xF9), ("vpsubd", 1, 0xFA), ("vpsubq", 1, 0xFB),
+        ("vpand", 1, 0xDB), ("vpandn", 1, 0xDF), ("vpor", 1, 0xEB), ("vpxor", 1, 0xEF),
+        ("vpcmpeqd", 1, 0x76), ("vpcmpgtd", 1, 0x66),
+        ("vpunpckldq", 1, 0x62), ("vpunpckhdq", 1, 0x6A),
+        ("vpmullw", 1, 0xD5), ("vpmaddwd", 1, 0xF5),
+        // Scalar single (0xF3) / double (0xF2).
+        ("vaddss", 2, 0x58), ("vsubss", 2, 0x5C), ("vmulss", 2, 0x59), ("vdivss", 2, 0x5E),
+        ("vaddsd", 3, 0x58), ("vsubsd", 3, 0x5C), ("vmulsd", 3, 0x59), ("vdivsd", 3, 0x5E),
+    ];
+    OPS.iter()
+        .find(|(n, _, _)| *n == name)
+        .map(|&(_, pp, opcode)| Mnemonic::Vex { pp, opcode })
 }
 
 /// If `movq src, dst` involves an XMM register, encode the SSE quadword move and
@@ -1264,6 +1320,51 @@ pub(crate) fn encode(
             code.push(*ib as u8);
             Ok(())
         }
+        Mnemonic::Vex { pp, opcode } => {
+            // 3-operand VEX: dst in ModRM.reg, src1 in VEX.vvvv (inverted), src2
+            // in ModRM.rm. `L` is set when any operand is a ymm. A 2-byte VEX
+            // (C5) suffices unless src2 is a high register (r8..15), which needs
+            // the 3-byte form (C4) to carry VEX.B; VEX.W is 0 and the map is 0F.
+            let vreg = |c: &Concrete| -> Option<(u8, bool)> {
+                match c {
+                    Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
+                        Some((*reg - XMM_BASE, false))
+                    }
+                    Concrete::Reg { reg, .. } if (YMM_BASE..YMM_BASE + 16).contains(reg) => {
+                        Some((*reg - YMM_BASE, true))
+                    }
+                    _ => None,
+                }
+            };
+            let [src2, src1, dst] = ops else {
+                return Err(String::from(
+                    "inline asm: VEX op needs %src2, %src1, %dst vector registers",
+                ));
+            };
+            let (Some((d, dy)), Some((s1, s1y)), Some((s2, s2y))) =
+                (vreg(dst), vreg(src1), vreg(src2))
+            else {
+                return Err(String::from(
+                    "inline asm: VEX operands must be xmm/ymm registers",
+                ));
+            };
+            let l = u8::from(dy || s1y || s2y);
+            let vvvv = !s1 & 0x0F;
+            if s2 < 8 {
+                // 2-byte VEX (C5): [R.vvvv.L.pp], R stored inverted.
+                code.push(0xC5);
+                code.push((u8::from(d < 8) << 7) | (vvvv << 3) | (l << 2) | pp);
+            } else {
+                // 3-byte VEX (C4): [R.X.B.map][W.vvvv.L.pp], R/X/B stored inverted,
+                // X = 1 (no index), map = 0F (00001), W = 0.
+                code.push(0xC4);
+                code.push((u8::from(d < 8) << 7) | (1 << 6) | (u8::from(s2 < 8) << 5) | 0x01);
+                code.push((vvvv << 3) | (l << 2) | pp);
+            }
+            code.push(opcode);
+            code.push(modrm_reg(d & 7, s2 & 7));
+            Ok(())
+        }
         Mnemonic::In | Mnemonic::Out => {
             // AT&T `in port, acc` / `out acc, port`. The accumulator
             // (AL/AX/EAX) is implicit; only the width and the port form
@@ -1936,5 +2037,64 @@ mod tests {
         // first `x` operand onto xmm1.
         let a = assign_operand_regs(&[op(C::Fp), op(C::Fp)], 1 << 0).unwrap();
         assert_eq!(a, [Some(1), Some(2)]);
+    }
+
+    #[test]
+    fn vex_ops() {
+        let xmm = |n: u8| Concrete::Reg {
+            reg: XMM_BASE + n,
+            size: AsmRegSize::Quad,
+        };
+        let ymm = |n: u8| Concrete::Reg {
+            reg: YMM_BASE + n,
+            size: AsmRegSize::Quad,
+        };
+        let vex = |pp, opcode| Mnemonic::Vex { pp, opcode };
+        // 3-operand VEX, AT&T `v-op %src2, %src1, %dst`. Byte-exact vs clang.
+        // vaddps %xmm2,%xmm1,%xmm0: 2-byte VEX.
+        assert_eq!(
+            enc(vex(0, 0x58), None, &[xmm(2), xmm(1), xmm(0)]),
+            [0xC5, 0xF0, 0x58, 0xC2]
+        );
+        // ymm sets the L bit.
+        assert_eq!(
+            enc(vex(0, 0x58), None, &[ymm(2), ymm(1), ymm(0)]),
+            [0xC5, 0xF4, 0x58, 0xC2]
+        );
+        // A high src2 needs the 3-byte VEX (C4) form for VEX.B.
+        assert_eq!(
+            enc(vex(0, 0x58), None, &[xmm(10), xmm(9), xmm(8)]),
+            [0xC4, 0x41, 0x30, 0x58, 0xC2]
+        );
+        // pp selects the SSE prefix: 0x66 (vpaddd), 0xF3 (vaddss).
+        assert_eq!(
+            enc(vex(1, 0xFE), None, &[xmm(2), xmm(1), xmm(0)]),
+            [0xC5, 0xF1, 0xFE, 0xC2]
+        );
+        assert_eq!(
+            enc(vex(2, 0x58), None, &[xmm(2), xmm(1), xmm(0)]),
+            [0xC5, 0xF2, 0x58, 0xC2]
+        );
+        // vmulsd %xmm12,%xmm1,%xmm3: 3-byte VEX (high src2), pp = 0xF2.
+        assert_eq!(
+            enc(vex(3, 0x59), None, &[xmm(12), xmm(1), xmm(3)]),
+            [0xC4, 0xC1, 0x73, 0x59, 0xDC]
+        );
+        // The table resolves names.
+        assert_eq!(
+            vex_op("vaddps"),
+            Some(Mnemonic::Vex {
+                pp: 0,
+                opcode: 0x58
+            })
+        );
+        assert_eq!(
+            vex_op("vpxor"),
+            Some(Mnemonic::Vex {
+                pp: 1,
+                opcode: 0xEF
+            })
+        );
+        assert_eq!(vex_op("not_a_vex"), None);
     }
 }

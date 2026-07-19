@@ -147,6 +147,34 @@ static int sse_x_constraint(void) {
     return r;
 }
 
+static int cpu_has_avx(void) {
+#if defined(__x86_64__)
+    unsigned a, b, c, d;
+    __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1), "c"(0));
+    (void) a;
+    (void) b;
+    (void) d;
+    return (int) ((c >> 28) & 1u); /* CPUID.1:ECX.AVX[bit 28] */
+#else
+    return 0;
+#endif
+}
+
+static int avx_vpaddd(void) {
+    int r = 42;
+#if defined(__x86_64__)
+    if (cpu_has_avx()) {
+        sse_v4 a = {10, 20, 30, 40};
+        sse_v4 b = {5, 3, 8, 2};
+        sse_v4 c;
+        /* 3-operand VEX (nondestructive): c = a + b; `x` operands allocate xmm. */
+        __asm__("vpaddd %2, %1, %0" : "=x"(c) : "x"(a), "x"(b));
+        r = ((int *) &c)[3]; /* {15,23,38,42} -> 42 */
+    }
+#endif
+    return r;
+}
+
 int main(void) {
     if (sse_add(19, 23) != 42) return 1;    /* 19 + 23, register paddd     */
     if (sse_mem_add(23) != 42) return 2;    /* 23 + 19, memory-source paddd */
@@ -156,5 +184,6 @@ int main(void) {
     if (movq_roundtrip(42) != 42) return 6; /* movq GP64 <-> xmm            */
     if (sse_float_roundtrip() != 42) return 7; /* cvtdq2ps/cvtps2dq/shufps  */
     if (sse_x_constraint() != 42) return 8;    /* `x` xmm operand allocation */
+    if (avx_vpaddd() != 42) return 9;          /* 3-operand VEX (AVX), guarded */
     return 42;
 }

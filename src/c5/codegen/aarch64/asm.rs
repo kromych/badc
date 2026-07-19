@@ -363,6 +363,9 @@ fn parse_vec_reg(tok: &str) -> Option<(u8, u8, bool)> {
         "4s" => (2, true),
         "1d" => (3, false),
         "2d" => (3, true),
+        // The 128-bit single element `.1q` (size log2 4) exists only as the
+        // pmull/pmull2 destination; other arms bound size to 0..3 and reject it.
+        "1q" => (4, true),
         _ => return None,
     };
     Some((num, size, q))

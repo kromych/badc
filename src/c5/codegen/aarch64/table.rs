@@ -501,11 +501,17 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         return Ok(base | ((rn as u32) << 5) | (rd as u32));
     }
     // SIMD `dup Vd.T, Rn`: broadcast a GP register into every lane. The imm5
-    // field carries the element size as a one-hot bit.
+    // field carries the element size as a one-hot bit. Valid targets are
+    // 8b/16b/4h/8h/2s/4s/2d; the single-lane .1d is not a broadcast target.
     if mnemonic == "dup" {
         let [Opnd::VecReg { num: rd, size, q }, Opnd::Reg { num: rn, .. }] = *ops else {
             return Err(String::from("inline asm: bad dup operands"));
         };
+        if size > 3 || (size == 3 && !q) {
+            return Err(String::from(
+                "inline asm: bad dup arrangement (8b/16b/4h/8h/2s/4s/2d)",
+            ));
+        }
         let imm5 = 1u32 << size;
         return Ok((if q { 1u32 << 30 } else { 0 })
             | 0x0E00_0C00
@@ -759,7 +765,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         if size != s1 || q != q1 {
             return Err(String::from("inline asm: vector shift arrangements differ"));
         }
-        if size == 3 && !q {
+        if size > 3 || (size == 3 && !q) {
             return Err(String::from(
                 "inline asm: vector shift .1d is reserved (use .2d)",
             ));
@@ -1124,6 +1130,59 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | (u << 29)
             | (if upper { 1u32 << 30 } else { 0 })
             | ((ds as u32) << 22)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // Polynomial (carryless) multiply long `pmull|pmull2 Vd, Vn, Vm`: the byte
+    // form widens .8b/.16b to .8h, the dword form widens .1d/.2d to .1q (used
+    // for GHASH). pmull2 (Q=1) reads the upper-half source lanes. The size field
+    // is the source width; the destination is one element class wider.
+    if let "pmull" | "pmull2" = mnemonic
+        && let [
+            Opnd::VecReg {
+                num: rd,
+                size: ds,
+                q: dq,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: ss,
+                q: sq,
+            },
+            Opnd::VecReg {
+                num: rm,
+                size: ms,
+                q: mq,
+            },
+        ] = *ops
+    {
+        let upper = mnemonic == "pmull2";
+        if ss != ms || sq != mq {
+            return Err(String::from("inline asm: pmull source arrangements differ"));
+        }
+        if sq != upper {
+            return Err(String::from(
+                "inline asm: the `2` form reads 128-bit sources; the base form reads 64-bit",
+            ));
+        }
+        let want_dst = match ss {
+            0 => (1u8, true),
+            3 => (4, true),
+            _ => {
+                return Err(String::from(
+                    "inline asm: pmull source must be .8b/.16b or .1d/.2d",
+                ));
+            }
+        };
+        if (ds, dq) != want_dst {
+            return Err(String::from(
+                "inline asm: pmull destination must be .8h (byte source) or .1q (dword source)",
+            ));
+        }
+        return Ok(0x0E20_E000
+            | (if upper { 1u32 << 30 } else { 0 })
+            | ((ss as u32) << 22)
+            | ((rm as u32) << 16)
             | ((rn as u32) << 5)
             | (rd as u32));
     }

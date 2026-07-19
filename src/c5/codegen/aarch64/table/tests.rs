@@ -847,6 +847,40 @@ fn simd_ld_st_single_lane() {
 }
 
 #[test]
+fn poly_multiply() {
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    let x = |n: u8| Opnd::Reg { num: n, is64: true };
+    // Byte form widens .8b/.16b to .8h; pmull2 reads the upper 64-bit halves.
+    assert_eq!(
+        enc("pmull", &[v(0, 1, true), v(1, 0, false), v(2, 0, false)]),
+        0x0E22_E020
+    );
+    assert_eq!(
+        enc("pmull2", &[v(0, 1, true), v(1, 0, true), v(2, 0, true)]),
+        0x4E22_E020
+    );
+    // Dword form widens .1d/.2d to .1q (the size-4 element used for GHASH).
+    assert_eq!(
+        enc("pmull", &[v(0, 4, true), v(1, 3, false), v(2, 3, false)]),
+        0x0EE2_E020
+    );
+    assert_eq!(
+        enc("pmull2", &[v(0, 4, true), v(1, 3, true), v(2, 3, true)]),
+        0x4EE2_E020
+    );
+    // pmull needs 64-bit sources, pmull2 needs 128-bit, and the destination must
+    // match the source width.
+    assert!(encode("pmull", &[v(0, 1, true), v(1, 0, true), v(2, 0, true)]).is_err());
+    assert!(encode("pmull2", &[v(0, 4, true), v(1, 3, false), v(2, 3, false)]).is_err());
+    assert!(encode("pmull", &[v(0, 2, true), v(1, 0, false), v(2, 0, false)]).is_err());
+    // .1q exists only for pmull: dup and vector shift reject it, and dup also
+    // rejects the single-lane .1d.
+    assert!(encode("dup", &[v(0, 4, true), x(1)]).is_err()); // .1q
+    assert!(encode("dup", &[v(0, 3, false), x(1)]).is_err()); // .1d
+    assert!(encode("shl", &[v(0, 4, true), v(1, 4, true), Opnd::Imm(1)]).is_err()); // .1q
+}
+
+#[test]
 fn table_lookup() {
     let v = |n: u8, q: bool| Opnd::VecReg { num: n, size: 0, q };
     let tab = |first: u8, count: u8| Opnd::VecList {

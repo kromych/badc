@@ -539,6 +539,52 @@ fn vector_lane_transfer() {
 }
 
 #[test]
+fn vector_permute() {
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    let p = |m: &str| enc(m, &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]);
+    // zip/uzp/trn on .4s; each base bakes the opcode, size at bit 22, Q at 30.
+    assert_eq!(p("zip1"), 0x4E82_3820);
+    assert_eq!(p("zip2"), 0x4E82_7820);
+    assert_eq!(p("uzp1"), 0x4E82_1820);
+    assert_eq!(p("uzp2"), 0x4E82_5820);
+    assert_eq!(p("trn1"), 0x4E82_2820);
+    assert_eq!(p("trn2"), 0x4E82_6820);
+    // The size field tracks the arrangement; .1d (size 3, no Q) is reserved.
+    assert_eq!(
+        enc("zip1", &[v(0, 0, true), v(1, 0, true), v(2, 0, true)]),
+        0x4E02_3820
+    ); // .16b
+    assert_eq!(
+        enc("zip1", &[v(0, 3, true), v(1, 3, true), v(2, 3, true)]),
+        0x4EC2_3820
+    ); // .2d
+    assert!(encode("zip1", &[v(0, 3, false), v(1, 3, false), v(2, 3, false)]).is_err());
+    // ext: byte-only, imm4 selects the starting byte of Vm:Vn.
+    assert_eq!(
+        enc(
+            "ext",
+            &[v(0, 0, true), v(1, 0, true), v(2, 0, true), Opnd::Imm(4)]
+        ),
+        0x6E02_2020
+    );
+    // A non-byte arrangement and an out-of-range index are rejected.
+    assert!(
+        encode(
+            "ext",
+            &[v(0, 2, true), v(1, 2, true), v(2, 2, true), Opnd::Imm(1)]
+        )
+        .is_err()
+    );
+    assert!(
+        encode(
+            "ext",
+            &[v(0, 0, true), v(1, 0, true), v(2, 0, true), Opnd::Imm(16)]
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn load_store_pair() {
     let mem = |base: u8, off: i64| Opnd::Mem {
         base,

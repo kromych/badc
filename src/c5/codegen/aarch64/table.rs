@@ -540,6 +540,81 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
+    // SIMD permute `<zip1|zip2|uzp1|uzp2|trn1|trn2> Vd.T, Vn.T, Vm.T`, one
+    // arrangement. size at bit 22, Q at 30; each op's base word carries its
+    // opcode. The .1d arrangement (size 3 without Q) is reserved.
+    if let Some(base) = match mnemonic {
+        "uzp1" => Some(0x0E00_1800u32),
+        "trn1" => Some(0x0E00_2800),
+        "zip1" => Some(0x0E00_3800),
+        "uzp2" => Some(0x0E00_5800),
+        "trn2" => Some(0x0E00_6800),
+        "zip2" => Some(0x0E00_7800),
+        _ => None,
+    } && let [
+        Opnd::VecReg { num: rd, size, q },
+        Opnd::VecReg {
+            num: rn,
+            size: s1,
+            q: q1,
+        },
+        Opnd::VecReg {
+            num: rm,
+            size: s2,
+            q: q2,
+        },
+    ] = *ops
+    {
+        if size != s1 || size != s2 || q != q1 || q != q2 {
+            return Err(String::from(
+                "inline asm: vector permute arrangements differ",
+            ));
+        }
+        if size == 3 && !q {
+            return Err(String::from(
+                "inline asm: vector permute .1d is reserved (use .2d)",
+            ));
+        }
+        return Ok(base
+            | (if q { 1u32 << 30 } else { 0 })
+            | ((size as u32) << 22)
+            | ((rm as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD extract `ext Vd.16b, Vn.16b, Vm.16b, #imm`: a byte-granular window
+    // starting at byte `imm` of the concatenation Vm:Vn. Byte arrangement only;
+    // the imm4 index is 0..15 (Q=1) or 0..7 (Q=0).
+    if mnemonic == "ext"
+        && let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+            Opnd::VecReg {
+                num: rm,
+                size: s2,
+                q: q2,
+            },
+            Opnd::Imm(index),
+        ] = *ops
+    {
+        if size != 0 || s1 != 0 || s2 != 0 || q != q1 || q != q2 {
+            return Err(String::from("inline asm: ext operands must be 8b/16b"));
+        }
+        let lanes = if q { 16 } else { 8 };
+        if index < 0 || index >= lanes {
+            return Err(String::from("inline asm: ext index out of range"));
+        }
+        return Ok(0x2E00_0000
+            | (if q { 1u32 << 30 } else { 0 })
+            | ((rm as u32) << 16)
+            | ((index as u32) << 11)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
     // SIMD FP three-same `<fadd|fsub|fmul|fdiv|fmax|fmin|fcmeq|fcmgt|fcmge>
     // Vd.T, Vn.T, Vm.T` (T = 2s/4s/2d). The sz bit (22) selects double; each
     // op's base word carries its opcode plus the U and sub/min flags. Scalar

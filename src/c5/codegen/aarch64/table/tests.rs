@@ -605,6 +605,37 @@ fn vector_one_source() {
 }
 
 #[test]
+fn vector_three_same_batch3() {
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    let t = |m: &str| enc(m, &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]); // .4s
+    // Saturating add/sub, multiply-accumulate, absolute difference, pairwise.
+    assert_eq!(t("sqadd"), 0x4EA2_0C20);
+    assert_eq!(t("uqadd"), 0x6EA2_0C20);
+    assert_eq!(t("sqsub"), 0x4EA2_2C20);
+    assert_eq!(t("uqsub"), 0x6EA2_2C20);
+    assert_eq!(t("mla"), 0x4EA2_9420);
+    assert_eq!(t("mls"), 0x6EA2_9420);
+    assert_eq!(t("sabd"), 0x4EA2_7420);
+    assert_eq!(t("uabd"), 0x6EA2_7420);
+    assert_eq!(t("addp"), 0x4EA2_BC20);
+    // FP multiply-accumulate, absolute difference, pairwise.
+    assert_eq!(t("fmla"), 0x4E22_CC20);
+    assert_eq!(t("fmls"), 0x4EA2_CC20);
+    assert_eq!(t("fabd"), 0x6EA2_D420);
+    assert_eq!(t("faddp"), 0x6E22_D420);
+    // Element-size bounds match the ISA: add/addp reach 2d, mul/smax/mla do not,
+    // and .1d is reserved.
+    assert_eq!(
+        enc("add", &[v(0, 3, true), v(1, 3, true), v(2, 3, true)]),
+        0x4EE2_8420
+    );
+    assert!(encode("mul", &[v(0, 3, true), v(1, 3, true), v(2, 3, true)]).is_err());
+    assert!(encode("smax", &[v(0, 3, true), v(1, 3, true), v(2, 3, true)]).is_err());
+    assert!(encode("mla", &[v(0, 3, true), v(1, 3, true), v(2, 3, true)]).is_err());
+    assert!(encode("add", &[v(0, 3, false), v(1, 3, false), v(2, 3, false)]).is_err());
+}
+
+#[test]
 fn vector_permute() {
     let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
     let p = |m: &str| enc(m, &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]);

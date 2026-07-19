@@ -488,23 +488,32 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
-    // SIMD three-same integer ops `Vd.T, Vn.T, Vm.T`, one arrangement:
-    // add/sub/mul, the compares cmeq/cmgt/cmge/cmhi/cmhs, and smax/smin/umax/
-    // umin. size at bit 22, Q at 30, U at 29, the opcode in the base word. GP
-    // add/sub/mul (Reg operands) fall through to the catalogue below.
-    if let Some((op_base, u)) = match mnemonic {
-        "add" => Some((0x0E20_8400u32, 0u32)),
-        "sub" => Some((0x0E20_8400, 1)),
-        "mul" => Some((0x0E20_9C00, 0)),
-        "cmeq" => Some((0x0E20_8C00, 1)),
-        "cmgt" => Some((0x0E20_3400, 0)),
-        "cmge" => Some((0x0E20_3C00, 0)),
-        "cmhi" => Some((0x0E20_3400, 1)),
-        "cmhs" => Some((0x0E20_3C00, 1)),
-        "smax" => Some((0x0E20_6400, 0)),
-        "smin" => Some((0x0E20_6C00, 0)),
-        "umax" => Some((0x0E20_6400, 1)),
-        "umin" => Some((0x0E20_6C00, 1)),
+    // SIMD three-same integer ops `Vd.T, Vn.T, Vm.T`, one arrangement. size at
+    // bit 22, Q at 30, U at 29, the opcode in the base word; `lo..=hi` bounds
+    // the element size (mul/min/max/mla/abd have no 64-bit form). GP add/sub/mul
+    // (Reg operands) fall through to the catalogue below.
+    if let Some((op_base, u, lo, hi)) = match mnemonic {
+        "add" => Some((0x0E20_8400u32, 0u32, 0u8, 3u8)),
+        "sub" => Some((0x0E20_8400, 1, 0, 3)),
+        "mul" => Some((0x0E20_9C00, 0, 0, 2)),
+        "cmeq" => Some((0x0E20_8C00, 1, 0, 3)),
+        "cmgt" => Some((0x0E20_3400, 0, 0, 3)),
+        "cmge" => Some((0x0E20_3C00, 0, 0, 3)),
+        "cmhi" => Some((0x0E20_3400, 1, 0, 3)),
+        "cmhs" => Some((0x0E20_3C00, 1, 0, 3)),
+        "smax" => Some((0x0E20_6400, 0, 0, 2)),
+        "smin" => Some((0x0E20_6C00, 0, 0, 2)),
+        "umax" => Some((0x0E20_6400, 1, 0, 2)),
+        "umin" => Some((0x0E20_6C00, 1, 0, 2)),
+        "sqadd" => Some((0x0E20_0C00, 0, 0, 3)),
+        "uqadd" => Some((0x0E20_0C00, 1, 0, 3)),
+        "sqsub" => Some((0x0E20_2C00, 0, 0, 3)),
+        "uqsub" => Some((0x0E20_2C00, 1, 0, 3)),
+        "mla" => Some((0x0E20_9400, 0, 0, 2)),
+        "mls" => Some((0x0E20_9400, 1, 0, 2)),
+        "sabd" => Some((0x0E20_7400, 0, 0, 2)),
+        "uabd" => Some((0x0E20_7400, 1, 0, 2)),
+        "addp" => Some((0x0E20_BC00, 0, 0, 3)),
         _ => None,
     } && let [
         Opnd::VecReg { num: rd, size, q },
@@ -523,6 +532,16 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         if size != s1 || size != s2 || q != q1 || q != q2 {
             return Err(String::from(
                 "inline asm: vector arithmetic arrangements differ",
+            ));
+        }
+        if size < lo || size > hi {
+            return Err(String::from(
+                "inline asm: element size invalid for this vector op",
+            ));
+        }
+        if size == 3 && !q {
+            return Err(String::from(
+                "inline asm: .1d arrangement is reserved (use .2d)",
             ));
         }
         return Ok((if q { 1u32 << 30 } else { 0 })
@@ -644,10 +663,12 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
-    // SIMD FP three-same `<fadd|fsub|fmul|fdiv|fmax|fmin|fcmeq|fcmgt|fcmge>
-    // Vd.T, Vn.T, Vm.T` (T = 2s/4s/2d). The sz bit (22) selects double; each
-    // op's base word carries its opcode plus the U and sub/min flags. Scalar
-    // f-arith (VReg operands) is handled elsewhere; VReg here falls through.
+    // SIMD FP three-same `Vd.T, Vn.T, Vm.T` (T = 2s/4s/2d): fadd/fsub/fmul/fdiv,
+    // fmax/fmin, the compares fcmeq/fcmgt/fcmge, the multiply-accumulates fmla/
+    // fmls, absolute difference fabd, and pairwise faddp. The sz bit (22) selects
+    // double; each op's base word carries its opcode plus the U and sub/min
+    // flags. Scalar f-arith (VReg operands) is handled elsewhere; VReg here
+    // falls through.
     if let Some(base) = match mnemonic {
         "fadd" => Some(0x0E20_D400u32),
         "fsub" => Some(0x0EA0_D400),
@@ -658,6 +679,10 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fcmeq" => Some(0x0E20_E400),
         "fcmgt" => Some(0x2EA0_E400),
         "fcmge" => Some(0x2E20_E400),
+        "fmla" => Some(0x0E20_CC00),
+        "fmls" => Some(0x0EA0_CC00),
+        "fabd" => Some(0x2EA0_D400),
+        "faddp" => Some(0x2E20_D400),
         _ => None,
     } && let [
         Opnd::VecReg { num: rd, size, q },

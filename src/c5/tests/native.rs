@@ -761,6 +761,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_ldr_str_q.c", 42),
     ("inline_asm_a64_vector_immediate.c", 42),
     ("inline_asm_a64_vector_unary.c", 42),
+    ("inline_asm_a64_vector_arith2.c", 42),
     ("inline_asm_a64_dp.c", 42),
     ("inline_asm_a64_labels.c", 42),
     ("compound_assign_int_fp.c", 0),

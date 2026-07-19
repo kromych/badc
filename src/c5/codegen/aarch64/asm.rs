@@ -134,6 +134,10 @@ pub(crate) struct AsmInsnA64 {
     /// A local-label definition `N:`; the emitter records the code offset it
     /// stands at.
     pub label_def: Option<u32>,
+    /// For a direct `bl` / `b` to a bare identifier (`bl schedule`), the target
+    /// symbol name; the emitter resolves it to a rel26 through the same fixup
+    /// pass as a compiler-emitted call. `None` for every other instruction.
+    pub sym_target: Option<String>,
 }
 
 /// A condition-code mnemonic to its 4-bit encoding.
@@ -328,6 +332,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 operands: Vec::new(),
                 bytes: Vec::new(),
                 label_def: Some(num),
+                sym_target: None,
             });
             piece = piece[colon + 1..].trim();
             if piece.is_empty() {
@@ -341,6 +346,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 operands: Vec::new(),
                 bytes,
                 label_def: None,
+                sym_target: None,
             });
             continue;
         }
@@ -365,6 +371,30 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     operands: alloc::vec![dst, src, AsmOpndA64::Imm(0)],
                     bytes: Vec::new(),
                     label_def: None,
+                    sym_target: None,
+                });
+                continue;
+            }
+        }
+        // A direct `bl` / `b` to a bare identifier is a call / tail-branch to a
+        // symbol (`bl schedule`); the target is resolved to a rel26 by the fixup
+        // pass, not parsed as a register operand. A local-label branch (`b 1f`)
+        // starts with a digit, so it is excluded.
+        if matches!(mnem, "bl" | "b") {
+            let is_bare_ident = !rest.is_empty()
+                && rest
+                    .bytes()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_')
+                && rest.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+                && parse_reg(rest).is_none();
+            if is_bare_ident {
+                insns.push(AsmInsnA64 {
+                    mnemonic: String::from(mnem),
+                    operands: Vec::new(),
+                    bytes: Vec::new(),
+                    label_def: None,
+                    sym_target: Some(String::from(rest)),
                 });
                 continue;
             }
@@ -380,6 +410,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             operands,
             bytes: Vec::new(),
             label_def: None,
+            sym_target: None,
         });
     }
     Ok(insns)

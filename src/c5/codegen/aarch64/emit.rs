@@ -569,6 +569,7 @@ pub(crate) fn emit_function(
     variadic_targets: &alloc::collections::BTreeSet<usize>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -871,6 +872,7 @@ pub(crate) fn emit_function(
                     variadic_targets,
                     extern_tls_names,
                     param_plan: &emit_param_plan,
+                    name2entpc,
                 };
                 emit_inst(
                     &mut cx,
@@ -2039,6 +2041,9 @@ struct FnCtx<'a> {
     variadic_targets: &'a alloc::collections::BTreeSet<usize>,
     extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     param_plan: &'a [super::ArgPlacement],
+    /// Function name -> entry PC, for resolving an inline-asm `bl` / `b` to a
+    /// named symbol.
+    name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
 }
 
 /// Lower an `Inst::InlineAsm` (GCC extended asm) on AArch64. Assigns each
@@ -2054,6 +2059,8 @@ fn emit_inline_asm_aarch64(
     args: &[u32],
     alloc: &Allocation,
     frame: Frame,
+    fixups: &mut Vec<super::encode::Fixup>,
+    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
 ) -> bool {
     use super::super::ir::AsmConstraint;
     use super::asm::{AsmOpndA64, assign_operand_regs, parse_template};
@@ -2208,6 +2215,29 @@ fn emit_inline_asm_aarch64(
         }
         if !insn.bytes.is_empty() {
             code.extend_from_slice(&insn.bytes);
+            continue;
+        }
+        // A direct `bl` / `b` to a symbol: resolve the name to its entry PC and
+        // record a fixup the post-pass patches to a rel26 once every function's
+        // address is final -- the same mechanism as a compiler-emitted call.
+        if let Some(name) = &insn.sym_target {
+            let Some(&ent_pc) = name2entpc.get(name.as_str()) else {
+                bail_msg(&alloc::format!(
+                    "aarch64 inline asm: unknown bl/b target `{name}`"
+                ));
+                return false;
+            };
+            let (kind, word) = if insn.mnemonic == "bl" {
+                (BranchKind::Bl, super::encode::enc_bl(0))
+            } else {
+                (BranchKind::B, super::encode::enc_b(0))
+            };
+            fixups.push(Fixup {
+                native_offset: code.len(),
+                target_ent_pc: ent_pc,
+                kind,
+            });
+            emit(code, word);
             continue;
         }
         if let Some(&AsmOpndA64::Label { num, forward }) = insn.operands.last() {
@@ -2408,6 +2438,7 @@ fn emit_inst(
         variadic_targets,
         extern_tls_names,
         param_plan,
+        name2entpc,
     } = *fcx;
     // The bundled emit output now arrives in `cx`; recreate the per-field
     // names as disjoint reborrows so the per-`Inst` lowering below is unchanged.
@@ -3007,7 +3038,9 @@ fn emit_inst(
             // value.
             true
         }
-        Inst::InlineAsm { asm, args } => emit_inline_asm_aarch64(code, asm, args, alloc, frame),
+        Inst::InlineAsm { asm, args } => {
+            emit_inline_asm_aarch64(code, asm, args, alloc, frame, fixups, name2entpc)
+        }
         _ => false,
     }
 }
@@ -7660,6 +7693,7 @@ mod tests {
                 &variadic_targets,
                 &mut tlv_fx,
                 &mut tlv_desc,
+                &alloc::collections::BTreeMap::new(),
             )
         };
         assert!(
@@ -7827,6 +7861,7 @@ mod tests {
                 &variadic_targets,
                 &mut tlv_fx,
                 &mut tlv_desc,
+                &alloc::collections::BTreeMap::new(),
             )
         };
         assert!(ok, "binop handler should cover Add + Shl + Shr");
@@ -7893,6 +7928,7 @@ mod tests {
                 &variadic_targets,
                 &mut tlv_fx,
                 &mut tlv_desc,
+                &alloc::collections::BTreeMap::new(),
             )
         };
         assert!(

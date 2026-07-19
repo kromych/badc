@@ -5854,13 +5854,18 @@ fn emit_inline_asm(
         super::encode::emit_push_r(code, Reg(r));
     }
     // Capture each operand's value (input) / address (output) into a
-    // stack slot via r10, before any asm register is written.
+    // stack slot via r10, before any asm register is written. rsp has moved
+    // down by the xmm spill area plus the pushes so far, so a place spilled to
+    // an rsp-relative slot must be read through the shifted form; the shift
+    // grows by 8 with each capture push.
     let n = asm.operands.len();
-    for &a in args.iter() {
+    let cap_shift = fp_area as u32 + 8 * save_list.len() as u32;
+    for (i, &a) in args.iter().enumerate() {
         let Some(place) = alloc.places.get(a as usize).copied() else {
             return fail("inline asm: operand place missing");
         };
-        let Some(r) = materialize_int(code, place, SCRATCH_R10, frame) else {
+        let shift = cap_shift + 8 * i as u32;
+        let Some(r) = materialize_int_shifted(code, place, SCRATCH_R10, frame, shift) else {
             return fail("inline asm: operand not an integer place");
         };
         if r.0 != SCRATCH_R10.0 {

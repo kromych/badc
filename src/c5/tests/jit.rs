@@ -490,6 +490,54 @@ fn indirect_call_spilled_target_under_pressure() {
 }
 
 #[test]
+fn inline_asm_operands_under_pressure() {
+    // Six inline-asm operands (one output address + five inputs). Under a
+    // 2-register cap most places spill to sp-relative slots; the asm block
+    // adjusts sp before capturing each operand, so the captures must read
+    // spilled places through the sp-shifted form. Without the shift a later
+    // operand reads the block's own capture area (a garbage value at -O0,
+    // a corrupt output address at -O).
+    let src = r#"
+        static int asm_sum5(int a, int b, int c, int d, int e) {
+            int r;
+        #if defined(__aarch64__)
+            __asm__("add %w0, %w1, %w2\n\t"
+                    "add %w0, %w0, %w3\n\t"
+                    "add %w0, %w0, %w4\n\t"
+                    "add %w0, %w0, %w5"
+                    : "=r"(r)
+                    : "r"(a), "r"(b), "r"(c), "r"(d), "r"(e));
+        #elif defined(__x86_64__)
+            __asm__("movl %1, %0\n\t"
+                    "addl %2, %0\n\t"
+                    "addl %3, %0\n\t"
+                    "addl %4, %0\n\t"
+                    "addl %5, %0"
+                    : "=r"(r)
+                    : "r"(a), "r"(b), "r"(c), "r"(d), "r"(e));
+        #else
+            r = a + b + c + d + e;
+        #endif
+            return r;
+        }
+        int main(void) {
+            return asm_sum5(6, 7, 8, 9, 12) == 42 ? 0 : 1;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit(src, &["asm-operands-pressure"])
+    });
+    assert_eq!(result, 0, "asm operand captured from a shifted spill slot");
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit_native_optimized(src, &["asm-operands-pressure-opt"])
+    });
+    assert_eq!(
+        result, 0,
+        "asm operand capture under -O read a corrupt place through the moved sp"
+    );
+}
+
+#[test]
 fn division_with_spilled_dividend_under_pressure() {
     // On x86_64 the divmod lowering stages the dividend into the
     // destination register; when the allocator reuses the divisor's

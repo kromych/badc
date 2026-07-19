@@ -2135,15 +2135,17 @@ fn emit_inline_asm_aarch64(
             return false;
         };
         // A `w` input captures its FP value; every other operand captures an
-        // integer value (input) or a destination address (output).
+        // integer value (input) or a destination address (output). sp has moved
+        // by `size` since the allocator laid out its sp-relative spill slots, so
+        // a spilled place must be read through the shifted form.
         if matches!(asm.operands[i].constraint, AsmConstraint::Fp) && !asm.operands[i].is_output {
-            let Some(d) = materialize_fp(code, place, 16, frame) else {
+            let Some(d) = materialize_fp_shifted(code, place, 16, frame, size) else {
                 bail_msg("aarch64 inline asm: `w` operand not a floating-point place");
                 return false;
             };
             emit_sp_str_d_auto(code, d, cap_off(i));
         } else {
-            let Some(r) = materialize_int(code, place, Reg(16), frame) else {
+            let Some(r) = materialize_int_shifted(code, place, Reg(16), frame, size) else {
                 bail_msg("aarch64 inline asm: operand not an integer place");
                 return false;
             };

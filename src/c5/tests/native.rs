@@ -790,6 +790,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_segment.c", 42),
     ("inline_asm_a64_barriers.c", 42),
     ("inline_asm_pushsection.c", 42),
+    ("inline_asm_goto_output.c", 42),
     ("compound_assign_int_fp.c", 0),
     ("signal_sig_t.c", 0),
     ("math_classify.c", 0),

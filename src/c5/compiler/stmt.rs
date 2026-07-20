@@ -1461,12 +1461,6 @@ impl Compiler {
                 continue;
             }
             let is_output = section == 1;
-            // TODO: support `asm goto` output operands (GCC 11 added
-            // them; the label paths would need output store-back).
-            if is_goto && is_output {
-                self.data.truncate(data_base);
-                return Err(self.compile_err("inline asm goto: output operands are not supported"));
-            }
             let (constraint, is_rw) = match Self::parse_asm_constraint(cstr, is_output, n_outputs) {
                 Some(c) => c,
                 None => {

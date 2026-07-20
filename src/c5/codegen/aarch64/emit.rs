@@ -2847,28 +2847,30 @@ fn emit_inline_asm_aarch64(
         }
     }
     // Store the register outputs back through their captured addresses (x16
-    // holds the address; the operand pool is untouched).
-    for (i, op) in asm.operands.iter().enumerate() {
-        if !op.is_output || matches!(op.constraint, AsmConstraint::Mem) {
-            continue;
-        }
-        let Some(r) = op_reg[i] else { continue };
-        emit_sp_ldr_x(code, Reg(16), cap_off(i));
-        if matches!(op.constraint, AsmConstraint::Fp) {
-            emit(code, super::encode::enc_str_d_imm(r, Reg(16), 0));
-            continue;
-        }
-        match op.width {
-            8 => emit(code, enc_str_imm(Reg(r), Reg(16), 0)),
-            4 => emit(code, enc_str32_imm(Reg(r), Reg(16), 0)),
-            2 => emit(code, enc_strh_imm(Reg(r), Reg(16), 0)),
-            1 => emit(code, super::encode::enc_strb_imm(Reg(r), Reg(16), 0)),
-            _ => {
-                bail_msg("aarch64 inline asm: unsupported output width");
-                return false;
+    // holds the address; the operand pool is untouched). For `asm goto`
+    // the outputs are stored on every exit path (GCC 11 output
+    // semantics), so the sequence repeats on each trampoline.
+    let emit_outputs = |code: &mut Vec<u8>| -> bool {
+        for (i, op) in asm.operands.iter().enumerate() {
+            if !op.is_output || matches!(op.constraint, AsmConstraint::Mem) {
+                continue;
+            }
+            let Some(r) = op_reg[i] else { continue };
+            emit_sp_ldr_x(code, Reg(16), cap_off(i));
+            if matches!(op.constraint, AsmConstraint::Fp) {
+                emit(code, super::encode::enc_str_d_imm(r, Reg(16), 0));
+                continue;
+            }
+            match op.width {
+                8 => emit(code, enc_str_imm(Reg(r), Reg(16), 0)),
+                4 => emit(code, enc_str32_imm(Reg(r), Reg(16), 0)),
+                2 => emit(code, enc_strh_imm(Reg(r), Reg(16), 0)),
+                1 => emit(code, super::encode::enc_strb_imm(Reg(r), Reg(16), 0)),
+                _ => return false,
             }
         }
-    }
+        true
+    };
     // Restore the saved registers and free the frame.
     let emit_restore = |code: &mut Vec<u8>| {
         for (j, &r) in save_list.iter().enumerate() {
@@ -2881,14 +2883,18 @@ fn emit_inline_asm_aarch64(
             emit(code, enc_add_imm(Reg(31), Reg(31), size));
         }
     };
-    let restore_start = code.len();
+    let exit_start = code.len();
+    if !emit_outputs(code) {
+        bail_msg("aarch64 inline asm: unsupported output width");
+        return false;
+    }
     emit_restore(code);
     // `asm goto`: each `%lK` branch leaves mid-template, before the
-    // restore just emitted on the fall-through path, so it lands on a
-    // trampoline that repeats the restore and branches to the label's
-    // block through the enclosing function's branch fixups. A label
-    // whose target is the fall-through block reuses the fall-through
-    // restore instead.
+    // store-backs and restore just emitted on the fall-through path, so
+    // it lands on a trampoline that repeats them and branches to the
+    // label's block through the enclosing function's branch fixups. A
+    // label whose target is the fall-through block reuses the
+    // fall-through exit sequence instead.
     if let Some(ctx) = goto_ctx {
         let mut tramp_at: Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
         if goto_sites
@@ -2902,6 +2908,10 @@ fn emit_inline_asm_aarch64(
                     continue;
                 }
                 tramp_at[k] = Some(code.len());
+                if !emit_outputs(code) {
+                    bail_msg("aarch64 inline asm: unsupported output width");
+                    return false;
+                }
                 emit_restore(code);
                 ctx.branch_fixups.push(BranchFixup {
                     site: code.len(),
@@ -2915,7 +2925,7 @@ fn emit_inline_asm_aarch64(
             code[skip_site..skip_site + 4].copy_from_slice(&word.to_le_bytes());
         }
         for &(site, ref kind, k) in &goto_sites {
-            let target = tramp_at[k].unwrap_or(restore_start);
+            let target = tramp_at[k].unwrap_or(exit_start);
             match label_branch_word(kind, target as i64 - site as i64) {
                 Ok(word) => code[site..site + 4].copy_from_slice(&word.to_le_bytes()),
                 Err(m) => {

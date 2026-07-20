@@ -6473,18 +6473,22 @@ fn emit_inline_asm(
     }
     // Store the register outputs back through their captured addresses. A
     // memory operand needs no store-back: the instruction wrote memory.
-    for (i, op) in asm.operands.iter().enumerate() {
-        if !op.is_output || matches!(op.constraint, AsmConstraint::Mem) {
-            continue;
+    // For `asm goto` the outputs are stored on every exit path (GCC 11
+    // output semantics), so the sequence repeats on each trampoline.
+    let emit_outputs = |code: &mut Vec<u8>| {
+        for (i, op) in asm.operands.iter().enumerate() {
+            if !op.is_output || matches!(op.constraint, AsmConstraint::Mem) {
+                continue;
+            }
+            let Some(r) = op_reg[i] else { continue };
+            super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RBP, cap_off(i));
+            if matches!(op.constraint, AsmConstraint::Fp) {
+                super::encode::emit_movups_mem_xmm(code, SCRATCH_R11, 0, Reg(r));
+            } else {
+                emit_asm_store_width(code, SCRATCH_R11, Reg(r), op.width);
+            }
         }
-        let Some(r) = op_reg[i] else { continue };
-        super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RBP, cap_off(i));
-        if matches!(op.constraint, AsmConstraint::Fp) {
-            super::encode::emit_movups_mem_xmm(code, SCRATCH_R11, 0, Reg(r));
-        } else {
-            emit_asm_store_width(code, SCRATCH_R11, Reg(r), op.width);
-        }
-    }
+    };
     // Restore the saved registers from their frame slots.
     let emit_restore = |code: &mut Vec<u8>| {
         for (k, &r) in save_list.iter().enumerate() {
@@ -6494,14 +6498,15 @@ fn emit_inline_asm(
             super::encode::emit_movups_xmm_mem(code, Reg(r), Reg::RBP, base + k as i32 * 16);
         }
     };
-    let restore_start = code.len();
+    let exit_start = code.len();
+    emit_outputs(code);
     emit_restore(code);
     // `asm goto`: each `%lK` branch leaves mid-template, before the
-    // restore just emitted on the fall-through path, so it lands on a
-    // trampoline that repeats the restore and jumps to the label's
-    // block through the enclosing function's branch fixups. A label
-    // whose target is the fall-through block reuses the fall-through
-    // restore instead.
+    // store-backs and restore just emitted on the fall-through path, so
+    // it lands on a trampoline that repeats them and jumps to the
+    // label's block through the enclosing function's branch fixups. A
+    // label whose target is the fall-through block reuses the
+    // fall-through exit sequence instead.
     if let Some(ctx) = goto_ctx.as_mut() {
         let mut tramp_at: alloc::vec::Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
         if goto_sites
@@ -6515,6 +6520,7 @@ fn emit_inline_asm(
                     continue;
                 }
                 tramp_at[k] = Some(code.len());
+                emit_outputs(code);
                 emit_restore(code);
                 emit_local_branch(
                     code,
@@ -6528,7 +6534,7 @@ fn emit_inline_asm(
             code[skip_site..skip_site + 4].copy_from_slice(&rel.to_le_bytes());
         }
         for &(site, opcode_len, k) in &goto_sites {
-            let target = tramp_at[k].unwrap_or(restore_start);
+            let target = tramp_at[k].unwrap_or(exit_start);
             let at = site + opcode_len;
             let rel = target as i64 - (at + 4) as i64;
             code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());

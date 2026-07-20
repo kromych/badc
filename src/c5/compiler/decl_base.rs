@@ -245,9 +245,28 @@ impl Compiler {
             return Err(self.compile_err("`(` expected after `typeof`"));
         }
         self.next()?; // (
+        // `typeof(f)` where `f` names a function: the specifier is `f`'s
+        // function type. Route the same pending carriers a function-type
+        // typedef base uses so a declarator through the specifier is a
+        // function declaration and a redeclaration of a defined function
+        // merges (C99 6.2.7) instead of colliding as a duplicate.
+        if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b')') {
+            let idx = self.lex.curr_id_idx;
+            let class = self.symbols[idx].class;
+            if class == Token::Fun as i64 || class == Token::Sys as i64 {
+                let fty = self.symbols[idx].type_ + Ty::Ptr as i64;
+                self.pending.fn_ptr_indirection = Some(1);
+                self.pending.base_is_function_type = true;
+                self.pending.typedef_fn_proto =
+                    Some((self.symbols[idx].params.len(), self.symbols[idx].is_variadic));
+                self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
+                self.next()?; // identifier
+                self.next()?; // )
+                return Ok(fty);
+            }
+        }
         let ty = if self.lex_is_type_start() {
             let mut inner = self.parse_decl_base_type()?;
-            let base_arr = core::mem::take(&mut self.pending.typedef_base_array_size);
             let mut had_ptr = false;
             while self.lex.tk == Token::MulOp {
                 self.next()?;
@@ -257,11 +276,31 @@ impl Compiler {
                     self.next()?;
                 }
             }
-            // `typeof(T[N])` is an array type; `typeof(T *)` is not.
-            self.pending.typeof_operand_was_array = base_arr != 0 && !had_ptr;
+            // An array typedef operand keeps its dimension on the carrier
+            // so a declarator through the specifier is an array, exactly
+            // as if the typedef itself were the base type. `typeof(T *)`
+            // names a pointer; the dimension belongs to the pointee.
+            if had_ptr {
+                self.pending.typedef_base_array_size = 0;
+                self.pending.typedef_base_array_dims.clear();
+            }
+            self.pending.typeof_operand_was_array =
+                self.pending.typedef_base_array_size != 0 && !had_ptr;
             inner
         } else {
-            self.parse_unevaluated_expr_ty(true)?
+            let mut inner = self.parse_unevaluated_expr_ty(true)?;
+            // A 1D array expression operand decayed to a pointer to its
+            // element; recover the element type and put the element count
+            // on the carrier like an array typedef base, so a declarator
+            // through the specifier is an array. TODO: multi-dim
+            // expression operands (the dims chain is not recoverable from
+            // the decay markers).
+            let n = core::mem::take(&mut self.pending.typeof_operand_array_size);
+            if n != 0 && inner >= Ty::Ptr as i64 {
+                inner -= Ty::Ptr as i64;
+                self.pending.typedef_base_array_size = n;
+            }
+            inner
         };
         if self.lex.tk != ')' {
             return Err(self.compile_err("`)` expected after `typeof` operand"));
@@ -313,6 +352,7 @@ impl Compiler {
         // sets only the byte marker.
         self.pending.typeof_operand_was_array =
             self.pending.last_array_decay_size != 0 || self.pending.last_array_decay_bytes > 0;
+        self.pending.typeof_operand_array_size = self.pending.last_array_decay_size;
         self.pending.last_array_decay_size = saved_decay;
         self.pending.last_array_decay_bytes = saved_decay_bytes;
         self.next_ent_pc = saved_text_len;

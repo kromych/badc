@@ -586,6 +586,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// decay. Consumed and reset by each `parse_generic_type_name` reader.
     pub typeof_operand_was_array: bool,
 
+    /// Element count of a 1D array expression operand of `typeof`,
+    /// captured before the unevaluated parse restores the decay
+    /// markers. `parse_typeof_specifier` moves it onto
+    /// `typedef_base_array_size` so a declarator through the specifier
+    /// gets the dimension, mirroring an array typedef base.
+    pub typeof_operand_array_size: i64,
+
     /// Companion to `last_array_decay_size` for cases where the
     /// row's byte size is known directly but its shape can't be
     /// reduced to a single `count * sizeof(elem_ty)` pair --
@@ -788,6 +795,7 @@ impl Default for Pending {
             param_decl_context: false,
             last_array_decay_size: 0,
             typeof_operand_was_array: false,
+            typeof_operand_array_size: 0,
             last_array_decay_bytes: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field
             // docs above.

@@ -1978,6 +1978,8 @@ impl<'a> Walker<'a> {
     /// widening). Shared by the cast, initializer, and assignment paths,
     /// which otherwise treat the scalar as a struct-rvalue address and
     /// copy 16 bytes from it.
+    /// TODO: a floating source above the 64-bit range saturates into the
+    /// low half; it needs splitting across both halves.
     fn store_scalar_as_int128(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
@@ -4017,6 +4019,8 @@ impl<'a> Walker<'a> {
                 // integer or pointer loads the object's low 8 bytes (its
                 // value mod 2^64); the convert then narrows to `to_ty`.
                 // Without the load the address is used as the value.
+                // TODO: a floating target needs both halves scaled and
+                // summed; it currently converts the address instead.
                 if self.is_int128_value_ty(src_ty)
                     && !is_struct_ty(*to_ty)
                     && !is_floating_scalar(*to_ty)

@@ -1263,26 +1263,12 @@ impl Compiler {
             }
         }
         // An empty template is a compiler barrier: `__asm__("")`, or the
-        // no-unroll / clobber idiom `__asm__("" :: "r"(p))`. It emits no
-        // instruction, so its operands carry no machine effect; consume
-        // the whole `: outputs : inputs : clobbers` region (operand
-        // expressions included) and emit nothing. c5 does not reorder
-        // memory accesses across the statement.
-        if tmpl_lc.is_empty() {
-            let mut depth = 0i32;
-            while !(self.lex.tk == ')' && depth == 0) {
-                if self.lex.tk == '(' {
-                    depth += 1;
-                } else if self.lex.tk == ')' {
-                    depth -= 1;
-                }
-                self.next()?;
-            }
-            self.next()?; // consume ')'
-            self.consume(b';', "`;` expected after `asm(...)`")?;
-            self.data.truncate(tstart);
-            return Ok(());
-        }
+        // no-unroll / clobber idiom `__asm__("" :: "r"(p))`. It encodes
+        // no machine instruction, but it must still reach the IR as an
+        // `Inst::InlineAsm` so the SSA passes and the builder's CSE
+        // cache treat it as an ordering barrier: no load / store may be
+        // forwarded or merged across it. The general parser below
+        // handles it; the empty template emits zero bytes.
         // The spin-loop hint appears as `pause` / `yield` (x86 / arm) or
         // the `rep; nop` byte encoding of PAUSE on x86; normalize away the
         // whitespace and `;` so every spelling maps to the relax hint. It

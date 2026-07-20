@@ -786,6 +786,56 @@ mod tests {
         assert!(matches!(f.insts[4], Inst::Load { .. }));
     }
 
+    /// An `Inst::InlineAsm` is an ordering barrier (`asm
+    /// volatile("" ::: "memory")`): a store before it may not satisfy
+    /// a load after it.
+    #[test]
+    fn inline_asm_barrier_blocks_forwarding() {
+        let asm = alloc::boxed::Box::new(crate::c5::ir::AsmBlock {
+            template: Vec::new(),
+            operands: Vec::new(),
+            clobber_regs: 0,
+            clobber_memory: true,
+            volatile: true,
+        });
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64
+                },
+                Inst::Store {
+                    addr: 0,
+                    disp: 0,
+                    value: 1,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+                Inst::InlineAsm {
+                    asm,
+                    args: Vec::new()
+                },
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ],
+            Terminator::Return(4),
+            4,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(4)),
+            "a load must not forward across an asm barrier",
+        );
+    }
+
     /// A volatile store seeds no forwarding entry: the reload after it
     /// must read memory (C99 6.7.3p6).
     #[test]

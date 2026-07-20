@@ -46,12 +46,15 @@ Severity (for compiling existing C): 1 = blocks almost everything,
 2 = blocks much real code, 3 = blocks specific idioms, 4 = workaround
 exists, 5 = rare in modern source.
 
-### `volatile` and `const` accepted but not enforced, severity 4
+### `const` accepted but not enforced, severity 4
 
-`volatile` is parsed at every position and discarded. c5 does not guarantee
-that a `volatile` access is preserved or unreordered against other memory
-accesses, so memory-mapped-IO code that relies on the access actually
-happening is not safe. `const` is likewise accepted but not enforced: c5
+`volatile` is enforced (6.7.3p6): an access through a volatile-qualified
+lvalue is marked through the IR, performed exactly once in program order at
+every optimization level, kept memory-resident (no promotion, coalescing,
+forwarding, or dead-access elision), and never moved across an inline-asm
+statement. One gap remains: a whole-aggregate copy of a volatile-qualified
+struct is lowered as an unmarked block copy. `const` is accepted but not
+enforced: c5
 does not diagnose assignment to a `const`-qualified object (a 6.5.16.1
 constraint violation) or the discarding of `const` in a conversion, so a
 program that modifies a `const` object compiles without the required
@@ -192,7 +195,8 @@ is C99 plus the C11 features real code gates on this macro (`_Static_assert`,
 1. Host-ABI struct-return packing for a `#pragma binding` import that
    returns a struct by value (the by-value argument direction already
    rides the host ABI).
-2. `volatile`-honored loads / stores.
+2. Volatile-marked whole-aggregate copies (scalar volatile accesses are
+   enforced; a volatile struct assignment's block copy is not marked).
 3. x86_64 Windows UNWIND_INFO describes only the frame-pointer prologue
    (RIP/RSP/RBP recover exactly); callee-saved GPR spills are not yet
    described, so a debugger / profiler / SEH unwind crossing such a frame

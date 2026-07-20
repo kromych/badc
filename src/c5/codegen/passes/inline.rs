@@ -488,26 +488,32 @@ fn is_inline_candidate(
                     }
                 }
             }
-            Inst::LoadLocal { off, .. } => {
+            Inst::LoadLocal { off, volatile, .. } => {
                 // A negative slot in a no-aggregate callee is a relocated
                 // local read the splice keeps. Otherwise the splice drops the
                 // read -- a parameter cell arrives as a value and the caller's
                 // frame has no matching slot -- which is safe only when the
-                // result is dead in the callee body.
+                // result is dead in the callee body and the access is not
+                // volatile (C99 5.1.2.3p2: a volatile read is a side effect
+                // even when the value is unused).
                 let relocated = reloc && *off < 0;
-                if !relocated && used[idx] {
-                    say(format_args!("live LoadLocal at v{}", idx));
+                if !relocated && (used[idx] || *volatile) {
+                    say(format_args!("live or volatile LoadLocal at v{}", idx));
                     return false;
                 }
             }
-            Inst::StoreLocal { off, .. } => {
+            Inst::StoreLocal { off, volatile, .. } => {
                 // A negative slot in a no-aggregate callee is a relocated
                 // local write the splice keeps. Otherwise the store is
                 // dropped; a drop into a struct-parameter slot would leave
-                // the redirected read stale.
+                // the redirected read stale, and a dropped volatile store
+                // would elide a required access (C99 6.7.3p6).
                 let relocated = reloc && *off < 0;
-                if !relocated && param_agg_slots.contains(off) {
-                    say(format_args!("StoreLocal into a struct-parameter slot"));
+                if !relocated && (param_agg_slots.contains(off) || *volatile) {
+                    say(format_args!(
+                        "StoreLocal into a struct-parameter slot or volatile at v{}",
+                        idx
+                    ));
                     return false;
                 }
             }
@@ -1925,6 +1931,62 @@ mod tests {
         let ok = is_inline_candidate(&f, 32, Target::LinuxX64.abi(), Some(&mut reason));
         assert!(!ok);
         assert_eq!(reason, "variadic");
+    }
+
+    /// A volatile access the splice would drop keeps the callee out of
+    /// line (C99 5.1.2.3p2 / 6.7.3p6): a dead read of a volatile
+    /// parameter cell and a volatile local store both reject; the same
+    /// shapes without `volatile` stay candidates.
+    #[test]
+    fn volatile_access_rejects_inlining() {
+        let abi = Target::LinuxX64.abi();
+        let single = |insts: Vec<Inst>, ret: ValueId| FunctionSsa {
+            n_params: 1,
+            inst_src: alloc::vec![(0, 0); insts.len()],
+            f32_values: alloc::vec![false; insts.len()],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..insts.len() as u32,
+                terminator: Terminator::Return(ret),
+                exit_acc: ret,
+            }],
+            insts,
+            ..Default::default()
+        };
+        for volatile in [false, true] {
+            let read = single(
+                alloc::vec![
+                    Inst::LoadLocal {
+                        off: 2,
+                        kind: LoadKind::I32,
+                        volatile,
+                    },
+                    Inst::Imm(1),
+                ],
+                1,
+            );
+            let write = single(
+                alloc::vec![
+                    Inst::Imm(3),
+                    Inst::StoreLocal {
+                        off: -1,
+                        value: 0,
+                        kind: StoreKind::I32,
+                        volatile,
+                    },
+                    Inst::Imm(4),
+                ],
+                2,
+            );
+            for f in [&read, &write] {
+                assert_eq!(
+                    is_inline_candidate(f, 32, abi, None),
+                    !volatile,
+                    "volatile={volatile} candidacy must be {}",
+                    !volatile
+                );
+            }
+        }
     }
 
     /// `unhonoured_always_inline` flags a called-but-uninlinable

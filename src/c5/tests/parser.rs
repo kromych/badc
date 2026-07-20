@@ -1141,6 +1141,71 @@ fn register_asm_binding_constraints() {
 }
 
 #[test]
+fn file_scope_register_asm_binding() {
+    // `register T name asm("reg")` at file scope: stack- / frame-pointer
+    // bindings are accepted, repeatable, shadowable, and read-only; a
+    // general-purpose register or a storage-class conflict is rejected.
+    #[cfg(target_arch = "x86_64")]
+    let (sp, fp, gp) = ("rsp", "rbp", "r12");
+    #[cfg(target_arch = "aarch64")]
+    let (sp, fp, gp) = ("sp", "x29", "x9");
+    let ok = |src: &str| {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("expected accept, got {e}"))
+    };
+    // Repeat declaration (header re-inclusion), reads from several
+    // functions, shadowing by a local and by a parameter.
+    let prog = ok(&format!(
+        "register unsigned long sp_reg asm(\"{sp}\");\n\
+         register unsigned long sp_reg asm(\"{sp}\");\n\
+         unsigned long f(void) {{ return sp_reg; }}\n\
+         unsigned long g(int sp_reg) {{ return (unsigned long)sp_reg; }}\n\
+         int main(void) {{ unsigned long v = sp_reg; {{ long sp_reg = 3; v += (unsigned long)sp_reg; }} return (int)(v == 0); }}\n"
+    ));
+    // No storage and no symbol: the binding is not a data global.
+    assert!(
+        !prog
+            .symbols
+            .iter()
+            .any(|s| s.name == "sp_reg" && s.class == crate::c5::token::Token::Glo as i64),
+        "file-scope register variable must not become a data global"
+    );
+    expect_compile_error(
+        &format!("register long x asm(\"{gp}\"); int main(void) {{ return (int)x; }}"),
+        "supported for the stack and frame pointer only",
+    );
+    expect_compile_error(
+        &format!("static register long x asm(\"{sp}\"); int main(void) {{ return 0; }}"),
+        "cannot be `static` or `extern`",
+    );
+    expect_compile_error(
+        &format!("register long x asm(\"{sp}\") = 1; int main(void) {{ return 0; }}"),
+        "cannot be initialized",
+    );
+    expect_compile_error(
+        &format!("register long x asm(\"{sp}\"); int main(void) {{ x = 1; return 0; }}"),
+        "cannot write register variable",
+    );
+    expect_compile_error(
+        &format!(
+            "register long x asm(\"{sp}\"); register long x asm(\"{fp}\"); int main(void) {{ return 0; }}"
+        ),
+        "conflicts with a prior declaration",
+    );
+    expect_compile_error(
+        &format!("int x; register long x asm(\"{sp}\"); int main(void) {{ return 0; }}"),
+        "conflicts with a prior declaration",
+    );
+    // Without `register` the declarator asm suffix stays rejected
+    // (linkage-name rename is TODO).
+    expect_compile_error(
+        "long x asm(\"renamed\"); int main(void) { return 0; }",
+        "not supported at file scope",
+    );
+}
+
+#[test]
 fn section_and_alias_operand_constraints() {
     // `section` / `alias` take a string-literal operand; an alias
     // target must be defined earlier in the unit.

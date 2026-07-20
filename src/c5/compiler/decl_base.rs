@@ -392,6 +392,65 @@ impl Compiler {
         Ok(())
     }
 
+    /// `register T name asm("reg")` at file scope: a GNU global register
+    /// variable. Stack- and frame-pointer bindings are supported; reads
+    /// anywhere in the unit compile into direct register moves, the name
+    /// holds no storage and emits no symbol. The declaration may repeat
+    /// across the unit (headers re-include it) as long as the register
+    /// matches. TODO: general-purpose global register variables (the
+    /// register must be reserved in every function's allocation).
+    pub(super) fn parse_file_scope_register_binding(
+        &mut self,
+        id_idx: usize,
+        ty: i64,
+        is_static: bool,
+        is_extern: bool,
+    ) -> Result<(), C5Error> {
+        use crate::c5::symbol::AsmRegister as R;
+        let name = self.parse_asm_register_suffix()?;
+        if is_static || is_extern {
+            return Err(
+                self.compile_err("an explicit-register variable cannot be `static` or `extern`")
+            );
+        }
+        let reg = self.resolve_asm_register(&name)?;
+        if !matches!(reg, R::StackPointer | R::FramePointer) {
+            return Err(self.compile_err(
+                "file-scope register variables are supported for the stack and frame pointer only",
+            ));
+        }
+        let prior_class = self.symbols[id_idx].class;
+        if prior_class != 0 {
+            let same = prior_class == Token::Loc as i64
+                && self.symbols[id_idx].asm_register == Some(reg);
+            if !same {
+                return Err(self.compile_err(format!(
+                    "`{}` conflicts with a prior declaration",
+                    self.symbols[id_idx].name
+                )));
+            }
+        }
+        self.check_register_asm_init(Some(reg))?;
+        let sym = &mut self.symbols[id_idx];
+        sym.class = Token::Loc as i64;
+        sym.type_ = ty;
+        sym.val = 0;
+        sym.array_size = 0;
+        sym.asm_register = Some(reg);
+        sym.is_global_register = true;
+        sym.decl_line = self.lex.line;
+        // The binding is the outermost scope: make the shadow slots hold
+        // the binding itself so the per-function `Loc` cleanup restore
+        // (and any block-scope shadowing) round-trips back to it.
+        sym.h_class = sym.class;
+        sym.h_type = sym.type_;
+        sym.h_val = sym.val;
+        sym.h_array_size = 0;
+        sym.h_asm_register = sym.asm_register;
+        sym.h_is_global_register = true;
+        Ok(())
+    }
+
     /// Resolve a `register T name asm("reg")` register name against the
     /// compile target. The `%`-prefixed spelling is accepted. Registers
     /// the emitters reserve as scratch (r10 / r11 on x86-64, x16 / x17

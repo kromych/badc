@@ -229,6 +229,9 @@ impl Compiler {
                     if self.lex.tk == Token::Noreturn {
                         self.pending_noreturn = true;
                     }
+                    if self.lex_is_register_storage() {
+                        self.pending.saw_register_storage = true;
+                    }
                     // `volatile` qualifies the declared type (C99 6.7.3);
                     // `const` is recorded out-of-band for value folding.
                     qual_bits |= self.lex_volatile_bit();
@@ -347,6 +350,9 @@ impl Compiler {
                     self.skip_attribute_specifiers()?;
                     continue;
                 }
+                if self.lex_is_register_storage() {
+                    self.pending.saw_register_storage = true;
+                }
                 qual_bits |= self.lex_volatile_bit();
                 self.pending.base_is_const |= self.lex_is_const_qual();
                 self.next()?;
@@ -423,9 +429,16 @@ impl Compiler {
                 // function body's opening brace parsed further below.
                 let signature_line = self.lex.line;
                 let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
-                // TODO: file-scope declarator `asm("name")` -- both the
-                // linkage-name rename and the global register variable.
                 if self.lex.tk == Token::Asm {
+                    // `register T name asm("reg")` at file scope is a GNU
+                    // global register variable; anything else is the
+                    // linkage-name rename. TODO: file-scope declarator
+                    // `asm("name")` linkage-name rename.
+                    if self.pending.saw_register_storage {
+                        self.parse_file_scope_register_binding(id_idx, ty, static_seen, extern_seen)?;
+                        self.accept(',')?;
+                        continue;
+                    }
                     return Err(self.compile_err("declarator `asm` is not supported at file scope"));
                 }
                 // `__declspec(dllexport)` on the declarator exports the name,

@@ -70,6 +70,14 @@ pub(crate) struct Symbol {
     /// Shadow slot for `asm_register` (see `h_class`).
     pub h_asm_register: Option<AsmRegister>,
 
+    /// File-scope `register T name asm("reg")` binding. Distinguishes
+    /// the unit-wide `Loc` binding from a function's own local so a
+    /// block-scope declaration of the same name shadows it instead of
+    /// tripping the duplicate-local check.
+    pub is_global_register: bool,
+    /// Shadow slot for `is_global_register` (see `h_class`).
+    pub h_is_global_register: bool,
+
     /// `__attribute__((weak))`: the symbol binds STB_WEAK in the
     /// object's symbol table, for a definition (a strong definition
     /// elsewhere overrides it) and for a declaration (an unresolved

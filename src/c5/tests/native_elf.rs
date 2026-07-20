@@ -391,6 +391,7 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 /// same fixtures; if they drift, one of them has a bug.
 const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("overaligned_data_placement.c", 0),
+    ("overaligned_type_placement.c", 0),
     ("vla_basic_sum.c", 0),
     ("vla_runtime_sizeof.c", 0),
     ("vla_size_from_arg.c", 0),

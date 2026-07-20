@@ -1821,19 +1821,6 @@ impl Compiler {
                     // with no attribute in sight.
                     let want_align =
                         core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty));
-                    // An explicit request on the declarator is placed up to
-                    // MAX_STATIC_ALIGN (checked above). Alignment coming
-                    // from the TYPE is only verified to be placed up to
-                    // MAX_OBJECT_ALIGN, so diagnose a wider one instead of
-                    // silently under-aligning the object.
-                    let type_align = self.align_of_type(ty);
-                    if type_align > super::MAX_OBJECT_ALIGN && req_align <= 0 {
-                        return Err(self.compile_err(format!(
-                            "object of a {type_align}-byte-aligned type is not supported \
-                             (at most {}); the type may still be used for layout",
-                            super::MAX_OBJECT_ALIGN
-                        )));
-                    }
                     let decl_align: usize = if want_align > 8 {
                         if thread_local && (req_align > 8 || want_align > 16) {
                             return Err(self.compile_err(
@@ -1850,17 +1837,6 @@ impl Compiler {
                     // definition starts on the object's boundary.
                     if decl_align > 8 {
                         self.align_data_to(decl_align);
-                    }
-                    // An object with an initializer takes its offset from
-                    // the initializer writer, which does not preserve a
-                    // boundary wider than 16. Diagnose rather than
-                    // under-align it.
-                    // TODO: align the initialized-object path and drop this.
-                    if type_align > 16 && req_align <= 0 && self.lex.tk == Token::Assign {
-                        return Err(self.compile_err(format!(
-                            "initialised object of a {type_align}-byte-aligned type is \
-                             not supported (at most 16); leave it zero-initialised"
-                        )));
                     }
                     let was_extern_only_decl =
                         extern_seen && self.lex.tk != Token::Assign && array_size != -1;

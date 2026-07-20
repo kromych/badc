@@ -353,20 +353,11 @@ impl Compiler {
                     && array_size == 0
                     && super::types::is_integer_scalar_ty(ty);
                 // As for a file-scope object: the type's own alignment
-                // counts even when the declarator carries no attribute.
-                // A block-scope static is allocated while a function body
-                // is being parsed and its slot does not keep a boundary
-                // wider than 16, so diagnose rather than under-align.
-                // TODO: place block-scope statics like file-scope objects
-                // and lift this to MAX_OBJECT_ALIGN.
+                // counts even when the declarator carries no attribute. A
+                // block-scope static shares the `.data` / `.bss` placement of
+                // a file-scope object, so the type's alignment holds up to
+                // MAX_STATIC_ALIGN.
                 let want_align = core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty));
-                if self.align_of_type(ty) > 16 && req_align <= 0 {
-                    return Err(self.compile_err(format!(
-                        "block-scope static of a {}-byte-aligned type is not \
-                         supported (at most 16); move it to file scope",
-                        self.align_of_type(ty)
-                    )));
-                }
                 if want_align > 8 {
                     self.align_data_to(want_align);
                     self.data_align = self.data_align.max(want_align);

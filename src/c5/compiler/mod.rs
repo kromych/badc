@@ -34,20 +34,13 @@ pub(crate) use type_layout::{StructReturnAbi, host_abi_agg_desc, struct_return_a
 pub(crate) mod types;
 
 /// Largest alignment (in bytes) honored on a static object via C11
-/// `_Alignas` / the GCC `aligned` attribute. Static objects are placed at
-/// this alignment in `.data`; automatic objects stay capped lower because
-/// stack-frame realignment is not implemented. A page covers the common
-/// cache-line (64) and page-aligned requests.
+/// `_Alignas` / the GCC `aligned` attribute, whether the request comes
+/// from the declarator or the object's type. Static objects (file-scope,
+/// block-scope static, and initialised or zero-init alike) are placed at
+/// this alignment in `.data` / `.bss`; automatic objects stay capped lower
+/// because stack-frame realignment is not implemented. A page covers the
+/// common cache-line (64) and page-aligned requests.
 pub(crate) const MAX_STATIC_ALIGN: usize = 4096;
-
-/// Widest alignment an object DEFINITION is placed at. Struct layout
-/// (`sizeof`, `_Alignof`, member offsets) honors the full
-/// [`MAX_STATIC_ALIGN`] range, but the placement of an object of such a
-/// type is only verified to hold at this boundary; wider requests are
-/// diagnosed rather than silently under-aligned. Covers the cache-line
-/// alignment that motivates over-aligned members.
-/// TODO: raise once `.data` / `.bss` object placement is verified wider.
-pub(crate) const MAX_OBJECT_ALIGN: usize = 64;
 
 /// Captured enum tag + constants for DWARF emission. C99 6.7.2.2
 /// enums collapse to `int` in c5 -- the tag carries no semantic

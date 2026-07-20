@@ -564,6 +564,16 @@ fn overaligned_data_placement() {
 }
 
 #[test]
+fn overaligned_type_placement() {
+    // An object whose alignment comes from its type (an over-aligned
+    // struct member raising the aggregate), with no attribute on the
+    // declarator, is placed on that boundary for file-scope, block-scope
+    // static, and initialised storage. Runtime address checks, matched
+    // against GCC and clang on x86-64 and aarch64.
+    assert_eq!(run_fixture("overaligned_type_placement.c"), 0);
+}
+
+#[test]
 fn packed_enum() {
     // `enum __attribute__((packed))` uses the smallest integer type holding
     // its values, changing the layout of an embedding struct (a real-world

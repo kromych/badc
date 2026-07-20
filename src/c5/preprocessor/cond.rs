@@ -1162,6 +1162,8 @@ pub(super) fn is_known_attribute(name: &str) -> bool {
     matches!(
         core,
         "cleanup"
+            | "alias"
+            | "naked"
             | "packed"
             | "aligned"
             | "unused"

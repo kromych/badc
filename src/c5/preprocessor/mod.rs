@@ -643,6 +643,8 @@ impl Preprocessor {
         // `__SIZEOF_POINTER__ * 8`). All badc targets are 64-bit, so the
         // pointer / size_t / ptrdiff_t sizes are 8; `long` and `wchar_t`
         // follow the data model (LLP64 Windows narrows both).
+        // C99 5.2.4.2.1: CHAR_BIT is 8 on every supported target.
+        macros.insert("__CHAR_BIT__".to_string(), "8".to_string());
         macros.insert("__SIZEOF_SHORT__".to_string(), "2".to_string());
         macros.insert("__SIZEOF_INT__".to_string(), "4".to_string());
         macros.insert("__SIZEOF_LONG_LONG__".to_string(), "8".to_string());
@@ -748,15 +750,29 @@ impl Preprocessor {
     /// `gcc`/`clang -std=c11` does, so portable code uses the standard
     /// path for the GNU-only features badc lacks.
     pub fn enable_gnu(&mut self) {
-        self.macros.insert("__GNUC__".to_string(), "4".to_string());
+        // 5.1.0 is the lowest version that clears the common
+        // `__GNUC__ < 5` minimum-version gates while every feature the
+        // version implies is backed: `__atomic_*` (4.7), `asm goto`
+        // (4.5), `__builtin_types_compatible_p`, designated-initializer
+        // ranges, and `__builtin_*_overflow` (5.1). Later versions are
+        // not claimed because they promise features badc lacks.
+        self.macros.insert("__GNUC__".to_string(), "5".to_string());
         self.macros
-            .insert("__GNUC_MINOR__".to_string(), "2".to_string());
+            .insert("__GNUC_MINOR__".to_string(), "1".to_string());
         self.macros
-            .insert("__GNUC_PATCHLEVEL__".to_string(), "1".to_string());
+            .insert("__GNUC_PATCHLEVEL__".to_string(), "0".to_string());
         self.macros
             .insert("__GNUC_STDC_INLINE__".to_string(), "1".to_string());
         self.macros
-            .insert("__VERSION__".to_string(), "\"4.2.1\"".to_string());
+            .insert("__VERSION__".to_string(), "\"5.1.0\"".to_string());
+        // The `__sync_*` builtins lower for these widths, so the
+        // capability macros a lock-free path tests are honest.
+        for w in [1u32, 2, 4, 8] {
+            self.macros.insert(
+                alloc::format!("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_{w}"),
+                "1".to_string(),
+            );
+        }
         // badc backs the `__`-prefixed GNU extensions but not the ones a
         // GNU dialect gates on `!__STRICT_ANSI__` (`typeof` of an array,
         // `__int128`). Reporting strict ISO conformance alongside

@@ -389,6 +389,35 @@ impl Compiler {
         true
     }
 
+    /// Reduce the just-parsed va_* intrinsic operand to the address of
+    /// the `va_list` storage it names (the GCC builtins take the
+    /// `va_list` by reference). The record-form `va_list` (System V
+    /// x86_64 / AAPCS64) reaches here already decayed to the record
+    /// address; the cursor-form lvalue (a plain pointer object) drops
+    /// its trailing load; anything else (an explicit `&ap`) already
+    /// carries the address and passes through.
+    pub(super) fn va_list_operand_address(&mut self) {
+        if is_struct_ty(self.ty) {
+            return;
+        }
+        self.va_operand_take_address();
+    }
+
+    /// Drop the operand's trailing scalar load so its address stays in
+    /// the accumulator, bumping the type one pointer level first so the
+    /// `AddrOf` wrap records the address type (the same ordering the
+    /// unary-`&` parse uses). An operand with no trailing load keeps its
+    /// value and type, so an explicit-address spelling passes through.
+    /// Also serves `va_start`'s second operand, which names the
+    /// rightmost fixed parameter and is passed by address (C99 7.15.1.4).
+    pub(super) fn va_operand_take_address(&mut self) {
+        let ty = self.ty;
+        self.ty += Ty::Ptr as i64;
+        if !self.pop_trailing_scalar_load() {
+            self.ty = ty;
+        }
+    }
+
     /// Emit code for accessing a bitfield. On entry `a` holds the
     /// address of the bitfield's 8-byte storage unit. The dispatch
     /// peeks at the next token: if it's `=`, an assignment follows

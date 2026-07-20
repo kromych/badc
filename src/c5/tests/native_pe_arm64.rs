@@ -686,6 +686,8 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("ssa_fp_routing.c", 0),
     ("ssa_callee_saved_x19.c", 0),
     ("ssa_va_arg_loop.c", 0),
+    ("builtin_va_list_typedef.c", 0),
+    ("builtin_expect_no_header.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
     ("ssa_fp_compare_nan.c", 0),
     ("ssa_c5_internal_fp_arg.c", 0),

@@ -184,6 +184,88 @@ impl Compiler {
         struct_ty_for(self.structs.len() - 1)
     }
 
+    /// True when the current identifier spells the GCC builtin type name
+    /// `__builtin_va_list`.
+    pub(super) fn is_lex_va_list_spelling(&self) -> bool {
+        self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].name == "__builtin_va_list"
+    }
+
+    /// Base type for `__builtin_va_list`, resolving to the same
+    /// per-target representation `<stdarg.h>` documents, so the two
+    /// spellings are interchangeable:
+    ///
+    ///   * System V AMD64 (Linux x86_64): the `__va_list_tag` record
+    ///     (System V AMD64 ABI 3.5.7) as an array of one element.
+    ///   * AAPCS64 (Linux aarch64): the `__va_list` record (AAPCS64
+    ///     Appendix B) as an array of one element.
+    ///   * Every other target: a single `void *` cursor.
+    ///
+    /// The record is registered once, on first use; the one-element
+    /// array dimension rides `pending.typedef_base_array_size`, the
+    /// same carrier an array-typedef base uses.
+    pub(super) fn builtin_va_list_tag(&mut self) -> i64 {
+        let ptr = (Ty::Char as i64 | UNSIGNED_BIT) + Ty::Ptr as i64;
+        let uint = Ty::Int as i64 | UNSIGNED_BIT;
+        let (fields, size): (&[(&str, usize, i64)], usize) = match self.target {
+            Target::LinuxX64 => (
+                &[
+                    ("gp_offset", 0, uint),
+                    ("fp_offset", 4, uint),
+                    ("overflow_arg_area", 8, ptr),
+                    ("reg_save_area", 16, ptr),
+                ],
+                24,
+            ),
+            Target::LinuxAarch64 => (
+                &[
+                    ("__stack", 0, ptr),
+                    ("__gr_top", 8, ptr),
+                    ("__vr_top", 16, ptr),
+                    ("__gr_offs", 24, Ty::Int as i64),
+                    ("__vr_offs", 28, Ty::Int as i64),
+                ],
+                32,
+            ),
+            _ => return ptr,
+        };
+        self.pending.typedef_base_array_size = 1;
+        self.pending.typedef_base_array_dims.clear();
+        if let Some(id) = self
+            .structs
+            .iter()
+            .position(|s| s.name == "__builtin_va_list")
+        {
+            return struct_ty_for(id);
+        }
+        let field = |(name, offset, ty): &(&str, usize, i64)| StructField {
+            name: name.to_string(),
+            offset: *offset,
+            ty: *ty,
+            array_size: 0,
+            inner_array_size: 0,
+            array_dims: Vec::new(),
+            bit_offset: 0,
+            bit_width: 0,
+            bit_unit_size: 0,
+            fn_ptr_indirection: 0,
+            params: Vec::new(),
+            is_variadic: false,
+            anon_union_group: 0,
+            anon_struct_group: 0,
+        };
+        self.structs.push(StructDef {
+            name: "__builtin_va_list".to_string(),
+            size,
+            align: 8,
+            fields: fields.iter().map(field).collect(),
+            is_union: false,
+            is_vector: false,
+            is_array: false,
+        });
+        struct_ty_for(self.structs.len() - 1)
+    }
+
     /// True when `t` is the GCC 128-bit `__int128` as a value (not a
     /// pointer to one). Mirrors the walker's `is_int128_value_ty`; used to
     /// widen a scalar assigned to an `__int128` lvalue.
@@ -351,6 +433,7 @@ impl Compiler {
         is_type_start_token(self.lex.tk)
             || self.is_lex_typedef_name()
             || self.is_lex_int128_spelling()
+            || self.is_lex_va_list_spelling()
             // A leading C23 `[[ ... ]]` attribute introduces a
             // declaration (`[[noreturn]] void f(void);`).
             || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))

@@ -1,14 +1,13 @@
-/* Regression for the edk2 VA_ARG / badc __builtin_va_arg contract bridge.
+/* Regression for the edk2 VA_ARG walk through badc's __builtin_va_arg.
  *
  * edk2 MdePkg/Include/Base.h (the __GNUC__ MS-ABI path) expands VA_ARG to
- * `(TYPE)(__builtin_va_arg(Marker, TYPE))`: it passes the VA_LIST by name and
- * does not dereference. badc's __builtin_va_arg instead takes the ADDRESS of
- * the va_list storage and returns the slot address (its <stdarg.h> derefs the
- * result). badc_efi_compat.h bridges the two. Without the bridge each VA_ARG
- * reads and advances `*Marker` in place, never advancing the cursor, so every
- * argument after the first walks back as the previous one plus one slot -- the
- * defect that made DxeCore's CoreInstallMultipleProtocolInterfaces install every
- * protocol with Interface = &Guid + 8 and crash the badc-built OVMF in early DXE.
+ * `(TYPE)(__builtin_va_arg(Marker, TYPE))`: it passes the VA_LIST by name
+ * and does not dereference -- the GCC builtin shape badc implements
+ * natively. A regression that reads without advancing the cursor walks
+ * every argument after the first back as the previous one plus one slot --
+ * the defect that made DxeCore's CoreInstallMultipleProtocolInterfaces
+ * install every protocol with Interface = &Guid + 8 and crash the
+ * badc-built OVMF in early DXE.
  *
  * Build with `--gnu` so the __GNUC__ Base.h path (hence __builtin_va_arg) is the
  * one under test; run under `--interp` for a host-independent check. */

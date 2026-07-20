@@ -788,6 +788,10 @@ impl Compiler {
                     let is_int_bit_unary = intr_kind.is_some_and(|i| i.is_int_bit_unary());
                     let is_bit_unary_64 = intr_kind.is_some_and(|i| i.is_bit_unary_64());
                     let is_bswap = intr_kind.is_some_and(|i| i.is_bswap());
+                    // Set for va_arg: the requested argument type. After
+                    // the intrinsic node is built the result is wrapped
+                    // in a load of this type (GCC value semantics).
+                    let mut va_arg_result_ty: Option<i64> = None;
                     let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
                         alloc::vec::Vec::new();
                     if intrinsic_id == trap_id {
@@ -894,17 +898,19 @@ impl Compiler {
                             ast_intrinsic_args.push(cast_id);
                         }
                     } else if intrinsic_id == va_arg_id {
-                        // `__builtin_va_arg(self, T)` -- self is the
-                        // va_list-storage address expression, T is the
-                        // argument's type-name. The first operand is
-                        // pushed; the second is the packed descriptor
-                        // `(kind << 16) | size` (kind 0 = integer /
-                        // pointer, 1 = floating) the per-target codegen
-                        // reads from the accumulator. The System V x86_64
-                        // ABI (3.5.7) routes the read to the gp or fp
-                        // save area by `kind`; the cursor targets ignore
-                        // the descriptor.
+                        // `__builtin_va_arg(ap, T)` -- ap names the
+                        // va_list, T is the argument's type-name. The
+                        // first operand is reduced to the storage
+                        // address and pushed; the second is the packed
+                        // descriptor `(kind << 16) | size` (kind 0 =
+                        // integer / pointer, 1 = floating) the
+                        // per-target codegen reads from the
+                        // accumulator. The System V x86_64 ABI (3.5.7)
+                        // routes the read to the gp or fp save area by
+                        // `kind`; the cursor targets ignore the
+                        // descriptor.
                         self.expr(Token::Assign as i64)?;
+                        self.va_list_operand_address();
                         if let Some(a) = self.ast_acc {
                             ast_intrinsic_args.push(a);
                         }
@@ -948,10 +954,44 @@ impl Compiler {
                         let descriptor = (kind << 16) | (size & 0xffff);
                         let desc_id = self.ast_emit_int_lit(descriptor, Ty::Int as i64);
                         ast_intrinsic_args.push(desc_id);
-                    } else if intrinsic_id == longjmp_id
-                        || intrinsic_id == va_start_id
-                        || intrinsic_id == va_copy_id
-                    {
+                        va_arg_result_ty = Some(arg_ty);
+                    } else if intrinsic_id == va_start_id || intrinsic_id == va_copy_id {
+                        // Two operands: the va_list, then the rightmost
+                        // fixed parameter (va_start, C99 7.15.1.4) or
+                        // the source va_list (va_copy). Both reach the
+                        // intrinsic as addresses; the helpers reduce
+                        // the GCC-shaped operands (`ap`, `last`) and
+                        // explicit-address spellings alike.
+                        self.expr(Token::Assign as i64)?;
+                        self.va_list_operand_address();
+                        if let Some(a) = self.ast_acc {
+                            ast_intrinsic_args.push(a);
+                        }
+                        self.ast_psh();
+                        if self.lex.tk != ',' {
+                            return Err(self.compile_err(format!(
+                                "intrinsic `{fn_name}` takes two operands"
+                            )));
+                        }
+                        self.next()?;
+                        self.expr(Token::Assign as i64)?;
+                        if intrinsic_id == va_copy_id {
+                            self.va_list_operand_address();
+                        } else {
+                            self.va_operand_take_address();
+                        }
+                        if let Some(a) = self.ast_acc {
+                            ast_intrinsic_args.push(a);
+                        }
+                    } else if intrinsic_id == va_end_id {
+                        // One operand: the va_list, reduced to its
+                        // storage address.
+                        self.expr(Token::Assign as i64)?;
+                        self.va_list_operand_address();
+                        if let Some(a) = self.ast_acc {
+                            ast_intrinsic_args.push(a);
+                        }
+                    } else if intrinsic_id == longjmp_id {
                         // Two-arg shape: env then val. The first
                         // gets pushed; the second lands in the
                         // accumulator so the AArch64 lowering can
@@ -1071,6 +1111,21 @@ impl Compiler {
                         pos,
                     );
                     self.ast_acc = Some(id);
+                    // GCC semantics: `__builtin_va_arg(ap, T)` yields
+                    // the next argument as a value of type T. The
+                    // intrinsic returns the slot address; wrap it in
+                    // the `*(T *)...` shape <stdarg.h>'s va_arg used
+                    // to spell out.
+                    if let Some(res_ty) = va_arg_result_ty {
+                        if let Some(child) = self.ast_acc {
+                            self.ast_emit_cast(child, res_ty + Ty::Ptr as i64);
+                        }
+                        if !(is_struct_ty(res_ty) && struct_ptr_depth(res_ty) == 0) {
+                            self.mark_emit_scalar_load();
+                        }
+                        self.ty = res_ty;
+                        self.ast_apply_unary(super::super::ast::UnOp::Deref);
+                    }
                 } else {
                     // Snapshot the declared signature up front: the per-arg
                     // type checks read from `expected_params` and `is_variadic`,

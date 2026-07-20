@@ -1072,6 +1072,10 @@ pub(super) fn is_known_builtin(name: &str) -> bool {
             | "__builtin_add_overflow"
             | "__builtin_sub_overflow"
             | "__builtin_mul_overflow"
+            | "__builtin_va_start"
+            | "__builtin_va_arg"
+            | "__builtin_va_end"
+            | "__builtin_va_copy"
     )
 }
 

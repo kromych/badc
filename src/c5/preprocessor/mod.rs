@@ -434,6 +434,14 @@ impl Preprocessor {
                 "__builtin_return_address",
                 super::op::Intrinsic::ReturnAddress,
             ),
+            // The variadic-access builtins are likewise available with
+            // no header (freestanding code typedefs `__builtin_va_list`
+            // and calls them directly); <stdarg.h>'s va_* macros map
+            // onto the same names.
+            ("__builtin_va_start", super::op::Intrinsic::VaStart),
+            ("__builtin_va_arg", super::op::Intrinsic::VaArg),
+            ("__builtin_va_end", super::op::Intrinsic::VaEnd),
+            ("__builtin_va_copy", super::op::Intrinsic::VaCopy),
         ] {
             intrinsics.insert(name.to_string(), kind as i64);
         }
@@ -550,6 +558,20 @@ impl Preprocessor {
                 },
             );
         }
+        // `__builtin_expect(exp, c)` is a compiler builtin in GCC,
+        // available with no header; its value is the first operand.
+        // Predefined here so code that never triggers the
+        // `<_builtins.h>` auto-include still compiles; that header's
+        // identical definition harmlessly re-registers it.
+        fn_macros.insert(
+            "__builtin_expect".to_string(),
+            FnMacro {
+                params: alloc::vec!["exp".to_string(), "c".to_string()],
+                body: "(exp)".to_string(),
+                is_variadic: false,
+                va_name: None,
+            },
+        );
         // C11 6.10.8.3 conditional-feature macros. An implementation that
         // reports `__STDC_VERSION__ == 201112L` defines each of these for an
         // optional feature it does not provide; library code gates on them

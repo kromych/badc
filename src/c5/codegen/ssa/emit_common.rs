@@ -1195,8 +1195,12 @@ pub(crate) fn strip_asm_comments(text: &str, syntax: AsmComments) -> Option<allo
     let mut out = alloc::string::String::with_capacity(text.len());
     let mut i = 0;
     // A statement starts at the template start and after every separator;
-    // leading whitespace does not end it.
+    // leading whitespace and label definitions do not end it, matching GNU
+    // as, which comments `1: # text` but rejects `.balign 4 # text`.
     let mut at_stmt_start = true;
+    // Everything seen since the statement start is label text or whitespace,
+    // so a `:` here closes a label definition rather than ending the start.
+    let mut in_label_prefix = true;
     while i < b.len() {
         let c = b[i];
         if c == b'"' {
@@ -1208,6 +1212,7 @@ pub(crate) fn strip_asm_comments(text: &str, syntax: AsmComments) -> Option<allo
             i = b.len().min(i + 1);
             out.push_str(&text[start..i]);
             at_stmt_start = false;
+            in_label_prefix = false;
             continue;
         }
         if c == b'/' && b.get(i + 1) == Some(&b'*') {
@@ -1226,8 +1231,12 @@ pub(crate) fn strip_asm_comments(text: &str, syntax: AsmComments) -> Option<allo
         }
         if c == b'\n' || c == b';' {
             at_stmt_start = true;
+            in_label_prefix = true;
+        } else if c == b':' && in_label_prefix {
+            at_stmt_start = true;
         } else if !c.is_ascii_whitespace() {
             at_stmt_start = false;
+            in_label_prefix &= c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
         }
         out.push(char::from(c));
         i += 1;
@@ -1563,6 +1572,11 @@ mod asm_comment_tests {
         // included, and swallows a `;` after it.
         assert_eq!(a64("   # lead\nmov x0, #1"), "   \nmov x0, #1");
         assert_eq!(a64("mov x0, #1 ; # c ; mov x2, #3\nnop"), "mov x0, #1 ; \nnop");
+        // A label definition does not end the statement start, so a `#` after
+        // one comments; after a directive operand it stays an immediate.
+        assert_eq!(a64("1: # c\nmov x0, #1"), "1: \nmov x0, #1");
+        assert_eq!(a64("lbl: # c\nmov x0, #1"), "lbl: \nmov x0, #1");
+        assert_eq!(a64(".balign 4 # not a comment"), ".balign 4 # not a comment");
     }
 
     /// `//` is a line comment on both targets: it is aarch64's comment

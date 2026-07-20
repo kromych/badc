@@ -454,15 +454,18 @@ impl Compiler {
         Ok(if is_const { 1 } else { 0 })
     }
 
-    /// Fold a bit-count builtin (`clz` / `ctz` / `popcount` and the 64-bit
-    /// `ll` forms; the `l` forms alias one of these per the target's `long`
-    /// width) with a constant argument. Returns `None` without consuming
-    /// input for anything else. A non-constant argument propagates as a
-    /// non-constant expression, so an array declarator treats the dimension
-    /// as a VLA. The argument is truncated to the operand width; at zero
-    /// `clz` / `ctz` yield the bit width, matching the walker's runtime
-    /// lowering and GCC.
-    fn try_fold_bitcount_builtin(&mut self) -> Result<Option<i64>, C5Error> {
+    /// Fold a bit / byte builtin with a constant argument. Covers the
+    /// integer bit-count family (`clz` / `ctz` / `popcount` / `clrsb` /
+    /// `parity` / `ffs` and their width variants; the `l` forms alias one per
+    /// the target's `long` width) and the byte-reversal `bswap16` / `bswap32`
+    /// / `bswap64`. Returns `None` without consuming input for anything else;
+    /// a non-constant argument propagates as a non-constant expression, so an
+    /// array declarator treats the dimension as a VLA. The result matches the
+    /// walker's runtime lowering and GCC: the argument is truncated to the
+    /// operand width, `clz` / `ctz` at zero yield the bit width, `ffs(0)` is
+    /// 0, and `bswap` reverses the bytes and carries the fixed-width unsigned
+    /// result type (`uint16_t` / `uint32_t` / `uint64_t`).
+    fn try_fold_bit_builtin(&mut self) -> Result<Option<ConstVal>, C5Error> {
         use crate::c5::op::Intrinsic;
         if self.lex.tk != Token::Id {
             return Ok(None);
@@ -472,38 +475,71 @@ impl Compiler {
             && self.symbols[idx].class != Token::Sys as i64;
         let kind = match self.pp_intrinsics.get(&self.symbols[idx].name).copied() {
             Some(intr) if not_real_fn => match Intrinsic::from_i64(intr) {
-                Some(
-                    k @ (Intrinsic::Clz
-                    | Intrinsic::Ctz
-                    | Intrinsic::Popcount
-                    | Intrinsic::Clzll
-                    | Intrinsic::Ctzll
-                    | Intrinsic::Popcountll),
-                ) => k,
+                Some(k) if k.is_int_bit_unary() || k.is_bswap() => k,
                 _ => return Ok(None),
             },
             _ => return Ok(None),
         };
         self.next()?; // builtin name
         if self.lex.tk != '(' {
-            return Err(self.compile_err("`(` expected after bit-count builtin"));
+            return Err(self.compile_err("`(` expected after bit builtin"));
         }
         self.next()?;
         let arg = self.parse_const_expr_cond_val()?.as_i128();
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected to close bit-count builtin"));
+            return Err(self.compile_err("`)` expected to close bit builtin"));
         }
         self.next()?;
-        let v = match kind {
-            Intrinsic::Clz => (arg as u32).leading_zeros() as i64,
-            Intrinsic::Ctz => (arg as u32).trailing_zeros() as i64,
-            Intrinsic::Popcount => (arg as u32).count_ones() as i64,
-            Intrinsic::Clzll => (arg as u64).leading_zeros() as i64,
-            Intrinsic::Ctzll => (arg as u64).trailing_zeros() as i64,
-            Intrinsic::Popcountll => (arg as u64).count_ones() as i64,
-            _ => unreachable!(),
+        let out = match kind {
+            Intrinsic::Clz => ConstVal::int((arg as u32).leading_zeros() as i64),
+            Intrinsic::Clzll => ConstVal::int((arg as u64).leading_zeros() as i64),
+            Intrinsic::Ctz => ConstVal::int((arg as u32).trailing_zeros() as i64),
+            Intrinsic::Ctzll => ConstVal::int((arg as u64).trailing_zeros() as i64),
+            Intrinsic::Popcount => ConstVal::int((arg as u32).count_ones() as i64),
+            Intrinsic::Popcountll => ConstVal::int((arg as u64).count_ones() as i64),
+            Intrinsic::Parity => ConstVal::int(((arg as u32).count_ones() & 1) as i64),
+            Intrinsic::Parityll => ConstVal::int(((arg as u64).count_ones() & 1) as i64),
+            // clrsb counts the sign bits below the top one over a sign-extended
+            // operand: `clz(x ^ (x >>s w-1)) - 1`, matching `lower_clrsb`.
+            Intrinsic::Clrsb => {
+                let x = arg as i32;
+                ConstVal::int(((x ^ (x >> 31)) as u32).leading_zeros() as i64 - 1)
+            }
+            Intrinsic::Clrsbll => {
+                let x = arg as i64;
+                ConstVal::int(((x ^ (x >> 63)) as u64).leading_zeros() as i64 - 1)
+            }
+            Intrinsic::Ffs => {
+                let a = arg as u32;
+                ConstVal::int(if a == 0 {
+                    0
+                } else {
+                    a.trailing_zeros() as i64 + 1
+                })
+            }
+            Intrinsic::Ffsll => {
+                let a = arg as u64;
+                ConstVal::int(if a == 0 {
+                    0
+                } else {
+                    a.trailing_zeros() as i64 + 1
+                })
+            }
+            Intrinsic::Bswap16 => ConstVal::Int {
+                val: (arg as u16).swap_bytes() as i128,
+                ty: Ty::Short as i64 | UNSIGNED_BIT,
+            },
+            Intrinsic::Bswap32 => ConstVal::Int {
+                val: (arg as u32).swap_bytes() as i128,
+                ty: Ty::Int as i64 | UNSIGNED_BIT,
+            },
+            Intrinsic::Bswap64 => ConstVal::Int {
+                val: (arg as u64).swap_bytes() as i128,
+                ty: Ty::LongLong as i64 | UNSIGNED_BIT,
+            },
+            _ => unreachable!("filtered to is_int_bit_unary / is_bswap above"),
         };
-        Ok(Some(v))
+        Ok(Some(out))
     }
 
     /// Parse a C11 6.7.10 `_Static_assert(<const-int-expr>,
@@ -992,13 +1028,14 @@ impl Compiler {
             let v = self.eval_constant_p_operand()?;
             return Ok(ConstVal::int(v));
         }
-        // GCC bit-count builtins (`__builtin_clz` / `ctz` / `popcount` and
-        // their `l` / `ll` forms) fold to an `int` when the argument is a
-        // constant expression, so an `ilog2`-style array bound or a
-        // `_Static_assert` resolves at parse time instead of being taken for
-        // a VLA.
-        if let Some(v) = self.try_fold_bitcount_builtin()? {
-            return Ok(ConstVal::int(v));
+        // GCC bit / byte builtins (`__builtin_clz` / `ctz` / `popcount` /
+        // `clrsb` / `parity` / `ffs` and their `l` / `ll` forms, plus
+        // `bswap16` / `bswap32` / `bswap64`) fold when the argument is a
+        // constant expression, so an `ilog2`-style array bound, a
+        // `_Static_assert`, or a `case htons(...)` label resolves at parse
+        // time instead of being taken for a VLA or rejected.
+        if let Some(v) = self.try_fold_bit_builtin()? {
+            return Ok(v);
         }
         if self.lex.tk == Token::BuiltinOffsetof {
             // GCC `__builtin_offsetof(T, member)` is an integer constant

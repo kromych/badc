@@ -2208,6 +2208,17 @@ fn builtin_ffs() {
 }
 
 #[test]
+fn builtin_bit_byte_const() {
+    // The bit / byte builtins (`bswap16` / `bswap32` / `bswap64`, `ffs`,
+    // `clrsb`, `parity`, and the bit-count family) fold in an integer
+    // constant expression, so a `case htons(...)` label, a file-scope array
+    // bound, and `_Static_assert` accept them. `bswap` carries its fixed-width
+    // unsigned result type. Values match GCC and clang; also checked at run
+    // time so the constant and run-time paths agree.
+    assert_eq!(run_fixture("builtin_bit_byte_const.c"), 0);
+}
+
+#[test]
 fn scanf_fscanf_binding() {
     // C99 7.19.6.4 scanf / 7.19.6.2 fscanf must be declared and bound
     // from <stdio.h>; the calls are guarded so the interp lane never

@@ -263,6 +263,12 @@ fn int128_arithmetic() {
     //   `!` / `~` / unary minus, controlling-expression truthiness,
     //   a conditional yielding a 128-bit value, short-circuit operands
     assert_eq!(run_fixture("int128_unary.c"), 0);
+    //   a comparison's `int` result in every scalar context, including
+    //   a variadic argument
+    assert_eq!(run_fixture("int128_scalar_result.c"), 0);
+    //   the type as a struct member: alignment-driven offsets, brace
+    //   initializers, and access through a pointer
+    assert_eq!(run_fixture("int128_struct_member.c"), 0);
 }
 
 #[test]

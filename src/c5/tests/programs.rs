@@ -269,6 +269,10 @@ fn int128_arithmetic() {
     //   the type as a struct member: alignment-driven offsets, brace
     //   initializers, and access through a pointer
     assert_eq!(run_fixture("int128_struct_member.c"), 0);
+    //   C99 6.3.1.4 conversions to and from `float` / `double`:
+    //   round-to-nearest-even past the significand, truncation toward
+    //   zero, and the 2^53 / 2^64 / 2^127 boundaries
+    assert_eq!(run_fixture("int128_fp_convert.c"), 0);
 }
 
 #[test]

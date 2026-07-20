@@ -768,10 +768,12 @@ pub(crate) enum AsmSectionItem {
         width: u8,
         values: alloc::vec::Vec<AsmSectionValue>,
     },
-    /// `.balign n` (or `.align n`, byte-granular on both supported
-    /// arches under GNU as when n is a byte count; `.p2align e` is the
-    /// exponent form).
+    /// `.balign n` / `.p2align e`, resolved to a byte alignment.
     Align(u32),
+    /// `.align n`: GNU as interprets the argument per target -- a byte
+    /// count on x86 ELF, a power-of-two exponent on AArch64. Resolved by
+    /// the materializer under the arch's convention.
+    AlignArch(u32),
     /// `.org n`: pad with zero bytes to section offset `n`.
     Org(u32),
     /// `.ascii` / `.asciz` / `.string` payload (NUL included when the
@@ -937,11 +939,17 @@ fn parse_section_item(tok: &str, rest: &str) -> Result<AsmSectionItem, alloc::st
         });
     }
     match tok {
-        ".balign" | ".align" => {
+        ".balign" => {
             let n = parse_raw_int(rest)
                 .filter(|&n| n > 0 && (n as u64).is_power_of_two())
                 .ok_or_else(|| alloc::format!("inline asm: bad alignment `{rest}`"))?;
             Ok(AsmSectionItem::Align(n as u32))
+        }
+        ".align" => {
+            let n = parse_raw_int(rest)
+                .filter(|&n| (1..=4096).contains(&n))
+                .ok_or_else(|| alloc::format!("inline asm: bad alignment `{rest}`"))?;
+            Ok(AsmSectionItem::AlignArch(n as u32))
         }
         ".p2align" => {
             let e = parse_raw_int(rest)
@@ -1034,6 +1042,7 @@ pub(crate) fn materialize_asm_sections(
     blocks: &[AsmSectionBlock],
     const_of: &dyn Fn(u8) -> Option<i64>,
     label_off: &dyn Fn(&str) -> Option<usize>,
+    align_is_p2: bool,
     sink: &mut alloc::vec::Vec<AsmSection>,
 ) -> Result<(), alloc::string::String> {
     for b in blocks {
@@ -1055,7 +1064,24 @@ pub(crate) fn materialize_asm_sections(
             }
         };
         for item in &b.items {
+            // `.align`'s argument is a byte count on x86 ELF, a
+            // power-of-two exponent on AArch64 (GNU as convention).
+            let resolved;
+            let item = match item {
+                AsmSectionItem::AlignArch(n) => {
+                    let bytes = if align_is_p2 { 1u32 << n.min(&12) } else { *n };
+                    if !bytes.is_power_of_two() {
+                        return Err(alloc::string::String::from(
+                            "inline asm: `.align` is not a power of two",
+                        ));
+                    }
+                    resolved = AsmSectionItem::Align(bytes);
+                    &resolved
+                }
+                other => other,
+            };
             match item {
+                AsmSectionItem::AlignArch(_) => unreachable!("resolved above"),
                 AsmSectionItem::Align(n) => {
                     sec.align = sec.align.max(*n);
                     while sec.bytes.len() % *n as usize != 0 {
@@ -1410,6 +1436,7 @@ mod asm_section_tests {
             &blocks,
             &|idx| (idx == 0).then_some(42),
             &|name| (name == "1b").then_some(0x40),
+            false,
             &mut sink,
         )
         .unwrap();
@@ -1452,7 +1479,7 @@ mod asm_section_tests {
         let (code, blocks) = extract_asm_sections(text).unwrap().unwrap();
         assert_eq!(code, "nop\nnop\n");
         let mut sink = alloc::vec::Vec::new();
-        materialize_asm_sections(&blocks, &|_| None, &|_| None, &mut sink).unwrap();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
         assert_eq!(
             sink[0].relocs[0].target,
             AsmSectionTarget::Symbol(alloc::string::String::from("handler"))
@@ -1462,7 +1489,7 @@ mod asm_section_tests {
         let text = ".pushsection .a,\"a\"\n.long 1\n.popsection\n.pushsection .a,\"a\"\n.long 2\n.popsection\n";
         let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
         let mut sink = alloc::vec::Vec::new();
-        materialize_asm_sections(&blocks, &|_| None, &|_| None, &mut sink).unwrap();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
         assert_eq!(sink.len(), 1);
         assert_eq!(sink[0].bytes.len(), 8);
         assert!(
@@ -1470,6 +1497,27 @@ mod asm_section_tests {
         );
         // No section directives: the fast path returns None.
         assert!(extract_asm_sections("nop").unwrap().is_none());
+    }
+
+    #[test]
+    fn align_convention_per_arch() {
+        // `.align 3` is 2^3 = 8 bytes under the AArch64 convention and a
+        // (rejected, non-power-of-two) byte count under the x86 one.
+        let text = ".pushsection .t,\"a\"\n.align 3\n.byte 1\n.popsection";
+        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, true, &mut sink).unwrap();
+        assert_eq!(sink[0].align, 8);
+        let mut sink = alloc::vec::Vec::new();
+        assert!(
+            materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).is_err()
+        );
+        // `.align 8` under the x86 convention is 8 bytes.
+        let text = ".pushsection .t,\"a\"\n.align 8\n.byte 1\n.popsection";
+        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
+        assert_eq!(sink[0].align, 8);
     }
 }
 

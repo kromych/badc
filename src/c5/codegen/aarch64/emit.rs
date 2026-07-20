@@ -2840,6 +2840,7 @@ fn emit_inline_asm_aarch64(
             section_blocks,
             &|idx| const_of(idx),
             &label_off,
+            true,
             asm_sections,
         ) {
             bail_msg(&m);

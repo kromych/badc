@@ -6465,6 +6465,7 @@ fn emit_inline_asm(
             section_blocks,
             &|idx| const_of(idx),
             &label_off,
+            false,
             asm_sections,
         ) {
             bail_msg(&m);

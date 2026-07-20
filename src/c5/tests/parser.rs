@@ -1421,9 +1421,8 @@ fn file_scope_register_asm_binding() {
 fn two_identifiers_in_declarator_position_are_rejected() {
     // C99 6.7p1: the declarators of one declaration are comma-separated
     // and the list ends at `;`. A second identifier after a declarator is
-    // a syntax error at both file and block scope; it used to be read as
-    // another declarator, so an unrecognized type qualifier silently
-    // declared a variable and a capability probe for it succeeded.
+    // a syntax error at both file and block scope; a bare identifier that
+    // is not a recognized type qualifier must not be read as one.
     for src in [
         "int foo bar; int main(void) { return 0; }",
         "int a b c; int main(void) { return 0; }",

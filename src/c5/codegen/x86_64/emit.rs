@@ -1544,6 +1544,7 @@ pub(crate) fn emit_function(
     let data_fixups_snapshot = data_fixups.len();
     let user_extern_data_refs_snapshot = user_extern_data_refs.len();
     let asm_extern_call_sites_snapshot = asm_extern_call_sites.len();
+    let asm_sections_snapshot = super::ssa::emit_common::snapshot_asm_sections(asm_sections);
     // A cross-unit `extern _Thread_local` access (`extern_tls_names` maps
     // the access value-id to the referenced symbol) and a same-unit one
     // both record an `ElfTpoffFixup` the linker resolves against the
@@ -1560,6 +1561,7 @@ pub(crate) fn emit_function(
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+            super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             return false;
         }};
@@ -1739,6 +1741,10 @@ pub(crate) fn emit_function(
     let body_tls = tls_index_fixups.len();
     let body_elf_tpoff = elf_tpoff_fixups.len();
     let body_line_rows = ssa_line_rows.len();
+    let body_asm_extern = asm_extern_call_sites.len();
+    // The section sink merges by name, so a re-emit restores its full
+    // per-section state rather than a length (see [`restore_asm_sections`]).
+    let body_asm_sections = super::ssa::emit_common::snapshot_asm_sections(asm_sections);
 
     'emit: loop {
         // Re-collected each relaxation pass; resolved after the loop.
@@ -2159,6 +2165,8 @@ pub(crate) fn emit_function(
                 tls_index_fixups.truncate(body_tls);
                 elf_tpoff_fixups.truncate(body_elf_tpoff);
                 ssa_line_rows.truncate(body_line_rows);
+                asm_extern_call_sites.truncate(body_asm_extern);
+                super::ssa::emit_common::restore_asm_sections(asm_sections, &body_asm_sections);
                 for b in block_offsets.iter_mut() {
                     *b = 0;
                 }

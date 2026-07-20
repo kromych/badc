@@ -868,6 +868,43 @@ pub(crate) struct AsmSectionLabel {
     pub global: bool,
 }
 
+/// A snapshot of the accumulated section sink, taken before a function
+/// body is laid out. `materialize_asm_sections` merges into existing
+/// sections, so a branch-relaxation re-emit or a bailed emit needs to
+/// undo the merge; a plain length truncation of the outer vector would
+/// leave the appended bytes / relocs / labels in a pre-existing section.
+pub(crate) struct AsmSectionsSnapshot {
+    len: usize,
+    per_section: alloc::vec::Vec<(usize, usize, usize, u32)>,
+}
+
+/// Record the sink's outer length and each existing section's bytes,
+/// relocs, labels, and alignment.
+pub(crate) fn snapshot_asm_sections(sink: &[AsmSection]) -> AsmSectionsSnapshot {
+    AsmSectionsSnapshot {
+        len: sink.len(),
+        per_section: sink
+            .iter()
+            .map(|s| (s.bytes.len(), s.relocs.len(), s.labels.len(), s.align))
+            .collect(),
+    }
+}
+
+/// Restore the sink to a prior [`snapshot_asm_sections`]: drop sections
+/// created since, and truncate each pre-existing section's contents.
+pub(crate) fn restore_asm_sections(
+    sink: &mut alloc::vec::Vec<AsmSection>,
+    snap: &AsmSectionsSnapshot,
+) {
+    sink.truncate(snap.len);
+    for (s, &(bytes, relocs, labels, align)) in sink.iter_mut().zip(&snap.per_section) {
+        s.bytes.truncate(bytes);
+        s.relocs.truncate(relocs);
+        s.labels.truncate(labels);
+        s.align = align;
+    }
+}
+
 /// Resolve constant assembler conditionals (`.if` / `.elseif` / `.else` /
 /// `.endif`), keeping only the taken branch. `.if <expr>` and `.ifeq` /
 /// `.ifne` / `.ifgt` / `.iflt` / `.ifge` / `.ifle` test a constant expression;

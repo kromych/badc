@@ -3115,6 +3115,47 @@ fn inline_asm_pushsection_lands_in_relocatable_object() {
 }
 
 #[test]
+fn asm_section_is_not_duplicated_by_branch_relaxation() {
+    // A section-emitting inline asm in a function whose body is re-laid-out
+    // for branch relaxation must contribute its section content once, not
+    // once per relaxation pass. The section sink merges by name and is
+    // restored before each re-emit; without that restore a second pass
+    // appends a duplicate entry (a silent miscompile).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int loopy(int n) {\n\
+            __asm__ volatile(\"1: nop\\n\"\n\
+                \".pushsection .probe.tab,\\\"a\\\"\\n\"\n\
+                \".long 1b - .\\n\"\n\
+                \".popsection\\n\");\n\
+            int s = 0;\n\
+            for (int i = 0; i < n; i++) s += i * i - i;\n\
+            return s;\n\
+        }\n\
+        int main(void) { return loopy(3); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".probe.tab")
+            .unwrap_or_else(|| panic!("{target:?}: .probe.tab section missing"));
+        // Exactly one `.long 1b - .`: 4 bytes, one relocation.
+        assert_eq!(sec.3.len(), 4, "{target:?}: one entry, not duplicated");
+        let reloc_count = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.probe.tab")
+            .map_or(0, |r| r.3.len() / 24);
+        assert_eq!(reloc_count, 1, "{target:?}: exactly one reloc");
+    }
+}
+
+#[test]
 fn asm_section_values_fold_constant_expressions() {
     // A named section's data value may be an integer constant expression,
     // not just a literal; the folded value is what lands in the section.

@@ -1552,8 +1552,26 @@ impl Compiler {
             // before the parse, since its expression is indistinguishable
             // from `__builtin_frame_address(0)` afterwards.
             let bound_reg = self.asm_operand_bound_register()?;
+            // `*(T (*)[N])p` reaches the array itself, which decays to the
+            // element pointer (C99 6.3.2.1p3): the deref emits no node and the
+            // accumulator already holds the object's address. The decay marker
+            // distinguishes that from an ordinary rvalue.
+            let saved_decay_bytes = core::mem::take(&mut self.pending.last_array_decay_bytes);
             self.expr(Token::Assign as i64)?;
+            let decayed_array =
+                core::mem::replace(&mut self.pending.last_array_decay_bytes, saved_decay_bytes) > 0;
             let width = self.size_of_type(self.ty).min(8) as u8;
+            // `A` on a value too wide for one register would need the
+            // `rdx:rax` pair, which this constraint does not model; rejecting
+            // keeps it from silently using the low half.
+            if cstr.trim_start_matches(['=', '+', '&', '%']) == "A"
+                && !self.target.is_aarch64()
+                && self.size_of_type(self.ty) > 8
+            {
+                self.data.truncate(data_base);
+                return Err(self
+                    .compile_err("inline asm: `A` operand wider than a register is unsupported"));
+            }
             // The x86 `x` operand path moves a full 128-bit value (movups), so
             // it requires a 16-byte operand (a __m128i / vector). A scalar
             // float / double `x` operand is not yet supported and is rejected
@@ -1612,24 +1630,25 @@ impl Compiler {
             if (is_output || matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase))
                 && !is_bound
             {
-                let addressable = match self.ast_acc {
-                    Some(id) => {
-                        use super::super::ast::Expr;
-                        matches!(
-                            self.ast.expr(id),
-                            Expr::Ident { .. }
-                                | Expr::Index { .. }
-                                | Expr::Member { .. }
-                                | Expr::CompoundLiteral { .. }
-                                | Expr::Binary { .. }
-                                | Expr::Unary {
-                                    op: UnOp::Deref,
-                                    ..
-                                }
-                        )
-                    }
-                    None => true,
-                };
+                let addressable = decayed_array
+                    || match self.ast_acc {
+                        Some(id) => {
+                            use super::super::ast::Expr;
+                            matches!(
+                                self.ast.expr(id),
+                                Expr::Ident { .. }
+                                    | Expr::Index { .. }
+                                    | Expr::Member { .. }
+                                    | Expr::CompoundLiteral { .. }
+                                    | Expr::Binary { .. }
+                                    | Expr::Unary {
+                                        op: UnOp::Deref,
+                                        ..
+                                    }
+                            )
+                        }
+                        None => true,
+                    };
                 if !addressable {
                     self.data.truncate(data_base);
                     return Err(self.compile_err(if stores_back {
@@ -1638,8 +1657,12 @@ impl Compiler {
                         "inline asm: memory operand is not directly addressable (must be an lvalue)"
                     }));
                 }
-                self.ty += Ty::Ptr as i64;
-                self.ast_apply_unary(UnOp::AddrOf);
+                // A decayed array operand is already an address; taking it
+                // again would yield the address of the pointer value.
+                if !decayed_array {
+                    self.ty += Ty::Ptr as i64;
+                    self.ast_apply_unary(UnOp::AddrOf);
+                }
             }
             let e = match self.ast_acc.take() {
                 Some(e) => e,
@@ -2055,6 +2078,13 @@ impl Compiler {
         // multi-letter names and must keep reaching the `m` path below.
         if body == "p" {
             return Some((AsmConstraint::Reg, is_rw));
+        }
+        // x86 `A`. On i386 this names the `edx:eax` pair; on x86-64 it is the
+        // `a` or `d` register (a value wider than a register has no pair form
+        // here and is rejected at the operand). GCC and clang both allocate
+        // `rax` for it, which `Fixed(0)` spells.
+        if is_x86 && body == "A" {
+            return Some((AsmConstraint::Fixed(0), is_rw));
         }
         // A matching constraint ties an input to an earlier output.
         if let Some(d) = body.chars().find(|c| c.is_ascii_digit()) {

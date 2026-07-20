@@ -1167,6 +1167,12 @@ pub struct Compiler {
     /// `__attribute__((alias("target")))` function declarations, moved
     /// onto `Program::function_aliases`.
     function_aliases: Vec<crate::c5::program::FunctionAlias>,
+    /// Aliases whose target was not yet defined when the declarator was
+    /// parsed. C99 leaves the ordering open and GCC accepts a target defined
+    /// later in the unit, so resolution is retried once the unit is complete.
+    /// Each entry is the alias symbol, its target name, and whether the
+    /// declarator was an object rather than a function.
+    pending_aliases: Vec<(usize, String, bool)>,
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -1638,6 +1644,7 @@ impl Compiler {
             pending_exports,
             init_funcs: Vec::new(),
             function_aliases: Vec::new(),
+            pending_aliases: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
             pending: Pending::default(),

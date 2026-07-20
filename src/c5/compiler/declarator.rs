@@ -132,7 +132,7 @@ impl Compiler {
     /// operand parser and the `sizeof` type-name parser.
     pub(super) fn parse_abstract_ptr_declarator_levels(&mut self) -> Result<i64, C5Error> {
         self.parse_abstract_ptr_declarator(false)
-            .map(|(levels, _)| levels)
+            .map(|(levels, _, _)| levels)
     }
 
     /// As [`Self::parse_abstract_ptr_declarator_levels`], but with
@@ -143,7 +143,14 @@ impl Compiler {
     pub(super) fn parse_abstract_ptr_declarator(
         &mut self,
         capture_proto: bool,
-    ) -> Result<(i64, Option<super::function::ParsedParams>), C5Error> {
+    ) -> Result<
+        (
+            i64,
+            Option<super::function::ParsedParams>,
+            alloc::vec::Vec<i64>,
+        ),
+        C5Error,
+    > {
         debug_assert!(self.lex.tk == '(');
         let mut depth: i64 = 1;
         self.next()?;
@@ -186,16 +193,20 @@ impl Compiler {
                 self.skip_balanced_parens_after_open()?;
             }
         }
+        // The pointee dimensions of `T (*)[M1]...[Mn]`: the caller folds
+        // them into an aggregate-backed tag so the pointee keeps its size.
+        // An unspecified `[]` contributes no dimension.
+        let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
         while self.lex.tk == Token::Brak {
             self.next()?;
             if self.lex.tk == ']' {
                 self.next()?;
             } else {
-                let _ = self.parse_constant_int()?;
+                dims.push(self.parse_constant_int()?);
                 self.accept(']')?;
             }
         }
-        Ok((nested_ptrs, proto))
+        Ok((nested_ptrs, proto, dims))
     }
 
     /// Parse a single declarator: zero-or-more `*` (pointer levels)

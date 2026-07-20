@@ -1560,16 +1560,173 @@ fn parse_raw_piece(piece: &str) -> Option<alloc::vec::Vec<u8>> {
 }
 
 fn parse_raw_int(s: &str) -> Option<i64> {
-    let (neg, s) = match s.strip_prefix('-') {
-        Some(r) => (true, r),
-        None => (false, s),
-    };
-    let v = if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        i64::from_str_radix(h, 16).ok()?
+    eval_const_expr(s)
+}
+
+/// Evaluate an assembler integer constant expression: decimal / hex literals
+/// combined with the C operators an assembler accepts, and parentheses.
+/// Returns `None` when the text is not a self-contained constant, which is
+/// how a label or symbol reference is distinguished from an expression.
+pub(crate) fn eval_const_expr(s: &str) -> Option<i64> {
+    let b = s.as_bytes();
+    let mut i = 0usize;
+    let v = const_bitor(b, &mut i)?;
+    skip_ws(b, &mut i);
+    (i == b.len()).then_some(v)
+}
+
+fn skip_ws(b: &[u8], i: &mut usize) {
+    while *i < b.len() && b[*i].is_ascii_whitespace() {
+        *i += 1;
+    }
+}
+
+/// `|` is the loosest binding operator modelled; each level below consumes
+/// its tighter operand first, giving C's precedence.
+fn const_bitor(b: &[u8], i: &mut usize) -> Option<i64> {
+    let mut v = const_bitxor(b, i)?;
+    loop {
+        skip_ws(b, i);
+        // `||` is not an assembler expression operator; only a single `|`.
+        if *i < b.len() && b[*i] == b'|' && b.get(*i + 1) != Some(&b'|') {
+            *i += 1;
+            v |= const_bitxor(b, i)?;
+        } else {
+            return Some(v);
+        }
+    }
+}
+
+fn const_bitxor(b: &[u8], i: &mut usize) -> Option<i64> {
+    let mut v = const_bitand(b, i)?;
+    loop {
+        skip_ws(b, i);
+        if *i < b.len() && b[*i] == b'^' {
+            *i += 1;
+            v ^= const_bitand(b, i)?;
+        } else {
+            return Some(v);
+        }
+    }
+}
+
+fn const_bitand(b: &[u8], i: &mut usize) -> Option<i64> {
+    let mut v = const_shift(b, i)?;
+    loop {
+        skip_ws(b, i);
+        if *i < b.len() && b[*i] == b'&' && b.get(*i + 1) != Some(&b'&') {
+            *i += 1;
+            v &= const_shift(b, i)?;
+        } else {
+            return Some(v);
+        }
+    }
+}
+
+fn const_shift(b: &[u8], i: &mut usize) -> Option<i64> {
+    let mut v = const_add(b, i)?;
+    loop {
+        skip_ws(b, i);
+        let op = match (b.get(*i), b.get(*i + 1)) {
+            (Some(b'<'), Some(b'<')) => b'<',
+            (Some(b'>'), Some(b'>')) => b'>',
+            _ => return Some(v),
+        };
+        *i += 2;
+        let rhs = const_add(b, i)?;
+        // A shift count outside the width is not a constant this evaluator
+        // will invent a value for.
+        if !(0..64).contains(&rhs) {
+            return None;
+        }
+        v = if op == b'<' { v << rhs } else { v >> rhs };
+    }
+}
+
+fn const_add(b: &[u8], i: &mut usize) -> Option<i64> {
+    let mut v = const_mul(b, i)?;
+    loop {
+        skip_ws(b, i);
+        let op = match b.get(*i) {
+            Some(&c @ (b'+' | b'-')) => c,
+            _ => return Some(v),
+        };
+        *i += 1;
+        let rhs = const_mul(b, i)?;
+        v = if op == b'+' {
+            v.checked_add(rhs)?
+        } else {
+            v.checked_sub(rhs)?
+        };
+    }
+}
+
+fn const_mul(b: &[u8], i: &mut usize) -> Option<i64> {
+    let mut v = const_unary(b, i)?;
+    loop {
+        skip_ws(b, i);
+        let op = match b.get(*i) {
+            Some(&c @ (b'*' | b'/' | b'%')) => c,
+            _ => return Some(v),
+        };
+        *i += 1;
+        let rhs = const_unary(b, i)?;
+        v = match op {
+            b'*' => v.checked_mul(rhs)?,
+            _ if rhs == 0 => return None,
+            b'/' => v.checked_div(rhs)?,
+            _ => v.checked_rem(rhs)?,
+        };
+    }
+}
+
+fn const_unary(b: &[u8], i: &mut usize) -> Option<i64> {
+    skip_ws(b, i);
+    match b.get(*i) {
+        Some(b'-') => {
+            *i += 1;
+            const_unary(b, i)?.checked_neg()
+        }
+        Some(b'+') => {
+            *i += 1;
+            const_unary(b, i)
+        }
+        Some(b'~') => {
+            *i += 1;
+            Some(!const_unary(b, i)?)
+        }
+        Some(b'(') => {
+            *i += 1;
+            let v = const_bitor(b, i)?;
+            skip_ws(b, i);
+            (b.get(*i) == Some(&b')')).then(|| {
+                *i += 1;
+                v
+            })
+        }
+        _ => const_literal(b, i),
+    }
+}
+
+fn const_literal(b: &[u8], i: &mut usize) -> Option<i64> {
+    skip_ws(b, i);
+    let start = *i;
+    let (radix, digits_at) = if b[*i..].starts_with(b"0x") || b[*i..].starts_with(b"0X") {
+        (16, start + 2)
     } else {
-        s.parse::<i64>().ok()?
+        (10, start)
     };
-    Some(if neg { -v } else { v })
+    let mut j = digits_at;
+    while j < b.len() && (b[j] as char).is_digit(radix) {
+        j += 1;
+    }
+    if j == digits_at {
+        return None;
+    }
+    let text = core::str::from_utf8(&b[digits_at..j]).ok()?;
+    let v = i64::from_str_radix(text, radix).ok()?;
+    *i = j;
+    Some(v)
 }
 
 /// Translate a c5-stack slot index (the operand of an
@@ -2047,5 +2204,57 @@ mod raw_template_tests {
         // An empty template carries no bytes.
         assert!(parse_raw_template(b"").is_none());
         assert!(parse_raw_template(b"   ").is_none());
+    }
+}
+
+#[cfg(test)]
+mod const_expr_tests {
+    use super::eval_const_expr;
+
+    #[test]
+    fn literals_and_arithmetic() {
+        assert_eq!(eval_const_expr("42"), Some(42));
+        assert_eq!(eval_const_expr("0x1F"), Some(31));
+        assert_eq!(eval_const_expr("0X10"), Some(16));
+        assert_eq!(eval_const_expr("-7"), Some(-7));
+        assert_eq!(eval_const_expr("  12  "), Some(12));
+        // The feature-word encoding an assembler folds for a section value.
+        assert_eq!(eval_const_expr("(16*32+22)"), Some(534));
+        // Displacement expressions in a memory operand.
+        assert_eq!(eval_const_expr("0*8"), Some(0));
+        assert_eq!(eval_const_expr("3*8"), Some(24));
+    }
+
+    #[test]
+    fn precedence_and_grouping() {
+        assert_eq!(eval_const_expr("2+3*4"), Some(14));
+        assert_eq!(eval_const_expr("(2+3)*4"), Some(20));
+        assert_eq!(eval_const_expr("1<<3"), Some(8));
+        assert_eq!(eval_const_expr("(1<<3)|2"), Some(10));
+        assert_eq!(eval_const_expr("0xF0|0x0F"), Some(255));
+        assert_eq!(eval_const_expr("0xFF&0x0F"), Some(15));
+        assert_eq!(eval_const_expr("5^3"), Some(6));
+        assert_eq!(eval_const_expr("~0"), Some(-1));
+        assert_eq!(eval_const_expr("-(2+3)"), Some(-5));
+        assert_eq!(eval_const_expr("17%5"), Some(2));
+        assert_eq!(eval_const_expr("17/5"), Some(3));
+        assert_eq!(eval_const_expr("1<<3|2"), Some(10));
+        assert_eq!(eval_const_expr("64>>2"), Some(16));
+    }
+
+    /// Anything that is not a self-contained constant yields `None`, which is
+    /// how a label or symbol reference stays distinguishable.
+    #[test]
+    fn non_constants_reject() {
+        assert_eq!(eval_const_expr("foo"), None);
+        assert_eq!(eval_const_expr("1b"), None);
+        assert_eq!(eval_const_expr("775f-774f"), None);
+        assert_eq!(eval_const_expr(""), None);
+        assert_eq!(eval_const_expr("(1+2"), None);
+        assert_eq!(eval_const_expr("1+"), None);
+        assert_eq!(eval_const_expr("1/0"), None);
+        assert_eq!(eval_const_expr("1%0"), None);
+        assert_eq!(eval_const_expr("1<<64"), None);
+        assert_eq!(eval_const_expr("2 3"), None);
     }
 }

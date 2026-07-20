@@ -58,8 +58,6 @@ pub(crate) enum Mnemonic {
     Pause,
     /// Push the 64-bit RFLAGS, `pushfq`.
     Pushfq,
-    /// Pop a 64-bit register, `pop reg`.
-    Pop,
     /// `movd` between an MMX / XMM register and a GPR / memory. The MMX form has
     /// no operand-size prefix; the XMM form (an `xmm` operand) adds the 0x66.
     Movd,
@@ -586,7 +584,6 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "int" => Mnemonic::Int,
         "pause" => Mnemonic::Pause,
         "pushfq" => Mnemonic::Pushfq,
-        "pop" => Mnemonic::Pop,
         "movd" => Mnemonic::Movd,
         "cli" => Mnemonic::Cli,
         "sti" => Mnemonic::Sti,
@@ -944,6 +941,16 @@ fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     if let Some(name) = table_mnemonic(tok) {
         return Some((Mnemonic::Table(name), None));
     }
+    // Unsuffixed flag push / pop: in 64-bit mode the operand size defaults to
+    // 64-bit, so these name the `q` forms. The catalogue is Intel-syntax and
+    // carries only the explicitly sized spellings.
+    if let Some(sized) = match tok {
+        "pushf" => Some("pushfq"),
+        "popf" => Some("popfq"),
+        _ => None,
+    } {
+        return Some((Mnemonic::Table(table_mnemonic(sized)?), None));
+    }
     let (base, suffix) = match tok.as_bytes().last() {
         Some(b'b') => (&tok[..tok.len() - 1], Some(AsmRegSize::Byte)),
         Some(b'w') => (&tok[..tok.len() - 1], Some(AsmRegSize::Word)),
@@ -977,9 +984,9 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
     }
     // `prefix(inner)`: a memory reference (displacement off a base register)
     // or, with an `(%rip)` base, the address of a template-local label.
-    if let Some(open) = tok.find('(')
-        && tok.ends_with(')')
-    {
+    // The reference's `(` is the one matching the trailing `)`, not the first
+    // in the token: a displacement may itself be a parenthesized expression.
+    if let Some(open) = matching_open_paren(tok) {
         return parse_mem_operand(&tok[..open], &tok[open + 1..tok.len() - 1], labels)
             .ok_or_else(|| format!("inline asm: unsupported operand `{tok}`"));
     }
@@ -1134,6 +1141,29 @@ fn parse_mem_base(tok: &str) -> Option<AsmMemBase> {
     Some(AsmMemBase::Reg(reg))
 }
 
+/// Byte offset of the `(` matching a token's trailing `)`, or `None` when the
+/// token does not end in a balanced parenthesized group.
+fn matching_open_paren(tok: &str) -> Option<usize> {
+    if !tok.ends_with(')') {
+        return None;
+    }
+    let b = tok.as_bytes();
+    let mut depth = 0i32;
+    for i in (0..b.len()).rev() {
+        match b[i] {
+            b')' => depth += 1,
+            b'(' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Parse `prefix(inner)`: the `disp(%%reg)` / `disp(%N)` /
 /// `disp(%%base, %%index, scale)` memory forms and the `LABEL(%rip)`
 /// label-address form. `None` for shapes not modelled.
@@ -1208,17 +1238,7 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
 
 /// Parse a decimal or `0x`-hex integer, optionally signed.
 fn parse_int(s: &str) -> Option<i64> {
-    let s = s.trim();
-    let (neg, s) = match s.strip_prefix('-') {
-        Some(r) => (true, r),
-        None => (false, s),
-    };
-    let v = if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        i64::from_str_radix(h, 16).ok()?
-    } else {
-        s.parse::<i64>().ok()?
-    };
-    Some(if neg { -v } else { v })
+    crate::c5::codegen::ssa::emit_common::eval_const_expr(s.trim())
 }
 
 /// Literal machine bytes for a raw-byte template piece, or `None` when the
@@ -1780,6 +1800,28 @@ fn table_opnd(c: &Concrete) -> super::table::Opnd {
     }
 }
 
+/// Re-read a catalogue mnemonic that matched as written (`suffix` is `None`)
+/// as an AT&T base plus size suffix, for the case where the two spellings name
+/// different form sets. Yields the base name, its width, and the operands, or
+/// `None` when the token does not split into another catalogue mnemonic.
+fn retry_as_suffixed(
+    name: &str,
+    suffix: Option<AsmRegSize>,
+    ops: &[Concrete],
+) -> Option<(&'static str, Option<u8>, Vec<super::table::Opnd>)> {
+    if suffix.is_some() {
+        return None;
+    }
+    let (base, size) = match name.as_bytes().last()? {
+        b'b' => (&name[..name.len() - 1], AsmRegSize::Byte),
+        b'w' => (&name[..name.len() - 1], AsmRegSize::Word),
+        b'l' => (&name[..name.len() - 1], AsmRegSize::Long),
+        b'q' => (&name[..name.len() - 1], AsmRegSize::Quad),
+        _ => return None,
+    };
+    to_table_generic(table_mnemonic(base)?, Some(size), ops)
+}
+
 /// Encode one resolved instruction into `code`. Operands are in AT&T
 /// order. Returns an error for an unsupported mnemonic / operand form.
 pub(crate) fn encode(
@@ -1795,8 +1837,27 @@ pub(crate) fn encode(
         // it to the catalogue enum at this one boundary.
         let mnem = super::table::Mnem::from_name(name)
             .ok_or_else(|| format!("inline asm: unknown catalogue mnemonic `{name}`"))?;
-        code.extend_from_slice(&super::table::encode(mnem, width, &tops)?);
-        return Ok(());
+        match super::table::encode(mnem, width, &tops) {
+            Ok(bytes) => {
+                code.extend_from_slice(&bytes);
+                return Ok(());
+            }
+            // A catalogue name matched as written may still be an AT&T
+            // suffixed spelling of a shorter one whose forms differ: the
+            // Intel-syntax `pushw` covers only the imm16 row, while AT&T
+            // `pushw %ax` is `push` at word width. Retry that reading before
+            // reporting the operands unencodable.
+            Err(e) => match retry_as_suffixed(name, suffix, ops) {
+                Some((base, w, btops)) => {
+                    let bm = super::table::Mnem::from_name(base).ok_or_else(|| {
+                        format!("inline asm: unknown catalogue mnemonic `{base}`")
+                    })?;
+                    code.extend_from_slice(&super::table::encode(bm, w, &btops)?);
+                    return Ok(());
+                }
+                None => return Err(e),
+            },
+        }
     }
     // The bespoke arms below address memory through `modrm_mem` (base +
     // displacement only); a scaled index reaches them only on an
@@ -1872,15 +1933,6 @@ pub(crate) fn encode(
                 Some(Concrete::Imm(n)) => code.extend_from_slice(&[0xCD, *n as u8]),
                 _ => return Err(String::from("inline asm: `int` needs an immediate vector")),
             }
-            Ok(())
-        }
-        Mnemonic::Pop => {
-            // `pop reg` (64-bit): 0x58+reg, REX.B for r8..r15.
-            let (reg, _) = reg_operand(ops.first(), suffix)?;
-            if reg >= 8 {
-                code.push(rex(false, false, false, true));
-            }
-            code.push(0x58 + (reg & 7));
             Ok(())
         }
         Mnemonic::Movd => {
@@ -2480,14 +2532,6 @@ fn as_reg(op: Concrete) -> Result<(u8, AsmRegSize), String> {
         }
         Concrete::Imm(_) => Err(String::from("inline asm: register operand expected")),
     }
-}
-
-fn reg_operand(
-    op: Option<&Concrete>,
-    suffix: Option<AsmRegSize>,
-) -> Result<(u8, AsmRegSize), String> {
-    let (reg, size) = as_reg(*op.ok_or_else(|| String::from("inline asm: missing operand"))?)?;
-    Ok((reg, suffix.unwrap_or(size)))
 }
 
 fn two(ops: &[Concrete]) -> Result<[Concrete; 2], String> {
@@ -3228,8 +3272,29 @@ mod tests {
             reg: 8,
             size: AsmRegSize::Quad,
         };
-        assert_eq!(enc(Mnemonic::Pop, None, &[rax]), [0x58]);
-        assert_eq!(enc(Mnemonic::Pop, None, &[r8]), [0x41, 0x58]);
+        assert_eq!(enc(Mnemonic::Table("pop"), None, &[rax]), [0x58]);
+        assert_eq!(enc(Mnemonic::Table("pop"), None, &[r8]), [0x41, 0x58]);
+    }
+
+    /// Unsuffixed `pushf` / `popf` take the 64-bit operand size, and the AT&T
+    /// word-suffixed push / pop of a register take the operand-size prefix.
+    /// Bytes match gcc and clang for the same templates.
+    #[test]
+    fn flag_and_word_push_pop_encoding() {
+        assert_eq!(asm_bytes(b"pushf"), [0x9C]);
+        assert_eq!(asm_bytes(b"popf"), [0x9D]);
+        assert_eq!(asm_bytes(b"pushfq"), [0x9C]);
+        assert_eq!(asm_bytes(b"popfq"), [0x9D]);
+        assert_eq!(asm_bytes(b"pushfw"), [0x66, 0x9C]);
+        assert_eq!(asm_bytes(b"popfw"), [0x66, 0x9D]);
+        // `pushw %ax` is `push` at word width; the Intel-syntax catalogue
+        // entry named `pushw` covers only the imm16 row, which still encodes.
+        assert_eq!(asm_bytes(b"pushw %%ax"), [0x66, 0x50]);
+        assert_eq!(asm_bytes(b"popw %%ax"), [0x66, 0x58]);
+        assert_eq!(asm_bytes(b"pushw %%cx"), [0x66, 0x51]);
+        assert_eq!(asm_bytes(b"pushw $0x1234"), [0x66, 0x68, 0x34, 0x12]);
+        assert_eq!(asm_bytes(b"push %%rax"), [0x50]);
+        assert_eq!(asm_bytes(b"pop %%rax"), [0x58]);
     }
 
     #[test]

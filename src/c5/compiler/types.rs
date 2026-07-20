@@ -82,6 +82,33 @@ pub(crate) fn is_volatile_ty(ty: i64) -> bool {
     (ty & VOLATILE_BIT) != 0
 }
 
+/// High-bit flags marking a type tag qualified by an x86 named address
+/// space (GCC `__seg_gs` / `__seg_fs`). An access through such a tag
+/// rides a segment-override prefix (`%gs:` / `%fs:`). Orthogonal to the
+/// band scheme like [`UNSIGNED_BIT`] and stripped by [`strip_unsigned`].
+/// x86-only; the two spellings never both appear on one tag.
+pub(crate) const SEG_GS_BIT: i64 = 1 << 31;
+pub(crate) const SEG_FS_BIT: i64 = 1 << 32;
+const SEG_MASK: i64 = SEG_GS_BIT | SEG_FS_BIT;
+
+/// The x86 named address space a type tag carries.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Segment {
+    Gs,
+    Fs,
+}
+
+/// The named address space qualifying `ty`, or `None`.
+pub(crate) fn segment_of_ty(ty: i64) -> Option<Segment> {
+    if ty & SEG_GS_BIT != 0 {
+        Some(Segment::Gs)
+    } else if ty & SEG_FS_BIT != 0 {
+        Some(Segment::Fs)
+    } else {
+        None
+    }
+}
+
 /// Apply a C99 6.3.1.3 integer conversion to a constant value:
 /// narrow to `bytes` width and re-interpret by the target's
 /// signedness. `_Bool` maps any nonzero value to 1 (6.3.1.2). An
@@ -107,14 +134,14 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
     }
 }
 
-/// Drop the qualifier bits (`UNSIGNED_BIT`, `VOLATILE_BIT`). Use to
-/// recover the bare band-encoded type before consulting a helper that
-/// classifies by band. Most of the helpers in this module call this at
-/// their entry; outside callers only need it when storing a type tag
-/// where a non-bit-flagged tag is expected (e.g., switch-table
+/// Drop the qualifier bits (`UNSIGNED_BIT`, `VOLATILE_BIT`, the segment
+/// bits). Use to recover the bare band-encoded type before consulting a
+/// helper that classifies by band. Most of the helpers in this module
+/// call this at their entry; outside callers only need it when storing a
+/// type tag where a non-bit-flagged tag is expected (e.g., switch-table
 /// comparisons against `Ty::Int as i64`).
 pub(crate) fn strip_unsigned(ty: i64) -> i64 {
-    ty & !(UNSIGNED_BIT | VOLATILE_BIT)
+    ty & !(UNSIGNED_BIT | VOLATILE_BIT | SEG_MASK)
 }
 
 /// True for a depth-1 `void *`. `void` shares the `Ty::Char |

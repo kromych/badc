@@ -1412,7 +1412,8 @@ impl Compiler {
         is_goto: bool,
     ) -> Result<(), C5Error> {
         use super::super::ast::{AsmBlockAst, Expr, UnOp};
-        use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand};
+        use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
+        use super::types::{Segment, segment_of_ty};
         let mut operands: alloc::vec::Vec<AsmOperand> = alloc::vec::Vec::new();
         let mut operand_names: alloc::vec::Vec<Option<alloc::string::String>> =
             alloc::vec::Vec::new();
@@ -1561,6 +1562,15 @@ impl Compiler {
             let decayed_array =
                 core::mem::replace(&mut self.pending.last_array_decay_bytes, saved_decay_bytes) > 0;
             let width = self.size_of_type(self.ty).min(8) as u8;
+            // A `__seg_gs` / `__seg_fs`-qualified operand object is reached
+            // through a segment override. Read the segment off the operand's
+            // element type now, before the address-of below retypes `self.ty`
+            // to a pointer. x86-only: no other target has segment registers.
+            let operand_seg = match (is_x86, segment_of_ty(self.ty)) {
+                (true, Some(Segment::Gs)) => AsmSeg::Gs,
+                (true, Some(Segment::Fs)) => AsmSeg::Fs,
+                _ => AsmSeg::None,
+            };
             // `A` on a value too wide for one register would need the
             // `rdx:rax` pair, which this constraint does not model; rejecting
             // keeps it from silently using the low half.
@@ -1719,6 +1729,7 @@ impl Compiler {
                 is_output: stores_back,
                 is_rw,
                 width,
+                seg: operand_seg,
             });
             if is_output {
                 n_outputs += 1;

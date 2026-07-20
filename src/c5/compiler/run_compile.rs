@@ -309,7 +309,7 @@ impl Compiler {
                     }
                     // `volatile` qualifies the declared type (C99 6.7.3);
                     // `const` is recorded out-of-band for value folding.
-                    qual_bits |= self.lex_volatile_bit();
+                    qual_bits |= self.lex_qualifier_bits();
                     self.pending.base_is_const |= self.lex_is_const_qual();
                     self.next()?;
                 } else {
@@ -433,7 +433,7 @@ impl Compiler {
                 if self.lex_is_register_storage() {
                     self.pending.saw_register_storage = true;
                 }
-                qual_bits |= self.lex_volatile_bit();
+                qual_bits |= self.lex_qualifier_bits();
                 self.pending.base_is_const |= self.lex_is_const_qual();
                 self.next()?;
             }
@@ -469,7 +469,7 @@ impl Compiler {
                     self.pending_noreturn = true;
                     self.next()?;
                 } else if self.lex.tk == Token::TypeQual {
-                    qual_bits |= self.lex_volatile_bit();
+                    qual_bits |= self.lex_qualifier_bits();
                     self.pending.base_is_const |= self.lex_is_const_qual();
                     self.next()?;
                 } else if self.lex.tk == Token::Attribute
@@ -1150,7 +1150,7 @@ impl Compiler {
                             || self.lex.tk == Token::Extern
                             || self.lex.tk == Token::TypeQual
                         {
-                            qual_bits |= self.lex_volatile_bit();
+                            qual_bits |= self.lex_qualifier_bits();
                             self.next()?;
                             saw_specifier = true;
                         }

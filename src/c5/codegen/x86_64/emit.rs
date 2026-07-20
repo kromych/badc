@@ -5979,7 +5979,7 @@ fn emit_inline_asm(
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
 ) -> bool {
-    use super::super::ir::{AsmConstraint, AsmRegSize, Inst};
+    use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg, Inst};
     use super::asm::{AsmOpnd, Concrete};
     // Expand `%=` once so the code text and any `.pushsection` content
     // share one instance number, then split off the section blocks; the
@@ -6333,6 +6333,11 @@ fn emit_inline_asm(
             continue;
         }
         let mut concrete: alloc::vec::Vec<Concrete> = alloc::vec::Vec::new();
+        // A `__seg_gs` / `__seg_fs`-qualified memory operand references its
+        // object through a segment override; the prefix rides the enclosing
+        // instruction (an extended-asm instruction reaches at most one such
+        // operand). `None` unless a resolved memory operand carries a segment.
+        let mut operand_seg: Option<u8> = None;
         for o in &insn.operands {
             let c = match *o {
                 AsmOpnd::Imm(val) => Concrete::Imm(val),
@@ -6355,6 +6360,11 @@ fn emit_inline_asm(
                             // The C operand type is only the default width.
                             let size = asm_mem_size(size, insn, &asm.operands, &op_reg)
                                 .unwrap_or(AsmRegSize::from_width(width));
+                            operand_seg = match asm.operands[idx as usize].seg {
+                                AsmSeg::Gs => Some(0x65),
+                                AsmSeg::Fs => Some(0x64),
+                                AsmSeg::None => operand_seg,
+                            };
                             Concrete::Mem {
                                 base: r,
                                 index: None,
@@ -6444,8 +6454,10 @@ fn emit_inline_asm(
             };
             concrete.push(c);
         }
-        // A segment override is a legacy prefix preceding the opcode.
-        if let Some(seg) = insn.seg {
+        // A segment override is a legacy prefix preceding the opcode. It comes
+        // from a template `%gs:` / `%fs:` or from a `__seg_gs` / `__seg_fs`
+        // memory operand; the two never conflict on one instruction.
+        if let Some(seg) = insn.seg.or(operand_seg) {
             code.push(seg);
         }
         if let Err(m) = super::asm::encode(code, insn.mnemonic, insn.suffix, &concrete) {

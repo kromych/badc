@@ -289,6 +289,58 @@ fn aarch64_qo_operand_stores_through_a_base_register() {
     assert!(found, "expected `strb Wt, [Xn]` with a zero offset");
 }
 
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_seg_qualified_memory_operand_rides_a_segment_prefix() {
+    use crate::{NativeOptions, Target};
+    // A `__seg_gs` / `__seg_fs`-qualified `"+m"` operand emits a segment
+    // override on the accessing instruction (GCC named address spaces): the
+    // `incq %[v]` reaches `%gs:`/`%fs:`-relative memory. gcc encodes the read
+    // path `65 48 ff ..` (gs) / `64 48 ff ..` (fs); the prefix is the only
+    // delta from the unqualified operand. An `incq` through memory is
+    // `REX.W ff /0`, so scan for the override byte followed by a REX and the
+    // `ff` opcode -- register-choice independent.
+    let emit = |seg: &str| -> alloc::vec::Vec<u8> {
+        let src = alloc::format!(
+            "extern unsigned long pv; \
+             void bump(void){{ __asm__ volatile(\"incq %[v]\" \
+             : [v] \"+m\" (*(unsigned long {seg} *)(__UINTPTR_TYPE__)&pv)); }} \
+             int main(void){{ return 0; }}"
+        );
+        let program =
+            crate::Compiler::with_options(src, Target::LinuxX64, crate::CompileOptions::default())
+                .compile()
+                .expect("compile");
+        crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            Target::LinuxX64,
+            NativeOptions::default(),
+        )
+        .expect("emit")
+    };
+    let inc_prefixed = |bytes: &[u8], pfx: u8| -> bool {
+        bytes
+            .windows(3)
+            .any(|w| w[0] == pfx && (0x48..=0x4f).contains(&w[1]) && w[2] == 0xff)
+    };
+    let gs = emit("__seg_gs");
+    let fs = emit("__seg_fs");
+    let plain = emit(""); // negative control: no qualifier, no override.
+    assert!(
+        inc_prefixed(&gs, 0x65),
+        "`__seg_gs` operand must ride a %gs (0x65) prefix"
+    );
+    assert!(
+        inc_prefixed(&fs, 0x64),
+        "`__seg_fs` operand must ride a %fs (0x64) prefix"
+    );
+    assert!(
+        !inc_prefixed(&plain, 0x65) && !inc_prefixed(&plain, 0x64),
+        "an unqualified operand must carry no segment override"
+    );
+}
+
 #[test]
 fn x86_range_immediate_constraints_are_immediates() {
     // The x86 range-restricted immediate letters classify as immediates,

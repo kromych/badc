@@ -1960,6 +1960,10 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("restrict", Token::TypeQual),
     ("__restrict", Token::TypeQual),
     ("__restrict__", Token::TypeQual),
+    // x86 named-address-space qualifiers: an access through such a type
+    // rides a `%gs:` / `%fs:` segment override (GCC named address spaces).
+    ("__seg_gs", Token::TypeQual),
+    ("__seg_fs", Token::TypeQual),
     // MSVC calling-convention decorations. Each badc target has a
     // single calling convention, so these carry no information and are
     // consumed as no-op qualifiers wherever a declarator decoration may

@@ -1431,12 +1431,63 @@ fn two_identifiers_in_declarator_position_are_rejected() {
         "static int foo bar; int main(void) { return 0; }",
         "int *p q; int main(void) { return 0; }",
         "int a = 1 b; int main(void) { return 0; }",
-        "int __seg_fs fs; int main(void) { return 0; }",
-        "int __seg_gs gs; int main(void) { return 0; }",
         "int main(void) { int foo bar; return 0; }",
         "int main(void) { int a = 1 b; return 0; }",
     ] {
         expect_compile_error(src, "expected `,` or `;` after declarator");
+    }
+}
+
+#[test]
+fn seg_address_space_qualifiers_parse_as_qualifiers() {
+    // `__seg_gs` / `__seg_fs` are x86 named-address-space qualifiers, valid
+    // wherever `const` / `volatile` are: on a base type, in a cast, and
+    // trailing a `typeof` operand. None of these shapes access the segment
+    // (address computation only), so they lower on any target.
+    for src in [
+        "int __seg_gs g; int main(void){ return 0; }",
+        "int __seg_fs f; int main(void){ return 0; }",
+        "void f(unsigned long *p){ unsigned long __seg_gs *q = \
+         (unsigned long __seg_gs *)p; (void)q; } int main(void){ return 0; }",
+        "extern unsigned long v; void g(void){ unsigned long __seg_gs *q = \
+         (typeof(v) __seg_gs *)(__UINTPTR_TYPE__)&v; (void)q; } int main(void){ return 0; }",
+    ] {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("expected `{src}` to compile, got {e}"));
+    }
+}
+
+// Reaches the SSA walk (via native emit), so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn direct_seg_access_is_rejected_pending_segment_load_store() {
+    use crate::{NativeOptions, Target};
+    // A direct read / write through a `__seg_gs` / `__seg_fs` pointer needs a
+    // segment-prefixed load / store, which the plain access path does not yet
+    // emit. It is rejected rather than lowered as a plain access that would
+    // silently drop the segment; the qualifier is instead honored on inline-
+    // asm memory operands. Both targets reject (no target has a plain
+    // segment-prefixed access path yet).
+    let emit_err = |src: &str, target: Target| -> String {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("parse");
+        crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .expect_err("expected emit to reject a direct segment access")
+        .to_string()
+    };
+    let read = "extern unsigned long v; unsigned long r(void){ \
+         return *(unsigned long __seg_gs *)(__UINTPTR_TYPE__)&v; } int main(void){ return 0; }";
+    let write = "extern unsigned long v; void w(unsigned long x){ \
+         *(unsigned long __seg_gs *)(__UINTPTR_TYPE__)&v = x; } int main(void){ return 0; }";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        assert!(emit_err(read, target).contains("direct __seg_gs/__seg_fs read"));
+        assert!(emit_err(write, target).contains("direct __seg_gs/__seg_fs write"));
     }
 }
 

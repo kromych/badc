@@ -598,6 +598,17 @@ pub(crate) enum AsmConstraint {
     MemBase,
 }
 
+/// x86 named-address-space qualifier on a memory operand's object
+/// (`__seg_gs` / `__seg_fs`): the memory reference rides a segment
+/// override prefix. `None` for an unqualified operand and on every
+/// target without segment registers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AsmSeg {
+    None,
+    Gs,
+    Fs,
+}
+
 /// One operand of a GCC extended-asm statement.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct AsmOperand {
@@ -611,6 +622,9 @@ pub(crate) struct AsmOperand {
     /// the default register-name size of a `%N` reference and the width
     /// of the load / store through an output address.
     pub width: u8,
+    /// Segment override for a memory operand whose object is
+    /// `__seg_gs` / `__seg_fs`-qualified (x86 only).
+    pub seg: AsmSeg,
 }
 
 /// A parsed GCC extended-asm statement (`asm(template : outputs :

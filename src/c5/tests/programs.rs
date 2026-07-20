@@ -631,6 +631,55 @@ fn builtin_bitcount_zero_const_fold() {
 }
 
 #[test]
+fn const_cond_dead_arm_not_vla() {
+    // C99 6.6p3: in a constant expression the operand not selected by a
+    // constant condition is not evaluated and need not be a constant
+    // expression, so an array bound of the kernel `ilog2` shape --
+    // `__builtin_constant_p(n) ? const : nonconst` and the `||` / `&&`
+    // short-circuit forms -- is a constant, not a C99 6.7.6.2 VLA. Sizes
+    // match gcc and clang; the fixture also links with the unselected-arm
+    // callee undefined, proving the dead arm is never referenced.
+    assert_eq!(run_fixture("const_cond_array_bound.c"), 0);
+}
+
+#[test]
+fn const_cond_live_arm_still_a_vla() {
+    // The short-circuit above must not over-accept: when the selected arm
+    // is non-constant the bound is still a C99 6.7.6.2 VLA, rejected at
+    // file scope, and an undeclared identifier in an unselected arm is a
+    // name-lookup violation regardless of evaluation (6.5.1). Matches gcc
+    // and clang.
+    use crate::c5::Compiler;
+    for src in [
+        "int nc(void); int a[__builtin_constant_p(32) ? nc() : 5];", // selected arm non-constant
+        "int nc(void); int a[0 ? 5 : nc()];",                        // const-false selects nc()
+        "int nc(void); int a[0 || nc()];",                           // || RHS is live
+        "int nc(void); int a[1 && nc()];",                           // && RHS is live
+        "int a[1 ? 5 : undeclared_operand];",                        // unselected arm undeclared
+        "int nc(void); int a[nc()];",                                // plain file-scope VLA
+    ] {
+        let err = Compiler::new(src.to_string())
+            .compile()
+            .expect_err("a live non-constant array bound must be rejected");
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("variable-length array") || msg.contains("constant integer expected"),
+            "expected a VLA / non-constant diagnostic for {src:?}, got {msg:?}"
+        );
+    }
+    // The selected-arm forms still compile when that arm is constant.
+    for ok in [
+        "int nc(void); int a[__builtin_constant_p(32) ? 5 : nc()]; int main(void){return 0;}",
+        "int nc(void); int a[(1 || nc()) ? 5 : 3]; int main(void){return 0;}",
+        "int nc(void); int a[1 ? 2 ? 3 : nc() : nc()]; int main(void){return 0;}",
+    ] {
+        Compiler::new(ok.to_string())
+            .compile()
+            .expect("a constant selected arm must compile");
+    }
+}
+
+#[test]
 fn hex_case_range() {
     // `case 0x10...0x20:` (no spaces around `...`, common after macro
     // expansion) must lex the hex integer + ellipsis, not a hex float; a

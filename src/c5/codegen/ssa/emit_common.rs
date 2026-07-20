@@ -1364,10 +1364,12 @@ fn parse_operand_reloc(a: &str) -> Option<Result<AsmSectionValue, alloc::string:
     let rest = a.strip_prefix('%')?;
     let (goto, rest) = if let Some(r) = rest.strip_prefix('l') {
         (true, r)
-    } else if let Some(r) = rest.strip_prefix('c').or_else(|| rest.strip_prefix('P')) {
-        (false, r)
     } else {
-        return None;
+        // `%c` / `%P` name an operand address; anything else is not this form.
+        (
+            false,
+            rest.strip_prefix('c').or_else(|| rest.strip_prefix('P'))?,
+        )
     };
     let end = rest
         .bytes()

@@ -6534,7 +6534,7 @@ fn emit_inline_asm(
         // block and is rewritten after layout (see resolve_asm_goto_relocs).
         let goto_block = |idx: u8| -> Option<u32> {
             let ctx = goto_ctx.as_ref()?;
-            ctx.row.get(1 + idx as usize).map(|&b| b)
+            ctx.row.get(1 + idx as usize).copied()
         };
         if let Err(m) = super::ssa::emit_common::materialize_asm_sections(
             section_blocks,

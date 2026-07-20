@@ -3456,6 +3456,55 @@ fn asm_section_goto_label_relocates_to_block() {
 }
 
 #[test]
+fn asm_goto_section_reloc_survives_branch_relaxation() {
+    // An `asm goto` section field in a function that also relaxes a branch:
+    // the section sink is restored before each re-emit, so the entry is not
+    // duplicated, and the goto reloc is rewritten to the label block's FINAL
+    // offset after layout. Exercises the restore + goto-resolve interaction.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int probe(int n) {\n\
+            __asm__ goto(\"1:\\tnop\\n\"\n\
+                \".pushsection .jt,\\\"aw\\\"\\n\"\n\
+                \".long %l[y] - .\\n\"\n\
+                \".popsection\\n\" : : : : y);\n\
+            int s = 0;\n\
+            for (int i = 0; i < n; i++) s += i * i - i;\n\
+            return s;\n\
+        y:\n\
+            return 1;\n\
+        }\n\
+        int main(void) { return probe(3); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".jt")
+            .unwrap_or_else(|| panic!("{target:?}: .jt section missing"));
+        // One 4-byte field, not duplicated by the relaxation re-emit.
+        assert_eq!(sec.3.len(), 4, "{target:?}: single entry");
+        let rela = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.jt")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.jt missing"));
+        // Exactly one relocation, resolved (a symbol index, not a TextBlock).
+        assert_eq!(rela.3.len(), 24, "{target:?}: one reloc, not duplicated");
+        let r_info = u64::from_le_bytes(rela.3[8..16].try_into().unwrap());
+        assert_ne!(
+            r_info >> 32,
+            0,
+            "{target:?}: goto reloc resolved to a symbol"
+        );
+    }
+}
+
+#[test]
 fn asm_section_values_fold_constant_expressions() {
     // A named section's data value may be an integer constant expression,
     // not just a literal; the folded value is what lands in the section.

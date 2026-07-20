@@ -1496,8 +1496,22 @@ fn file_scope_asm_constraints() {
         "asm volatile(\".section .modinfo,\\\"a\\\"\\n.asciz \\\"v=1\\\"\\n.previous\");\n\
         int main(void) { return 0; }",
     );
+    // `.globl` / `.global` outside a section gives the named symbol
+    // external linkage; a name this unit does not define has no effect.
+    ok("static int f(void) { return 0; } asm(\".globl f\"); int main(void) { return f(); }");
+    ok("static int v = 1; __asm__(\".global v\"); int main(void) { return v - 1; }");
+    ok("asm(\".globl f\"); static int f(void) { return 0; } int main(void) { return f(); }");
+    ok("asm(\".globl nosuchsymbol\"); int main(void) { return 0; }");
+    ok("static int f(void) { return 0; }\n\
+         asm(\".pushsection .a,\\\"a\\\"\\n.quad 1\\n.popsection\\n.globl f\");\n\
+         int main(void) { return f(); }");
     expect_compile_error(
         "asm(\"nop\"); int main(void) { return 0; }",
+        "section data directives only",
+    );
+    // `.globl` with no operand is not a directive this accepts.
+    expect_compile_error(
+        "asm(\".globl\"); int main(void) { return 0; }",
         "section data directives only",
     );
     expect_compile_error(

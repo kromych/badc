@@ -1189,6 +1189,10 @@ pub struct Compiler {
     /// Each entry is the alias symbol, its target name, and whether the
     /// declarator was an object rather than a function.
     pending_aliases: Vec<(usize, String, bool)>,
+    /// Names given external linkage by a file-scope `asm(".globl name");`.
+    /// The directive may precede the definition, so the names are applied
+    /// once the unit is complete.
+    pending_asm_globl: Vec<String>,
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -1661,6 +1665,7 @@ impl Compiler {
             init_funcs: Vec::new(),
             function_aliases: Vec::new(),
             pending_aliases: Vec::new(),
+            pending_asm_globl: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
             pending: Pending::default(),

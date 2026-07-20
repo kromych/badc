@@ -137,14 +137,14 @@ impl Compiler {
             match engine::extract_asm_sections(text) {
                 Err(m) => return Err(self.compile_err(m)),
                 Ok(Some((code, blocks))) => {
-                    if code.split_whitespace().next().is_some() {
+                    if !self.take_file_scope_asm_globl(&code) {
                         return Err(self
                             .compile_err("file-scope asm supports section data directives only"));
                     }
                     blocks
                 }
                 Ok(None) => {
-                    if text.split_whitespace().next().is_some() {
+                    if !self.take_file_scope_asm_globl(text) {
                         return Err(self
                             .compile_err("file-scope asm supports section data directives only"));
                     }
@@ -2623,8 +2623,44 @@ impl Compiler {
             self.next()?;
         }
         self.resolve_pending_aliases()?;
+        self.resolve_file_scope_asm_globl();
         self.warn_unused_static_functions();
         Ok(())
+    }
+
+    /// Record the `.globl` / `.global` names in file-scope asm text that sits
+    /// outside any section block, and report whether the text held nothing
+    /// else. A directive naming no symbol of this unit is accepted and has no
+    /// effect, as it does when the assembler sees it.
+    fn take_file_scope_asm_globl(&mut self, text: &str) -> bool {
+        for piece in text.split([';', '\n']) {
+            let piece = piece.trim();
+            if piece.is_empty() {
+                continue;
+            }
+            let (tok, rest) = match piece.find(char::is_whitespace) {
+                Some(p) => (&piece[..p], piece[p..].trim()),
+                None => (piece, ""),
+            };
+            if !matches!(tok, ".globl" | ".global") || rest.is_empty() {
+                return false;
+            }
+            self.pending_asm_globl.push(rest.into());
+        }
+        true
+    }
+
+    /// Give external linkage to the names a file-scope `asm(".globl name");`
+    /// declared. Applied once the unit is complete: the directive may precede
+    /// the definition it names.
+    fn resolve_file_scope_asm_globl(&mut self) {
+        for name in core::mem::take(&mut self.pending_asm_globl) {
+            for s in self.symbols.iter_mut() {
+                if s.name == name && s.defined_here {
+                    s.linkage = crate::c5::symbol::Linkage::External;
+                }
+            }
+        }
     }
 
     /// Bind aliases whose target had not been defined when the declarator was

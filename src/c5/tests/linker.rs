@@ -451,6 +451,68 @@ fn extern_data_address_in_struct_initializer_resolves_cross_tu() {
 }
 
 #[test]
+fn file_scope_asm_globl_gives_external_linkage() {
+    // `asm(".globl name");` at file scope binds the named symbol
+    // STB_GLOBAL, as gcc and clang do: a `static` function so named
+    // leaves the unit's local-function list and becomes a definition the
+    // merge resolves by name.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let unit = |directive: &str| {
+        let program = Compiler::with_options(
+            alloc::format!(
+                "static int hidden(void) {{ return 7; }}\n\
+                 {directive}\n\
+                 int main(void) {{ return hidden() - 7; }}\n"
+            ),
+            Target::LinuxX64,
+            CompileOptions::default(),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        link_native_objects(&[parse_native_elf(&bytes).expect("parse")]).expect("link")
+    };
+    let is_local =
+        |m: &crate::c5::linker::MergedNative| m.local_funcs.iter().any(|(n, _)| n == "hidden");
+    // Control: without the directive the static function stays local.
+    assert!(
+        is_local(&unit("")),
+        "a plain `static` function must keep internal linkage"
+    );
+    assert!(
+        !is_local(&unit("asm(\".globl hidden\");")),
+        "`.globl` must give the static function external linkage"
+    );
+    // The directive may precede the definition it names.
+    let program = Compiler::with_options(
+        "asm(\".globl hidden\");\n\
+         static int hidden(void) { return 7; }\n\
+         int main(void) { return hidden() - 7; }\n"
+            .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile with the directive first");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let merged = link_native_objects(&[parse_native_elf(&bytes).expect("parse")]).expect("link");
+    assert!(
+        !merged.local_funcs.iter().any(|(n, _)| n == "hidden"),
+        "`.globl` ahead of the definition must still apply"
+    );
+}
+
+#[test]
 fn libc_address_trampoline_is_per_tu_local() {
     // Two translation units that each take the address of the same
     // libc function in a `.data` function-pointer table both emit a

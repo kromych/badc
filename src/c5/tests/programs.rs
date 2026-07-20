@@ -260,6 +260,9 @@ fn int128_arithmetic() {
     //   division / remainder, small and larger-than-64-bit divisors,
     //   C99 6.5.5p6 truncation toward zero
     assert_eq!(run_fixture("int128_divmod.c"), 0);
+    //   `!` / `~` / unary minus, controlling-expression truthiness,
+    //   a conditional yielding a 128-bit value, short-circuit operands
+    assert_eq!(run_fixture("int128_unary.c"), 0);
 }
 
 #[test]

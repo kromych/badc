@@ -928,6 +928,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("int128_mul.c", 0),
     ("int128_cmp.c", 0),
     ("int128_divmod.c", 0),
+    ("int128_unary.c", 0),
     // C99 7.13.2.1p3 / 6.7.3p6 / 5.1.2.3p2: volatile objects keep
     // their post-longjmp value, are re-read through aliases, and
     // unused volatile reads still execute.

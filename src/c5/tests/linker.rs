@@ -3154,7 +3154,11 @@ fn asm_section_values_fold_constant_expressions() {
         } else {
             2
         };
-        assert_eq!(sec.3.len(), 4 * 4 + word_width + 1, "{target:?}: section size");
+        assert_eq!(
+            sec.3.len(),
+            4 * 4 + word_width + 1,
+            "{target:?}: section size"
+        );
         let long_at = |k: usize| u32::from_le_bytes(sec.3[k * 4..k * 4 + 4].try_into().unwrap());
         assert_eq!(long_at(0), 16 * 32 + 22, "{target:?}: (16*32+22)");
         assert_eq!(long_at(1), (1 << 3) | 2, "{target:?}: (1<<3)|2");
@@ -3167,6 +3171,43 @@ fn asm_section_values_fold_constant_expressions() {
         };
         assert_eq!(word, 3 * 8 + 1, "{target:?}: 3*8+1");
         assert_eq!(sec.3[16 + word_width], 0xFF, "{target:?}: ~0 & 0xFF");
+    }
+}
+
+#[test]
+fn asm_section_operand_expression_and_parenthesised_label() {
+    // Two kernel section-value forms: an `i`-class operand folded into a
+    // constant expression (`.hword (1 << 15) | (%0)`, the cpucap alternatives)
+    // and a parenthesised label reference (`.long (1b) - .`, the exception
+    // table). Byte-identical to gas: 0x8000 | 37 = 0x8025, followed by a
+    // 4-byte PC-relative field. The `.hword` / `.long` widths are the same on
+    // both targets, so the layout is too.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int probe(void) {\n\
+            __asm__ volatile(\"1:\\tnop\\n\"\n\
+                \".pushsection .cb,\\\"a\\\"\\n\"\n\
+                \".hword (1 << 15) | (%0)\\n\"\n\
+                \".long (1b) - .\\n\"\n\
+                \".popsection\\n\" : : \"i\"(37));\n\
+            return 0;\n\
+        }\n\
+        int main(void) { return 0; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".cb")
+            .unwrap_or_else(|| panic!("{target:?}: .cb section missing"));
+        // The folded operand expression, then the 4-byte label-reference field.
+        assert_eq!(&sec.3[0..2], &[0x25, 0x80], "{target:?}: (1<<15)|37");
+        assert_eq!(sec.3.len(), 2 + 4, "{target:?}: section size");
     }
 }
 

@@ -1910,13 +1910,27 @@ impl Compiler {
     /// (`=`) contributes the destination's address, an input contributes its
     /// value. Operands are mapped by their constraint letter so the order
     /// they appear does not matter; the intrinsic args are then built in the
-    /// fixed order the codegen expects. On entry the template is consumed and
-    /// the cursor is at the first `:`.
+    /// fixed order the codegen expects. Each implicitly written register must
+    /// be an output operand or a clobber; a clobbered register with no output
+    /// operand stores to a synthesized scratch slot, and a cpuid with no `c`
+    /// input runs with subleaf 0. On entry the template is consumed and the
+    /// cursor is at the first `:`.
     fn parse_cpuid_xgetbv_asm(&mut self, is_cpuid: bool) -> Result<(), C5Error> {
         use super::super::ast::{Expr, UnOp};
+        // Register slot covered by a clobber name, indexed like `out`.
+        fn clobber_reg_slot(name: &[u8]) -> Option<usize> {
+            match name {
+                b"rax" | b"eax" | b"ax" => Some(0),
+                b"rbx" | b"ebx" | b"bx" => Some(1),
+                b"rcx" | b"ecx" | b"cx" => Some(2),
+                b"rdx" | b"edx" | b"dx" => Some(3),
+                _ => None,
+            }
+        }
         // Indexed by register letter: a=0, b=1, c=2, d=3.
         let mut out: [Option<super::super::ast::ExprId>; 4] = [None; 4];
         let mut inp: [Option<super::super::ast::ExprId>; 4] = [None; 4];
+        let mut clobbered = [false; 4];
         // Register slot of each output operand in declaration order, so a
         // matching constraint (`"0"` -> output operand 0's register) resolves.
         let mut out_order: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
@@ -1942,6 +1956,16 @@ impl Compiler {
             // letter (`=a` -> a). The lexer appended its bytes to the data
             // segment; read the letter, then drop them.
             let cstart = self.lex.ival as usize;
+            // A clobber (the fourth section on) is a bare string with no
+            // operand; record which implicit register it covers.
+            if section >= 3 {
+                if let Some(slot) = clobber_reg_slot(&self.data[cstart..]) {
+                    clobbered[slot] = true;
+                }
+                self.next()?;
+                self.data.truncate(cstart);
+                continue;
+            }
             let (letter, match_digit) = {
                 let cbytes = &self.data[cstart..];
                 let letter = cbytes
@@ -1964,11 +1988,6 @@ impl Compiler {
             };
             self.next()?; // consume the constraint string
             self.data.truncate(cstart);
-            // A clobber (the fourth section on) is a bare string with no
-            // operand; skip it.
-            if section >= 3 {
-                continue;
-            }
             let slot = match letter {
                 Some(b'a') => 0usize,
                 Some(b'b') => 1,
@@ -2009,6 +2028,35 @@ impl Compiler {
         self.consume(b';', "`;` expected after `asm(...)`")?;
         self.data.truncate(data_base);
 
+        // Each implicitly written register must be captured by an output
+        // operand or listed as a clobber; a clobber's value is discarded
+        // into a synthesized scratch slot.
+        let out_slots: &[usize] = if is_cpuid { &[0, 1, 2, 3] } else { &[0, 3] };
+        for &slot in out_slots {
+            if out[slot].is_none() {
+                if !clobbered[slot] {
+                    return Err(self.compile_err(
+                        "cpuid / xgetbv: each implicitly written register \
+                         (cpuid a,b,c,d; xgetbv a,d) must be an output \
+                         operand or a clobber",
+                    ));
+                }
+                out[slot] = Some(self.synth_scratch_addr());
+            }
+        }
+        // A cpuid with no `c` operand runs the leaf's base form: every
+        // leaf that reads ecx defines subleaf 0, so default the input.
+        if is_cpuid && inp[2].is_none() {
+            let pos = self.ast_src_pos();
+            inp[2] = Some(self.ast.push_expr(
+                Expr::IntLit {
+                    val: 0,
+                    ty: Ty::Int as i64,
+                },
+                pos,
+            ));
+        }
+
         // Build the args in the order the codegen reads them.
         let (kind, parts): (
             super::super::op::Intrinsic,
@@ -2031,8 +2079,8 @@ impl Compiler {
                 Some(id) => args.push(*id),
                 None => {
                     return Err(self.compile_err(
-                        "cpuid requires =a,=b,=c,=d outputs with a,c inputs; \
-                         xgetbv requires =a,=d outputs with a c input",
+                        "cpuid requires an `a` (leaf) input; \
+                         xgetbv requires a `c` input",
                     ));
                 }
             }
@@ -2052,6 +2100,33 @@ impl Compiler {
         self.ast_acc = Some(id);
         let _ = self.ast_emit_expr_stmt();
         Ok(())
+    }
+
+    /// Reserve a frame slot and yield its address, shaped as the address
+    /// of an uninitialized `int` compound literal: the store target for an
+    /// implicit asm output the source discards through a clobber.
+    fn synth_scratch_addr(&mut self) -> super::super::ast::ExprId {
+        use super::super::ast::{Expr, LocalInit, UnOp};
+        let slot = self.reserve_slots(1);
+        self.commit_block_slot(slot);
+        let pos = self.ast_src_pos();
+        let cl = self.ast.push_expr(
+            Expr::CompoundLiteral {
+                slot_off: slot,
+                ty: Ty::Int as i64,
+                array_size: 0,
+                init: LocalInit::None,
+            },
+            pos,
+        );
+        self.ast.push_expr(
+            Expr::Unary {
+                op: UnOp::AddrOf,
+                child: cl,
+                ty: Ty::Int as i64 + Ty::Ptr as i64,
+            },
+            pos,
+        )
     }
 
     /// Parse `asm("divq %4" : "=a"(q), "=d"(*r) : "0"(n0), "1"(n1),

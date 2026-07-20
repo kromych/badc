@@ -959,47 +959,17 @@ impl Preprocessor {
                 match parse_directive(directive) {
                     Directive::Define(name, body) => {
                         if active {
-                            self.macros.insert(name.to_string(), body.to_string());
-                            self.fn_macros.remove(name);
+                            self.apply_define(name, body);
                         }
                     }
-                    Directive::DefineFn(name, mut params, body) => {
+                    Directive::DefineFn(name, params, body) => {
                         if active {
-                            // A trailing `...` (C99 6.10.3) or the GCC
-                            // named-rest form `name...` makes the macro
-                            // variadic; the named form additionally binds
-                            // the trailing arguments to `name`.
-                            let mut is_variadic = false;
-                            let mut va_name = None;
-                            if let Some(last) = params.last().copied() {
-                                if last == "..." {
-                                    is_variadic = true;
-                                    params.pop();
-                                } else if let Some(prefix) = last.strip_suffix("...") {
-                                    let prefix = prefix.trim();
-                                    if is_ident(prefix) {
-                                        is_variadic = true;
-                                        va_name = Some(prefix.to_string());
-                                        params.pop();
-                                    }
-                                }
-                            }
-                            self.fn_macros.insert(
-                                name.to_string(),
-                                FnMacro {
-                                    params: params.iter().map(|s| s.to_string()).collect(),
-                                    body: body.to_string(),
-                                    is_variadic,
-                                    va_name,
-                                },
-                            );
-                            self.macros.remove(name);
+                            self.apply_define_fn(name, params, body);
                         }
                     }
                     Directive::Undef(name) => {
                         if active {
-                            self.macros.remove(name);
-                            self.fn_macros.remove(name);
+                            self.apply_undef(name);
                         }
                     }
                     Directive::Ifdef(name) => {
@@ -1303,13 +1273,16 @@ impl Preprocessor {
                 let mut buffer = String::from(line);
                 let mut consumed = 1usize;
                 // A function-like macro call may span lines whose arguments
-                // carry conditional directives (C99 6.10.3p11 leaves this
-                // undefined, but the common toolchains evaluate them and
-                // real code relies on it). Track a local conditional state
-                // so only the active branch's lines join the argument
-                // buffer; directive lines never become argument text.
-                let mut join_stack: Vec<CondFrame> = Vec::new();
-                let mut join_active = true;
+                // carry preprocessor directives (C99 6.10.3p11 leaves this
+                // undefined; gcc and clang process such directives as if
+                // the invocation were not present, and real code relies on
+                // it). Directives here work on the same conditional stack
+                // as top-level ones -- an `#if` opened inside the argument
+                // list may close after the call's `)`, and vice versa.
+                // Directive lines never become argument text; content
+                // lines join the buffer only while the current branch is
+                // active.
+                //
                 // The scan state advances over appended bytes only;
                 // re-scanning the grown buffer per joined line is
                 // quadratic in the invocation length.
@@ -1327,91 +1300,99 @@ impl Preprocessor {
                 {
                     let cont = lines[idx + consumed];
                     consumed += 1;
+                    let dline = source_line + consumed - 1;
                     let cont_trimmed = cont.trim_start();
                     if let Some(rest) = cont_trimmed.strip_prefix('#') {
                         match parse_directive(rest.trim_start()) {
+                            Directive::Define(name, body) => {
+                                if active {
+                                    self.apply_define(name, body);
+                                }
+                            }
+                            Directive::DefineFn(name, params, body) => {
+                                if active {
+                                    self.apply_define_fn(name, params, body);
+                                }
+                            }
+                            Directive::Undef(name) => {
+                                if active {
+                                    self.apply_undef(name);
+                                }
+                            }
                             Directive::Ifdef(name) => {
-                                let taken = join_active
+                                let taken = active
                                     && (self.macros.contains_key(name)
-                                        || self.fn_macros.contains_key(name));
-                                join_stack.push(CondFrame {
-                                    parent_active: join_active,
+                                        || self.fn_macros.contains_key(name)
+                                        || is_builtin_operator_name(name));
+                                cond_stack.push(CondFrame {
+                                    parent_active: active,
                                     this_branch_taken: taken,
                                     any_branch_taken: taken,
                                     saw_else: false,
                                 });
-                                join_active = taken;
+                                active = taken;
                             }
                             Directive::Ifndef(name) => {
-                                let taken = join_active
+                                let taken = active
                                     && !(self.macros.contains_key(name)
-                                        || self.fn_macros.contains_key(name));
-                                join_stack.push(CondFrame {
-                                    parent_active: join_active,
+                                        || self.fn_macros.contains_key(name)
+                                        || is_builtin_operator_name(name));
+                                cond_stack.push(CondFrame {
+                                    parent_active: active,
                                     this_branch_taken: taken,
                                     any_branch_taken: taken,
                                     saw_else: false,
                                 });
-                                join_active = taken;
+                                active = taken;
                             }
                             Directive::If(expr) => {
-                                let taken = join_active
-                                    && self.eval_condition(expr, source_line, filename)?;
-                                join_stack.push(CondFrame {
-                                    parent_active: join_active,
+                                let taken =
+                                    active && self.eval_condition(expr, dline, filename)?;
+                                cond_stack.push(CondFrame {
+                                    parent_active: active,
                                     this_branch_taken: taken,
                                     any_branch_taken: taken,
                                     saw_else: false,
                                 });
-                                join_active = taken;
+                                active = taken;
                             }
-                            // An `#elif` / `#else` / `#endif` with no
-                            // frame opened inside the argument list
-                            // belongs to the conditional enclosing the
-                            // macro call; apply it to the outer stack so
-                            // argument gathering resumes in the right
-                            // branch and the outer frame still closes.
                             Directive::Elif(expr) => {
-                                let stack = if join_stack.is_empty() {
-                                    &mut cond_stack
-                                } else {
-                                    &mut join_stack
-                                };
-                                let eligible = elif_eligible(stack, filename, source_line)?;
+                                let eligible = elif_eligible(&cond_stack, filename, dline)?;
                                 let cond =
-                                    eligible && self.eval_condition(expr, source_line, filename)?;
-                                let taken = apply_elif(stack, cond, filename, source_line)?;
-                                if join_stack.is_empty() {
-                                    active = taken;
-                                }
-                                join_active = taken;
+                                    eligible && self.eval_condition(expr, dline, filename)?;
+                                active = apply_elif(&mut cond_stack, cond, filename, dline)?;
                             }
                             Directive::Else => {
-                                let stack = if join_stack.is_empty() {
-                                    &mut cond_stack
-                                } else {
-                                    &mut join_stack
-                                };
-                                let taken = apply_else(stack, filename, source_line)?;
-                                if join_stack.is_empty() {
-                                    active = taken;
-                                }
-                                join_active = taken;
+                                active = apply_else(&mut cond_stack, filename, dline)?;
                             }
                             Directive::Endif => {
-                                if let Some(frame) = join_stack.pop() {
-                                    join_active = frame.parent_active;
-                                } else {
-                                    active = apply_endif(&mut cond_stack, filename, source_line)?;
-                                    join_active = active;
+                                active = apply_endif(&mut cond_stack, filename, dline)?;
+                            }
+                            Directive::Error(message) => {
+                                if active {
+                                    return Err(C5Error::Compile(super::error::fmt_compile_err(
+                                        filename,
+                                        dline,
+                                        &format!("#error {}", message.trim()),
+                                    )));
                                 }
                             }
-                            // Other directives inside a macro argument are
-                            // rare and undefined; consume the line without
-                            // adding it to the argument text.
+                            Directive::Warning(message) => {
+                                if active {
+                                    self.warnings.push(super::error::fmt_compile_warn(
+                                        filename,
+                                        dline,
+                                        &format!("#warning {}", message.trim()),
+                                    ));
+                                }
+                            }
+                            // TODO: `#include`, `#line`, and `#pragma`
+                            // inside an argument list are consumed
+                            // without effect; their output would have to
+                            // interleave with the joined expansion.
                             _ => {}
                         }
-                    } else if join_active {
+                    } else if active {
                         let appended = buffer.len();
                         buffer.push('\n');
                         buffer.push_str(cont);
@@ -1452,6 +1433,50 @@ impl Preprocessor {
         }
 
         Ok(out)
+    }
+
+    /// Install an object-like macro definition.
+    fn apply_define(&mut self, name: &str, body: &str) {
+        self.macros.insert(name.to_string(), body.to_string());
+        self.fn_macros.remove(name);
+    }
+
+    /// Install a function-like macro definition. A trailing `...`
+    /// (C99 6.10.3) or the GCC named-rest form `name...` makes the
+    /// macro variadic; the named form additionally binds the trailing
+    /// arguments to `name`.
+    fn apply_define_fn(&mut self, name: &str, mut params: Vec<&str>, body: &str) {
+        let mut is_variadic = false;
+        let mut va_name = None;
+        if let Some(last) = params.last().copied() {
+            if last == "..." {
+                is_variadic = true;
+                params.pop();
+            } else if let Some(prefix) = last.strip_suffix("...") {
+                let prefix = prefix.trim();
+                if is_ident(prefix) {
+                    is_variadic = true;
+                    va_name = Some(prefix.to_string());
+                    params.pop();
+                }
+            }
+        }
+        self.fn_macros.insert(
+            name.to_string(),
+            FnMacro {
+                params: params.iter().map(|s| s.to_string()).collect(),
+                body: body.to_string(),
+                is_variadic,
+                va_name,
+            },
+        );
+        self.macros.remove(name);
+    }
+
+    /// Remove a macro definition of either kind.
+    fn apply_undef(&mut self, name: &str) {
+        self.macros.remove(name);
+        self.fn_macros.remove(name);
     }
 
     /// Record the first macro-expansion diagnostic of a pass; later

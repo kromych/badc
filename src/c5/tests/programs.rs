@@ -260,6 +260,15 @@ fn rdtsc_host_ticks() {
 }
 
 #[test]
+fn cpuid_partial_outputs() {
+    // A `cpuid` asm with one output and the remaining implicit outputs
+    // listed as clobbers lowers to the same Intrinsic::Cpuid as the
+    // full four-output form; the VM zeroes every output, including the
+    // synthesized scratch slots of the clobbered registers.
+    assert_eq!(run_fixture("cpuid_partial_outputs.c"), 0);
+}
+
+#[test]
 fn cacheflush_asm() {
     // AArch64 `mrs ctr_el0` / `dc cvau` / `ic ivau` / `dsb ish` / `isb`
     // (a common cache-flush sequence) as fixed-encoding intrinsics. Run

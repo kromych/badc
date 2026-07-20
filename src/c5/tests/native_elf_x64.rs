@@ -360,6 +360,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_clflush.c", 42),
     ("inline_asm_x64_setjmp_label.c", 42),
     ("inline_asm_x64_mem_disp.c", 42),
+    ("cpuid_partial_outputs.c", 0),
     ("inline_asm_goto.c", 42),
     ("inline_asm_reg_var.c", 42),
     ("register_var_stack_pointer.c", 0),

@@ -1221,6 +1221,60 @@ fn macro_args_split_across_an_enclosing_conditional() {
 }
 
 #[test]
+fn conditional_inside_macro_argument_list() {
+    // C99 6.10.3p11 leaves directives inside an argument list
+    // undefined; gcc and clang evaluate them and keep the surviving
+    // tokens as argument text. Output checked against gcc -E.
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#if 1\n2\n#else\n3\n#endif\n); }\n";
+    let out = process(src);
+    assert!(out.contains("f(1,2)") || out.contains("f(1, 2)"), "{out}");
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#if 0\n2\n#else\n3\n#endif\n); }\n";
+    let out = process(src);
+    assert!(out.contains("f(1,3)") || out.contains("f(1, 3)"), "{out}");
+}
+
+#[test]
+fn define_inside_macro_argument_list() {
+    // gcc processes a `#define` between macro arguments; the new name
+    // expands in the argument text. Output checked against gcc -E.
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#define TWO 2\nTWO\n); }\n";
+    let out = process(src);
+    assert!(out.contains("f(1,2)") || out.contains("f(1, 2)"), "{out}");
+    // The definition persists past the invocation.
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#define TWO 2\nTWO\n); }\nint t = TWO;\n";
+    let out = process(src);
+    assert!(out.contains("int t = 2;"), "{out}");
+}
+
+#[test]
+fn nested_conditionals_inside_macro_argument_list() {
+    // Output checked against gcc -E.
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(CALL(1,\n#if 1\n9\n#endif\n),\n#if 1\n#if 0\n5\n#else\n2\n#endif\n#else\n3\n#endif\n); }\n";
+    let out = process(src);
+    assert!(
+        out.contains("f(f(1,9),2)") || out.contains("f(f(1, 9), 2)"),
+        "{out}"
+    );
+}
+
+#[test]
+fn macro_argument_list_closed_inside_conditional_arm() {
+    // The call's `)` sits inside a conditional arm, so argument
+    // collection ends while the `#if` is still open and the `#endif`
+    // arrives after the invocation. The conditional stack is shared
+    // with the top level, matching gcc; a private per-invocation
+    // stack loses the open frame and misreports the trailing
+    // `#endif` as unmatched. Output checked against gcc -E.
+    for (cond, picked) in [("#ifdef ZZZ", "3"), ("#ifndef ZZZ", "2")] {
+        let src = format!(
+            "#define M(a) f(a)\nint g(int c) {{ return M(c ? 1 :\n{cond}\n2);\n#else\n3);\n#endif\n}}\n"
+        );
+        let out = process(&src);
+        assert!(out.contains(&format!("f(c ? 1 : {picked})")), "{out}");
+    }
+}
+
+#[test]
 fn has_include_quoted_form_searches_the_including_dir() {
     // C99 6.10.2p2 via C23 6.10.1: the quoted `__has_include` form
     // probes the including file's directory exactly as the matching

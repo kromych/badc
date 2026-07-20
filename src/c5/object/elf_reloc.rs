@@ -630,11 +630,15 @@ pub(super) fn write_relocatable(
     // section attribute move their `.data` / `.bss` byte range into
     // the named section; the vacated file bytes are zeroed in place so
     // no other data offset shifts. Symbols and relocations touching a
-    // moved range are retargeted below. Named sections take the
-    // indices right after the fixed set; `.init_array` groups follow.
+    // moved range are retargeted below. Named sections take one index
+    // each right after the fixed set; `.rela` companions and
+    // `.init_array` groups follow.
     // TODO: `.debug_info` / `.debug_line` still describe carved
     // functions at their pre-carve `.text` offsets.
     let mut carve = CarvePlan::default();
+    // Planned content length per table entry; asm payloads append past
+    // the attribute content recorded here.
+    let mut sizes: Vec<u64> = Vec::new();
     {
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
@@ -746,7 +750,7 @@ pub(super) fn write_relocatable(
         carve.data_ranges.sort_by_key(|r| r.old_lo);
         // Assign packed in-section bases: text groups keep their
         // internal layout wholesale; data objects pack 8-aligned.
-        let mut sizes: Vec<u64> = alloc::vec![0; carve.table.entries.len()];
+        sizes.resize(carve.table.entries.len(), 0);
         for r in carve.text_ranges.iter_mut().chain(carve.data_ranges.iter_mut()) {
             let base = (sizes[r.entry] + 7) & !7;
             r.new_base = base;
@@ -760,11 +764,46 @@ pub(super) fn write_relocatable(
                 )));
             }
         }
-        for (k, e) in carve.table.entries.iter().enumerate() {
-            let _ = e;
-            carve.shndx.push((base_sections + 2 * k) as u16);
-            carve.sym_idx.push(0);
+    }
+    // Inline-asm `.pushsection` payloads join the same table. Letter
+    // flags and the `@type` argument map to sh_flags / sh_type; a
+    // block sharing a name with an attribute placement merges into the
+    // existing entry, its bytes placed past the attribute content at
+    // the block's alignment. `asm_placements[i]` is the (entry, base)
+    // of `build.asm_sections[i]`.
+    let mut asm_placements: Vec<(usize, u64)> = Vec::with_capacity(build.asm_sections.len());
+    for s in &build.asm_sections {
+        let mut flags: u64 = 0;
+        for c in s.flags.bytes() {
+            match c {
+                b'a' => flags |= SHF_ALLOC,
+                b'w' => flags |= SHF_WRITE,
+                b'x' => flags |= SHF_EXECINSTR,
+                // Merge / strings / group flags are layout hints a
+                // relocatable object can omit without changing meaning.
+                _ => {}
+            }
         }
+        let sh_type = match s.sh_type.as_deref() {
+            Some("nobits") => SHT_NOBITS,
+            Some("note") => SHT_NOTE,
+            _ => SHT_PROGBITS,
+        };
+        let align = s.align.max(1) as u64;
+        let e = carve
+            .table
+            .get_or_insert(&s.name, sh_type, flags, align)
+            .map_err(|msg| C5Error::Compile(crate::c5::error::fmt_internal_err(&msg)))?;
+        if sizes.len() <= e {
+            sizes.resize(e + 1, 0);
+        }
+        let base = round_up(sizes[e], align);
+        sizes[e] = base + s.bytes.len() as u64;
+        asm_placements.push((e, base));
+    }
+    for k in 0..carve.table.entries.len() {
+        carve.shndx.push((base_sections + k) as u16);
+        carve.sym_idx.push(0);
     }
     let named_section_count = carve.table.entries.len();
 
@@ -1051,6 +1090,48 @@ pub(super) fn write_relocatable(
         }
     }
 
+    // Data objects defined in this unit, by name and unified data
+    // offset; an inline-asm section reloc naming one resolves
+    // section-relative like the attribute path.
+    let defined_data_by_name: alloc::collections::BTreeMap<&str, i64> = {
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        program
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.class == Token::Glo as i64
+                    && s.defined_here
+                    && !s.is_alias
+                    && !s.is_thread_local
+                    && !s.name.is_empty()
+                    && matches!(s.linkage, Linkage::External | Linkage::Internal)
+            })
+            .map(|s| (s.name.as_str(), s.val))
+            .collect()
+    };
+    // Inline-asm section reloc names with neither a definition in this
+    // unit nor an existing UNDEF entry get their own undefined symbols.
+    let mut asm_extern_names: Vec<&str> = Vec::new();
+    for s in &build.asm_sections {
+        for r in &s.relocs {
+            use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
+            let AsmSectionTarget::Symbol(name) = &r.target else {
+                continue;
+            };
+            let n = name.as_str();
+            if !defined_fn_names.contains(n)
+                && !program.function_aliases.iter().any(|a| a.name == n)
+                && !defined_data_by_name.contains_key(n)
+                && !user_extern_names.contains(&n)
+                && !user_extern_data_names.contains(&n)
+                && !asm_extern_names.contains(&n)
+            {
+                asm_extern_names.push(n);
+            }
+        }
+    }
+
     // Rebuild strtab now that all names are known: file
     // basename + function names + libc-import symbol names +
     // cross-TU user-function names + defined data globals +
@@ -1091,6 +1172,10 @@ pub(super) fn write_relocatable(
     }
     let user_extern_data_names_start = all_names.len();
     for name in &user_extern_data_names {
+        all_names.push(*name);
+    }
+    let asm_extern_names_start = all_names.len();
+    for name in &asm_extern_names {
         all_names.push(*name);
     }
     // Standard TLS symbols + local-exec relocations are the ELF interop
@@ -1331,6 +1416,19 @@ pub(super) fn write_relocatable(
         symbols.push(Elf64Sym {
             st_name: name_offs[user_extern_data_names_start + i],
             st_info: pack_sym_info(bind_for(name), STT_OBJECT),
+            st_shndx: SHN_UNDEF,
+            ..Default::default()
+        });
+    }
+
+    // Undefined symbols for inline-asm section reloc targets no other
+    // table covers; the linker resolves them against sibling units.
+    let mut asm_extern_sym_idx: Vec<usize> = Vec::with_capacity(asm_extern_names.len());
+    for (i, name) in asm_extern_names.iter().enumerate() {
+        asm_extern_sym_idx.push(symbols.len());
+        symbols.push(Elf64Sym {
+            st_name: name_offs[asm_extern_names_start + i],
+            st_info: pack_sym_info(bind_for(name), STT_NOTYPE),
             st_shndx: SHN_UNDEF,
             ..Default::default()
         });
@@ -1611,6 +1709,172 @@ pub(super) fn write_relocatable(
         data_file_len as u64,
     );
 
+    // Inline-asm section relocations join the owning table entry,
+    // offset by the block's placement base. A text-offset target in a
+    // carved range retargets to the named section's symbol; a name
+    // resolves to a defined function, section-relative defined data,
+    // or an undefined symbol.
+    {
+        use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
+        for (&(e, base), s) in asm_placements.iter().zip(build.asm_sections.iter()) {
+            for r in &s.relocs {
+                let (sym_idx, addend) = match &r.target {
+                    AsmSectionTarget::Text(off) => match carve.map_text(*off as u64) {
+                        Some((te, new_off)) => (carve.sym_idx[te], new_off as i64 + r.addend),
+                        None => (text_sym_idx, *off as i64 + r.addend),
+                    },
+                    AsmSectionTarget::Symbol(name) => {
+                        if let Some(&idx) = func_symidx_by_name.get(name.as_str()) {
+                            (idx as u64, r.addend)
+                        } else if let Some(&val) = defined_data_by_name.get(name.as_str()) {
+                            match carve.map_data(val as u64) {
+                                Some((de, new_off)) => {
+                                    (carve.sym_idx[de], new_off as i64 + r.addend)
+                                }
+                                None => {
+                                    let (sym, off) = data_section_ref(val);
+                                    (sym, off + r.addend)
+                                }
+                            }
+                        } else if let Some(pos) =
+                            user_extern_names.iter().position(|n| *n == name.as_str())
+                        {
+                            (user_extern_sym_idx[pos] as u64, r.addend)
+                        } else if let Some(pos) = user_extern_data_names
+                            .iter()
+                            .position(|n| *n == name.as_str())
+                        {
+                            (user_extern_data_sym_idx[pos] as u64, r.addend)
+                        } else {
+                            let pos = asm_extern_names
+                                .iter()
+                                .position(|n| *n == name.as_str())
+                                .expect("asm_extern_names covers every unresolved asm reloc name");
+                            (asm_extern_sym_idx[pos] as u64, r.addend)
+                        }
+                    }
+                };
+                let rtype = match (machine_for_rela, r.pcrel, r.width) {
+                    (Machine::X86_64, false, 8) => R_X86_64_64,
+                    (Machine::X86_64, false, _) => R_X86_64_32,
+                    (Machine::X86_64, true, 8) => R_X86_64_PC64,
+                    (Machine::X86_64, true, _) => R_X86_64_PC32,
+                    (Machine::Aarch64, false, 8) => R_AARCH64_ABS64,
+                    (Machine::Aarch64, false, _) => R_AARCH64_ABS32,
+                    (Machine::Aarch64, true, 8) => R_AARCH64_PREL64,
+                    (Machine::Aarch64, true, _) => R_AARCH64_PREL32,
+                };
+                carve.table.entries[e]
+                    .relas
+                    .push(super::section_table::SectionRela {
+                        offset: base + r.offset as u64,
+                        sym: sym_idx,
+                        rtype,
+                        addend,
+                    });
+            }
+        }
+    }
+
+    // `.rela.data` -- absolute 64-bit relocations for
+    // pointer-to-global initializers. `Build::data_relocs` carries
+    // `(slot_data_offset, target_data_offset)`; each becomes a
+    // `R_X86_64_64` / `R_AARCH64_ABS64` reloc at `slot_data_offset`
+    // against the `.data` section symbol with
+    // `r_addend = target_data_offset`. The linker resolves to
+    // `data_vaddr + target_offset`, the runtime VA of the
+    // pointed-at global. Built ahead of the section-count planning so
+    // the carve partition below settles every named section's
+    // relocation list first.
+    let rtype_abs64 = match machine_for_rela {
+        Machine::X86_64 => R_X86_64_64,
+        Machine::Aarch64 => R_AARCH64_ABS64,
+    };
+    let mut rela_data_bytes: Vec<u8> =
+        Vec::with_capacity((build.data_relocs.len() + build.code_relocs.len()) * ELF64_RELA_SIZE);
+    for r in &build.data_relocs {
+        let (sym, addend) = data_section_ref(r.target_offset as i64);
+        let rela = Elf64Rela {
+            r_offset: r.data_offset,
+            r_info: (sym << 32) | rtype_abs64 as u64,
+            r_addend: addend,
+        };
+        write_struct(&mut rela_data_bytes, &rela);
+    }
+    // Pointer-to-extern-data initializers: the reloc targets the named
+    // undefined-data symbol so the linker resolves it against the
+    // defining unit's storage. The addend carries the byte offset added
+    // to the symbol (`&extern_arr[N]`).
+    for r in &build.extern_data_relocs {
+        let pos = user_extern_data_names
+            .iter()
+            .position(|n| *n == r.symbol_name.as_str())
+            .expect("user_extern_data_names contains every extern_data_reloc name");
+        let sym_idx = user_extern_data_sym_idx[pos] as u64;
+        let rela = Elf64Rela {
+            r_offset: r.data_offset,
+            r_info: (sym_idx << 32) | rtype_abs64 as u64,
+            r_addend: r.addend,
+        };
+        write_struct(&mut rela_data_bytes, &rela);
+    }
+    // Function-pointer initializers: same `R_*_64` shape as
+    // pointer-to-global, but the addend is the target
+    // function's native byte offset within `.text` (looked up
+    // via `pc_to_native`) and the reloc points at the
+    // `.text` section symbol. The linker resolves to
+    // `text_vaddr + target_offset`.
+    for r in &build.code_relocs {
+        let ent_pc = r.target_ent_pc as usize;
+        // Cross-TU target: emit against the named UNDEF
+        // function symbol so the linker resolves it against
+        // the sibling unit's defined entry. `r_addend = 0`
+        // since the named symbol carries the target's text
+        // offset directly.
+        if let Some(&name) = extern_fn_by_pc.get(&ent_pc) {
+            let pos = user_extern_names
+                .iter()
+                .position(|n| *n == name)
+                .expect("user_extern_names contains every code-reloc extern callee");
+            let sym_idx = user_extern_sym_idx[pos] as u64;
+            let rela = Elf64Rela {
+                r_offset: r.data_offset,
+                r_info: (sym_idx << 32) | rtype_abs64 as u64,
+                r_addend: 0,
+            };
+            write_struct(&mut rela_data_bytes, &rela);
+            continue;
+        }
+        let native_off = build
+            .pc_to_native
+            .get(ent_pc)
+            .copied()
+            .unwrap_or(usize::MAX);
+        if native_off == usize::MAX {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("elf_reloc: code reloc references missing ent_pc {ent_pc}",),
+            )));
+        }
+        let rela = Elf64Rela {
+            r_offset: r.data_offset,
+            r_info: (text_sym_idx << 32) | rtype_abs64 as u64,
+            r_addend: native_off as i64,
+        };
+        write_struct(&mut rela_data_bytes, &rela);
+    }
+    // Rows applying within a carved data range move to the owning
+    // named section; section-symbol targets into carved ranges are
+    // retargeted (both directions already handled for `.rela.text`).
+    carve_partition_relas(
+        &mut rela_data_bytes,
+        &mut carve,
+        false,
+        text_sym_idx,
+        data_sym_idx,
+        bss_sym_idx,
+        data_file_len as u64,
+    );
+
     // `.init_array` / `.fini_array` groups. C99 has no such attribute;
     // GNU practice (matched by every mainstream toolchain) lowers each
     // `__attribute__((constructor))` into an `SHT_INIT_ARRAY` pointer
@@ -1620,26 +1884,18 @@ pub(super) fn write_relocatable(
     // across units; unprioritized entries land in the bare
     // `.init_array` the script places last. Entries sharing a group
     // keep source order.
-    let rtype_abs64_init = match machine_for_rela {
-        Machine::X86_64 => R_X86_64_64,
-        Machine::Aarch64 => R_AARCH64_ABS64,
-    };
     let init_sections =
-        build_init_array_sections(&program.init_funcs, &func_symidx_by_name, rtype_abs64_init)?;
-    // Inline-asm `.pushsection` sections: one header per section plus a
-    // companion `.rela.*` for those carrying relocations.
-    // TODO: fold these into the attribute-driven named-section table.
-    let asm_secs = &build.asm_sections;
-    let asm_rela_names: Vec<String> = asm_secs
+        build_init_array_sections(&program.init_funcs, &func_symidx_by_name, rtype_abs64)?;
+    // Every named section's relocation list is settled; a `.rela`
+    // companion exists exactly for the entries that carry relocations.
+    let named_rela_count = carve
+        .table
+        .entries
         .iter()
-        .map(|s| format!(".rela{}", s.name))
-        .collect();
-    let asm_rela_count = asm_secs.iter().filter(|s| !s.relocs.is_empty()).count();
-    let num_sections: usize = base_sections
-        + 2 * named_section_count
-        + 2 * init_sections.len()
-        + asm_secs.len()
-        + asm_rela_count;
+        .filter(|e| !e.relas.is_empty())
+        .count();
+    let num_sections: usize =
+        base_sections + named_section_count + named_rela_count + 2 * init_sections.len();
 
     // Section name table. Index map below mirrors the SHIDX_*
     // constants above (one entry per non-null section).
@@ -1666,12 +1922,22 @@ pub(super) fn write_relocatable(
         shstrtab_names.push(".tdata");
         shstrtab_names.push(".tbss");
     }
-    // Named (`__attribute__((section))`) sections and their `.rela`
-    // companions take the indices right after the fixed set.
+    // Named sections (attribute placements + inline-asm payloads) take
+    // the indices right after the fixed set; the on-demand `.rela`
+    // companions follow the block.
     let named_names_start = shstrtab_names.len();
     for e in &carve.table.entries {
         shstrtab_names.push(e.name.as_str());
-        shstrtab_names.push(e.rela_name.as_str());
+    }
+    // `named_rela_pos[k]` is entry k's position among the rela-bearing
+    // entries; only those contribute a `.rela<name>` string.
+    let named_rela_names_start = shstrtab_names.len();
+    let mut named_rela_pos: Vec<usize> = Vec::with_capacity(carve.table.entries.len());
+    for e in &carve.table.entries {
+        named_rela_pos.push(shstrtab_names.len() - named_rela_names_start);
+        if !e.relas.is_empty() {
+            shstrtab_names.push(e.rela_name.as_str());
+        }
     }
     // `.init_array*` / `.fini_array*` names and their `.rela.*`
     // companions, appended last so the fixed and TLS indices stay put.
@@ -1679,12 +1945,6 @@ pub(super) fn write_relocatable(
     for s in &init_sections {
         shstrtab_names.push(s.name.as_str());
         shstrtab_names.push(s.rela_name.as_str());
-    }
-    // Inline-asm section names, each followed by its `.rela.*` name.
-    let asm_names_start = shstrtab_names.len();
-    for (s, rela_name) in asm_secs.iter().zip(asm_rela_names.iter()) {
-        shstrtab_names.push(s.name.as_str());
-        shstrtab_names.push(rela_name.as_str());
     }
     let (shstrtab_bytes, shstrtab_offs) = build_strtab(&shstrtab_names);
 
@@ -1826,6 +2086,15 @@ pub(super) fn write_relocatable(
         ent.bytes.resize(ent.bytes.len() + (size - (file_hi - file_lo)), 0);
         data_body[file_lo..file_hi].fill(0);
     }
+    // Inline-asm payloads follow the attribute content of their entry
+    // at the placement bases planned above.
+    for (&(e, base), s) in asm_placements.iter().zip(build.asm_sections.iter()) {
+        let ent = &mut carve.table.entries[e];
+        if (ent.bytes.len() as u64) < base {
+            ent.bytes.resize(base as usize, 0);
+        }
+        ent.bytes.extend_from_slice(&s.bytes);
+    }
     let data_align = build.data_align.max(8) as u64;
     let data_off = round_up(out.len() as u64, data_align);
     out.resize(data_off as usize, 0);
@@ -1893,102 +2162,8 @@ pub(super) fn write_relocatable(
         ..Default::default()
     });
 
-    // .rela.data -- absolute 64-bit relocations for
-    // pointer-to-global initializers. `Build::data_relocs` carries
-    // `(slot_data_offset, target_data_offset)`; each becomes a
-    // `R_X86_64_64` / `R_AARCH64_ABS64` reloc at `slot_data_offset`
-    // against the `.data` section symbol with
-    // `r_addend = target_data_offset`. The linker resolves to
-    // `data_vaddr + target_offset`, the runtime VA of the
-    // pointed-at global.
-    let rtype_abs64 = match machine_for_rela {
-        Machine::X86_64 => R_X86_64_64,
-        Machine::Aarch64 => R_AARCH64_ABS64,
-    };
-    let mut rela_data_bytes: Vec<u8> =
-        Vec::with_capacity((build.data_relocs.len() + build.code_relocs.len()) * ELF64_RELA_SIZE);
-    for r in &build.data_relocs {
-        let (sym, addend) = data_section_ref(r.target_offset as i64);
-        let rela = Elf64Rela {
-            r_offset: r.data_offset,
-            r_info: (sym << 32) | rtype_abs64 as u64,
-            r_addend: addend,
-        };
-        write_struct(&mut rela_data_bytes, &rela);
-    }
-    // Pointer-to-extern-data initializers: the reloc targets the named
-    // undefined-data symbol so the linker resolves it against the
-    // defining unit's storage. The addend carries the byte offset added
-    // to the symbol (`&extern_arr[N]`).
-    for r in &build.extern_data_relocs {
-        let pos = user_extern_data_names
-            .iter()
-            .position(|n| *n == r.symbol_name.as_str())
-            .expect("user_extern_data_names contains every extern_data_reloc name");
-        let sym_idx = user_extern_data_sym_idx[pos] as u64;
-        let rela = Elf64Rela {
-            r_offset: r.data_offset,
-            r_info: (sym_idx << 32) | rtype_abs64 as u64,
-            r_addend: r.addend,
-        };
-        write_struct(&mut rela_data_bytes, &rela);
-    }
-    // Function-pointer initializers: same `R_*_64` shape as
-    // pointer-to-global, but the addend is the target
-    // function's native byte offset within `.text` (looked up
-    // via `pc_to_native`) and the reloc points at the
-    // `.text` section symbol. The linker resolves to
-    // `text_vaddr + target_offset`.
-    for r in &build.code_relocs {
-        let ent_pc = r.target_ent_pc as usize;
-        // Cross-TU target: emit against the named UNDEF
-        // function symbol so the linker resolves it against
-        // the sibling unit's defined entry. `r_addend = 0`
-        // since the named symbol carries the target's text
-        // offset directly.
-        if let Some(&name) = extern_fn_by_pc.get(&ent_pc) {
-            let pos = user_extern_names
-                .iter()
-                .position(|n| *n == name)
-                .expect("user_extern_names contains every code-reloc extern callee");
-            let sym_idx = user_extern_sym_idx[pos] as u64;
-            let rela = Elf64Rela {
-                r_offset: r.data_offset,
-                r_info: (sym_idx << 32) | rtype_abs64 as u64,
-                r_addend: 0,
-            };
-            write_struct(&mut rela_data_bytes, &rela);
-            continue;
-        }
-        let native_off = build
-            .pc_to_native
-            .get(ent_pc)
-            .copied()
-            .unwrap_or(usize::MAX);
-        if native_off == usize::MAX {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("elf_reloc: code reloc references missing ent_pc {ent_pc}",),
-            )));
-        }
-        let rela = Elf64Rela {
-            r_offset: r.data_offset,
-            r_info: (text_sym_idx << 32) | rtype_abs64 as u64,
-            r_addend: native_off as i64,
-        };
-        write_struct(&mut rela_data_bytes, &rela);
-    }
-    // Rows applying within a carved data range move to the owning
-    // named section; section-symbol targets into carved ranges are
-    // retargeted (both directions already handled for `.rela.text`).
-    carve_partition_relas(
-        &mut rela_data_bytes,
-        &mut carve,
-        false,
-        text_sym_idx,
-        data_sym_idx,
-        bss_sym_idx,
-        data_file_len as u64,
-    );
+    // .rela.data -- built and carve-partitioned above, before the
+    // section-count planning.
     let rela_data_off = round_up(out.len() as u64, 8);
     out.resize(rela_data_off as usize, 0);
     out.extend_from_slice(&rela_data_bytes);
@@ -2157,16 +2332,19 @@ pub(super) fn write_relocatable(
     let _ = SHIDX_DEBUG_LINE;
     let _ = SHIDX_RELA_DEBUG_LINE;
 
-    // Named (`__attribute__((section))`) sections, each followed by
-    // its `.rela` companion. The indices were planned right after the
-    // fixed set (`carve.shndx`).
+    // Named sections (attribute placements + inline-asm payloads) at
+    // the indices planned right after the fixed set (`carve.shndx`).
+    // `SHT_NOBITS` entries keep their size but contribute no file
+    // bytes.
     for (k, e) in carve.table.entries.iter().enumerate() {
         debug_assert_eq!(sh.len(), carve.shndx[k] as usize);
         let sec_off = round_up(out.len() as u64, e.align);
         out.resize(sec_off as usize, 0);
-        out.extend_from_slice(&e.bytes);
+        if e.sh_type != SHT_NOBITS {
+            out.extend_from_slice(&e.bytes);
+        }
         sh.push(Elf64Shdr {
-            sh_name: shstrtab_offs[named_names_start + 2 * k],
+            sh_name: shstrtab_offs[named_names_start + k],
             sh_type: e.sh_type,
             sh_flags: e.flags,
             sh_offset: sec_off,
@@ -2174,6 +2352,12 @@ pub(super) fn write_relocatable(
             sh_addralign: e.align,
             ..Default::default()
         });
+    }
+    // Their `.rela` companions, only for entries carrying relocations.
+    for (k, e) in carve.table.entries.iter().enumerate() {
+        if e.relas.is_empty() {
+            continue;
+        }
         let mut rb: Vec<u8> = Vec::with_capacity(e.relas.len() * ELF64_RELA_SIZE);
         for r in &e.relas {
             let rela = Elf64Rela {
@@ -2187,7 +2371,7 @@ pub(super) fn write_relocatable(
         out.resize(rela_off as usize, 0);
         out.extend_from_slice(&rb);
         sh.push(Elf64Shdr {
-            sh_name: shstrtab_offs[named_names_start + 2 * k + 1],
+            sh_name: shstrtab_offs[named_rela_names_start + named_rela_pos[k]],
             sh_type: SHT_RELA,
             sh_flags: SHF_INFO_LINK,
             sh_offset: rela_off,
@@ -2235,96 +2419,6 @@ pub(super) fn write_relocatable(
             sh_entsize: ELF64_RELA_SIZE as u64,
             ..Default::default()
         });
-    }
-
-    // Inline-asm `.pushsection` sections. Each carries its accumulated
-    // bytes; a reference into the code resolves against the `.text`
-    // section symbol with the target's offset as the addend, and a named
-    // symbol against its `.symtab` entry. `@nobits` maps to SHT_NOBITS.
-    for (k, s) in asm_secs.iter().enumerate() {
-        let mut flags: u64 = 0;
-        for c in s.flags.bytes() {
-            match c {
-                b'a' => flags |= SHF_ALLOC,
-                b'w' => flags |= SHF_WRITE,
-                b'x' => flags |= SHF_EXECINSTR,
-                // Merge / strings / group flags are layout hints a
-                // relocatable object can omit without changing meaning.
-                _ => {}
-            }
-        }
-        let sh_type = match s.sh_type.as_deref() {
-            Some("nobits") => SHT_NOBITS,
-            _ => SHT_PROGBITS,
-        };
-        let mut rela_bytes: Vec<u8> = Vec::with_capacity(s.relocs.len() * ELF64_RELA_SIZE);
-        for r in &s.relocs {
-            use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
-            let (sym_idx, addend) = match &r.target {
-                AsmSectionTarget::Text(off) => (text_sym_idx, *off as i64 + r.addend),
-                AsmSectionTarget::Symbol(name) => {
-                    let Some(&idx) = func_symidx_by_name.get(name) else {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            &format!(
-                                "elf_reloc: inline-asm section references unknown symbol `{name}`"
-                            ),
-                        )));
-                    };
-                    (idx as u64, r.addend)
-                }
-            };
-            let rtype = match (machine_for_rela, r.pcrel, r.width) {
-                (Machine::X86_64, false, 8) => R_X86_64_64,
-                (Machine::X86_64, false, _) => R_X86_64_32,
-                (Machine::X86_64, true, 8) => R_X86_64_PC64,
-                (Machine::X86_64, true, _) => R_X86_64_PC32,
-                (Machine::Aarch64, false, 8) => R_AARCH64_ABS64,
-                (Machine::Aarch64, false, _) => R_AARCH64_ABS32,
-                (Machine::Aarch64, true, 8) => R_AARCH64_PREL64,
-                (Machine::Aarch64, true, _) => R_AARCH64_PREL32,
-            };
-            write_struct(
-                &mut rela_bytes,
-                &Elf64Rela {
-                    r_offset: r.offset as u64,
-                    r_info: (sym_idx << 32) | rtype as u64,
-                    r_addend: addend,
-                },
-            );
-        }
-        let align = s.align.max(1) as u64;
-        let sec_shndx = sh.len() as u32;
-        let sec_off = round_up(out.len() as u64, align);
-        out.resize(sec_off as usize, 0);
-        if sh_type != SHT_NOBITS {
-            out.extend_from_slice(&s.bytes);
-        }
-        sh.push(Elf64Shdr {
-            sh_name: shstrtab_offs[asm_names_start + 2 * k],
-            sh_type,
-            sh_flags: flags,
-            sh_offset: sec_off,
-            sh_size: s.bytes.len() as u64,
-            sh_addralign: align,
-            ..Default::default()
-        });
-        if !rela_bytes.is_empty() {
-            let rela_off = round_up(out.len() as u64, 8);
-            out.resize(rela_off as usize, 0);
-            out.extend_from_slice(&rela_bytes);
-            sh.push(Elf64Shdr {
-                sh_name: shstrtab_offs[asm_names_start + 2 * k + 1],
-                sh_type: SHT_RELA,
-                sh_flags: SHF_INFO_LINK,
-                sh_offset: rela_off,
-                sh_size: rela_bytes.len() as u64,
-                sh_link: SHIDX_SYMTAB as u32,
-                sh_info: sec_shndx,
-                sh_addralign: 8,
-                sh_entsize: ELF64_RELA_SIZE as u64,
-                ..Default::default()
-            });
-        }
     }
 
     debug_assert_eq!(sh.len(), num_sections);

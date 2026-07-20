@@ -1334,6 +1334,12 @@ fn memory_and_positional_registers() {
     // stored value may be wider than the status register.
     assert_eq!(enc("stlxr", &[w(20), w(21), m(22)]), 0x8814FED5);
     assert_eq!(enc("stlxr", &[w(23), x(24), m(25)]), 0xC817FF38);
+    // Exclusive load/store singles, the shapes the `Q` constraint
+    // substitution feeds. Words match clang.
+    assert_eq!(enc("ldxr", &[w(0), m(2)]), 0x885F7C40); // ldxr w0, [x2]
+    assert_eq!(enc("ldaxr", &[x(0), m(1)]), 0xC85FFC20); // ldaxr x0, [x1]
+    assert_eq!(enc("stxr", &[w(1), w(0), m(2)]), 0x88017C40); // stxr w1, w0, [x2]
+    assert_eq!(enc("stlxr", &[w(1), x(0), m(2)]), 0xC801FC40); // stlxr w1, x0, [x2]
     // Load/store exclusive pair: Rd2/Rs2 at bit 10.
     assert_eq!(enc("ldaxp", &[x(0), x(1), m(2)]), 0xC87F8440);
     assert_eq!(enc("stxp", &[w(3), w(4), w(5), m(6)]), 0x882314C4);

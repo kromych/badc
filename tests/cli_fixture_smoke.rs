@@ -67,6 +67,8 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("atomic128_ldst.c", "linux-x64"), // aarch64 128-bit ldp/stp, ldxp/stxp
     ("inline_asm_a64_dp.c", "linux-x64"), // aarch64 mul/csel (x86 mul is 1-operand)
     ("inline_asm_a64_labels.c", "linux-x64"), // aarch64 local-label branches
+    ("inline_asm_a64_acqrel.c", "linux-x64"), // aarch64 ldar/stlr via `Q`
+    ("inline_asm_a64_llsc.c", "linux-x64"),   // aarch64 ldxr/stxr loop via `+Q`
     ("divq_udiv_qrnnd.c", "linux-aarch64"), // x86-64 128/64 divq
     ("rdtsc_host_ticks.c", "linux-aarch64"), // x86-64 rdtsc
     ("inline_asm_memory_operand.c", "linux-aarch64"), // x86-64 lock cmpxchg/xadd

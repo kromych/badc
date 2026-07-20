@@ -1452,7 +1452,12 @@ impl Compiler {
                 self.data.truncate(data_base);
                 return Err(self.compile_err("inline asm goto: output operands are not supported"));
             }
-            let (constraint, is_rw) = match Self::parse_asm_constraint(cstr, is_output, n_outputs) {
+            let (constraint, is_rw) = match Self::parse_asm_constraint(
+                cstr,
+                is_output,
+                n_outputs,
+                self.target.is_aarch64(),
+            ) {
                 Some(c) => c,
                 None => {
                     self.data.truncate(data_base);
@@ -1507,7 +1512,7 @@ impl Compiler {
             // addressable" / an output operand must be an lvalue). An empty
             // accumulator falls through to the "operand expression expected"
             // check below.
-            if is_output || matches!(constraint, AsmConstraint::Mem) {
+            if is_output || matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase) {
                 let addressable = match self.ast_acc {
                     Some(id) => {
                         use super::super::ast::Expr;
@@ -1694,16 +1699,23 @@ impl Compiler {
     /// [`ir::AsmConstraint`] and whether it is a read-write (`+`)
     /// output. `is_output` selects the output vs input grammar;
     /// `n_outputs` is the count of outputs already parsed, so a digit
-    /// (matching) constraint resolves to an earlier output. Returns
-    /// `None` for a constraint the codegen does not model.
+    /// (matching) constraint resolves to an earlier output. `aarch64`
+    /// admits the target-specific letters (`Q`). Returns `None` for a
+    /// constraint the codegen does not model.
     fn parse_asm_constraint(
         cstr: &str,
         is_output: bool,
         n_outputs: usize,
+        aarch64: bool,
     ) -> Option<(super::super::ir::AsmConstraint, bool)> {
         use super::super::ir::AsmConstraint;
         let is_rw = cstr.starts_with('+');
         let body = cstr.trim_start_matches(['=', '+', '&', '%']);
+        // AArch64 `Q`: a base-register-only memory operand. The x86 `Q`
+        // (the legacy high-byte register class) is not modeled.
+        if aarch64 && body == "Q" {
+            return Some((AsmConstraint::MemBase, is_rw));
+        }
         // A matching constraint ties an input to an earlier output.
         if let Some(d) = body.chars().find(|c| c.is_ascii_digit()) {
             let idx = d as u8 - b'0';

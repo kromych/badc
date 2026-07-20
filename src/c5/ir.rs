@@ -579,6 +579,11 @@ pub(crate) enum AsmConstraint {
     /// through it (not a register). Assigned a register to hold the
     /// address; the instruction dereferences that register.
     Mem,
+    /// AArch64 `Q` (`Q`, `=Q`, `+Q`): a memory operand whose address is a
+    /// single base register with no offset, the addressing mode the
+    /// acquire/release and exclusive instructions take. Assigned a
+    /// register to hold the address; a template `%N` substitutes as `[xN]`.
+    MemBase,
 }
 
 /// One operand of a GCC extended-asm statement.

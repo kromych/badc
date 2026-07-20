@@ -1773,6 +1773,13 @@ pub(super) fn write(
     let data_align = build.data_align.max(8) as u64;
     let data_off = round_up(got_off + got_size, data_align);
     let data_size = build.data.len() as u64;
+    // An object wider than the arch page size needs the RW segment's
+    // p_align raised to it: the image is a PIE, and the loader aligns the
+    // load bias down to the maximum PT_LOAD p_align, so a page-only value
+    // would let the bias land the object off its boundary. TEXT_VMADDR_BASE
+    // is a multiple of every alignment up to itself, so the ELF congruence
+    // p_vaddr == p_offset (mod p_align) holds for the raised value.
+    let rw_seg_align = seg.max(data_align.next_power_of_two());
     // PT_TLS requires `p_vaddr % p_align == 0` (ELF gABI), and glibc
     // computes a `_Thread_local`'s address as `tp - roundup(p_memsz,
     // p_align) + var_offset`. A misaligned TLS image makes the loader
@@ -2155,7 +2162,7 @@ pub(super) fn write(
         TEXT_VMADDR_BASE + segment2_off,
         segment2_filesize,
         segment2_memsize,
-        seg,
+        rw_seg_align,
     );
 
     // PT_DYNAMIC -- mirror of the .dynamic section.

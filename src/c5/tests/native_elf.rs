@@ -401,6 +401,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("vla_loop_stack_restore.c", 42),
     ("vla_param_decay.c", 0),
     ("arithmetic.c", 60),
+    ("get_cpuid_leaf_checks.c", 0),
     ("register_var_stack_pointer.c", 0),
     ("attribute_weak_alias.c", 0),
     ("attribute_section_placement.c", 0),

@@ -2708,9 +2708,16 @@ fn weak_alias_used_bindings_in_relocatable() {
     let real = find("real_fn");
     let alias = find("alias_fn");
     assert_eq!(alias.binding, 2, "alias declared weak binds STB_WEAK");
-    assert_eq!(alias.value, real.value, "alias sits at the target's address");
+    assert_eq!(
+        alias.value, real.value,
+        "alias sits at the target's address"
+    );
     assert!(matches!(alias.section, NativeSymSection::Text));
-    assert_eq!(find("weak_def").binding, 2, "weak definition binds STB_WEAK");
+    assert_eq!(
+        find("weak_def").binding,
+        2,
+        "weak definition binds STB_WEAK"
+    );
     assert_eq!(find("keep_me").binding, 0, "used static stays STB_LOCAL");
     let mw = find("missing_weak");
     assert_eq!(mw.binding, 2, "weak extern declaration binds STB_WEAK");
@@ -2728,8 +2735,9 @@ fn strong_definition_overrides_weak_at_link() {
     // error; a weak definition alone satisfies references.
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::parse_native_elf;
-    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options,
-        link_native_objects};
+    use crate::c5::{
+        NativeOptions, OutputKind, Target, emit_native_with_options, link_native_objects,
+    };
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
         ..Default::default()
@@ -2747,8 +2755,7 @@ fn strong_definition_overrides_weak_at_link() {
     };
     // The weak unit defines `f` first in its text (absolute offset 0
     // when the unit links first); the strong unit's `f` lands past it.
-    let weak_obj =
-        compile("int f(void) __attribute__((weak));\nint f(void) { return 1; }\n");
+    let weak_obj = compile("int f(void) __attribute__((weak));\nint f(void) { return 1; }\n");
     let strong_obj = compile("int filler(void) { return 9; }\nint f(void) { return 2; }\n");
     let merged = link_native_objects(&[weak_obj, strong_obj]).expect("link");
     let sym = merged.defined.get("f").expect("f defined in merge");
@@ -2757,8 +2764,7 @@ fn strong_definition_overrides_weak_at_link() {
         "strong definition (second unit) must win over the weak one at text offset 0"
     );
     // A weak definition alone satisfies the reference.
-    let weak_only =
-        compile("int f(void) __attribute__((weak));\nint f(void) { return 1; }\n");
+    let weak_only = compile("int f(void) __attribute__((weak));\nint f(void) { return 1; }\n");
     let merged = link_native_objects(&[weak_only]).expect("link weak-only");
     assert!(merged.defined.contains_key("f"));
 }
@@ -2822,7 +2828,10 @@ fn section_attribute_places_symbols_in_named_sections() {
     let init_i = *idx_of.get(".init.text").expect(".init.text present");
     assert_eq!(u32le(shdr(init_i) + 4), SHT_PROGBITS);
     assert_eq!(u64le(shdr(init_i) + 8), SHF_ALLOC | SHF_EXECINSTR);
-    assert!(u64le(shdr(init_i) + 0x20) > 0, ".init.text holds code bytes");
+    assert!(
+        u64le(shdr(init_i) + 0x20) > 0,
+        ".init.text holds code bytes"
+    );
 
     let cfg_i = *idx_of.get(".cfg.data").expect(".cfg.data present");
     assert_eq!(u32le(shdr(cfg_i) + 4), SHT_PROGBITS);
@@ -2835,9 +2844,15 @@ fn section_attribute_places_symbols_in_named_sections() {
         !idx_of.contains_key(".rela.init.text"),
         "no empty .rela companion"
     );
-    let rela_i = *idx_of.get(".rela.cfg.data").expect("companion rela present");
+    let rela_i = *idx_of
+        .get(".rela.cfg.data")
+        .expect("companion rela present");
     assert_eq!(u32le(shdr(rela_i) + 4), SHT_RELA);
-    assert_eq!(u32le(shdr(rela_i) + 0x2c) as usize, cfg_i, "sh_info names the section");
+    assert_eq!(
+        u32le(shdr(rela_i) + 0x2c) as usize,
+        cfg_i,
+        "sh_info names the section"
+    );
     let rela_off = u64le(shdr(rela_i) + 0x18) as usize;
     let rela_size = u64le(shdr(rela_i) + 0x20) as usize;
     assert_eq!(rela_size, 24, "one relocation for the hook slot");
@@ -2926,9 +2941,7 @@ fn file_scope_asm_pushsection_lands_in_relocatable_object() {
             \".popsection\");\n\
         int main(void) { return export_me(); }\n";
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
-        let program = Compiler::new(String::from(src))
-            .compile()
-            .expect("compile");
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             ..Default::default()
@@ -2961,8 +2974,16 @@ fn file_scope_asm_pushsection_lands_in_relocatable_object() {
         assert_eq!(r_offset, 0, "{target:?}: reloc at the quad field");
         assert_eq!(r_info & 0xFFFF_FFFF, abs64, "{target:?}: abs64 type");
         // The relocation's symbol is the C function, by name.
-        let symtab = &sections.iter().find(|(n, _, _, _)| n == ".symtab").unwrap().3;
-        let strtab = &sections.iter().find(|(n, _, _, _)| n == ".strtab").unwrap().3;
+        let symtab = &sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".symtab")
+            .unwrap()
+            .3;
+        let strtab = &sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".strtab")
+            .unwrap()
+            .3;
         let sym = (r_info >> 32) as usize;
         let st_name =
             u32::from_le_bytes(symtab[sym * 24..sym * 24 + 4].try_into().unwrap()) as usize;
@@ -2997,9 +3018,7 @@ fn inline_asm_pushsection_lands_in_relocatable_object() {
         }\n\
         int main(void) { int v = 42; return f(&v); }\n";
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
-        let program = Compiler::new(String::from(src))
-            .compile()
-            .expect("compile");
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             ..Default::default()
@@ -3022,7 +3041,8 @@ fn inline_asm_pushsection_lands_in_relocatable_object() {
             .unwrap_or_else(|| panic!("{target:?}: .rela.discard.probe missing"));
         assert_eq!(rela.1, 4, "{target:?}: SHT_RELA expected");
         assert_eq!(rela.3.len(), 2 * 24, "{target:?}: two relocations");
-        let r_info = |k: usize| u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+        let r_info =
+            |k: usize| u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
         let (abs64, prel32) = match target {
             Target::LinuxX64 => (1u64, 2u64),
             _ => (257, 261),
@@ -3074,7 +3094,11 @@ fn attribute_and_asm_pushsection_merge_into_one_section() {
         // marker's 4 initialized bytes, padding to the asm block's
         // `.balign 8`, then the two 8-byte fields.
         assert_eq!(sec.3.len(), 24, "{target:?}: merged payload size");
-        assert_eq!(&sec.3[0..4], &77u32.to_le_bytes(), "{target:?}: marker first");
+        assert_eq!(
+            &sec.3[0..4],
+            &77u32.to_le_bytes(),
+            "{target:?}: marker first"
+        );
         let text_i = sections.iter().position(|s| s.0 == ".text").unwrap();
         let symtab = &sections.iter().find(|s| s.0 == ".symtab").unwrap().3;
         let sym_shndx = |sym: usize| {
@@ -3121,7 +3145,11 @@ fn attribute_and_asm_pushsection_merge_into_one_section() {
                 marker_shndx = Some(sym_shndx(s));
             }
         }
-        assert_eq!(marker_shndx, Some(mix_i), "{target:?}: marker symbol in .mix");
+        assert_eq!(
+            marker_shndx,
+            Some(mix_i),
+            "{target:?}: marker symbol in .mix"
+        );
     }
 }
 
@@ -3175,7 +3203,10 @@ fn extern_data_ref_is_relaxable_got_load_x86_64() {
     let (obj, relocs) = relocs_against(EXTERN_DATA_SRC, Target::LinuxX64, "ext_var");
     assert!(!relocs.is_empty(), "extern data refs must reloc `ext_var`");
     for r in &relocs {
-        assert_eq!(r.rtype, 42, "extern data ref must be R_X86_64_REX_GOTPCRELX");
+        assert_eq!(
+            r.rtype, 42,
+            "extern data ref must be R_X86_64_REX_GOTPCRELX"
+        );
         assert_eq!(r.addend, -4, "disp32 reloc uses the end-of-field addend");
         let off = r.offset as usize;
         assert!(off >= 3 && off + 4 <= obj.text.len());
@@ -3300,4 +3331,159 @@ fn two_tu_extern_data_links_through_own_linker() {
             "{target:?}: a two-TU link with every symbol defined must import nothing"
         );
     }
+}
+
+/// A single-TU final image has no link step, so an external reference
+/// the codegen left as a zero-displacement placeholder must not reach
+/// the output: a rip-relative `lea` with disp 0 materializes the
+/// address of the next instruction, which reads as a non-null function
+/// pointer and faults when called. An undefined weak reference
+/// resolves to 0 instead (ELF STB_WEAK), so the `if (fn) fn();` guard
+/// skips the call.
+#[test]
+fn undefined_weak_reference_in_single_tu_image_reads_as_null() {
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    const SRC: &str = "\
+         extern void optional_hook(void) __attribute__((weak));\n\
+         int main(void) {\n\
+             if (optional_hook) { optional_hook(); return 1; }\n\
+             return 0;\n\
+         }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program =
+            Compiler::with_options(SRC.to_string(), target, crate::CompileOptions::default())
+                .compile()
+                .expect("compile");
+        let bytes =
+            emit_native_with_options(&program, target, NativeOptions::default()).expect("emit");
+        match target {
+            Target::LinuxX64 => {
+                assert!(
+                    !bytes
+                        .windows(7)
+                        .any(|w| w == [0x48, 0x8D, 0x05, 0, 0, 0, 0]),
+                    "{target:?}: `lea rax, [rip+0]` names an unresolved external"
+                );
+                assert!(
+                    !bytes.windows(5).any(|w| w == [0xE8, 0, 0, 0, 0]),
+                    "{target:?}: `call` with disp 0 names an unresolved external"
+                );
+            }
+            _ => {
+                // `adrp xd, #0` (0x90000000 | rd) and `bl #0` (0x94000000)
+                // are the aarch64 unresolved-placeholder shapes.
+                for word in bytes.chunks_exact(4) {
+                    let w = u32::from_le_bytes(word.try_into().unwrap());
+                    assert_ne!(w & 0xFFFF_FFE0, 0x9000_0000, "{target:?}: `adrp xd, #0`");
+                    assert_ne!(w, 0x9400_0000, "{target:?}: `bl #0`");
+                }
+            }
+        }
+    }
+}
+
+/// The same path with a non-weak undefined reference is a diagnostic.
+/// Emitting the placeholder silently produced a binary that faulted at
+/// the call site with no build-time signal.
+#[test]
+fn undefined_strong_reference_in_single_tu_image_is_diagnosed() {
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    const SRC: &str = "extern void absent(void);\nint main(void) { absent(); return 0; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program =
+            Compiler::with_options(SRC.to_string(), target, crate::CompileOptions::default())
+                .compile()
+                .expect("compile");
+        let err = emit_native_with_options(&program, target, NativeOptions::default())
+            .expect_err("an undefined reference in a final image must be diagnosed");
+        assert!(
+            format!("{err}").contains("undefined reference to `absent`"),
+            "{target:?}: unexpected diagnostic: {err}"
+        );
+    }
+}
+
+/// A call to a function defined `__attribute__((weak))` in the same TU
+/// must go through a relocation, not a baked local displacement, and
+/// the linker must resolve that relocation against the strong sibling
+/// definition rather than this unit's own copy (ELF STB_WEAK). Matches
+/// gcc, which emits `R_X86_64_PLT32` for this shape.
+#[test]
+fn call_to_weak_definition_resolves_to_the_strong_sibling() {
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const WEAK_UNIT: &str = "\
+         int pick(void) __attribute__((weak));\n\
+         int pick(void) { return 1; }\n\
+         int call_pick(void) { return pick(); }\n";
+    const STRONG_UNIT: &str = "int pick(void) { return 2; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = |src: &str| {
+            let program = Compiler::with_options(
+                src.to_string(),
+                target,
+                crate::CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            emit_native_with_options(&program, target, opts).expect("emit")
+        };
+        let weak_bytes = obj(WEAK_UNIT);
+        let weak_obj = parse_native_elf(&weak_bytes).expect("parse ET_REL");
+        let call_sites: Vec<u64> = weak_obj
+            .text_relocs
+            .iter()
+            .filter(|r| weak_obj.symbols[r.sym_idx].name == "pick")
+            .map(|r| r.offset)
+            .collect();
+        assert_eq!(
+            call_sites.len(),
+            1,
+            "{target:?}: the call to a weak definition must be a relocation"
+        );
+        let strong_bytes = obj(STRONG_UNIT);
+        let merged = link_native_objects(&[
+            weak_obj,
+            parse_native_elf(&strong_bytes).expect("parse ET_REL"),
+        ])
+        .expect("link");
+        let pick = merged.defined.get("pick").expect("pick resolved");
+        // The weak unit links first, so its text starts at 0 and the
+        // reloc offset doubles as the merged-text offset.
+        let target_off = match target {
+            Target::LinuxX64 => {
+                let site = call_sites[0] as usize;
+                let rel = i32::from_le_bytes(merged.text[site..site + 4].try_into().unwrap());
+                (site as i64 + 4 + rel as i64) as u64
+            }
+            _ => {
+                let site = call_sites[0] as usize;
+                let w = u32::from_le_bytes(merged.text[site..site + 4].try_into().unwrap());
+                let imm26 = ((w & 0x03ff_ffff) << 6) as i32 >> 6;
+                (site as i64 + (imm26 as i64) * 4) as u64
+            }
+        };
+        assert_eq!(
+            target_off, pick.value,
+            "{target:?}: the call must branch to the winning definition"
+        );
+        assert!(
+            pick.value as usize >= merged_weak_text_len(&weak_bytes),
+            "{target:?}: the strong definition must win over the weak one"
+        );
+    }
+}
+
+/// `.text` length of an ET_REL object, used to tell which unit a merged
+/// symbol landed in.
+#[cfg(feature = "full")]
+fn merged_weak_text_len(bytes: &[u8]) -> usize {
+    crate::c5::linker::parse_native_elf(bytes)
+        .expect("parse ET_REL")
+        .text
+        .len()
 }

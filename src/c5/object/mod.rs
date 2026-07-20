@@ -18,6 +18,7 @@ pub(crate) mod pe;
 pub(crate) mod section_table;
 #[cfg(feature = "std")]
 pub(crate) mod so_versions;
+pub(crate) mod weak_undef;
 
 #[cfg(feature = "native-emit")]
 use crate::c5::error::C5Error;
@@ -148,6 +149,95 @@ fn route_single_tu_data_imports(build: &mut Build, target: Target) {
     build.user_extern_data_refs = remaining;
 }
 
+/// Resolve or diagnose the external references still recorded on a
+/// single-TU final image. Such an image has no link step to bind them,
+/// so leaving them as the codegen's zero-displacement placeholders
+/// yields a rip-relative `lea` that materializes the address of the
+/// next instruction -- a non-null pointer that faults when called.
+///
+/// An undefined weak reference resolves to address 0, matching the
+/// linker's ELF behavior, so the `if (fn) fn();` guard idiom reads a
+/// null pointer. Everything else is an undefined-reference diagnostic.
+/// `#pragma binding(data ...)` locals are excluded: the per-format
+/// writer binds those through the GOT / a copy relocation.
+#[cfg(feature = "native-emit")]
+fn resolve_single_tu_extern_refs(
+    program: &Program,
+    build: &mut Build,
+    target: Target,
+) -> Result<(), C5Error> {
+    if build.output_kind == OutputKind::Relocatable
+        || (build.user_extern_data_refs.is_empty() && build.user_extern_call_sites.is_empty())
+    {
+        return Ok(());
+    }
+    use crate::c5::token::Token;
+    let weak_names: alloc::collections::BTreeSet<&str> = program
+        .symbols
+        .iter()
+        .filter(|s| s.is_weak && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64))
+        .map(|s| s.name.as_str())
+        .collect();
+    let data_bindings: alloc::collections::BTreeSet<&str> = build
+        .imports
+        .data_bindings
+        .iter()
+        .map(|(local, _host, _dylib)| local.as_str())
+        .collect();
+    let machine = match target {
+        Target::LinuxX64 | Target::WindowsX64 => Machine::X86_64,
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => Machine::Aarch64,
+    };
+    let undefined = |name: &str| -> C5Error {
+        C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+            "undefined reference to `{name}`",
+        )))
+    };
+    let unsupported = |name: &str| -> C5Error {
+        C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+            "unresolved weak reference to `{name}`: cannot resolve the referencing instruction to address 0",
+        )))
+    };
+
+    let mut kept_data = Vec::new();
+    for r in core::mem::take(&mut build.user_extern_data_refs) {
+        if data_bindings.contains(r.symbol_name.as_str()) {
+            kept_data.push(r);
+            continue;
+        }
+        if !weak_names.contains(r.symbol_name.as_str()) {
+            return Err(undefined(&r.symbol_name));
+        }
+        let ok = match machine {
+            Machine::X86_64 => weak_undef::x86_64_lea_to_zero(&mut build.text, r.instr_offset),
+            Machine::Aarch64 => {
+                weak_undef::aarch64_adrp_to_zero(&mut build.text, r.instr_offset)
+                    && weak_undef::aarch64_add_lo12_to_zero(&mut build.text, r.instr_offset + 4)
+            }
+        };
+        if !ok {
+            return Err(unsupported(&r.symbol_name));
+        }
+    }
+    build.user_extern_data_refs = kept_data;
+
+    for site in core::mem::take(&mut build.user_extern_call_sites) {
+        if !weak_names.contains(site.symbol_name.as_str()) {
+            return Err(undefined(&site.symbol_name));
+        }
+        let ok = match machine {
+            Machine::X86_64 => weak_undef::x86_64_branch_to_nop(&mut build.text, site.instr_offset),
+            Machine::Aarch64 => {
+                weak_undef::aarch64_branch_to_nop(&mut build.text, site.instr_offset)
+            }
+        };
+        if !ok {
+            return Err(unsupported(&site.symbol_name));
+        }
+    }
+    Ok(())
+}
+
 /// Whether `BADC_NO_BSS_SEGREGATE` opts a build out of segregating
 /// wholly-zero data objects into a no-file-backing `.bss` region. The
 /// opt-out exists for debugging and for diffing against the pre-`.bss`
@@ -185,6 +275,7 @@ pub fn emit_native_with_options_named(
     let mut build = lower_for(program, target, options)?;
     build.bss_size = bss_size;
     route_single_tu_data_imports(&mut build, target);
+    resolve_single_tu_extern_refs(program, &mut build, target)?;
     if options.output_kind == OutputKind::SharedLibrary {
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
     }

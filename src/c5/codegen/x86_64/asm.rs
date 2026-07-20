@@ -25,6 +25,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::super::ir::AsmRegSize;
+use super::super::ssa::emit_common::data_directive_width;
 
 /// Base mnemonic of a template instruction (AT&T size suffix folded
 /// out into [`AsmInsn::suffix`]).
@@ -171,6 +172,10 @@ pub(crate) enum Mnemonic {
     /// instructions the mnemonic catalogue does not cover; the bytes are
     /// emitted verbatim.
     RawBytes,
+    /// A `.byte`-family data directive whose arguments reference operands
+    /// (`.long %c0`), so the values resolve at emit time. The payload is the
+    /// element width in bytes; the operands are the directive arguments.
+    Data(u8),
     /// A general-purpose / system mnemonic recognized straight from the
     /// catalogue, not one of the bespoke forms above. The string is the
     /// catalogue mnemonic; [`encode`] routes it through the table encoder with
@@ -185,6 +190,12 @@ pub(crate) enum AsmOpnd {
     /// `%N` / `%<size>N`: operand N of the asm statement, at the named
     /// register-name size (or the operand's own width when unmodified).
     Ref { idx: u8, size: Option<AsmRegSize> },
+    /// `%cN` / `%PN`: operand N substituted as a bare constant (`%c`) or a
+    /// bare symbol / constant address (`%P`), without the `$` immediate
+    /// syntax. Valid on an `i`-class operand; the emitter resolves a
+    /// compile-time constant to an immediate and an address value to the
+    /// operand's captured value (`lea` / `call` / `jmp` positions).
+    RefConst { idx: u8, symbolic: bool },
     /// `%%reg`: an explicit register named in the template.
     Reg { reg: u8, size: AsmRegSize },
     /// `$imm`: a literal immediate.
@@ -854,6 +865,20 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
                 .map_err(|_| format!("inline asm: bad goto-label reference `{tok}`"))?;
             return Ok(AsmOpnd::GotoLabel(k));
         }
+        // `%cN` / `%PN`: a bare-constant / bare-symbol substitution.
+        if let Some(&m) = body.as_bytes().first()
+            && matches!(m, b'c' | b'P')
+            && body.len() > 1
+            && body[1..].bytes().all(|c| c.is_ascii_digit())
+        {
+            let idx: u8 = body[1..]
+                .parse()
+                .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            return Ok(AsmOpnd::RefConst {
+                idx,
+                symbolic: m == b'P',
+            });
+        }
         // `%N` or `%<size>N`. A leading size modifier is a single
         // letter b/w/k/q before the operand digits.
         let (size, digits) = match body.as_bytes().first() {
@@ -953,13 +978,7 @@ fn parse_int(s: &str) -> Option<i64> {
 /// The bare form reads its tokens as hexadecimal (so `90` is `0x90`); the
 /// directive form reads C-style integer constants (`0x`-prefixed or decimal).
 fn parse_raw_bytes(piece: &str) -> Option<Result<Vec<u8>, String>> {
-    let width = match piece.split_whitespace().next()? {
-        ".byte" => Some(1usize),
-        ".word" | ".2byte" => Some(2),
-        ".long" | ".4byte" => Some(4),
-        ".quad" | ".8byte" => Some(8),
-        _ => None,
-    };
+    let width = data_directive_width(piece.split_whitespace().next()?);
     if let Some(w) = width {
         let args = piece[piece.find(char::is_whitespace).unwrap()..].trim();
         let mut out = Vec::new();
@@ -1072,6 +1091,32 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         // carry no code bytes. badc emits no unwind info for asm bodies, so
         // they are accepted and ignored.
         if piece.starts_with(".cfi_") {
+            continue;
+        }
+        // A `.byte`-family directive whose arguments reference operands
+        // (`.long %c0`) resolves its values at emit time.
+        if let Some((tok, rest)) = piece
+            .split_once(char::is_whitespace)
+            .filter(|(_, r)| r.contains('%'))
+            && let Some(w) = data_directive_width(tok)
+        {
+            let mut operands = Vec::new();
+            for a in rest.split(',') {
+                // Directive arguments are bare integers, not `$`-prefixed.
+                let a = a.trim();
+                operands.push(match parse_int(a) {
+                    Some(v) => AsmOpnd::Imm(v),
+                    None => parse_operand(a, &names)?,
+                });
+            }
+            insns.push(AsmInsn {
+                mnemonic: Mnemonic::Data(w as u8),
+                suffix: None,
+                operands,
+                bytes: Vec::new(),
+                sym_target: None,
+                label_def: None,
+            });
             continue;
         }
         // A raw-byte piece (hex-byte run or `.byte`-family directive) emits its
@@ -2184,6 +2229,36 @@ mod tests {
                 core::str::from_utf8(tmpl).unwrap()
             );
         }
+    }
+
+    #[test]
+    fn const_modifier_refs() {
+        // `%cN` / `%PN` parse to bare-constant operand references.
+        let insns = parse_template(b"lea %P0, %%rax").unwrap();
+        assert_eq!(
+            insns[0].operands[0],
+            AsmOpnd::RefConst {
+                idx: 0,
+                symbolic: true
+            }
+        );
+        // A data directive referencing an operand defers to emit time,
+        // carrying the directive width.
+        let insns = parse_template(b".long %c0").unwrap();
+        assert_eq!(insns[0].mnemonic, Mnemonic::Data(4));
+        assert_eq!(
+            insns[0].operands[0],
+            AsmOpnd::RefConst {
+                idx: 0,
+                symbolic: false
+            }
+        );
+        let insns = parse_template(b".quad %c1, 7").unwrap();
+        assert_eq!(insns[0].mnemonic, Mnemonic::Data(8));
+        assert_eq!(insns[0].operands[1], AsmOpnd::Imm(7));
+        // A constant-only directive stays on the raw-byte path.
+        let insns = parse_template(b".long 42").unwrap();
+        assert_eq!(insns[0].mnemonic, Mnemonic::RawBytes);
     }
 
     #[test]

@@ -6037,6 +6037,78 @@ fn emit_inline_asm(
             code.extend_from_slice(&insn.bytes);
             continue;
         }
+        // The constant value of an `i`-class operand reference, if any.
+        let const_of = |idx: u8| -> Option<i64> {
+            match func.insts.get(*args.get(idx as usize)? as usize) {
+                Some(Inst::Imm(v)) => Some(*v),
+                _ => None,
+            }
+        };
+        // A data directive with operand references (`.long %c0`): each
+        // argument must resolve to a compile-time constant, emitted
+        // little-endian at the directive width.
+        if let super::asm::Mnemonic::Data(w) = insn.mnemonic {
+            for o in &insn.operands {
+                let v = match *o {
+                    AsmOpnd::Imm(v) => v,
+                    AsmOpnd::RefConst { idx, .. } | AsmOpnd::Ref { idx, .. } => {
+                        match const_of(idx) {
+                            Some(v) => v,
+                            None => return fail("inline asm: non-constant data-directive value"),
+                        }
+                    }
+                    _ => return fail("inline asm: unsupported data-directive value"),
+                };
+                code.extend_from_slice(&(v as u64).to_le_bytes()[..w as usize]);
+            }
+            continue;
+        }
+        // `%P` / `%c` naming a link-time address (not a compile-time
+        // constant): the operand's captured value is the address. `lea`
+        // materializes it into the destination; `call` / `jmp` branch
+        // through it (r11 scratch).
+        if let Some((k, idx)) = insn.operands.iter().enumerate().find_map(|(k, o)| match *o {
+            AsmOpnd::RefConst { idx, .. } if const_of(idx).is_none() => Some((k, idx)),
+            _ => None,
+        }) {
+            let name = match insn.mnemonic {
+                super::asm::Mnemonic::Table(n) => n,
+                _ => "",
+            };
+            match name {
+                "lea" | "leaq" if k == 0 && insn.operands.len() == 2 => {
+                    let dst = match insn.operands[1] {
+                        AsmOpnd::Reg { reg, .. } if reg < 16 => reg,
+                        AsmOpnd::Ref { idx, .. } => match op_reg[idx as usize] {
+                            Some(r) => r,
+                            None => return fail("inline asm: `lea` destination must be a register"),
+                        },
+                        _ => return fail("inline asm: `lea` destination must be a register"),
+                    };
+                    super::encode::emit_mov_r_mem(code, Reg(dst), Reg::RBP, cap_off(idx as usize));
+                }
+                "call" | "callq" | "jmp" | "jmpq" if insn.operands.len() == 1 => {
+                    super::encode::emit_mov_r_mem(
+                        code,
+                        SCRATCH_R11,
+                        Reg::RBP,
+                        cap_off(idx as usize),
+                    );
+                    // FF /2 (call) / FF /4 (jmp) through r11.
+                    code.extend_from_slice(&[
+                        0x41,
+                        0xFF,
+                        if name.starts_with("call") { 0xD3 } else { 0xE3 },
+                    ]);
+                }
+                _ => {
+                    return fail(
+                        "inline asm: `%c`/`%P` address operand outside lea/call/jmp",
+                    );
+                }
+            }
+            continue;
+        }
         // A jmp / jcc to a local label: emit the rel32 form now and record the
         // site; the displacement is patched below against the label offset.
         if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
@@ -6152,6 +6224,12 @@ fn emit_inline_asm(
         for o in &insn.operands {
             let c = match *o {
                 AsmOpnd::Imm(val) => Concrete::Imm(val),
+                // `%cN` / `%PN` with a compile-time constant (the address
+                // case was handled above): a bare immediate.
+                AsmOpnd::RefConst { idx, .. } => match const_of(idx) {
+                    Some(v) => Concrete::Imm(v),
+                    None => return fail("inline asm: non-constant `%c`/`%P` operand"),
+                },
                 AsmOpnd::Reg { reg, size } => Concrete::Reg { reg, size },
                 AsmOpnd::Ref { idx, size } => {
                     let width = asm.operands[idx as usize].width;

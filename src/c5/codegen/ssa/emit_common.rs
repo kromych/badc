@@ -791,14 +791,19 @@ pub(crate) fn parse_raw_template(template: &[u8]) -> Option<alloc::vec::Vec<u8>>
     any.then_some(out)
 }
 
+/// Element width of a `.byte`-family data directive keyword, or `None`.
+pub(crate) fn data_directive_width(tok: &str) -> Option<usize> {
+    Some(match tok {
+        ".byte" => 1,
+        ".word" | ".2byte" | ".short" | ".hword" => 2,
+        ".long" | ".4byte" | ".int" => 4,
+        ".quad" | ".8byte" => 8,
+        _ => return None,
+    })
+}
+
 fn parse_raw_piece(piece: &str) -> Option<alloc::vec::Vec<u8>> {
-    let width = match piece.split_whitespace().next()? {
-        ".byte" => Some(1usize),
-        ".word" | ".2byte" => Some(2),
-        ".long" | ".4byte" => Some(4),
-        ".quad" | ".8byte" => Some(8),
-        _ => None,
-    };
+    let width = data_directive_width(piece.split_whitespace().next()?);
     if let Some(w) = width {
         let args = piece[piece.find(char::is_whitespace)?..].trim();
         let mut out = alloc::vec::Vec::new();

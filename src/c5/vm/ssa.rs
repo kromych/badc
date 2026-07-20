@@ -2094,6 +2094,11 @@ fn run_inline_asm(
                     None => (frame.regs[args[idx as usize] as usize], sz),
                 }
             }
+            // `%cN` / `%PN`: the operand's value, as an immediate.
+            AsmOpnd::RefConst { idx, .. } => (
+                frame.regs[args[idx as usize] as usize],
+                AsmRegSize::from_width(asm.operands[idx as usize].width),
+            ),
             // Label / memory references are refused before this loop.
             AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
@@ -2109,6 +2114,7 @@ fn run_inline_asm(
             AsmOpnd::Reg { reg, .. } => (reg < 16).then_some(reg as usize),
             AsmOpnd::Ref { idx, .. } => op_reg[idx as usize].map(|r| r as usize),
             AsmOpnd::Imm(_)
+            | AsmOpnd::RefConst { .. }
             | AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
             | AsmOpnd::GotoLabel(_)
@@ -2119,9 +2125,10 @@ fn run_inline_asm(
     for insn in &insns {
         let ops = &insn.operands;
         match insn.mnemonic {
-            // Literal machine bytes are opaque to the register model, like the
-            // privileged / port ops below: no modelled effect under the VM.
-            Mnemonic::RawBytes => {}
+            // Literal machine bytes and emit-time data directives are opaque
+            // to the register model, like the privileged / port ops below:
+            // no modelled effect under the VM.
+            Mnemonic::RawBytes | Mnemonic::Data(_) => {}
             // The interpreter is not a CPU emulator: a mnemonic reached through
             // the catalogue is refused rather than modelled. Such inline asm is
             // an ahead-of-time / JIT construct, executed natively there.

@@ -789,6 +789,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_goto.c", 42),
     ("inline_asm_reg_var.c", 42),
     ("inline_asm_named_operands.c", 42),
+    ("inline_asm_const_modifier.c", 42),
     ("compound_assign_int_fp.c", 0),
     ("signal_sig_t.c", 0),
     ("math_classify.c", 0),

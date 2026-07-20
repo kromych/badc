@@ -27,6 +27,10 @@ pub(crate) enum AsmOpndA64 {
     /// `%N` / `%wN` / `%xN`: operand N of the statement, at the register width
     /// named by the modifier (or the operand's own width when unmodified).
     Ref { idx: u8, is64: Option<bool> },
+    /// `%cN` / `%PN`: operand N substituted as a bare constant, without
+    /// immediate syntax. Valid on an `i`-class operand; the emitter
+    /// resolves the compile-time constant value.
+    RefConst(u8),
     /// An explicit register: `x5` / `w5` / `sp` / `xzr` (`num == 31` is the
     /// zero register or SP, per the instruction).
     Reg { num: u8, is64: bool },
@@ -700,6 +704,17 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
                 .map_err(|_| format!("inline asm: bad goto-label reference `{tok}`"))?;
             return Ok(AsmOpndA64::GotoLabel(k));
         }
+        // `%cN` / `%PN`: a bare-constant substitution.
+        if let Some(&m) = rest.as_bytes().first()
+            && matches!(m, b'c' | b'P')
+            && rest.len() > 1
+            && rest[1..].bytes().all(|c| c.is_ascii_digit())
+        {
+            let idx: u8 = rest[1..]
+                .parse()
+                .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            return Ok(AsmOpndA64::RefConst(idx));
+        }
         // `%N` (natural width); the GP views `%wN` (32) / `%xN` (64); and the FP
         // scalar views `%sN` (single) / `%dN` (double). A view flag rides `is64`
         // (w/s = 32, x/d = 64) and the emitter resolves it against the operand's
@@ -817,6 +832,31 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             if piece.is_empty() {
                 continue;
             }
+        }
+        // A `.byte`-family directive whose arguments reference operands
+        // (`.long %c0`) resolves its values at emit time; the directive
+        // keyword rides the mnemonic field.
+        if let Some((tok, rest)) = piece
+            .split_once(char::is_whitespace)
+            .filter(|(_, r)| r.contains('%'))
+            && emit_common::data_directive_width(tok).is_some()
+        {
+            let mut operands = Vec::new();
+            for a in split_operands(rest) {
+                // Directive arguments are bare integers, not `#`-prefixed.
+                operands.push(match parse_int(a) {
+                    Some(v) => AsmOpndA64::Imm(v),
+                    None => parse_operand(a)?,
+                });
+            }
+            insns.push(AsmInsnA64 {
+                mnemonic: String::from(tok),
+                operands,
+                bytes: Vec::new(),
+                label_def: None,
+                sym_target: None,
+            });
+            continue;
         }
         // Reuse the shared raw-byte recognizer for a single piece.
         if let Some(bytes) = emit_common::parse_raw_template(piece.as_bytes()) {

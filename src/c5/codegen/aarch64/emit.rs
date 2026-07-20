@@ -974,6 +974,7 @@ pub(crate) fn emit_function(
                     code,
                     asm,
                     args,
+                    func,
                     alloc,
                     frame,
                     fixups,
@@ -2327,6 +2328,7 @@ fn emit_inline_asm_aarch64(
     code: &mut Vec<u8>,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
+    func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
     fixups: &mut Vec<super::encode::Fixup>,
@@ -2467,12 +2469,31 @@ fn emit_inline_asm_aarch64(
             }
         }
     }
+    // The constant value of an `i`-class operand reference, if any.
+    let const_of = |idx: u8| -> Option<i64> {
+        match func
+            .insts
+            .get(*args.get(idx as usize)? as usize)
+        {
+            Some(super::super::ir::Inst::Imm(v)) => Some(*v),
+            _ => None,
+        }
+    };
     // Resolve one symbolic operand to a table operand; label references have
     // no table form and are handled by the branch path below.
     let conv = |o: &AsmOpndA64| -> Result<Opnd, String> {
         let resolve_ref = |idx: u8| -> Option<u8> { op_reg.get(idx as usize).copied().flatten() };
         Ok(match *o {
             AsmOpndA64::Imm(v) => Opnd::Imm(v),
+            // `%cN` / `%PN`: the operand's compile-time constant, bare.
+            AsmOpndA64::RefConst(idx) => match const_of(idx) {
+                Some(v) => Opnd::Imm(v),
+                None => {
+                    return Err(String::from(
+                        "aarch64 inline asm: non-constant `%c` operand",
+                    ));
+                }
+            },
             AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
             AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
             AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
@@ -2575,6 +2596,30 @@ fn emit_inline_asm_aarch64(
         }
         if !insn.bytes.is_empty() {
             code.extend_from_slice(&insn.bytes);
+            continue;
+        }
+        // A data directive with operand references (`.long %c0`): each
+        // argument must resolve to a compile-time constant, emitted
+        // little-endian at the directive width.
+        if let Some(w) = super::super::ssa::emit_common::data_directive_width(&insn.mnemonic) {
+            for o in &insn.operands {
+                let v = match *o {
+                    AsmOpndA64::Imm(v) => v,
+                    AsmOpndA64::RefConst(idx) | AsmOpndA64::Ref { idx, .. } => match const_of(idx)
+                    {
+                        Some(v) => v,
+                        None => {
+                            bail_msg("aarch64 inline asm: non-constant data-directive value");
+                            return false;
+                        }
+                    },
+                    _ => {
+                        bail_msg("aarch64 inline asm: unsupported data-directive value");
+                        return false;
+                    }
+                };
+                code.extend_from_slice(&(v as u64).to_le_bytes()[..w]);
+            }
             continue;
         }
         // A direct `bl` / `b` to a symbol: resolve the name to its entry PC and
@@ -3423,7 +3468,7 @@ fn emit_inst(
             true
         }
         Inst::InlineAsm { asm, args } => {
-            emit_inline_asm_aarch64(code, asm, args, alloc, frame, fixups, name2entpc, None)
+            emit_inline_asm_aarch64(code, asm, args, func, alloc, frame, fixups, name2entpc, None)
         }
         _ => false,
     }

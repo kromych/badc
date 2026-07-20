@@ -2448,7 +2448,11 @@ pub(crate) fn encode(
             Err(String::from("inline asm: unsupported mov operands"))
         }
         // The delegated general-purpose / system mnemonics are handled by the
-        // table encoder above and never reach here.
+        // table encoder above; reaching here means the catalogue has no form
+        // matching these operands, so report the mnemonic as written.
+        Mnemonic::Table(name) => Err(format!(
+            "inline asm: `{name}` has no x86-64 encoding for these operands"
+        )),
         _ => Err(format!(
             "inline asm: unsupported instruction `{mnemonic:?}`"
         )),

@@ -521,7 +521,7 @@ impl Compiler {
                             static_seen,
                             extern_seen,
                         )?;
-                        self.accept(',')?;
+                        self.accept_declarator_separator()?;
                         continue;
                     }
                     return Err(self.compile_err("declarator `asm` is not supported at file scope"));
@@ -760,7 +760,7 @@ impl Compiler {
                             .unwrap_or_else(|| alloc::vec![0i64; proto_fixed]);
                         self.symbols[id_idx].is_variadic = proto_variadic;
                     }
-                    self.accept(',')?;
+                    self.accept_declarator_separator()?;
                     continue;
                 }
 
@@ -1104,7 +1104,7 @@ impl Compiler {
                         // On `,` consume it and let the outer loop parse
                         // the next declarator; on `;` the outer loop exits
                         // and `self.next()` after it consumes the `;`.
-                        self.accept(',')?;
+                        self.accept_declarator_separator()?;
                         continue;
                     }
 
@@ -1759,7 +1759,7 @@ impl Compiler {
                         self.symbols[id_idx].defined_here = true;
                         self.symbols[id_idx].is_extern_decl = false;
                         self.symbols[id_idx].is_alias = true;
-                        self.accept(',')?;
+                        self.accept_declarator_separator()?;
                         continue;
                     }
                     // C11 6.7.5: a requested alignment is honored on
@@ -1818,7 +1818,7 @@ impl Compiler {
                         self.symbols[id_idx].is_extern_decl = true;
                         self.symbols[id_idx].defined_here = false;
                         self.symbols[id_idx].type_ = ty;
-                        self.accept(',')?;
+                        self.accept_declarator_separator()?;
                         continue;
                     }
                     if was_extern_only_decl {
@@ -1864,7 +1864,7 @@ impl Compiler {
                                     self.symbols[id_idx].is_extern_decl = true;
                                     self.symbols[id_idx].defined_here = false;
                                 }
-                                self.accept(',')?;
+                                self.accept_declarator_separator()?;
                                 continue;
                             }
                             // C99 6.9.2: a file-scope `T x[];` with no
@@ -1891,7 +1891,7 @@ impl Compiler {
                                 self.data.push(0);
                             }
                             self.symbols[id_idx].defined_here = true;
-                            self.accept(',')?;
+                            self.accept_declarator_separator()?;
                             continue;
                         }
                         if thread_local {
@@ -2034,7 +2034,7 @@ impl Compiler {
                                 }
                                 self.symbols[id_idx].has_initializer = true;
                                 self.symbols[id_idx].defined_here = true;
-                                self.accept(',')?;
+                                self.accept_declarator_separator()?;
                                 continue;
                             }
                             let mut i: i64 = 0;
@@ -2114,7 +2114,7 @@ impl Compiler {
                             }
                             self.symbols[id_idx].has_initializer = true;
                             self.symbols[id_idx].defined_here = true;
-                            self.accept(',')?;
+                            self.accept_declarator_separator()?;
                             continue;
                         }
                         self.pending.init_inner_dims = self.inner_dims_of(id_idx);
@@ -2548,7 +2548,7 @@ impl Compiler {
                         }
                     }
                 }
-                self.accept(',')?;
+                self.accept_declarator_separator()?;
             }
             self.next()?;
         }

@@ -3051,6 +3051,24 @@ impl Compiler {
         }
     }
 
+    /// Consume the separator between declarators of one declaration.
+    /// C99 6.7p1: an init-declarator-list is comma-separated and the
+    /// declaration ends at `;`. A declarator followed by anything else --
+    /// typically a second identifier, which is how an unrecognized type
+    /// qualifier reads -- is a syntax error, not the start of another
+    /// declarator.
+    pub(super) fn accept_declarator_separator(&mut self) -> Result<(), C5Error> {
+        if self.lex.tk == ',' {
+            self.next()?;
+        } else if self.lex.tk != ';' && self.lex.tk != '}' && self.lex.tk != 0 {
+            return Err(self.compile_err(alloc::format!(
+                "expected `,` or `;` after declarator (got {})",
+                super::super::token::describe(self.lex.tk)
+            )));
+        }
+        Ok(())
+    }
+
     /// Capture the data-segment offset of the current string literal,
     /// then step past it and any adjacent string literals (the lexer
     /// has already concatenated their bytes into one run, C99 5.1.1.2).

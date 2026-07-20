@@ -1206,6 +1206,65 @@ fn file_scope_register_asm_binding() {
 }
 
 #[test]
+fn two_identifiers_in_declarator_position_are_rejected() {
+    // C99 6.7p1: the declarators of one declaration are comma-separated
+    // and the list ends at `;`. A second identifier after a declarator is
+    // a syntax error at both file and block scope; it used to be read as
+    // another declarator, so an unrecognized type qualifier silently
+    // declared a variable and a capability probe for it succeeded.
+    for src in [
+        "int foo bar; int main(void) { return 0; }",
+        "int a b c; int main(void) { return 0; }",
+        "extern int foo bar; int main(void) { return 0; }",
+        "static int foo bar; int main(void) { return 0; }",
+        "int *p q; int main(void) { return 0; }",
+        "int a = 1 b; int main(void) { return 0; }",
+        "int __seg_fs fs; int main(void) { return 0; }",
+        "int __seg_gs gs; int main(void) { return 0; }",
+        "int main(void) { int foo bar; return 0; }",
+        "int main(void) { int a = 1 b; return 0; }",
+    ] {
+        expect_compile_error(src, "expected `,` or `;` after declarator");
+    }
+}
+
+#[test]
+fn declaration_lists_still_parse() {
+    // The separator check must not disturb the legitimate shapes: multiple
+    // declarators, initializers, pointers, arrays and their designators,
+    // prototypes, typedef and tag names, attributes and old-style
+    // parameter declarations.
+    let ok = |src: &str| {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("expected accept for {src:?}, got {e}"))
+    };
+    ok("int a, b; int main(void) { return a + b; }");
+    ok("int *p, q = 3; int main(void) { return q; }");
+    ok("int a[3] = {1, 2, 3}, b = 4; int main(void) { return a[0] + b; }");
+    ok("int m[2][2] = {[0][1] = 3, [1][0] = 4}; int main(void) { return m[0][1]; }");
+    ok(
+        "struct P { int x, y; }; struct P a[2] = {{1, 2}, {3, 4}}, b = {5, 6}; \
+        int main(void) { return a[0].x + b.x; }",
+    );
+    ok("int f(int), g(void); int main(void) { return g(); }");
+    ok("typedef int mi; mi v; int main(void) { return v; }");
+    ok("typedef int A, B; int main(void) { A a = 1; B b = 2; return a + b; }");
+    ok("typedef int (*F)(int); F a, b; int main(void) { return a == b; }");
+    ok("struct S { int m; }; struct S s; int main(void) { return s.m; }");
+    ok("enum E { A, B }; enum E e; int main(void) { return e; }");
+    ok("int x __attribute__((unused)); int main(void) { return 0; }");
+    ok("extern int e; int main(void) { return e; }");
+    ok("char *s = \"a\", *t = \"b\"; int main(void) { return s[0] + t[0]; }");
+    // Old-style definition: the parameter declarations are their own
+    // declarations, each ending at its `;`.
+    ok("int f(a, b) int a; int b; { return a + b; } int main(void) { return f(1, 2); }");
+    ok("int main(void) { int a = 1, *p = &a, c[2] = {1, 2}; return a + *p + c[0]; }");
+    ok("int main(void) { typedef int T; T v = 1; return v; }");
+    ok("int main(void) { static int s = 5; return s; }");
+}
+
+#[test]
 fn asm_output_operand_lvalue_matrix() {
     // A stack- / frame-pointer register variable names a register, not an
     // object: it is a valid output operand even though it has no address.

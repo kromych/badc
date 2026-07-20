@@ -434,7 +434,7 @@ impl Compiler {
             if self.pending.auto_type_single_declarator && self.lex.tk == ',' {
                 return Err(self.compile_err("`__auto_type` declaration takes a single declarator"));
             }
-            self.accept(',')?;
+            self.accept_declarator_separator()?;
         }
         self.next()?;
         self.pending.auto_type_single_declarator = false;

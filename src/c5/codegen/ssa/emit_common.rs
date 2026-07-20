@@ -894,7 +894,11 @@ pub(crate) fn strip_asm_conditionals(
             ".iflt" => v < 0,
             ".ifge" => v >= 0,
             ".ifle" => v <= 0,
-            _ => return Err(alloc::format!("inline asm: unsupported conditional `{tok}`")),
+            _ => {
+                return Err(alloc::format!(
+                    "inline asm: unsupported conditional `{tok}`"
+                ));
+            }
         })
     };
     let mut out = alloc::string::String::with_capacity(text.len());
@@ -920,7 +924,9 @@ pub(crate) fn strip_asm_conditionals(
             }
             ".else" => {
                 let outer = emitting(&stack[..stack.len().saturating_sub(1)]);
-                let frame = stack.last_mut().ok_or("inline asm: `.else` without `.if`")?;
+                let frame = stack
+                    .last_mut()
+                    .ok_or("inline asm: `.else` without `.if`")?;
                 frame.0 = outer && !frame.1;
                 frame.1 = true;
             }
@@ -936,7 +942,9 @@ pub(crate) fn strip_asm_conditionals(
         }
     }
     if !stack.is_empty() {
-        return Err(alloc::string::String::from("inline asm: unterminated `.if`"));
+        return Err(alloc::string::String::from(
+            "inline asm: unterminated `.if`",
+        ));
     }
     Ok(Some(out))
 }
@@ -949,6 +957,7 @@ pub(crate) fn strip_asm_conditionals(
 /// inside a named section (code in sections is TODO).
 pub(crate) fn extract_asm_sections(
     text: &str,
+    is_aarch64: bool,
 ) -> Result<Option<(alloc::string::String, alloc::vec::Vec<AsmSectionBlock>)>, alloc::string::String>
 {
     if !text.contains(".pushsection") && !text.contains(".section") {
@@ -1029,7 +1038,9 @@ pub(crate) fn extract_asm_sections(
                     rest = r;
                 }
                 if !tok.is_empty() {
-                    blocks[idx].items.push(parse_section_item(tok, rest)?);
+                    blocks[idx]
+                        .items
+                        .push(parse_section_item(tok, rest, is_aarch64)?);
                 }
             }
         }
@@ -1082,8 +1093,14 @@ fn is_asm_symbol_name(name: &str) -> bool {
 }
 
 /// Parse one directive inside a named section.
-fn parse_section_item(tok: &str, rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
+fn parse_section_item(
+    tok: &str,
+    rest: &str,
+    is_aarch64: bool,
+) -> Result<AsmSectionItem, alloc::string::String> {
     if let Some(w) = data_directive_width(tok) {
+        // `.word` is target-dependent: 2 bytes on x86 ELF, 4 on AArch64.
+        let w = if tok == ".word" && is_aarch64 { 4 } else { w };
         let mut values = alloc::vec::Vec::new();
         for a in rest.split(',') {
             values.push(parse_section_value(a.trim())?);
@@ -1453,7 +1470,7 @@ pub(crate) fn materialize_file_asm(
     for text in templates {
         let stripped = strip_asm_comments(text, comments);
         let text = stripped.as_deref().unwrap_or(text);
-        if let Some((_code, blocks)) = extract_asm_sections(text)? {
+        if let Some((_code, blocks)) = extract_asm_sections(text, align_is_p2)? {
             materialize_asm_sections(&blocks, &|_| None, &|_| None, align_is_p2, sink)?;
         }
     }
@@ -2260,7 +2277,7 @@ mod asm_section_tests {
     #[test]
     fn extract_and_materialize() {
         let text = "1: nop\n.pushsection .discard.t,\"aw\",@progbits\n.balign 8\n.quad 1b\n.long 1b - .\n.long %c0, 7\n.asciz \"hi\"\n.popsection\nnop\n";
-        let (code, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let (code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         assert_eq!(code, "1: nop\nnop\n");
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].name, ".discard.t");
@@ -2353,15 +2370,21 @@ mod asm_section_tests {
             AsmSectionValue::Expr(alloc::string::String::from("(1 << 15) | (%0)")),
         );
         let text = ".pushsection .altinstructions,\"a\"\n.hword (1 << 15) | (%0)\n.popsection\n";
-        let (_code, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = alloc::vec::Vec::new();
-        materialize_asm_sections(&blocks, &|idx| (idx == 0).then_some(37), &|_| None, false, &mut sink)
-            .unwrap();
+        materialize_asm_sections(
+            &blocks,
+            &|idx| (idx == 0).then_some(37),
+            &|_| None,
+            false,
+            &mut sink,
+        )
+        .unwrap();
         assert_eq!(sink[0].bytes, alloc::vec![0x25, 0x80]);
         // A non-constant operand leaves the expression unresolved.
         let mut sink2 = alloc::vec::Vec::new();
-        let err = materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink2)
-            .unwrap_err();
+        let err =
+            materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink2).unwrap_err();
         assert!(err.contains("non-constant"), "{err}");
     }
 
@@ -2387,10 +2410,16 @@ mod asm_section_tests {
         // The materialized field is a PC-relative reloc to the label's text
         // offset, as for the unparenthesised reference.
         let text = "1: nop\n.pushsection __ex_table,\"a\"\n.long (1b) - .\n.popsection\n";
-        let (_code, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = alloc::vec::Vec::new();
-        materialize_asm_sections(&blocks, &|_| None, &|n| (n == "1b").then_some(0x40), false, &mut sink)
-            .unwrap();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|n| (n == "1b").then_some(0x40),
+            false,
+            &mut sink,
+        )
+        .unwrap();
         assert_eq!(
             sink[0].relocs,
             alloc::vec![AsmSectionReloc {
@@ -2429,6 +2458,40 @@ mod asm_section_tests {
     }
 
     #[test]
+    fn word_directive_width_is_target_dependent() {
+        // GNU as `.word` is 2 bytes on x86 ELF, 4 on AArch64. The alternatives
+        // metadata stores a label reference with `.word`, which needs a 4- or
+        // 8-byte field, so it resolves only under the AArch64 width.
+        let width = |is_a64: bool| -> u8 {
+            let (_c, blocks) =
+                extract_asm_sections(".pushsection .x,\"a\"\n.word 0x1234\n.popsection\n", is_a64)
+                    .unwrap()
+                    .unwrap();
+            match &blocks[0].items[0] {
+                AsmSectionItem::Data { width, .. } => *width,
+                _ => panic!("expected data"),
+            }
+        };
+        assert_eq!(width(false), 2);
+        assert_eq!(width(true), 4);
+        // On AArch64 `.word 1b - .` fits its PC-relative reloc.
+        let (_c, blocks) =
+            extract_asm_sections(".pushsection .x,\"a\"\n.word 1b - .\n.popsection\n", true)
+                .unwrap()
+                .unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|n| (n == "1b").then_some(0),
+            true,
+            &mut sink,
+        )
+        .unwrap();
+        assert_eq!(sink[0].relocs[0].width, 4);
+    }
+
+    #[test]
     fn section_label_difference_bytes() {
         // Distances between two template labels are constants sized to the
         // field, forward or backward, byte-verified against GNU as (a 4-byte
@@ -2437,7 +2500,7 @@ mod asm_section_tests {
         let text = "1: nop\n2: nop\n.pushsection .x,\"a\"\n\
                     .byte 2b - 1b\n.short 2b - 1b\n.long 2b - 1b\n.byte 1b - 2b\n\
                     .popsection\n";
-        let (_code, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = alloc::vec::Vec::new();
         materialize_asm_sections(
             &blocks,
@@ -2463,7 +2526,7 @@ mod asm_section_tests {
     fn section_label_difference_overflow_rejected() {
         // A distance outside the field width is rejected, not truncated.
         let text = "1: nop\n2: nop\n.pushsection .x,\"a\"\n.byte 2b - 1b\n.popsection\n";
-        let (_c, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let (_c, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = alloc::vec::Vec::new();
         let err = materialize_asm_sections(
             &blocks,
@@ -2496,7 +2559,7 @@ mod asm_section_tests {
         // `.section` + `.previous` return to the code stream; an unknown
         // name resolves as a symbol target.
         let text = "nop\n.section .fixup,\"ax\"\n.quad handler\n.previous\nnop\n";
-        let (code, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let (code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         assert_eq!(code, "nop\nnop\n");
         let mut sink = alloc::vec::Vec::new();
         materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
@@ -2507,14 +2570,16 @@ mod asm_section_tests {
         // Two blocks naming one section merge; a `.popsection` without a
         // push is rejected.
         let text = ".pushsection .a,\"a\"\n.long 1\n.popsection\n.pushsection .a,\"a\"\n.long 2\n.popsection\n";
-        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = alloc::vec::Vec::new();
         materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
         assert_eq!(sink.len(), 1);
         assert_eq!(sink[0].bytes.len(), 8);
-        assert!(extract_asm_sections(".pushsection .a,\"a\"\n.popsection\n.popsection").is_err());
+        assert!(
+            extract_asm_sections(".pushsection .a,\"a\"\n.popsection\n.popsection", false).is_err()
+        );
         // No section directives: the fast path returns None.
-        assert!(extract_asm_sections("nop").unwrap().is_none());
+        assert!(extract_asm_sections("nop", false).unwrap().is_none());
     }
 
     #[test]
@@ -2522,7 +2587,7 @@ mod asm_section_tests {
         // `.align 3` is 2^3 = 8 bytes under the AArch64 convention and a
         // (rejected, non-power-of-two) byte count under the x86 one.
         let text = ".pushsection .t,\"a\"\n.align 3\n.byte 1\n.popsection";
-        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = alloc::vec::Vec::new();
         materialize_asm_sections(&blocks, &|_| None, &|_| None, true, &mut sink).unwrap();
         assert_eq!(sink[0].align, 8);
@@ -2530,7 +2595,7 @@ mod asm_section_tests {
         assert!(materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).is_err());
         // `.align 8` under the x86 convention is 8 bytes.
         let text = ".pushsection .t,\"a\"\n.align 8\n.byte 1\n.popsection";
-        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = alloc::vec::Vec::new();
         materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
         assert_eq!(sink[0].align, 8);
@@ -2542,7 +2607,7 @@ mod asm_section_tests {
         // binding whether it precedes or follows the definition, and a
         // quoted section name is unquoted.
         let text = ".section \".export\",\"a\"\n                    first:\n                    .asciz \"GPL\"\n                    .balign 8\n                    .globl second\n                    second: .quad 0\n                    .globl nowhere\n                    .previous\n";
-        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         assert_eq!(blocks[0].name, ".export");
         let mut sink = alloc::vec::Vec::new();
         materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
@@ -2569,7 +2634,7 @@ mod asm_section_tests {
     #[test]
     fn duplicate_section_label_is_rejected() {
         let text = ".pushsection .t,\"a\"\ndup:\n.quad 0\ndup:\n.popsection\n";
-        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = alloc::vec::Vec::new();
         let err = materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink)
             .expect_err("duplicate label must be rejected");
@@ -2581,7 +2646,7 @@ mod asm_section_tests {
         // Preprocessed templates separate the directive from its arguments
         // with tabs and leave trailing whitespace after a label.
         let text = ".section\t\".initcall7.init\", \"a\"\t\t\n                    __initcall_probe7:\t\t\t\n                    .long\tprobe - .\t\n                    .previous\t\t\t\n";
-        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         assert_eq!(blocks[0].name, ".initcall7.init");
         assert_eq!(blocks[0].flags, "a");
         let mut sink = alloc::vec::Vec::new();

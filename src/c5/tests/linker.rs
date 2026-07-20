@@ -3146,19 +3146,27 @@ fn asm_section_values_fold_constant_expressions() {
             .iter()
             .find(|(n, _, _, _)| n == ".cexpr")
             .unwrap_or_else(|| panic!("{target:?}: .cexpr section missing"));
-        // Four longs, one word, one byte.
-        assert_eq!(sec.3.len(), 4 * 4 + 2 + 1, "{target:?}: section size");
+        // Four longs, one word, one byte. `.word` is 2 bytes on x86 ELF and
+        // 4 on aarch64 (GNU as convention), so the section size and the byte's
+        // offset follow the target's word width.
+        let word_width = if matches!(target, Target::LinuxAarch64) {
+            4
+        } else {
+            2
+        };
+        assert_eq!(sec.3.len(), 4 * 4 + word_width + 1, "{target:?}: section size");
         let long_at = |k: usize| u32::from_le_bytes(sec.3[k * 4..k * 4 + 4].try_into().unwrap());
         assert_eq!(long_at(0), 16 * 32 + 22, "{target:?}: (16*32+22)");
         assert_eq!(long_at(1), (1 << 3) | 2, "{target:?}: (1<<3)|2");
         assert_eq!(long_at(2), 7 * 2, "{target:?}: 7*2");
         assert_eq!(long_at(3), 0xF0 | 0x0F, "{target:?}: 0xF0|0x0F");
-        assert_eq!(
-            u16::from_le_bytes(sec.3[16..18].try_into().unwrap()),
-            3 * 8 + 1,
-            "{target:?}: 3*8+1"
-        );
-        assert_eq!(sec.3[18], 0xFF, "{target:?}: ~0 & 0xFF");
+        let word = if word_width == 4 {
+            u32::from_le_bytes(sec.3[16..20].try_into().unwrap()) as u64
+        } else {
+            u16::from_le_bytes(sec.3[16..18].try_into().unwrap()) as u64
+        };
+        assert_eq!(word, 3 * 8 + 1, "{target:?}: 3*8+1");
+        assert_eq!(sec.3[16 + word_width], 0xFF, "{target:?}: ~0 & 0xFF");
     }
 }
 

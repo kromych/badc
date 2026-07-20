@@ -134,7 +134,7 @@ impl Compiler {
         let text = core::str::from_utf8(&template)
             .map_err(|_| self.compile_err("file-scope asm template is not valid UTF-8"))?;
         let blocks =
-            match engine::extract_asm_sections(text) {
+            match engine::extract_asm_sections(text, self.target.is_aarch64()) {
                 Err(m) => return Err(self.compile_err(m)),
                 Ok(Some((code, blocks))) => {
                     if !self.take_file_scope_asm_globl(&code) {

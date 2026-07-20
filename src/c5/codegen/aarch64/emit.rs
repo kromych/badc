@@ -2387,7 +2387,7 @@ fn emit_inline_asm_aarch64(
         }
     };
     let text = reduced.as_deref().unwrap_or(text);
-    let extracted = match super::ssa::emit_common::extract_asm_sections(text) {
+    let extracted = match super::ssa::emit_common::extract_asm_sections(text, true) {
         Ok(e) => e,
         Err(m) => {
             bail_msg(&m);

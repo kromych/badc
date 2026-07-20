@@ -171,3 +171,22 @@ fn split_constraint_reaching_an_unknown_letter_is_still_rejected() {
         "expected the joined constraint in the diagnostic, got {err:?}"
     );
 }
+
+#[test]
+fn flag_output_macro_is_advertised_only_where_implemented() {
+    // The macro must not claim a feature the target cannot lower:
+    // `=@cc` is x86_64-only, and it is a GNU extension.
+    let probe = "#if defined(__GCC_ASM_FLAG_OUTPUTS__)\nyes\n#else\nno\n#endif\n";
+    let check = |target: crate::Target, gnu: bool| -> bool {
+        let mut pp = crate::c5::preprocessor::Preprocessor::new("", target, "0");
+        if gnu {
+            pp.enable_gnu();
+        }
+        pp.process(probe)
+            .unwrap_or_default()
+            .contains("yes")
+    };
+    assert!(check(crate::Target::LinuxX64, true));
+    assert!(!check(crate::Target::LinuxAarch64, true));
+    assert!(!check(crate::Target::LinuxX64, false));
+}

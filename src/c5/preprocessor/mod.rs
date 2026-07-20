@@ -524,9 +524,10 @@ impl Preprocessor {
         // `__GNUC__` and the rest of the GCC identity are opt-in
         // (`--gnu`, [`Self::enable_gnu`]). badc implements the GNU C
         // extensions real code gates on `__GNUC__`, but not all of them
-        // (`__int128` is absent), so it does not claim the macro by
-        // default; code that gates a 128-bit path on `__GNUC__` plus a
-        // 64-bit target would otherwise fail to compile.
+        // (`<x86intrin.h>` and the x86 intrinsics are absent), so it
+        // does not claim the macro by default; code that gates an
+        // intrinsic path on `__GNUC__` plus an x86 target would
+        // otherwise fail to compile.
         // Byte-order predefines (GCC/clang form). Every supported target
         // is little-endian.
         macros.insert("__ORDER_LITTLE_ENDIAN__".to_string(), "1234".to_string());
@@ -742,8 +743,9 @@ impl Preprocessor {
 
     /// Define the GCC identity macros (`--gnu`). badc claims `__GNUC__`
     /// only on request because it implements most, but not all, of the
-    /// GNU C surface (`__int128` is absent). `__GNUC_STDC_INLINE__`
-    /// reports ISO C99 inline semantics (not the GNU89 dialect);
+    /// GNU C surface (`<x86intrin.h>` and the x86 intrinsics are
+    /// absent). `__GNUC_STDC_INLINE__` reports ISO C99 inline
+    /// semantics (not the GNU89 dialect);
     /// `__VERSION__` is the compiler-identification string embedded by
     /// code such as `Py_GetCompiler`. `__STRICT_ANSI__` reports strict
     /// ISO conformance alongside `__GNUC__`, exactly as
@@ -779,14 +781,11 @@ impl Preprocessor {
                 "1".to_string(),
             );
         }
-        // badc backs the `__`-prefixed GNU extensions but not the ones a
-        // GNU dialect gates on `!__STRICT_ANSI__` (`typeof` of an array,
-        // `__int128`). Reporting strict ISO conformance alongside
-        // `__GNUC__` -- exactly `gcc`/`clang -std=c11` -- routes portable
-        // code to the standard path for those, while keeping the
-        // `__`-prefixed surface available. (`__builtin_types_compatible_p`
-        // is now backed by the compiler, so code gating on it works
-        // regardless of this macro.)
+        // Report strict ISO conformance alongside `__GNUC__`, exactly as
+        // `gcc`/`clang -std=c11` does, so a header takes its standard-C
+        // path rather than a GNU-dialect path for any extension badc
+        // does not provide. Both the plain and `__`-prefixed spellings
+        // of the extensions badc does implement stay available.
         self.macros
             .insert("__STRICT_ANSI__".to_string(), "1".to_string());
         // `=@cc<cond>` inline-asm flag outputs (GCC 6). Implemented for

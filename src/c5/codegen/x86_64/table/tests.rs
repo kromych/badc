@@ -462,6 +462,15 @@ mod differential {
                     let sign = if disp < 0 { "-" } else { "+" };
                     alloc::format!("{sz} ptr [rip {sign} {}]", disp.unsigned_abs())
                 }
+                Opnd::AbsMem { disp, width } => {
+                    let sz = match width {
+                        1 => "byte",
+                        2 => "word",
+                        4 => "dword",
+                        _ => "qword",
+                    };
+                    alloc::format!("{sz} ptr [{disp}]")
+                }
                 Opnd::Imm(v) => alloc::format!("{v}"),
             });
         }

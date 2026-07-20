@@ -6243,6 +6243,8 @@ fn emit_inline_asm(
                         {
                             Concrete::Mem {
                                 base: r,
+                                index: None,
+                                scale: 1,
                                 disp: 0,
                                 size,
                             }
@@ -6270,7 +6272,12 @@ fn emit_inline_asm(
                 // An explicit `disp(%reg)` memory reference. Its access width
                 // comes from the AT&T suffix, else from a GP register operand
                 // of the same instruction, else the 64-bit default.
-                AsmOpnd::Mem { base, disp } => {
+                AsmOpnd::Mem {
+                    base,
+                    index,
+                    scale,
+                    disp,
+                } => {
                     let size = insn.suffix.or_else(|| {
                         insn.operands.iter().find_map(|o| match *o {
                             AsmOpnd::Reg { reg, size } if reg < 16 => Some(size),
@@ -6287,23 +6294,62 @@ fn emit_inline_asm(
                             _ => None,
                         })
                     });
-                    let base = match base {
-                        super::asm::AsmMemBase::Reg(r) => r,
-                        super::asm::AsmMemBase::Ref(idx) => {
-                            match op_reg.get(idx as usize).copied().flatten().filter(|_| {
-                                !matches!(asm.operands[idx as usize].constraint, AsmConstraint::Fp)
-                            }) {
-                                Some(r) => r,
-                                None => {
-                                    return fail(
-                                        "inline asm: memory base must be a register operand",
-                                    );
-                                }
+                    let resolve = |b: super::asm::AsmMemBase| -> Option<u8> {
+                        match b {
+                            super::asm::AsmMemBase::Reg(r) => Some(r),
+                            super::asm::AsmMemBase::Ref(idx) => {
+                                op_reg.get(idx as usize).copied().flatten().filter(|_| {
+                                    !matches!(
+                                        asm.operands[idx as usize].constraint,
+                                        AsmConstraint::Fp
+                                    )
+                                })
                             }
                         }
                     };
+                    let Some(base) = resolve(base) else {
+                        return fail("inline asm: memory base must be a register operand");
+                    };
+                    let index = match index {
+                        Some(i) => match resolve(i) {
+                            Some(r) => Some(r),
+                            None => {
+                                return fail(
+                                    "inline asm: memory index must be a register operand",
+                                );
+                            }
+                        },
+                        None => None,
+                    };
                     Concrete::Mem {
                         base,
+                        index,
+                        scale,
+                        disp,
+                        size: size.unwrap_or(AsmRegSize::Quad),
+                    }
+                }
+                // An absolute `seg:disp` reference; the segment prefix rides
+                // the instruction. Access width as for `disp(%reg)`: the
+                // AT&T suffix, else a GP register operand's width.
+                AsmOpnd::AbsMem { disp } => {
+                    let size = insn.suffix.or_else(|| {
+                        insn.operands.iter().find_map(|o| match *o {
+                            AsmOpnd::Reg { reg, size } if reg < 16 => Some(size),
+                            AsmOpnd::Ref { idx, size }
+                                if !matches!(
+                                    asm.operands[idx as usize].constraint,
+                                    AsmConstraint::Fp | AsmConstraint::Mem
+                                ) =>
+                            {
+                                Some(size.unwrap_or(AsmRegSize::from_width(
+                                    asm.operands[idx as usize].width,
+                                )))
+                            }
+                            _ => None,
+                        })
+                    });
+                    Concrete::AbsMem {
                         disp,
                         size: size.unwrap_or(AsmRegSize::Quad),
                     }
@@ -6315,6 +6361,10 @@ fn emit_inline_asm(
                 }
             };
             concrete.push(c);
+        }
+        // A segment override is a legacy prefix preceding the opcode.
+        if let Some(seg) = insn.seg {
+            code.push(seg);
         }
         if let Err(m) = super::asm::encode(code, insn.mnemonic, insn.suffix, &concrete) {
             bail_msg(&m);

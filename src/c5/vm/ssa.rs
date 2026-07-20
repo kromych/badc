@@ -2043,7 +2043,12 @@ fn run_inline_asm(
     if insns.iter().any(|i| {
         i.operands
             .iter()
-            .any(|o| matches!(o, AsmOpnd::Mem { .. } | AsmOpnd::LabelAddr { .. }))
+            .any(|o| {
+                matches!(
+                    o,
+                    AsmOpnd::Mem { .. } | AsmOpnd::AbsMem { .. } | AsmOpnd::LabelAddr { .. }
+                )
+            })
     }) {
         return Err(C5Error::Runtime(alloc::string::String::from(
             "inline asm: explicit memory operands are not supported under --interp",
@@ -2103,7 +2108,8 @@ fn run_inline_asm(
             AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
             | AsmOpnd::GotoLabel(_)
-            | AsmOpnd::Mem { .. } => (0, AsmRegSize::Long),
+            | AsmOpnd::Mem { .. }
+            | AsmOpnd::AbsMem { .. } => (0, AsmRegSize::Long),
         }
     };
     // The model register a destination operand writes into.
@@ -2118,7 +2124,8 @@ fn run_inline_asm(
             | AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
             | AsmOpnd::GotoLabel(_)
-            | AsmOpnd::Mem { .. } => None,
+            | AsmOpnd::Mem { .. }
+            | AsmOpnd::AbsMem { .. } => None,
         }
     };
 

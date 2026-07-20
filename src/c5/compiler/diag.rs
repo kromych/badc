@@ -161,7 +161,7 @@ impl Compiler {
     /// looked through without applying their conversion: the callers
     /// only compare against zero, and a cast that truncates a non-zero
     /// constant to zero is not a null pointer constant in practice.
-    fn expr_const_int(&self, e: ExprId) -> Option<i64> {
+    pub(super) fn expr_const_int(&self, e: ExprId) -> Option<i64> {
         match self.ast.expr(e) {
             Expr::IntLit { val, .. } => Some(*val),
             Expr::Cast { child, .. } => self.expr_const_int(*child),

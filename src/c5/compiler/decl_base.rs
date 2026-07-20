@@ -318,6 +318,28 @@ impl Compiler {
     /// (`typeof`'s operand grammar); a declarator initializer stops at
     /// the comma. Sets `pending.typeof_operand_was_array` when the
     /// operand's value decayed from an array.
+    /// The symbol index of the function whose address the accumulated
+    /// expression takes (`&f`), if that is its whole shape.
+    fn addressed_function_symbol(&self) -> Option<usize> {
+        use super::super::ast::{Expr, UnOp};
+        // A function designator already denotes its address, so `&f` may
+        // reach here either wrapped in the operator or collapsed to the
+        // identifier.
+        let e = self.ast.expr(self.ast_acc?);
+        let e = match e {
+            Expr::Unary {
+                op: UnOp::AddrOf,
+                child,
+                ..
+            } => self.ast.expr(*child),
+            _ => e,
+        };
+        let Expr::Ident { sym, class, .. } = e else {
+            return None;
+        };
+        (*class == Token::Fun as i64 || *class == Token::Sys as i64).then_some(*sym as usize)
+    }
+
     fn parse_unevaluated_expr_ty(&mut self, comma_operands: bool) -> Result<i64, C5Error> {
         let saved_text_len = self.next_ent_pc;
         let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
@@ -345,7 +367,24 @@ impl Compiler {
                 self.expr(Token::Assign as i64)?;
             }
         }
-        let expr_ty = self.ty;
+        // `&f` where `f` names a function: the operand is a pointer to
+        // `f`'s function type. Route the same pending carriers the
+        // function-typedef and `typeof(f)` bases use, so the prototype
+        // reaches a type-name reader; without them the specifier keeps
+        // only the return type and an opaque pointer level.
+        let expr_ty = match self.addressed_function_symbol() {
+            Some(idx) => {
+                self.pending.fn_ptr_indirection = Some(1);
+                self.pending.base_is_function_type = false;
+                self.pending.typedef_fn_proto = Some((
+                    self.symbols[idx].params.len(),
+                    self.symbols[idx].is_variadic,
+                ));
+                self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
+                self.symbols[idx].type_ + Ty::Ptr as i64
+            }
+            None => self.ty,
+        };
         // Either marker firing means the operand decayed from an
         // array, so `typeof(x)` is an array type and
         // `__builtin_types_compatible_p(typeof(x), typeof(&(x)[0]))`

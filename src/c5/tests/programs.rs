@@ -615,6 +615,16 @@ fn builtin_types_compatible_array() {
 }
 
 #[test]
+fn builtin_types_compatible_fnptr() {
+    // C99 6.7.5.3p15: function and function-pointer type names as
+    // `__builtin_types_compatible_p` arguments, including a typedef against
+    // the address of a matching function, differing return types and
+    // parameter lists, an unspecified parameter list against a prototype,
+    // and pointer-to-function versus function type. Matches gcc and clang.
+    assert_eq!(run_fixture("builtin_types_compatible_fnptr.c"), 0);
+}
+
+#[test]
 fn has_builtin_clrsb() {
     // `__has_builtin(NAME)` preprocessor operator routes supported vs
     // unsupported builtins, and `__builtin_clrsb` / `__builtin_clrsbll`

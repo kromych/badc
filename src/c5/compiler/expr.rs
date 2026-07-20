@@ -4495,7 +4495,7 @@ impl Compiler {
                 }
                 self.consume(b':', "`:` expected after `default`")?;
             } else {
-                let (assoc_ty, _) = self.parse_generic_type_name()?;
+                let (assoc_ty, _, _) = self.parse_generic_type_name()?;
                 let is_match = winner.is_none() && generic_type_match(ctrl_ty, assoc_ty);
                 if is_match {
                     winner = Some(self.lex.snapshot());
@@ -4530,16 +4530,19 @@ impl Compiler {
     /// leading keyword has been consumed.
     pub(super) fn parse_types_compatible_p(&mut self) -> Result<i64, C5Error> {
         self.consume(b'(', "`(` expected after `__builtin_types_compatible_p`")?;
-        let (a, a_dims) = self.parse_generic_type_name()?;
+        let (a, a_dims, a_fn) = self.parse_generic_type_name()?;
         self.consume(b',', "`,` expected between type names")?;
-        let (b, b_dims) = self.parse_generic_type_name()?;
+        let (b, b_dims, b_fn) = self.parse_generic_type_name()?;
         self.consume(b')', "`)` expected after `__builtin_types_compatible_p`")?;
         // C99 6.7.6.2: an array type and a pointer type are never
         // compatible, even when the element / pointee coincide -- the flat
         // type collapses both to the element pointer, so the recorded
         // dimensions carry the array-vs-pointer distinction a compile-time
-        // element-count macro depends on.
-        Ok((generic_type_match(a, b) && array_dims_match(&a_dims, &b_dims)) as i64)
+        // element-count macro depends on. The flat tag likewise holds only
+        // a function type's return type, so the signature settles the rest.
+        Ok((generic_type_match(a, b)
+            && array_dims_match(&a_dims, &b_dims)
+            && fn_type_match(&a_fn, &b_fn)) as i64)
     }
 
     /// Parse `__builtin_offsetof ( type-name , member-designator )` (GCC /
@@ -4560,7 +4563,7 @@ impl Compiler {
     ) -> Result<Option<i64>, C5Error> {
         use super::super::ir::BinOp;
         self.consume(b'(', "`(` expected after `__builtin_offsetof`")?;
-        let (ty, _) = self.parse_generic_type_name()?;
+        let (ty, _, _) = self.parse_generic_type_name()?;
         if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
             return Err(self.compile_err("`__builtin_offsetof` requires a struct or union type"));
         }
@@ -4672,14 +4675,34 @@ impl Compiler {
     }
 
     /// Parse a `_Generic` association type name: a base type plus any
-    /// abstract pointer and array decoration, matching the
-    /// `typeof(type-name)` surface. Returns the flat type tag and the
-    /// array dimensions outermost first, `-1` for an unspecified bound
-    /// (`T []`). An empty dimension list means the type name is not an
-    /// array.
-    fn parse_generic_type_name(&mut self) -> Result<(i64, alloc::vec::Vec<i64>), C5Error> {
+    /// abstract pointer, array and function decoration, matching the
+    /// `typeof(type-name)` surface. Returns the flat type tag, the
+    /// array dimensions outermost first (`-1` for an unspecified bound,
+    /// an empty list when the type name is not an array), and the
+    /// function signature when the type name denotes a function or a
+    /// pointer to one.
+    fn parse_generic_type_name(
+        &mut self,
+    ) -> Result<(i64, alloc::vec::Vec<i64>, Option<FnTypeName>), C5Error> {
         self.pending.typeof_operand_was_array = false;
         let mut ty = self.parse_decl_base_type()?;
+        // A function-pointer / function-type base -- a typedef, or `typeof`
+        // of a function or of a function's address -- carries the pointee
+        // prototype beside the flat tag, which holds only the return type.
+        // `base_is_function_type` separates a function type from a pointer
+        // to one; both spell the same flat tag.
+        let base_is_fn = self.pending.base_is_function_type;
+        let base_variadic = matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
+        let base_params = self.pending.fn_ptr_param_types.take();
+        let mut fn_ty = self
+            .pending
+            .fn_ptr_indirection
+            .take()
+            .map(|depth| FnTypeName {
+                ptr_depth: if base_is_fn { 0 } else { depth.max(0) as usize },
+                params: Some(base_params.unwrap_or_default()),
+                variadic: base_variadic,
+            });
         // `typeof(arr)` and an array typedef leave the operand's extent on
         // the carrier; a multi-dimensional alias also fills the dims list.
         let base_extent = core::mem::take(&mut self.pending.typedef_base_array_size);
@@ -4694,11 +4717,43 @@ impl Compiler {
         while self.lex.tk == Token::MulOp {
             self.next()?;
             ty += Ty::Ptr as i64;
+            if let Some(f) = fn_ty.as_mut() {
+                f.ptr_depth += 1;
+            }
             // A pointer through the specifier names a pointer, not an
             // array; the extent belongs to the pointee.
             dims.clear();
             while self.lex.tk == Token::TypeQual {
                 self.next()?;
+            }
+        }
+        // Abstract function declarator (C99 6.7.6): `T (*)(params)` names a
+        // pointer to function, `T (params)` the function type itself. The
+        // base type parsed above is the return type; badc spells a function
+        // type as the return type at one pointer level, so the flat tag
+        // takes one level for the function plus one per pointer beyond the
+        // first.
+        if fn_ty.is_none() && self.lex.tk == '(' {
+            let (levels, proto) = if self.lex.peek_after_whitespace(b'*') {
+                self.parse_abstract_ptr_declarator(true)?
+            } else {
+                self.next()?; // consume `(`
+                let pp = self.parse_function_params()?;
+                for &p in &pp.indices {
+                    Self::restore_shadowed_symbol(&mut self.symbols[p]);
+                }
+                (0, Some(pp))
+            };
+            if let Some(pp) = proto {
+                ty += levels.max(1) * Ty::Ptr as i64;
+                dims.clear();
+                fn_ty = Some(FnTypeName {
+                    ptr_depth: levels as usize,
+                    params: pp.is_prototyped.then_some(pp.types),
+                    variadic: pp.is_variadic,
+                });
+            } else {
+                ty += levels * Ty::Ptr as i64;
             }
         }
         // Abstract array declarator `T []` / `T [N]` (C99 6.7.6). An
@@ -4723,7 +4778,7 @@ impl Compiler {
             self.next()?;
             dims.push(n);
         }
-        Ok((ty, dims))
+        Ok((ty, dims, fn_ty))
     }
 
     /// Advance the lexer past one generic association's expression to
@@ -4756,6 +4811,62 @@ impl Compiler {
 /// `unsigned int` and `T *` select distinct associations.
 fn generic_type_match(ctrl: i64, assoc: i64) -> bool {
     (ctrl & !super::types::VOLATILE_BIT) == (assoc & !super::types::VOLATILE_BIT)
+}
+
+/// A function type named by a type name. The flat type tag carries only
+/// the return type, so C99 6.7.5.3 compatibility needs the parameter list
+/// and the indirection above the function alongside it.
+pub(super) struct FnTypeName {
+    /// Pointer levels applied to the function type: 0 names a function
+    /// type, 1 a pointer to function.
+    ptr_depth: usize,
+    /// Parameter type tags, or `None` for a declarator with no prototype
+    /// (`T ()`). TODO: a typedef records only its parameter types, not
+    /// whether they came from a prototype, so a `T (*)()` alias reads as
+    /// an empty prototype here; the distinction survives only when the
+    /// declarator is spelled out.
+    params: Option<alloc::vec::Vec<i64>>,
+    variadic: bool,
+}
+
+/// C99 6.7.5.3p15 function-type compatibility, given that the caller has
+/// already matched the return types through the flat tag. Two prototypes
+/// agree on arity, variadic-ness, and pairwise parameter types. A
+/// declarator with no prototype agrees with a non-variadic prototype whose
+/// parameters are unchanged by the default argument promotions. A function
+/// type is never compatible with a non-function type, nor with a different
+/// depth of pointer to itself.
+fn fn_type_match(a: &Option<FnTypeName>, b: &Option<FnTypeName>) -> bool {
+    let (a, b) = match (a, b) {
+        (None, None) => return true,
+        (Some(a), Some(b)) => (a, b),
+        _ => return false,
+    };
+    if a.ptr_depth != b.ptr_depth {
+        return false;
+    }
+    match (&a.params, &b.params) {
+        (Some(pa), Some(pb)) => {
+            a.variadic == b.variadic
+                && pa.len() == pb.len()
+                && pa.iter().zip(pb).all(|(x, y)| generic_type_match(*x, *y))
+        }
+        (Some(p), None) | (None, Some(p)) => {
+            !a.variadic && !b.variadic && p.iter().copied().all(promotes_unchanged)
+        }
+        (None, None) => true,
+    }
+}
+
+/// True when the default argument promotions (C99 6.5.2.2p6) leave `ty`
+/// unchanged: integer types of rank below `int` promote to `int` and
+/// `float` promotes to `double`, so only those four scalars are altered.
+/// A pointer to one of them sits at a different tag and is unaffected.
+fn promotes_unchanged(ty: i64) -> bool {
+    let ty = super::types::strip_unsigned(ty);
+    ![Ty::Char, Ty::Short, Ty::Bool, Ty::Float]
+        .iter()
+        .any(|&t| ty == t as i64)
 }
 
 /// C99 6.7.5.2p6 array compatibility: two array types are compatible when

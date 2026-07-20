@@ -58,6 +58,11 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "bfm", ops: &[X, X, Imm, Imm], base: 0xB3400000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 16, width: 6 }, UImm { op: 3, shift: 10, width: 6 }] },  // bfm Xd, Xn, #immr, #imms
     Form { mnemonic: "bic", ops: &[W, W, W], base: 0x0A200000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // bic Wd, Wn, Wm, {sop #n}
     Form { mnemonic: "bic", ops: &[X, X, X], base: 0x8A200000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // bic Xd, Xn, Xm, {sop #n}
+    // `bic (immediate)` assembles as `and Rd, Rn, #~imm`. GNU as accepts this
+    // alias (clang too); the `bics (immediate)` alias is not accepted by GNU
+    // as, so it is not modeled. Kept in the `bic` run to preserve the sort.
+    Form { mnemonic: "bic", ops: &[W, W, Imm], base: 0x12000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, LogicalImmNot { op: 2, is64: false }] },  // bic Wd, Wn, #imm
+    Form { mnemonic: "bic", ops: &[X, X, Imm], base: 0x92000000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, LogicalImmNot { op: 2, is64: true }] },  // bic Xd, Xn, #imm
     Form { mnemonic: "bics", ops: &[W, W, W], base: 0x6A200000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // bics Wd, Wn, Wm, {sop #n}
     Form { mnemonic: "bics", ops: &[X, X, X], base: 0xEA200000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // bics Xd, Xn, Xm, {sop #n}
     Form { mnemonic: "blr", ops: &[X], base: 0xD63F0000, fields: &[Reg { op: 0, shift: 5 }] },  // blr Xn

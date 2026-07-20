@@ -1277,6 +1277,19 @@ fn logical_immediate_encoder() {
     assert_eq!(enc("orr", &[x(5), x(6), Opnd::Imm(0x1)]), 0xB24000C5); // orr x5, x6, #1
 }
 
+#[test]
+fn bic_immediate_is_and_of_complement() {
+    // `bic Rd, Rn, #imm` assembles as `and Rd, Rn, #~imm`, the complement taken
+    // at the operand width. Golden words from GNU as / clang.
+    // bic x0, x1, #(1<<55) == and x0, x1, #0xff7fffffffffffff
+    assert_eq!(enc("bic", &[x(0), x(1), Opnd::Imm(1 << 55)]), 0x9248F820);
+    // bic w0, w1, #0xf == and w0, w1, #0xfffffff0
+    assert_eq!(enc("bic", &[w(0), w(1), Opnd::Imm(0xF)]), 0x121C6C20);
+    // The complement of -1 is 0, which is not a valid bitmask (as GNU as also
+    // rejects `bic x0, x1, #-1`).
+    assert!(encode("bic", &[x(0), x(1), Opnd::Imm(-1)]).is_err());
+}
+
 /// Differential sweeps found seven database rows disagreeing with the
 /// architecture; the generator corrects them (DB_FIXES). Encoding the
 /// corrected forms locks the true bits -- had the raw rows shipped, the bytes

@@ -58,6 +58,10 @@ pub(crate) enum Field {
     /// The 13-bit logical-immediate bitmask field (`N:immr:imms` at bit 10),
     /// computed from the operand value. `is64` selects the 64/32-bit element.
     LogicalImm { op: u8, is64: bool },
+    /// Like [`Field::LogicalImm`] but encoding the bitwise complement of the
+    /// operand value at the `is64` element width. The `bic`/`bics` immediate
+    /// aliases assemble as `and`/`ands` with the inverted bitmask.
+    LogicalImmNot { op: u8, is64: bool },
     /// Move-wide 16-bit immediate at bit 5.
     MovImm { op: u8 },
     /// Move-wide `hw` shift-amount/16 at bit 21, from an optional `lsl #s`
@@ -1798,6 +1802,13 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
             Field::LogicalImm { op, is64 } => {
                 let v = imm(ops[op as usize])? as u64;
                 let enc = encode_logical_imm(v, is64)
+                    .ok_or_else(|| String::from("inline asm: not a logical immediate"))?;
+                word |= enc << 10;
+            }
+            Field::LogicalImmNot { op, is64 } => {
+                let v = imm(ops[op as usize])? as u64;
+                let mask = if is64 { u64::MAX } else { 0xFFFF_FFFF };
+                let enc = encode_logical_imm(!v & mask, is64)
                     .ok_or_else(|| String::from("inline asm: not a logical immediate"))?;
                 word |= enc << 10;
             }

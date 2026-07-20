@@ -2690,6 +2690,19 @@ fn emit_inline_asm_aarch64(
             } else {
                 (BranchKind::B, super::encode::enc_b(0))
             };
+            // The name may embed operand references; substituting them first
+            // is what makes `__get_user_%c0` name `__get_user_4`.
+            let name = match super::super::ssa::emit_common::resolve_asm_symbol_target(
+                name,
+                &super::super::ssa::emit_common::A64_SYMBOL_SUBST,
+                &const_of,
+            ) {
+                Ok(n) => n,
+                Err(e) => {
+                    bail_msg(&e);
+                    return false;
+                }
+            };
             let native_offset = code.len();
             match name2entpc.get(name.as_str()) {
                 Some(&ent_pc) => fixups.push(Fixup {

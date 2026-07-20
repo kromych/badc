@@ -164,7 +164,11 @@ pub(crate) enum Mnemonic {
     /// A string primitive (`movs` / `cmps` / `stos` / `lods` / `scas`). Its
     /// operands are the fixed `%rsi` / `%rdi` / accumulator pair, so the AT&T
     /// size suffix alone picks the opcode and the operand-size prefix.
-    StringOp { opcode: u8, osz: bool, rex_w: bool },
+    StringOp {
+        opcode: u8,
+        osz: bool,
+        rex_w: bool,
+    },
     /// A single-memory-operand instruction encoded as one opcode byte and a
     /// ModR/M whose reg field is the opcode extension: `fnstsw` / `fnstcw`
     /// (x87 status / control word) and the far indirect call `lcall`.
@@ -557,11 +561,7 @@ fn string_op(name: &str) -> Option<Mnemonic> {
         "q" => (op + 1, false, true),
         _ => return None,
     };
-    Some(Mnemonic::StringOp {
-        opcode,
-        osz,
-        rex_w,
-    })
+    Some(Mnemonic::StringOp { opcode, osz, rex_w })
 }
 
 fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
@@ -1419,19 +1419,17 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         }
         let (mnemonic, suffix) = split_mnemonic(mnem_tok)
             .ok_or_else(|| format!("inline asm: unsupported instruction `{mnem_tok}`"))?;
-        // A direct `call` / `jmp` to a bare identifier is a symbol reference
+        // A direct `call` / `jmp` to a symbol name is a symbol reference
         // (basic-asm `call schedule`); the target is resolved to a rel32 by a
         // relocation, not parsed as a register / immediate / memory operand.
         // A name the template defines as a label resolves locally instead.
-        let is_bare_ident = !rest.is_empty()
-            && rest
-                .bytes()
-                .next()
-                .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_')
-            && rest.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+        // The name may embed operand references (`call __get_user_%c0`), which
+        // are substituted at emit time, so the text is kept verbatim here.
+        let is_symbol_target = !rest.is_empty()
+            && super::super::ssa::emit_common::is_asm_symbol_template(rest)
             && reg_by_name(rest).is_none()
             && !names.contains(&rest);
-        if matches!(mnem_tok, "call" | "callq" | "jmp" | "jmpq") && is_bare_ident {
+        if matches!(mnem_tok, "call" | "callq" | "jmp" | "jmpq") && is_symbol_target {
             insns.push(AsmInsn {
                 mnemonic,
                 suffix,
@@ -1812,11 +1810,7 @@ pub(crate) fn encode(
             code.extend_from_slice(bytes);
             Ok(())
         }
-        Mnemonic::StringOp {
-            opcode,
-            osz,
-            rex_w,
-        } => {
+        Mnemonic::StringOp { opcode, osz, rex_w } => {
             if osz {
                 code.push(0x66);
             }
@@ -3688,9 +3682,10 @@ mod string_and_prefix_tests {
     #[test]
     fn reported_template_shapes() {
         assert_eq!(asm_bytes(b"repe; cmpsb"), [0xF3, 0xA6]);
-        assert_eq!(asm_bytes(b"fninit ; fnstsw (%rax) ; fnstcw (%rbx)"), [
-            0xDB, 0xE3, 0xDD, 0x38, 0xD9, 0x3B
-        ]);
+        assert_eq!(
+            asm_bytes(b"fninit ; fnstsw (%rax) ; fnstcw (%rbx)"),
+            [0xDB, 0xE3, 0xDD, 0x38, 0xD9, 0x3B]
+        );
         assert_eq!(asm_bytes(b"stosw \n\t rep;stosl"), [0x66, 0xAB, 0xF3, 0xAB]);
     }
 }

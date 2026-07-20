@@ -1077,19 +1077,17 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             });
             continue;
         }
-        // A direct `bl` / `b` to a bare identifier is a call / tail-branch to a
+        // A direct `bl` / `b` to a symbol name is a call / tail-branch to a
         // symbol (`bl schedule`); the target is resolved to a rel26 by the fixup
         // pass, not parsed as a register operand. A local-label branch (`b 1f`)
-        // starts with a digit, so it is excluded.
+        // starts with a digit, so it is excluded. The name may embed operand
+        // references (`bl __get_user_%c0`), which are substituted at emit time,
+        // so the text is kept verbatim here.
         if matches!(mnem, "bl" | "b") {
-            let is_bare_ident = !rest.is_empty()
-                && rest
-                    .bytes()
-                    .next()
-                    .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_')
-                && rest.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+            let is_symbol_target = !rest.is_empty()
+                && super::super::ssa::emit_common::is_asm_symbol_template(rest)
                 && parse_reg(rest).is_none();
-            if is_bare_ident {
+            if is_symbol_target {
                 insns.push(AsmInsnA64 {
                     mnemonic: String::from(mnem),
                     operands: Vec::new(),

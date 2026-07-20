@@ -1736,7 +1736,7 @@ pub(crate) fn lower(
         super::ssa::emit_common::AsmComments::X86,
         &mut asm_sections,
     )
-        .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
+    .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();

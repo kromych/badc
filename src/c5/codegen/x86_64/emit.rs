@@ -6299,6 +6299,16 @@ fn emit_inline_asm(
         if let Some(name) = &insn.sym_target {
             let is_call =
                 matches!(insn.mnemonic, super::asm::Mnemonic::Table(n) if n.starts_with("call"));
+            // The name may embed operand references; substituting them first
+            // is what makes `__get_user_%c0` name `__get_user_4`.
+            let name = match super::super::ssa::emit_common::resolve_asm_symbol_target(
+                name,
+                &super::super::ssa::emit_common::X64_SYMBOL_SUBST,
+                &const_of,
+            ) {
+                Ok(n) => n,
+                Err(e) => return fail(&e),
+            };
             // native_offset is the opcode byte; the fixup pass patches the
             // rel32 at +1 and computes the displacement from the 5-byte end.
             let native_offset = code.len();

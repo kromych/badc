@@ -88,7 +88,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("cpuid_partial_outputs.c", "linux-aarch64"), // x86-64 cpuid
     ("inline_asm_x64_flag_outputs.c", "linux-aarch64"), // x86-64 `=@cc` flag outputs
     ("inline_asm_x64_string_ops.c", "linux-aarch64"), // x86-64 string primitives / prefixes
-    ("inline_asm_a64_comments.c", "linux-x64"),       // aarch64 comment syntax
+    ("inline_asm_a64_comments.c", "linux-x64"), // aarch64 comment syntax
 ];
 
 #[test]

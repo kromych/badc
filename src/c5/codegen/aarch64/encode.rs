@@ -1583,7 +1583,7 @@ pub(crate) fn lower(
         super::ssa::emit_common::AsmComments::A64,
         &mut asm_sections,
     )
-        .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
+    .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     // Each `JsrExt` / `TailExt` site emits a placeholder

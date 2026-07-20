@@ -1141,6 +1141,23 @@ pub(crate) fn materialize_asm_sections(
     Ok(())
 }
 
+/// Materialize a unit's file-scope `asm("...")` templates into `sink`.
+/// The parse validated each template as section data directives only,
+/// so there is no code stream: label references resolve as named-symbol
+/// relocations and there are no operands.
+pub(crate) fn materialize_file_asm(
+    templates: &[alloc::string::String],
+    align_is_p2: bool,
+    sink: &mut alloc::vec::Vec<AsmSection>,
+) -> Result<(), alloc::string::String> {
+    for text in templates {
+        if let Some((_code, blocks)) = extract_asm_sections(text)? {
+            materialize_asm_sections(&blocks, &|_| None, &|_| None, align_is_p2, sink)?;
+        }
+    }
+    Ok(())
+}
+
 /// Per-process counter behind the `%=` template escape.
 static ASM_INSTANCE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 

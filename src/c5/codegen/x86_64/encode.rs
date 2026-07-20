@@ -1704,6 +1704,10 @@ pub(crate) fn lower(
     let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
     let mut asm_sections: Vec<super::ssa::emit_common::AsmSection> = Vec::new();
+    // File-scope asm section blocks precede the per-function ones
+    // (`.align` takes a byte count on x86-64 ELF).
+    super::ssa::emit_common::materialize_file_asm(&program.file_asm, false, &mut asm_sections)
+        .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();

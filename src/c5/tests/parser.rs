@@ -1206,6 +1206,51 @@ fn file_scope_register_asm_binding() {
 }
 
 #[test]
+fn file_scope_asm_constraints() {
+    // `asm("...")` between declarations accepts section data
+    // directives (and an empty template); instructions, operands,
+    // `goto`, and malformed section stacks are rejected.
+    let ok = |src: &str| {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("expected accept, got {e}"));
+    };
+    ok("asm(\"\"); int main(void) { return 0; }");
+    ok("__asm__(\".pushsection .note.x,\\\"a\\\"\\n.long 1\\n.popsection\");\n\
+        int main(void) { return 0; }");
+    ok("asm volatile(\".section .modinfo,\\\"a\\\"\\n.asciz \\\"v=1\\\"\\n.previous\");\n\
+        int main(void) { return 0; }");
+    expect_compile_error(
+        "asm(\"nop\"); int main(void) { return 0; }",
+        "section data directives only",
+    );
+    expect_compile_error(
+        "asm(\".pushsection .a,\\\"a\\\"\\n.quad 1\\n.popsection\" : : \"r\"(1));\n\
+         int main(void) { return 0; }",
+        "operands are not supported at file scope",
+    );
+    expect_compile_error(
+        "asm goto(\"x\"); int main(void) { return 0; }",
+        "`asm goto` is not supported at file scope",
+    );
+    expect_compile_error(
+        "asm(\".pushsection .a,\\\"a\\\"\\n.long %0\\n.popsection\");\n\
+         int main(void) { return 0; }",
+        "no operands at file scope",
+    );
+    expect_compile_error(
+        "asm(\".pushsection .a,\\\"a\\\"\\n.popsection\\n.popsection\");\n\
+         int main(void) { return 0; }",
+        "`.popsection` without `.pushsection`",
+    );
+    expect_compile_error(
+        "asm(\".pushsection .a,\\\"a\\\"\\n.unknowndir 1\\n.popsection\");\n\
+         int main(void) { return 0; }",
+        "unsupported directive",
+    );
+}
+
+#[test]
 fn section_and_alias_operand_constraints() {
     // `section` / `alias` take a string-literal operand; an alias
     // target must be defined earlier in the unit.

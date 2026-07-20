@@ -1067,6 +1067,12 @@ pub struct Compiler {
     /// without knowing their structure.
     warnings: Vec<String>,
 
+    /// File-scope `asm("...")` templates, validated at parse time
+    /// (section data directives only). The codegen materializes them
+    /// into the object's named sections under the emit target's
+    /// directive conventions.
+    pub(super) file_asm: Vec<String>,
+
     /// gcc `-H`-shape include trace produced by the preprocessor when
     /// `with_full_options_and_label_with_trace(.., show_includes =
     /// true)` was used. Empty otherwise. The CLI flushes this list
@@ -1602,6 +1608,7 @@ impl Compiler {
             tag_scopes: alloc::vec![alloc::vec::Vec::new()],
             enums: Vec::new(),
             warnings: pp_warnings,
+            file_asm: Vec::new(),
             include_trace: pp_include_trace,
             pp_entrypoint,
             pp_subsystem,
@@ -1963,6 +1970,7 @@ impl Compiler {
         let exports = self.resolve_exports()?;
         Ok(Program {
             data: self.data,
+            file_asm: self.file_asm,
             data_align: self.data_align,
             data_object_starts: self.data_object_starts,
             entry_pc,

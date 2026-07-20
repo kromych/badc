@@ -112,6 +112,75 @@ impl Compiler {
         Ok(())
     }
 
+    /// `asm("...");` at file scope. The template goes through the same
+    /// head parse as a function-body `asm` statement, then through the
+    /// section-directive engine: section blocks of data directives are
+    /// recorded for the object writers (references to C symbols become
+    /// relocations by name). Operands, clobbers, `goto`, and
+    /// instructions outside a named section are rejected.
+    /// TODO: top-level instruction emission.
+    fn parse_file_scope_asm(&mut self) -> Result<(), C5Error> {
+        use crate::c5::codegen::ssa::emit_common as engine;
+        let (template, tstart, _is_volatile, is_goto) = self.parse_asm_head()?;
+        self.data.truncate(tstart);
+        if is_goto {
+            return Err(self.compile_err("`asm goto` is not supported at file scope"));
+        }
+        if self.lex.tk == ':' {
+            return Err(
+                self.compile_err("inline asm operands are not supported at file scope")
+            );
+        }
+        self.consume(b')', "`)` expected after inline asm")?;
+        self.consume(b';', "`;` expected after file-scope `asm`")?;
+        let text = core::str::from_utf8(&template)
+            .map_err(|_| self.compile_err("file-scope asm template is not valid UTF-8"))?;
+        let blocks = match engine::extract_asm_sections(text) {
+            Err(m) => return Err(self.compile_err(m)),
+            Ok(Some((code, blocks))) => {
+                if code.split_whitespace().next().is_some() {
+                    return Err(self.compile_err(
+                        "file-scope asm supports section data directives only",
+                    ));
+                }
+                blocks
+            }
+            Ok(None) => {
+                if text.split_whitespace().next().is_some() {
+                    return Err(self.compile_err(
+                        "file-scope asm supports section data directives only",
+                    ));
+                }
+                return Ok(());
+            }
+        };
+        for b in &blocks {
+            for item in &b.items {
+                if let engine::AsmSectionItem::Data { values, .. } = item
+                    && values
+                        .iter()
+                        .any(|v| matches!(v, engine::AsmSectionValue::OperandConst(_)))
+                {
+                    return Err(self.compile_err(
+                        "operand reference in file-scope asm (no operands at file scope)",
+                    ));
+                }
+            }
+        }
+        // Materialize into a scratch sink now so directive errors are
+        // diagnosed at the source line; the codegen re-materializes into
+        // the object's sections under the emit target's conventions.
+        let mut scratch: alloc::vec::Vec<engine::AsmSection> = alloc::vec::Vec::new();
+        let aarch64 = matches!(
+            self.target,
+            crate::Target::MacOSAarch64 | crate::Target::LinuxAarch64 | crate::Target::WindowsAarch64
+        );
+        engine::materialize_asm_sections(&blocks, &|_| None, &|_| None, aarch64, &mut scratch)
+            .map_err(|m| self.compile_err(m))?;
+        self.file_asm.push(String::from(text));
+        Ok(())
+    }
+
     pub(super) fn run_compile(&mut self) -> Result<(), C5Error> {
         self.next()?;
         while self.lex.tk != 0 {
@@ -121,6 +190,13 @@ impl Compiler {
             // the message verbatim through the standard error path.
             if self.lex.tk == Token::StaticAssert {
                 self.parse_static_assert()?;
+                continue;
+            }
+            // `asm("...");` between declarations (C99 J.5.10 common
+            // extension): the template's section data directives emit
+            // into named sections of the object.
+            if self.lex.tk == Token::Asm {
+                self.parse_file_scope_asm()?;
                 continue;
             }
             let mut bt = Ty::Int as i64;

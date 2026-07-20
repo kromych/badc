@@ -4261,3 +4261,29 @@ fn typeof_array_operand_declares_array() {
     ";
     assert_eq!(run_str(src), 0);
 }
+
+#[test]
+fn file_scope_asm_and_register_variable_run() {
+    // The export-macro composition at file scope: a definition, an
+    // `extern typeof` redeclaration, an asm block emitting the name
+    // into a custom section (a no-op for the VM), and a stack-pointer
+    // register variable read from a function.
+    let sp = if cfg!(target_arch = "x86_64") { "rsp" } else { "sp" };
+    let src = alloc::format!(
+        "
+        int export_me(int v) {{ return v + 2; }}
+        extern typeof(export_me) export_me __attribute__((used));
+        __asm__(\".pushsection .export_tab,\\\"a\\\"\\n\"
+                \".balign 8\\n\"
+                \".quad export_me\\n\"
+                \".asciz \\\"export_me\\\"\\n\"
+                \".popsection\");
+        register unsigned long stack_ptr asm(\"{sp}\");
+        int main(void) {{
+            if (stack_ptr == 0) return 1;
+            return export_me(-2);
+        }}
+    "
+    );
+    assert_eq!(run_str(&src), 0);
+}

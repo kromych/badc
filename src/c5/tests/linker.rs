@@ -2839,6 +2839,72 @@ fn elf_sections(bytes: &[u8]) -> alloc::vec::Vec<(String, u32, u64, alloc::vec::
 }
 
 #[test]
+fn file_scope_asm_pushsection_lands_in_relocatable_object() {
+    // A file-scope `asm(".pushsection ...")` block emits into the named
+    // section of the `-c` object exactly as an in-function block does:
+    // constants and strings laid out, a C symbol reference emitted as a
+    // named-symbol relocation.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int export_me(void) { return 42; }\n\
+        __asm__(\".pushsection .export_tab,\\\"a\\\"\\n\"\n\
+            \".balign 8\\n\"\n\
+            \".quad export_me\\n\"\n\
+            \".long 7\\n\"\n\
+            \".asciz \\\"export_me\\\"\\n\"\n\
+            \".popsection\");\n\
+        int main(void) { return export_me(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src))
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".export_tab")
+            .unwrap_or_else(|| panic!("{target:?}: .export_tab section missing"));
+        assert_eq!(sec.1, 1, "{target:?}: SHT_PROGBITS expected");
+        assert_eq!(sec.2 & 0x2, 0x2, "{target:?}: SHF_ALLOC expected");
+        // 8 (quad symbol ref) + 4 (constant 7) + 10 (asciz + NUL).
+        assert_eq!(sec.3.len(), 22, "{target:?}: section size");
+        assert_eq!(&sec.3[8..12], &7u32.to_le_bytes(), "{target:?}: constant");
+        assert_eq!(&sec.3[12..22], b"export_me\0", "{target:?}: asciz");
+        // One abs64 relocation against the `export_me` function symbol.
+        let rela = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.export_tab")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.export_tab missing"));
+        assert_eq!(rela.1, 4, "{target:?}: SHT_RELA expected");
+        assert_eq!(rela.3.len(), 24, "{target:?}: one relocation");
+        let r_offset = u64::from_le_bytes(rela.3[0..8].try_into().unwrap());
+        let r_info = u64::from_le_bytes(rela.3[8..16].try_into().unwrap());
+        let abs64 = match target {
+            Target::LinuxX64 => 1u64,
+            _ => 257,
+        };
+        assert_eq!(r_offset, 0, "{target:?}: reloc at the quad field");
+        assert_eq!(r_info & 0xFFFF_FFFF, abs64, "{target:?}: abs64 type");
+        // The relocation's symbol is the C function, by name.
+        let symtab = &sections.iter().find(|(n, _, _, _)| n == ".symtab").unwrap().3;
+        let strtab = &sections.iter().find(|(n, _, _, _)| n == ".strtab").unwrap().3;
+        let sym = (r_info >> 32) as usize;
+        let st_name =
+            u32::from_le_bytes(symtab[sym * 24..sym * 24 + 4].try_into().unwrap()) as usize;
+        let end = strtab[st_name..].iter().position(|&b| b == 0).unwrap();
+        assert_eq!(
+            &strtab[st_name..st_name + end],
+            b"export_me",
+            "{target:?}: reloc symbol name"
+        );
+    }
+}
+
+#[test]
 fn inline_asm_pushsection_lands_in_relocatable_object() {
     // A `.pushsection` data block must appear as a named section of the
     // `-c` object, with its constants resolved and its label references

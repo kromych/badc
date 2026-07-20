@@ -137,6 +137,12 @@ pub struct CodeReloc {
 #[derive(Debug, Clone)]
 pub struct Program {
     pub data: Vec<u8>,
+    /// File-scope `asm("...")` templates in source order, parse-time
+    /// validated to hold section data directives only. The native
+    /// codegen materializes them into the object's named sections
+    /// under the emit target's directive conventions; the VM ignores
+    /// them (the sections are not loaded).
+    pub file_asm: Vec<String>,
     /// Base alignment `data` requires in the image, at least 8;
     /// raised to 16 when a file-scope object carries `_Alignas(16)`
     /// (or the attribute equivalents). The native writers place the

@@ -1072,6 +1072,13 @@ fn flex_array_member_static_init() {
 }
 
 #[test]
+fn attribute_hot_cold_accepted() {
+    // GNU `hot` / `cold` hints parse in declaration and declarator
+    // positions without altering behavior.
+    assert_eq!(run_fixture("attribute_hot_cold.c"), 0);
+}
+
+#[test]
 fn attribute_cleanup() {
     // __attribute__((cleanup(fn))) runs fn(&var) at every scope exit
     // (fall-through, return, break, continue), reverse order, innermost

@@ -1051,7 +1051,8 @@ pub(crate) fn extract_asm_sections(
     is_aarch64: bool,
 ) -> Result<Option<(alloc::string::String, alloc::vec::Vec<AsmSectionBlock>)>, alloc::string::String>
 {
-    if !text.contains(".pushsection") && !text.contains(".section") {
+    if !text.contains(".pushsection") && !text.contains(".section") && !text.contains(".subsection")
+    {
         return Ok(None);
     }
     let mut code = alloc::string::String::with_capacity(text.len());
@@ -1095,6 +1096,16 @@ pub(crate) fn extract_asm_sections(
                     stack[0] = None;
                 }
                 continue;
+            }
+            // `.subsection N` defers its code to a region appended to the
+            // section (the cpucap ALTERNATIVE replacement). Emitting it
+            // inline would fall through from the main sequence into the
+            // replacement -- both would execute. Deferred code emission is
+            // not implemented, so reject rather than miscompile.
+            ".subsection" => {
+                return Err(alloc::string::String::from(
+                    "inline asm: `.subsection` is not supported (deferred replacement code)",
+                ));
             }
             _ => {}
         }
@@ -2942,6 +2953,22 @@ mod asm_section_tests {
         )
         .expect_err("256 does not fit a byte");
         assert!(err.contains("does not fit"), "{err}");
+    }
+
+    #[test]
+    fn subsection_is_rejected() {
+        // `.subsection` defers its code to a region appended to the section
+        // (the cpucap ALTERNATIVE replacement). Emitting it inline would run
+        // both the main and the replacement sequence, so it is rejected with a
+        // clear diagnostic rather than miscompiled. Rejected whether or not a
+        // `.pushsection` precedes it.
+        let with = "661: nop\n.pushsection .altinstructions,\"a\"\n.byte 0\n\
+                    .popsection\n.subsection 1\n663: nop\n.previous\n";
+        let err = extract_asm_sections(with, true).unwrap_err();
+        assert!(err.contains(".subsection"), "{err}");
+        let bare = "nop\n.subsection 1\nnop\n.previous\n";
+        let err = extract_asm_sections(bare, true).unwrap_err();
+        assert!(err.contains(".subsection"), "{err}");
     }
 
     #[test]

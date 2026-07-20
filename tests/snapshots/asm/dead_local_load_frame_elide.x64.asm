@@ -87,6 +87,14 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	leaq	-0x8(%rbp), %rdi
+               	callq	<addr>
+               	cmpq	$0x9, %rax
+               	je	<addr>
+               	movl	$0x2, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
                	xorq	%rax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp

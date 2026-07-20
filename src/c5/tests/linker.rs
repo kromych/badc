@@ -3053,6 +3053,54 @@ fn inline_asm_pushsection_lands_in_relocatable_object() {
 }
 
 #[test]
+fn asm_section_values_fold_constant_expressions() {
+    // A named section's data value may be an integer constant expression,
+    // not just a literal; the folded value is what lands in the section.
+    // Byte-for-byte identical to gcc for the same template.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int probe(void) {\n\
+            __asm__(\".pushsection .cexpr,\\\"a\\\"\\n\"\n\
+                \".long (16*32+22)\\n\"\n\
+                \".long (1<<3)|2\\n\"\n\
+                \".long 7*2\\n\"\n\
+                \".long 0xF0|0x0F\\n\"\n\
+                \".word 3*8+1\\n\"\n\
+                \".byte ~0 & 0xFF\\n\"\n\
+                \".popsection\\n\"\n\
+                \"nop\");\n\
+            return 0;\n\
+        }\n\
+        int main(void) { return probe(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".cexpr")
+            .unwrap_or_else(|| panic!("{target:?}: .cexpr section missing"));
+        // Four longs, one word, one byte.
+        assert_eq!(sec.3.len(), 4 * 4 + 2 + 1, "{target:?}: section size");
+        let long_at = |k: usize| u32::from_le_bytes(sec.3[k * 4..k * 4 + 4].try_into().unwrap());
+        assert_eq!(long_at(0), 16 * 32 + 22, "{target:?}: (16*32+22)");
+        assert_eq!(long_at(1), (1 << 3) | 2, "{target:?}: (1<<3)|2");
+        assert_eq!(long_at(2), 7 * 2, "{target:?}: 7*2");
+        assert_eq!(long_at(3), 0xF0 | 0x0F, "{target:?}: 0xF0|0x0F");
+        assert_eq!(
+            u16::from_le_bytes(sec.3[16..18].try_into().unwrap()),
+            3 * 8 + 1,
+            "{target:?}: 3*8+1"
+        );
+        assert_eq!(sec.3[18], 0xFF, "{target:?}: ~0 & 0xFF");
+    }
+}
+
+#[test]
 fn attribute_and_asm_pushsection_merge_into_one_section() {
     // An `__attribute__((section))` object and an inline-asm
     // `.pushsection` block naming the same section share one output

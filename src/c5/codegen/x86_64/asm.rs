@@ -984,9 +984,9 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
     }
     // `prefix(inner)`: a memory reference (displacement off a base register)
     // or, with an `(%rip)` base, the address of a template-local label.
-    if let Some(open) = tok.find('(')
-        && tok.ends_with(')')
-    {
+    // The reference's `(` is the one matching the trailing `)`, not the first
+    // in the token: a displacement may itself be a parenthesized expression.
+    if let Some(open) = matching_open_paren(tok) {
         return parse_mem_operand(&tok[..open], &tok[open + 1..tok.len() - 1], labels)
             .ok_or_else(|| format!("inline asm: unsupported operand `{tok}`"));
     }
@@ -1122,6 +1122,29 @@ fn parse_mem_base(tok: &str) -> Option<AsmMemBase> {
     Some(AsmMemBase::Reg(reg))
 }
 
+/// Byte offset of the `(` matching a token's trailing `)`, or `None` when the
+/// token does not end in a balanced parenthesized group.
+fn matching_open_paren(tok: &str) -> Option<usize> {
+    if !tok.ends_with(')') {
+        return None;
+    }
+    let b = tok.as_bytes();
+    let mut depth = 0i32;
+    for i in (0..b.len()).rev() {
+        match b[i] {
+            b')' => depth += 1,
+            b'(' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Parse `prefix(inner)`: the `disp(%%reg)` / `disp(%N)` /
 /// `disp(%%base, %%index, scale)` memory forms and the `LABEL(%rip)`
 /// label-address form. `None` for shapes not modelled.
@@ -1196,17 +1219,7 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
 
 /// Parse a decimal or `0x`-hex integer, optionally signed.
 fn parse_int(s: &str) -> Option<i64> {
-    let s = s.trim();
-    let (neg, s) = match s.strip_prefix('-') {
-        Some(r) => (true, r),
-        None => (false, s),
-    };
-    let v = if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        i64::from_str_radix(h, 16).ok()?
-    } else {
-        s.parse::<i64>().ok()?
-    };
-    Some(if neg { -v } else { v })
+    crate::c5::codegen::ssa::emit_common::eval_const_expr(s.trim())
 }
 
 /// Literal machine bytes for a raw-byte template piece, or `None` when the

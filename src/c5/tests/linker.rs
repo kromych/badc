@@ -2615,3 +2615,180 @@ fn divmod_constant_branch_drops_its_dead_callee() {
         "the __builtin_constant_p-false runtime fallback arm is dead and must be eliminated"
     );
 }
+
+/// Compile a single TU to ET_REL and return the parsed object plus the
+/// `.rela.text` entries whose symbol matches `name`.
+fn relocs_against(
+    src: &str,
+    target: crate::c5::Target,
+    name: &str,
+) -> (
+    crate::c5::linker::object::NativeObject,
+    Vec<crate::c5::linker::object::NativeReloc>,
+) {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
+    let program = Compiler::with_options(
+        src.to_string(),
+        target,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let matched = obj
+        .text_relocs
+        .iter()
+        .filter(|r| obj.symbols.get(r.sym_idx).is_some_and(|s| s.name == name))
+        .copied()
+        .collect();
+    (obj, matched)
+}
+
+const EXTERN_DATA_SRC: &str = "\
+    extern int ext_var;\n\
+    int use_it(void) { ext_var = ext_var + 1; return ext_var; }\n\
+    int *addr(void) { return &ext_var; }\n";
+
+#[test]
+fn extern_data_ref_is_relaxable_got_load_x86_64() {
+    // Cross-TU data access must carry `R_X86_64_REX_GOTPCRELX` on a
+    // `REX mov reg, [rip+disp32]` so a linker resolving the symbol in
+    // the image relaxes the load to `lea` and a fully static link ends
+    // with an empty GOT; plain `R_X86_64_GOTPCREL` is never relaxed.
+    use crate::c5::Target;
+    let (obj, relocs) = relocs_against(EXTERN_DATA_SRC, Target::LinuxX64, "ext_var");
+    assert!(!relocs.is_empty(), "extern data refs must reloc `ext_var`");
+    for r in &relocs {
+        assert_eq!(r.rtype, 42, "extern data ref must be R_X86_64_REX_GOTPCRELX");
+        assert_eq!(r.addend, -4, "disp32 reloc uses the end-of-field addend");
+        let off = r.offset as usize;
+        assert!(off >= 3 && off + 4 <= obj.text.len());
+        assert_eq!(
+            obj.text[off - 3] & 0xf8,
+            0x48,
+            "the marked instruction must carry a REX prefix"
+        );
+        assert_eq!(
+            obj.text[off - 2],
+            0x8b,
+            "the marked instruction must be the relaxable `mov` form"
+        );
+    }
+}
+
+#[test]
+fn extern_data_ref_is_direct_pair_aarch64() {
+    // Cross-TU data access must use the direct `adrp + add` pair
+    // (`ADR_PREL_PG_HI21` + `ADD_ABS_LO12_NC`), not the GOT forms no
+    // linker relaxes: a static image whose layout forbids a GOT could
+    // not link the GOT pair, while the direct pair resolves within any
+    // image, including a PIE.
+    use crate::c5::Target;
+    let (obj, relocs) = relocs_against(EXTERN_DATA_SRC, Target::LinuxAarch64, "ext_var");
+    assert!(!relocs.is_empty(), "extern data refs must reloc `ext_var`");
+    for r in &relocs {
+        assert!(
+            r.rtype == 275 || r.rtype == 277,
+            "extern data ref must be ADR_PREL_PG_HI21 / ADD_ABS_LO12_NC, got {}",
+            r.rtype
+        );
+        if r.rtype == 277 {
+            let off = r.offset as usize;
+            let insn = u32::from_le_bytes(obj.text[off..off + 4].try_into().unwrap());
+            assert_eq!(
+                insn & 0xffc0_0000,
+                0x9100_0000,
+                "the lo12 site must be an `add`, not a GOT `ldr`"
+            );
+        }
+    }
+    assert!(relocs.iter().any(|r| r.rtype == 275));
+    assert!(relocs.iter().any(|r| r.rtype == 277));
+}
+
+#[test]
+fn import_address_keeps_got_pair_aarch64() {
+    // Address-taking a dylib-routed import stays GOT-indirect: the
+    // symbol binds against a shared object at load time, so a direct
+    // pair would force a copy relocation / canonical PLT entry.
+    use crate::c5::Target;
+    let src = alloc::format!(
+        "{TEST_PRELUDE}\
+         typedef int (*cmp_t)(const char *, const char *);\n\
+         cmp_t get(void) {{ return strcmp; }}\n"
+    );
+    let (_, relocs) = relocs_against(&src, Target::LinuxAarch64, "strcmp");
+    assert!(!relocs.is_empty(), "&strcmp must reloc `strcmp`");
+    for r in &relocs {
+        assert!(
+            r.rtype == 311 || r.rtype == 312,
+            "import address-of must be ADR_GOT_PAGE / LD64_GOT_LO12_NC, got {}",
+            r.rtype
+        );
+    }
+}
+
+#[test]
+fn import_address_is_relaxable_got_load_x86_64() {
+    // Same site on x86_64: the GOT load carries the relaxable marking,
+    // so a static link of a defined `strcmp` relaxes to `lea` and a
+    // dynamic link keeps the indirection.
+    use crate::c5::Target;
+    let src = alloc::format!(
+        "{TEST_PRELUDE}\
+         typedef int (*cmp_t)(const char *, const char *);\n\
+         cmp_t get(void) {{ return strcmp; }}\n"
+    );
+    let (_, relocs) = relocs_against(&src, Target::LinuxX64, "strcmp");
+    assert!(!relocs.is_empty(), "&strcmp must reloc `strcmp`");
+    for r in &relocs {
+        assert_eq!(
+            r.rtype, 42,
+            "import address-of must be R_X86_64_REX_GOTPCRELX"
+        );
+    }
+}
+
+#[test]
+fn two_tu_extern_data_links_through_own_linker() {
+    // Consumption side: badc's linker must resolve both the relaxable
+    // x86_64 GOT load (rewritten back to `lea`) and the direct aarch64
+    // pair against the defining unit.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let tu2 = "int ext_var = 20;\n\
+               int main(void) { extern int use_it(void); return use_it(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let objs: Vec<_> = [EXTERN_DATA_SRC, tu2]
+            .iter()
+            .map(|src| {
+                let program = Compiler::with_options(
+                    src.to_string(),
+                    target,
+                    CompileOptions::default().with_no_entry_point(true),
+                )
+                .compile()
+                .expect("compile");
+                let opts = NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..Default::default()
+                };
+                let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+                parse_native_elf(&bytes).expect("parse ET_REL")
+            })
+            .collect();
+        let merged = link_native_objects(&objs).expect("link");
+        assert!(
+            merged.imports.is_empty(),
+            "{target:?}: a two-TU link with every symbol defined must import nothing"
+        );
+    }
+}

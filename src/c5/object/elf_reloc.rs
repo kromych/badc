@@ -127,8 +127,13 @@ const SHF_INFO_LINK: u64 = 0x40;
 const R_X86_64_64: u32 = 1;
 const R_X86_64_PC32: u32 = 2;
 const R_X86_64_PLT32: u32 = 4;
-const R_X86_64_GOTPCREL: u32 = 9;
 const R_X86_64_32: u32 = 10;
+// Relaxable GOT load (psABI B.2): marks a `REX mov reg, [rip+disp32]`
+// whose disp32 is the GOT-entry offset. A linker resolving the symbol
+// within the image relaxes the load to `lea` and drops the GOT entry,
+// so fully static links need no GOT; otherwise it behaves exactly like
+// `R_X86_64_GOTPCREL`, which linkers never relax.
+const R_X86_64_REX_GOTPCRELX: u32 = 42;
 // Local-exec TLS: the linker writes the (negative, variant-2) TP-relative
 // offset of the symbol into the `add r64, imm32` immediate.
 const R_X86_64_TPOFF32: u32 = 23;
@@ -139,10 +144,11 @@ const R_AARCH64_ABS32: u32 = 258;
 const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
 const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
-// GOT-indirect page + offset: address-taking an undefined external symbol
-// goes through the GOT so the object links into a PIE / shared object where
-// the symbol binds at run time (a direct ADR_PREL page relocation is only
-// valid for a symbol resolved within the same image).
+// GOT-indirect page + offset: address-taking a dylib-routed import goes
+// through the GOT because the symbol binds against a shared object at
+// load time (a direct ADR_PREL page relocation would force a copy
+// relocation / canonical PLT entry for a symbol that always lives in a
+// shared library).
 const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
 const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
 // Local-exec TLS pair over the two-`add` sequence: the linker splits the
@@ -1149,26 +1155,41 @@ pub(super) fn write_relocatable(
         );
     }
 
-    // Cross-TU data references. Same encoding shape as the
-    // local data_fixups, but the reloc targets the named
-    // undefined-data symbol so the linker resolves it against
-    // the defining TU's storage. The addend is zero -- the
-    // base of the symbol is the location to reach.
+    // Cross-TU data references. The reloc targets the named
+    // undefined-data symbol with addend zero so the linker resolves
+    // it against the defining TU's storage. Per-arch addressing:
+    // * x86_64 -- GOT load with the relaxable marking. The linker
+    //   relaxes an in-image resolution back to `lea` (a fully static
+    //   link ends with an empty GOT) and keeps the indirection for a
+    //   shared-library resolution.
+    // * aarch64 -- direct `adrp + add`, the same pair local data uses.
+    //   No linker relaxes the aarch64 GOT forms, so a GOT reference
+    //   cannot serve images whose layout forbids a GOT; the direct
+    //   pair resolves within any image, including a PIE, and a
+    //   definition only a shared library supplies binds through the
+    //   copy relocation / canonical PLT the system linker creates for
+    //   direct references from executables.
     for r in &build.user_extern_data_refs {
         let pos = user_extern_data_names
             .iter()
             .position(|n| *n == r.symbol_name.as_str())
             .expect("user_extern_data_names contains every ref's name");
         let sym_idx = user_extern_data_sym_idx[pos] as u64;
-        // Address-of an undefined external symbol goes through the GOT (the
-        // symbol binds at run time in a PIE / shared object). The paired `add`
-        // in `.text` is rewritten to an `ldr` below.
-        emit_got_ref_relocs(
-            machine_for_rela,
-            &mut rela_bytes,
-            r.instr_offset as u64,
-            sym_idx,
-        );
+        match machine_for_rela {
+            Machine::X86_64 => emit_got_ref_relocs(
+                machine_for_rela,
+                &mut rela_bytes,
+                r.instr_offset as u64,
+                sym_idx,
+            ),
+            Machine::Aarch64 => emit_addr_fixup_relocs(
+                machine_for_rela,
+                &mut rela_bytes,
+                r.instr_offset as u64,
+                sym_idx,
+                0,
+            ),
+        }
     }
 
     // Function-pointer literals. Same shape as data fixups but
@@ -1295,16 +1316,20 @@ pub(super) fn write_relocatable(
     let mut sh: Vec<Elf64Shdr> = Vec::with_capacity(num_sections);
     sh.push(Elf64Shdr::default()); // SHN_UNDEF
 
-    // .text -- extern-address materializations become GOT loads (see
-    // `rewrite_extern_addr_loads_to_got`). Both cross-TU data/function
-    // references (`user_extern_data_refs`) and import address-of sites
-    // (`reloc_call_sites` with `is_addr`) go through the GOT. Same length as
-    // `build.text`.
-    let mut got_site_offsets: alloc::vec::Vec<usize> = build
-        .user_extern_data_refs
-        .iter()
-        .map(|r| r.instr_offset)
-        .collect();
+    // .text -- GOT-addressed extern materializations become GOT loads
+    // (see `rewrite_extern_addr_loads_to_got`): import address-of sites
+    // (`reloc_call_sites` with `is_addr`) on both arches, and cross-TU
+    // data references (`user_extern_data_refs`) on x86_64 only --
+    // aarch64 keeps those direct (see the reloc loop above). Same
+    // length as `build.text`.
+    let mut got_site_offsets: alloc::vec::Vec<usize> = match machine_for_rela {
+        Machine::X86_64 => build
+            .user_extern_data_refs
+            .iter()
+            .map(|r| r.instr_offset)
+            .collect(),
+        Machine::Aarch64 => alloc::vec::Vec::new(),
+    };
     got_site_offsets.extend(
         build
             .reloc_call_sites
@@ -2067,10 +2092,10 @@ fn emit_addr_fixup_relocs(
     }
 }
 
-/// Emit the GOT-indirect relocs for address-taking an undefined external
-/// symbol: `R_AARCH64_ADR_GOT_PAGE` at the `adrp` and
+/// Emit the GOT-indirect relocs for address-taking a dylib-routed import:
+/// `R_AARCH64_ADR_GOT_PAGE` at the `adrp` and
 /// `R_AARCH64_LD64_GOT_LO12_NC` at the paired `ldr` on aarch64;
-/// `R_X86_64_GOTPCREL` at the disp32 of the rewritten `mov` on x86_64.
+/// `R_X86_64_REX_GOTPCRELX` at the disp32 of the rewritten `mov` on x86_64.
 /// The direct-address instruction the codegen left is rewritten to the
 /// GOT load by [`rewrite_extern_addr_loads_to_got`].
 fn emit_got_ref_relocs(machine: Machine, out: &mut Vec<u8>, instr_offset: u64, sym_idx: u64) {
@@ -2090,12 +2115,13 @@ fn emit_got_ref_relocs(machine: Machine, out: &mut Vec<u8>, instr_offset: u64, s
             write_struct(out, &lo12);
         }
         Machine::X86_64 => {
-            // `mov reg, [rip + disp32]` (rewritten from the codegen's
+            // `REX mov reg, [rip + disp32]` (rewritten from the codegen's
             // `lea`): the disp32 sits after REX + opcode + modrm, and
             // resolves as `G + GOT + A - P` with the end-of-field `-4`.
+            // The REX form is exactly what the relaxable marking covers.
             let rela = Elf64Rela {
                 r_offset: instr_offset + 3,
-                r_info: (sym_idx << 32) | R_X86_64_GOTPCREL as u64,
+                r_info: (sym_idx << 32) | R_X86_64_REX_GOTPCRELX as u64,
                 r_addend: -4,
             };
             write_struct(out, &rela);

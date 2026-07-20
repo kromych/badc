@@ -379,6 +379,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("register_var_stack_pointer.c", 0),
     ("register_var_asm_operand.c", 0),
     ("register_var_asm_operand_sp.c", 0),
+    ("register_var_asm_operand_split.c", 0),
     ("attribute_weak_alias.c", 0),
     ("attribute_alias_target_later.c", 0),
     ("attribute_section_placement.c", 0),

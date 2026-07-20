@@ -416,6 +416,12 @@ impl Compiler {
         // read them back and drop them.
         let start = self.lex.ival as usize;
         self.next()?; // consume the string
+        // C99 5.1.1.2 phase 6: adjacent string literals concatenate, as on
+        // the constraint path. A register name may be spelled `"%" "rdx"`,
+        // so it is complete only once the following `"` tokens are consumed.
+        while self.lex.tk == '"' {
+            self.next()?;
+        }
         let mut bytes = self.data[start..].to_vec();
         self.data.truncate(start);
         while bytes.last() == Some(&0) {

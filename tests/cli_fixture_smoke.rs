@@ -88,6 +88,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_constraint_a.c", "linux-aarch64"), // x86-64 `A` accumulator constraint
     ("register_var_asm_operand.c", "linux-aarch64"), // x86-64 extended-asm operand pinning
     ("register_var_asm_operand_sp.c", "linux-aarch64"), // x86-64 rsp / rbp operand binding
+    ("register_var_asm_operand_split.c", "linux-aarch64"), // x86-64 split-literal register name
     ("inline_asm_x64_sib.c", "linux-aarch64"), // x86-64 scaled-index memory operands
     ("cpuid_partial_outputs.c", "linux-aarch64"), // x86-64 cpuid
     ("inline_asm_x64_flag_outputs.c", "linux-aarch64"), // x86-64 `=@cc` flag outputs

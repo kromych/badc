@@ -1302,6 +1302,57 @@ fn register_asm_binding_constraints() {
 }
 
 #[test]
+fn register_asm_binding_concatenates_adjacent_literals() {
+    // C99 5.1.1.2 phase 6: the register-name operand of a register-asm
+    // declarator joins adjacent string literals before resolving the
+    // register, matching gcc and clang. Macro-pasted headers spell the
+    // name in pieces, e.g. `asm("%" "rdx")`.
+    use super::super::codegen::Target;
+    let x64 = Target::LinuxX64;
+    let a64 = Target::LinuxAarch64;
+    // Block-scope binding: `%`-prefixed and unprefixed splits, two and
+    // three pieces, all equivalent to the single-literal spelling.
+    for (form, target) in [
+        ("\"%\" \"rdx\"", x64),
+        ("\"r\" \"dx\"", x64),
+        ("\"%\" \"r\" \"dx\"", x64),
+        ("\"rd\" \"x\"", x64),
+        ("\"x\" \"9\"", a64),
+        ("\"x\" \"1\" \"9\"", a64),
+    ] {
+        let src =
+            alloc::format!("int main(void){{ register long v asm({form}); return (int)v; }}\n");
+        assert!(
+            compile_for_target(&src, target).is_ok(),
+            "split register name {form} should compile: {:?}",
+            compile_for_target(&src, target).err()
+        );
+    }
+    // File-scope stack-pointer binding uses the same suffix parser.
+    assert!(
+        compile_for_target(
+            "register unsigned long sp asm(\"r\" \"sp\");\n\
+             unsigned long f(void) { return sp; }\n\
+             int main(void) { return 0; }\n",
+            x64
+        )
+        .is_ok(),
+        "file-scope split stack-pointer binding should compile"
+    );
+    // A split that joins to an unknown register is rejected, and the
+    // diagnostic names the joined text rather than a partial piece.
+    let err = compile_for_target(
+        "int main(void) { register long v asm(\"no\" \"such\"); return (int)v; }\n",
+        x64,
+    )
+    .expect_err("unknown joined register must be rejected");
+    assert!(
+        err.contains("nosuch") && err.contains("not a bindable register"),
+        "diagnostic must name the joined register text: {err}"
+    );
+}
+
+#[test]
 fn file_scope_register_asm_binding() {
     // `register T name asm("reg")` at file scope: stack- / frame-pointer
     // bindings are accepted, repeatable, shadowable, and read-only; a

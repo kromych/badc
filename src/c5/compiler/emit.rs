@@ -574,6 +574,8 @@ impl Compiler {
         // declarator sets its own binding after this shadow.
         s.h_asm_register = s.asm_register;
         s.asm_register = None;
+        s.h_is_global_register = s.is_global_register;
+        s.is_global_register = false;
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -596,6 +598,7 @@ impl Compiler {
         sym.vla_size_slot = sym.h_vla_size_slot;
         sym.is_zero_len_array = sym.h_is_zero_len_array;
         sym.asm_register = sym.h_asm_register;
+        sym.is_global_register = sym.h_is_global_register;
         sym.is_scope_static = false;
         sym.is_scope_typedef = false;
         // The register-asm binding belongs to the block-scope local

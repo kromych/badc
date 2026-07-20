@@ -4220,3 +4220,79 @@ fn inline_asm_extended_operands_fixture() {
     // fallback. Returns 0 when every form round-trips.
     assert_eq!(run_fixture("inline_asm_extended_operands.c"), 0);
 }
+
+#[test]
+fn extern_typeof_redeclaration_merges() {
+    // `extern typeof(f) f;` (and the object form) after or before the
+    // definition is a redeclaration, not a duplicate definition; an
+    // added attribute rides along (the export-macro composition shape).
+    let src = "
+        int f(void) { return 40; }
+        extern typeof(f) f;
+        int g(void);
+        extern typeof(g) g __attribute__((used));
+        int g(void) { return 2; }
+        int arr[3] = {1, 2, 3};
+        extern typeof(arr) arr;
+        extern typeof(printf) printf;
+        int main(void) {
+            if (sizeof(arr) != 3 * sizeof(int)) return 1;
+            if (arr[2] != 3) return 2;
+            return f() + g() - 42;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn typeof_array_operand_declares_array() {
+    // `typeof(arr)` carries the array type into a declaration: the
+    // declared object has the operand's element type and dimension,
+    // matching an array typedef used as the base type.
+    let src = "
+        int arr[3] = {1, 2, 3};
+        typedef long arr4_t[4];
+        typeof(arr) file_copy;
+        int main(void) {
+            typeof(arr) copy;
+            if (sizeof(copy) != sizeof(arr)) return 1;
+            if (sizeof(file_copy) != sizeof(arr)) return 2;
+            copy[0] = 5; copy[1] = 6; copy[2] = 7;
+            file_copy[2] = 9;
+            if (copy[2] != 7 || file_copy[2] != 9) return 3;
+            typeof(arr4_t) q;
+            if (sizeof(q) != 4 * sizeof(long)) return 4;
+            typeof(arr4_t *) p = &q;
+            if (sizeof(p) != sizeof(void *)) return 5;
+            if (sizeof(typeof(arr)) != sizeof(arr)) return 6;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn file_scope_asm_and_register_variable_run() {
+    // The export-macro composition at file scope: a definition, an
+    // `extern typeof` redeclaration, an asm block emitting the name
+    // into a custom section (a no-op for the VM), and a stack-pointer
+    // register variable read from a function.
+    let sp = if cfg!(target_arch = "x86_64") { "rsp" } else { "sp" };
+    let src = alloc::format!(
+        "
+        int export_me(int v) {{ return v + 2; }}
+        extern typeof(export_me) export_me __attribute__((used));
+        __asm__(\".pushsection .export_tab,\\\"a\\\"\\n\"
+                \".balign 8\\n\"
+                \".quad export_me\\n\"
+                \".asciz \\\"export_me\\\"\\n\"
+                \".popsection\");
+        register unsigned long stack_ptr asm(\"{sp}\");
+        int main(void) {{
+            if (stack_ptr == 0) return 1;
+            return export_me(-2);
+        }}
+    "
+    );
+    assert_eq!(run_str(&src), 0);
+}

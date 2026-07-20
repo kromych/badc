@@ -1061,12 +1061,14 @@ impl Compiler {
             .any(|&(s, e)| id >= s && id < e)
     }
 
-    /// Parse a GCC inline-asm statement. c5 supports the operand-free
-    /// forms: an empty template (a compiler barrier, no instruction
-    /// emitted) and a single known operand-free hint instruction
-    /// (`pause` / `yield`, lowered to the target spin-loop hint).
-    /// Operand constraints and other instructions are rejected.
-    fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
+    /// Shared head of an `asm` statement or a file-scope `asm`
+    /// declaration: qualifiers, `(`, and the (concatenated) template
+    /// string. Returns the template bytes, their start offset in the
+    /// data section (the caller truncates once done), and the
+    /// `volatile` / `goto` qualifier flags.
+    pub(super) fn parse_asm_head(
+        &mut self,
+    ) -> Result<(alloc::vec::Vec<u8>, usize, bool, bool), C5Error> {
         self.next()?; // asm / __asm__ / __asm
         // Optional qualifiers (`volatile` / `__volatile__`, `inline`,
         // `goto`). `volatile` must not be elided and rides the parsed
@@ -1105,6 +1107,16 @@ impl Compiler {
             self.next()?;
         }
         let template: alloc::vec::Vec<u8> = self.data[tstart..].to_vec();
+        Ok((template, tstart, is_volatile, is_goto))
+    }
+
+    /// Parse a GCC inline-asm statement. c5 supports the operand-free
+    /// forms: an empty template (a compiler barrier, no instruction
+    /// emitted) and a single known operand-free hint instruction
+    /// (`pause` / `yield`, lowered to the target spin-loop hint).
+    /// Operand constraints and other instructions are rejected.
+    fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
+        let (template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
         // `asm goto` takes the general extended-asm path directly: the
         // operand-free template shortcuts below have no label grammar.
         if is_goto {

@@ -302,7 +302,9 @@ impl Compiler {
                 }
                 break;
             }
-            if self.symbols[loc_idx].class == Token::Loc as i64 {
+            if self.symbols[loc_idx].class == Token::Loc as i64
+                && !self.symbols[loc_idx].is_global_register
+            {
                 return Err(self.compile_err("duplicate local definition"));
             }
 

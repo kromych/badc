@@ -1575,6 +1575,10 @@ pub(crate) fn lower(
         alloc::collections::BTreeMap::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
     let mut asm_sections: Vec<super::ssa::emit_common::AsmSection> = Vec::new();
+    // File-scope asm section blocks precede the per-function ones
+    // (`.align` takes a power-of-two exponent on aarch64).
+    super::ssa::emit_common::materialize_file_asm(&program.file_asm, true, &mut asm_sections)
+        .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     // Each `JsrExt` / `TailExt` site emits a placeholder

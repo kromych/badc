@@ -38,9 +38,14 @@ pub(crate) mod types;
 /// from the declarator or the object's type. Static objects (file-scope,
 /// block-scope static, and initialised or zero-init alike) are placed at
 /// this alignment in `.data` / `.bss`; automatic objects stay capped lower
-/// because stack-frame realignment is not implemented. A page covers the
-/// common cache-line (64) and page-aligned requests.
-pub(crate) const MAX_STATIC_ALIGN: usize = 4096;
+/// because stack-frame realignment is not implemented. 64 KiB is the
+/// largest page size in common use (the aarch64 max-page-size) and covers
+/// cache-line, page, and page-multiple requests such as a per-CPU stack.
+/// The self-contained ELF writer raises the read-write segment `p_align`
+/// to the object's alignment so a PIE load bias preserves it, and the JIT
+/// over-aligns its data mapping the same way; both are bounded by
+/// `TEXT_VMADDR_BASE`, which fixes the structural ceiling above this.
+pub(crate) const MAX_STATIC_ALIGN: usize = 65536;
 
 /// Captured enum tag + constants for DWARF emission. C99 6.7.2.2
 /// enums collapse to `int` in c5 -- the tag carries no semantic

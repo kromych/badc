@@ -574,6 +574,25 @@ fn overaligned_type_placement() {
 }
 
 #[test]
+fn page_multiple_alignment() {
+    // A page-multiple alignment (16 KiB, above the x86-64 page size) is
+    // honored for struct layout and for static / global placement,
+    // including the type-derived case. Layout up to the 64 KiB cap is
+    // checked with `_Static_assert`; the addresses are read at run time.
+    // Matched against GCC and clang on x86-64 and aarch64.
+    assert_eq!(run_fixture("page_multiple_alignment.c"), 0);
+}
+
+#[test]
+fn max_alignment_placement() {
+    // The widest static alignment badc honors (64 KiB) lands on its
+    // boundary for bare, initialised, and block-scope-static storage. Off
+    // the Mach-O list: macOS slides a PIE by whole pages, so a wider
+    // boundary is not guaranteed at run time (clang rejects it likewise).
+    assert_eq!(run_fixture("max_alignment_placement.c"), 0);
+}
+
+#[test]
 fn packed_enum() {
     // `enum __attribute__((packed))` uses the smallest integer type holding
     // its values, changing the layout of an embedding struct (a real-world

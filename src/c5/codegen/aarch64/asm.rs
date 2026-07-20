@@ -243,6 +243,26 @@ fn sysop_base(mnem: &str, op: &str) -> Option<u32> {
     Some(0xD508_0000 | (op1 << 16) | (crn << 12) | (crm << 8) | (op2 << 5))
 }
 
+/// The 4-bit CRm value of a `dmb` / `dsb` barrier option, or None if the
+/// name is not one. `isb` takes only `sy`; `clrex` only a numeric imm.
+fn barrier_option(name: &str) -> Option<u32> {
+    Some(match name.to_ascii_lowercase().as_str() {
+        "sy" => 15,
+        "st" => 14,
+        "ld" => 13,
+        "ish" => 11,
+        "ishst" => 10,
+        "ishld" => 9,
+        "nsh" => 7,
+        "nshst" => 6,
+        "nshld" => 5,
+        "osh" => 3,
+        "oshst" => 2,
+        "oshld" => 1,
+        _ => return None,
+    })
+}
+
 /// The 5-bit prefetch-operation code of a `prfm` op name
 /// (`<pld|pli|pst><l1|l2|l3><keep|strm>` = type<<3 | target<<1 | policy), or
 /// None if the name is not one.
@@ -955,6 +975,41 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 continue;
             }
         }
+        // Barriers: `dmb` / `dsb` take a domain option (default `sy`), `isb`
+        // takes only `sy`, `clrex` a numeric imm. All are constant and encode
+        // to their word here: `1101 0101 0000 0011 0011 CRm opc 11111` with
+        // opc 4 (dsb), 5 (dmb), 6 (isb), 2 (clrex). Byte-verified vs clang.
+        if matches!(mnem, "dmb" | "dsb" | "isb" | "clrex") {
+            let toks = split_operands(rest);
+            if toks.len() > 1 {
+                return Err(format!("inline asm: `{mnem}` takes at most one option"));
+            }
+            let crm = match toks.first() {
+                None => 15,
+                Some(t) => match barrier_option(t) {
+                    Some(v) if matches!(mnem, "dmb" | "dsb") || (mnem == "isb" && v == 15) => v,
+                    _ => match t.strip_prefix('#').and_then(parse_int) {
+                        Some(v) if (0..=15).contains(&v) => v as u32,
+                        _ => return Err(format!("inline asm: bad `{mnem}` option `{t}`")),
+                    },
+                },
+            };
+            let opc = match mnem {
+                "dsb" => 4u32,
+                "dmb" => 5,
+                "isb" => 6,
+                _ => 2, // clrex
+            };
+            let word = 0xD503_301F | (crm << 8) | (opc << 5);
+            insns.push(AsmInsnA64 {
+                mnemonic: String::new(),
+                operands: Vec::new(),
+                bytes: word.to_le_bytes().to_vec(),
+                label_def: None,
+                sym_target: None,
+            });
+            continue;
+        }
         // `dc` / `ic` / `tlbi` name a system operation as the first token and
         // take an optional address register. The op resolves to a base word; the
         // register -- explicit, an operand reference, or absent (xzr) -- is
@@ -1221,6 +1276,41 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn barrier_encodings() {
+        // Every dmb/dsb domain option, isb, and clrex encode to their
+        // constant words. Expected words from
+        // `clang --target=aarch64-unknown-linux-gnu`.
+        #[rustfmt::skip]
+        let cases: &[(&[u8], u32)] = &[
+            (b"dmb sy",    0xd5033fbf), (b"dmb ish",   0xd5033bbf),
+            (b"dmb ishld", 0xd50339bf), (b"dmb ishst", 0xd5033abf),
+            (b"dmb osh",   0xd50333bf), (b"dmb oshld", 0xd50331bf),
+            (b"dmb oshst", 0xd50332bf), (b"dmb nsh",   0xd50337bf),
+            (b"dmb nshld", 0xd50335bf), (b"dmb nshst", 0xd50336bf),
+            (b"dmb ld",    0xd5033dbf), (b"dmb st",    0xd5033ebf),
+            (b"dmb",       0xd5033fbf),
+            (b"dsb sy",    0xd5033f9f), (b"dsb ish",   0xd5033b9f),
+            (b"dsb ishst", 0xd5033a9f), (b"dsb ld",    0xd5033d9f),
+            (b"dsb st",    0xd5033e9f),
+            (b"isb",       0xd5033fdf), (b"isb sy",    0xd5033fdf),
+            (b"clrex",     0xd5033f5f), (b"clrex #7",  0xd503375f),
+        ];
+        for (tmpl, want) in cases {
+            let insns = parse_template(tmpl).unwrap();
+            assert_eq!(insns.len(), 1);
+            assert_eq!(
+                insns[0].bytes,
+                want.to_le_bytes(),
+                "template {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+        // An unknown option and an isb domain option are rejected.
+        assert!(parse_template(b"dmb full").is_err());
+        assert!(parse_template(b"isb ish").is_err());
     }
 
     #[test]

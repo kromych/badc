@@ -2674,6 +2674,17 @@ impl<'a> Walker<'a> {
                 }
             }
         }
+        // A GNU statement expression whose final statement transfers
+        // control out of it (a `goto` or `return`, or a noreturn call)
+        // closes the block; its value is then unreachable. Open a fresh
+        // block and yield a placeholder so callers, which assume an rvalue
+        // leaves an open block, keep building well-formed SSA that the
+        // unreachable-block prune drops.
+        if !b.is_block_open() {
+            let dead = b.new_block();
+            b.switch_to(dead);
+            return Ok(b.imm(0));
+        }
         match result {
             Some(v) => Ok(v),
             None => Ok(b.imm(0)),

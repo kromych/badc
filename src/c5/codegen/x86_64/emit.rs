@@ -6277,6 +6277,24 @@ fn emit_inline_asm(
         let rel = target as i64 - (at as i64 + 4);
         code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());
     }
+    // Flag outputs: the template's condition flags are still live here (the
+    // label fixups above patch bytes and emit none), so materialize each
+    // `=@cc<cond>` with `set<cond>` into its assigned register's low byte and
+    // zero-extend it. This must precede the store-back loop, whose `mov`s
+    // would otherwise be the first instructions after the template.
+    for (i, op) in asm.operands.iter().enumerate() {
+        let AsmConstraint::Flags(nibble) = op.constraint else {
+            continue;
+        };
+        let Some(cc) = super::encode::Cc::from_nibble(nibble) else {
+            return fail("inline asm: bad flag-output condition");
+        };
+        let Some(r) = op_reg[i] else {
+            return fail("inline asm: flag output without a register");
+        };
+        super::encode::emit_setcc_r8(code, cc, Reg(r));
+        super::encode::emit_movzx_r_r8(code, Reg(r), Reg(r));
+    }
     // Store the register outputs back through their captured addresses. A
     // memory operand needs no store-back: the instruction wrote memory.
     for (i, op) in asm.operands.iter().enumerate() {

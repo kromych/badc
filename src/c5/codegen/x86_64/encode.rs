@@ -1212,6 +1212,30 @@ impl Cc {
             Cc::Ns => Cc::S,
         }
     }
+
+    /// Recover a condition from its architectural nibble, the form an
+    /// inline-asm flag-output constraint carries through the IR.
+    pub(crate) fn from_nibble(n: u8) -> Option<Cc> {
+        Some(match n {
+            0x0 => Cc::O,
+            0x1 => Cc::No,
+            0x2 => Cc::B,
+            0x3 => Cc::Ae,
+            0x4 => Cc::E,
+            0x5 => Cc::Ne,
+            0x6 => Cc::Be,
+            0x7 => Cc::A,
+            0x8 => Cc::S,
+            0x9 => Cc::Ns,
+            0xA => Cc::P,
+            0xB => Cc::Np,
+            0xC => Cc::L,
+            0xD => Cc::Ge,
+            0xE => Cc::Le,
+            0xF => Cc::G,
+            _ => return None,
+        })
+    }
 }
 
 /// `SETcc r/m8` -- write byte = 1 if condition holds, else 0. The

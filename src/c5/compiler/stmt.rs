@@ -1459,15 +1459,17 @@ impl Compiler {
                 self.data.truncate(data_base);
                 return Err(self.compile_err("inline asm goto: output operands are not supported"));
             }
-            let (constraint, is_rw) = match Self::parse_asm_constraint(cstr, is_output, n_outputs) {
-                Some(c) => c,
-                None => {
-                    self.data.truncate(data_base);
-                    return Err(self.compile_err(alloc::format!(
-                        "inline asm: unsupported constraint `{cstr}`"
-                    )));
-                }
-            };
+            let is_x86 = !self.target.is_aarch64();
+            let (constraint, is_rw) =
+                match Self::parse_asm_constraint(cstr, is_output, n_outputs, is_x86) {
+                    Some(c) => c,
+                    None => {
+                        self.data.truncate(data_base);
+                        return Err(self.compile_err(alloc::format!(
+                            "inline asm: unsupported constraint `{cstr}`"
+                        )));
+                    }
+                };
             if self.lex.tk != '(' {
                 self.data.truncate(data_base);
                 return Err(self.compile_err("inline asm: `(` expected after constraint"));
@@ -1701,16 +1703,42 @@ impl Compiler {
     /// [`ir::AsmConstraint`] and whether it is a read-write (`+`)
     /// output. `is_output` selects the output vs input grammar;
     /// `n_outputs` is the count of outputs already parsed, so a digit
-    /// (matching) constraint resolves to an earlier output. Returns
-    /// `None` for a constraint the codegen does not model.
-    fn parse_asm_constraint(
+    /// (matching) constraint resolves to an earlier output; `is_x86`
+    /// enables the x86_64-only flag-output form. Returns `None` for a
+    /// constraint the codegen does not model.
+    ///
+    /// A constraint naming several alternatives (`rm`, `=qm`, `ri`) is
+    /// satisfied by the register alternative whenever the constraint
+    /// admits one, in both input and output position: a register
+    /// operand is always a legal choice for such a constraint and needs
+    /// no addressing-mode analysis to place. Only a constraint with no
+    /// register alternative at all (`m`, `=m`) takes the memory path.
+    pub(crate) fn parse_asm_constraint(
         cstr: &str,
         is_output: bool,
         n_outputs: usize,
+        is_x86: bool,
     ) -> Option<(super::super::ir::AsmConstraint, bool)> {
         use super::super::ir::AsmConstraint;
         let is_rw = cstr.starts_with('+');
         let body = cstr.trim_start_matches(['=', '+', '&', '%']);
+        // Flag output (`=@cc<cond>`): the block's condition flags are the
+        // operand. Outputs only, and x86_64 only -- the condition names and
+        // the `setcc` materialization are that target's.
+        if let Some(cond) = body.strip_prefix("@cc") {
+            // Write-only: the flags are produced by the template, so there is
+            // no prior value to load, and `+` has no meaning here.
+            if !is_output || !is_x86 || is_rw {
+                return None;
+            }
+            let cc = super::super::codegen::x86_64::asm::flag_cond_code(cond)?;
+            return Some((AsmConstraint::Flags(cc), is_rw));
+        }
+        // No other `@` form is modelled; without this the letters after it
+        // would be read as ordinary class letters.
+        if body.contains('@') {
+            return None;
+        }
         // A matching constraint ties an input to an earlier output.
         if let Some(d) = body.chars().find(|c| c.is_ascii_digit()) {
             let idx = d as u8 - b'0';

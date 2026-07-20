@@ -89,6 +89,19 @@ fn predefined_macros_expand() {
 }
 
 #[test]
+fn sizeof_int128_is_predefined() {
+    // Headers gate their own 128-bit typedefs on `__SIZEOF_INT128__`
+    // rather than probing for the type, so it is predefined
+    // unconditionally (not behind `--gnu`) and reads 16.
+    let probe = "#ifdef __SIZEOF_INT128__\nyes __SIZEOF_INT128__\n#else\nno\n#endif\n";
+    let out = process(probe);
+    assert!(
+        out.contains("yes 16"),
+        "expected __SIZEOF_INT128__ predefined as 16, got: {out}"
+    );
+}
+
+#[test]
 fn gnu_identity_macros_are_opt_in() {
     // `__GNUC__` and `__STRICT_ANSI__` are undefined by default.
     let probe = "#ifdef __GNUC__\nG yes\n#else\nG no\n#endif\n\

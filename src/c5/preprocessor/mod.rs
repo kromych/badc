@@ -654,6 +654,10 @@ impl Preprocessor {
         macros.insert("__SIZEOF_PTRDIFF_T__".to_string(), "8".to_string());
         macros.insert("__SIZEOF_FLOAT__".to_string(), "4".to_string());
         macros.insert("__SIZEOF_DOUBLE__".to_string(), "8".to_string());
+        // Headers gate their own 128-bit typedefs on this macro rather
+        // than probing for `__int128`; the type and its operators are
+        // supported on every target.
+        macros.insert("__SIZEOF_INT128__".to_string(), "16".to_string());
         let (long_bytes, wchar_bytes) = match target {
             Target::WindowsX64 | Target::WindowsAarch64 => ("4", "2"),
             _ => ("8", "4"),

@@ -2716,9 +2716,11 @@ fn strong_definition_overrides_weak_at_link() {
 fn section_attribute_places_symbols_in_named_sections() {
     // `__attribute__((section("name")))`: the ET_REL object carries a
     // section of that name with the right type/flags, the attributed
-    // symbols sit in it, and a `.rela` companion holds the relocations
-    // applying inside it (the same-section call needs none; the
-    // cross-section call from `main` relocates by callee name).
+    // symbols sit in it, and a `.rela` companion exists exactly when
+    // relocations apply inside it: `.cfg.data`'s function-pointer slot
+    // needs one, `.init.text` needs none (the same-section call is
+    // direct; the cross-section call from `use_cfg` applies in
+    // `.text`).
     use crate::c5::compiler::CompileOptions;
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::with_options(
@@ -2726,7 +2728,8 @@ fn section_attribute_places_symbols_in_named_sections() {
          __attribute__((section(\".init.text\"))) int boot(void) { return boot_step(4); }\n\
          int cfg __attribute__((section(\".cfg.data\"))) = 35;\n\
          int cfg_zero __attribute__((section(\".cfg.data\")));\n\
-         int use_cfg(void) { return boot() + cfg + cfg_zero; }\n"
+         int (*hook)(void) __attribute__((section(\".cfg.data\"))) = boot;\n\
+         int use_cfg(void) { return boot() + cfg + cfg_zero + hook(); }\n"
             .to_string(),
         Target::LinuxX64,
         CompileOptions::default().with_no_entry_point(true),
@@ -2774,9 +2777,20 @@ fn section_attribute_places_symbols_in_named_sections() {
     assert_eq!(u32le(shdr(cfg_i) + 4), SHT_PROGBITS);
     assert_eq!(u64le(shdr(cfg_i) + 8), SHF_ALLOC | SHF_WRITE);
 
-    let rela_i = *idx_of.get(".rela.init.text").expect("companion rela present");
+    // `.rela` companions are on-demand: none for the reloc-free
+    // `.init.text`, one for `.cfg.data` whose `hook` slot binds to
+    // `boot` (retargeted to the `.init.text` section symbol).
+    assert!(
+        !idx_of.contains_key(".rela.init.text"),
+        "no empty .rela companion"
+    );
+    let rela_i = *idx_of.get(".rela.cfg.data").expect("companion rela present");
     assert_eq!(u32le(shdr(rela_i) + 4), SHT_RELA);
-    assert_eq!(u32le(shdr(rela_i) + 0x2c) as usize, init_i, "sh_info names the section");
+    assert_eq!(u32le(shdr(rela_i) + 0x2c) as usize, cfg_i, "sh_info names the section");
+    let rela_off = u64le(shdr(rela_i) + 0x18) as usize;
+    let rela_size = u64le(shdr(rela_i) + 0x20) as usize;
+    assert_eq!(rela_size, 24, "one relocation for the hook slot");
+    let r_sym = (u64le(rela_off + 8) >> 32) as usize;
 
     // Symbols: boot / boot_step in .init.text; cfg (initialized) and
     // cfg_zero (zero, carved out of the bss region) in .cfg.data.
@@ -2800,7 +2814,13 @@ fn section_attribute_places_symbols_in_named_sections() {
     assert_eq!(shndx_by_name["boot_step"], init_i);
     assert_eq!(shndx_by_name["cfg"], cfg_i);
     assert_eq!(shndx_by_name["cfg_zero"], cfg_i);
+    assert_eq!(shndx_by_name["hook"], cfg_i);
     assert_eq!(shndx_by_name["use_cfg"], idx_of[".text"]);
+    assert_eq!(
+        u16le(sym_off + r_sym * 24 + 6) as usize,
+        init_i,
+        "hook's reloc binds to the .init.text section symbol"
+    );
 
     // The `.cfg.data` payload starts with cfg's initializer.
     let cfg_off = u64le(shdr(cfg_i) + 0x18) as usize;
@@ -2892,6 +2912,99 @@ fn inline_asm_pushsection_lands_in_relocatable_object() {
         };
         assert_eq!(r_info(0) & 0xFFFF_FFFF, abs64, "{target:?}: abs64 type");
         assert_eq!(r_info(1) & 0xFFFF_FFFF, prel32, "{target:?}: pcrel32 type");
+    }
+}
+
+#[test]
+fn attribute_and_asm_pushsection_merge_into_one_section() {
+    // An `__attribute__((section))` object and an inline-asm
+    // `.pushsection` block naming the same section share one output
+    // section: the attribute content first, the asm payload after it
+    // at its `.balign`, and both sides' relocations in the single
+    // `.rela` companion.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int marker __attribute__((section(\".mix\"))) = 77;\n\
+        int probe(void) {\n\
+            __asm__(\"1: nop\\n\"\n\
+                \".pushsection .mix,\\\"aw\\\"\\n\"\n\
+                \".balign 8\\n\"\n\
+                \".quad 1b\\n\"\n\
+                \".quad marker\\n\"\n\
+                \".popsection\\n\");\n\
+            return 0;\n\
+        }\n\
+        int main(void) { return probe(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let mix: alloc::vec::Vec<usize> = sections
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.0 == ".mix")
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(mix.len(), 1, "{target:?}: exactly one .mix section");
+        let mix_i = mix[0];
+        let sec = &sections[mix_i];
+        assert_eq!(sec.1, 1, "{target:?}: SHT_PROGBITS");
+        assert_eq!(sec.2, 0x3, "{target:?}: SHF_WRITE | SHF_ALLOC");
+        // marker's 4 initialized bytes, padding to the asm block's
+        // `.balign 8`, then the two 8-byte fields.
+        assert_eq!(sec.3.len(), 24, "{target:?}: merged payload size");
+        assert_eq!(&sec.3[0..4], &77u32.to_le_bytes(), "{target:?}: marker first");
+        let text_i = sections.iter().position(|s| s.0 == ".text").unwrap();
+        let symtab = &sections.iter().find(|s| s.0 == ".symtab").unwrap().3;
+        let sym_shndx = |sym: usize| {
+            u16::from_le_bytes(symtab[sym * 24 + 6..sym * 24 + 8].try_into().unwrap()) as usize
+        };
+        let rela = &sections
+            .iter()
+            .find(|s| s.0 == ".rela.mix")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.mix missing"))
+            .3;
+        assert_eq!(rela.len(), 2 * 24, "{target:?}: two relocations");
+        let field = |k: usize, o: usize| {
+            u64::from_le_bytes(rela[k * 24 + o..k * 24 + o + 8].try_into().unwrap())
+        };
+        let abs64 = match target {
+            Target::LinuxX64 => 1u64,
+            _ => 257,
+        };
+        // `.quad 1b`: the asm label in probe's body, against `.text`.
+        assert_eq!(field(0, 0), 8, "{target:?}: label reloc offset");
+        assert_eq!(field(0, 8) & 0xFFFF_FFFF, abs64, "{target:?}: abs64 type");
+        assert_eq!(
+            sym_shndx((field(0, 8) >> 32) as usize),
+            text_i,
+            "{target:?}: label reloc binds to .text"
+        );
+        // `.quad marker`: the attribute object carved into `.mix`
+        // itself, against the `.mix` section symbol at offset 0.
+        assert_eq!(field(1, 0), 16, "{target:?}: marker reloc offset");
+        assert_eq!(field(1, 8) & 0xFFFF_FFFF, abs64, "{target:?}: abs64 type");
+        assert_eq!(
+            sym_shndx((field(1, 8) >> 32) as usize),
+            mix_i,
+            "{target:?}: marker reloc binds to .mix"
+        );
+        assert_eq!(field(1, 16), 0, "{target:?}: marker sits at .mix offset 0");
+        // `marker`'s own symbol lives in `.mix`.
+        let strtab = &sections.iter().find(|s| s.0 == ".strtab").unwrap().3;
+        let mut marker_shndx = None;
+        for s in 0..symtab.len() / 24 {
+            let noff = u32::from_le_bytes(symtab[s * 24..s * 24 + 4].try_into().unwrap()) as usize;
+            let end = strtab[noff..].iter().position(|&b| b == 0).unwrap() + noff;
+            if &strtab[noff..end] == b"marker" {
+                marker_shndx = Some(sym_shndx(s));
+            }
+        }
+        assert_eq!(marker_shndx, Some(mix_i), "{target:?}: marker symbol in .mix");
     }
 }
 

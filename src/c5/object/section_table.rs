@@ -1,8 +1,8 @@
 //! Named-section table for relocatable output.
 //!
 //! Carries every section that is not part of the writer's fixed set:
-//! `__attribute__((section("name")))` placements today, assembler
-//! `.pushsection` payloads next. Entries are keyed by name; the writer
+//! `__attribute__((section("name")))` placements and assembler
+//! `.pushsection` payloads. Entries are keyed by name; the writer
 //! assigns section indices, emits one STT_SECTION symbol per entry,
 //! and appends each entry's bytes plus a companion `.rela<name>` when
 //! it carries relocations.
@@ -51,6 +51,7 @@ impl SectionTable {
     /// Index of the entry for `name`, creating it when absent. An
     /// existing entry keeps its type/flags; asking for the same name
     /// with a different identity is an error surfaced to the caller.
+    /// The entry's alignment grows to the largest request.
     pub(crate) fn get_or_insert(
         &mut self,
         name: &str,
@@ -59,12 +60,13 @@ impl SectionTable {
         align: u64,
     ) -> Result<usize, String> {
         if let Some(i) = self.entries.iter().position(|e| e.name == name) {
-            let e = &self.entries[i];
+            let e = &mut self.entries[i];
             if e.sh_type != sh_type || e.flags != flags {
                 return Err(alloc::format!(
                     "section `{name}` requested with conflicting type/flags"
                 ));
             }
+            e.align = e.align.max(align);
             return Ok(i);
         }
         let mut rela_name = String::with_capacity(name.len() + 5);

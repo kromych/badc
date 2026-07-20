@@ -3163,6 +3163,57 @@ fn asm_section_values_fold_constant_expressions() {
 }
 
 #[test]
+fn asm_section_label_difference_is_a_constant() {
+    // `label_a - label_b` between two template labels is the constant byte
+    // distance in the emitted code, sized to the directive. Byte-for-byte
+    // identical to GNU as: the nop between the labels is 1 byte on x86-64 and
+    // 4 bytes on aarch64, so the diffs are those constants; `.long 661b - .`
+    // stays a PC-relative relocation and is the section's only reloc.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        void f(void) {\n\
+            __asm__ volatile(\"661:\\n\\tnop\\n662:\\n\"\n\
+                \".pushsection .altinstructions,\\\"a\\\"\\n\"\n\
+                \".long 661b - .\\n\"\n\
+                \".byte 662b - 661b\\n\"\n\
+                \".short 662f - 661b\\n\"\n\
+                \".popsection\\n\");\n\
+        }\n\
+        int main(void) { f(); return 0; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".altinstructions")
+            .unwrap_or_else(|| panic!("{target:?}: .altinstructions missing"));
+        // 4 (pcrel long) + 1 (byte diff) + 2 (short diff).
+        assert_eq!(sec.3.len(), 7, "{target:?}: section size");
+        let nop_len = match target {
+            Target::LinuxX64 => 1u8,
+            _ => 4,
+        };
+        assert_eq!(sec.3[4], nop_len, "{target:?}: .byte 662b - 661b");
+        assert_eq!(
+            u16::from_le_bytes(sec.3[5..7].try_into().unwrap()),
+            u16::from(nop_len),
+            "{target:?}: .short 662f - 661b"
+        );
+        // Only `.long 661b - .` relocates; both diffs are folded constants.
+        let reloc_count = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.altinstructions")
+            .map_or(0, |r| r.3.len() / 24);
+        assert_eq!(reloc_count, 1, "{target:?}: exactly one reloc");
+    }
+}
+
+#[test]
 fn attribute_and_asm_pushsection_merge_into_one_section() {
     // An `__attribute__((section))` object and an inline-asm
     // `.pushsection` block naming the same section share one output

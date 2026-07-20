@@ -765,6 +765,14 @@ pub(crate) enum AsmSectionValue {
         name: alloc::string::String,
         pcrel: bool,
     },
+    /// `label_a - label_b`: the byte distance between two template-label
+    /// definitions. Both resolve to text offsets at materialize time, so the
+    /// difference is a compile-time constant stored in the field. Either
+    /// label may be a forward or a backward reference.
+    LabelDiff {
+        minuend: alloc::string::String,
+        subtrahend: alloc::string::String,
+    },
 }
 
 /// One item of an in-template section block, in source order.
@@ -1094,20 +1102,49 @@ fn parse_section_value(a: &str) -> Result<AsmSectionValue, alloc::string::String
         }
         return Err(alloc::format!("inline asm: bad section value `{a}`"));
     }
-    // `ref - .`: PC-relative against the field's own position.
-    let (name, pcrel) = match a.split_once('-') {
-        Some((l, r)) if r.trim() == "." => (l.trim(), true),
-        None => (a, false),
-        _ => return Err(alloc::format!("inline asm: unsupported expression `{a}`")),
-    };
     let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
-    if name.is_empty() || !name.bytes().all(ident) {
+    let is_name = |s: &str| !s.is_empty() && s.bytes().all(ident);
+    // A single `-` splits `ref - .` (PC-relative against the field's own
+    // position) from `label_a - label_b` (a constant label distance).
+    if let Some((l, r)) = a.split_once('-') {
+        let (l, r) = (l.trim(), r.trim());
+        if r == "." {
+            if !is_name(l) {
+                return Err(alloc::format!("inline asm: bad section value `{a}`"));
+            }
+            return Ok(AsmSectionValue::Ref {
+                name: alloc::string::String::from(l),
+                pcrel: true,
+            });
+        }
+        if is_name(l) && is_name(r) {
+            return Ok(AsmSectionValue::LabelDiff {
+                minuend: alloc::string::String::from(l),
+                subtrahend: alloc::string::String::from(r),
+            });
+        }
+        return Err(alloc::format!("inline asm: unsupported expression `{a}`"));
+    }
+    if !is_name(a) {
         return Err(alloc::format!("inline asm: bad section value `{a}`"));
     }
     Ok(AsmSectionValue::Ref {
-        name: alloc::string::String::from(name),
-        pcrel,
+        name: alloc::string::String::from(a),
+        pcrel: false,
     })
+}
+
+/// Whether a signed constant fits a data-directive field of `width` bytes,
+/// accepting either a signed or an unsigned reading (`-128..=255` for a byte,
+/// and so on). An 8-byte field holds any `i64`.
+fn value_fits_width(v: i64, width: u8) -> bool {
+    let bits = width as u32 * 8;
+    if bits >= 64 {
+        return true;
+    }
+    let signed_min = -(1i64 << (bits - 1));
+    let unsigned_max = (1i64 << bits) - 1;
+    (signed_min..=unsigned_max).contains(&v)
 }
 
 /// Materialize the parsed section blocks: resolve operand constants and
@@ -1238,6 +1275,27 @@ pub(crate) fn materialize_asm_sections(
                                     addend: 0,
                                 });
                                 sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
+                            }
+                            AsmSectionValue::LabelDiff {
+                                minuend,
+                                subtrahend,
+                            } => {
+                                let resolve = |n: &str| {
+                                    label_off(n).ok_or_else(|| {
+                                        alloc::format!(
+                                            "inline asm: label difference needs template labels, `{n}` is not one"
+                                        )
+                                    })
+                                };
+                                let diff = resolve(minuend)? as i64 - resolve(subtrahend)? as i64;
+                                if !value_fits_width(diff, *width) {
+                                    return Err(alloc::format!(
+                                        "inline asm: label difference {diff} does not fit a {width}-byte field"
+                                    ));
+                                }
+                                sec.bytes.extend_from_slice(
+                                    &(diff as u64).to_le_bytes()[..*width as usize],
+                                );
                             }
                         }
                     }
@@ -2063,6 +2121,105 @@ mod asm_section_tests {
                 addend: 0
             }
         );
+    }
+
+    #[test]
+    fn section_label_difference_parses() {
+        // `label_a - label_b` is a constant distance; `label - .` stays
+        // PC-relative; a bare name stays a plain reference.
+        assert_eq!(
+            parse_section_value("662b - 661b").unwrap(),
+            AsmSectionValue::LabelDiff {
+                minuend: alloc::string::String::from("662b"),
+                subtrahend: alloc::string::String::from("661b"),
+            }
+        );
+        assert_eq!(
+            parse_section_value("662f-661b").unwrap(),
+            AsmSectionValue::LabelDiff {
+                minuend: alloc::string::String::from("662f"),
+                subtrahend: alloc::string::String::from("661b"),
+            }
+        );
+        assert_eq!(
+            parse_section_value("661b - .").unwrap(),
+            AsmSectionValue::Ref {
+                name: alloc::string::String::from("661b"),
+                pcrel: true,
+            }
+        );
+        assert_eq!(
+            parse_section_value("sym").unwrap(),
+            AsmSectionValue::Ref {
+                name: alloc::string::String::from("sym"),
+                pcrel: false,
+            }
+        );
+        // A three-term expression is still unsupported.
+        assert!(parse_section_value("a - b - c").is_err());
+    }
+
+    #[test]
+    fn section_label_difference_bytes() {
+        // Distances between two template labels are constants sized to the
+        // field, forward or backward, byte-verified against GNU as (a 4-byte
+        // instruction between the labels: `.byte 2b - 1b` is 0x04, `1b - 2b`
+        // is 0xFC).
+        let text = "1: nop\n2: nop\n.pushsection .x,\"a\"\n\
+                    .byte 2b - 1b\n.short 2b - 1b\n.long 2b - 1b\n.byte 1b - 2b\n\
+                    .popsection\n";
+        let (_code, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|name| match name {
+                "1b" => Some(0),
+                "2b" => Some(4),
+                _ => None,
+            },
+            false,
+            &mut sink,
+        )
+        .unwrap();
+        let s = &sink[0];
+        assert_eq!(
+            s.bytes,
+            alloc::vec![0x04, 0x04, 0x00, 0x04, 0x00, 0x00, 0x00, 0xFC]
+        );
+        assert!(s.relocs.is_empty());
+    }
+
+    #[test]
+    fn section_label_difference_overflow_rejected() {
+        // A distance outside the field width is rejected, not truncated.
+        let text = "1: nop\n2: nop\n.pushsection .x,\"a\"\n.byte 2b - 1b\n.popsection\n";
+        let (_c, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        let err = materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|name| match name {
+                "1b" => Some(0),
+                "2b" => Some(256),
+                _ => None,
+            },
+            false,
+            &mut sink,
+        )
+        .expect_err("256 does not fit a byte");
+        assert!(err.contains("does not fit"), "{err}");
+    }
+
+    #[test]
+    fn data_field_fit_boundaries() {
+        // Signed-or-unsigned fit per width, matching GNU as's accept set.
+        assert!(value_fits_width(255, 1) && value_fits_width(-128, 1));
+        assert!(!value_fits_width(256, 1) && !value_fits_width(-129, 1));
+        assert!(value_fits_width(65535, 2) && value_fits_width(-32768, 2));
+        assert!(!value_fits_width(65536, 2));
+        assert!(value_fits_width(0xFFFF_FFFF, 4) && !value_fits_width(0x1_0000_0000, 4));
+        assert!(value_fits_width(i64::MIN, 8) && value_fits_width(i64::MAX, 8));
     }
 
     #[test]

@@ -155,6 +155,29 @@ fn sysreg_field(name: &str) -> Option<u16> {
             "elr_el1" => (3, 0, 4, 0, 1),
             "spsr_el1" => (3, 0, 4, 0, 0),
             "currentel" => (3, 0, 4, 2, 2),
+            // Stack pointer, exception-link, saved-PSTATE, vector-base and
+            // thread-id registers at EL0/EL2/EL3 (the EL1 forms are above).
+            "sp_el0" => (3, 0, 4, 1, 0),
+            "sp_el1" => (3, 4, 4, 1, 0),
+            "sp_el2" => (3, 6, 4, 1, 0),
+            "elr_el2" => (3, 4, 4, 0, 1),
+            "elr_el3" => (3, 6, 4, 0, 1),
+            "spsr_el2" => (3, 4, 4, 0, 0),
+            "spsr_el3" => (3, 6, 4, 0, 0),
+            "vbar_el2" => (3, 4, 12, 0, 0),
+            "vbar_el3" => (3, 6, 12, 0, 0),
+            "tpidr_el2" => (3, 4, 13, 0, 2),
+            // EL1/EL2 control and translation registers (the EL1
+            // sctlr/tcr/ttbr0/mair/esr/far forms are above).
+            "cpacr_el1" => (3, 0, 1, 0, 2),
+            "sctlr_el2" => (3, 4, 1, 0, 0),
+            "hcr_el2" => (3, 4, 1, 1, 0),
+            "cptr_el2" => (3, 4, 1, 1, 2),
+            "tcr_el2" => (3, 4, 2, 0, 2),
+            "ttbr0_el2" => (3, 4, 2, 0, 0),
+            "mair_el2" => (3, 4, 10, 2, 0),
+            "esr_el2" => (3, 4, 5, 2, 0),
+            "far_el2" => (3, 4, 6, 0, 0),
             _ => return None,
         })
     };
@@ -1487,6 +1510,44 @@ mod tests {
         );
         assert_eq!(insns[1].mnemonic, "msr");
         assert!(matches!(insns[1].operands[0], AsmOpndA64::SysReg(_)));
+    }
+
+    #[test]
+    fn parse_sysreg_el_transition_names() {
+        // Thread/EL-transition and EL1/EL2 control registers named directly
+        // rather than by the generic `sN_N_cN_cN_N` spelling. Every field is
+        // byte-verified: `mrs x0, NAME` assembled by clang equals the word our
+        // encoder builds from the field. midr_el1 is the regression guard.
+        assert_eq!(sysreg_field("midr_el1"), Some(0x4000));
+        for (name, field) in [
+            ("sp_el0", 0x4208),
+            ("sp_el1", 0x6208),
+            ("sp_el2", 0x7208),
+            ("elr_el2", 0x6201),
+            ("elr_el3", 0x7201),
+            ("spsr_el2", 0x6200),
+            ("spsr_el3", 0x7200),
+            ("tpidr_el2", 0x6682),
+            ("vbar_el2", 0x6600),
+            ("vbar_el3", 0x7600),
+            ("cpacr_el1", 0x4082),
+            ("sctlr_el2", 0x6080),
+            ("hcr_el2", 0x6088),
+            ("cptr_el2", 0x608A),
+            ("tcr_el2", 0x6102),
+            ("ttbr0_el2", 0x6100),
+            ("mair_el2", 0x6510),
+            ("esr_el2", 0x6290),
+            ("far_el2", 0x6300),
+        ] {
+            assert_eq!(sysreg_field(name), Some(field), "{name}");
+            // Case-insensitive, and the named form equals its generic spelling.
+            assert_eq!(sysreg_field(&name.to_ascii_uppercase()), Some(field));
+        }
+        // The generic spelling s3_0_c4_c1_0 names the same register as sp_el0.
+        assert_eq!(sysreg_field("s3_0_c4_c1_0"), sysreg_field("sp_el0"));
+        let insns = parse_template(b"mrs %0, sp_el0").unwrap();
+        assert_eq!(insns[0].operands[1], AsmOpndA64::SysReg(0x4208));
     }
 
     #[test]

@@ -1671,29 +1671,45 @@ impl Compiler {
                     return Err(self.compile_err("inline asm: operand expression expected"));
                 }
             };
-            // An x86 range-restricted immediate constraint admits only an
-            // integer constant within its range (GCC "Machine
-            // Constraints"). The constraint resolved to a pure immediate,
-            // so there is no register alternative to fall back on: a
-            // non-constant or out-of-range operand cannot be satisfied.
-            if is_x86
-                && matches!(constraint, AsmConstraint::Imm)
-                && let Some(letter) =
-                    Self::x86_imm_constraint_letter(cstr.trim_start_matches(['=', '+', '&', '%']))
-            {
-                let v = self.expr_const_int(e);
-                if !v.is_some_and(|v| Self::x86_imm_constraint_accepts(letter, v)) {
-                    let range = Self::x86_imm_constraint_range_text(letter);
-                    return Err(self.compile_err(match v {
-                        Some(v) => alloc::format!(
-                            "inline asm: value {v} out of range for constraint \
-                             `{letter}` (expected {range})"
-                        ),
-                        None => alloc::format!(
-                            "inline asm: constraint `{letter}` requires an \
-                             integer constant (expected {range})"
-                        ),
-                    }));
+            // A range-restricted immediate constraint admits only an integer
+            // constant within its range (GCC machine constraints). The
+            // constraint resolved to a pure immediate, so there is no
+            // register alternative to fall back on: a non-constant or
+            // out-of-range operand cannot be satisfied. The letters and their
+            // ranges are target-specific.
+            if matches!(constraint, AsmConstraint::Imm) {
+                let ibody = cstr.trim_start_matches(['=', '+', '&', '%']);
+                let letter = if is_x86 {
+                    Self::x86_imm_constraint_letter(ibody)
+                } else {
+                    Self::aarch64_imm_constraint_letter(ibody)
+                };
+                if let Some(letter) = letter {
+                    let v = self.expr_const_int(e);
+                    let accepts = |v| {
+                        if is_x86 {
+                            Self::x86_imm_constraint_accepts(letter, v)
+                        } else {
+                            Self::aarch64_imm_constraint_accepts(letter, v)
+                        }
+                    };
+                    if !v.is_some_and(accepts) {
+                        let range = if is_x86 {
+                            Self::x86_imm_constraint_range_text(letter)
+                        } else {
+                            Self::aarch64_imm_constraint_range_text(letter)
+                        };
+                        return Err(self.compile_err(match v {
+                            Some(v) => alloc::format!(
+                                "inline asm: value {v} out of range for constraint \
+                                 `{letter}` (expected {range})"
+                            ),
+                            None => alloc::format!(
+                                "inline asm: constraint `{letter}` requires an \
+                                 integer constant (expected {range})"
+                            ),
+                        }));
+                    }
                 }
             }
             operand_exprs.push(e);
@@ -2039,6 +2055,73 @@ impl Compiler {
             .map_or("", |&(.., text)| text)
     }
 
+    /// The AArch64 range-restricted immediate letter `body` selects, if any
+    /// (GCC machine constraints I, J, K, L, M, N). Only meaningful once the
+    /// constraint has resolved to a pure immediate: a register or memory
+    /// alternative alongside the letter (`"rI"`) lets the operand be loaded,
+    /// which lifts the restriction. A multi-letter `U` / `D` / `v` class
+    /// (`UsM`, `vsN`, `DL`) embeds these letters without being an immediate,
+    /// so such bodies are excluded.
+    fn aarch64_imm_constraint_letter(body: &str) -> Option<char> {
+        if body.contains(['U', 'D', 'v']) {
+            return None;
+        }
+        body.chars()
+            .find(|c| matches!(c, 'I' | 'J' | 'K' | 'L' | 'M' | 'N'))
+    }
+
+    /// A 12-bit unsigned `add` / `sub` operand: the value fits the low 12
+    /// bits, or the next 12 bits with a left shift of 12.
+    fn aarch64_uimm12_shift(x: u64) -> bool {
+        (x & !0xFFF) == 0 || (x & !0xFF_F000) == 0
+    }
+
+    /// A single-`movz` immediate: one non-zero 16-bit lane, the lane count
+    /// being 2 for a 32-bit and 4 for a 64-bit move.
+    fn aarch64_movz_imm(x: u64, is64: bool) -> bool {
+        let lanes: u32 = if is64 { 4 } else { 2 };
+        (0..lanes).any(|i| (x & !(0xFFFFu64 << (16 * i))) == 0)
+    }
+
+    /// A single-instruction `mov` immediate: `movz`, `movn` (the complement
+    /// as a `movz`), or a logical bitmask (`orr` with the zero register).
+    fn aarch64_mov_imm(x: u64, is64: bool) -> bool {
+        let mask = if is64 { u64::MAX } else { 0xFFFF_FFFF };
+        Self::aarch64_movz_imm(x, is64)
+            || Self::aarch64_movz_imm(!x & mask, is64)
+            || super::super::codegen::aarch64::table::encode_logical_imm(x, is64).is_some()
+    }
+
+    /// True when `v` satisfies the AArch64 immediate constraint `letter`
+    /// (GCC machine constraints; validated against gcc 16 and clang 22).
+    pub(crate) fn aarch64_imm_constraint_accepts(letter: char, v: i64) -> bool {
+        use super::super::codegen::aarch64::table::encode_logical_imm;
+        let u = v as u64;
+        match letter {
+            'I' => Self::aarch64_uimm12_shift(u),
+            'J' => Self::aarch64_uimm12_shift(u.wrapping_neg()),
+            'K' => encode_logical_imm(u & 0xFFFF_FFFF, false).is_some(),
+            'L' => encode_logical_imm(u, true).is_some(),
+            'M' => Self::aarch64_mov_imm(u & 0xFFFF_FFFF, false),
+            'N' => Self::aarch64_mov_imm(u, true),
+            _ => false,
+        }
+    }
+
+    /// The admissible values of the AArch64 immediate constraint `letter`,
+    /// spelled for a diagnostic.
+    fn aarch64_imm_constraint_range_text(letter: char) -> &'static str {
+        match letter {
+            'I' => "a 12-bit unsigned value, optionally shifted left by 12 (add/sub)",
+            'J' => "the negation of an `I` value (sub)",
+            'K' => "a 32-bit logical-instruction bitmask",
+            'L' => "a 64-bit logical-instruction bitmask",
+            'M' => "a 32-bit move immediate",
+            'N' => "a 64-bit move immediate",
+            _ => "",
+        }
+    }
+
     pub(crate) fn parse_asm_constraint(
         cstr: &str,
         is_output: bool,
@@ -2109,13 +2192,13 @@ impl Compiler {
                 _ => return None,
             })
         };
-        // `i` / `n` take any integer constant; the x86 letters additionally
-        // restrict its value, which the operand site checks once the
-        // constant is in hand. The letters are target-specific -- aarch64
-        // spells its own classes with several of them -- so they only
-        // count on x86.
+        // `i` / `n` take any integer constant; the range-restricted letters
+        // additionally bound its value, which the operand site checks once
+        // the constant is in hand. The letters are target-specific: x86 and
+        // aarch64 each give `I`..`N` their own ranges.
         let has_imm = body.contains(['i', 'n'])
-            || (is_x86 && Self::x86_imm_constraint_letter(body).is_some());
+            || (is_x86 && Self::x86_imm_constraint_letter(body).is_some())
+            || (!is_x86 && Self::aarch64_imm_constraint_letter(body).is_some());
         // A memory-only constraint (`m`, `=m`, `+m`): the operand is accessed
         // through a memory reference. `g` / `rm` also permit memory but prefer
         // a register, which the register path below handles.

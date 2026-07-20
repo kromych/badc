@@ -313,15 +313,21 @@ fn x86_range_immediate_constraints_are_immediates() {
             "`{c}` should take the register alternative"
         );
     }
-    // The letters are x86-specific: aarch64 spells its own classes with
-    // several of them and must not pick up the x86 meaning.
-    for c in ["I", "J", "K", "L", "M", "N", "O"] {
+    // aarch64 gives `I`..`N` its own immediate meanings (different ranges,
+    // checked in the aarch64 tests below); it does not take the x86 ones. `O`
+    // is not modeled on aarch64, so it stays unrecognized there.
+    for c in ["I", "J", "K", "L", "M", "N"] {
         assert_eq!(
             crate::Compiler::parse_asm_constraint(c, false, 0, false).map(|(k, _)| k),
-            None,
-            "`{c}` should not be an x86 immediate on aarch64"
+            Some(AsmConstraint::Imm),
+            "`{c}` should be an aarch64 immediate"
         );
     }
+    assert_eq!(
+        crate::Compiler::parse_asm_constraint("O", false, 0, false).map(|(k, _)| k),
+        None,
+        "`O` is not modeled on aarch64"
+    );
     // The x86 memory and fixed-register paths keep their classification.
     assert_eq!(inp("m").map(|(k, _)| k), Some(AsmConstraint::Mem));
     assert_eq!(inp("D").map(|(k, _)| k), Some(AsmConstraint::Fixed(7)));
@@ -435,4 +441,162 @@ fn x86_immediate_constraint_out_of_range_is_diagnosed() {
     // x86 leaves `P` undefined in the machine-dependent band.
     let e = err("__asm__ volatile(\"# %0\" :: \"P\"(0));");
     assert!(e.contains("unsupported constraint `P`"), "{e}");
+}
+
+#[test]
+fn aarch64_immediate_constraints_classify_and_combine() {
+    let a64 = |c: &str| crate::Compiler::parse_asm_constraint(c, false, 0, false).map(|(k, _)| k);
+    // Bare I..N are pure immediates; the value restriction is applied at the
+    // operand, where the constant is known.
+    for c in ["I", "J", "K", "L", "M", "N"] {
+        assert_eq!(a64(c), Some(AsmConstraint::Imm), "`{c}` on aarch64");
+    }
+    // A register alternative alongside the letter wins: the operand can be
+    // loaded, so no value restriction applies.
+    for c in ["rI", "Ir", "rL", "Nr"] {
+        assert_eq!(a64(c), Some(AsmConstraint::Reg), "`{c}` on aarch64");
+    }
+    // A multi-letter `U` / `D` / `v` class embeds these letters without being
+    // an immediate and must not be misread as one.
+    for c in ["UsM", "vsN", "DL"] {
+        assert_ne!(
+            a64(c),
+            Some(AsmConstraint::Imm),
+            "`{c}` must not be read as an immediate"
+        );
+    }
+}
+
+#[test]
+fn aarch64_immediate_constraint_ranges() {
+    // Accept / reject sets confirmed against gcc 16 and clang 22 on aarch64.
+    let cases: &[(char, &[i64], &[i64])] = &[
+        // 12-bit unsigned, optionally shifted left by 12 (add/sub operand).
+        (
+            'I',
+            &[0, 1, 0xFFF, 0x1000, 0xFFF000, 0x401],
+            &[0x1001, 0xFFF001, 0x1000000, -1],
+        ),
+        // The negation of an `I` value (sub operand).
+        (
+            'J',
+            &[0, -1, -0xFFF, -0x1000, -0xFFF000],
+            &[-0x1001, 1, -0xFFF001],
+        ),
+        // 32-bit logical bitmask (and/orr/eor).
+        (
+            'K',
+            &[1, 0xF, 0xFFFF, 0x8000_0001, 0x5555_5555, 0xFFFF_FFFE],
+            &[0, 5, 0xFFFF_FFFF, -1],
+        ),
+        // 64-bit logical bitmask.
+        (
+            'L',
+            &[1, 0xFFFF_FFFF, 0x5555_5555_5555_5555, 0xFFFF, i64::MIN + 1],
+            &[0, -1],
+        ),
+        // 32-bit move immediate (movz / movn / bitmask).
+        (
+            'M',
+            &[
+                0,
+                1,
+                0xFFFF,
+                0xFFFF_0000,
+                0x1234,
+                0xFFFF_FFFF,
+                0xFFFF_FF00,
+                0x1_0001,
+            ],
+            &[0x1234_5678],
+        ),
+        // 64-bit move immediate.
+        (
+            'N',
+            &[0, 0xFFFF, 0x1_0000_0001, -0x1_0000],
+            &[0x1234_5678_1234_5678],
+        ),
+    ];
+    for &(letter, accept, reject) in cases {
+        for &v in accept {
+            assert!(
+                crate::Compiler::aarch64_imm_constraint_accepts(letter, v),
+                "`{letter}` should accept {v:#x}"
+            );
+        }
+        for &v in reject {
+            assert!(
+                !crate::Compiler::aarch64_imm_constraint_accepts(letter, v),
+                "`{letter}` should reject {v:#x}"
+            );
+        }
+    }
+}
+
+#[test]
+fn aarch64_immediate_constraint_out_of_range_is_diagnosed() {
+    // An out-of-range literal has no register alternative to fall back on, so
+    // it cannot be satisfied; the values match what gcc 16 and clang 22 reject.
+    let err = |body: &str| -> alloc::string::String {
+        let src =
+            alloc::format!("void f(int n){{ (void)n; {body} }} int main(void){{ return 0; }}");
+        crate::Compiler::with_options(
+            src,
+            crate::Target::LinuxAarch64,
+            crate::CompileOptions::default(),
+        )
+        .compile()
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default()
+    };
+    // 0x1001 is neither a 12-bit value nor a shifted one.
+    let e = err("__asm__ volatile(\"add x0, x0, %0\" :: \"I\"(0x1001));");
+    assert!(
+        e.contains("value 4097 out of range for constraint `I`"),
+        "{e}"
+    );
+    // The all-ones 32-bit mask is not a logical immediate.
+    let e = err("__asm__ volatile(\"and w0, w0, %w0\" :: \"K\"(0xffffffff));");
+    assert!(e.contains("out of range for constraint `K`"), "{e}");
+    // A non-constant operand cannot satisfy an immediate-only constraint.
+    let e = err("__asm__ volatile(\"add x0, x0, %0\" :: \"I\"(n));");
+    assert!(e.contains("requires an integer constant"), "{e}");
+    // A register alternative lifts the restriction.
+    assert_eq!(
+        err("__asm__ volatile(\"add x0, x0, %0\" :: \"Ir\"(n));"),
+        ""
+    );
+    // `O` is not modeled on aarch64.
+    let e = err("__asm__ volatile(\"# %0\" :: \"O\"(0));");
+    assert!(e.contains("unsupported constraint `O`"), "{e}");
+}
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_brk_immediate_operand_encodes_as_an_immediate() {
+    use crate::{NativeOptions, Target};
+    // The kgdb breakpoint site `asm("brk %0" :: "I"(imm))`: the `I` operand
+    // reaches `brk` as an immediate, encoding `brk #0x401` (0xD4208020),
+    // byte-identical to clang.
+    let src = "void f(void){ __asm__ (\"brk %0\" :: \"I\"(0x401)); } \
+        int main(void){ return 0; }";
+    let program = crate::Compiler::with_options(
+        src.to_string(),
+        Target::LinuxAarch64,
+        crate::CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("emit");
+    let found = bytes
+        .windows(4)
+        .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == 0xD420_8020);
+    assert!(found, "expected `brk #0x401` (0xD4208020)");
 }

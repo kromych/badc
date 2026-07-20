@@ -2571,6 +2571,16 @@ fn emit_inline_asm_aarch64(
             },
             AsmOpndA64::Ref { idx, is64 } => {
                 let Some(r) = resolve_ref(idx) else {
+                    // An immediate-only operand has no register; a bare `%N`
+                    // uses its compile-time constant value.
+                    if matches!(asm.operands[idx as usize].constraint, AsmConstraint::Imm) {
+                        return match const_of(idx) {
+                            Some(v) => Ok(Opnd::Imm(v)),
+                            None => Err(String::from(
+                                "aarch64 inline asm: non-constant immediate operand",
+                            )),
+                        };
+                    }
                     return Err(String::from(
                         "aarch64 inline asm: operand reference is not a register",
                     ));

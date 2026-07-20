@@ -652,3 +652,36 @@ fn aarch64_brk_immediate_operand_encodes_as_an_immediate() {
         .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == 0xD420_8020);
     assert!(found, "expected `brk #0x401` (0xD4208020)");
 }
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_bare_immediate_operand_encodes_like_gcc() {
+    use crate::{NativeOptions, Target};
+    // GAS makes the `#` optional on an immediate: `BUG()` expands to
+    // `brk 0x800` and the semihosting sites to `hlt 0xf000`, both written
+    // without a `#`. They must encode identically to the `#`-prefixed form
+    // gcc emits: brk #0x800 -> 0xD4210000, hlt #0xf000 -> 0xD45E0000.
+    let src = "void f(void){ __asm__ volatile(\"brk 0x800\"); \
+        __asm__ volatile(\"hlt 0xf000\"); } int main(void){ return 0; }";
+    let program = crate::Compiler::with_options(
+        src.to_string(),
+        Target::LinuxAarch64,
+        crate::CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("emit");
+    let has = |word: u32| {
+        bytes
+            .windows(4)
+            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == word)
+    };
+    assert!(has(0xD421_0000), "expected `brk 0x800` (0xD4210000)");
+    assert!(has(0xD45E_0000), "expected `hlt 0xf000` (0xD45E0000)");
+}

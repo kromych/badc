@@ -70,6 +70,72 @@ without touching the tree:
   measurable. Overlays hold copied kernel code, so they are built on the
   measurement box, not vendored here.
 
+## badc-probed configuration (opt-in)
+
+The kernel decides what its code may use by probing the compiler at configure
+time, and Kconfig bakes the answers into `include/generated/autoconf.h`. A
+corpus captured from a gcc reference build therefore carries gcc's answers, and
+replaying it asks badc to compile code gated on capabilities it was never
+asked about. The measured consequence on x86_64 is `CONFIG_CC_HAS_NAMED_AS=1`,
+which turns on the `__seg_gs` named address space in the percpu headers and
+masks 84% of the tree behind one construct badc does not implement.
+
+`probecfg.py` re-runs the kernel's own configuration step with badc as the
+probe compiler, so the replayed configuration reflects badc:
+
+```sh
+python3 demos/linux/setup.py --cache ~/probecfg      # fresh tree, no --build
+python3 demos/linux/probecfg.py --kernel-dir ~/probecfg/linux-<version>
+python3 demos/linux/sweep.py --kernel-dir <reference tree> \
+    --probed-autoconf ~/probecfg/linux-<version>/include/generated/autoconf.h
+```
+
+`--probed-autoconf` substitutes the probed header for the reference one that
+every unit force-includes, and the substitution and its unit count are printed
+and recorded in the report header, so a number is always attributable to the
+configuration it came from. Without the flag nothing changes.
+
+The probe tree must be fresh and separate from the reference tree: configuring
+rewrites `.config` and the generated headers, and the corpus has to stay as it
+was captured. The unit population stays the reference build's -- a
+badc-probed config would compile a slightly different object set, and holding
+the population fixed is what makes the two numbers comparable. Only the
+capability symbols change, and `probe-deviations-<arch>.txt` lists every one.
+
+### Why re-configuring rather than editing the generated header
+
+Post-processing `autoconf.h` needs a list of symbols to clear, and any such
+list is a standing claim about badc that decays as badc changes. Re-running
+Kconfig has no list: the probes are the kernel's, and their verdicts are
+whatever badc answers on the day it runs.
+
+The cost is that badc cannot be named as `$(CC)` directly -- the probes use
+driver spellings (`-x c`, `-`, `-S`, `-E -P`) badc has no equivalent for -- so
+`ccshim.py` presents the gcc driver surface the probes use and routes each
+probe class to one answerer. C capability probes go to badc with their flags
+passed through unchanged, so a flag badc does not accept fails the probe;
+that is the truthful answer and it matches the sweep, which drops exactly
+those flags when it replays a compile. Assembler probes (`-x assembler*`) and
+preprocess-only version queries (`-E`) are delegated to the reference
+compiler: badc has no standalone assembler driver and `.S` units are out of
+scope, and the version gates encode a toolchain's bug history rather than a
+capability. Those two delegations are the limits of the mode, and both are
+reported in the probe log.
+
+### Corroborated probes
+
+A kernel probe can be non-discriminating for badc: badc accepts the probe
+snippet but rejects every form the kernel actually emits, so the probe reports
+a capability badc does not have. `probes/*.c` holds a corroborating use of
+such a feature, selected by a `// trigger: <substring>` line matched against
+the probe source; a matching probe is answered by compiling the probe and the
+corroboration together. This strengthens the kernel's probe instead of
+overriding its verdict, and it is re-verified on every run rather than
+asserted once. Each file states the evidence for its own existence -- the
+`CC_HAS_NAMED_AS` one records that badc accepts `int __seg_fs fs;`, reading
+the qualifier as the declarator name, while rejecting the qualifier-leading
+form the percpu headers use.
+
 ## Scope
 
 The sweep gates nothing; it is a measurement. A unit that gcc compiles and

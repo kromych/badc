@@ -116,14 +116,25 @@ def classify(argv: list[str]) -> tuple[str, str | None]:
     return ("other", None)
 
 
-def rewrite(argv: list[str]) -> list[str]:
-    """gcc argv -> the badc flag set (source and output excluded)."""
+AUTOCONF_SUFFIX = "include/generated/autoconf.h"
+
+
+def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
+    """gcc argv -> the badc flag set (source and output excluded).
+
+    ``autoconf`` replaces the force-included generated autoconf.h, so a
+    configuration probed with badc can be replayed over a corpus captured from
+    a reference build."""
     out: list[str] = []
     i = 1
     while i < len(argv):
         a = argv[i]
         if a in KEEP_ARG:
-            out += [a, argv[i + 1]]
+            val = argv[i + 1]
+            if (autoconf and a == "-include"
+                    and val.replace(os.sep, "/").endswith(AUTOCONF_SUFFIX)):
+                val = autoconf
+            out += [a, val]
             i += 2
         elif a in FOLD_TO_I:
             out += ["-I", argv[i + 1]]
@@ -184,6 +195,11 @@ def main(argv: list[str] | None = None) -> int:
                     help="include dir searched before the recorded ones "
                          "(repeatable); an overlay with a patched copy of a "
                          "gating header exposes the failures behind it")
+    ap.add_argument("--probed-autoconf", type=Path,
+                    help="badc-probed include/generated/autoconf.h (probecfg.py) "
+                         "substituted for the reference one each unit force-"
+                         "includes; the capability symbols Kconfig baked in from "
+                         "the reference compiler then reflect badc instead")
     ap.add_argument("--keep-objects", action="store_true",
                     help="keep the per-unit badc objects in the scratch dir")
     args = ap.parse_args(argv)
@@ -230,10 +246,28 @@ def main(argv: list[str] | None = None) -> int:
     pre = [f for p in args.pre_I for f in ("-I", str(p.resolve()))]
     pre += [f for p in args.pre_include for f in ("-include", str(p.resolve()))]
 
+    # A unit reaches autoconf.h two ways: Kbuild force-includes it by path, and
+    # include/linux/kconfig.h includes <generated/autoconf.h> off the search
+    # path. Substituting the probed header needs both -- rewriting the recorded
+    # -include, and an overlay directory searched ahead of the recorded ones.
+    autoconf = None
+    if args.probed_autoconf:
+        src = args.probed_autoconf.resolve()
+        if not src.is_file():
+            sys.exit(f"linux sweep: no such autoconf.h: {src}")
+        overlay = scratch / "probed-config" / "generated"
+        overlay.mkdir(parents=True, exist_ok=True)
+        (overlay / "autoconf.h").write_bytes(src.read_bytes())
+        autoconf = str(overlay / "autoconf.h")
+        pre = ["-I", str(overlay.parent)] + pre
+        n_sub = sum(1 for _, a in units if rewrite(a, autoconf) != rewrite(a))
+        log(f"probed config: {src} (force-include rewritten in {n_sub}/"
+            f"{len(units)} units, search path overlay in all)")
+
     def run_one(item: tuple[str, list[str]]) -> dict:
         src, gcc_argv = item
         obj = scratch / (src.replace(os.sep, "_") + ".o")
-        flags = rewrite(gcc_argv)
+        flags = rewrite(gcc_argv, autoconf)
         cmd = [str(badc), "--gnu", "-q", "-c", f"--target={target}",
                "-o", str(obj), *pre, *flags, src]
         try:
@@ -282,6 +316,10 @@ def main(argv: list[str] | None = None) -> int:
         f"- C units: {len(units)}  pass: {n_ok}  fail: {n_fail}  "
         f"pass rate: {100.0 * n_ok / len(units):.1f}%",
         f"- .S units skipped: {n_asm}  non-compile .cmd files: {n_other}",
+        f"- config: {'badc-probed, autoconf.h `' + str(args.probed_autoconf)
+                    + '` (force-include rewritten in ' + str(n_sub) + '/'
+                    + str(len(units)) + ' units, search path overlay in all)'
+                    if autoconf else 'as captured from the reference build'}",
         "",
         "| rank | count | error signature | examples |",
         "|-----:|------:|-----------------|----------|",

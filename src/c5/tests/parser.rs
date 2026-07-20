@@ -1273,3 +1273,195 @@ fn section_and_alias_operand_constraints() {
         "not an object defined earlier",
     );
 }
+
+fn expect_compiles(src: &str, what: &str) {
+    assert!(
+        Compiler::new(src.to_string()).compile().is_ok(),
+        "{} should compile, got {:?}",
+        what,
+        Compiler::new(src.to_string()).compile().err(),
+    );
+}
+
+#[test]
+fn empty_declaration_accepted_where_gcc_accepts_it() {
+    // A stray `;` declares nothing. gcc and clang accept an empty
+    // declaration in a struct/union member list and at file scope
+    // (diagnosed only under `-pedantic`).
+    expect_compiles(
+        "struct S { void *lock;; };\n\
+         int main(void) { struct S s; s.lock = 0; return s.lock != 0; }",
+        "a trailing `;` in a member list",
+    );
+    expect_compiles(
+        "struct S { ; int x; };\n\
+         int main(void) { struct S s; s.x = 0; return s.x; }",
+        "a leading `;` in a member list",
+    );
+    expect_compiles(
+        "struct S { ; };\n\
+         int main(void) { struct S s; (void)s; return 0; }",
+        "a member list holding only `;`",
+    );
+    expect_compiles(
+        "union U { int a;;; long b; };\n\
+         int main(void) { union U u; u.a = 0; return u.a; }",
+        "repeated `;` in a union member list",
+    );
+    expect_compiles(
+        "int a;;\n; int b;\n\
+         int main(void) { a = 0; b = 0; return a + b; }",
+        "an empty declaration at file scope",
+    );
+}
+
+#[test]
+fn empty_declaration_in_enum_list_rejected() {
+    // gcc and clang both reject a `;` in an enumerator list ("expected
+    // ',' or '}'"), so the member-list extension does not extend here.
+    expect_compile_error(
+        "enum E { A;, B };\n\
+         int main(void) { return A; }",
+        "bad enum identifier",
+    );
+}
+
+#[test]
+fn conditional_pointer_arm_result_type() {
+    // C99 6.5.15p6, checked through `sizeof` of the dereferenced
+    // result. A null pointer constant is a value, not a spelling:
+    // `(void *)0` yields the other arm's type but `(void *)(x * 0)`
+    // does not. Contrasted against gcc and clang.
+    let cases: &[(&str, &str)] = &[
+        (
+            "void* vs int* yields void*",
+            "sizeof(*(8 ? ((void *)((long)(g) * 0l)) : (int *)8)) == 1",
+        ),
+        (
+            "arm order does not matter",
+            "sizeof(*(8 ? (int *)8 : ((void *)((long)(g) * 0l)))) == 1",
+        ),
+        (
+            "(void*)0 is a null pointer constant",
+            "sizeof(*(8 ? (void *)0 : (int *)8)) == sizeof(int)",
+        ),
+        (
+            "folded zero is a null pointer constant",
+            "sizeof(*(8 ? (void *)((long)0 * 0l) : (int *)8)) == sizeof(int)",
+        ),
+        (
+            "struct* survives a null pointer constant",
+            "sizeof(*(g ? (struct s *)&g : (void *)0)) == 2 * sizeof(int)",
+        ),
+        (
+            "struct* survives a plain 0",
+            "sizeof(*(g ? (struct s *)&g : 0)) == 2 * sizeof(int)",
+        ),
+        (
+            "void* beats struct*",
+            "sizeof(*(g ? (void *)&g : (struct s *)&g)) == 1",
+        ),
+    ];
+    for (what, cond) in cases {
+        let src = alloc::format!(
+            "struct s {{ int a; int b; }};\n\
+             int g;\n\
+             int main(void) {{ return !({cond}); }}\n"
+        );
+        expect_compiles(&src, what);
+    }
+}
+
+#[test]
+fn aggregate_with_no_named_member_is_zero_sized() {
+    // gcc and clang give a struct with no named member size 0 in C
+    // (C++ floors it at 1). The compile-time assertion idiom
+    // `sizeof(struct { int:-!!(e); })` depends on the 0.
+    expect_compiles(
+        "int main(void) { return sizeof(struct {}) + sizeof(struct { int : 0; }); }",
+        "a struct with no named member",
+    );
+}
+
+#[test]
+fn member_of_incomplete_aggregate_type_rejected() {
+    // C99 6.7.2.1: a member must have complete type, and an array of an
+    // incomplete type is itself incomplete. gcc and clang reject both.
+    expect_compile_error(
+        "struct fwd; struct s { struct fwd f; }; int main(void) { return 0; }",
+        "incomplete type",
+    );
+    expect_compile_error(
+        "struct fwd; struct s { struct fwd f[2]; }; int main(void) { return 0; }",
+        "incomplete type",
+    );
+    // A complete but zero-sized member stays accepted.
+    expect_compiles(
+        "struct s { struct {} e; int x; };\n\
+         int main(void) { struct s v; v.x = 0; return v.x; }",
+        "an empty struct member",
+    );
+}
+
+/// Compile `src` for `target`, returning the error text on failure.
+fn compile_for_target(
+    src: &str,
+    target: super::super::codegen::Target,
+) -> Result<(), alloc::string::String> {
+    super::Compiler::with_target(alloc::string::String::from(src), target)
+        .compile()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[test]
+fn stack_pointer_register_variable_as_asm_operand() {
+    // GCC binds an `r` operand naming a register variable to that
+    // register. The stack and frame pointers have no storage behind
+    // them, so such an operand transfers no value: `"+r"` marks the
+    // block as reading and disturbing the register rather than
+    // requesting a new one be installed.
+    let x64 = super::super::codegen::Target::LinuxX64;
+    let decl = "register unsigned long csp asm(\"rsp\");\n\
+                register unsigned long cfp asm(\"rbp\");\n\
+                void ext(void);\n";
+    for (what, body) in [
+        (
+            "a read-write stack-pointer marker",
+            "asm volatile(\"call ext\" : \"+r\"(csp) :: \"memory\");",
+        ),
+        (
+            "a stack-pointer input",
+            "unsigned long o; asm(\"movq %1, %0\" : \"=r\"(o) : \"r\"(csp)); (void)o;",
+        ),
+        (
+            "a stack-pointer output",
+            "asm volatile(\"nop\" : \"=r\"(csp));",
+        ),
+        (
+            "a frame-pointer input",
+            "unsigned long o; asm(\"movq %1, %0\" : \"=r\"(o) : \"r\"(cfp)); (void)o;",
+        ),
+        (
+            "a non-bare stack-pointer expression",
+            "unsigned long o; asm(\"movq %1, %0\" : \"=r\"(o) : \"r\"(csp + 8)); (void)o;",
+        ),
+    ] {
+        let src = alloc::format!("{decl}int main(void) {{ {body} return 0; }}\n");
+        assert!(
+            compile_for_target(&src, x64).is_ok(),
+            "{what} should compile: {:?}",
+            compile_for_target(&src, x64).err(),
+        );
+    }
+
+    // Assigning to a storage-less register variable stays rejected:
+    // the frame layout owns the stack pointer, so badc will not emit a
+    // write it cannot honor.
+    let src = alloc::format!("{decl}int main(void) {{ csp = 0; return 0; }}\n");
+    let err = compile_for_target(&src, x64).expect_err("assignment must be rejected");
+    assert!(
+        err.contains("cannot write register variable"),
+        "unexpected error: {err}"
+    );
+}

@@ -4158,6 +4158,22 @@ fn builtin_choose_expr() {
 }
 
 #[test]
+fn conditional_void_pointer() {
+    // C99 6.5.15p6 for two pointer arms: a null pointer constant arm
+    // takes the other arm's type, otherwise a `void *` arm wins. The
+    // constant-expression detection idiom rests on that distinction.
+    assert_eq!(run_fixture("conditional_void_pointer.c"), 0);
+}
+
+#[test]
+fn empty_declaration() {
+    // A stray `;` declares nothing: accepted in a struct/union member
+    // list and at file scope (gcc/clang extension), without opening a
+    // new field group or perturbing layout.
+    assert_eq!(run_fixture("empty_declaration.c"), 0);
+}
+
+#[test]
 fn builtin_constant_p() {
     // `__builtin_constant_p(x)` folds to 1 for a constant operand and 0
     // for a runtime one, in both constant-expression and runtime

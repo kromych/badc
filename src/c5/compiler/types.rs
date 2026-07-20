@@ -117,6 +117,21 @@ pub(crate) fn strip_unsigned(ty: i64) -> i64 {
     ty & !(UNSIGNED_BIT | VOLATILE_BIT)
 }
 
+/// True for a depth-1 `void *`. `void` shares the `Ty::Char |
+/// UNSIGNED_BIT` encoding (see `Token::Void`), so an `unsigned char *`
+/// also answers true; callers that must not confuse the two pair this
+/// with [`is_char_band_ptr_ty`] to exclude a character-pointer operand.
+pub(crate) fn is_void_ptr_ty(ty: i64) -> bool {
+    ty & !VOLATILE_BIT == (Ty::Char as i64 | UNSIGNED_BIT) + Ty::Ptr as i64
+}
+
+/// True for a depth-1 pointer to any character type, of either
+/// signedness. `void *` answers true as well, for the encoding reason
+/// above.
+pub(crate) fn is_char_band_ptr_ty(ty: i64) -> bool {
+    strip_unsigned(ty) == Ty::Char as i64 + Ty::Ptr as i64
+}
+
 /// Round `x` up to the nearest multiple of `alignment` (which must
 /// be a power of two). Used by struct-field layout, struct-tail
 /// padding, bitfield-storage placement, and any other code that

@@ -83,6 +83,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_mem_disp.c", "linux-aarch64"), // x86-64 disp(%reg) memory operands
     ("inline_asm_x64_imm_mem.c", "linux-aarch64"), // x86-64 byte/word imm-to-memory ALU
     ("register_var_asm_operand.c", "linux-aarch64"), // x86-64 extended-asm operand pinning
+    ("register_var_asm_operand_sp.c", "linux-aarch64"), // x86-64 rsp / rbp operand binding
     ("inline_asm_x64_sib.c", "linux-aarch64"), // x86-64 scaled-index memory operands
     ("cpuid_partial_outputs.c", "linux-aarch64"), // x86-64 cpuid
     ("inline_asm_x64_flag_outputs.c", "linux-aarch64"), // x86-64 `=@cc` flag outputs

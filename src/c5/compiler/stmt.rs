@@ -1492,6 +1492,11 @@ impl Compiler {
                 return Err(self.compile_err("inline asm: `(` expected after constraint"));
             }
             self.next()?; // consume `(`
+            // A storage-less register variable (the stack / frame pointer)
+            // named alone as the operand binds to that register; detected
+            // before the parse, since its expression is indistinguishable
+            // from `__builtin_frame_address(0)` afterwards.
+            let bound_reg = self.asm_operand_bound_register()?;
             self.expr(Token::Assign as i64)?;
             let width = self.size_of_type(self.ty).min(8) as u8;
             // The x86 `x` operand path moves a full 128-bit value (movups), so
@@ -1518,7 +1523,15 @@ impl Compiler {
                 && let Some(crate::c5::symbol::AsmRegister::Gp(r)) =
                     self.symbols[*sym as usize].asm_register
             {
+                // A register variable with storage keeps its slot; the
+                // operand is pinned to the named register and the value
+                // round-trips through the slot like any other operand.
                 AsmConstraint::Fixed(r)
+            } else if let (AsmConstraint::Reg, Some(r)) = (constraint, bound_reg) {
+                // The stack / frame pointer has no storage behind it, so
+                // the operand IS the register: nothing is loaded into it
+                // and nothing is written back out of it.
+                AsmConstraint::Bound(r)
             } else {
                 constraint
             };
@@ -1532,7 +1545,9 @@ impl Compiler {
             // addressable" / an output operand must be an lvalue). An empty
             // accumulator falls through to the "operand expression expected"
             // check below.
-            if is_output || matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase) {
+            if (is_output || matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase))
+                && !matches!(constraint, AsmConstraint::Bound(_))
+            {
                 let addressable = match self.ast_acc {
                     Some(id) => {
                         use super::super::ast::Expr;
@@ -1592,6 +1607,9 @@ impl Compiler {
 
         // Every register operand is preserved across the statement.
         for (op, _) in operands.iter().zip(operand_exprs.iter()) {
+            // A `Bound` operand is deliberately excluded: preserving the
+            // register the asm was asked to see and affect would defeat
+            // the binding.
             if let AsmConstraint::Fixed(r) | AsmConstraint::RegOrImm(r) = op.constraint {
                 clobber_regs |= 1 << r;
             }
@@ -1800,6 +1818,57 @@ impl Compiler {
     /// operand is always a legal choice for such a constraint and needs
     /// no addressing-mode analysis to place. Only a constraint with no
     /// register alternative at all (`m`, `=m`) takes the memory path.
+    /// The architectural register an asm operand binds to when the
+    /// operand is exactly one identifier naming a storage-less
+    /// `register T v asm("reg")` variable -- the stack or frame
+    /// pointer. GCC guarantees such an operand is that register.
+    ///
+    /// On entry the operand's `(` is consumed. The lexer is left where
+    /// it was: the operand is parsed normally afterwards, and only the
+    /// constraint changes.
+    ///
+    /// A register variable with storage is not reported here; it keeps
+    /// its slot and is pinned through `AsmConstraint::Fixed`.
+    fn asm_operand_bound_register(&mut self) -> Result<Option<u8>, C5Error> {
+        use crate::c5::symbol::AsmRegister as R;
+        if self.lex.tk != Token::Id {
+            return Ok(None);
+        }
+        let sym = self.lex.curr_id_idx;
+        let reg = match self.symbols[sym].asm_register {
+            Some(R::StackPointer) | Some(R::FramePointer)
+                if self.symbols[sym].class == Token::Loc as i64 =>
+            {
+                self.symbols[sym].asm_register
+            }
+            _ => return Ok(None),
+        };
+        // Only a bare `(v)` binds; any larger expression is an ordinary
+        // rvalue computed from the register's value.
+        let snap = self.lex.snapshot();
+        self.next()?;
+        let bare = self.lex.tk == ')';
+        self.lex.restore(snap);
+        if !bare {
+            return Ok(None);
+        }
+        if self.target.is_aarch64() {
+            // TODO: the aarch64 asm surface is pattern-matched rather
+            // than constraint-based, so a bound operand cannot be
+            // resolved there yet. Reject instead of mis-encoding.
+            return Err(self.compile_err(
+                "inline asm: a stack- or frame-pointer register variable \
+                 operand is not supported on this target",
+            ));
+        }
+        let name = match reg {
+            Some(R::StackPointer) => "rsp",
+            Some(R::FramePointer) => "rbp",
+            _ => return Ok(None),
+        };
+        Ok(super::super::codegen::x86_64::asm::reg_by_name(name).map(|(r, _)| r))
+    }
+
     pub(crate) fn parse_asm_constraint(
         cstr: &str,
         is_output: bool,

@@ -366,6 +366,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_reg_var.c", 42),
     ("register_var_stack_pointer.c", 0),
     ("register_var_asm_operand.c", 0),
+    ("register_var_asm_operand_sp.c", 0),
     ("attribute_weak_alias.c", 0),
     ("attribute_section_placement.c", 0),
     ("inline_asm_named_operands.c", 42),

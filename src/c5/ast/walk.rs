@@ -5201,7 +5201,7 @@ fn unsigned_narrow_mask(ty: i64) -> i64 {
 /// integer comparison. Excludes Div / Divu / Mod / Modu (which
 /// `fold_int_binop` evaluates but the immediate path does not
 /// cover) and every FP op.
-fn imm_safe_binop(op: BinOp) -> bool {
+pub(crate) fn imm_safe_binop(op: BinOp) -> bool {
     matches!(
         op,
         BinOp::Add
@@ -5268,7 +5268,7 @@ fn narrow_const_to_ty(v: i64, ty: i64, target: Target) -> i64 {
 /// non-negative operand likewise saturates to 0, and on a
 /// negative operand to -1, so the model picks the closer of the
 /// two for the rhs's sign).
-fn fold_int_binop(op: BinOp, lhs: i64, rhs: i64) -> i64 {
+pub(crate) fn fold_int_binop(op: BinOp, lhs: i64, rhs: i64) -> i64 {
     match op {
         BinOp::Add => lhs.wrapping_add(rhs),
         BinOp::Sub => lhs.wrapping_sub(rhs),

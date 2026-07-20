@@ -88,6 +88,7 @@ impl Compiler {
                     align: 1,
                     fields: Vec::new(),
                     is_union,
+                    is_complete: false,
                     is_vector: false,
                     is_array: false,
                 });
@@ -140,6 +141,13 @@ impl Compiler {
             // it before the field-type parse and continue.
             if self.lex.tk == Token::StaticAssert {
                 self.parse_static_assert()?;
+                continue;
+            }
+            // An empty struct-declaration (a stray `;`) declares no
+            // member. gcc and clang accept it in a member list as an
+            // extension, diagnosed only under `-pedantic`.
+            if self.lex.tk == ';' {
+                self.next()?;
                 continue;
             }
             // Reset the typedef-array carrier between field groups
@@ -615,16 +623,12 @@ impl Compiler {
                 let field_is_variadic = !field_params.is_empty()
                     && matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
                 let is_aggregate_value = is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
-                if is_aggregate_value && field_array_size == 0 && {
-                    let sd = &self.structs[struct_id_of(field_ty)];
-                    // C99 6.7.2.1: a member must have complete type. A
-                    // forward-declared struct is incomplete: it has no fields
-                    // and its size is still 0. A fully-defined struct is
-                    // complete and accepted -- including an empty `struct {}`
-                    // (a GCC extension, size 1) and a struct whose only member
-                    // is a flexible / zero-length array (has a field, size 0).
-                    sd.fields.is_empty() && sd.size == 0
-                } {
+                // C99 6.7.2.1: a member must have complete type, and an
+                // array of an incomplete type is itself incomplete. Only a
+                // forward-declared tag is incomplete; size cannot stand in
+                // for that, since a complete empty `struct {}` and a struct
+                // whose only member is a flexible array both have size 0.
+                if is_aggregate_value && !self.structs[struct_id_of(field_ty)].is_complete {
                     return Err(self.compile_err("aggregate-value field of incomplete type"));
                 }
                 let field_name = self.symbols[id_idx].name.clone();
@@ -823,19 +827,15 @@ impl Compiler {
                 .min(if packed { 1 } else { self.lex.current_pack() });
         // Pad the struct's tail up to its alignment so consecutive
         // elements of an array preserve every field's natural
-        // alignment. Empty structs floor at 1 byte (so a `struct
-        // *p` always has a meaningful sizeof for pointer
-        // arithmetic, matching GCC's empty-struct extension);
-        // every other struct's size is whatever the field cursor
-        // ended up at, rounded to the struct's own alignment.
+        // alignment. A struct with no named member -- empty, or holding
+        // only a zero-width bitfield -- has size 0: that is gcc's and
+        // clang's C empty-struct extension (C++ floors it at 1, C does
+        // not), and the `sizeof(struct { int:-!!(e); })` compile-time
+        // assertion idiom depends on the 0.
         let total = round_up(offset, struct_align);
-        // A genuinely empty aggregate floors at 1 byte so `struct *p`
-        // has a meaningful sizeof for pointer arithmetic (matching GCC's
-        // empty-struct extension); an aggregate with a flexible-array
-        // member legitimately has size 0 when nothing precedes it (gcc /
-        // clang) and must not be floored.
-        self.structs[struct_id].size = if saw_field { total } else { total.max(1) };
+        self.structs[struct_id].size = total;
         self.structs[struct_id].align = struct_align;
+        self.structs[struct_id].is_complete = true;
         Ok(struct_id)
     }
 

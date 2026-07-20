@@ -74,6 +74,11 @@ pub struct StructDef {
     /// size is `max(field size)` instead of the sum. Member
     /// access otherwise reuses the struct path verbatim.
     pub is_union: bool,
+    /// `false` for a tag that has been named but whose body has not
+    /// been parsed (C99 6.7.2.3 incomplete type). Size cannot stand in
+    /// for this: a complete empty `struct {}` and a struct whose only
+    /// member is a flexible array both have size 0.
+    pub is_complete: bool,
     /// `true` for the synthesized aggregate that models a GCC vector type
     /// (`__attribute__((vector_size(N)))`). It has one array field of the
     /// element type; the flag lets the cast and binary-operator paths treat it

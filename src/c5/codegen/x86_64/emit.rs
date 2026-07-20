@@ -5917,6 +5917,35 @@ struct AsmGotoCtx<'a> {
     branch_short: &'a [bool],
 }
 
+/// Access width of a template memory operand. A memory reference carries no
+/// width of its own: a `%N` size modifier wins, else the AT&T size suffix,
+/// else a GP register operand of the same instruction. `None` leaves the
+/// choice to the caller's default.
+fn asm_mem_size(
+    modifier: Option<super::super::ir::AsmRegSize>,
+    insn: &super::asm::AsmInsn,
+    operands: &[super::super::ir::AsmOperand],
+    op_reg: &[Option<u8>],
+) -> Option<super::super::ir::AsmRegSize> {
+    use super::super::ir::{AsmConstraint, AsmRegSize};
+    use super::asm::AsmOpnd;
+    modifier.or(insn.suffix).or_else(|| {
+        insn.operands.iter().find_map(|o| match *o {
+            AsmOpnd::Reg { reg, size } if reg < super::asm::XMM_BASE => Some(size),
+            AsmOpnd::Ref { idx, size }
+                if op_reg.get(idx as usize).copied().flatten().is_some()
+                    && !matches!(
+                        operands[idx as usize].constraint,
+                        AsmConstraint::Fp | AsmConstraint::Mem
+                    ) =>
+            {
+                Some(size.unwrap_or(AsmRegSize::from_width(operands[idx as usize].width)))
+            }
+            _ => None,
+        })
+    })
+}
+
 /// Lower an `Inst::InlineAsm` (GCC extended asm with operands). Assigns
 /// each register operand a machine register per its constraint, saves
 /// the registers it and the clobber list overwrite, loads the inputs,
@@ -6270,7 +6299,6 @@ fn emit_inline_asm(
                 AsmOpnd::Reg { reg, size } => Concrete::Reg { reg, size },
                 AsmOpnd::Ref { idx, size } => {
                     let width = asm.operands[idx as usize].width;
-                    let size = size.unwrap_or(AsmRegSize::from_width(width));
                     match op_reg[idx as usize] {
                         Some(r)
                             if matches!(
@@ -6278,6 +6306,9 @@ fn emit_inline_asm(
                                 AsmConstraint::Mem
                             ) =>
                         {
+                            // The C operand type is only the default width.
+                            let size = asm_mem_size(size, insn, &asm.operands, &op_reg)
+                                .unwrap_or(AsmRegSize::from_width(width));
                             Concrete::Mem {
                                 base: r,
                                 index: None,
@@ -6294,10 +6325,13 @@ fn emit_inline_asm(
                         {
                             Concrete::Reg {
                                 reg: super::asm::XMM_BASE + r,
-                                size,
+                                size: size.unwrap_or(AsmRegSize::from_width(width)),
                             }
                         }
-                        Some(r) => Concrete::Reg { reg: r, size },
+                        Some(r) => Concrete::Reg {
+                            reg: r,
+                            size: size.unwrap_or(AsmRegSize::from_width(width)),
+                        },
                         // A `%N` naming an immediate-only operand: use its
                         // constant value.
                         None => match func.insts.get(args[idx as usize] as usize) {
@@ -6306,31 +6340,14 @@ fn emit_inline_asm(
                         },
                     }
                 }
-                // An explicit `disp(%reg)` memory reference. Its access width
-                // comes from the AT&T suffix, else from a GP register operand
-                // of the same instruction, else the 64-bit default.
+                // An explicit `disp(%reg)` memory reference; 64-bit default.
                 AsmOpnd::Mem {
                     base,
                     index,
                     scale,
                     disp,
                 } => {
-                    let size = insn.suffix.or_else(|| {
-                        insn.operands.iter().find_map(|o| match *o {
-                            AsmOpnd::Reg { reg, size } if reg < 16 => Some(size),
-                            AsmOpnd::Ref { idx, size }
-                                if !matches!(
-                                    asm.operands[idx as usize].constraint,
-                                    AsmConstraint::Fp | AsmConstraint::Mem
-                                ) =>
-                            {
-                                Some(size.unwrap_or(AsmRegSize::from_width(
-                                    asm.operands[idx as usize].width,
-                                )))
-                            }
-                            _ => None,
-                        })
-                    });
+                    let size = asm_mem_size(None, insn, &asm.operands, &op_reg);
                     let resolve = |b: super::asm::AsmMemBase| -> Option<u8> {
                         match b {
                             super::asm::AsmMemBase::Reg(r) => Some(r),
@@ -6367,25 +6384,9 @@ fn emit_inline_asm(
                     }
                 }
                 // An absolute `seg:disp` reference; the segment prefix rides
-                // the instruction. Access width as for `disp(%reg)`: the
-                // AT&T suffix, else a GP register operand's width.
+                // the instruction. Access width as for `disp(%reg)`.
                 AsmOpnd::AbsMem { disp } => {
-                    let size = insn.suffix.or_else(|| {
-                        insn.operands.iter().find_map(|o| match *o {
-                            AsmOpnd::Reg { reg, size } if reg < 16 => Some(size),
-                            AsmOpnd::Ref { idx, size }
-                                if !matches!(
-                                    asm.operands[idx as usize].constraint,
-                                    AsmConstraint::Fp | AsmConstraint::Mem
-                                ) =>
-                            {
-                                Some(size.unwrap_or(AsmRegSize::from_width(
-                                    asm.operands[idx as usize].width,
-                                )))
-                            }
-                            _ => None,
-                        })
-                    });
+                    let size = asm_mem_size(None, insn, &asm.operands, &op_reg);
                     Concrete::AbsMem {
                         disp,
                         size: size.unwrap_or(AsmRegSize::Quad),

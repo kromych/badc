@@ -73,6 +73,19 @@ pub(crate) fn fmt_link_err(message: &str) -> String {
     format!("error: {message}")
 }
 
+/// Helper: produce an `error: <message>` string for a user-level
+/// codegen error recorded by the backend -- an inline-asm form the
+/// encoder cannot encode, for one. The backend runs past the point
+/// where a source line is tracked, so unlike `fmt_compile_err` these
+/// carry no `<file>:<line>`. They describe a problem with the user's
+/// source, so they MUST NOT carry the `internal compiler error:`
+/// marker.
+#[cfg(feature = "std")]
+pub(crate) fn fmt_codegen_err(message: &str) -> String {
+    use alloc::format;
+    format!("error: {message}")
+}
+
 // std::error::Error doesn't exist in core; only register as an Error
 // when std is available. Any Display impl is enough for `?` propagation
 // either way.

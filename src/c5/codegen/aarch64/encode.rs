@@ -1912,9 +1912,8 @@ pub(crate) fn lower(
             // stands only for a shape that failed without recording one.
             #[cfg(feature = "std")]
             if let Some(reason) = super::ssa::emit_common::take_bail() {
-                return Err(C5Error::Compile(alloc::format!(
-                    "{reason} (aarch64, function `{}`)",
-                    func_ssa.name,
+                return Err(C5Error::Compile(crate::c5::error::fmt_codegen_err(
+                    &alloc::format!("{reason} (aarch64, function `{}`)", func_ssa.name),
                 )));
             }
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(

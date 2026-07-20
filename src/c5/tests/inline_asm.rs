@@ -133,6 +133,33 @@ fn template_operand_reference_past_the_operand_list_is_diagnosed() {
     assert!(msg.contains("`%2` names no operand"), "{msg}");
 }
 
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn backend_asm_diagnostics_carry_the_error_prefix() {
+    use crate::{NativeOptions, Target};
+    // A diagnostic that does not identify itself as an error leaves a
+    // log consumer to attribute it to whatever severity came before.
+    // Every backend-recorded inline-asm failure goes out through one
+    // site per target, so check both.
+    for (target, arch) in [
+        (Target::LinuxX64, "x86_64"),
+        (Target::LinuxAarch64, "aarch64"),
+    ] {
+        let program =
+            super::compile_str("int main(void){ __asm__ volatile(\"frobnicate\"); return 0; }");
+        let err = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .expect_err("`frobnicate` is not an instruction");
+        let msg = alloc::format!("{err}");
+        assert!(msg.starts_with("error: "), "{arch}: {msg}");
+        assert!(msg.contains("frobnicate"), "{arch}: {msg}");
+    }
+}
+
 #[test]
 fn adjacent_constraint_literals_concatenate() {
     // C99 5.1.1.2 phase 6. A constraint may be split across adjacent

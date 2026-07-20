@@ -4402,7 +4402,7 @@ impl Compiler {
                 }
                 self.consume(b':', "`:` expected after `default`")?;
             } else {
-                let assoc_ty = self.parse_generic_type_name()?;
+                let (assoc_ty, _) = self.parse_generic_type_name()?;
                 let is_match = winner.is_none() && generic_type_match(ctrl_ty, assoc_ty);
                 if is_match {
                     winner = Some(self.lex.snapshot());
@@ -4437,20 +4437,16 @@ impl Compiler {
     /// leading keyword has been consumed.
     pub(super) fn parse_types_compatible_p(&mut self) -> Result<i64, C5Error> {
         self.consume(b'(', "`(` expected after `__builtin_types_compatible_p`")?;
-        self.pending.typeof_operand_was_array = false;
-        let a = self.parse_generic_type_name()?;
-        let a_array = self.pending.typeof_operand_was_array;
+        let (a, a_dims) = self.parse_generic_type_name()?;
         self.consume(b',', "`,` expected between type names")?;
-        self.pending.typeof_operand_was_array = false;
-        let b = self.parse_generic_type_name()?;
-        let b_array = self.pending.typeof_operand_was_array;
+        let (b, b_dims) = self.parse_generic_type_name()?;
         self.consume(b')', "`)` expected after `__builtin_types_compatible_p`")?;
         // C99 6.7.6.2: an array type and a pointer type are never
         // compatible, even when the element / pointee coincide -- the flat
-        // type collapses both to the element pointer, so distinguish them
-        // by the array flag `typeof` recorded (the array-vs-pointer
-        // distinction a compile-time element-count macro depends on).
-        Ok((generic_type_match(a, b) && a_array == b_array) as i64)
+        // type collapses both to the element pointer, so the recorded
+        // dimensions carry the array-vs-pointer distinction a compile-time
+        // element-count macro depends on.
+        Ok((generic_type_match(a, b) && array_dims_match(&a_dims, &b_dims)) as i64)
     }
 
     /// Parse `__builtin_offsetof ( type-name , member-designator )` (GCC /
@@ -4471,7 +4467,7 @@ impl Compiler {
     ) -> Result<Option<i64>, C5Error> {
         use super::super::ir::BinOp;
         self.consume(b'(', "`(` expected after `__builtin_offsetof`")?;
-        let ty = self.parse_generic_type_name()?;
+        let (ty, _) = self.parse_generic_type_name()?;
         if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
             return Err(self.compile_err("`__builtin_offsetof` requires a struct or union type"));
         }
@@ -4583,19 +4579,58 @@ impl Compiler {
     }
 
     /// Parse a `_Generic` association type name: a base type plus any
-    /// abstract pointer decoration, matching the `typeof(type-name)`
-    /// surface. Returns the flat type tag.
-    fn parse_generic_type_name(&mut self) -> Result<i64, C5Error> {
+    /// abstract pointer and array decoration, matching the
+    /// `typeof(type-name)` surface. Returns the flat type tag and the
+    /// array dimensions outermost first, `-1` for an unspecified bound
+    /// (`T []`). An empty dimension list means the type name is not an
+    /// array.
+    fn parse_generic_type_name(&mut self) -> Result<(i64, alloc::vec::Vec<i64>), C5Error> {
+        self.pending.typeof_operand_was_array = false;
         let mut ty = self.parse_decl_base_type()?;
-        core::mem::take(&mut self.pending.typedef_base_array_size);
+        // `typeof(arr)` and an array typedef leave the operand's extent on
+        // the carrier; a multi-dimensional alias also fills the dims list.
+        let base_extent = core::mem::take(&mut self.pending.typedef_base_array_size);
+        let base_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
+        let mut dims = if !self.pending.typeof_operand_was_array {
+            alloc::vec::Vec::new()
+        } else if !base_dims.is_empty() {
+            base_dims
+        } else {
+            alloc::vec![if base_extent > 0 { base_extent } else { -1 }]
+        };
         while self.lex.tk == Token::MulOp {
             self.next()?;
             ty += Ty::Ptr as i64;
+            // A pointer through the specifier names a pointer, not an
+            // array; the extent belongs to the pointee.
+            dims.clear();
             while self.lex.tk == Token::TypeQual {
                 self.next()?;
             }
         }
-        Ok(ty)
+        // Abstract array declarator `T []` / `T [N]` (C99 6.7.6). An
+        // omitted bound is an incomplete array type, which C99 6.7.5.2p6
+        // makes compatible with any bound for the same element type.
+        while self.lex.tk == Token::Brak {
+            self.next()?;
+            let n = if self.lex.tk == ']' {
+                -1
+            } else {
+                let n = self.parse_constant_int()?;
+                if n < 0 {
+                    return Err(
+                        self.compile_err("array dimension in a type name must not be negative")
+                    );
+                }
+                n
+            };
+            if self.lex.tk != ']' {
+                return Err(self.compile_err("close bracket expected in an array type name"));
+            }
+            self.next()?;
+            dims.push(n);
+        }
+        Ok((ty, dims))
     }
 
     /// Advance the lexer past one generic association's expression to
@@ -4628,6 +4663,17 @@ impl Compiler {
 /// `unsigned int` and `T *` select distinct associations.
 fn generic_type_match(ctrl: i64, assoc: i64) -> bool {
     (ctrl & !super::types::VOLATILE_BIT) == (assoc & !super::types::VOLATILE_BIT)
+}
+
+/// C99 6.7.5.2p6 array compatibility: two array types are compatible when
+/// they have the same rank and, for each dimension where both bounds are
+/// specified, the bounds agree. An unspecified bound (`-1`) matches any.
+/// A rank mismatch also covers array-vs-non-array, since a non-array type
+/// name has rank 0. The flat type tag does not carry the element type of
+/// an inner dimension, so the rank comparison stands in for it: `int[2][3]`
+/// and `int[]` differ in rank and are correctly incompatible.
+fn array_dims_match(a: &[i64], b: &[i64]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| *x < 0 || *y < 0 || x == y)
 }
 
 /// Map an atomic-operation [`Intrinsic`](crate::c5::op::Intrinsic)

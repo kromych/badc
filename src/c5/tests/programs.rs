@@ -566,6 +566,14 @@ fn builtin_types_compatible() {
 }
 
 #[test]
+fn builtin_types_compatible_array() {
+    // C99 6.7.5.2p6: array type names as `__builtin_types_compatible_p`
+    // arguments, including an omitted bound matching any bound, mismatched
+    // bounds, rank, and array-vs-pointer. Matches gcc and clang.
+    assert_eq!(run_fixture("builtin_types_compatible_array.c"), 0);
+}
+
+#[test]
 fn has_builtin_clrsb() {
     // `__has_builtin(NAME)` preprocessor operator routes supported vs
     // unsupported builtins, and `__builtin_clrsb` / `__builtin_clrsbll`

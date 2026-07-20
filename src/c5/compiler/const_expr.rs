@@ -388,6 +388,49 @@ impl Compiler {
         }
     }
 
+    /// Consume a non-constant primary and its postfix chain (`(...)`,
+    /// `[...]`, `.id`, `->id`) without evaluating it. Used when a
+    /// non-constant operand appears in a subexpression that is not
+    /// evaluated -- a not-taken `?:` arm or a short-circuited `||` / `&&`
+    /// operand -- where C99 6.6p3 does not require it to be a constant
+    /// expression; the value is discarded by the enclosing operator.
+    fn skip_unevaluated_operand(&mut self) -> Result<(), C5Error> {
+        self.next()?; // the non-constant primary token
+        loop {
+            if self.lex.tk == '(' || self.lex.tk == Token::Brak {
+                self.skip_balanced_group()?;
+            } else if self.lex.tk == Token::Dot || self.lex.tk == Token::Arrow {
+                self.next()?;
+                if self.lex.tk == Token::Id {
+                    self.next()?;
+                }
+            } else {
+                return Ok(());
+            }
+        }
+    }
+
+    /// Consume one balanced `( ... )` or `[ ... ]` group; on entry the
+    /// current token is the opening bracket, on return it is past the
+    /// matching close.
+    fn skip_balanced_group(&mut self) -> Result<(), C5Error> {
+        let mut depth: i64 = 0;
+        loop {
+            if self.lex.tk == '(' || self.lex.tk == Token::Brak {
+                depth += 1;
+            } else if self.lex.tk == ')' || self.lex.tk == ']' {
+                depth -= 1;
+                if depth == 0 {
+                    self.next()?;
+                    return Ok(());
+                }
+            } else if self.lex.tk == 0 {
+                return Err(self.compile_err("unterminated operand in constant expression"));
+            }
+            self.next()?;
+        }
+    }
+
     /// Evaluate a `__builtin_constant_p(x)` operand: 1 when `x` folds to
     /// a constant expression, else 0. On entry the opening `(` is
     /// consumed and the current token is the operand's first; on return
@@ -535,25 +578,23 @@ impl Compiler {
     }
 
     /// C99 6.5.15 conditional operator at the top of the constant-
-    /// expression chain. Both arms are evaluated (the parser still
-    /// has to consume their tokens) but only the selected one
-    /// contributes to the resulting value, matching clang/gcc.
-    /// The `:` arm recurses back into `parse_const_expr_cond_val` so
-    /// `a ? b : c ? d : e` parses right-associatively.
+    /// expression chain. Both arms are parsed (their tokens must be
+    /// consumed) but only the selected one is evaluated, so a non-constant
+    /// operand or a zero divisor in the not-taken arm does not diagnose
+    /// (C99 6.6p3), matching clang/gcc. The middle operand is a full
+    /// expression and the `:` arm a conditional-expression, so nested
+    /// `?:` (`a ? b ? c : d : e`, `a ? b : c ? d : e`) parses correctly.
     pub(super) fn parse_const_expr_cond_val(&mut self) -> Result<ConstVal, C5Error> {
         let cond = self.parse_const_expr_or_val()?;
         if self.lex.tk == Token::Cond {
             self.next()?;
-            // Both arms are parsed (their tokens must be consumed)
-            // but the not-taken arm is unevaluated per C99 6.5.15,
-            // so a zero divisor there must not diagnose.
             let taken = cond.is_truthy();
             // GNU `a ?: b`: the middle operand may be omitted, and the
             // condition's own value is the result when truthy.
             let then_val = if self.lex.tk == ':' {
                 cond
             } else {
-                self.parse_const_unevaluated(!taken, Self::parse_const_expr_or_val)?
+                self.parse_const_unevaluated(!taken, Self::parse_const_expr_cond_val)?
             };
             if self.lex.tk != ':' {
                 return Err(self.compile_err("`:` expected in conditional constant expression"));
@@ -1386,14 +1427,26 @@ impl Compiler {
                 }
             }
         }
+        // A non-constant operand. In a not-evaluated subexpression (C99
+        // 6.6p3) -- a not-taken `?:` arm or a short-circuited `||` / `&&`
+        // operand -- it need not be a constant expression, so consume it and
+        // yield a placeholder the enclosing operator discards; name lookup
+        // still applies (6.5.1), so require a declared identifier. Otherwise
+        // it makes the expression non-constant, which an array declarator
+        // reads through `const_expr_nonconst` to tell a C99 6.7.6.2 VLA
+        // dimension from a constant-expression error.
+        if self.const_unevaluated > 0
+            && self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].class != 0
+        {
+            self.skip_unevaluated_operand()?;
+            return Ok(ConstVal::int(0));
+        }
         let id_suffix = if self.lex.tk == Token::Id {
             format!(" `{}`", self.symbols[self.lex.curr_id_idx].name)
         } else {
             alloc::string::String::new()
         };
-        // Reached a non-constant operand rather than a malformed
-        // constant: the array-declarator reads this to tell a C99
-        // 6.7.6.2 VLA dimension apart from a constant-expression error.
         self.pending.const_expr_nonconst = true;
         Err(self.compile_err(format!(
             "constant integer expected (got {}{id_suffix})",

@@ -5987,6 +5987,11 @@ fn emit_inline_asm(
     let Ok(raw_text) = core::str::from_utf8(&asm.template) else {
         return fail("inline asm: non-UTF8 template");
     };
+    let stripped = super::ssa::emit_common::strip_asm_comments(
+        raw_text,
+        super::ssa::emit_common::AsmComments::X86,
+    );
+    let raw_text = stripped.as_deref().unwrap_or(raw_text);
     let expanded = super::ssa::emit_common::expand_template_uniq(raw_text);
     let text = expanded.as_deref().unwrap_or(raw_text);
     let extracted = match super::ssa::emit_common::extract_asm_sections(text) {

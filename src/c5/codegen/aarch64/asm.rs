@@ -816,6 +816,14 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
 pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
     let text =
         core::str::from_utf8(tmpl).map_err(|_| String::from("inline asm: non-UTF8 template"))?;
+    let stripped;
+    let text = match emit_common::strip_asm_comments(text, emit_common::AsmComments::A64) {
+        Some(t) => {
+            stripped = t;
+            stripped.as_str()
+        }
+        None => text,
+    };
     // `%=` expands to a per-instance number (shared helper). TODO: named
     // local-label definitions / references (the x86-64 parser has them).
     let expanded;

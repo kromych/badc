@@ -2372,6 +2372,11 @@ fn emit_inline_asm_aarch64(
         bail_msg("aarch64 inline asm: non-UTF8 template");
         return false;
     };
+    let stripped = super::ssa::emit_common::strip_asm_comments(
+        raw_text,
+        super::ssa::emit_common::AsmComments::A64,
+    );
+    let raw_text = stripped.as_deref().unwrap_or(raw_text);
     let expanded = super::ssa::emit_common::expand_template_uniq(raw_text);
     let text = expanded.as_deref().unwrap_or(raw_text);
     let extracted = match super::ssa::emit_common::extract_asm_sections(text) {

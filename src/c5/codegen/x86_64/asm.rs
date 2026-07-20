@@ -153,9 +153,29 @@ pub(crate) enum Mnemonic {
     Mwait,
     /// Halt, `hlt`.
     Hlt,
-    /// `lock` prefix on its own template line; emits 0xF0 so the following
-    /// instruction (in a multi-line block) becomes its locked form.
-    Lock,
+    /// A legacy prefix byte: `lock` (0xF0), `rep` / `repe` / `repz` (0xF3),
+    /// `repne` / `repnz` (0xF2). A prefix is a statement of its own
+    /// (`repe; cmpsb`) or leads the instruction it applies to on the same
+    /// statement (`rep stosw`); the parser emits it as its own entry either
+    /// way, so it precedes the operand-size prefix the instruction adds.
+    Prefix(u8),
+    /// An operandless instruction with a fixed encoding, such as `fninit`.
+    Fixed(&'static [u8]),
+    /// A string primitive (`movs` / `cmps` / `stos` / `lods` / `scas`). Its
+    /// operands are the fixed `%rsi` / `%rdi` / accumulator pair, so the AT&T
+    /// size suffix alone picks the opcode and the operand-size prefix.
+    StringOp { opcode: u8, osz: bool, rex_w: bool },
+    /// A single-memory-operand instruction encoded as one opcode byte and a
+    /// ModR/M whose reg field is the opcode extension: `fnstsw` / `fnstcw`
+    /// (x87 status / control word) and the far indirect call `lcall`.
+    /// `osz` emits the 0x66 operand-size prefix; REX.W comes from `rex_w`
+    /// and REX.B from the base register.
+    MemExt {
+        opcode: u8,
+        ext: u8,
+        osz: bool,
+        rex_w: bool,
+    },
     /// `xadd r, r/m` (0F C0/C1): exchange-and-add, the atomic primitive of
     /// the interlocked increment / decrement.
     Xadd,
@@ -512,6 +532,38 @@ pub(crate) fn assign_operand_regs(
 }
 
 /// Known base mnemonic for a template token, if any.
+/// The string primitives as `(base name, byte-form opcode)`. Their operands
+/// are the fixed `%rsi` / `%rdi` / `%al` pair, so the whole encoding is the
+/// opcode plus an operand-size prefix: the byte form is the opcode itself,
+/// and the wider forms are `opcode + 1` under 0x66 (word) or REX.W (quad).
+/// The size always comes from the AT&T suffix, which is part of the name
+/// here rather than a separate suffix, so `movsbl` stays a sign-extending
+/// move and never parses as `movsb` plus a long suffix.
+const STRING_OPS: &[(&str, u8)] = &[
+    ("movs", 0xA4),
+    ("cmps", 0xA6),
+    ("stos", 0xAA),
+    ("lods", 0xAC),
+    ("scas", 0xAE),
+];
+
+fn string_op(name: &str) -> Option<Mnemonic> {
+    let (base, suffix) = name.split_at(name.len().checked_sub(1)?);
+    let op = STRING_OPS.iter().find(|(n, _)| *n == base)?.1;
+    let (opcode, osz, rex_w) = match suffix {
+        "b" => (op, false, false),
+        "w" => (op + 1, true, false),
+        "l" => (op + 1, false, false),
+        "q" => (op + 1, false, true),
+        _ => return None,
+    };
+    Some(Mnemonic::StringOp {
+        opcode,
+        osz,
+        rex_w,
+    })
+}
+
 fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
     Some(match name {
         "shld" => Mnemonic::Shld,
@@ -546,13 +598,49 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "monitor" => Mnemonic::Monitor,
         "mwait" => Mnemonic::Mwait,
         "hlt" => Mnemonic::Hlt,
-        "lock" => Mnemonic::Lock,
+        "lock" => Mnemonic::Prefix(0xF0),
+        "rep" | "repe" | "repz" => Mnemonic::Prefix(0xF3),
+        "repne" | "repnz" => Mnemonic::Prefix(0xF2),
+        "fninit" => Mnemonic::Fixed(&[0xDB, 0xE3]),
+        // x87 store status / control word to memory (DD /7, D9 /7).
+        "fnstsw" => Mnemonic::MemExt {
+            opcode: 0xDD,
+            ext: 7,
+            osz: false,
+            rex_w: false,
+        },
+        "fnstcw" => Mnemonic::MemExt {
+            opcode: 0xD9,
+            ext: 7,
+            osz: false,
+            rex_w: false,
+        },
+        // Far indirect call (FF /3); the AT&T suffix sets the operand size.
+        "lcallw" => Mnemonic::MemExt {
+            opcode: 0xFF,
+            ext: 3,
+            osz: true,
+            rex_w: false,
+        },
+        "lcall" | "lcalll" => Mnemonic::MemExt {
+            opcode: 0xFF,
+            ext: 3,
+            osz: false,
+            rex_w: false,
+        },
+        "lcallq" => Mnemonic::MemExt {
+            opcode: 0xFF,
+            ext: 3,
+            osz: false,
+            rex_w: true,
+        },
         "xadd" => Mnemonic::Xadd,
         "cmpxchg" => Mnemonic::Cmpxchg,
         "inc" => Mnemonic::Inc,
         "dec" => Mnemonic::Dec,
         _ => {
-            return sse2_op(name)
+            return string_op(name)
+                .or_else(|| sse2_op(name))
                 .or_else(|| sse_mov(name))
                 .or_else(|| sse_imm(name))
                 .or_else(|| vex_op(name));
@@ -864,6 +952,12 @@ fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
         _ => return None,
     };
     if let Some(m) = mnemonic_by_name(base) {
+        // A string primitive carries its size in its own name, so a further
+        // suffix does not apply: `movsbl` is a sign-extending move, not
+        // `movsb` widened to long.
+        if matches!(m, Mnemonic::StringOp { .. }) {
+            return None;
+        }
         return Some((m, suffix));
     }
     table_mnemonic(base).map(|name| (Mnemonic::Table(name), suffix))
@@ -1193,6 +1287,17 @@ pub(crate) fn scan_label_names(text: &str) -> Vec<&str> {
 pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
     let text =
         core::str::from_utf8(tmpl).map_err(|_| String::from("inline asm: non-UTF8 template"))?;
+    let stripped;
+    let text = match super::super::ssa::emit_common::strip_asm_comments(
+        text,
+        super::super::ssa::emit_common::AsmComments::X86,
+    ) {
+        Some(t) => {
+            stripped = t;
+            stripped.as_str()
+        }
+        None => text,
+    };
     let expanded;
     let text = match super::super::ssa::emit_common::expand_template_uniq(text) {
         Some(t) => {
@@ -1287,10 +1392,31 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         }
         // Mnemonic is the first whitespace-delimited token; the operand
         // list is the remainder, comma-separated.
-        let (mnem_tok, rest) = match piece.find(char::is_whitespace) {
+        let (mut mnem_tok, mut rest) = match piece.find(char::is_whitespace) {
             Some(p) => (&piece[..p], piece[p..].trim()),
             None => (piece, ""),
         };
+        // A prefix may lead the instruction it applies to on the same
+        // statement (`rep stosw`, `lock xaddl ...`) as well as stand alone
+        // (`repe; cmpsb`). Emit each leading prefix as its own entry and
+        // carry on with the rest of the statement.
+        while !rest.is_empty()
+            && let Some((Mnemonic::Prefix(b), None)) = split_mnemonic(mnem_tok)
+        {
+            insns.push(AsmInsn {
+                mnemonic: Mnemonic::Prefix(b),
+                suffix: None,
+                seg: None,
+                operands: Vec::new(),
+                bytes: Vec::new(),
+                sym_target: None,
+                label_def: None,
+            });
+            (mnem_tok, rest) = match rest.find(char::is_whitespace) {
+                Some(p) => (&rest[..p], rest[p..].trim()),
+                None => (rest, ""),
+            };
+        }
         let (mnemonic, suffix) = split_mnemonic(mnem_tok)
             .ok_or_else(|| format!("inline asm: unsupported instruction `{mnem_tok}`"))?;
         // A direct `call` / `jmp` to a bare identifier is a symbol reference
@@ -1676,9 +1802,49 @@ pub(crate) fn encode(
             code.extend_from_slice(&[0xF3, 0x90]);
             Ok(())
         }
-        Mnemonic::Lock => {
-            // Prefix byte; the following template line encodes the locked op.
-            code.push(0xF0);
+        Mnemonic::Prefix(b) => {
+            // The instruction it applies to is the next entry, so the prefix
+            // byte precedes any operand-size prefix that instruction emits.
+            code.push(b);
+            Ok(())
+        }
+        Mnemonic::Fixed(bytes) => {
+            code.extend_from_slice(bytes);
+            Ok(())
+        }
+        Mnemonic::StringOp {
+            opcode,
+            osz,
+            rex_w,
+        } => {
+            if osz {
+                code.push(0x66);
+            }
+            if rex_w {
+                code.push(rex(true, false, false, false));
+            }
+            code.push(opcode);
+            Ok(())
+        }
+        Mnemonic::MemExt {
+            opcode,
+            ext,
+            osz,
+            rex_w,
+        } => {
+            let Some(Concrete::Mem { base, disp, .. }) = ops.first() else {
+                return Err(String::from(
+                    "inline asm: this instruction takes a memory operand",
+                ));
+            };
+            if osz {
+                code.push(0x66);
+            }
+            if rex_w || *base >= 8 {
+                code.push(rex(rex_w, false, false, *base >= 8));
+            }
+            code.push(opcode);
+            modrm_mem(code, ext, *base, *disp);
             Ok(())
         }
         Mnemonic::Pushfq => {
@@ -2282,7 +2448,11 @@ pub(crate) fn encode(
             Err(String::from("inline asm: unsupported mov operands"))
         }
         // The delegated general-purpose / system mnemonics are handled by the
-        // table encoder above and never reach here.
+        // table encoder above; reaching here means the catalogue has no form
+        // matching these operands, so report the mnemonic as written.
+        Mnemonic::Table(name) => Err(format!(
+            "inline asm: `{name}` has no x86-64 encoding for these operands"
+        )),
         _ => Err(format!(
             "inline asm: unsupported instruction `{mnemonic:?}`"
         )),
@@ -2346,7 +2516,7 @@ mod tests {
     /// resolve them the way the emitter does (memory width from the suffix,
     /// else a GP register operand, else quad), and encode. For templates
     /// whose expected bytes are byte-verified against clang.
-    fn asm_bytes(tmpl: &[u8]) -> Vec<u8> {
+    pub(super) fn asm_bytes(tmpl: &[u8]) -> Vec<u8> {
         let mut out = Vec::new();
         for insn in parse_template(tmpl).unwrap() {
             let mem_size = insn.suffix.or_else(|| {
@@ -3429,5 +3599,98 @@ mod tests {
             e("vinsertf128", &[Concrete::Imm(0x1), mem(0), ymm(1), ymm(0)]),
             [0xC4, 0xE3, 0x75, 0x18, 0x00, 0x01]
         );
+    }
+}
+
+#[cfg(test)]
+mod string_and_prefix_tests {
+    use super::tests::asm_bytes;
+    use super::*;
+
+    /// The string primitives over every AT&T size suffix. The byte form is
+    /// the bare opcode; the wider forms take `opcode + 1` under 0x66 (word)
+    /// or REX.W (quad). Byte-verified against clang.
+    #[test]
+    fn string_primitives() {
+        for (tmpl, want) in [
+            ("movsb", &[0xA4][..]),
+            ("movsw", &[0x66, 0xA5]),
+            ("movsl", &[0xA5]),
+            ("movsq", &[0x48, 0xA5]),
+            ("cmpsb", &[0xA6]),
+            ("cmpsw", &[0x66, 0xA7]),
+            ("cmpsl", &[0xA7]),
+            ("cmpsq", &[0x48, 0xA7]),
+            ("stosb", &[0xAA]),
+            ("stosw", &[0x66, 0xAB]),
+            ("stosl", &[0xAB]),
+            ("stosq", &[0x48, 0xAB]),
+            ("lodsb", &[0xAC]),
+            ("lodsw", &[0x66, 0xAD]),
+            ("lodsl", &[0xAD]),
+            ("lodsq", &[0x48, 0xAD]),
+            ("scasb", &[0xAE]),
+            ("scasw", &[0x66, 0xAF]),
+            ("scasl", &[0xAF]),
+            ("scasq", &[0x48, 0xAF]),
+        ] {
+            assert_eq!(asm_bytes(tmpl.as_bytes()), want, "{tmpl}");
+        }
+    }
+
+    /// A prefix stands alone as a statement or leads its instruction on the
+    /// same statement; either way the prefix byte comes first, before the
+    /// operand-size prefix the instruction emits. Byte-verified against
+    /// clang (`rep stosw` is `f3 66 ab`, not `66 f3 ab`).
+    #[test]
+    fn prefixes_compose_with_the_next_instruction() {
+        assert_eq!(asm_bytes(b"repe; cmpsb"), [0xF3, 0xA6]);
+        assert_eq!(asm_bytes(b"repe cmpsb"), [0xF3, 0xA6]);
+        assert_eq!(asm_bytes(b"rep; stosl"), [0xF3, 0xAB]);
+        assert_eq!(asm_bytes(b"rep stosw"), [0xF3, 0x66, 0xAB]);
+        assert_eq!(asm_bytes(b"repz cmpsb"), [0xF3, 0xA6]);
+        assert_eq!(asm_bytes(b"repne scasb"), [0xF2, 0xAE]);
+        assert_eq!(asm_bytes(b"repnz scasb"), [0xF2, 0xAE]);
+        assert_eq!(asm_bytes(b"rep movsq"), [0xF3, 0x48, 0xA5]);
+        // `lock` is the same mechanism and keeps its standalone form.
+        assert_eq!(asm_bytes(b"lock; stosb"), [0xF0, 0xAA]);
+    }
+
+    /// `fninit` and the x87 / far-call memory forms. Byte-verified against
+    /// clang.
+    #[test]
+    fn fninit_and_memory_extension_forms() {
+        assert_eq!(asm_bytes(b"fninit"), [0xDB, 0xE3]);
+        assert_eq!(asm_bytes(b"fnstsw (%rax)"), [0xDD, 0x38]);
+        assert_eq!(asm_bytes(b"fnstcw (%rax)"), [0xD9, 0x38]);
+        assert_eq!(asm_bytes(b"fnstsw 8(%rbx)"), [0xDD, 0x7B, 0x08]);
+        assert_eq!(asm_bytes(b"lcallw *(%rax)"), [0x66, 0xFF, 0x18]);
+        assert_eq!(asm_bytes(b"lcallw *8(%rbx)"), [0x66, 0xFF, 0x5B, 0x08]);
+        assert_eq!(asm_bytes(b"lcall *(%rax)"), [0xFF, 0x18]);
+        assert_eq!(asm_bytes(b"lcalll *(%rax)"), [0xFF, 0x18]);
+        assert_eq!(asm_bytes(b"lcallq *(%rax)"), [0x48, 0xFF, 0x18]);
+    }
+
+    /// A string primitive names its own size, so a further AT&T suffix does
+    /// not apply: `movsbl` stays a sign-extending move rather than parsing
+    /// as `movsb` widened to long.
+    #[test]
+    fn string_primitive_takes_no_further_suffix() {
+        assert!(matches!(
+            split_mnemonic("movsb"),
+            Some((Mnemonic::StringOp { .. }, None))
+        ));
+        assert_eq!(split_mnemonic("movsbl"), None);
+        assert_eq!(split_mnemonic("movswl"), None);
+    }
+
+    /// The template shapes the sweep reported, end to end.
+    #[test]
+    fn reported_template_shapes() {
+        assert_eq!(asm_bytes(b"repe; cmpsb"), [0xF3, 0xA6]);
+        assert_eq!(asm_bytes(b"fninit ; fnstsw (%rax) ; fnstcw (%rbx)"), [
+            0xDB, 0xE3, 0xDD, 0x38, 0xD9, 0x3B
+        ]);
+        assert_eq!(asm_bytes(b"stosw \n\t rep;stosl"), [0x66, 0xAB, 0xF3, 0xAB]);
     }
 }

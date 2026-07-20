@@ -1991,6 +1991,7 @@ pub(crate) fn lower(
     let _ssa_emit_pass_start = std::time::Instant::now();
     // Function name -> entry PC, so an inline-asm `call`/`jmp` to a bare symbol
     // resolves to a relocation the fixup pass patches like any other call.
+    let mut asm_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
@@ -2026,6 +2027,7 @@ pub(crate) fn lower(
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut func_prologue_native,
                 asm_sections: &mut asm_sections,
+                asm_extern_call_sites: &mut asm_extern_call_sites,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2095,7 +2097,9 @@ pub(crate) fn lower(
         .iter()
         .map(|(pc, name)| (*pc, name.as_str()))
         .collect();
-    let mut user_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
+    // Seeded with the inline-asm branch sites whose target this unit does
+    // not define; they take the same by-name relocation.
+    let mut user_extern_call_sites: Vec<super::UserExternCallSite> = asm_extern_call_sites;
     // A direct branch whose callee the linker resolves -- across a
     // named-section boundary, or to a weak definition a sibling unit
     // may override -- likewise becomes a by-name call relocation.

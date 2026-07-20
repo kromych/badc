@@ -28,6 +28,10 @@ pub(crate) struct EmitCtx<'a> {
     /// Named sections accumulated from inline-asm `.pushsection` data
     /// directives; the object writers append them to the emitted object.
     pub(crate) asm_sections: &'a mut alloc::vec::Vec<AsmSection>,
+    /// Branch sites an inline-asm `call`/`jmp` (`bl`/`b`) aimed at a symbol
+    /// this unit does not define. The callee's address is a link-time
+    /// decision, so each site becomes a call relocation against the name.
+    pub(crate) asm_extern_call_sites: &'a mut alloc::vec::Vec<super::UserExternCallSite>,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV

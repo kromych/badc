@@ -3487,3 +3487,136 @@ fn merged_weak_text_len(bytes: &[u8]) -> usize {
         .text
         .len()
 }
+
+/// An inline-asm `call` / `bl` naming a symbol this unit does not
+/// define must become a call relocation against that name -- the same
+/// treatment a compiler-emitted call to an extern function gets --
+/// rather than being rejected for having no local target. The symbol
+/// need not be declared in C: a template can name a pure-asm symbol.
+#[cfg(feature = "native-emit")]
+#[test]
+fn inline_asm_branch_to_undefined_symbol_emits_a_call_relocation() {
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let branch = if target == Target::LinuxX64 {
+            "call"
+        } else {
+            "bl"
+        };
+        // R_X86_64_PLT32 / R_AARCH64_CALL26.
+        let want_rtype = if target == Target::LinuxX64 { 4 } else { 283 };
+        // Both an `extern`-declared callee and one with no C
+        // declaration at all reach the same relocation.
+        for src in [
+            format!(
+                "extern void helper(void);\n\
+                 void f(void) {{ __asm__ __volatile__(\"{branch} helper\" ::: \"memory\"); }}\n"
+            ),
+            format!(
+                "void f(void) {{ __asm__ __volatile__(\"{branch} helper\" ::: \"memory\"); }}\n"
+            ),
+        ] {
+            let program = Compiler::with_options(
+                src.clone(),
+                target,
+                crate::CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+            let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+            let sites: Vec<&crate::c5::linker::NativeReloc> = obj
+                .text_relocs
+                .iter()
+                .filter(|r| obj.symbols[r.sym_idx].name == "helper")
+                .collect();
+            assert_eq!(
+                sites.len(),
+                1,
+                "{target:?}: expected one call relocation against `helper` for {src:?}, \
+                 got {:?}",
+                obj.text_relocs
+                    .iter()
+                    .map(|r| (&obj.symbols[r.sym_idx].name, r.rtype))
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                sites[0].rtype, want_rtype,
+                "{target:?}: wrong relocation type for an inline-asm branch"
+            );
+        }
+    }
+}
+
+/// The same inline-asm branch in a single-TU final image has no link
+/// step to bind it, so an undefined non-weak target is a diagnostic
+/// rather than a placeholder that faults at run time.
+#[cfg(feature = "native-emit")]
+#[test]
+fn inline_asm_branch_to_undefined_symbol_in_final_image_is_diagnosed() {
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let branch = if target == Target::LinuxX64 {
+            "call"
+        } else {
+            "bl"
+        };
+        let src = format!(
+            "int main(void) {{ __asm__ __volatile__(\"{branch} helper\" ::: \"memory\"); \
+             return 0; }}\n"
+        );
+        let program = Compiler::with_options(src, target, crate::CompileOptions::default())
+            .compile()
+            .expect("compile");
+        let err = emit_native_with_options(&program, target, NativeOptions::default())
+            .expect_err("an undefined inline-asm branch target must be diagnosed");
+        assert!(
+            format!("{err}").contains("undefined reference to `helper`"),
+            "{target:?}: unexpected diagnostic: {err}"
+        );
+    }
+}
+
+/// An inline-asm branch whose target IS defined in the unit keeps
+/// resolving locally, with no relocation emitted for it.
+#[cfg(feature = "native-emit")]
+#[test]
+fn inline_asm_branch_to_local_definition_stays_local() {
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let branch = if target == Target::LinuxX64 {
+            "call"
+        } else {
+            "bl"
+        };
+        let src = format!(
+            "void helper(void) {{}}\n\
+             void f(void) {{ __asm__ __volatile__(\"{branch} helper\" ::: \"memory\"); }}\n"
+        );
+        let program = Compiler::with_options(
+            src,
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        assert!(
+            !obj.text_relocs
+                .iter()
+                .any(|r| obj.symbols[r.sym_idx].name == "helper"),
+            "{target:?}: a locally-defined branch target must not go through a relocation"
+        );
+    }
+}

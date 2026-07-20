@@ -73,6 +73,7 @@ pub(crate) fn compile_function_to_bytes(
             // offset, so the recorded fixups are unused here.
             let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
             let mut asm_sections: Vec<super::emit_common::AsmSection> = Vec::new();
+            let mut asm_extern_call_sites = Vec::new();
             let ok = {
                 let mut cx = super::emit_common::EmitCtx {
                     code: &mut code,
@@ -86,6 +87,7 @@ pub(crate) fn compile_function_to_bytes(
                     pc_to_native: &mut pc_to_native,
                     prologue_native: &mut prologue_native,
                     asm_sections: &mut asm_sections,
+                    asm_extern_call_sites: &mut asm_extern_call_sites,
                 };
                 super::aarch64::emit::emit_function(
                     func,
@@ -137,6 +139,7 @@ pub(crate) fn compile_function_to_bytes(
             // offset, so the recorded fixups are unused here.
             let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
             let mut asm_sections: Vec<super::emit_common::AsmSection> = Vec::new();
+            let mut asm_extern_call_sites = Vec::new();
             // The JIT single-function path builds no PE; the unwind
             // descriptor is discarded.
             let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
@@ -153,6 +156,7 @@ pub(crate) fn compile_function_to_bytes(
                     pc_to_native: &mut pc_to_native,
                     prologue_native: &mut prologue_native,
                     asm_sections: &mut asm_sections,
+                    asm_extern_call_sites: &mut asm_extern_call_sites,
                 };
                 super::x86_64::emit::emit_function(
                     func,

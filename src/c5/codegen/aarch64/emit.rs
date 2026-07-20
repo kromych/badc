@@ -706,6 +706,7 @@ pub(crate) fn emit_function(
     let pc_to_native = &mut *cx.pc_to_native;
     let prologue_native = &mut *cx.prologue_native;
     let asm_sections = &mut *cx.asm_sections;
+    let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
     let abi = target.abi();
     let frame = compute_frame(func, alloc, abi, target);
     let scratch = ScratchPool::new();
@@ -719,6 +720,7 @@ pub(crate) fn emit_function(
     let plt_call_fixups_snapshot = plt_call_fixups.len();
     let data_fixups_snapshot = data_fixups.len();
     let user_extern_data_refs_snapshot = user_extern_data_refs.len();
+    let asm_extern_call_sites_snapshot = asm_extern_call_sites.len();
     let pending_func_fixups_snapshot = pending_func_fixups.len();
     let tls_index_fixups_snapshot = tls_index_fixups.len();
     let macho_tlv_fixups_snapshot = macho_tlv_fixups.len();
@@ -947,6 +949,7 @@ pub(crate) fn emit_function(
                         plt_call_fixups.truncate(plt_call_fixups_snapshot);
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
                         elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -981,6 +984,7 @@ pub(crate) fn emit_function(
                     fixups,
                     name2entpc,
                     asm_sections,
+                    asm_extern_call_sites,
                     Some(AsmGotoCtxA64 {
                         row: &func.jump_tables[table as usize],
                         branch_fixups: &mut branch_fixups,
@@ -991,6 +995,7 @@ pub(crate) fn emit_function(
                     plt_call_fixups.truncate(plt_call_fixups_snapshot);
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1014,6 +1019,7 @@ pub(crate) fn emit_function(
                     pc_to_native: &mut *pc_to_native,
                     prologue_native: &mut *prologue_native,
                     asm_sections: &mut *asm_sections,
+                    asm_extern_call_sites: &mut *asm_extern_call_sites,
                 };
                 let fcx = FnCtx {
                     func,
@@ -1052,6 +1058,7 @@ pub(crate) fn emit_function(
                 plt_call_fixups.truncate(plt_call_fixups_snapshot);
                 data_fixups.truncate(data_fixups_snapshot);
                 user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
                 pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 tls_index_fixups.truncate(tls_index_fixups_snapshot);
                 elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1095,6 +1102,7 @@ pub(crate) fn emit_function(
             plt_call_fixups.truncate(plt_call_fixups_snapshot);
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+            asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1166,6 +1174,7 @@ pub(crate) fn emit_function(
                             plt_call_fixups.truncate(plt_call_fixups_snapshot);
                             data_fixups.truncate(data_fixups_snapshot);
                             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                            asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
                             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1237,6 +1246,7 @@ pub(crate) fn emit_function(
                             plt_call_fixups.truncate(plt_call_fixups_snapshot);
                             data_fixups.truncate(data_fixups_snapshot);
                             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                            asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
                             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1289,6 +1299,7 @@ pub(crate) fn emit_function(
                         plt_call_fixups.truncate(plt_call_fixups_snapshot);
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
                         elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1319,6 +1330,7 @@ pub(crate) fn emit_function(
                         plt_call_fixups.truncate(plt_call_fixups_snapshot);
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
                         elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1366,6 +1378,7 @@ pub(crate) fn emit_function(
                         plt_call_fixups.truncate(plt_call_fixups_snapshot);
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
                         elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1394,6 +1407,7 @@ pub(crate) fn emit_function(
             plt_call_fixups.truncate(plt_call_fixups_snapshot);
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+            asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1428,6 +1442,7 @@ pub(crate) fn emit_function(
             plt_call_fixups.truncate(plt_call_fixups_snapshot);
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+            asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1444,6 +1459,7 @@ pub(crate) fn emit_function(
                     plt_call_fixups.truncate(plt_call_fixups_snapshot);
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1461,6 +1477,7 @@ pub(crate) fn emit_function(
                     plt_call_fixups.truncate(plt_call_fixups_snapshot);
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1478,6 +1495,7 @@ pub(crate) fn emit_function(
                     plt_call_fixups.truncate(plt_call_fixups_snapshot);
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1495,6 +1513,7 @@ pub(crate) fn emit_function(
                     plt_call_fixups.truncate(plt_call_fixups_snapshot);
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -2337,6 +2356,7 @@ fn emit_inline_asm_aarch64(
     fixups: &mut Vec<super::encode::Fixup>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     asm_sections: &mut Vec<super::ssa::emit_common::AsmSection>,
+    asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> bool {
     use super::super::ir::AsmConstraint;
@@ -2659,22 +2679,29 @@ fn emit_inline_asm_aarch64(
         // record a fixup the post-pass patches to a rel26 once every function's
         // address is final -- the same mechanism as a compiler-emitted call.
         if let Some(name) = &insn.sym_target {
-            let Some(&ent_pc) = name2entpc.get(name.as_str()) else {
-                bail_msg(&alloc::format!(
-                    "aarch64 inline asm: unknown bl/b target `{name}`"
-                ));
-                return false;
-            };
-            let (kind, word) = if insn.mnemonic == "bl" {
+            let is_call = insn.mnemonic == "bl";
+            let (kind, word) = if is_call {
                 (BranchKind::Bl, super::encode::enc_bl(0))
             } else {
                 (BranchKind::B, super::encode::enc_b(0))
             };
-            fixups.push(Fixup {
-                native_offset: code.len(),
-                target_ent_pc: ent_pc,
-                kind,
-            });
+            let native_offset = code.len();
+            match name2entpc.get(name.as_str()) {
+                Some(&ent_pc) => fixups.push(Fixup {
+                    native_offset,
+                    target_ent_pc: ent_pc,
+                    kind,
+                }),
+                // Not defined here: the callee's address is a link-time
+                // decision, so the site becomes a call relocation against the
+                // name, exactly as a compiler-emitted call to an extern
+                // function does. The rel26 stays zero for the linker to patch.
+                None => asm_extern_call_sites.push(super::UserExternCallSite {
+                    instr_offset: native_offset,
+                    symbol_name: name.clone(),
+                    is_tail: !is_call,
+                }),
+            }
             emit(code, word);
             continue;
         }
@@ -2983,6 +3010,7 @@ fn emit_inst(
     let tls_index_fixups = &mut *cx.tls_index_fixups;
     let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
     let asm_sections = &mut *cx.asm_sections;
+    let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca. Non-zero:
@@ -3552,6 +3580,7 @@ fn emit_inst(
             fixups,
             name2entpc,
             asm_sections,
+            asm_extern_call_sites,
             None,
         ),
         _ => false,
@@ -8177,6 +8206,7 @@ mod tests {
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
         let mut asm_sections = Vec::new();
+        let mut asm_extern_call_sites = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -8190,6 +8220,7 @@ mod tests {
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut prologue_native,
                 asm_sections: &mut asm_sections,
+                asm_extern_call_sites: &mut asm_extern_call_sites,
             };
             emit_function(
                 &func,
@@ -8347,6 +8378,7 @@ mod tests {
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
         let mut asm_sections = Vec::new();
+        let mut asm_extern_call_sites = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -8360,6 +8392,7 @@ mod tests {
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut prologue_native,
                 asm_sections: &mut asm_sections,
+                asm_extern_call_sites: &mut asm_extern_call_sites,
             };
             emit_function(
                 &func,
@@ -8416,6 +8449,7 @@ mod tests {
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
         let mut asm_sections = Vec::new();
+        let mut asm_extern_call_sites = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -8429,6 +8463,7 @@ mod tests {
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut prologue_native,
                 asm_sections: &mut asm_sections,
+                asm_extern_call_sites: &mut asm_extern_call_sites,
             };
             emit_function(
                 &func,

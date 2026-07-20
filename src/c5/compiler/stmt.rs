@@ -1535,15 +1535,15 @@ impl Compiler {
             } else {
                 constraint
             };
-            // A stack- / frame-pointer register variable names the register
-            // itself, which is its own storage: there is no object to address
-            // and nothing to store back. Carry its current value in as a plain
-            // input so the operand still occupies its `%N` slot. Writing such a
-            // variable is rejected in the expression path, so an asm that
-            // leaves the register changed is equally unsupported.
-            let reg_var_operand = self.ast_acc.is_some() && self.ast_acc == self.reg_var_read_expr;
-            let stores_back = is_output && !reg_var_operand;
-            let is_rw = is_rw && !reg_var_operand;
+            // A bound operand names a register, which is its own storage:
+            // there is no object to address and nothing to store back. Its
+            // current value is carried in as a plain input so the operand
+            // still occupies its `%N` slot. Writing such a variable is
+            // rejected in the expression path, so an asm that leaves the
+            // register changed is equally unsupported.
+            let is_bound = matches!(constraint, AsmConstraint::Bound(_));
+            let stores_back = is_output && !is_bound;
+            let is_rw = is_rw && !is_bound;
             // Outputs pass the destination address; a memory operand (input or
             // output) is likewise reached through its address, so it must be an
             // lvalue. A non-lvalue (a call / cast / arithmetic result) is not
@@ -1555,7 +1555,7 @@ impl Compiler {
             // accumulator falls through to the "operand expression expected"
             // check below.
             if (is_output || matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase))
-                && !matches!(constraint, AsmConstraint::Bound(_))
+                && !is_bound
             {
                 let addressable = match self.ast_acc {
                     Some(id) => {

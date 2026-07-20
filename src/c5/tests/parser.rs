@@ -1206,6 +1206,68 @@ fn file_scope_register_asm_binding() {
 }
 
 #[test]
+fn asm_output_operand_lvalue_matrix() {
+    // A stack- / frame-pointer register variable names a register, not an
+    // object: it is a valid output operand even though it has no address.
+    // Everything else keeps the lvalue requirement, including
+    // `__builtin_frame_address`, which reads back as the same intrinsic a
+    // frame-pointer register variable does but is not an lvalue.
+    #[cfg(target_arch = "x86_64")]
+    let (sp, fp, gp) = ("rsp", "rbp", "r12");
+    #[cfg(target_arch = "aarch64")]
+    let (sp, fp, gp) = ("sp", "x29", "x9");
+    let ok = |src: &str| {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("expected accept for {src:?}, got {e}"))
+    };
+    // File-scope binding used as a read-write output: a template that
+    // perturbs the stack pointer declares it this way.
+    ok(&format!(
+        "register unsigned long sp_reg asm(\"{sp}\");\n\
+         int main(void) {{ return 0; }} void f(void) {{ __asm__ __volatile__(\"\" : \"+r\"(sp_reg) : : \"memory\"); }}"
+    ));
+    // Block-scope bindings, write-only and read-write, stack and frame.
+    ok(&format!(
+        "int main(void) {{ return 0; }} void f(void) {{ register unsigned long s asm(\"{sp}\"); \
+         __asm__ __volatile__(\"\" : \"=r\"(s) : : \"memory\"); }}"
+    ));
+    ok(&format!(
+        "int main(void) {{ return 0; }} void f(void) {{ register unsigned long b asm(\"{fp}\"); \
+         __asm__ __volatile__(\"\" : \"+r\"(b) : : \"memory\"); }}"
+    ));
+    // A general-purpose register variable and the ordinary lvalue forms
+    // keep working as outputs.
+    ok(&format!(
+        "int main(void) {{ return 0; }} void f(void) {{ register long r asm(\"{gp}\"); \
+         __asm__ __volatile__(\"\" : \"=r\"(r)); }}"
+    ));
+    ok("struct S { int m; }; \
+        int main(void) { return 0; } void f(struct S *p, int *q, int a[2]) { int v; \
+        __asm__(\"\" : \"=r\"(v)); __asm__(\"\" : \"=r\"(p->m)); \
+        __asm__(\"\" : \"=r\"(*q)); __asm__(\"\" : \"=r\"(a[1])); }");
+    // Genuine rvalues stay rejected: a call result, a cast, and the
+    // frame-address intrinsic.
+    expect_compile_error(
+        "int g(void); int main(void) { return 0; } void f(void) { __asm__(\"\" : \"=r\"(g())); }",
+        "output operand must be an lvalue",
+    );
+    expect_compile_error(
+        "int main(void) { return 0; } void f(long a) { __asm__(\"\" : \"=r\"((int)a)); }",
+        "output operand must be an lvalue",
+    );
+    expect_compile_error(
+        "int main(void) { return 0; } void f(void) { __asm__(\"\" : \"=r\"(__builtin_frame_address(0))); }",
+        "output operand must be an lvalue",
+    );
+    // A memory operand still needs an address.
+    expect_compile_error(
+        "int g(void); int main(void) { return 0; } void f(void) { int r; __asm__(\"\" : \"=r\"(r) : \"m\"(g())); }",
+        "not directly addressable",
+    );
+}
+
+#[test]
 fn file_scope_asm_constraints() {
     // `asm("...")` between declarations accepts section data
     // directives (and an empty template); instructions, operands,

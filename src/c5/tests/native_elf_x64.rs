@@ -373,6 +373,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("attribute_section_placement.c", 0),
     ("inline_asm_named_operands.c", 42),
     ("inline_asm_const_modifier.c", 42),
+    ("inline_asm_branch_target_operand.c", 42),
     ("inline_asm_x64_segment.c", 42),
     ("inline_asm_x64_sib.c", 42),
     ("inline_asm_pushsection.c", 42),

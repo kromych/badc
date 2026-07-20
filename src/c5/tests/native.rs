@@ -798,6 +798,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("declarator_list_forms.c", 42),
     ("inline_asm_named_operands.c", 42),
     ("inline_asm_const_modifier.c", 42),
+    ("inline_asm_branch_target_operand.c", 42),
     ("inline_asm_x64_segment.c", 42),
     ("inline_asm_a64_barriers.c", 42),
     ("inline_asm_pushsection.c", 42),

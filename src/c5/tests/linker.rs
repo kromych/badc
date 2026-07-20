@@ -3620,3 +3620,232 @@ fn inline_asm_branch_to_local_definition_stays_local() {
         );
     }
 }
+
+/// A branch target assembled from template text plus a `%c` operand
+/// names the symbol the substituted text spells: `__get_user_%c0` with
+/// a constant 4 relocates against `__get_user_4`. Resolution therefore
+/// happens after substitution, not at template-parse time.
+#[cfg(feature = "native-emit")]
+#[test]
+fn inline_asm_branch_target_substitutes_a_constant_operand() {
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let branch = if target == Target::LinuxX64 {
+            "call"
+        } else {
+            "bl"
+        };
+        // R_X86_64_PLT32 / R_AARCH64_CALL26.
+        let want_rtype = if target == Target::LinuxX64 { 4 } else { 283 };
+        // Adjacent string literals joined before parsing, a named
+        // operand, and a positional `%cN` all reach the same symbol.
+        for body in [
+            format!("\"{branch} __\" \"get_user\" \"_%c[size]\" :: [size] \"i\"(4)"),
+            format!("\"{branch} __get_user_%c[size]\" :: [size] \"i\"(4)"),
+            format!("\"{branch} __get_user_%c0\" :: \"i\"(4)"),
+        ] {
+            let src = format!("void f(void) {{ __asm__ __volatile__({body} : \"memory\"); }}\n");
+            let program = Compiler::with_options(
+                src.clone(),
+                target,
+                crate::CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+            let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+            let sites: Vec<&crate::c5::linker::NativeReloc> = obj
+                .text_relocs
+                .iter()
+                .filter(|r| obj.symbols[r.sym_idx].name == "__get_user_4")
+                .collect();
+            assert_eq!(
+                sites.len(),
+                1,
+                "{target:?}: expected one relocation against `__get_user_4` for {src:?}, got {:?}",
+                obj.text_relocs
+                    .iter()
+                    .map(|r| (&obj.symbols[r.sym_idx].name, r.rtype))
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                sites[0].rtype, want_rtype,
+                "{target:?}: wrong relocation type for a substituted branch target"
+            );
+        }
+    }
+}
+
+/// Substitution is positional text, so a reference may sit anywhere in
+/// the name, and several may appear in one target.
+#[cfg(feature = "native-emit")]
+#[test]
+fn inline_asm_branch_target_substitutes_every_reference_position() {
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let branch = if target == Target::LinuxX64 {
+            "call"
+        } else {
+            "bl"
+        };
+        let src = format!(
+            "void f(void) {{ __asm__ __volatile__(\"{branch} pre_%c0_mid_%c1_end\" \
+             :: \"i\"(3), \"i\"(7) : \"memory\"); }}\n"
+        );
+        let program = Compiler::with_options(
+            src,
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        assert!(
+            obj.text_relocs
+                .iter()
+                .any(|r| obj.symbols[r.sym_idx].name == "pre_3_mid_7_end"),
+            "{target:?}: expected a relocation against `pre_3_mid_7_end`, got {:?}",
+            obj.text_relocs
+                .iter()
+                .map(|r| &obj.symbols[r.sym_idx].name)
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+/// A substituted target that the unit DOES define resolves locally, so
+/// the substituted name -- not the template text -- is what the local
+/// lookup sees.
+#[cfg(feature = "native-emit")]
+#[test]
+fn inline_asm_substituted_branch_target_resolves_a_local_definition() {
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let branch = if target == Target::LinuxX64 {
+            "call"
+        } else {
+            "bl"
+        };
+        let src = format!(
+            "void helper_4(void) {{}}\n\
+             void f(void) {{ __asm__ __volatile__(\"{branch} helper_%c0\" \
+             :: \"i\"(4) : \"memory\"); }}\n"
+        );
+        let program = Compiler::with_options(
+            src,
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        assert!(
+            !obj.text_relocs
+                .iter()
+                .any(|r| obj.symbols[r.sym_idx].name == "helper_4"),
+            "{target:?}: a locally-defined substituted target must not go through a relocation"
+        );
+    }
+}
+
+/// An operand reference only spells part of a symbol name when it
+/// prints bare. x86 prints an unmodified `%N` as `$N`, which cannot,
+/// so it is diagnosed; AArch64 prints it bare and accepts it. Both
+/// follow what gcc and clang emit for the same template.
+#[cfg(feature = "native-emit")]
+#[test]
+fn inline_asm_branch_target_requires_a_bare_operand_reference() {
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for (target, branch, modifier, accepted) in [
+        (Target::LinuxX64, "call", "c", true),
+        (Target::LinuxX64, "call", "P", true),
+        (Target::LinuxX64, "call", "", false),
+        (Target::LinuxAarch64, "bl", "c", true),
+        (Target::LinuxAarch64, "bl", "", true),
+        (Target::LinuxAarch64, "bl", "P", false),
+    ] {
+        let src = format!(
+            "void f(void) {{ __asm__ __volatile__(\"{branch} __get_user_%{modifier}0\" \
+             :: \"i\"(4) : \"memory\"); }}\n"
+        );
+        let program = Compiler::with_options(
+            src,
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let got = emit_native_with_options(&program, target, opts);
+        assert_eq!(
+            got.is_ok(),
+            accepted,
+            "{target:?}: `%{modifier}` in a branch target: {:?}",
+            got.err().map(|e| format!("{e}"))
+        );
+        if !accepted {
+            let err = format!("{}", got.err().unwrap());
+            assert!(
+                err.contains("does not print a bare symbol name"),
+                "{target:?}: unexpected diagnostic: {err}"
+            );
+        }
+    }
+}
+
+/// A branch target whose operand is not a compile-time constant cannot
+/// name a symbol, so it is diagnosed rather than relocated against a
+/// malformed name.
+#[cfg(feature = "native-emit")]
+#[test]
+fn inline_asm_branch_target_with_a_non_constant_operand_is_diagnosed() {
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let branch = if target == Target::LinuxX64 {
+            "call"
+        } else {
+            "bl"
+        };
+        let src = format!(
+            "void f(int n) {{ __asm__ __volatile__(\"{branch} __get_user_%c0\" \
+             :: \"i\"(n) : \"memory\"); }}\n"
+        );
+        let program = Compiler::with_options(
+            src,
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let err = emit_native_with_options(&program, target, opts)
+            .expect_err("a non-constant branch-target operand must be diagnosed");
+        assert!(
+            format!("{err}").contains("needs a constant operand"),
+            "{target:?}: unexpected diagnostic: {err}"
+        );
+    }
+}

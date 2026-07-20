@@ -1293,19 +1293,17 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         };
         let (mnemonic, suffix) = split_mnemonic(mnem_tok)
             .ok_or_else(|| format!("inline asm: unsupported instruction `{mnem_tok}`"))?;
-        // A direct `call` / `jmp` to a bare identifier is a symbol reference
+        // A direct `call` / `jmp` to a symbol name is a symbol reference
         // (basic-asm `call schedule`); the target is resolved to a rel32 by a
         // relocation, not parsed as a register / immediate / memory operand.
         // A name the template defines as a label resolves locally instead.
-        let is_bare_ident = !rest.is_empty()
-            && rest
-                .bytes()
-                .next()
-                .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_')
-            && rest.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+        // The name may embed operand references (`call __get_user_%c0`), which
+        // are substituted at emit time, so the text is kept verbatim here.
+        let is_symbol_target = !rest.is_empty()
+            && super::super::ssa::emit_common::is_asm_symbol_template(rest)
             && reg_by_name(rest).is_none()
             && !names.contains(&rest);
-        if matches!(mnem_tok, "call" | "callq" | "jmp" | "jmpq") && is_bare_ident {
+        if matches!(mnem_tok, "call" | "callq" | "jmp" | "jmpq") && is_symbol_target {
             insns.push(AsmInsn {
                 mnemonic,
                 suffix,

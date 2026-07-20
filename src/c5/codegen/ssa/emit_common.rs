@@ -1165,6 +1165,119 @@ pub(crate) fn materialize_file_asm(
     Ok(())
 }
 
+/// How a target prints an `i`-class operand reference that appears inside a
+/// branch-target symbol name. A reference only spells part of a name when it
+/// prints as bare text; a `$`-prefixed form cannot.
+pub(crate) struct AsmSymbolSubst {
+    /// Modifier letters that print the operand bare. x86 accepts `%c` and
+    /// `%P`; AArch64 accepts `%c`, and gives `%P` an unrelated meaning.
+    pub(crate) bare_modifiers: &'static [u8],
+    /// Whether an unmodified `%N` prints bare. It does on AArch64; x86 prints
+    /// `$N`.
+    pub(crate) plain_is_bare: bool,
+}
+
+pub(crate) const X64_SYMBOL_SUBST: AsmSymbolSubst = AsmSymbolSubst {
+    bare_modifiers: b"cP",
+    plain_is_bare: false,
+};
+
+pub(crate) const A64_SYMBOL_SUBST: AsmSymbolSubst = AsmSymbolSubst {
+    bare_modifiers: b"c",
+    plain_is_bare: true,
+};
+
+/// Split a `%`-reference at the start of `s` into `(modifier, index, rest)`.
+/// A modifier is a single letter; the index is the digits that follow.
+fn split_operand_ref(s: &str) -> Option<(Option<u8>, u8, &str)> {
+    let b = s.as_bytes();
+    let mut i = 0;
+    let modifier = match b.first() {
+        Some(&c) if c.is_ascii_alphabetic() => {
+            i = 1;
+            Some(c)
+        }
+        _ => None,
+    };
+    let start = i;
+    while i < b.len() && b[i].is_ascii_digit() {
+        i += 1;
+    }
+    if i == start {
+        return None;
+    }
+    let idx: u8 = s[start..i].parse().ok()?;
+    Some((modifier, idx, &s[i..]))
+}
+
+/// True when `s` can spell a branch-target symbol name: an identifier body
+/// that may embed operand references (`__get_user_%c0`). The leading
+/// identifier character keeps a whole-operand target (`*%rax`, `%c0`) out.
+/// Whether each reference is substitutable is settled at emit time, once the
+/// operands' constants are known.
+pub(crate) fn is_asm_symbol_template(s: &str) -> bool {
+    if !s
+        .bytes()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_')
+    {
+        return false;
+    }
+    let mut rest = s;
+    while let Some(p) = rest.find('%') {
+        if !rest[..p]
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'_')
+        {
+            return false;
+        }
+        match split_operand_ref(&rest[p + 1..]) {
+            Some((_, _, tail)) => rest = tail,
+            None => return false,
+        }
+    }
+    rest.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+}
+
+/// Substitute the operand references in a branch-target symbol name, so the
+/// target is resolved from the text the template spells after substitution.
+/// `const_of` yields an `i`-class operand's constant.
+pub(crate) fn resolve_asm_symbol_target(
+    template: &str,
+    subst: &AsmSymbolSubst,
+    const_of: &dyn Fn(u8) -> Option<i64>,
+) -> Result<alloc::string::String, alloc::string::String> {
+    let mut out = alloc::string::String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(p) = rest.find('%') {
+        out.push_str(&rest[..p]);
+        let Some((modifier, idx, tail)) = split_operand_ref(&rest[p + 1..]) else {
+            return Err(alloc::format!(
+                "inline asm: bad operand reference in branch target `{template}`"
+            ));
+        };
+        match modifier {
+            Some(m) if subst.bare_modifiers.contains(&m) => {}
+            None if subst.plain_is_bare => {}
+            _ => {
+                return Err(alloc::format!(
+                    "inline asm: operand reference in branch target `{template}` \
+                     does not print a bare symbol name; use `%c`"
+                ));
+            }
+        }
+        let Some(v) = const_of(idx) else {
+            return Err(alloc::format!(
+                "inline asm: branch target `{template}` needs a constant operand"
+            ));
+        };
+        out.push_str(&alloc::format!("{v}"));
+        rest = tail;
+    }
+    out.push_str(rest);
+    Ok(out)
+}
+
 /// Per-process counter behind the `%=` template escape.
 static ASM_INSTANCE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 

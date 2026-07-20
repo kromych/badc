@@ -1152,11 +1152,9 @@ pub(super) fn is_builtin_operator_name(name: &str) -> bool {
 /// `__has_attribute(NAME)` reports 1. The name may be spelled bare or
 /// wrapped in `__` (`cleanup` / `__cleanup__`). badc parses every
 /// `__attribute__((...))` and acts on a subset (`packed`, `aligned`,
-/// `unused`, `noreturn`); the rest are accepted and ignored, so
-/// reporting 1 lets feature-testing headers take their attribute path.
-/// `cleanup` is reported present so `cleanup`-attribute helpers
-/// activate (the destructor is not yet run at scope exit -- a resource
-/// managed this way is freed at process exit, not block exit).
+/// `unused`, `noreturn`, `cleanup`, `alias`, `naked`); the rest are
+/// accepted and ignored, so reporting 1 lets feature-testing headers
+/// take their attribute path.
 pub(super) fn is_known_attribute(name: &str) -> bool {
     let core = name.trim_matches('_');
     matches!(

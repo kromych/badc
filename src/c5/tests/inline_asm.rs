@@ -112,6 +112,8 @@ fn flag_output_is_rejected_where_it_has_no_meaning() {
     );
 }
 
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
 #[test]
 fn template_operand_reference_past_the_operand_list_is_diagnosed() {
     use crate::{NativeOptions, Target};

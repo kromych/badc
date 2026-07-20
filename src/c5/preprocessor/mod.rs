@@ -1405,14 +1405,12 @@ impl Preprocessor {
                                     )));
                                 }
                             }
-                            Directive::Warning(message) => {
-                                if active {
-                                    self.warnings.push(super::error::fmt_compile_warn(
-                                        filename,
-                                        dline,
-                                        &format!("#warning {}", message.trim()),
-                                    ));
-                                }
+                            Directive::Warning(message) if active => {
+                                self.warnings.push(super::error::fmt_compile_warn(
+                                    filename,
+                                    dline,
+                                    &format!("#warning {}", message.trim()),
+                                ));
                             }
                             // TODO: `#include`, `#line`, and `#pragma`
                             // inside an argument list are consumed

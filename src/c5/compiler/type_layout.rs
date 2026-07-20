@@ -268,6 +268,16 @@ impl Compiler {
         struct_ty_for(self.structs.len() - 1)
     }
 
+    /// Tag for the int128 spelling at the current (unconsumed) token:
+    /// the `__int128` struct tag, with `UNSIGNED_BIT` for the
+    /// `__uint128_t` spelling or a preceding `unsigned` modifier.
+    pub(super) fn lex_int128_tag(&mut self, saw_unsigned: bool) -> i64 {
+        let unsigned =
+            saw_unsigned || self.symbols[self.lex.curr_id_idx].name.as_str() == "__uint128_t";
+        let tag = self.builtin_int128_tag();
+        if unsigned { tag | UNSIGNED_BIT } else { tag }
+    }
+
     /// True when `t` is the GCC 128-bit `__int128` as a value (not a
     /// pointer to one). Mirrors the walker's `is_int128_value_ty`; used to
     /// widen a scalar assigned to an `__int128` lvalue.

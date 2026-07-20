@@ -346,8 +346,8 @@ impl Compiler {
             } else if self.is_lex_int128_spelling() {
                 // GCC `__int128` / `__uint128_t` at file scope: a 16-byte
                 // integer type, modeled as a 16-byte aggregate.
+                bt = self.lex_int128_tag(m.saw_unsigned);
                 self.next()?;
-                bt = self.builtin_int128_tag();
             } else if self.is_lex_va_list_spelling() {
                 // GCC `__builtin_va_list` at file scope: the target's
                 // `va_list` representation, usable with no header.

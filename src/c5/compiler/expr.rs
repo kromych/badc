@@ -2817,7 +2817,11 @@ impl Compiler {
                     // (6.3.2.1p2) already drops qualifiers from the
                     // right operand's value, so a `volatile`-qualified
                     // source object assigns to a plain destination.
-                    if t & !super::types::VOLATILE_BIT != self.ty & !super::types::VOLATILE_BIT {
+                    // `UNSIGNED_BIT` is stripped too: only the int128
+                    // tag carries it, and a signed / unsigned 128-bit
+                    // assignment converts the value (a bit copy, C99
+                    // 6.3.1.3), so the copy below is already correct.
+                    if super::types::strip_unsigned(t) != super::types::strip_unsigned(self.ty) {
                         let lhs_s = format_type(t, &self.structs);
                         let rhs_s = format_type(self.ty, &self.structs);
                         return Err(self.compile_err(format!(

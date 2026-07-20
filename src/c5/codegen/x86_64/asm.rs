@@ -455,9 +455,10 @@ pub(crate) fn assign_operand_regs(
     use crate::c5::ir::AsmConstraint as C;
     let mut assigned: Vec<Option<u8>> = alloc::vec![None; operands.len()];
     let mut used = [false; 16];
-    // Fixed / register-or-immediate operands take their named register.
+    // Fixed / bound / register-or-immediate operands take their named
+    // register.
     for (i, op) in operands.iter().enumerate() {
-        if let C::Fixed(r) | C::RegOrImm(r) = op.constraint {
+        if let C::Fixed(r) | C::Bound(r) | C::RegOrImm(r) = op.constraint {
             assigned[i] = Some(r);
             used[r as usize] = true;
         }

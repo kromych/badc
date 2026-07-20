@@ -2089,6 +2089,13 @@ fn run_inline_asm(
     // output loaded from its destination address.
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
+        // A bound operand is the register itself: seed the modelled slot
+        // with the register variable's value and never treat that value
+        // as a destination address.
+        if matches!(op.constraint, crate::c5::ir::AsmConstraint::Bound(_)) {
+            xregs[r as usize] = frame.regs[args[i] as usize];
+            continue;
+        }
         if !op.is_output {
             xregs[r as usize] = frame.regs[args[i] as usize];
         } else if op.is_rw {
@@ -2324,6 +2331,7 @@ fn run_inline_asm(
     // Store the outputs back through their destination addresses.
     for (i, op) in asm.operands.iter().enumerate() {
         if op.is_output
+            && !matches!(op.constraint, crate::c5::ir::AsmConstraint::Bound(_))
             && let Some(r) = op_reg[i]
         {
             let addr = frame.regs[args[i] as usize] as usize;

@@ -69,7 +69,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_a64_labels.c", "linux-x64"), // aarch64 local-label branches
     ("inline_asm_a64_barriers.c", "linux-x64"), // aarch64 dmb/dsb/isb/clrex
     ("inline_asm_a64_acqrel.c", "linux-x64"), // aarch64 ldar/stlr via `Q`
-    ("inline_asm_a64_llsc.c", "linux-x64"),   // aarch64 ldxr/stxr loop via `+Q`
+    ("inline_asm_a64_llsc.c", "linux-x64"), // aarch64 ldxr/stxr loop via `+Q`
     ("divq_udiv_qrnnd.c", "linux-aarch64"), // x86-64 128/64 divq
     ("rdtsc_host_ticks.c", "linux-aarch64"), // x86-64 rdtsc
     ("inline_asm_memory_operand.c", "linux-aarch64"), // x86-64 lock cmpxchg/xadd
@@ -83,6 +83,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_mem_disp.c", "linux-aarch64"), // x86-64 disp(%reg) memory operands
     ("inline_asm_x64_imm_mem.c", "linux-aarch64"), // x86-64 byte/word imm-to-memory ALU
     ("register_var_asm_operand.c", "linux-aarch64"), // x86-64 extended-asm operand pinning
+    ("register_var_asm_operand_sp.c", "linux-aarch64"), // x86-64 rsp / rbp operand binding
     ("inline_asm_x64_sib.c", "linux-aarch64"), // x86-64 scaled-index memory operands
     ("cpuid_partial_outputs.c", "linux-aarch64"), // x86-64 cpuid
     ("inline_asm_x64_flag_outputs.c", "linux-aarch64"), // x86-64 `=@cc` flag outputs

@@ -183,6 +183,9 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
         let mut fp_used = asm.clobber_fp_regs;
         for (i, op) in asm.operands.iter().enumerate() {
             let Some(r) = op_reg[i] else { continue };
+            if matches!(op.constraint, AsmConstraint::Bound(_)) {
+                continue;
+            }
             if matches!(op.constraint, AsmConstraint::Fp) {
                 fp_used |= 1 << r;
             } else {
@@ -6015,6 +6018,11 @@ fn emit_inline_asm(
     let mut fp_used = asm.clobber_fp_regs;
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
+        // A bound operand's register is the one the asm was asked to see
+        // and affect, so it is not saved around the block.
+        if matches!(op.constraint, AsmConstraint::Bound(_)) {
+            continue;
+        }
         if matches!(op.constraint, AsmConstraint::Fp) {
             fp_used |= 1 << r;
         } else {
@@ -6068,6 +6076,10 @@ fn emit_inline_asm(
                 super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RBP, cap_off(i));
                 super::encode::emit_movups_xmm_mem(code, Reg(r), SCRATCH_R11, 0);
             }
+            continue;
+        }
+        // Nothing moves into a bound operand: it has no storage behind it.
+        if matches!(op.constraint, AsmConstraint::Bound(_)) {
             continue;
         }
         let reg = Reg(r);
@@ -6502,7 +6514,9 @@ fn emit_inline_asm(
     // output semantics), so the sequence repeats on each trampoline.
     let emit_outputs = |code: &mut Vec<u8>| {
         for (i, op) in asm.operands.iter().enumerate() {
-            if !op.is_output || matches!(op.constraint, AsmConstraint::Mem) {
+            if !op.is_output
+                || matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::Bound(_))
+            {
                 continue;
             }
             let Some(r) = op_reg[i] else { continue };

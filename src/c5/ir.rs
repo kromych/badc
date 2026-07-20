@@ -565,6 +565,13 @@ pub(crate) enum AsmConstraint {
     /// `b`->rbx, `c`->rcx, `d`->rdx, `S`->rsi, `D`->rdi); the value is
     /// the architectural register number.
     Fixed(u8),
+    /// An operand naming a `register T v asm("reg")` variable: the
+    /// operand IS that register. `%N` resolves to it, and no value moves
+    /// in or out -- the variable has no storage behind it, so there is
+    /// nothing to load from or store back to. The register is also left
+    /// out of the save / restore set, since the binding's purpose is for
+    /// the asm to see and affect that exact register.
+    Bound(u8),
     /// Matching constraint (`"0".."9"`): shares the register assigned to
     /// the operand at that index (an earlier output).
     Match(u8),

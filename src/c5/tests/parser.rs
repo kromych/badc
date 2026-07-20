@@ -1402,3 +1402,66 @@ fn member_of_incomplete_aggregate_type_rejected() {
         "an empty struct member",
     );
 }
+
+/// Compile `src` for `target`, returning the error text on failure.
+fn compile_for_target(
+    src: &str,
+    target: super::super::codegen::Target,
+) -> Result<(), alloc::string::String> {
+    super::Compiler::with_target(alloc::string::String::from(src), target)
+        .compile()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[test]
+fn stack_pointer_register_variable_as_asm_operand() {
+    // GCC binds an `r` operand naming a register variable to that
+    // register. The stack and frame pointers have no storage behind
+    // them, so such an operand transfers no value: `"+r"` marks the
+    // block as reading and disturbing the register rather than
+    // requesting a new one be installed.
+    let x64 = super::super::codegen::Target::LinuxX64;
+    let decl = "register unsigned long csp asm(\"rsp\");\n\
+                register unsigned long cfp asm(\"rbp\");\n\
+                void ext(void);\n";
+    for (what, body) in [
+        (
+            "a read-write stack-pointer marker",
+            "asm volatile(\"call ext\" : \"+r\"(csp) :: \"memory\");",
+        ),
+        (
+            "a stack-pointer input",
+            "unsigned long o; asm(\"movq %1, %0\" : \"=r\"(o) : \"r\"(csp)); (void)o;",
+        ),
+        (
+            "a stack-pointer output",
+            "asm volatile(\"nop\" : \"=r\"(csp));",
+        ),
+        (
+            "a frame-pointer input",
+            "unsigned long o; asm(\"movq %1, %0\" : \"=r\"(o) : \"r\"(cfp)); (void)o;",
+        ),
+        (
+            "a non-bare stack-pointer expression",
+            "unsigned long o; asm(\"movq %1, %0\" : \"=r\"(o) : \"r\"(csp + 8)); (void)o;",
+        ),
+    ] {
+        let src = alloc::format!("{decl}int main(void) {{ {body} return 0; }}\n");
+        assert!(
+            compile_for_target(&src, x64).is_ok(),
+            "{what} should compile: {:?}",
+            compile_for_target(&src, x64).err(),
+        );
+    }
+
+    // Assigning to a storage-less register variable stays rejected:
+    // the frame layout owns the stack pointer, so badc will not emit a
+    // write it cannot honor.
+    let src = alloc::format!("{decl}int main(void) {{ csp = 0; return 0; }}\n");
+    let err = compile_for_target(&src, x64).expect_err("assignment must be rejected");
+    assert!(
+        err.contains("cannot write register variable"),
+        "unexpected error: {err}"
+    );
+}

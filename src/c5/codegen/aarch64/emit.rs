@@ -721,6 +721,9 @@ pub(crate) fn emit_function(
     let data_fixups_snapshot = data_fixups.len();
     let user_extern_data_refs_snapshot = user_extern_data_refs.len();
     let asm_extern_call_sites_snapshot = asm_extern_call_sites.len();
+    // The section sink merges by name, so a rollback restores its full
+    // per-section state rather than a length (see [`restore_asm_sections`]).
+    let asm_sections_snapshot = super::ssa::emit_common::snapshot_asm_sections(asm_sections);
     let pending_func_fixups_snapshot = pending_func_fixups.len();
     let tls_index_fixups_snapshot = tls_index_fixups.len();
     let macho_tlv_fixups_snapshot = macho_tlv_fixups.len();
@@ -950,6 +953,10 @@ pub(crate) fn emit_function(
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                        super::ssa::emit_common::restore_asm_sections(
+                            asm_sections,
+                            &asm_sections_snapshot,
+                        );
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
                         elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -996,6 +1003,10 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                    super::ssa::emit_common::restore_asm_sections(
+                        asm_sections,
+                        &asm_sections_snapshot,
+                    );
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1059,6 +1070,7 @@ pub(crate) fn emit_function(
                 data_fixups.truncate(data_fixups_snapshot);
                 user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                 asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
                 pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 tls_index_fixups.truncate(tls_index_fixups_snapshot);
                 elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1103,6 +1115,7 @@ pub(crate) fn emit_function(
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+            super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1175,6 +1188,10 @@ pub(crate) fn emit_function(
                             data_fixups.truncate(data_fixups_snapshot);
                             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                            super::ssa::emit_common::restore_asm_sections(
+                                asm_sections,
+                                &asm_sections_snapshot,
+                            );
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
                             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1247,6 +1264,10 @@ pub(crate) fn emit_function(
                             data_fixups.truncate(data_fixups_snapshot);
                             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                            super::ssa::emit_common::restore_asm_sections(
+                                asm_sections,
+                                &asm_sections_snapshot,
+                            );
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
                             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1300,6 +1321,10 @@ pub(crate) fn emit_function(
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                        super::ssa::emit_common::restore_asm_sections(
+                            asm_sections,
+                            &asm_sections_snapshot,
+                        );
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
                         elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1331,6 +1356,10 @@ pub(crate) fn emit_function(
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                        super::ssa::emit_common::restore_asm_sections(
+                            asm_sections,
+                            &asm_sections_snapshot,
+                        );
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
                         elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1379,6 +1408,10 @@ pub(crate) fn emit_function(
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                        super::ssa::emit_common::restore_asm_sections(
+                            asm_sections,
+                            &asm_sections_snapshot,
+                        );
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
                         elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1408,6 +1441,7 @@ pub(crate) fn emit_function(
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+            super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1418,6 +1452,14 @@ pub(crate) fn emit_function(
         let word = enc_adr(*rd, rel as i32);
         code[*site..*site + 4].copy_from_slice(&word.to_le_bytes());
     }
+    // Rewrite `asm goto` section fields (`.long %l0 - .`) to the label
+    // block's now-final text offset. Scoped to this function's contribution
+    // via the entry snapshot; only this pass's relocs survived the loop.
+    super::ssa::emit_common::resolve_asm_goto_relocs(
+        asm_sections,
+        &asm_sections_snapshot,
+        &|bid| block_offsets[bid as usize],
+    );
     // Patch each jump table's entries with the target block's offset
     // relative to the table base.
     for (table_start, table) in &jump_table_fixups {
@@ -1443,6 +1485,7 @@ pub(crate) fn emit_function(
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+            super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1460,6 +1503,10 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                    super::ssa::emit_common::restore_asm_sections(
+                        asm_sections,
+                        &asm_sections_snapshot,
+                    );
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1478,6 +1525,10 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                    super::ssa::emit_common::restore_asm_sections(
+                        asm_sections,
+                        &asm_sections_snapshot,
+                    );
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1496,6 +1547,10 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                    super::ssa::emit_common::restore_asm_sections(
+                        asm_sections,
+                        &asm_sections_snapshot,
+                    );
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1514,6 +1569,10 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                    super::ssa::emit_common::restore_asm_sections(
+                        asm_sections,
+                        &asm_sections_snapshot,
+                    );
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -2908,10 +2967,25 @@ fn emit_inline_asm_aarch64(
                 defs.next_back().map(|&(_, off)| off)
             }
         };
+        // An `i`-class operand naming a link-time data address (`.quad %c0 - .`
+        // where `%c0` is `&sym`) relocates against the data image, resolved
+        // like the operand's own `ImmData` lowering.
+        let operand_sym = |idx: u8| -> Option<super::ssa::emit_common::AsmSectionTarget> {
+            super::ssa::emit_common::asm_operand_data_target(&func.insts, *args.get(idx as usize)?)
+        };
+        // An `asm goto` label operand (`.long %l0 - .`): the goto row's block
+        // index. Its text offset is not final here; the reloc carries the
+        // block and is rewritten after layout (see resolve_asm_goto_relocs).
+        let goto_block = |idx: u8| -> Option<u32> {
+            let ctx = goto_ctx.as_ref()?;
+            ctx.row.get(1 + idx as usize).copied()
+        };
         if let Err(m) = super::ssa::emit_common::materialize_asm_sections(
             section_blocks,
             &|idx| const_of(idx),
             &label_off,
+            &operand_sym,
+            &goto_block,
             true,
             asm_sections,
         ) {

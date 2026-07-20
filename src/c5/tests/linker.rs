@@ -3115,6 +3115,396 @@ fn inline_asm_pushsection_lands_in_relocatable_object() {
 }
 
 #[test]
+fn asm_section_is_not_duplicated_by_branch_relaxation() {
+    // A section-emitting inline asm in a function whose body is re-laid-out
+    // for branch relaxation must contribute its section content once, not
+    // once per relaxation pass. The section sink merges by name and is
+    // restored before each re-emit; without that restore a second pass
+    // appends a duplicate entry (a silent miscompile).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int loopy(int n) {\n\
+            __asm__ volatile(\"1: nop\\n\"\n\
+                \".pushsection .probe.tab,\\\"a\\\"\\n\"\n\
+                \".long 1b - .\\n\"\n\
+                \".popsection\\n\");\n\
+            int s = 0;\n\
+            for (int i = 0; i < n; i++) s += i * i - i;\n\
+            return s;\n\
+        }\n\
+        int main(void) { return loopy(3); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".probe.tab")
+            .unwrap_or_else(|| panic!("{target:?}: .probe.tab section missing"));
+        // Exactly one `.long 1b - .`: 4 bytes, one relocation.
+        assert_eq!(sec.3.len(), 4, "{target:?}: one entry, not duplicated");
+        let reloc_count = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.probe.tab")
+            .map_or(0, |r| r.3.len() / 24);
+        assert_eq!(reloc_count, 1, "{target:?}: exactly one reloc");
+    }
+}
+
+#[test]
+fn asm_section_numeric_labels_are_per_instance_unique() {
+    // GNU as numeric labels inside a section are local to one asm instance.
+    // Two expansions of the same bug-table-shaped block must not collide:
+    // each cross-section `.long 14472b - .` relocates to its own copy of the
+    // string in `.bstr`, a distinct per-instance symbol. Without unique
+    // identities the second `14472:` is a duplicate-label error, or both
+    // entries point at one string (a silent miscompile).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let entry = |file: &str| {
+        format!(
+            "__asm__ volatile(\
+                \".pushsection .btab,\\\"aw\\\"\\n\"\
+                \"14470:\\t.long 14471f - .\\n\"\
+                \".pushsection .bstr,\\\"a\\\"\\n\"\
+                \"14472:\\t.string \\\"{file}\\\"\\n\"\
+                \".popsection\\n\"\
+                \".long 14472b - .\\n\"\
+                \".popsection\\n\"\
+                \"14471:\\tnop\\n\");"
+        )
+    };
+    let src = format!(
+        "void a(void) {{ {} }}\n\
+         void b(void) {{ {} }}\n\
+         int main(void) {{ a(); b(); return 0; }}\n",
+        entry("aa"),
+        entry("bb"),
+    );
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(src.clone()).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = |n: &str| {
+            sections
+                .iter()
+                .find(|(name, _, _, _)| name == n)
+                .unwrap_or_else(|| panic!("{target:?}: {n} section missing"))
+        };
+        // Two 8-byte entries (a text ref and a string ref each).
+        assert_eq!(sec(".btab").3.len(), 16, "{target:?}: two entries");
+        // Both strings present, neither merged nor overwritten.
+        assert_eq!(&sec(".bstr").3, b"aa\0bb\0", "{target:?}: both strings");
+        let bstr_idx = sections
+            .iter()
+            .position(|(n, _, _, _)| n == ".bstr")
+            .unwrap();
+        let rela = sec(".rela.btab");
+        assert_eq!(rela.3.len(), 4 * 24, "{target:?}: four relocs");
+        let symtab = &sec(".symtab").3;
+        // The two string references (field offsets 4 and 12) must resolve to
+        // distinct symbols, both in `.bstr`, at the two string offsets.
+        let mut str_syms = alloc::vec::Vec::new();
+        for k in 0..4 {
+            let r_off = u64::from_le_bytes(rela.3[k * 24..k * 24 + 8].try_into().unwrap());
+            let r_info = u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+            if r_off == 4 || r_off == 12 {
+                let sym = (r_info >> 32) as usize;
+                let shndx =
+                    u16::from_le_bytes(symtab[sym * 24 + 6..sym * 24 + 8].try_into().unwrap());
+                let value =
+                    u64::from_le_bytes(symtab[sym * 24 + 8..sym * 24 + 16].try_into().unwrap());
+                assert_eq!(shndx as usize, bstr_idx, "{target:?}: str ref into .bstr");
+                str_syms.push((sym, value));
+            }
+        }
+        assert_eq!(str_syms.len(), 2, "{target:?}: two string references");
+        assert_ne!(
+            str_syms[0].0, str_syms[1].0,
+            "{target:?}: per-instance-distinct symbols"
+        );
+        let mut values = [str_syms[0].1, str_syms[1].1];
+        values.sort_unstable();
+        assert_eq!(values, [0, 3], "{target:?}: the two string offsets");
+    }
+}
+
+#[test]
+fn asm_section_org_pads_to_label_plus_operand() {
+    // `.org 2b + %c0` (the `__bug_table` entry size) pads to a section-local
+    // label's offset plus an `i`-class operand constant. Two instances of the
+    // numeric label `2` stay independent. Byte-identical padding to gas.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let entry = "__asm__ volatile(\
+        \"1:\\tnop\\n\"\
+        \".pushsection .otab,\\\"aw\\\"\\n\"\
+        \"2:\\t.long 1b - .\\n\"\
+        \"\\t.word 11\\n\"\
+        \"\\t.org 2b + %c0\\n\"\
+        \".popsection\\n\" : : \"i\"(12));";
+    let src = format!(
+        "void a(void) {{ {entry} }}\n\
+         void b(void) {{ {entry} }}\n\
+         int main(void) {{ a(); b(); return 0; }}\n"
+    );
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(src.clone()).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".otab")
+            .unwrap_or_else(|| panic!("{target:?}: .otab missing"));
+        // Two entries, each padded to `2b + 12` = 12 bytes.
+        assert_eq!(sec.3.len(), 24, "{target:?}: two 12-byte entries");
+        // The `.word 11` line field sits after the 4-byte text reference; the
+        // rest of each entry is `.org` zero padding.
+        let line0 = u16::from_le_bytes(sec.3[4..6].try_into().unwrap());
+        let line1 = u16::from_le_bytes(sec.3[16..18].try_into().unwrap());
+        assert_eq!((line0, line1), (11, 11), "{target:?}: line fields");
+        assert!(
+            sec.3[6..12].iter().all(|&b| b == 0),
+            "{target:?}: entry A pad"
+        );
+        assert!(
+            sec.3[18..24].iter().all(|&b| b == 0),
+            "{target:?}: entry B pad"
+        );
+    }
+}
+
+#[test]
+fn asm_string_operand_data_is_emitted() {
+    // A string-literal `i`-class operand is interned into the data buffer
+    // while lexing the operand list, and the walk lowers its `Expr::StrLit`
+    // to an `ImmData` at that offset. The bytes must survive into the object;
+    // the operand parse used to truncate the buffer on the way out, leaving
+    // the reference dangling past the image.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int probe(void) {\n\
+            __asm__ volatile(\"\" : : \"i\"(\"asm_operand_marker\"));\n\
+            return 0;\n\
+        }\n\
+        int main(void) { return probe(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let emitted = sections
+            .iter()
+            .any(|(_, _, _, body)| body.windows(18).any(|w| w == b"asm_operand_marker"));
+        assert!(emitted, "{target:?}: string operand data must be emitted");
+    }
+}
+
+#[test]
+fn asm_section_operand_symbol_relocates_to_data() {
+    // `.long %c0 - .` where `%c0` is an `i`-class operand naming a link-time
+    // address (a string literal, the bug table's file pointer) relocates
+    // PC-relative to that data. The string must be emitted -- it is interned
+    // while lexing the operand and referenced only by the section field. A
+    // second field adds a constant operand to the base (`.quad %c1 + %c2 - .`,
+    // the static-key jump entry). Byte-structure identical to gas.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int probe(void) {\n\
+            __asm__ volatile(\n\
+                \"1:\\tnop\\n\"\n\
+                \".pushsection .optab,\\\"aw\\\"\\n\"\n\
+                \".long %c0 - .\\n\"\n\
+                \".quad %c0 + %c1 - .\\n\"\n\
+                \".popsection\\n\" : : \"i\"(\"probe.c\"), \"i\"(4));\n\
+            return 0;\n\
+        }\n\
+        int main(void) { return probe(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".optab")
+            .unwrap_or_else(|| panic!("{target:?}: .optab section missing"));
+        // A 4-byte and an 8-byte PC-relative field.
+        assert_eq!(sec.3.len(), 4 + 8, "{target:?}: section size");
+        // The operand string is emitted so the field has a target to reach.
+        let has_string = sections
+            .iter()
+            .any(|(_, _, _, body)| body.windows(7).any(|w| w == b"probe.c"));
+        assert!(has_string, "{target:?}: operand string emitted");
+        let rela = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.optab")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.optab missing"));
+        assert_eq!(rela.3.len(), 2 * 24, "{target:?}: two relocs");
+        let (prel32, prel64) = match target {
+            Target::LinuxX64 => (2u64, 24u64),
+            _ => (261, 260),
+        };
+        let r_info =
+            |k: usize| u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+        let r_addend =
+            |k: usize| i64::from_le_bytes(rela.3[k * 24 + 16..k * 24 + 24].try_into().unwrap());
+        assert_eq!(
+            r_info(0) & 0xFFFF_FFFF,
+            prel32,
+            "{target:?}: `.long %c0 - .` pcrel32"
+        );
+        assert_eq!(
+            r_info(1) & 0xFFFF_FFFF,
+            prel64,
+            "{target:?}: `.quad ... - .` pcrel64"
+        );
+        // The second field's operand addend (`+ %c1`, the constant 4) folds
+        // into the relocation addend, atop the string's own data offset.
+        assert_eq!(
+            r_addend(1) - r_addend(0),
+            4,
+            "{target:?}: `+ %c1` addend folds in"
+        );
+    }
+}
+
+#[test]
+fn asm_section_goto_label_relocates_to_block() {
+    // `.long %l0 - .` (a static-key jump entry) relocates PC-relative to an
+    // `asm goto` label's block. The block's text offset is not known when the
+    // section materializes, so the reloc carries the block and is rewritten
+    // after layout. The label ref lands in `.text`, alongside the template's
+    // own `1b`, while the operand address (`%c0`) targets the data image.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        static int key;\n\
+        int probe(void) {\n\
+            __asm__ goto(\n\
+                \"1:\\tnop\\n\"\n\
+                \".pushsection .jtab,\\\"aw\\\"\\n\"\n\
+                \".long 1b - ., %l[l_yes] - .\\n\"\n\
+                \".quad %c0 - .\\n\"\n\
+                \".popsection\\n\" : : \"i\"(&key) : : l_yes);\n\
+            return 0;\n\
+        l_yes:\n\
+            return 1;\n\
+        }\n\
+        int main(void) { return probe(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".jtab")
+            .unwrap_or_else(|| panic!("{target:?}: .jtab section missing"));
+        // `.long 1b - .`, `.long %l0 - .`, `.quad %c0 - .`.
+        assert_eq!(sec.3.len(), 4 + 4 + 8, "{target:?}: section size");
+        let rela = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.jtab")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.jtab missing"));
+        assert_eq!(rela.3.len(), 3 * 24, "{target:?}: three relocs");
+        let r_off = |k: usize| u64::from_le_bytes(rela.3[k * 24..k * 24 + 8].try_into().unwrap());
+        let r_info =
+            |k: usize| u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+        // Offsets 0/4 are the two `.long`s; offset 8 is the `.quad`.
+        let sym_at = |field: u64| -> u64 {
+            (0..3)
+                .find(|&k| r_off(k) == field)
+                .map(|k| r_info(k) >> 32)
+                .unwrap_or_else(|| panic!("{target:?}: no reloc at {field}"))
+        };
+        // Both the template label `1b` and the goto label `%l0` resolve into
+        // `.text` -- the same section symbol; the operand address does not.
+        assert_eq!(
+            sym_at(0),
+            sym_at(4),
+            "{target:?}: `%l0` resolves into .text"
+        );
+        assert_ne!(
+            sym_at(0),
+            sym_at(8),
+            "{target:?}: operand address is not in .text"
+        );
+        // No leftover TextBlock: every reloc names a defined symbol index.
+        for k in 0..3 {
+            assert_ne!(r_info(k) >> 32, 0, "{target:?}: reloc {k} has a symbol");
+        }
+    }
+}
+
+#[test]
+fn asm_goto_section_reloc_survives_branch_relaxation() {
+    // An `asm goto` section field in a function that also relaxes a branch:
+    // the section sink is restored before each re-emit, so the entry is not
+    // duplicated, and the goto reloc is rewritten to the label block's FINAL
+    // offset after layout. Exercises the restore + goto-resolve interaction.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int probe(int n) {\n\
+            __asm__ goto(\"1:\\tnop\\n\"\n\
+                \".pushsection .jt,\\\"aw\\\"\\n\"\n\
+                \".long %l[y] - .\\n\"\n\
+                \".popsection\\n\" : : : : y);\n\
+            int s = 0;\n\
+            for (int i = 0; i < n; i++) s += i * i - i;\n\
+            return s;\n\
+        y:\n\
+            return 1;\n\
+        }\n\
+        int main(void) { return probe(3); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".jt")
+            .unwrap_or_else(|| panic!("{target:?}: .jt section missing"));
+        // One 4-byte field, not duplicated by the relaxation re-emit.
+        assert_eq!(sec.3.len(), 4, "{target:?}: single entry");
+        let rela = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.jt")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.jt missing"));
+        // Exactly one relocation, resolved (a symbol index, not a TextBlock).
+        assert_eq!(rela.3.len(), 24, "{target:?}: one reloc, not duplicated");
+        let r_info = u64::from_le_bytes(rela.3[8..16].try_into().unwrap());
+        assert_ne!(
+            r_info >> 32,
+            0,
+            "{target:?}: goto reloc resolved to a symbol"
+        );
+    }
+}
+
+#[test]
 fn asm_section_values_fold_constant_expressions() {
     // A named section's data value may be an integer constant expression,
     // not just a literal; the folded value is what lands in the section.
@@ -3208,6 +3598,60 @@ fn asm_section_operand_expression_and_parenthesised_label() {
         // The folded operand expression, then the 4-byte label-reference field.
         assert_eq!(&sec.3[0..2], &[0x25, 0x80], "{target:?}: (1<<15)|37");
         assert_eq!(sec.3.len(), 2 + 4, "{target:?}: section size");
+    }
+}
+
+#[test]
+fn asm_section_double_parenthesised_label_relocates() {
+    // The aarch64 exception table wraps the whole PC-relative expression in
+    // an outer paren: `.long ((insn) - .)`. It must relocate exactly like the
+    // single-paren form: a 4-byte PC-relative field per label, no folded
+    // constant. Byte-structure identical to gas.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int load_ex(int *p) {\n\
+            int r = 0;\n\
+            __asm__ volatile(\"1:\\tnop\\n\"\n\
+                \".pushsection .exx,\\\"a\\\"\\n\"\n\
+                \".long ((1b) - .)\\n\"\n\
+                \".long ((2f) - .)\\n\"\n\
+                \".short 0\\n\"\n\
+                \".popsection\\n\"\n\
+                \"2:\\n\" : \"=r\"(r) : \"r\"(*p));\n\
+            return r;\n\
+        }\n\
+        int main(void) { int v = 1; return load_ex(&v); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".exx")
+            .unwrap_or_else(|| panic!("{target:?}: .exx section missing"));
+        // Two 4-byte PC-relative fields plus a 2-byte word.
+        assert_eq!(sec.3.len(), 4 + 4 + 2, "{target:?}: section size");
+        let rela = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.exx")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.exx missing"));
+        assert_eq!(rela.3.len(), 2 * 24, "{target:?}: two PC-relative relocs");
+        let prel32 = match target {
+            Target::LinuxX64 => 2u64,
+            _ => 261,
+        };
+        for k in 0..2 {
+            let r_info = u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+            assert_eq!(
+                r_info & 0xFFFF_FFFF,
+                prel32,
+                "{target:?}: reloc {k} pcrel32"
+            );
+        }
     }
 }
 

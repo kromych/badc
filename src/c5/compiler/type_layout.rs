@@ -123,6 +123,7 @@ impl Compiler {
             align: 1,
             fields: Vec::new(),
             is_union: false,
+            is_complete: false,
             is_vector: false,
             is_array: false,
         });
@@ -177,6 +178,7 @@ impl Compiler {
             size: 16,
             align: 8,
             fields: alloc::vec![half("__lo", 0), half("__hi", 8)],
+            is_complete: true,
             is_union: false,
             is_vector: false,
             is_array: false,
@@ -187,8 +189,7 @@ impl Compiler {
     /// True when the current identifier spells the GCC builtin type name
     /// `__builtin_va_list`.
     pub(super) fn is_lex_va_list_spelling(&self) -> bool {
-        self.lex.tk == Token::Id
-            && self.symbols[self.lex.curr_id_idx].name == "__builtin_va_list"
+        self.lex.tk == Token::Id && self.symbols[self.lex.curr_id_idx].name == "__builtin_va_list"
     }
 
     /// Base type for `__builtin_va_list`, resolving to the same
@@ -259,6 +260,7 @@ impl Compiler {
             size,
             align: 8,
             fields: fields.iter().map(field).collect(),
+            is_complete: true,
             is_union: false,
             is_vector: false,
             is_array: false,
@@ -309,6 +311,7 @@ impl Compiler {
             size: n_bytes as usize,
             align: (n_bytes as usize).min(8),
             fields: alloc::vec![field],
+            is_complete: true,
             is_union: false,
             is_vector: true,
             is_array: false,
@@ -357,6 +360,7 @@ impl Compiler {
             size: (count * elem_size) as usize,
             align: self.align_of_type(elem_ty),
             fields: alloc::vec![field],
+            is_complete: true,
             is_union: false,
             is_vector: false,
             is_array: true,

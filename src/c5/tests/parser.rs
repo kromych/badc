@@ -1216,10 +1216,14 @@ fn file_scope_asm_constraints() {
             .unwrap_or_else(|e| panic!("expected accept, got {e}"));
     };
     ok("asm(\"\"); int main(void) { return 0; }");
-    ok("__asm__(\".pushsection .note.x,\\\"a\\\"\\n.long 1\\n.popsection\");\n\
-        int main(void) { return 0; }");
-    ok("asm volatile(\".section .modinfo,\\\"a\\\"\\n.asciz \\\"v=1\\\"\\n.previous\");\n\
-        int main(void) { return 0; }");
+    ok(
+        "__asm__(\".pushsection .note.x,\\\"a\\\"\\n.long 1\\n.popsection\");\n\
+        int main(void) { return 0; }",
+    );
+    ok(
+        "asm volatile(\".section .modinfo,\\\"a\\\"\\n.asciz \\\"v=1\\\"\\n.previous\");\n\
+        int main(void) { return 0; }",
+    );
     expect_compile_error(
         "asm(\"nop\"); int main(void) { return 0; }",
         "section data directives only",
@@ -1319,5 +1323,82 @@ fn empty_declaration_in_enum_list_rejected() {
         "enum E { A;, B };\n\
          int main(void) { return A; }",
         "bad enum identifier",
+    );
+}
+
+#[test]
+fn conditional_pointer_arm_result_type() {
+    // C99 6.5.15p6, checked through `sizeof` of the dereferenced
+    // result. A null pointer constant is a value, not a spelling:
+    // `(void *)0` yields the other arm's type but `(void *)(x * 0)`
+    // does not. Contrasted against gcc and clang.
+    let cases: &[(&str, &str)] = &[
+        (
+            "void* vs int* yields void*",
+            "sizeof(*(8 ? ((void *)((long)(g) * 0l)) : (int *)8)) == 1",
+        ),
+        (
+            "arm order does not matter",
+            "sizeof(*(8 ? (int *)8 : ((void *)((long)(g) * 0l)))) == 1",
+        ),
+        (
+            "(void*)0 is a null pointer constant",
+            "sizeof(*(8 ? (void *)0 : (int *)8)) == sizeof(int)",
+        ),
+        (
+            "folded zero is a null pointer constant",
+            "sizeof(*(8 ? (void *)((long)0 * 0l) : (int *)8)) == sizeof(int)",
+        ),
+        (
+            "struct* survives a null pointer constant",
+            "sizeof(*(g ? (struct s *)&g : (void *)0)) == 2 * sizeof(int)",
+        ),
+        (
+            "struct* survives a plain 0",
+            "sizeof(*(g ? (struct s *)&g : 0)) == 2 * sizeof(int)",
+        ),
+        (
+            "void* beats struct*",
+            "sizeof(*(g ? (void *)&g : (struct s *)&g)) == 1",
+        ),
+    ];
+    for (what, cond) in cases {
+        let src = alloc::format!(
+            "struct s {{ int a; int b; }};\n\
+             int g;\n\
+             int main(void) {{ return !({cond}); }}\n"
+        );
+        expect_compiles(&src, what);
+    }
+}
+
+#[test]
+fn aggregate_with_no_named_member_is_zero_sized() {
+    // gcc and clang give a struct with no named member size 0 in C
+    // (C++ floors it at 1). The compile-time assertion idiom
+    // `sizeof(struct { int:-!!(e); })` depends on the 0.
+    expect_compiles(
+        "int main(void) { return sizeof(struct {}) + sizeof(struct { int : 0; }); }",
+        "a struct with no named member",
+    );
+}
+
+#[test]
+fn member_of_incomplete_aggregate_type_rejected() {
+    // C99 6.7.2.1: a member must have complete type, and an array of an
+    // incomplete type is itself incomplete. gcc and clang reject both.
+    expect_compile_error(
+        "struct fwd; struct s { struct fwd f; }; int main(void) { return 0; }",
+        "incomplete type",
+    );
+    expect_compile_error(
+        "struct fwd; struct s { struct fwd f[2]; }; int main(void) { return 0; }",
+        "incomplete type",
+    );
+    // A complete but zero-sized member stays accepted.
+    expect_compiles(
+        "struct s { struct {} e; int x; };\n\
+         int main(void) { struct s v; v.x = 0; return v.x; }",
+        "an empty struct member",
     );
 }

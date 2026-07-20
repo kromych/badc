@@ -4158,6 +4158,14 @@ fn builtin_choose_expr() {
 }
 
 #[test]
+fn conditional_void_pointer() {
+    // C99 6.5.15p6 for two pointer arms: a null pointer constant arm
+    // takes the other arm's type, otherwise a `void *` arm wins. The
+    // constant-expression detection idiom rests on that distinction.
+    assert_eq!(run_fixture("conditional_void_pointer.c"), 0);
+}
+
+#[test]
 fn empty_declaration() {
     // A stray `;` declares nothing: accepted in a struct/union member
     // list and at file scope (gcc/clang extension), without opening a
@@ -4354,7 +4362,11 @@ fn file_scope_asm_and_register_variable_run() {
     // `extern typeof` redeclaration, an asm block emitting the name
     // into a custom section (a no-op for the VM), and a stack-pointer
     // register variable read from a function.
-    let sp = if cfg!(target_arch = "x86_64") { "rsp" } else { "sp" };
+    let sp = if cfg!(target_arch = "x86_64") {
+        "rsp"
+    } else {
+        "sp"
+    };
     let src = alloc::format!(
         "
         int export_me(int v) {{ return v + 2; }}

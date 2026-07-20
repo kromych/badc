@@ -39,9 +39,9 @@ use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_bool_ty, is_float_ty,
-    is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty, is_vector_ty, struct_id_of,
-    struct_ptr_depth, usual_arith_common_ty,
+    UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_bool_ty, is_char_band_ptr_ty,
+    is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty, is_vector_ty,
+    is_void_ptr_ty, struct_id_of, struct_ptr_depth, usual_arith_common_ty,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -969,9 +969,8 @@ impl Compiler {
                         }
                         self.ast_psh();
                         if self.lex.tk != ',' {
-                            return Err(self.compile_err(format!(
-                                "intrinsic `{fn_name}` takes two operands"
-                            )));
+                            return Err(self
+                                .compile_err(format!("intrinsic `{fn_name}` takes two operands")));
                         }
                         self.next()?;
                         self.expr(Token::Assign as i64)?;
@@ -3198,14 +3197,34 @@ impl Compiler {
                         usual_arith_common_ty(then_ty, else_ty, self.target)
                     };
                 } else if then_ptr || else_ptr {
-                    // C99 6.5.15p6: with a pointer arm, a null pointer
-                    // constant (`0` / `(void*)0`) or a `void*` arm takes the
-                    // other arm's pointer type. A struct object pointer
-                    // therefore wins over a generic-pointer / integer arm so
-                    // `c ? (T*)x : (void*)0` and `c ? (T*)x : 0` keep `T*`.
+                    // C99 6.5.15p6, in order: a null pointer constant arm
+                    // takes the other arm's type; otherwise a `void*` arm
+                    // against a pointer to an object type yields `void*`.
+                    // The null-pointer-constant test is a value test, not a
+                    // structural one -- `(void*)0` takes the other arm's
+                    // type but `(void*)(x * 0)` does not, and the two are
+                    // spelled alike.
+                    let then_npc = then_ast.is_some_and(|e| self.expr_is_null_pointer_constant(e));
+                    let else_npc = else_ast.is_some_and(|e| self.expr_is_null_pointer_constant(e));
                     let then_sp = is_struct_ty(then_ty) && struct_ptr_depth(then_ty) > 0;
                     let else_sp = is_struct_ty(else_ty) && struct_ptr_depth(else_ty) > 0;
-                    result_ty = if then_sp && !else_sp {
+                    result_ty = if then_ptr && else_ptr && then_npc && !else_npc {
+                        else_ty
+                    } else if then_ptr && else_ptr && else_npc && !then_npc {
+                        then_ty
+                    } else if then_ptr
+                        && else_ptr
+                        && is_void_ptr_ty(then_ty)
+                        && !is_char_band_ptr_ty(else_ty)
+                    {
+                        then_ty
+                    } else if then_ptr
+                        && else_ptr
+                        && is_void_ptr_ty(else_ty)
+                        && !is_char_band_ptr_ty(then_ty)
+                    {
+                        else_ty
+                    } else if then_sp && !else_sp {
                         then_ty
                     } else if else_sp && !then_sp {
                         else_ty

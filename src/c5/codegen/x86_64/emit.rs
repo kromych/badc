@@ -5994,7 +5994,7 @@ fn emit_inline_asm(
     let raw_text = stripped.as_deref().unwrap_or(raw_text);
     let expanded = super::ssa::emit_common::expand_template_uniq(raw_text);
     let text = expanded.as_deref().unwrap_or(raw_text);
-    let extracted = match super::ssa::emit_common::extract_asm_sections(text) {
+    let extracted = match super::ssa::emit_common::extract_asm_sections(text, false) {
         Ok(e) => e,
         Err(m) => {
             bail_msg(&m);

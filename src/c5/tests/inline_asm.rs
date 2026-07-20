@@ -237,6 +237,59 @@ fn address_constraint_takes_a_register() {
 }
 
 #[test]
+fn aarch64_q_memory_constraint_covers_the_offsettable_forms() {
+    // The MMIO write accessors use `"Qo"`: the base-register (`Q`) class
+    // broadened by the offsettable (`o`) one. badc renders every form as
+    // `[xN]`, so `Q`, `Qo` and `Qm`, with any output/read-write prefix, all
+    // classify as the base-register memory operand.
+    for c in ["Q", "Qo", "Qm", "=Q", "+Qo"] {
+        assert_eq!(
+            crate::Compiler::parse_asm_constraint(c, false, 0, false).map(|(k, _)| k),
+            Some(AsmConstraint::MemBase),
+            "`{c}` on aarch64"
+        );
+    }
+    // The x86 `Q` is the legacy high-byte register class, not memory; the
+    // `Qo` spelling has no x86 meaning and stays unrecognized.
+    assert_eq!(
+        crate::Compiler::parse_asm_constraint("Qo", false, 0, true).map(|(k, _)| k),
+        None,
+    );
+}
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_qo_operand_stores_through_a_base_register() {
+    use crate::{NativeOptions, Target};
+    // `%1` is the `"Qo"` memory operand; the store must address it as
+    // `[xN]` with a zero offset -- `strb Wt, [Xn]` (0x39000000, imm12 = 0),
+    // byte-identical to clang for `*ptr`.
+    let src = "typedef unsigned char u8; \
+        void wb(u8 v, volatile void *a){ volatile u8 *p = a; \
+        __asm__ volatile(\"strb %w0, %1\" : : \"rZ\"(v), \"Qo\"(*p)); } \
+        int main(void){ return 0; }";
+    let program = crate::Compiler::with_options(
+        src.to_string(),
+        Target::LinuxAarch64,
+        crate::CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("emit");
+    let found = bytes.windows(4).any(|w| {
+        let word = u32::from_le_bytes([w[0], w[1], w[2], w[3]]);
+        word & 0xFFC0_0000 == 0x3900_0000 && (word >> 10) & 0xFFF == 0
+    });
+    assert!(found, "expected `strb Wt, [Xn]` with a zero offset");
+}
+
+#[test]
 fn x86_range_immediate_constraints_are_immediates() {
     // The x86 range-restricted immediate letters classify as immediates,
     // like `i` / `n`; the value restriction is applied at the operand,

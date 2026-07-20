@@ -2065,9 +2065,12 @@ impl Compiler {
         if body.contains('@') {
             return None;
         }
-        // AArch64 `Q`: a base-register-only memory operand. The x86 `Q`
-        // (the legacy high-byte register class) is not modeled.
-        if !is_x86 && body == "Q" {
+        // AArch64 `Q`: a base-register-only memory operand. `Qo` / `Qm`
+        // broaden it with the offsettable / any-memory classes; the operand's
+        // address is captured into the base register and rendered `[xN]` for
+        // every form, so all map alike. The x86 `Q` (the legacy high-byte
+        // register class) is not modeled.
+        if !is_x86 && body.contains('Q') && body.bytes().all(|c| matches!(c, b'Q' | b'o' | b'm')) {
             return Some((AsmConstraint::MemBase, is_rw));
         }
         // `p`: an address operand. The operand expression is a valid address

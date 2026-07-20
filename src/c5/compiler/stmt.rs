@@ -1593,6 +1593,31 @@ impl Compiler {
                     return Err(self.compile_err("inline asm: operand expression expected"));
                 }
             };
+            // An x86 range-restricted immediate constraint admits only an
+            // integer constant within its range (GCC "Machine
+            // Constraints"). The constraint resolved to a pure immediate,
+            // so there is no register alternative to fall back on: a
+            // non-constant or out-of-range operand cannot be satisfied.
+            if is_x86
+                && matches!(constraint, AsmConstraint::Imm)
+                && let Some(letter) =
+                    Self::x86_imm_constraint_letter(cstr.trim_start_matches(['=', '+', '&', '%']))
+            {
+                let v = self.expr_const_int(e);
+                if !v.is_some_and(|v| Self::x86_imm_constraint_accepts(letter, v)) {
+                    let range = Self::x86_imm_constraint_range_text(letter);
+                    return Err(self.compile_err(match v {
+                        Some(v) => alloc::format!(
+                            "inline asm: value {v} out of range for constraint \
+                             `{letter}` (expected {range})"
+                        ),
+                        None => alloc::format!(
+                            "inline asm: constraint `{letter}` requires an \
+                             integer constant (expected {range})"
+                        ),
+                    }));
+                }
+            }
             operand_exprs.push(e);
             operand_names.push(op_name);
             operands.push(AsmOperand {
@@ -1878,6 +1903,64 @@ impl Compiler {
         Ok(super::super::codegen::x86_64::asm::reg_by_name(name).map(|(r, _)| r))
     }
 
+    /// The x86 range-restricted immediate constraint letters (GCC "Machine
+    /// Constraints", i386 family). Each admits only an integer constant in
+    /// the stated range; `text` is the range as it appears in a diagnostic.
+    /// `L` admits a three-value set rather than an interval, so it carries
+    /// no bounds and is tested against [`X86_IMM_L_VALUES`]. The band
+    /// `I`..`P` is reserved for machine-dependent immediates; x86 leaves
+    /// `P` undefined, so it stays unrecognized here.
+    const X86_IMM_CONSTRAINTS: &'static [(char, i64, i64, &'static str)] = &[
+        // 32-bit shift counts.
+        ('I', 0, 31, "0..31"),
+        // 64-bit shift counts.
+        ('J', 0, 63, "0..63"),
+        // A signed 8-bit value.
+        ('K', -128, 127, "-128..127"),
+        // `lea` scale-factor shift counts.
+        ('M', 0, 3, "0..3"),
+        // An unsigned 8-bit value (`in` / `out` port numbers).
+        ('N', 0, 255, "0..255"),
+        // 128-bit shift counts.
+        ('O', 0, 127, "0..127"),
+    ];
+
+    /// The values GCC's x86 `L` constraint admits: the and-masks that turn
+    /// a masking `and` into a zero-extending move.
+    const X86_IMM_L_VALUES: [i64; 3] = [0xFF, 0xFFFF, 0xFFFF_FFFF];
+
+    /// The x86 range-restricted immediate letter `body` selects, if any.
+    /// Only meaningful once the constraint has resolved to a pure
+    /// immediate: a register or memory alternative alongside the letter
+    /// (`"Ir"`) lets the operand be loaded, which lifts the restriction.
+    fn x86_imm_constraint_letter(body: &str) -> Option<char> {
+        body.chars()
+            .find(|&c| c == 'L' || Self::X86_IMM_CONSTRAINTS.iter().any(|&(l, ..)| l == c))
+    }
+
+    /// True when `v` satisfies the x86 immediate constraint `letter`.
+    pub(crate) fn x86_imm_constraint_accepts(letter: char, v: i64) -> bool {
+        if letter == 'L' {
+            return Self::X86_IMM_L_VALUES.contains(&v);
+        }
+        Self::X86_IMM_CONSTRAINTS
+            .iter()
+            .find(|&&(l, ..)| l == letter)
+            .is_some_and(|&(_, lo, hi, _)| (lo..=hi).contains(&v))
+    }
+
+    /// The admissible values of the x86 immediate constraint `letter`,
+    /// spelled for a diagnostic.
+    fn x86_imm_constraint_range_text(letter: char) -> &'static str {
+        if letter == 'L' {
+            return "0xff, 0xffff or 0xffffffff";
+        }
+        Self::X86_IMM_CONSTRAINTS
+            .iter()
+            .find(|&&(l, ..)| l == letter)
+            .map_or("", |&(.., text)| text)
+    }
+
     pub(crate) fn parse_asm_constraint(
         cstr: &str,
         is_output: bool,
@@ -1938,7 +2021,13 @@ impl Compiler {
                 _ => return None,
             })
         };
-        let has_imm = body.contains(['i', 'n']);
+        // `i` / `n` take any integer constant; the x86 letters additionally
+        // restrict its value, which the operand site checks once the
+        // constant is in hand. The letters are target-specific -- aarch64
+        // spells its own classes with several of them -- so they only
+        // count on x86.
+        let has_imm = body.contains(['i', 'n'])
+            || (is_x86 && Self::x86_imm_constraint_letter(body).is_some());
         // A memory-only constraint (`m`, `=m`, `+m`): the operand is accessed
         // through a memory reference. `g` / `rm` also permit memory but prefer
         // a register, which the register path below handles.

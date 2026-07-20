@@ -1040,6 +1040,25 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
                 symbolic: m == b'P',
             });
         }
+        // `%aN`: operand N rendered as an address reference. The operand holds
+        // an address in a general register, so this is the base-only memory
+        // form `(%reg)`. GCC may instead fold a constant displacement or a
+        // symbol into the addressing expression (`64(%rdi)`, `sym(%rip)`);
+        // the register form names the same address.
+        if let Some(digits) = body.strip_prefix('a')
+            && !digits.is_empty()
+            && digits.bytes().all(|c| c.is_ascii_digit())
+        {
+            let idx: u8 = digits
+                .parse()
+                .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            return Ok(AsmOpnd::Mem {
+                base: AsmMemBase::Ref(idx),
+                index: None,
+                scale: 1,
+                disp: 0,
+            });
+        }
         // `%N` or `%<size>N`. A leading size modifier is a single
         // letter b/w/k/q before the operand digits.
         let (size, digits) = match body.as_bytes().first() {

@@ -735,6 +735,22 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
                 .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
             return Ok(AsmOpndA64::RefConst(idx));
         }
+        // `%aN`: operand N rendered as an address reference. The operand holds
+        // an address in a general register, so this is the base-only memory
+        // form `[xN]`.
+        if let Some(digits) = rest.strip_prefix('a')
+            && !digits.is_empty()
+            && digits.bytes().all(|c| c.is_ascii_digit())
+        {
+            let idx: u8 = digits
+                .parse()
+                .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            return Ok(AsmOpndA64::Mem {
+                base: MemBase::Ref(idx),
+                off: 0,
+                pre: false,
+            });
+        }
         // `%N` (natural width); the GP views `%wN` (32) / `%xN` (64); and the FP
         // scalar views `%sN` (single) / `%dN` (double). A view flag rides `is64`
         // (w/s = 32, x/d = 64) and the emitter resolves it against the operand's

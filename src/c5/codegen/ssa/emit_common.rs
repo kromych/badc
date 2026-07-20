@@ -786,6 +786,11 @@ pub(crate) enum AsmSectionItem {
     /// `.ascii` / `.asciz` / `.string` payload (NUL included when the
     /// directive appends one).
     Bytes(alloc::vec::Vec<u8>),
+    /// `name:`: a label defining a symbol at the current section offset.
+    Label(alloc::string::String),
+    /// `.globl name` / `.global name`: give the named label external
+    /// binding. May precede or follow the label's definition.
+    Global(alloc::string::String),
 }
 
 /// A parsed `.pushsection` / `.section` block of a template.
@@ -831,8 +836,24 @@ pub(crate) struct AsmSection {
     pub sh_type: Option<alloc::string::String>,
     pub bytes: alloc::vec::Vec<u8>,
     pub relocs: alloc::vec::Vec<AsmSectionReloc>,
+    /// Labels defined in the section; each becomes a symbol whose section
+    /// index is this section and whose value is `offset` within it.
+    pub labels: alloc::vec::Vec<AsmSectionLabel>,
     /// Largest `.balign` seen; the object writer aligns the section.
     pub align: u32,
+}
+
+/// Offset marking a `.globl` seen before its label definition.
+const PENDING_LABEL: u32 = u32::MAX;
+
+/// A label defined inside a named section.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AsmSectionLabel {
+    pub name: alloc::string::String,
+    /// Byte offset of the definition within the section's own bytes.
+    pub offset: u32,
+    /// `.globl`-declared: external rather than local binding.
+    pub global: bool,
 }
 
 /// Split a template into its code text and its section blocks. Returns
@@ -900,7 +921,32 @@ pub(crate) fn extract_asm_sections(
                 code.push_str(piece);
                 code.push('\n');
             }
-            Some(idx) => blocks[idx].items.push(parse_section_item(tok, rest)?),
+            Some(idx) => {
+                // Peel any leading `name:` labels; GNU as allows a directive
+                // to follow a label on the same line.
+                let (mut tok, mut rest) = (tok, rest);
+                while let Some(name) = tok.strip_suffix(':') {
+                    if !is_asm_symbol_name(name) {
+                        return Err(alloc::format!("inline asm: bad label `{tok}:`"));
+                    }
+                    blocks[idx]
+                        .items
+                        .push(AsmSectionItem::Label(alloc::string::String::from(name)));
+                    let (t, r) = match rest.find(char::is_whitespace) {
+                        Some(p) => (&rest[..p], rest[p..].trim()),
+                        None => (rest, ""),
+                    };
+                    if t.is_empty() {
+                        tok = t;
+                        break;
+                    }
+                    tok = t;
+                    rest = r;
+                }
+                if !tok.is_empty() {
+                    blocks[idx].items.push(parse_section_item(tok, rest)?);
+                }
+            }
         }
     }
     Ok(Some((code, blocks)))
@@ -910,8 +956,15 @@ pub(crate) fn extract_asm_sections(
 /// `name[,"flags"[,@type]]`.
 fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::String> {
     let mut parts = rest.split(',').map(str::trim);
+    // The name may be quoted (`.section ".export_symbol","a"`); the quotes
+    // are syntax, not part of the section name.
     let name = parts
         .next()
+        .map(|n| {
+            n.strip_prefix('"')
+                .and_then(|n| n.strip_suffix('"'))
+                .unwrap_or(n)
+        })
         .filter(|n| !n.is_empty())
         .ok_or_else(|| alloc::string::String::from("inline asm: section name expected"))?;
     let mut flags = alloc::string::String::new();
@@ -931,6 +984,16 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
         sh_type,
         items: alloc::vec::Vec::new(),
     })
+}
+
+/// An assembler symbol name: identifier characters, not starting with a
+/// digit (which would be a local numeric label, not a symbol definition).
+fn is_asm_symbol_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.as_bytes()[0].is_ascii_digit()
+        && name
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$'))
 }
 
 /// Parse one directive inside a named section.
@@ -999,6 +1062,13 @@ fn parse_section_item(tok: &str, rest: &str) -> Result<AsmSectionItem, alloc::st
             }
             Ok(AsmSectionItem::Bytes(bytes))
         }
+        ".globl" | ".global" => {
+            let name = rest.trim();
+            if !is_asm_symbol_name(name) {
+                return Err(alloc::format!("inline asm: bad `{tok}` operand `{rest}`"));
+            }
+            Ok(AsmSectionItem::Global(alloc::string::String::from(name)))
+        }
         _ => Err(alloc::format!(
             "inline asm: unsupported directive `{tok}` in a named section"
         )),
@@ -1065,6 +1135,7 @@ pub(crate) fn materialize_asm_sections(
                     sh_type: b.sh_type.clone(),
                     bytes: alloc::vec::Vec::new(),
                     relocs: alloc::vec::Vec::new(),
+                    labels: alloc::vec::Vec::new(),
                     align: 1,
                 });
                 sink.last_mut().unwrap()
@@ -1104,6 +1175,35 @@ pub(crate) fn materialize_asm_sections(
                     sec.bytes.resize(*n as usize, 0);
                 }
                 AsmSectionItem::Bytes(bs) => sec.bytes.extend_from_slice(bs),
+                AsmSectionItem::Label(name) => {
+                    let at = sec.bytes.len() as u32;
+                    match sec.labels.iter_mut().find(|l| l.name == *name) {
+                        // A pending `.globl` entry is the definition site.
+                        Some(l) if l.offset == PENDING_LABEL => l.offset = at,
+                        Some(_) => {
+                            return Err(alloc::format!(
+                                "inline asm: duplicate label `{name}` in a named section"
+                            ));
+                        }
+                        None => sec.labels.push(AsmSectionLabel {
+                            name: name.clone(),
+                            offset: at,
+                            global: false,
+                        }),
+                    }
+                }
+                AsmSectionItem::Global(name) => {
+                    match sec.labels.iter_mut().find(|l| l.name == *name) {
+                        // `.globl` may precede its label; record the pending name
+                        // as a zero-length forward entry the definition fills in.
+                        Some(l) => l.global = true,
+                        None => sec.labels.push(AsmSectionLabel {
+                            name: name.clone(),
+                            offset: PENDING_LABEL,
+                            global: true,
+                        }),
+                    }
+                }
                 AsmSectionItem::Data { width, values } => {
                     for v in values {
                         match v {
@@ -1144,6 +1244,11 @@ pub(crate) fn materialize_asm_sections(
                 }
             }
         }
+    }
+    // A `.globl` naming no label in the section declares an external symbol,
+    // not a definition here; it defines no section symbol.
+    for s in sink.iter_mut() {
+        s.labels.retain(|l| l.offset != PENDING_LABEL);
     }
     Ok(())
 }
@@ -1846,6 +1951,65 @@ mod asm_section_tests {
         let mut sink = alloc::vec::Vec::new();
         materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
         assert_eq!(sink[0].align, 8);
+    }
+
+    #[test]
+    fn section_labels_become_offsets() {
+        // A label records its offset in the section; `.globl` sets external
+        // binding whether it precedes or follows the definition, and a
+        // quoted section name is unquoted.
+        let text = ".section \".export\",\"a\"\n                    first:\n                    .asciz \"GPL\"\n                    .balign 8\n                    .globl second\n                    second: .quad 0\n                    .globl nowhere\n                    .previous\n";
+        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        assert_eq!(blocks[0].name, ".export");
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
+        let s = &sink[0];
+        assert_eq!(s.bytes.len(), 16);
+        assert_eq!(
+            s.labels,
+            alloc::vec![
+                AsmSectionLabel {
+                    name: alloc::string::String::from("first"),
+                    offset: 0,
+                    global: false,
+                },
+                AsmSectionLabel {
+                    name: alloc::string::String::from("second"),
+                    offset: 8,
+                    global: true,
+                },
+            ],
+            "a `.globl` naming no label here defines no symbol",
+        );
+    }
+
+    #[test]
+    fn duplicate_section_label_is_rejected() {
+        let text = ".pushsection .t,\"a\"\ndup:\n.quad 0\ndup:\n.popsection\n";
+        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        let err = materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink)
+            .expect_err("duplicate label must be rejected");
+        assert!(err.contains("duplicate label"), "{err}");
+    }
+
+    #[test]
+    fn tab_separated_directives_and_trailing_whitespace() {
+        // Preprocessed templates separate the directive from its arguments
+        // with tabs and leave trailing whitespace after a label.
+        let text = ".section\t\".initcall7.init\", \"a\"\t\t\n                    __initcall_probe7:\t\t\t\n                    .long\tprobe - .\t\n                    .previous\t\t\t\n";
+        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        assert_eq!(blocks[0].name, ".initcall7.init");
+        assert_eq!(blocks[0].flags, "a");
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
+        let s = &sink[0];
+        assert_eq!(s.bytes.len(), 4);
+        assert_eq!(s.labels.len(), 1);
+        assert_eq!(s.labels[0].name, "__initcall_probe7");
+        assert_eq!(s.labels[0].offset, 0);
+        assert!(!s.labels[0].global);
+        assert_eq!(s.relocs.len(), 1, "the pc-relative reference survives");
     }
 }
 

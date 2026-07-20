@@ -189,3 +189,22 @@ fn flag_output_macro_is_advertised_only_where_implemented() {
     assert!(!check(crate::Target::LinuxAarch64, true));
     assert!(!check(crate::Target::LinuxX64, false));
 }
+
+#[test]
+fn address_constraint_takes_a_register() {
+    // `p` takes its operand as an address held in a general register, on
+    // either target; unlike `m` it forces no addressing mode.
+    for is_x86 in [true, false] {
+        assert_eq!(
+            crate::Compiler::parse_asm_constraint("p", false, 0, is_x86).map(|(k, _)| k),
+            Some(AsmConstraint::Reg),
+            "is_x86={is_x86}"
+        );
+    }
+    // The aarch64 `U`-prefixed memory classes spell their own multi-letter
+    // names and keep reaching the memory path.
+    assert_eq!(
+        crate::Compiler::parse_asm_constraint("Ump", false, 0, false).map(|(k, _)| k),
+        Some(AsmConstraint::Mem),
+    );
+}

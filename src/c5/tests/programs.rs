@@ -4627,3 +4627,44 @@ fn file_scope_asm_and_register_variable_run() {
     );
     assert_eq!(run_str(&src), 0);
 }
+
+#[test]
+fn for_post_statement_expression_returns() {
+    // A `for` post-expression is a void context, so its value is
+    // discarded. When it is a GNU statement expression whose final
+    // statement transfers control out of the expression (here a
+    // `return`), the block that would carry the post back-edge is
+    // closed. The walker must open a fresh block for that unreachable
+    // back-edge instead of emitting it into no block. Runtime: the init
+    // runs, the body runs once (i becomes 8), then the post's `return`
+    // yields steps * 100 + i == 108, matching gcc.
+    let src = "
+        int main(void) {
+            int i = 3;
+            int steps = 0;
+            for (i = 3; ; ({ steps += 1; return steps * 100 + i; }))
+                i = i + 5;
+        }
+    ";
+    assert_eq!(run_str(src), 108);
+}
+
+#[test]
+fn for_post_statement_expression_goto() {
+    // The same shape with a `goto` out of the post statement expression
+    // to a label after the loop. The post back-edge is unreachable and
+    // must not be emitted into a closed block. Runtime: body runs once
+    // (i becomes 4), the post records log == 4 and jumps past the loop,
+    // so the result is log * 100 + i == 404, matching gcc.
+    let src = "
+        int main(void) {
+            int i = 1;
+            int log = 0;
+            for (i = 1; ; ({ log = log * 10 + i; goto done; }))
+                i = 4;
+        done:
+            return log * 100 + i;
+        }
+    ";
+    assert_eq!(run_str(src), 404);
+}

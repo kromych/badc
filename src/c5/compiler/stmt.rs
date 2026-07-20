@@ -1506,6 +1506,17 @@ impl Compiler {
             let decayed_array =
                 core::mem::replace(&mut self.pending.last_array_decay_bytes, saved_decay_bytes) > 0;
             let width = self.size_of_type(self.ty).min(8) as u8;
+            // `A` on a value too wide for one register would need the
+            // `rdx:rax` pair, which this constraint does not model; rejecting
+            // keeps it from silently using the low half.
+            if cstr.trim_start_matches(['=', '+', '&', '%']) == "A"
+                && !self.target.is_aarch64()
+                && self.size_of_type(self.ty) > 8
+            {
+                self.data.truncate(data_base);
+                return Err(self
+                    .compile_err("inline asm: `A` operand wider than a register is unsupported"));
+            }
             // The x86 `x` operand path moves a full 128-bit value (movups), so
             // it requires a 16-byte operand (a __m128i / vector). A scalar
             // float / double `x` operand is not yet supported and is rejected
@@ -1920,6 +1931,13 @@ impl Compiler {
         // (the legacy high-byte register class) is not modeled.
         if !is_x86 && body == "Q" {
             return Some((AsmConstraint::MemBase, is_rw));
+        }
+        // x86 `A`. On i386 this names the `edx:eax` pair; on x86-64 it is the
+        // `a` or `d` register (a value wider than a register has no pair form
+        // here and is rejected at the operand). GCC and clang both allocate
+        // `rax` for it, which `Fixed(0)` spells.
+        if is_x86 && body == "A" {
+            return Some((AsmConstraint::Fixed(0), is_rw));
         }
         // A matching constraint ties an input to an earlier output.
         if let Some(d) = body.chars().find(|c| c.is_ascii_digit()) {

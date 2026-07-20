@@ -85,6 +85,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_flags_push.c", "linux-aarch64"), // x86-64 pushf/popf and word push/pop
     ("inline_asm_m_operand_array_cast.c", "linux-aarch64"), // x86-64 addq/adcq region operand
     ("inline_asm_x64_const_expr.c", "linux-aarch64"), // x86-64 addq/adcq const-expr displacements
+    ("inline_asm_x64_constraint_a.c", "linux-aarch64"), // x86-64 `A` accumulator constraint
     ("register_var_asm_operand.c", "linux-aarch64"), // x86-64 extended-asm operand pinning
     ("register_var_asm_operand_sp.c", "linux-aarch64"), // x86-64 rsp / rbp operand binding
     ("inline_asm_x64_sib.c", "linux-aarch64"), // x86-64 scaled-index memory operands

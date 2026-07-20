@@ -28,6 +28,25 @@ fn empty_source_has_no_main() {
 }
 
 #[test]
+fn overaligned_automatic_is_rejected() {
+    // Frame slots are 8 bytes and the prologue does not realign the
+    // stack, so an automatic object cannot be placed on a boundary wider
+    // than the 16 bytes the frame pointer guarantees. Rejecting is
+    // preferable to handing back an under-aligned address; static storage
+    // carries any supported alignment. Both an explicit request on the
+    // declarator and one inherited from an over-aligned type are caught.
+    expect_compile_error(
+        "int main(void) { int __attribute__((aligned(64))) a; return (int)(long)&a; }",
+        "not supported here",
+    );
+    expect_compile_error(
+        "struct __attribute__((aligned(64))) S { int x; };\n\
+         int main(void) { struct S a; return (int)(long)&a.x; }",
+        "automatic object of a 64-byte-aligned type is not supported",
+    );
+}
+
+#[test]
 fn source_with_only_a_global_has_no_main() {
     expect_compile_error("int x;", "main() not defined");
 }

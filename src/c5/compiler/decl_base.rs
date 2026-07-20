@@ -31,7 +31,9 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{UNSIGNED_BIT, VOLATILE_BIT, is_decl_modifier, struct_ty_for};
+use super::types::{
+    SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, is_decl_modifier, struct_ty_for,
+};
 
 /// Accumulator for the int-modifier soup that prefixes a C base
 /// type. `signed` / `unsigned` / `short` / `long` (any count) /
@@ -1184,17 +1186,20 @@ impl Compiler {
         Ok(Some(bt))
     }
 
-    /// `VOLATILE_BIT` when the current token is the `volatile` type
-    /// qualifier (C99 6.7.3), 0 for any other spelling mapped to
-    /// `Token::TypeQual` (`const`, `restrict`, calling-convention
-    /// decorations). Qualifier identity lives on the interned keyword
-    /// symbol; the caller consumes the token.
-    pub(super) fn lex_volatile_bit(&self) -> i64 {
+    /// The type-tag qualifier bits contributed by the current
+    /// `Token::TypeQual`: `VOLATILE_BIT` for `volatile` (C99 6.7.3), a
+    /// segment bit for the x86 named-address-space qualifiers
+    /// `__seg_gs` / `__seg_fs`, 0 for any other spelling (`const`,
+    /// `restrict`, calling-convention decorations). Qualifier identity
+    /// lives on the interned keyword symbol; the caller consumes the token.
+    pub(super) fn lex_qualifier_bits(&self) -> i64 {
         if self.lex.tk != Token::TypeQual {
             return 0;
         }
         match self.symbols[self.lex.curr_id_idx].name.as_str() {
             "volatile" | "__volatile" | "__volatile__" => VOLATILE_BIT,
+            "__seg_gs" => SEG_GS_BIT,
+            "__seg_fs" => SEG_FS_BIT,
             _ => 0,
         }
     }
@@ -1289,7 +1294,7 @@ impl Compiler {
                 // `volatile` sets the tag's qualifier bit (C99 6.7.3);
                 // `const` is recorded out-of-band for value folding;
                 // restrict / _Atomic / etc. are no-ops.
-                qual_bits |= self.lex_volatile_bit();
+                qual_bits |= self.lex_qualifier_bits();
                 self.pending.base_is_const |= self.lex_is_const_qual();
                 self.next()?;
             }
@@ -1300,7 +1305,14 @@ impl Compiler {
         // The operand supplies the complete type, so the int-modifier
         // soup collected above does not apply.
         if self.lex.tk == Token::Typeof {
-            return self.parse_typeof_specifier();
+            let mut ty = self.parse_typeof_specifier()?;
+            // A qualifier may trail the specifier, as after any base type
+            // (`typeof(x) __seg_gs *`, `typeof(x) const`); fold it in.
+            while self.lex.tk == Token::TypeQual {
+                ty |= self.lex_qualifier_bits();
+                self.next()?;
+            }
+            return Ok(ty);
         }
         if self.lex.tk == Token::AutoType {
             return self.parse_auto_type_specifier();
@@ -1451,7 +1463,7 @@ impl Compiler {
                 saw_int_mod = true;
                 continue;
             }
-            qual_bits |= self.lex_volatile_bit();
+            qual_bits |= self.lex_qualifier_bits();
             self.next()?;
         }
         Ok((saw_int_mod, qual_bits))

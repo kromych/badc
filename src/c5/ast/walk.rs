@@ -14,7 +14,7 @@ use super::super::codegen::Target;
 use super::super::codegen::ssa::build::SsaBuilder;
 use super::super::compiler::types::{
     STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty,
-    is_vector_ty, is_volatile_ty, load_kind, strip_unsigned, struct_ptr_depth,
+    is_vector_ty, is_volatile_ty, load_kind, segment_of_ty, strip_unsigned, struct_ptr_depth,
 };
 use super::super::ir::{AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind, ValueId};
 use super::super::symbol::Symbol;
@@ -3090,6 +3090,14 @@ impl<'a> Walker<'a> {
                 // the store so the assignment yields the f32 value.
                 let kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lhs);
+                // A write through a `__seg_gs` / `__seg_fs` pointer needs a
+                // segment-prefixed store; see the load guard in `walk_unary`.
+                if segment_of_ty(*ty).is_some() {
+                    return Err(WalkError::UnsupportedExpr {
+                        id: *lhs,
+                        kind: "direct __seg_gs/__seg_fs write",
+                    });
+                }
                 if let Expr::Ident {
                     class,
                     val,
@@ -5352,6 +5360,18 @@ impl<'a> Walker<'a> {
                 // Member chain) consumes the address.
                 if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                     return Ok(addr);
+                }
+                // A read through a `__seg_gs` / `__seg_fs` pointer needs a
+                // segment-prefixed load, which the plain load path does not
+                // yet emit. Reject rather than drop the segment (a silent
+                // wrong-segment access). TODO: segment-prefixed load/store;
+                // until then such objects are reachable via an inline-asm
+                // memory operand, which honors the qualifier.
+                if segment_of_ty(ty).is_some() {
+                    return Err(WalkError::UnsupportedExpr {
+                        id: child,
+                        kind: "direct __seg_gs/__seg_fs read",
+                    });
                 }
                 let kind = load_kind_for(ty, self.target);
                 Ok(b.load_vol(addr, kind, is_volatile_ty(ty)))

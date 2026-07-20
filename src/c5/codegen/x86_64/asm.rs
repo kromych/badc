@@ -3323,6 +3323,7 @@ mod tests {
             is_output: false,
             is_rw: false,
             width: 16,
+            seg: crate::c5::ir::AsmSeg::None,
         };
         // `x` operands take xmm0, xmm1, ... from a file independent of the GPRs,
         // so a mixed GP + xmm operand list assigns each from its own pool.

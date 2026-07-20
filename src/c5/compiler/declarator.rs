@@ -240,7 +240,7 @@ impl Compiler {
         // Consume either here so neither stands in for the declarator name.
         loop {
             if self.lex.tk == Token::TypeQual {
-                ty |= self.lex_volatile_bit();
+                ty |= self.lex_qualifier_bits();
                 self.next()?;
             } else if self.at_attribute_specifier() {
                 self.skip_attribute_specifiers()?;
@@ -260,7 +260,7 @@ impl Compiler {
             // (`void * __attribute__((malloc)) p`).
             loop {
                 if self.lex.tk == Token::TypeQual {
-                    ty |= self.lex_volatile_bit();
+                    ty |= self.lex_qualifier_bits();
                     self.next()?;
                 } else if self.at_attribute_specifier() {
                     self.skip_attribute_specifiers()?;

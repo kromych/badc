@@ -1980,7 +1980,7 @@ impl Compiler {
                         }
                     }
                     while self.lex.tk == Token::TypeQual {
-                        t |= self.lex_volatile_bit();
+                        t |= self.lex_qualifier_bits();
                         self.next()?;
                     }
                 }

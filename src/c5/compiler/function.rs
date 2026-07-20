@@ -116,7 +116,7 @@ impl Compiler {
                 ty += Ty::Ptr as i64;
                 leading_ptr_count += 1;
                 while self.lex.tk == Token::TypeQual {
-                    ty |= self.lex_volatile_bit();
+                    ty |= self.lex_qualifier_bits();
                     self.next()?;
                 }
             }

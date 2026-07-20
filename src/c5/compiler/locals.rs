@@ -360,10 +360,11 @@ impl Compiler {
                 // TODO: place block-scope statics like file-scope objects
                 // and lift this to MAX_OBJECT_ALIGN.
                 let want_align = core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty));
-                if want_align > 16 {
+                if self.align_of_type(ty) > 16 && req_align <= 0 {
                     return Err(self.compile_err(format!(
-                        "block-scope static of a {want_align}-byte-aligned type is not \
-                         supported (at most 16); move it to file scope"
+                        "block-scope static of a {}-byte-aligned type is not \
+                         supported (at most 16); move it to file scope",
+                        self.align_of_type(ty)
                     )));
                 }
                 if want_align > 8 {

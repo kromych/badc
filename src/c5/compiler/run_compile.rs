@@ -1808,9 +1808,15 @@ impl Compiler {
                     // with no attribute in sight.
                     let want_align =
                         core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty));
-                    if want_align > super::MAX_OBJECT_ALIGN {
+                    // An explicit request on the declarator is placed up to
+                    // MAX_STATIC_ALIGN (checked above). Alignment coming
+                    // from the TYPE is only verified to be placed up to
+                    // MAX_OBJECT_ALIGN, so diagnose a wider one instead of
+                    // silently under-aligning the object.
+                    let type_align = self.align_of_type(ty);
+                    if type_align > super::MAX_OBJECT_ALIGN && req_align <= 0 {
                         return Err(self.compile_err(format!(
-                            "object alignment {want_align} is not supported \
+                            "object of a {type_align}-byte-aligned type is not supported \
                              (at most {}); the type may still be used for layout",
                             super::MAX_OBJECT_ALIGN
                         )));
@@ -1837,9 +1843,9 @@ impl Compiler {
                     // boundary wider than 16. Diagnose rather than
                     // under-align it.
                     // TODO: align the initialized-object path and drop this.
-                    if want_align > 16 && self.lex.tk == Token::Assign {
+                    if type_align > 16 && req_align <= 0 && self.lex.tk == Token::Assign {
                         return Err(self.compile_err(format!(
-                            "initialised object of a {want_align}-byte-aligned type is \
+                            "initialised object of a {type_align}-byte-aligned type is \
                              not supported (at most 16); leave it zero-initialised"
                         )));
                     }

@@ -73,14 +73,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=82
     v24  Store { addr=v21, disp=8, value=v20, kind=I64 }  -> -
     v25  LocalAddr(-2)                                    -> x1
     v26  Mcpy { dst=v25, src=v21, size=16 }               -> x0
-    v27  ImmData(24)                                      -> x0
+    v27  ImmData(32)                                      -> x0
     v28  Load { addr=v27, disp=0, kind=I32 }              -> x1
     v29  BinopI { op=ne, lhs=v28, rhs_imm=1 }             -> x2
     v30  Imm(1)                                           -> x1
     v31  Imm(0)                                           -> x6
     terminator Bnz { cond=v29, target=b58, fall=b1 }   (exit_acc=v29)
   block 1  start_pc=0
-    v32  ImmData(24)                                      -> x1
+    v32  ImmData(32)                                      -> x1
     v33  BinopI { op=add, lhs=v27, rhs_imm=32 }           -> x1
     v34  Load { addr=v27, disp=32, kind=I32 }             -> x1
     v35  BinopI { op=ne, lhs=v34, rhs_imm=2 }             -> x1
@@ -93,7 +93,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=82
     v40  Imm(0)                                           -> x2
     terminator Bnz { cond=v38, target=b57, fall=b3 }   (exit_acc=v38)
   block 3  start_pc=0
-    v41  ImmData(24)                                      -> x1
+    v41  ImmData(32)                                      -> x1
     v42  BinopI { op=add, lhs=v27, rhs_imm=16 }           -> x1
     v43  Load { addr=v27, disp=16, kind=I64 }             -> x1
     v44  BinopI { op=add, lhs=v27, rhs_imm=24 }           -> x2
@@ -116,7 +116,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=82
     v57  Imm(5)                                           -> x0
     terminator Return(v57)   (exit_acc=v57)
   block 6  start_pc=0
-    v58  ImmData(72)                                      -> x0
+    v58  ImmData(80)                                      -> x0
     v59  Load { addr=v58, disp=0, kind=I64 }              -> x1
     v60  BinopI { op=add, lhs=v58, rhs_imm=8 }            -> x2
     v61  Load { addr=v58, disp=8, kind=I64 }              -> x2
@@ -133,7 +133,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=82
     v70  Imm(6)                                           -> x0
     terminator Return(v70)   (exit_acc=v70)
   block 8  start_pc=0
-    v71  ImmData(88)                                      -> x0
+    v71  ImmData(96)                                      -> x0
     v72  Load { addr=v71, disp=0, kind=I64 }              -> x6
     v73  BinopI { op=add, lhs=v71, rhs_imm=8 }            -> x1
     v74  Load { addr=v71, disp=8, kind=I64 }              -> x7
@@ -160,7 +160,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=82
     v95  Imm(0)                                           -> x1
     terminator Bnz { cond=v94, target=b56, fall=b9 }   (exit_acc=v94)
   block 9  start_pc=0
-    v96  ImmData(88)                                      -> x0
+    v96  ImmData(96)                                      -> x0
     v97  Load { addr=v96, disp=0, kind=I64 }              -> x1
     v98  BinopI { op=add, lhs=v96, rhs_imm=8 }            -> x1
     v99  Load { addr=v96, disp=8, kind=I64 }              -> x1
@@ -184,10 +184,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=82
     terminator Return(v112)   (exit_acc=v112)
   block 12  start_pc=0
     v113 LocalAddr(-8)                                    -> x0
-    v114 ImmData(104)                                     -> x1
+    v114 ImmData(112)                                     -> x1
     v115 Mcpy { dst=v113, src=v114, size=48 }             -> x0
     v116 LocalAddr(-14)                                   -> x0
-    v117 ImmData(152)                                     -> x1
+    v117 ImmData(160)                                     -> x1
     v118 Mcpy { dst=v116, src=v117, size=48 }             -> x0
     v119 Imm(1)                                           -> x0
     v120 LocalAddr(-14)                                   -> x1
@@ -286,7 +286,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=82
     terminator Return(v190)   (exit_acc=v190)
   block 24  start_pc=0
     v191 LocalAddr(-20)                                   -> x0
-    v192 ImmData(200)                                     -> x1
+    v192 ImmData(208)                                     -> x1
     v193 Mcpy { dst=v191, src=v192, size=48 }             -> x0
     v194 Imm(1)                                           -> x1
     v195 LocalAddr(-20)                                   -> x0
@@ -452,7 +452,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=82
     terminator Return(v328)   (exit_acc=v328)
   block 38  start_pc=0
     v329 LocalAddr(-30)                                   -> x0
-    v330 ImmData(248)                                     -> x1
+    v330 ImmData(256)                                     -> x1
     v331 Mcpy { dst=v329, src=v330, size=48 }             -> x0
     v332 Imm(1)                                           -> x1
     v333 LocalAddr(-72)                                   -> x0

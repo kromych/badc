@@ -3386,6 +3386,83 @@ fn asm_section_operand_symbol_relocates_to_data() {
 }
 
 #[test]
+fn asm_section_operand_extern_symbol_relocates_to_symbol() {
+    // `.long %c0 - .` / `.quad %c0 + %c1 - .` where `%c0` is an `i`-class
+    // operand naming a *cross-TU* address (`&extern_var`, a static key defined
+    // in another unit) relocates against that symbol, not this unit's `.data`
+    // image -- a `.data + off` relocation would name unrelated local bytes. A
+    // constant offset folds into the addend, whether spelled `%c0 + %c1` or
+    // folded into the operand (`&sym + n`). Byte-identical to gas: the
+    // referenced symbol, PC-relative type by field width, and the addend.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        struct sk { int x; };\n\
+        extern struct sk extkey;\n\
+        int probe(void) {\n\
+            __asm__ volatile(\n\
+                \"1:\\tnop\\n\"\n\
+                \".pushsection .optab,\\\"aw\\\"\\n\"\n\
+                \".long %c0 - .\\n\"\n\
+                \".quad %c0 + %c1 - .\\n\"\n\
+                \".quad %c2 - .\\n\"\n\
+                \".popsection\\n\" : : \"i\"(&extkey), \"i\"(4), \"i\"((char*)&extkey + 8));\n\
+            return 0;\n\
+        }\n\
+        int main(void) { return probe(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        // The cross-TU key surfaces as an undefined symbol; every field
+        // relocates against it rather than a `.data` / `.bss` section symbol.
+        let (shndx, _, _, _, extkey_idx) =
+            elf_symbol(&bytes, "extkey").unwrap_or_else(|| panic!("{target:?}: extkey symbol"));
+        assert_eq!(shndx, 0, "{target:?}: extkey is undefined (SHN_UNDEF)");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".optab")
+            .unwrap_or_else(|| panic!("{target:?}: .optab section missing"));
+        // A 4-byte and two 8-byte PC-relative fields.
+        assert_eq!(sec.3.len(), 4 + 8 + 8, "{target:?}: section size");
+        let rela = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.optab")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.optab missing"));
+        assert_eq!(rela.3.len(), 3 * 24, "{target:?}: three relocs");
+        let r_off = |k: usize| u64::from_le_bytes(rela.3[k * 24..k * 24 + 8].try_into().unwrap());
+        let r_info =
+            |k: usize| u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+        let r_add =
+            |k: usize| i64::from_le_bytes(rela.3[k * 24 + 16..k * 24 + 24].try_into().unwrap());
+        let (prel32, prel64) = match target {
+            Target::LinuxX64 => (2u64, 24u64),
+            _ => (261, 260),
+        };
+        // (field offset, PC-relative reloc type, folded addend).
+        for (off, rtype, addend) in [(0u64, prel32, 0i64), (4, prel64, 4), (12, prel64, 8)] {
+            let k = (0..3)
+                .find(|&k| r_off(k) == off)
+                .unwrap_or_else(|| panic!("{target:?}: no reloc at field {off}"));
+            assert_eq!(
+                r_info(k) & 0xFFFF_FFFF,
+                rtype,
+                "{target:?}: field {off} PC-relative type"
+            );
+            assert_eq!(
+                r_info(k) >> 32,
+                extkey_idx as u64,
+                "{target:?}: field {off} relocates against extkey, not .data"
+            );
+            assert_eq!(r_add(k), addend, "{target:?}: field {off} addend");
+        }
+    }
+}
+
+#[test]
 fn asm_section_goto_label_relocates_to_block() {
     // `.long %l0 - .` (a static-key jump entry) relocates PC-relative to an
     // `asm goto` label's block. The block's text offset is not known when the

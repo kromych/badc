@@ -1824,6 +1824,7 @@ pub(crate) fn emit_function(
                         frame,
                         fixups,
                         name2entpc,
+                        extern_data_names,
                         asm_sections,
                         asm_extern_call_sites,
                         Some(AsmGotoCtx {
@@ -1861,6 +1862,7 @@ pub(crate) fn emit_function(
                         imports,
                         variadic_targets,
                         extern_tls_names,
+                        extern_data_names,
                         tls_total_size,
                         param_from_home: &param_from_home,
                         param_plan: &param_plan,
@@ -2803,6 +2805,9 @@ struct FnCtx<'a> {
     imports: &'a super::ResolvedImports,
     variadic_targets: &'a alloc::collections::BTreeSet<usize>,
     extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    /// `Inst::ImmData` value-id -> cross-TU data symbol name, for an `i`-class
+    /// inline-asm operand that names an external address in a section field.
+    extern_data_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     tls_total_size: usize,
     param_from_home: &'a [bool],
     param_plan: &'a [super::ArgPlacement],
@@ -2830,6 +2835,7 @@ fn emit_inst(
         imports,
         variadic_targets,
         extern_tls_names,
+        extern_data_names,
         tls_total_size,
         param_from_home,
         param_plan,
@@ -3178,6 +3184,7 @@ fn emit_inst(
             frame,
             fixups,
             name2entpc,
+            extern_data_names,
             asm_sections,
             asm_extern_call_sites,
             None,
@@ -5990,6 +5997,7 @@ fn emit_inline_asm(
     frame: Frame,
     fixups: &mut Vec<super::encode::Fixup>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     asm_sections: &mut Vec<super::ssa::emit_common::AsmSection>,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
@@ -6538,8 +6546,12 @@ fn emit_inline_asm(
         // An `i`-class operand naming a link-time data address (`.long %c0 - .`
         // where `%c0` is `&sym` or a string literal) relocates against the
         // data image, resolved like the operand's own `ImmData` lowering.
-        let operand_sym = |idx: u8| -> Option<super::ssa::emit_common::AsmSectionTarget> {
-            super::ssa::emit_common::asm_operand_data_target(&func.insts, *args.get(idx as usize)?)
+        let operand_sym = |idx: u8| -> Option<(super::ssa::emit_common::AsmSectionTarget, i64)> {
+            super::ssa::emit_common::asm_operand_data_target(
+                &func.insts,
+                *args.get(idx as usize)?,
+                &|vid| extern_data_names.get(&vid).cloned(),
+            )
         };
         // An `asm goto` label operand (`.long %l0 - .`): the goto row's block
         // index. Its text offset is not final here; the reloc carries the

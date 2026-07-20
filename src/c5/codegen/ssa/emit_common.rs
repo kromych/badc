@@ -1481,24 +1481,38 @@ fn value_fits_width(v: i64, width: u8) -> bool {
     (signed_min..=unsigned_max).contains(&v)
 }
 
-/// Resolve an `i`-class operand's SSA value to a data relocation target for
-/// a section field (`.long %c0 - .`): a global or string-literal address
-/// (`Inst::ImmData`), optionally offset by a constant (`&g + c`, the arm64
-/// static branch's `&key + branch`). The constant offset folds into the
-/// data offset the writer resolves against the `.data` / `.bss` symbol.
+/// Resolve an `i`-class operand's SSA value to a section field's relocation
+/// target (`.long %c0 - .`) plus a base addend folded from a constant pointer
+/// offset (`&key + branch`, the arm64 static branch). Returns `(target,
+/// addend)`.
+///
+/// A local `.data` / `.bss` address (`Inst::ImmData` whose value-id names no
+/// external symbol) relocates against the section symbol with the offset in
+/// the target and a zero base addend. A cross-TU address (the same `ImmData`
+/// whose value-id appears in `extern_imm_data_refs`, so `extern_name` yields
+/// its symbol) relocates against that symbol, with any constant offset folded
+/// into the addend the writer applies to the symbol -- a `.data + off`
+/// relocation would name this unit's data image, not the referenced symbol.
 pub(crate) fn asm_operand_data_target(
     insts: &[crate::c5::ir::Inst],
     arg: u32,
-) -> Option<AsmSectionTarget> {
+    extern_name: &dyn Fn(u32) -> Option<alloc::string::String>,
+) -> Option<(AsmSectionTarget, i64)> {
     use crate::c5::ir::{BinOp, Inst};
+    let target = |data_vid: u32, off: i64| -> (AsmSectionTarget, i64) {
+        match extern_name(data_vid) {
+            Some(name) => (AsmSectionTarget::Symbol(name), off),
+            None => (AsmSectionTarget::Data(off as u64), 0),
+        }
+    };
     match insts.get(arg as usize)? {
-        Inst::ImmData(off) => Some(AsmSectionTarget::Data(*off as u64)),
+        Inst::ImmData(off) => Some(target(arg, *off)),
         Inst::BinopI {
             op: BinOp::Add,
             lhs,
             rhs_imm,
         } => match insts.get(*lhs as usize) {
-            Some(Inst::ImmData(off)) => Some(AsmSectionTarget::Data((*off + *rhs_imm) as u64)),
+            Some(Inst::ImmData(off)) => Some(target(*lhs, *off + *rhs_imm)),
             _ => None,
         },
         Inst::Binop {
@@ -1506,10 +1520,8 @@ pub(crate) fn asm_operand_data_target(
             lhs,
             rhs,
         } => match (insts.get(*lhs as usize), insts.get(*rhs as usize)) {
-            (Some(Inst::ImmData(off)), Some(Inst::Imm(c)))
-            | (Some(Inst::Imm(c)), Some(Inst::ImmData(off))) => {
-                Some(AsmSectionTarget::Data((*off + *c) as u64))
-            }
+            (Some(Inst::ImmData(off)), Some(Inst::Imm(c))) => Some(target(*lhs, *off + *c)),
+            (Some(Inst::Imm(c)), Some(Inst::ImmData(off))) => Some(target(*rhs, *off + *c)),
             _ => None,
         },
         _ => None,
@@ -1528,7 +1540,7 @@ pub(crate) fn materialize_asm_sections(
     blocks: &[AsmSectionBlock],
     const_of: &dyn Fn(u8) -> Option<i64>,
     label_off: &dyn Fn(&str) -> Option<usize>,
-    operand_sym: &dyn Fn(u8) -> Option<AsmSectionTarget>,
+    operand_sym: &dyn Fn(u8) -> Option<(AsmSectionTarget, i64)>,
     goto_block: &dyn Fn(u8) -> Option<u32>,
     align_is_p2: bool,
     sink: &mut alloc::vec::Vec<AsmSection>,
@@ -1761,13 +1773,13 @@ pub(crate) fn materialize_asm_sections(
                                         "inline asm: section reference needs a 4- or 8-byte field",
                                     ));
                                 }
-                                let target = if *goto {
+                                let (target, base_add) = if *goto {
                                     let bid = goto_block(*idx).ok_or_else(|| {
                                         alloc::format!(
                                             "inline asm: `%l{idx}` names no `asm goto` label"
                                         )
                                     })?;
-                                    AsmSectionTarget::TextBlock(bid)
+                                    (AsmSectionTarget::TextBlock(bid), 0)
                                 } else {
                                     operand_sym(*idx).ok_or_else(|| {
                                         alloc::format!(
@@ -1775,17 +1787,18 @@ pub(crate) fn materialize_asm_sections(
                                         )
                                     })?
                                 };
-                                let add = if addend.is_empty() {
-                                    0
-                                } else {
-                                    eval_const_expr_ops(addend, &|i| const_of(i)).ok_or_else(
-                                        || {
-                                            alloc::string::String::from(
-                                                "inline asm: non-constant section reloc addend",
-                                            )
-                                        },
-                                    )?
-                                };
+                                let add = base_add
+                                    + if addend.is_empty() {
+                                        0
+                                    } else {
+                                        eval_const_expr_ops(addend, &|i| const_of(i)).ok_or_else(
+                                            || {
+                                                alloc::string::String::from(
+                                                    "inline asm: non-constant section reloc addend",
+                                                )
+                                            },
+                                        )?
+                                    };
                                 sec.relocs.push(AsmSectionReloc {
                                     offset: sec.bytes.len() as u32,
                                     width: *width,

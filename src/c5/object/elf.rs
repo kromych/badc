@@ -3106,6 +3106,7 @@ mod tests {
             user_ssa_funcs: alloc::vec::Vec::new(),
             extern_function_imports: alloc::vec::Vec::new(),
             init_funcs: alloc::vec::Vec::new(),
+            function_aliases: alloc::vec::Vec::new(),
         }
     }
 

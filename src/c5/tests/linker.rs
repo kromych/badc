@@ -2615,3 +2615,194 @@ fn divmod_constant_branch_drops_its_dead_callee() {
         "the __builtin_constant_p-false runtime fallback arm is dead and must be eliminated"
     );
 }
+
+#[test]
+fn weak_alias_used_bindings_in_relocatable() {
+    // `weak` binds STB_WEAK on definitions and declarations;
+    // `alias("target")` emits an additional symbol at the target's
+    // address; `used` keeps an unreferenced static in the object.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        "int real_fn(void) { return 41; }\n\
+         int alias_fn(void) __attribute__((weak, alias(\"real_fn\")));\n\
+         static int keep_me(void) __attribute__((used));\n\
+         static int keep_me(void) { return 1; }\n\
+         int weak_def(void) __attribute__((weak));\n\
+         int weak_def(void) { return 2; }\n\
+         extern int missing_weak __attribute__((weak));\n\
+         int gdata = 7;\n\
+         extern int gdata_alias __attribute__((alias(\"gdata\")));\n\
+         int *paddr(void) { return &missing_weak; }\n"
+            .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let find = |name: &str| {
+        obj.symbols
+            .iter()
+            .find(|s| s.name == name)
+            .unwrap_or_else(|| panic!("symbol `{name}` missing"))
+    };
+    let real = find("real_fn");
+    let alias = find("alias_fn");
+    assert_eq!(alias.binding, 2, "alias declared weak binds STB_WEAK");
+    assert_eq!(alias.value, real.value, "alias sits at the target's address");
+    assert!(matches!(alias.section, NativeSymSection::Text));
+    assert_eq!(find("weak_def").binding, 2, "weak definition binds STB_WEAK");
+    assert_eq!(find("keep_me").binding, 0, "used static stays STB_LOCAL");
+    let mw = find("missing_weak");
+    assert_eq!(mw.binding, 2, "weak extern declaration binds STB_WEAK");
+    assert!(matches!(mw.section, NativeSymSection::Undef));
+    let gd = find("gdata");
+    let gda = find("gdata_alias");
+    assert_eq!(gda.value, gd.value, "data alias shares the target's offset");
+    assert_eq!(gda.binding, 1, "non-weak alias binds STB_GLOBAL");
+}
+
+#[test]
+fn strong_definition_overrides_weak_at_link() {
+    // ELF weak semantics in the native linker: a strong STB_GLOBAL
+    // definition wins over a weak one with no multiple-definition
+    // error; a weak definition alone satisfies references.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options,
+        link_native_objects};
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let compile = |src: &str| {
+        let program = Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse")
+    };
+    // The weak unit defines `f` first in its text (absolute offset 0
+    // when the unit links first); the strong unit's `f` lands past it.
+    let weak_obj =
+        compile("int f(void) __attribute__((weak));\nint f(void) { return 1; }\n");
+    let strong_obj = compile("int filler(void) { return 9; }\nint f(void) { return 2; }\n");
+    let merged = link_native_objects(&[weak_obj, strong_obj]).expect("link");
+    let sym = merged.defined.get("f").expect("f defined in merge");
+    assert_ne!(
+        sym.value, 0,
+        "strong definition (second unit) must win over the weak one at text offset 0"
+    );
+    // A weak definition alone satisfies the reference.
+    let weak_only =
+        compile("int f(void) __attribute__((weak));\nint f(void) { return 1; }\n");
+    let merged = link_native_objects(&[weak_only]).expect("link weak-only");
+    assert!(merged.defined.contains_key("f"));
+}
+
+#[test]
+fn section_attribute_places_symbols_in_named_sections() {
+    // `__attribute__((section("name")))`: the ET_REL object carries a
+    // section of that name with the right type/flags, the attributed
+    // symbols sit in it, and a `.rela` companion holds the relocations
+    // applying inside it (the same-section call needs none; the
+    // cross-section call from `main` relocates by callee name).
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        "__attribute__((section(\".init.text\"))) static int boot_step(int x) { return x + 3; }\n\
+         __attribute__((section(\".init.text\"))) int boot(void) { return boot_step(4); }\n\
+         int cfg __attribute__((section(\".cfg.data\"))) = 35;\n\
+         int cfg_zero __attribute__((section(\".cfg.data\")));\n\
+         int use_cfg(void) { return boot() + cfg + cfg_zero; }\n"
+            .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+
+    // Walk the raw section headers and symbol table; the linker-side
+    // parser folds named sections into families, so the assertions
+    // must read the container directly.
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64le(0x28) as usize;
+    let shnum = u16le(0x3c) as usize;
+    let shstrndx = u16le(0x3e) as usize;
+    let shdr = |i: usize| shoff + i * 64;
+    let shstr_off = u64le(shdr(shstrndx) + 0x18) as usize;
+    let name_at = |name_off: usize| -> &str {
+        let s = shstr_off + name_off;
+        let end = bytes[s..].iter().position(|&b| b == 0).unwrap() + s;
+        core::str::from_utf8(&bytes[s..end]).unwrap()
+    };
+    let mut idx_of = std::collections::BTreeMap::new();
+    for i in 0..shnum {
+        idx_of.insert(name_at(u32le(shdr(i)) as usize).to_string(), i);
+    }
+    const SHT_PROGBITS: u32 = 1;
+    const SHT_RELA: u32 = 4;
+    const SHF_WRITE: u64 = 1;
+    const SHF_ALLOC: u64 = 2;
+    const SHF_EXECINSTR: u64 = 4;
+
+    let init_i = *idx_of.get(".init.text").expect(".init.text present");
+    assert_eq!(u32le(shdr(init_i) + 4), SHT_PROGBITS);
+    assert_eq!(u64le(shdr(init_i) + 8), SHF_ALLOC | SHF_EXECINSTR);
+    assert!(u64le(shdr(init_i) + 0x20) > 0, ".init.text holds code bytes");
+
+    let cfg_i = *idx_of.get(".cfg.data").expect(".cfg.data present");
+    assert_eq!(u32le(shdr(cfg_i) + 4), SHT_PROGBITS);
+    assert_eq!(u64le(shdr(cfg_i) + 8), SHF_ALLOC | SHF_WRITE);
+
+    let rela_i = *idx_of.get(".rela.init.text").expect("companion rela present");
+    assert_eq!(u32le(shdr(rela_i) + 4), SHT_RELA);
+    assert_eq!(u32le(shdr(rela_i) + 0x2c) as usize, init_i, "sh_info names the section");
+
+    // Symbols: boot / boot_step in .init.text; cfg (initialized) and
+    // cfg_zero (zero, carved out of the bss region) in .cfg.data.
+    let symtab_i = *idx_of.get(".symtab").expect(".symtab");
+    let strtab_i = *idx_of.get(".strtab").expect(".strtab");
+    let sym_off = u64le(shdr(symtab_i) + 0x18) as usize;
+    let sym_n = (u64le(shdr(symtab_i) + 0x20) / 24) as usize;
+    let str_off = u64le(shdr(strtab_i) + 0x18) as usize;
+    let mut shndx_by_name = std::collections::BTreeMap::new();
+    for s in 0..sym_n {
+        let o = sym_off + s * 24;
+        let noff = u32le(o) as usize;
+        let start = str_off + noff;
+        let end = bytes[start..].iter().position(|&b| b == 0).unwrap() + start;
+        let name = core::str::from_utf8(&bytes[start..end]).unwrap();
+        if !name.is_empty() {
+            shndx_by_name.insert(name.to_string(), u16le(o + 6) as usize);
+        }
+    }
+    assert_eq!(shndx_by_name["boot"], init_i);
+    assert_eq!(shndx_by_name["boot_step"], init_i);
+    assert_eq!(shndx_by_name["cfg"], cfg_i);
+    assert_eq!(shndx_by_name["cfg_zero"], cfg_i);
+    assert_eq!(shndx_by_name["use_cfg"], idx_of[".text"]);
+
+    // The `.cfg.data` payload starts with cfg's initializer.
+    let cfg_off = u64le(shdr(cfg_i) + 0x18) as usize;
+    assert_eq!(&bytes[cfg_off..cfg_off + 4], &35i32.to_le_bytes());
+}

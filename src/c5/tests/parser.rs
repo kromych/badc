@@ -1030,6 +1030,28 @@ fn asm_goto_rejects_label_number_below_operand_count() {
 }
 
 #[test]
+fn auto_type_constraints() {
+    // GNU `__auto_type` requires a single plain-identifier declarator
+    // with an expression initializer.
+    expect_compile_error(
+        "int main(void) { __auto_type x = 1, y = 2; return x + y; }",
+        "single declarator",
+    );
+    expect_compile_error(
+        "int main(void) { __auto_type *p = 0; return 0; }",
+        "plain identifier declarator",
+    );
+    expect_compile_error(
+        "int main(void) { __auto_type z; return 0; }",
+        "requires an initializer",
+    );
+    expect_compile_error(
+        "int main(void) { __auto_type b = { 1 }; return b; }",
+        "single expression",
+    );
+}
+
+#[test]
 fn asm_goto_requires_a_label() {
     expect_compile_error(
         "int f(int x) { __asm__ goto(\"nop\" : : \"r\"(x) : :); return 1; } \
@@ -1066,38 +1088,71 @@ fn asm_goto_accepts_forward_and_backward_labels() {
 }
 
 #[test]
-fn register_asm_variable_rejects_unknown_register() {
-    expect_compile_error(
-        "int main(void) { register int v asm(\"zz9\") = 1; return v; }",
-        "is not a supported register",
-    );
-}
-
-#[test]
-fn register_asm_variable_rejects_reserved_register() {
-    // rsp / rbp and the emit scratch r10 / r11 cannot carry an operand.
-    expect_compile_error(
-        "int main(void) { register long v asm(\"rsp\") = 1; \
-             __asm__(\"nop\" : : \"r\"(v)); return 0; }",
-        "is not a supported register",
-    );
-}
-
-#[test]
-fn declarator_asm_requires_register_class() {
-    // TODO: the rename form (`int v asm(\"name\")`) on non-register
-    // declarators.
-    expect_compile_error(
-        "int main(void) { int v asm(\"r9\") = 1; return v; }",
-        "only supported on `register` locals",
-    );
-}
-
-#[test]
 fn declarator_asm_rejected_at_file_scope() {
     // TODO: file-scope renames and global register variables.
     expect_compile_error(
         "int g asm(\"r9\"); int main(void) { return g; }",
         "not supported at file scope",
+    );
+}
+
+#[test]
+fn register_asm_binding_constraints() {
+    // `register T name asm("reg")` requires the `register` storage
+    // class, a bindable register for the target, automatic storage,
+    // and (for the stack / frame pointer) read-only use.
+    expect_compile_error(
+        "int main(void) { long x asm(\"rax\"); return 0; }",
+        "requires the `register` storage class",
+    );
+    expect_compile_error(
+        "int main(void) { register long x asm(\"nosuch\"); return (int)x; }",
+        "is not a bindable register",
+    );
+    expect_compile_error(
+        "int main(void) { static register long x asm(\"rax\"); return 0; }",
+        "cannot be `static` or `extern`",
+    );
+    #[cfg(target_arch = "x86_64")]
+    {
+        expect_compile_error(
+            "int main(void) { register long x asm(\"rsp\"); x = 5; return 0; }",
+            "cannot write register variable",
+        );
+        expect_compile_error(
+            "int main(void) { register long x asm(\"r10\"); return 0; }",
+            "reserved and cannot hold a register variable",
+        );
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        expect_compile_error(
+            "int main(void) { register long x asm(\"sp\"); x = 5; return 0; }",
+            "cannot write register variable",
+        );
+        expect_compile_error(
+            "int main(void) { register long x asm(\"x16\"); return 0; }",
+            "reserved and cannot hold a register variable",
+        );
+    }
+}
+
+#[test]
+fn section_and_alias_operand_constraints() {
+    // `section` / `alias` take a string-literal operand; an alias
+    // target must be defined earlier in the unit.
+    expect_compile_error(
+        "__attribute__((section(data))) int x; int main(void) { return x; }",
+        "must be a string literal",
+    );
+    expect_compile_error(
+        "int aka(void) __attribute__((alias(\"missing\")));\n\
+         int main(void) { return aka(); }",
+        "not a function defined earlier",
+    );
+    expect_compile_error(
+        "int aka __attribute__((alias(\"missing_obj\")));\n\
+         int main(void) { return aka; }",
+        "not an object defined earlier",
     );
 }

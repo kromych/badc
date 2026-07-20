@@ -4494,6 +4494,21 @@ fn emit_intrinsic(
             spill_local_addr_to_dst(code, dst, rd, frame);
             true
         }
+        I::StackPointer => {
+            // A `register T v asm("sp")` read: the current stack pointer.
+            // ADD (immediate) reads register 31 as SP.
+            let rd = match dst {
+                Place::IntReg(r) => Reg(r),
+                Place::Spill(_) => Reg(16),
+                _ => {
+                    bail_msg("StackPointer: dst not int reg / spill");
+                    return false;
+                }
+            };
+            emit(code, enc_add_imm(rd, Reg(31), 0));
+            spill_local_addr_to_dst(code, dst, rd, frame);
+            true
+        }
         I::ReturnAddress => {
             // __builtin_return_address(0): the saved return address the
             // AAPCS64 prologue stored at [x29 + 8]. Only level 0 (args[0]

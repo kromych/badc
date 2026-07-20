@@ -180,6 +180,12 @@ impl Compiler {
             self.pending.attr_destructor = false;
             self.pending.attr_init_priority = None;
             self.pending.attr_cleanup = None;
+            self.pending.attr_weak = false;
+            self.pending.attr_used = false;
+            self.pending.attr_section = None;
+            self.pending.attr_alias = None;
+            self.pending.saw_register_storage = false;
+            self.pending.auto_type_single_declarator = false;
             self.pending_is_inline = false;
             self.pending_is_always_inline = false;
             self.pending_is_naked = false;
@@ -241,6 +247,11 @@ impl Compiler {
                 // (parse_decl_base_type) already routes through the same
                 // helper; handle it identically at file scope.
                 bt = self.parse_typeof_specifier()?;
+            } else if self.lex.tk == Token::AutoType {
+                // `__auto_type` at file scope: the initializer supplies
+                // the type, recovered by the same pre-scan the
+                // block-scope path uses.
+                bt = self.parse_auto_type_specifier()?;
             } else if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
                 bt = scalar;
             } else if self.lex.tk == Token::Enum {
@@ -395,7 +406,14 @@ impl Compiler {
             let base_is_function_type = self.pending.base_is_function_type;
             let base_typedef_fn_proto = self.pending.typedef_fn_proto;
             let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
+            let mut declarator_count = 0usize;
             while self.lex.tk != ';' && self.lex.tk != '}' {
+                if self.pending.auto_type_single_declarator && declarator_count > 0 {
+                    return Err(
+                        self.compile_err("`__auto_type` declaration takes a single declarator")
+                    );
+                }
+                declarator_count += 1;
                 self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
                 self.pending.base_is_function_type = base_is_function_type;
                 self.pending.typedef_fn_proto = base_typedef_fn_proto;
@@ -844,6 +862,10 @@ impl Compiler {
                     if self.pending_noreturn {
                         self.symbols[id_idx].is_noreturn = true;
                     }
+                    // `weak` / `used` / `section("name")` collected for
+                    // this declarator (leading or trailing) mark the
+                    // symbol; the object writers read them off it.
+                    self.apply_symbol_attributes(id_idx);
                     // Carry the bare-`void` return marker onto the
                     // symbol so the body-emit path zeroes the
                     // accumulator before the trailing return, and so a
@@ -941,6 +963,34 @@ impl Compiler {
                     }
 
                     if self.lex.tk == ';' || self.lex.tk == ',' {
+                        // `alias("target")` on a bodyless declarator: the
+                        // declared name becomes an additional symbol for a
+                        // function already defined in this unit, and calls
+                        // through it resolve to the target's entry.
+                        if let Some(target) = self.pending.attr_alias.take() {
+                            let tgt = self.symbols.iter().position(|s| {
+                                s.name == target
+                                    && s.class == Token::Fun as i64
+                                    && s.defined_here
+                            });
+                            let Some(tgt) = tgt else {
+                                return Err(self.compile_err(format!(
+                                    "alias target `{target}` is not a function defined \
+                                     earlier in this unit"
+                                )));
+                            };
+                            self.symbols[tgt].was_referenced = true;
+                            self.symbols[id_idx].val = self.symbols[tgt].val;
+                            // Defined-through-the-target: keeps the TU-end
+                            // extern-import pass from re-assigning a
+                            // placeholder pc over the resolved entry.
+                            self.symbols[id_idx].defined_here = true;
+                            self.symbols[id_idx].is_alias = true;
+                            let name = self.symbols[id_idx].name.clone();
+                            let weak = self.symbols[id_idx].is_weak;
+                            self.function_aliases
+                                .push(crate::c5::program::FunctionAlias { name, target, weak });
+                        }
                         // Function prototype, not a definition. C99 6.7
                         // permits several declarators in one declaration,
                         // so a prototype can be followed by `,` and more
@@ -1589,6 +1639,32 @@ impl Compiler {
                         self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::Internal;
                     } else if self.symbols[id_idx].linkage != crate::c5::symbol::Linkage::Internal {
                         self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
+                    }
+                    self.apply_symbol_attributes(id_idx);
+                    // `alias("target")` on an object declarator: the name
+                    // is an additional symbol at the target object's
+                    // offset. It reserves no storage of its own; the
+                    // regular data-symbol emission picks it up with the
+                    // shared offset.
+                    if let Some(target) = self.pending.attr_alias.take() {
+                        let tgt = self.symbols.iter().position(|s| {
+                            s.name == target && s.class == Token::Glo as i64 && s.defined_here
+                        });
+                        let Some(tgt) = tgt else {
+                            return Err(self.compile_err(format!(
+                                "alias target `{target}` is not an object defined earlier \
+                                 in this unit"
+                            )));
+                        };
+                        self.symbols[id_idx].class = Token::Glo as i64;
+                        self.symbols[id_idx].type_ = ty;
+                        self.symbols[id_idx].val = self.symbols[tgt].val;
+                        self.symbols[id_idx].array_size = self.symbols[tgt].array_size;
+                        self.symbols[id_idx].defined_here = true;
+                        self.symbols[id_idx].is_extern_decl = false;
+                        self.symbols[id_idx].is_alias = true;
+                        self.accept(',')?;
+                        continue;
                     }
                     // C11 6.7.5: a requested alignment is honored on
                     // file-scope objects -- the object writer aligns the
@@ -2413,6 +2489,7 @@ impl Compiler {
                 || sym.name.is_empty()
                 || sym.name.starts_with('_')
                 || sym.name == "main"
+                || sym.is_used
                 || init_names.contains(sym.name.as_str())
             {
                 continue;
@@ -2421,6 +2498,22 @@ impl Compiler {
         }
         for (line, name) in unused {
             self.warn_at(line, alloc::format!("unused function `{name}`"));
+        }
+    }
+
+    /// Move the `weak` / `used` / `section("name")` attribute carriers
+    /// collected for the current declarator onto its symbol. Shared by
+    /// the function and file-scope-object paths; the object writers
+    /// read the fields off the symbol.
+    fn apply_symbol_attributes(&mut self, id_idx: usize) {
+        if self.pending.attr_weak {
+            self.symbols[id_idx].is_weak = true;
+        }
+        if self.pending.attr_used {
+            self.symbols[id_idx].is_used = true;
+        }
+        if let Some(sec) = self.pending.attr_section.take() {
+            self.symbols[id_idx].section_name = Some(sec);
         }
     }
 }

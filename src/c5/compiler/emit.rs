@@ -570,6 +570,10 @@ impl Compiler {
         s.h_vla_ptr_slot = s.vla_ptr_slot;
         s.h_vla_size_slot = s.vla_size_slot;
         s.h_is_zero_len_array = s.is_zero_len_array;
+        // The inner binding starts unpinned; a `register ... asm("reg")`
+        // declarator sets its own binding after this shadow.
+        s.h_asm_register = s.asm_register;
+        s.asm_register = None;
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -591,11 +595,11 @@ impl Compiler {
         sym.vla_ptr_slot = sym.h_vla_ptr_slot;
         sym.vla_size_slot = sym.h_vla_size_slot;
         sym.is_zero_len_array = sym.h_is_zero_len_array;
+        sym.asm_register = sym.h_asm_register;
         sym.is_scope_static = false;
         sym.is_scope_typedef = false;
         // The register-asm binding belongs to the block-scope local
         // being unbound, never to the restored outer symbol.
-        sym.asm_reg = None;
     }
 
     // ---- AST helpers ----

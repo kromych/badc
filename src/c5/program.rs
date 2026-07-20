@@ -47,6 +47,20 @@ pub struct InitFunc {
     pub is_destructor: bool,
 }
 
+/// A function symbol declared `__attribute__((alias("target")))`: the
+/// object's symbol table carries `name` as an additional symbol at
+/// `target`'s address. The target is a function defined in this unit
+/// (data aliases ride the regular data-symbol path with the target's
+/// offset). `weak` selects STB_WEAK over STB_GLOBAL. TODO: the ELF
+/// writer emits these; the Mach-O / PE final-image symbol tables do
+/// not carry the extra name (calls resolve at parse time regardless).
+#[derive(Debug, Clone)]
+pub struct FunctionAlias {
+    pub name: String,
+    pub target: String,
+    pub weak: bool,
+}
+
 /// A pointer-to-extern-data initializer. The slot at `data_offset` in
 /// [`Program::data`] must hold the runtime address of the data symbol
 /// `symbol_name`, which is defined in another translation unit and
@@ -353,6 +367,11 @@ pub struct Program {
     /// the constructors before `main`. Empty for programs that declare
     /// none, and for `Program` shapes built outside the parser.
     pub init_funcs: alloc::vec::Vec<InitFunc>,
+
+    /// Function symbols declared `__attribute__((alias("target")))`
+    /// in this unit, emitted by the object writers as additional
+    /// symbols at the target's address.
+    pub function_aliases: alloc::vec::Vec<FunctionAlias>,
 }
 
 /// A single local variable or formal parameter belonging to a

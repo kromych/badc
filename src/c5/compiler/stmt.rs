@@ -383,6 +383,7 @@ impl Compiler {
         // Reset the const carrier for this declaration; `parse_decl_base_type`
         // below records `const` as it consumes the base specifiers.
         self.pending.base_is_const = false;
+        self.pending.saw_register_storage = false;
         while self.lex.tk == Token::Extern
             || self.lex.tk == Token::Static
             || self.lex.tk == Token::ThreadLocal
@@ -448,6 +449,7 @@ impl Compiler {
             self.pending.vla_allowed = true;
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = false;
+            let asm_reg = self.parse_register_asm_binding(is_static, is_extern)?;
             // Trailing cleanup wins for this declarator; otherwise the
             // leading one (if any) applies.
             let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
@@ -563,6 +565,10 @@ impl Compiler {
                 let decl_file = self.intern_source_file() as u32;
                 self.symbols[loc_idx].decl_file = decl_file;
                 self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
+                // Unconditional write so a reused symbol slot does not
+                // leak a stale binding from an outer name.
+                self.symbols[loc_idx].asm_register = asm_reg;
+                self.check_register_asm_init(asm_reg)?;
                 // Save any enclosing aggregate's in-progress initializer
                 // carriers -- this declaration can be nested inside one when
                 // an aggregate element is a statement expression that
@@ -617,9 +623,15 @@ impl Compiler {
                 self.register_cleanup_var(loc_idx, fn_sym);
             }
 
+            if self.pending.auto_type_single_declarator && self.lex.tk == ',' {
+                return Err(
+                    self.compile_err("`__auto_type` declaration takes a single declarator")
+                );
+            }
             self.accept(',')?;
         }
         self.next()?;
+        self.pending.auto_type_single_declarator = false;
         Ok(())
     }
 
@@ -1453,22 +1465,6 @@ impl Compiler {
             }
             self.next()?; // consume `(`
             self.expr(Token::Assign as i64)?;
-            // A `register T v asm("reg")` local used as an `r`-class
-            // operand binds to its named register (the one placement
-            // GCC guarantees for asm-declared register variables).
-            let constraint = match constraint {
-                AsmConstraint::Reg => {
-                    let pinned = self.ast_acc.and_then(|id| match self.ast.expr(id) {
-                        Expr::Ident { sym, .. } => self.symbols[*sym as usize].asm_reg,
-                        _ => None,
-                    });
-                    match pinned {
-                        Some(r) => AsmConstraint::Fixed(r),
-                        None => constraint,
-                    }
-                }
-                c => c,
-            };
             let width = self.size_of_type(self.ty).min(8) as u8;
             // The x86 `x` operand path moves a full 128-bit value (movups), so
             // it requires a 16-byte operand (a __m128i / vector). A scalar
@@ -1483,6 +1479,21 @@ impl Compiler {
                 return Err(self
                     .compile_err("inline asm: only 16-byte (__m128i) `x` operands are supported"));
             }
+            // A `register T v asm("reg")` variable used as a plain
+            // register operand pins the operand to its named register --
+            // the GNU-documented purpose of a local register variable.
+            // TODO: the aarch64 asm surface is pattern-matched, not
+            // constraint-based; pinning applies there once it is.
+            let constraint = if let AsmConstraint::Reg = constraint
+                && let Some(Expr::Ident { sym, .. }) = self.ast_acc.map(|a| self.ast.expr(a))
+                && self.symbols[*sym as usize].class == Token::Loc as i64
+                && let Some(crate::c5::symbol::AsmRegister::Gp(r)) =
+                    self.symbols[*sym as usize].asm_register
+            {
+                AsmConstraint::Fixed(r)
+            } else {
+                constraint
+            };
             // Outputs pass the destination address; a memory operand (input or
             // output) is likewise reached through its address, so it must be an
             // lvalue. A non-lvalue (a call / cast / arithmetic result) is not

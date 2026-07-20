@@ -513,7 +513,7 @@ impl Compiler {
                 return self.emit_static_array_init_runtime(loc_idx, ty, array_size);
             }
             if array_size == -1 {
-                if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                if self.is_traversable_aggregate_ty(ty) {
                     // Static-local of struct array, deferred size:
                     // `static struct T xs[] = { {...}, {...}, ... };`
                     // Pre-scan the source for the element count so
@@ -649,7 +649,7 @@ impl Compiler {
                     self.data.push(0);
                 }
                 self.write_array_init_into_data(off, ty, &elements);
-            } else if array_size > 0 && is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            } else if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
                 // Known-size static-local array of structs. Each element
                 // is a (possibly brace-elided, C99 6.7.8p20) struct
                 // initializer; the generic array collector below would
@@ -811,7 +811,7 @@ impl Compiler {
                 let elements = self.collect_array_initializer(ty)?;
                 let var_offset = self.symbols[loc_idx].val;
                 self.write_array_init_into_data(var_offset, ty, &elements);
-            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            } else if self.is_traversable_aggregate_ty(ty) {
                 let sid = struct_id_of(ty);
                 let var_offset = self.symbols[loc_idx].val;
                 self.collect_struct_initializer(sid, var_offset)?;
@@ -1192,7 +1192,7 @@ impl Compiler {
             // Stage each element in self.data, count them, then
             // reserve one stack frame slot block and Mcpy the
             // staged bytes into it.
-            if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
+            if self.is_traversable_aggregate_ty(ty) && self.lex.tk == '{' {
                 // Local deferred-size struct array. Same
                 // scan-then-pre-allocate sequence as the
                 // file-scope path so an element's string-literal
@@ -1369,7 +1369,7 @@ impl Compiler {
                 // nested struct braces. Stage each element's
                 // bytes in `self.data` and Mcpy the block into
                 // the local slot.
-                if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
+                if self.is_traversable_aggregate_ty(ty) && self.lex.tk == '{' {
                     let elem_size = self.size_of_type(ty);
                     let sid = struct_id_of(ty);
                     // Pre-scan each element's brace list: if any
@@ -1660,7 +1660,7 @@ impl Compiler {
                     packed_bytes
                 };
                 self.emit_local_array_init(local_val, start_addr, total_bytes);
-            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
+            } else if self.is_traversable_aggregate_ty(ty) && self.lex.tk == '{' {
                 // Local struct value with brace-list initializer.
                 // C99 6.7.8p13: every entry may be a non-constant
                 // expression. Pre-scan the brace list; if all
@@ -1808,7 +1808,7 @@ impl Compiler {
             // C99 6.3.2.1p3: an array compound literal used as a
             // value decays to a pointer to its first element.
             value_ty = elem_ty + Ty::Ptr as i64;
-        } else if is_struct_ty(t) && struct_ptr_depth(t) == 0 {
+        } else if self.is_traversable_aggregate_ty(t) {
             let sid = struct_id_of(t);
             let elem_size = self.size_of_type(t);
             let cl_slots = self.slots_of_type(t);
@@ -2121,7 +2121,7 @@ impl Compiler {
                 } else {
                     self.fill_array_leaves_runtime(local_val, off, sub_span, ty, elem_size)?;
                 }
-            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            } else if self.is_traversable_aggregate_ty(ty) {
                 // Array-of-struct element (C99 6.7.8p17): recurse into the
                 // struct initializer instead of the scalar-leaf path, which
                 // would hand the element's `{` to the expression parser.

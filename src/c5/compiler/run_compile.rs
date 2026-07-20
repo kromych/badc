@@ -1900,7 +1900,7 @@ impl Compiler {
                             ));
                         }
                         self.next()?;
-                        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                        if self.is_traversable_aggregate_ty(ty) {
                             // `struct T xs[] = { {...}, {...}, ... };`
                             // Pre-scan the source to count elements so
                             // every element's storage is pre-reserved
@@ -2295,7 +2295,7 @@ impl Compiler {
                             // `{ ... }`. A scalar `(int){5}` falls through to
                             // parse_global_initializer's single-value path.
                             self.skip_opt_compound_literal_cast()?;
-                            if array_size > 0 && is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                            if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
                                 if thread_local {
                                     return Err(self.compile_err(
                                         "array `_Thread_local` initialisers are not supported",
@@ -2533,7 +2533,7 @@ impl Compiler {
                                     )));
                                 }
                                 self.write_array_init_into_data(var_offset, ty, &elements);
-                            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                            } else if self.is_traversable_aggregate_ty(ty) {
                                 if thread_local {
                                     return Err(self.compile_err(
                                         "struct `_Thread_local` initialisers are not supported",

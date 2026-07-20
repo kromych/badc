@@ -176,7 +176,11 @@ impl Compiler {
         self.structs.push(StructDef {
             name: "__int128".to_string(),
             size: 16,
-            align: 8,
+            // GCC / clang give `__int128` 16-byte alignment on every
+            // target that provides it, which the member offsets of a
+            // containing struct and the x86-64 / AArch64 argument
+            // classification both depend on.
+            align: 16,
             fields: alloc::vec![half("__lo", 0), half("__hi", 8)],
             is_complete: true,
             is_union: false,
@@ -287,6 +291,14 @@ impl Compiler {
         }
         let id = struct_id_of(t);
         self.structs.get(id).is_some_and(|s| s.name == "__int128")
+    }
+
+    /// True when a member of type `t` is an aggregate the initializer
+    /// traversal descends into. The 128-bit integer reuses the aggregate
+    /// layout machinery but initializes as a single scalar leaf, so a
+    /// brace list must not spend a sibling's value on its halves.
+    pub(super) fn is_traversable_aggregate_ty(&self, t: i64) -> bool {
+        is_struct_ty(t) && struct_ptr_depth(t) == 0 && !self.is_int128_ty(t)
     }
 
     /// C99 6.3.1.8 usual arithmetic conversions, with the GCC 128-bit

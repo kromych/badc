@@ -1815,7 +1815,7 @@ impl Compiler {
         let mut i = 0;
         while i < fields.len() && (!is_union || i == 0) {
             let f = &fields[i];
-            let elem = if is_struct_ty(f.ty) && struct_ptr_depth(f.ty) == 0 {
+            let elem = if self.is_traversable_aggregate_ty(f.ty) {
                 self.struct_flat_init_slots(struct_id_of(f.ty))
             } else {
                 1
@@ -2307,7 +2307,7 @@ impl Compiler {
                     };
                     let mem = self.structs[struct_id].fields[mem_idx].clone();
                     let mem_base = (var_offset as usize) + mem.offset;
-                    if is_struct_ty(mem.ty) && struct_ptr_depth(mem.ty) == 0 && self.lex.tk == '{' {
+                    if self.is_traversable_aggregate_ty(mem.ty) && self.lex.tk == '{' {
                         self.collect_struct_initializer_t(
                             struct_id_of(mem.ty),
                             target.rebased(mem_base as i64),
@@ -2617,7 +2617,7 @@ impl Compiler {
             for b in &mut self.data[field_base..field_base + region] {
                 *b = 0;
             }
-            let elem_is_struct = is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0;
+            let elem_is_struct = self.is_traversable_aggregate_ty(field.ty);
             let elem_sid = if elem_is_struct {
                 Some(struct_id_of(field.ty))
             } else {
@@ -2737,7 +2737,7 @@ impl Compiler {
                     break;
                 }
             }
-        } else if is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0 {
+        } else if self.is_traversable_aggregate_ty(field.ty) {
             let nested_sid = struct_id_of(field.ty);
             if self.lex.tk == '{' {
                 self.collect_struct_initializer(nested_sid, field_base as i64)?;
@@ -2921,7 +2921,7 @@ impl Compiler {
         // A nested aggregate member initialized by a brace list (or a
         // compound literal naming its type) recurses through the shared
         // traversal at the member's offset (C99 6.7.8p13).
-        if is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0 && self.lex.tk == '{' {
+        if self.is_traversable_aggregate_ty(field.ty) && self.lex.tk == '{' {
             self.collect_struct_initializer_t(
                 struct_id_of(field.ty),
                 InitTarget::Runtime {
@@ -2965,8 +2965,7 @@ impl Compiler {
         // C99 6.7.8p13: a struct member may be initialized by a single
         // compatible struct expression (copied); a scalar value would be
         // brace elision into its sub-fields, which this path can't model.
-        if is_struct_ty(field.ty)
-            && struct_ptr_depth(field.ty) == 0
+        if self.is_traversable_aggregate_ty(field.ty)
             && !(is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0)
         {
             return Err(self

@@ -11,11 +11,11 @@
 use alloc::string::String;
 
 use super::super::codegen::Target;
+use super::super::codegen::ssa::build::SsaBuilder;
 use super::super::compiler::types::{
     STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty,
     is_vector_ty, is_volatile_ty, load_kind, strip_unsigned, struct_ptr_depth,
 };
-use super::super::codegen::ssa::build::SsaBuilder;
 use super::super::ir::{AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind, ValueId};
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
@@ -833,7 +833,11 @@ impl<'a> Walker<'a> {
         if is128 {
             return Ok(self.int128_load(b, v));
         }
-        let ty = if self.is_int128_value_ty(ty) { Ty::Int as i64 } else { ty };
+        let ty = if self.is_int128_value_ty(ty) {
+            Ty::Int as i64
+        } else {
+            ty
+        };
         let low_ty = Ty::LongLong as i64 | (ty & UNSIGNED_BIT);
         let lo = self.convert_scalar_value(b, v, ty, low_ty);
         let hi = if (ty & UNSIGNED_BIT) != 0 || is_pointer_ty(ty) {
@@ -1171,18 +1175,9 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// True when the expression's *value* is a 128-bit integer. A
-    /// comparison yields `int` even though the parser leaves the operand
-    /// type on the node (it sets the result type after building it), so
-    /// the node's own tag is not enough.
+    /// True when the expression's *value* is a 128-bit integer.
     fn expr_is_int128_value(&self, id: ExprId) -> bool {
-        let e = self.ast.expr(id);
-        if let Expr::Binary { op, .. } = e
-            && is_comparison_op(*op)
-        {
-            return false;
-        }
-        expr_ty(e).is_some_and(|t| self.is_int128_value_ty(t))
+        expr_ty(self.ast.expr(id)).is_some_and(|t| self.is_int128_value_ty(t))
     }
 
     /// True when either operand of a binary node is a 128-bit value, so
@@ -1335,11 +1330,7 @@ impl<'a> Walker<'a> {
 
     /// Shift count for a 128-bit shift: a scalar rvalue, or the low
     /// half of an int128-typed count.
-    fn int128_shift_count(
-        &mut self,
-        b: &mut SsaBuilder,
-        id: ExprId,
-    ) -> Result<ValueId, WalkError> {
+    fn int128_shift_count(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<ValueId, WalkError> {
         let is128 = self.expr_is_int128_value(id);
         let v = self.walk_expr_rvalue(b, id)?;
         if is128 {
@@ -5460,7 +5451,7 @@ fn store_kind_for(ty: i64, target: Target) -> StoreKind {
 /// True for a relational or equality operator (integer or
 /// floating-point). The result is `int` (C99 6.5.8 / 6.5.9) regardless
 /// of operand type.
-fn is_comparison_op(op: BinOp) -> bool {
+pub(crate) fn is_comparison_op(op: BinOp) -> bool {
     matches!(
         op,
         BinOp::Eq

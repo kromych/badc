@@ -41,7 +41,7 @@ use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_bool_ty, is_char_band_ptr_ty,
     is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty, is_vector_ty,
-    is_void_ptr_ty, struct_id_of, struct_ptr_depth, usual_arith_common_ty,
+    is_void_ptr_ty, struct_id_of, struct_ptr_depth,
 };
 
 /// Relational comparison operator. The four variants share an

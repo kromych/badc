@@ -845,6 +845,12 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     {
         return Ok(AsmOpndA64::Label { num, forward: dir });
     }
+    // GAS makes the `#` on an immediate optional, so a bare integer literal is
+    // an immediate (`brk 0x800`, `hlt 0xf000`). Checked last: registers,
+    // system registers and local labels are matched above.
+    if let Some(v) = parse_int(tok) {
+        return Ok(AsmOpndA64::Imm(v));
+    }
     Err(format!("inline asm: unsupported operand `{tok}`"))
 }
 
@@ -1321,6 +1327,25 @@ mod tests {
                     is64: false
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn bare_immediate_operand() {
+        // GAS accepts an immediate without `#`; a bare integer literal parses
+        // to the same operand as the `#`-prefixed form.
+        let insns = parse_template(b"brk 0x800; hlt 0xf000; brk #0x800").unwrap();
+        assert_eq!(insns[0].operands, [AsmOpndA64::Imm(0x800)]);
+        assert_eq!(insns[1].operands, [AsmOpndA64::Imm(0xf000)]);
+        assert_eq!(insns[2].operands, insns[0].operands);
+        // A trailing `b`/`f` is still a local-label reference, not an integer.
+        let insns = parse_template(b"b 1f").unwrap();
+        assert_eq!(
+            insns[0].operands,
+            [AsmOpndA64::Label {
+                num: 1,
+                forward: true
+            }]
         );
     }
 

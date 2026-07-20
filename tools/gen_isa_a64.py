@@ -121,6 +121,20 @@ EXCLUDED_ROWS = {
     'subg Xd|SP, Xn|SP, #imm1, #imm2',
 }
 
+# Assembler aliases the instruction database does not carry as rows.
+# `bic (immediate)` assembles as `and Rd, Rn, #~imm`; the LogicalImmNot field
+# encodes the complement at the operand width. `bics (immediate)` is not
+# accepted by GNU as, so only `bic` is added. Keyed as the catalogue is:
+# (mnemonic, ops-tuple) -> (base, fields, source-comment).
+EXTRA_FORMS = {
+    ('bic', ('W', 'W', 'Imm')): (0x12000000, [
+        'Reg { op: 0, shift: 0 }', 'Reg { op: 1, shift: 5 }',
+        'LogicalImmNot { op: 2, is64: false }'], 'bic Wd, Wn, #imm'),
+    ('bic', ('X', 'X', 'Imm')): (0x92000000, [
+        'Reg { op: 0, shift: 0 }', 'Reg { op: 1, shift: 5 }',
+        'LogicalImmNot { op: 2, is64: true }'], 'bic Xd, Xn, #imm'),
+}
+
 # Bare op-string tokens whose bit width is not written inline (widths verified
 # by the 32-bit row-sum constraint in the design spike).
 BARE = {'Rm': 5, 'Rn': 5, 'Rd': 5, 'Ra': 5, 'Rt': 5, 'Rt2': 5, 'Rs': 5,
@@ -419,6 +433,8 @@ def main():
     rows = load_rows(a.db)
     residuals = collections.defaultdict(list)
     forms = catalogue(rows, residuals)
+    for key, val in EXTRA_FORMS.items():
+        forms.setdefault(key, val)
     # Sort by mnemonic so the consumer can binary-search the catalogue; stable
     # to keep each mnemonic's rows in database order.
     out = sorted(forms.items(), key=lambda kv: kv[0][0])

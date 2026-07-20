@@ -17,5 +17,3 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rax
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

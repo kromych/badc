@@ -182,6 +182,7 @@ impl Compiler {
             self.pending.attr_cleanup = None;
             self.pending_is_inline = false;
             self.pending_is_always_inline = false;
+            self.pending_is_naked = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
                     thread_local = true;
@@ -291,6 +292,8 @@ impl Compiler {
                 let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
                 if typedef_array != 0 {
                     self.pending.typedef_base_array_size = typedef_array;
+                    self.pending.typedef_base_array_dims =
+                        self.symbols[self.lex.curr_id_idx].array_dims.clone();
                 }
                 self.next()?;
             } else if m.saw_int_mod {
@@ -402,6 +405,11 @@ impl Compiler {
                 // function body's opening brace parsed further below.
                 let signature_line = self.lex.line;
                 let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
+                // TODO: file-scope declarator `asm("name")` -- both the
+                // linkage-name rename and the global register variable.
+                if self.lex.tk == Token::Asm {
+                    return Err(self.compile_err("declarator `asm` is not supported at file scope"));
+                }
                 // `__declspec(dllexport)` on the declarator exports the name,
                 // the equivalent of `#pragma export(name)`. resolve_exports
                 // validates the name resolves to a defined function.
@@ -466,6 +474,7 @@ impl Compiler {
                     && self.pending.declarator_leading_ptr_count == 0
                 {
                     array_size = typedef_dim;
+                    self.apply_typedef_array_dims(id_idx);
                 }
                 self.ty = ty;
                 let prior_array_size = self.symbols[id_idx].array_size;
@@ -1321,6 +1330,9 @@ impl Compiler {
                     // from a value-returning cast) reads `0`
                     // instead of whatever the function body
                     // happened to leave in the accumulator.
+                    // A naked function has no synthetic return value: its
+                    // inline-asm body is the entire function and returns on its
+                    // own (e.g. `iretq`), so emit no accumulator zeroing.
                     if self.current_func_returns_void {
                         self.emit_imm(0);
                     }

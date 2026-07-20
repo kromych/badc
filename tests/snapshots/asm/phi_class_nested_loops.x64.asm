@@ -64,4 +64,3 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movslq	%eax, %rax
                	retq
-               	addb	%al, 0x41(%rdx)

@@ -154,5 +154,3 @@ Disassembly of section .text:
                	retq
                	movslq	%eax, %rax
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

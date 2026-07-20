@@ -444,6 +444,13 @@ fn lay_out(
                             stack.push(t);
                         }
                     }
+                    // Label targets first (reversed), fall-through
+                    // (row 0) last so it pops first and chains.
+                    Terminator::AsmGoto { table } => {
+                        for &t in func.jump_tables[table as usize].iter().rev() {
+                            stack.push(t);
+                        }
+                    }
                 }
             }
             Some(li) => {

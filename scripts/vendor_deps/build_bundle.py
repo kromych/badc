@@ -230,6 +230,40 @@ SOURCES = [
         upstream_sha="3d5e064e9dd67c70f7962836505a7fa067bf0a4e",
         sha_kind="git",
     ),
+    Source(
+        # libmill -- Go-style CSP coroutines in C. No release since
+        # 2017; pin to the master head. Version embeds the commit's
+        # author date. The demo currently fetches this archive from
+        # upstream directly; the mirror entry keeps the bump workflow
+        # uniform.
+        name="libmill",
+        version="20210209",
+        url="https://github.com/sustrik/libmill/archive/e8937e624757663f5379018cae3f2b3e916afb6c.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="e8937e624757663f5379018cae3f2b3e916afb6c",
+        sha_kind="git",
+    ),
+    Source(
+        # libdill -- structured concurrency in C. Same pin model as
+        # libmill: master head, author-date version.
+        name="libdill",
+        version="20220810",
+        url="https://github.com/sustrik/libdill/archive/32d0e8b733416208e0412a56490332772bc5c6e1.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="32d0e8b733416208e0412a56490332772bc5c6e1",
+        sha_kind="git",
+    ),
+    Source(
+        # tsoding/coroutines -- minimal coroutine library whose context
+        # switch is hand-written SysV AMD64 asm in naked functions.
+        # No releases; pin to the main head, author-date version.
+        name="coroutines",
+        version="20250823",
+        url="https://github.com/tsoding/coroutines/archive/7d50b7162a58a1d7f136145de0cc9d46fb82a7f8.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="7d50b7162a58a1d7f136145de0cc9d46fb82a7f8",
+        sha_kind="git",
+    ),
 ]
 
 

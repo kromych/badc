@@ -357,11 +357,12 @@ impl Compiler {
     }
 
     pub(super) fn type_warning(
+        structs: &[super::StructDef],
         declared: i64,
         actual: i64,
         actual_is_zero_literal: bool,
     ) -> Option<&'static str> {
-        Self::type_warning_with_flags(declared, actual, actual_is_zero_literal, false)
+        Self::type_warning_with_flags(structs, declared, actual, actual_is_zero_literal, false)
     }
 
     /// Like [`Self::type_warning`] but with an extra `actual_is_untyped_call`
@@ -371,6 +372,7 @@ impl Compiler {
     /// register value is preserved bit-for-bit at the assignment
     /// store regardless of the tag.
     pub(super) fn type_warning_with_flags(
+        structs: &[super::StructDef],
         declared: i64,
         actual: i64,
         actual_is_zero_literal: bool,
@@ -424,6 +426,25 @@ impl Compiler {
             return None;
         }
         if act_is_char_ptr && decl_is_ptr {
+            return None;
+        }
+
+        // A pointer-to-array (aggregate-backed) accepts the flat pointer
+        // spellings of the same shape -- `&arr` and a decayed row carry
+        // the element-pointer tag -- so any pointer on the other side is
+        // quiet, mirroring the byte-pointer rule above. Real
+        // pointer-vs-integer mismatches still warn below.
+        let is_array_agg_ptr = |ty: i64| {
+            is_struct_ty(ty)
+                && struct_ptr_depth(ty) > 0
+                && structs
+                    .get(super::types::struct_id_of(ty))
+                    .is_some_and(|s| s.is_array)
+        };
+        if is_array_agg_ptr(declared) && act_is_ptr {
+            return None;
+        }
+        if is_array_agg_ptr(actual) && decl_is_ptr {
             return None;
         }
 

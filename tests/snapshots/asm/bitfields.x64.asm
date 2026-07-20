@@ -54,7 +54,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rax
                	movl	(%rax), %eax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	andq	$0x1, %rax
                	testq	%rax, %rax
                	je	<addr>
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rax
                	movl	(%rax), %eax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	andq	$0x1, %rax
                	testq	%rax, %rax
                	je	<addr>
@@ -233,7 +233,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x18(%rbp), %rax
                	movl	(%rax), %eax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	andq	$0x1, %rax
                	cmpq	$0x1, %rax
                	je	<addr>

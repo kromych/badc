@@ -113,6 +113,14 @@ impl Compiler {
                     self.next()?;
                 }
             }
+            // `A *p` for an array typedef `A` is a pointer to the array
+            // (C99 6.7.7p3 + 6.7.6.1); rebuild the flat tag into the
+            // aggregate-backed form, mirroring `parse_declarator`'s
+            // leading-`*` epilogue (this loop consumed the `*`s, so the
+            // declarator below never sees them).
+            if leading_ptr_count > 0 && self.pending.typedef_base_array_size > 0 {
+                ty = self.ptr_to_array_typedef_ty(base, ty, leading_ptr_count);
+            }
             // A parameter that is a pointer to a function-pointer typedef
             // base (`curl_write_callback *p`) gains one fn-pointer
             // indirection level per leading `*`, matching the general
@@ -184,24 +192,22 @@ impl Compiler {
             // whose alias is an array. Only consult the carrier
             // when parse_declarator did not already absorb it
             // into `array_size` (i.e., the declarator carried no
-            // explicit brackets).
-            if array_size == 0 && self.pending.typedef_base_array_size != 0 {
-                if leading_ptr_count > 0 {
-                    // `Node *p` where `Node` is an array typedef: a pointer
-                    // TO the array, not an array parameter. 6.7.5.3p7 does
-                    // not apply -- the leading `*` already gave the pointer
-                    // level. Record the pointer-to-array shape (array_dims
-                    // [1, N]) so `p[k]` strides by the whole row and decays
-                    // to the row address, matching the general declarator
-                    // path; the `*` was consumed here, so parse_declarator
-                    // never saw it to set this itself.
-                    if param_idx != usize::MAX {
-                        let inner = self.pending.typedef_base_array_size;
-                        self.symbols[param_idx].inner_array_size = inner;
-                        self.symbols[param_idx].array_dims = alloc::vec![1, inner];
-                    }
-                } else {
-                    full_ty += Ty::Ptr as i64;
+            // explicit brackets). A pointer-to-array parameter
+            // (`Node *p`, leading `*` consumed above) already has
+            // the aggregate-backed tag and needs no adjustment.
+            if array_size == 0
+                && self.pending.typedef_base_array_size != 0
+                && leading_ptr_count == 0
+            {
+                full_ty += Ty::Ptr as i64;
+                // A multi-dim alias (`typedef T G[A][B]; void f(G g)`)
+                // decays to a row pointer; record the dims on the
+                // parameter like a bracket-declared `T g[A][B]` so the
+                // subscript path strides each level by its row width.
+                if param_idx != usize::MAX && self.pending.typedef_base_array_dims.len() >= 2 {
+                    let dims = self.pending.typedef_base_array_dims.clone();
+                    self.symbols[param_idx].inner_array_size = dims[1];
+                    self.symbols[param_idx].array_dims = dims;
                 }
             }
             // Fn-pointer lineage: pick up the side-channel that

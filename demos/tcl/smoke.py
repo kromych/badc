@@ -114,7 +114,7 @@ def compile_units(badc: str, unix: Path, generic: Path, out: Path, log) -> list[
     objs, fails = [], []
     for src, obj, flags in cmds:
         objp = out / f"{obj}.o"
-        cmd = [badc, "-O", "-c", "-UHAVE_CPUID", *extra, *flags, *includes, src, "-o", str(objp)]
+        cmd = [badc, "-O", "-c", *extra, *flags, *includes, src, "-o", str(objp)]
         r = run(cmd, timeout=180)
         if r.returncode != 0:
             msg = (r.stderr.strip().splitlines() or [f"rc{r.returncode}"])[-1]

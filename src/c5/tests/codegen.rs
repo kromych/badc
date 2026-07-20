@@ -10,6 +10,30 @@ fn entry_pc_points_at_main() {
     assert_eq!(program.entry_pc, 0);
 }
 
+#[test]
+fn unsupported_inline_asm_reports_the_specific_form() {
+    use crate::{NativeOptions, Target};
+    // An inline-asm form the encoder cannot handle must report the specific
+    // reason, not the generic "op outside the implemented subset" fallback that
+    // reads like an internal compiler error. `add` with too many registers has
+    // no encoding -- a stable trigger, since no `add` form ever takes five.
+    let program = super::compile_str(
+        "int main(void){ __asm__ volatile(\"add x0, x1, x2, x3, x5\" ::: \"x0\"); return 0; }",
+    );
+    let err = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect_err("add with five registers is not encodable");
+    let msg = format!("{err}");
+    assert!(msg.contains("no A64 encoding"), "specific reason: {msg}");
+    assert!(
+        !msg.contains("implemented subset"),
+        "not the generic fallback: {msg}"
+    );
+}
+
 /// Every emitted binary -- regardless of target -- carries the
 /// `OUTPUT_MARKER` at the tail of the code section so a `strings`
 /// scan reveals the badc version that produced it. The marker is
@@ -1538,6 +1562,27 @@ fn builtin_overflow_on_128bit_operand_is_rejected() {
     );
 }
 
+/// The x86 `x` (xmm) inline-asm operand path moves a full 128-bit value
+/// (movups), so it requires a 16-byte `__m128i`. A scalar float / double `x`
+/// operand must be rejected at parse rather than over-reading / over-writing
+/// its 4/8-byte storage. TODO: scalar `x` via movss / movsd.
+#[test]
+fn scalar_x_inline_asm_operand_is_rejected() {
+    use crate::{Compiler, Target};
+    let err = Compiler::with_target(
+        "double f(double a){ double r; __asm__(\"movsd %1, %0\" : \"=x\"(r) : \"x\"(a)); \
+             return r; } int main(void){ return (int) f(1.0); }"
+            .to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect_err("a scalar `x` operand must be rejected, not over-moved");
+    assert!(
+        err.to_string().contains("16-byte (__m128i) `x` operands"),
+        "expected the scalar-`x` rejection, got: {err}",
+    );
+}
+
 /// `__int128` <-> scalar conversions run correctly. An integer initializer,
 /// cast, or assignment to `__int128` widens into the 16-byte object (low
 /// half = value, high half = sign); a cast to a narrower integer loads the
@@ -2672,15 +2717,148 @@ fn external_bool_return_is_masked_before_branch() {
     )
     .expect("emit relocatable");
     let text = elf64_section(&obj, ".text").expect(".text");
-    // `and $0xff, %rax` == 48 81 e0 ff 00 00 00. The bool return must be
-    // reduced to its low byte before the conditional branch.
+    // The bool return must be reduced to its low byte before the conditional
+    // branch. `and $0xff, %rax` is the accumulator form 48 25 ff 00 00 00 --
+    // the catalogue's shortest encoding for rax; 48 81 e0 ff 00 00 00 is the
+    // equivalent 81 /4 form a non-accumulator register would take.
     let masks = text
-        .windows(7)
-        .any(|w| w == [0x48, 0x81, 0xe0, 0xff, 0x00, 0x00, 0x00]);
+        .windows(6)
+        .any(|w| w == [0x48, 0x25, 0xff, 0x00, 0x00, 0x00])
+        || text
+            .windows(7)
+            .any(|w| w == [0x48, 0x81, 0xe0, 0xff, 0x00, 0x00, 0x00]);
     assert!(
         masks,
         "expected the external _Bool return to be masked to its low byte before use"
     );
+}
+
+#[test]
+fn naked_function_emits_body_only() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    // A `__attribute__((naked))` function's machine code is exactly its
+    // inline-asm body -- no prologue (push rbp), no epilogue, no synthetic
+    // return -- so an interrupt service routine can end in `iretq`.
+    let src = "__attribute__((naked)) void isr(void){ __asm__ volatile(\"hlt\\n\\tiretq\"); }\n\
+               int main(void){ return 0; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap();
+    let obj = emit_native_with_options(
+        &program,
+        Target::LinuxX64,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        },
+    )
+    .expect("emit relocatable");
+    let text = elf64_section(&obj, ".text").expect(".text");
+    let off = elf_func_value(&obj, "isr").expect("isr symbol value") as usize;
+    let size = elf_func_symbols(&obj)
+        .into_iter()
+        .find(|(n, _)| n == "isr")
+        .expect("isr symbol")
+        .1 as usize;
+    // hlt = F4, iretq = 48 CF. Body-only: exactly these three bytes, with no
+    // prologue byte (55 = push rbp) and no trailing return (C3 / xor+ret).
+    assert_eq!(
+        &text[off..off + size],
+        &[0xF4, 0x48, 0xCF],
+        "naked function must emit its inline-asm body verbatim"
+    );
+}
+
+#[test]
+fn explicit_register_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // Basic (operand-less) asm names hardware registers with a single `%`,
+    // as an ISR's context-save does. The parser resolves `%rax`/`%r15` to the
+    // register directly rather than treating `%` as an operand reference.
+    let program = super::compile_str_bare(
+        "void isr(void){ __asm__ volatile(\"mov %rax, %rbx\\n\\tpush %r15\\n\\tpop %r15\"); }\n\
+         int main(void){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    let has = |w: &[u8]| bytes.windows(w.len()).any(|c| c == w);
+    assert!(has(&[0x48, 0x89, 0xc3]), "mov %rax,%rbx = 48 89 c3");
+    assert!(has(&[0x41, 0x57]), "push %r15 = 41 57");
+    assert!(has(&[0x41, 0x5f]), "pop %r15 = 41 5f");
+}
+
+#[test]
+fn inline_asm_call_symbol_x64() {
+    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    // A naked ISR's `call <symbol>` resolves to the target function through a
+    // relocation (E8 + rel32), patched by the same fixup pass as a normal
+    // call. Compilation succeeding proves the symbol resolved -- an unknown
+    // target bails -- and the naked body's `iretq` (48 cf) survives intact.
+    let src = "void schedule(void){ }\n\
+               __attribute__((naked)) void isr(void){ __asm__ volatile(\"call schedule\\n\\tiretq\"); }\n\
+               int main(void){ return 0; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap();
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("naked call-symbol must emit -- the target must resolve");
+    assert!(
+        bytes.windows(2).any(|w| w == [0x48, 0xcf]),
+        "the naked ISR body (iretq) must be present"
+    );
+}
+
+#[test]
+fn local_label_jump_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // Numeric local labels resolve within the block: `Nb` branches backward to
+    // the nearest prior `N:`, `Nf` forward to the next. badc emits the rel32
+    // form and patches the displacement against the label offset. The windows
+    // below are self-relative, so they hold regardless of the block's position.
+    let program = super::compile_str_bare(
+        "void f(void){ __asm__ volatile(\n\
+           \"1:\\n\\tnop\\n\\tjmp 1b\\n\\t\
+            jmp 2f\\n\\tnop\\n\\t2:\\n\\t\
+            3:\\n\\tjne 3b\"); }\n\
+         int main(void){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    let has = |w: &[u8]| bytes.windows(w.len()).any(|c| c == w);
+    // `1: nop; jmp 1b` -> nop (90) then E9 with rel32 = -6.
+    assert!(
+        has(&[0x90, 0xe9, 0xfa, 0xff, 0xff, 0xff]),
+        "backward jmp 1b"
+    );
+    // `jmp 2f; nop; 2:` -> E9 with rel32 = +1 (skips the nop 90).
+    assert!(has(&[0xe9, 0x01, 0x00, 0x00, 0x00, 0x90]), "forward jmp 2f");
+    // `3: jne 3b` -> 0F 85 with rel32 = -6.
+    assert!(
+        has(&[0x0f, 0x85, 0xfa, 0xff, 0xff, 0xff]),
+        "backward jne 3b"
+    );
+}
+
+#[test]
+fn in_out_port_forms_inline_asm_x64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // The variable-port form uses dx (EC/ED/EE/EF); the immediate-port form
+    // uses E4/E5/E6/E7 + an imm8 (dropping the immediate would be a silent
+    // miscompile). Word width adds the 0x66 prefix.
+    let program = super::compile_str_bare(
+        "void io(void){ __asm__ volatile(\n\
+           \"inb %dx, %al\\n\\toutb %al, %dx\\n\\tinb $0x20, %al\\n\\t\
+            outb %al, $0x20\\n\\tinw $0x60, %ax\\n\\toutl %eax, $0x70\"); }\n\
+         int main(void){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit LinuxX64");
+    let has = |w: &[u8]| bytes.windows(w.len()).any(|c| c == w);
+    assert!(has(&[0xec]) && has(&[0xee]), "dx forms inb/outb = ec/ee");
+    assert!(has(&[0xe4, 0x20]), "inb $0x20 = e4 20");
+    assert!(has(&[0xe6, 0x20]), "outb $0x20 = e6 20");
+    assert!(has(&[0x66, 0xe5, 0x60]), "inw $0x60 = 66 e5 60");
+    assert!(has(&[0xe7, 0x70]), "outl $0x70 = e7 70");
 }
 
 #[test]
@@ -2908,4 +3086,91 @@ fn interlocked_and_halt_inline_asm_x64() {
     };
     assert!(has_ff(0), "expected `inc r/m` (FF /0)");
     assert!(has_ff(1), "expected `dec r/m` (FF /1)");
+}
+
+/// A `register T v asm("reg")` local used as an `r` operand must be
+/// carried in exactly the named register: the template instruction's
+/// encoding fixes both source registers, so the bytes prove the pin.
+#[test]
+fn register_asm_variable_pins_the_named_register() {
+    use crate::{Compiler, NativeOptions, Target};
+    // x86-64: `movq %r9, %rax` (4C 89 C8) then `addq %r12, %rax`
+    // (4C 01 E0) -- %0 is rax (first pool register), %1 = r9, %2 = r12.
+    let src_x64 = "int main(void) { \
+        register long a asm(\"r9\") = 30; \
+        register long b asm(\"r12\") = 10; \
+        long out; \
+        __asm__(\"movq %1, %0; addq %2, %0\" : \"=r\"(out) : \"r\"(a), \"r\"(b)); \
+        return (int)out - 40; }";
+    let program = Compiler::with_target(src_x64.to_string(), Target::LinuxX64)
+        .compile()
+        .expect("register-asm x64 source compiles");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxX64,
+        NativeOptions::default(),
+    )
+    .expect("emit_native(LinuxX64)");
+    let has = |pat: &[u8]| bytes.windows(pat.len()).any(|w| w == pat);
+    assert!(has(&[0x4C, 0x89, 0xC8]), "expected `movq %r9, %rax`");
+    assert!(has(&[0x4C, 0x01, 0xE0]), "expected `addq %r12, %rax`");
+
+    // AArch64: `add x0, x9, x12` = 0x8B0C0120 little-endian.
+    let src_a64 = "int main(void) { \
+        register long a asm(\"x9\") = 30; \
+        register long b asm(\"x12\") = 10; \
+        long out; \
+        __asm__(\"add %0, %1, %2\" : \"=r\"(out) : \"r\"(a), \"r\"(b)); \
+        return (int)out - 40; }";
+    let program = Compiler::with_target(src_a64.to_string(), Target::LinuxAarch64)
+        .compile()
+        .expect("register-asm a64 source compiles");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("emit_native(LinuxAarch64)");
+    let word = 0x8B0C0120u32.to_le_bytes();
+    assert!(
+        bytes.windows(4).any(|w| w == word),
+        "expected `add x0, x9, x12`"
+    );
+}
+
+/// `asm goto` lowers on both targets at -O0 and -O: the label branch
+/// leaves through a restore trampoline patched to the label's block.
+#[test]
+fn asm_goto_emits_for_both_targets() {
+    use crate::{Compiler, NativeOptions, Target};
+    let cases = [
+        (
+            Target::LinuxX64,
+            "int f(int v) { \
+                 __asm__ goto(\"testl %0, %0; jnz %l[out]\" : : \"r\"(v) : : out); \
+                 return 1; out: return 2; } \
+             int main(void) { return f(1) + f(0); }",
+        ),
+        (
+            Target::LinuxAarch64,
+            "int f(int v) { \
+                 __asm__ goto(\"cbnz %w0, %l[out]\" : : \"r\"(v) : : out); \
+                 return 1; out: return 2; } \
+             int main(void) { return f(1) + f(0); }",
+        ),
+    ];
+    for (target, src) in cases {
+        for optimize in [false, true] {
+            let program = Compiler::with_target(src.to_string(), target)
+                .compile()
+                .unwrap_or_else(|e| panic!("asm goto compiles for {target:?}: {e}"));
+            let opts = if optimize {
+                NativeOptions::new().with_optimize()
+            } else {
+                NativeOptions::default()
+            };
+            crate::c5::object::emit_native_single_tu_for_test(&program, target, opts)
+                .unwrap_or_else(|e| panic!("emit_native({target:?}, -O={optimize}): {e}"));
+        }
+    }
 }

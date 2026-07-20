@@ -515,6 +515,11 @@ mod jit_impl {
         Ok(exit_code)
     }
 
+    /// Stack bytes for the worker thread running the guest's `main`,
+    /// matching the 8 MiB a process main thread receives on the
+    /// supported hosts.
+    const JIT_MAIN_STACK_BYTES: usize = 8 * 1024 * 1024;
+
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn run_main_threaded(
         entry_ptr: *const u8,
@@ -525,8 +530,12 @@ mod jit_impl {
         fini_addrs: Vec<usize>,
     ) -> Result<i32, C5Error> {
         // pthread_t is an opaque pointer on Linux and macOS (8 bytes
-        // on every supported host arch).
+        // on every supported host arch). pthread_attr_t is 64 bytes
+        // (Linux glibc x86_64/aarch64: 56; macOS: 64); an
+        // over-aligned 64-byte buffer covers both.
         type PthreadT = usize;
+        #[repr(C, align(16))]
+        struct PthreadAttrT([u8; 64]);
         unsafe extern "C" {
             fn pthread_create(
                 tid: *mut PthreadT,
@@ -535,6 +544,9 @@ mod jit_impl {
                 arg: *mut c_void,
             ) -> c_int;
             fn pthread_join(tid: PthreadT, retval: *mut *mut c_void) -> c_int;
+            fn pthread_attr_init(attr: *mut PthreadAttrT) -> c_int;
+            fn pthread_attr_setstacksize(attr: *mut PthreadAttrT, stack_size: usize) -> c_int;
+            fn pthread_attr_destroy(attr: *mut PthreadAttrT) -> c_int;
         }
 
         // Payload moves to the worker by raw pointer; the worker
@@ -570,9 +582,24 @@ mod jit_impl {
             Box::into_raw(Box::new(rc)) as *mut c_void
         }
 
+        // The guest's `main` gets a process-main-sized stack. The
+        // platform default for a bare pthread (512 KiB on macOS) is
+        // far below the 8 MiB a real main thread receives, and
+        // alloca / VLA storage now genuinely consumes stack.
+        let mut attr = PthreadAttrT([0u8; 64]);
+        let attr_ptr: *const c_void = if unsafe { pthread_attr_init(&mut attr) } == 0 {
+            let rc = unsafe { pthread_attr_setstacksize(&mut attr, JIT_MAIN_STACK_BYTES) };
+            debug_assert_eq!(rc, 0, "pthread_attr_setstacksize failed");
+            &attr as *const PthreadAttrT as *const c_void
+        } else {
+            core::ptr::null()
+        };
         let mut tid: PthreadT = 0;
         let raw_payload = Box::into_raw(payload) as *mut c_void;
-        let rc = unsafe { pthread_create(&mut tid, core::ptr::null(), worker, raw_payload) };
+        let rc = unsafe { pthread_create(&mut tid, attr_ptr, worker, raw_payload) };
+        if !attr_ptr.is_null() {
+            unsafe { pthread_attr_destroy(&mut attr) };
+        }
         if rc != 0 {
             // Reclaim the payload box; the worker never ran.
             drop(unsafe { Box::from_raw(raw_payload as *mut Payload) });
@@ -652,10 +679,13 @@ mod jit_impl {
 
         let mut thread_id: u32 = 0;
         let raw_payload = Box::into_raw(payload) as *mut c_void;
+        // Reserve a process-main-sized stack for the guest's `main`
+        // (the PE-header default is 1 MiB); alloca / VLA storage now
+        // genuinely consumes stack.
         let handle: Handle = unsafe {
             CreateThread(
                 core::ptr::null_mut(),
-                0,
+                JIT_MAIN_STACK_BYTES,
                 worker,
                 raw_payload,
                 0,

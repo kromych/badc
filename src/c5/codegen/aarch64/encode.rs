@@ -1837,6 +1837,12 @@ pub(crate) fn lower(
     }
     #[cfg(feature = "std")]
     let _ssa_emit_pass_start = std::time::Instant::now();
+    // Function name -> entry PC, so an inline-asm `bl` / `b` to a bare
+    // identifier resolves to the target's fixup like a compiler-emitted call.
+    let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
+        .iter()
+        .map(|f| (f.name.clone(), f.ent_pc))
+        .collect();
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
         pc_to_native[ent_pc] = code.len();
@@ -1870,6 +1876,8 @@ pub(crate) fn lower(
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut func_prologue_native,
             };
+            #[cfg(feature = "std")]
+            let _ = super::ssa::emit_common::take_bail();
             super::emit::emit_function(
                 func_ssa,
                 alloc_for,
@@ -1882,9 +1890,20 @@ pub(crate) fn lower(
                 &variadic_targets,
                 &mut macho_tlv_fixups,
                 &mut macho_tlv_descriptors,
+                &name2entpc,
             )
         };
         if !ok {
+            // A specific bail reason (an unencodable inline-asm form, a
+            // fixup out of range) is surfaced verbatim; the generic message
+            // stands only for a shape that failed without recording one.
+            #[cfg(feature = "std")]
+            if let Some(reason) = super::ssa::emit_common::take_bail() {
+                return Err(C5Error::Compile(alloc::format!(
+                    "{reason} (aarch64, function `{}`)",
+                    func_ssa.name,
+                )));
+            }
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &alloc::format!(
                     "ssa emit (aarch64): function `{}` (ent_pc {ent_pc}) contains an op outside the implemented subset",

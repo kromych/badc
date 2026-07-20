@@ -20,6 +20,10 @@ Disassembly of section .text:
                	jmpq	*%r10
                	xorb	%al, (%rax)
                	addb	%al, (%rax)
+               	popq	%rsp
+               	addb	%al, (%rax)
+               	addb	%bl, (%rsi)
+               	addb	%al, (%rax)
                	<unknown>
                	addb	%al, (%rax)
                	addb	%ah, (%rdx)
@@ -32,11 +36,7 @@ Disassembly of section .text:
                	addb	%ch, (%rax,%rax)
                	addb	%ch, (%rsi)
                	addb	%al, (%rax)
-               	jo	<addr>
-               	addb	%al, (%rax)
-               	jb	<addr>
-               	addb	%al, (%rax)
-               	jnp	<addr>
+               	ja	<addr>
                	addb	%al, (%rax)
                	incq	%rsi
                	leaq	0x2(%rsi), %rdx
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	leaq	(%rdx,%rdx,2), %rdx
                	subq	%rdx, %rsi
                	addq	%rsi, %rdx
-               	shlq	$0x1, %rsi
+               	shlq	%rsi
                	decq	%rdx
                	addq	$0x7, %rsi
                	addq	%rsi, %rdx
@@ -121,4 +121,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

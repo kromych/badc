@@ -65,9 +65,19 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("cacheflush_asm.c", "linux-x64"), // aarch64 cache-ops / barriers
     ("atomic128_ldaxp_stlxp.c", "linux-x64"), // aarch64 128-bit ldaxp/stlxp
     ("atomic128_ldst.c", "linux-x64"), // aarch64 128-bit ldp/stp, ldxp/stxp
+    ("inline_asm_a64_dp.c", "linux-x64"), // aarch64 mul/csel (x86 mul is 1-operand)
+    ("inline_asm_a64_labels.c", "linux-x64"), // aarch64 local-label branches
     ("divq_udiv_qrnnd.c", "linux-aarch64"), // x86-64 128/64 divq
     ("rdtsc_host_ticks.c", "linux-aarch64"), // x86-64 rdtsc
     ("inline_asm_memory_operand.c", "linux-aarch64"), // x86-64 lock cmpxchg/xadd
+    ("inline_asm_x64_catalogue.c", "linux-aarch64"), // x86-64 neg/not/xchg/rol/adc
+    ("inline_asm_x64_setcc.c", "linux-aarch64"), // x86-64 setcc
+    ("inline_asm_x64_cmov.c", "linux-aarch64"), // x86-64 cmovcc
+    ("inline_asm_x64_cdqe.c", "linux-aarch64"), // x86-64 cdqe
+    ("inline_asm_x64_movnti.c", "linux-aarch64"), // x86-64 movnti/sfence
+    ("inline_asm_x64_clflush.c", "linux-aarch64"), // x86-64 clflush/prefetch
+    ("inline_asm_x64_setjmp_label.c", "linux-aarch64"), // x86-64 asm context switch
+    ("inline_asm_x64_mem_disp.c", "linux-aarch64"), // x86-64 disp(%reg) memory operands
 ];
 
 #[test]

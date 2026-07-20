@@ -54,6 +54,46 @@ fn bare_return_in_void_function_is_allowed() {
 }
 
 #[test]
+fn block_scope_array_and_vector_typedef_keep_dimension() {
+    // A block-scope array or vector typedef must keep its dimension across
+    // several declarations. The dimension used to be dropped after the first
+    // use: `A4 a = {..}` compiled but a following `A4 b = {..}` saw a scalar
+    // (the file-scope path preserved it; the block-scope path did not).
+    Compiler::new(
+        "int main(void) { \
+             typedef int A4[4]; A4 a = {1, 2, 3, 4}; A4 b = {5, 6, 7, 8}; \
+             typedef int v4 __attribute__((vector_size(16))); \
+             v4 x = {1, 2, 3, 4}; v4 y = {5, 6, 7, 8}; \
+             return a[0] + b[0] + ((int *) &x)[0] + ((int *) &y)[0]; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("block-scope array / vector typedefs must keep their dimension across decls");
+}
+
+#[test]
+fn asm_memory_operand_rvalue_is_rejected() {
+    // A memory (`"m"`) operand is reached through its address, so it must be an
+    // lvalue. An rvalue (here a call result) is not directly addressable; the
+    // compiler must reject it, not reach the address path as an internal error.
+    expect_compile_error(
+        "int g(void); \
+         int main(void) { int r = 0; __asm__(\"mov %1, %0\" : \"=r\"(r) : \"m\"(g())); return r; }",
+        "not directly addressable",
+    );
+}
+
+#[test]
+fn asm_output_operand_rvalue_is_rejected() {
+    // An output operand names where the result is written, so an rvalue output
+    // is likewise rejected with a diagnostic rather than an internal error.
+    expect_compile_error(
+        "int g(void); int main(void) { __asm__(\"mov %%eax, %0\" : \"=m\"(g())); return 0; }",
+        "output operand must be an lvalue",
+    );
+}
+
+#[test]
 fn fall_off_end_of_non_void_function_warns() {
     // C99 6.9.1p12: control reaching the closing brace of a
     // value-returning function with no `return value;` leaves the value
@@ -938,5 +978,126 @@ fn constructor_is_not_reported_unused() {
     assert!(
         warns.contains("unused function `really_unused`"),
         "a genuinely unused static function should still be flagged; got:\n{warns}"
+    );
+}
+
+#[test]
+fn asm_goto_rejects_output_operands() {
+    // TODO: asm-goto outputs (GCC 11) need label-path store-back.
+    expect_compile_error(
+        "int f(int x) { int o; \
+             __asm__ goto(\"nop\" : \"=r\"(o) : \"r\"(x) : : out); \
+             return 1; out: return 2; } \
+         int main(void) { return f(0); }",
+        "inline asm goto: output operands are not supported",
+    );
+}
+
+#[test]
+fn asm_goto_rejects_unknown_label_name() {
+    expect_compile_error(
+        "int f(int x) { \
+             __asm__ goto(\"jmp %l[nope]\" : : \"r\"(x) : : out); \
+             return 1; out: return 2; } \
+         int main(void) { return f(0); }",
+        "`%l[nope]` names no listed label",
+    );
+}
+
+#[test]
+fn asm_goto_rejects_label_number_out_of_range() {
+    // One input operand: the only valid reference is `%l1`.
+    expect_compile_error(
+        "int f(int x) { \
+             __asm__ goto(\"jmp %l5\" : : \"r\"(x) : : out); \
+             return 1; out: return 2; } \
+         int main(void) { return f(0); }",
+        "`%l5` is out of range",
+    );
+}
+
+#[test]
+fn asm_goto_rejects_label_number_below_operand_count() {
+    // `%l0` names operand 0, not a label (labels number after all
+    // operands, so the first label is `%l1` here).
+    expect_compile_error(
+        "int f(int x) { \
+             __asm__ goto(\"jmp %l0\" : : \"r\"(x) : : out); \
+             return 1; out: return 2; } \
+         int main(void) { return f(0); }",
+        "`%l0` is out of range",
+    );
+}
+
+#[test]
+fn asm_goto_requires_a_label() {
+    expect_compile_error(
+        "int f(int x) { __asm__ goto(\"nop\" : : \"r\"(x) : :); return 1; } \
+         int main(void) { return f(0); }",
+        "at least one label is required",
+    );
+}
+
+#[test]
+fn asm_goto_undefined_label_is_diagnosed() {
+    // A listed label with no matching `name:` in the function body
+    // rides the same unresolved-goto check as `goto name;`.
+    expect_compile_error(
+        "int f(int x) { \
+             __asm__ goto(\"jmp %l[nowhere]\" : : \"r\"(x) : : nowhere); \
+             return 1; } \
+         int main(void) { return f(0); }",
+        "unresolved label: nowhere",
+    );
+}
+
+#[test]
+fn asm_goto_accepts_forward_and_backward_labels() {
+    // Acceptance only (no native emit): both reference spellings and a
+    // backward label parse and lower.
+    super::compile_str_bare(
+        "int f(int n) { int c = 0; \
+         loop: c++; n--; \
+             __asm__ goto(\"nop\" : : \"r\"(n) : : loop, done); \
+             return c; \
+         done: return c + 1; } \
+         int main(void) { return f(1); }",
+    );
+}
+
+#[test]
+fn register_asm_variable_rejects_unknown_register() {
+    expect_compile_error(
+        "int main(void) { register int v asm(\"zz9\") = 1; return v; }",
+        "is not a supported register",
+    );
+}
+
+#[test]
+fn register_asm_variable_rejects_reserved_register() {
+    // rsp / rbp and the emit scratch r10 / r11 cannot carry an operand.
+    expect_compile_error(
+        "int main(void) { register long v asm(\"rsp\") = 1; \
+             __asm__(\"nop\" : : \"r\"(v)); return 0; }",
+        "is not a supported register",
+    );
+}
+
+#[test]
+fn declarator_asm_requires_register_class() {
+    // TODO: the rename form (`int v asm(\"name\")`) on non-register
+    // declarators.
+    expect_compile_error(
+        "int main(void) { int v asm(\"r9\") = 1; return v; }",
+        "only supported on `register` locals",
+    );
+}
+
+#[test]
+fn declarator_asm_rejected_at_file_scope() {
+    // TODO: file-scope renames and global register variables.
+    expect_compile_error(
+        "int g asm(\"r9\"); int main(void) { return g; }",
+        "not supported at file scope",
     );
 }

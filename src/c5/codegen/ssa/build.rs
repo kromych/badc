@@ -161,6 +161,7 @@ impl SsaBuilder {
             is_variadic,
             is_inline: false,
             is_always_inline: false,
+            is_naked: false,
             insts: Vec::new(),
             inst_src: Vec::new(),
             blocks: Vec::new(),
@@ -1216,6 +1217,23 @@ impl SsaBuilder {
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::InlineAsm { asm, args })
+    }
+
+    /// GCC `asm goto`: push the `Inst::InlineAsm` as the block's last
+    /// instruction and close the block with `Terminator::AsmGoto`.
+    /// `targets[0]` is the fall-through block; entries 1.. are the
+    /// label targets in label-list order.
+    pub(crate) fn asm_goto(
+        &mut self,
+        asm: alloc::boxed::Box<crate::c5::ir::AsmBlock>,
+        args: Vec<ValueId>,
+        targets: alloc::vec::Vec<BlockId>,
+    ) {
+        self.local_cache.clear();
+        let _ = self.push(Inst::InlineAsm { asm, args });
+        let table = self.func.jump_tables.len() as u32;
+        self.func.jump_tables.push(targets);
+        self.close(Terminator::AsmGoto { table }, NO_VALUE);
     }
 
     /// Record that the function calls a returns-twice function (the

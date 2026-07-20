@@ -149,4 +149,3 @@ Disassembly of section .text:
                	ud2
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

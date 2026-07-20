@@ -13,25 +13,18 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x2030, %rsp           # imm = 0x2030
-               	leaq	-0x28(%rbp), %r10
-               	movq	%r10, (%r10)
+               	subq	$0x30, %rsp
                	movl	$0x7, %eax
                	movl	%eax, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
                	shlq	$0x3, %rax
                	movq	%rax, -0x18(%rbp)
-               	movq	%rax, %r10
-               	addq	$0xf, %r10
-               	andq	$-0x10, %r10
-               	leaq	-0x28(%rbp), %r11
-               	movq	(%r11), %rax
-               	subq	%r10, %rax
-               	leaq	-0x2000(%r11), %r10
-               	cmpq	%r10, %rax
-               	jae	<addr>
-               	ud2
-               	movq	%rax, (%r11)
+               	movq	%rax, %r11
+               	addq	$0xf, %r11
+               	andq	$-0x10, %r11
+               	movq	%rsp, %rax
+               	subq	%r11, %rax
+               	movq	%rax, %rsp
                	movq	%rax, -0x10(%rbp)
                	movq	-0x18(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
@@ -41,7 +34,8 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x2030, %rsp           # imm = 0x2030
+               	leaq	-0x30(%rbp), %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movq	-0x20(%rbp), %rax
@@ -50,7 +44,8 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x2030, %rsp           # imm = 0x2030
+               	leaq	-0x30(%rbp), %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movl	$0x64, %eax
@@ -59,11 +54,12 @@ Disassembly of section .text:
                	cmpq	$0x38, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x2030, %rsp           # imm = 0x2030
+               	leaq	-0x30(%rbp), %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x2030, %rsp           # imm = 0x2030
+               	leaq	-0x30(%rbp), %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

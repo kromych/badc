@@ -50,7 +50,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %rax
                	movzbq	0x1(%rax), %rax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	andq	$0x1, %rax
                	testq	%rax, %rax
                	je	<addr>
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	-0x8(%rbp), %rax
                	movzbq	0x1(%rax), %rax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	andq	$0x1, %rax
                	testq	%rax, %rax
                	sete	%al

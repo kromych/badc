@@ -21,7 +21,7 @@ Disassembly of section .text:
                	sarq	$0x3f, %rcx
                	shrq	$0x3f, %rcx
                	addq	%rcx, %rax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	cmpq	$-0x3, %rax
                	setne	%al
                	movzbq	%al, %rax
@@ -137,7 +137,7 @@ Disassembly of section .text:
                	sarq	$0x3f, %rcx
                	shrq	$0x3f, %rcx
                	addq	%rcx, %rax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	cmpq	$-0x40000000, %rax      # imm = 0xC0000000
                	setne	%al
                	movzbq	%al, %rax
@@ -162,7 +162,7 @@ Disassembly of section .text:
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	movl	%eax, -0x10(%rbp)
                	movl	-0x10(%rbp), %eax
-               	shrq	$0x1, %rax
+               	shrq	%rax
                	cmpq	$0x7fffffff, %rax       # imm = 0x7FFFFFFF
                	setne	%al
                	movzbq	%al, %rax
@@ -235,7 +235,7 @@ Disassembly of section .text:
                	sarq	$0x3f, %rcx
                	shrq	$0x3f, %rcx
                	addq	%rcx, %rax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	movabsq	$-0x4000000000000000, %r11 # imm = 0xC000000000000000
                	cmpq	%r11, %rax
                	setne	%al
@@ -261,7 +261,7 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rax
                	movq	%rax, -0x40(%rbp)
                	movq	-0x40(%rbp), %rax
-               	shrq	$0x1, %rax
+               	shrq	%rax
                	movabsq	$0x7fffffffffffffff, %r11 # imm = 0x7FFFFFFFFFFFFFFF
                	cmpq	%r11, %rax
                	setne	%al

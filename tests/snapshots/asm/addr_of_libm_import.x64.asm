@@ -168,5 +168,3 @@ Disassembly of section .text:
 
 <__c5_sys_cos>:
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -38,18 +38,18 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
                	movzwq	(%rcx), %rcx
-               	sarq	$0x1, %rcx
+               	sarq	%rcx
                	andq	$0x7, %rcx
                	orq	$0x5, %rcx
                	andq	$0x7, %rcx
                	movzwq	(%rax), %rdx
                	andq	$-0xf, %rdx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	orq	%rdx, %rcx
                	movw	%cx, (%rax)
                	leaq	-0x8(%rbp), %rax
                	movzwq	(%rax), %rax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	andq	$0x7, %rax
                	cmpq	$0x5, %rax
                	je	<addr>
@@ -60,18 +60,18 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
                	movzwq	(%rcx), %rcx
-               	sarq	$0x1, %rcx
+               	sarq	%rcx
                	andq	$0x7, %rcx
                	orq	$0x2, %rcx
                	andq	$0x7, %rcx
                	movzwq	(%rax), %rdx
                	andq	$-0xf, %rdx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	orq	%rdx, %rcx
                	movw	%cx, (%rax)
                	leaq	-0x8(%rbp), %rax
                	movzwq	(%rax), %rax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	andq	$0x7, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
@@ -82,16 +82,16 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
                	movzwq	(%rcx), %rcx
-               	sarq	$0x1, %rcx
+               	sarq	%rcx
                	andq	$0x6, %rcx
                	movzwq	(%rax), %rdx
                	andq	$-0xf, %rdx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	orq	%rdx, %rcx
                	movw	%cx, (%rax)
                	leaq	-0x8(%rbp), %rax
                	movzwq	(%rax), %rax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	andq	$0x7, %rax
                	cmpq	$0x6, %rax
                	je	<addr>
@@ -102,18 +102,18 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
                	movzwq	(%rcx), %rcx
-               	sarq	$0x1, %rcx
+               	sarq	%rcx
                	andq	$0x7, %rcx
                	xorq	$0x7, %rcx
                	andq	$0x7, %rcx
                	movzwq	(%rax), %rdx
                	andq	$-0xf, %rdx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	orq	%rdx, %rcx
                	movw	%cx, (%rax)
                	leaq	-0x8(%rbp), %rax
                	movzwq	(%rax), %rax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	andq	$0x7, %rax
                	cmpq	$0x1, %rax
                	je	<addr>
@@ -139,13 +139,13 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
                	movzwq	(%rcx), %rcx
-               	sarq	$0x1, %rcx
+               	sarq	%rcx
                	andq	$0x7, %rcx
                	xorq	$0x7, %rcx
                	andq	$0x7, %rcx
                	movzwq	(%rax), %rdx
                	andq	$-0xf, %rdx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	orq	%rdx, %rcx
                	movw	%cx, (%rax)
                	leaq	-0x8(%rbp), %rax
@@ -159,7 +159,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %rax
                	movzwq	(%rax), %rax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	andq	$0x7, %rax
                	cmpq	$0x6, %rax
                	je	<addr>
@@ -236,7 +236,7 @@ Disassembly of section .text:
                	movzwq	(%rcx), %rcx
                	sarq	$0x8, %rcx
                	andq	$0xff, %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	andq	$0xff, %rcx
                	movzwq	(%rax), %rdx
                	andq	$-0xff01, %rdx          # imm = 0xFFFF00FF

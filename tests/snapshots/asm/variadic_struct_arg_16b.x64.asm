@@ -64,7 +64,7 @@ Disassembly of section .text:
                	movq	(%rsi), %rdi
                	leaq	-0x38(%rbp), %rsi
                	movq	0x8(%rsi), %rsi
-               	shlq	$0x1, %rsi
+               	shlq	%rsi
                	addq	%rdi, %rsi
                	addq	%rsi, %rcx
                	leaq	0x1(%rdx), %rax
@@ -129,4 +129,3 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

@@ -54,6 +54,23 @@ fn return_42() {
     assert_eq!(jit_exit("int main() { return 42; }", &["jit-ret42"]), 42);
 }
 
+/// Raw-byte inline asm executes natively: the literal bytes `B8 25 00 00 00`
+/// are `mov eax, 0x25`, and the `"=a"` output ties the result to the return
+/// value. x86_64 host only -- the bytes are x86 machine code, and the VM
+/// (which cannot model opaque bytes) is bypassed by the JIT path.
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn raw_byte_inline_asm_executes() {
+    let src = r#"
+        int main() {
+            int x = 1;
+            __asm__ volatile(".byte 0xb8, 0x25, 0x00, 0x00, 0x00" : "=a"(x));
+            return x;
+        }
+    "#;
+    assert_eq!(jit_exit(src, &["jit-raw-bytes"]), 0x25);
+}
+
 #[test]
 fn external_int_return_is_sign_extended() {
     // C99 6.3.1.1 + AAPCS64: a callee returning `int` leaves only the low
@@ -469,6 +486,54 @@ fn indirect_call_spilled_target_under_pressure() {
     assert_eq!(
         result, 0,
         "indirect-call target-slot spill desynced a spilled argument reload under pressure"
+    );
+}
+
+#[test]
+fn inline_asm_operands_under_pressure() {
+    // Six inline-asm operands (one output address + five inputs). Under a
+    // 2-register cap most places spill to sp-relative slots; the asm block
+    // adjusts sp before capturing each operand, so the captures must read
+    // spilled places through the sp-shifted form. Without the shift a later
+    // operand reads the block's own capture area (a garbage value at -O0,
+    // a corrupt output address at -O).
+    let src = r#"
+        static int asm_sum5(int a, int b, int c, int d, int e) {
+            int r;
+        #if defined(__aarch64__)
+            __asm__("add %w0, %w1, %w2\n\t"
+                    "add %w0, %w0, %w3\n\t"
+                    "add %w0, %w0, %w4\n\t"
+                    "add %w0, %w0, %w5"
+                    : "=r"(r)
+                    : "r"(a), "r"(b), "r"(c), "r"(d), "r"(e));
+        #elif defined(__x86_64__)
+            __asm__("movl %1, %0\n\t"
+                    "addl %2, %0\n\t"
+                    "addl %3, %0\n\t"
+                    "addl %4, %0\n\t"
+                    "addl %5, %0"
+                    : "=r"(r)
+                    : "r"(a), "r"(b), "r"(c), "r"(d), "r"(e));
+        #else
+            r = a + b + c + d + e;
+        #endif
+            return r;
+        }
+        int main(void) {
+            return asm_sum5(6, 7, 8, 9, 12) == 42 ? 0 : 1;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit(src, &["asm-operands-pressure"])
+    });
+    assert_eq!(result, 0, "asm operand captured from a shifted spill slot");
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit_native_optimized(src, &["asm-operands-pressure-opt"])
+    });
+    assert_eq!(
+        result, 0,
+        "asm operand capture under -O read a corrupt place through the moved sp"
     );
 }
 
@@ -1240,6 +1305,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("return_void_expression.c", 0),
     ("macro_operators.c", 0),
     ("typedef_basic.c", 0),
+    ("ptr_to_array_typedef.c", 42),
     ("local_init_and_block_scope.c", 0),
     ("arrays_basic.c", 0),
     ("function_pointer_typedefs.c", 0),
@@ -1438,6 +1504,11 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("slot_coalesce_disjoint_temps.c", 0),
     ("alloca_alignment.c", 0),
     ("alloca_arena_in_bounds.c", 0),
+    ("alloca_large.c", 42),
+    ("alloca_spill_arith.c", 42),
+    ("alloca_call_args.c", 42),
+    ("vla_large_runtime.c", 42),
+    ("vla_loop_stack_restore.c", 42),
     ("slot_coalesce_declared.c", 0),
     ("slot_coalesce_alloca.c", 0),
     ("fn_arg_decay_then_deref_assign.c", 0),

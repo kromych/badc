@@ -308,5 +308,3 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

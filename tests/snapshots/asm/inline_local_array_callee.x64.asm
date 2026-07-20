@@ -22,7 +22,7 @@ Disassembly of section .text:
                	movl	%eax, 0x4(%rdx)
                	leaq	-0x30(%rbp), %rdx
                	movq	%rdi, %rax
-               	shlq	$0x1, %rax
+               	shlq	%rax
                	movl	%eax, 0x8(%rdx)
                	leaq	-0x30(%rbp), %rdx
                	leaq	-0x1(%rdi), %rax
@@ -65,7 +65,7 @@ Disassembly of section .text:
                	movl	%ecx, 0x4(%rdx)
                	leaq	-0x30(%rbp), %rdx
                	movq	%rdi, %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	movl	%ecx, 0x8(%rdx)
                	leaq	-0x30(%rbp), %rdx
                	leaq	-0x1(%rdi), %rcx
@@ -104,14 +104,14 @@ Disassembly of section .text:
                	movl	%eax, 0x4(%rdx)
                	leaq	-0x30(%rbp), %rdx
                	movq	%rdi, %rax
-               	shlq	$0x1, %rax
+               	shlq	%rax
                	movl	%eax, 0x8(%rdx)
                	leaq	-0x30(%rbp), %rdx
                	leaq	-0x1(%rdi), %rax
                	movl	%eax, 0xc(%rdx)
                	leaq	-0x30(%rbp), %rax
                	movslq	0x4(%rax), %rax
-               	shlq	$0x1, %rax
+               	shlq	%rax
                	movslq	%eax, %rax
                	movl	%eax, (%rcx)
                	leaq	-0x30(%rbp), %rax
@@ -252,7 +252,7 @@ Disassembly of section .text:
                	movl	%ecx, 0x4(%r8)
                	leaq	-0xa8(%rbp), %r8
                	movq	%rax, %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	movl	%ecx, 0x8(%r8)
                	leaq	-0xa8(%rbp), %r8
                	leaq	-0x1(%rax), %rcx
@@ -289,7 +289,7 @@ Disassembly of section .text:
                	movl	%ecx, 0x4(%rsi)
                	leaq	-0xc8(%rbp), %rsi
                	movq	%rax, %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	movl	%ecx, 0x8(%rsi)
                	leaq	-0xc8(%rbp), %rsi
                	leaq	-0x1(%rax), %rcx
@@ -324,7 +324,7 @@ Disassembly of section .text:
                	movl	%ecx, 0x4(%rsi)
                	leaq	-0xe8(%rbp), %rsi
                	movq	%rax, %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	movl	%ecx, 0x8(%rsi)
                	leaq	-0xe8(%rbp), %rsi
                	leaq	-0x1(%rax), %rcx
@@ -358,7 +358,7 @@ Disassembly of section .text:
                	movl	%ecx, 0x4(%rsi)
                	leaq	-0x108(%rbp), %rsi
                	movq	%rax, %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	movl	%ecx, 0x8(%rsi)
                	leaq	-0x108(%rbp), %rsi
                	leaq	-0x1(%rax), %rcx
@@ -393,7 +393,7 @@ Disassembly of section .text:
                	movl	%edx, 0x4(%rsi)
                	leaq	-0x128(%rbp), %rsi
                	movq	%rax, %rdx
-               	shlq	$0x1, %rdx
+               	shlq	%rdx
                	movl	%edx, 0x8(%rsi)
                	leaq	-0x128(%rbp), %rsi
                	leaq	-0x1(%rax), %rdx
@@ -428,7 +428,7 @@ Disassembly of section .text:
                	movl	%edx, 0x4(%rsi)
                	leaq	-0x148(%rbp), %rsi
                	movq	%rax, %rdx
-               	shlq	$0x1, %rdx
+               	shlq	%rdx
                	movl	%edx, 0x8(%rsi)
                	leaq	-0x148(%rbp), %rsi
                	leaq	-0x1(%rax), %rdx
@@ -461,7 +461,7 @@ Disassembly of section .text:
                	movl	%edx, 0x4(%rsi)
                	leaq	-0x168(%rbp), %rsi
                	movq	%rax, %rdx
-               	shlq	$0x1, %rdx
+               	shlq	%rdx
                	movl	%edx, 0x8(%rsi)
                	leaq	-0x168(%rbp), %rsi
                	leaq	-0x1(%rax), %rdx
@@ -494,7 +494,7 @@ Disassembly of section .text:
                	movl	%edx, 0x4(%rsi)
                	leaq	-0x188(%rbp), %rsi
                	movq	%rax, %rdx
-               	shlq	$0x1, %rdx
+               	shlq	%rdx
                	movl	%edx, 0x8(%rsi)
                	leaq	-0x188(%rbp), %rsi
                	leaq	-0x1(%rax), %rdx
@@ -528,7 +528,7 @@ Disassembly of section .text:
                	movl	%ecx, 0x4(%rsi)
                	leaq	-0x1a8(%rbp), %rsi
                	movq	%rax, %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	movl	%ecx, 0x8(%rsi)
                	leaq	-0x1a8(%rbp), %rsi
                	leaq	-0x1(%rax), %rcx
@@ -536,7 +536,7 @@ Disassembly of section .text:
                	leaq	-0x1a8(%rbp), %rcx
                	addq	$0x0, %rcx
                	movslq	(%rcx), %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rdx)
                	leaq	-0x1a8(%rbp), %rcx
@@ -561,14 +561,14 @@ Disassembly of section .text:
                	movl	%ecx, 0x4(%rsi)
                	leaq	-0x1c8(%rbp), %rsi
                	movq	%rax, %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	movl	%ecx, 0x8(%rsi)
                	leaq	-0x1c8(%rbp), %rsi
                	leaq	-0x1(%rax), %rcx
                	movl	%ecx, 0xc(%rsi)
                	leaq	-0x1c8(%rbp), %rcx
                	movslq	0x4(%rcx), %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rdx)
                	leaq	-0x1c8(%rbp), %rcx
@@ -592,14 +592,14 @@ Disassembly of section .text:
                	movl	%ecx, 0x4(%rsi)
                	leaq	-0x1e8(%rbp), %rsi
                	movq	%rax, %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	movl	%ecx, 0x8(%rsi)
                	leaq	-0x1e8(%rbp), %rsi
                	leaq	-0x1(%rax), %rcx
                	movl	%ecx, 0xc(%rsi)
                	leaq	-0x1e8(%rbp), %rcx
                	movslq	0x8(%rcx), %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rdx)
                	leaq	-0x1e8(%rbp), %rcx
@@ -623,14 +623,14 @@ Disassembly of section .text:
                	movl	%ecx, 0x4(%rsi)
                	leaq	-0x208(%rbp), %rsi
                	movq	%rax, %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	movl	%ecx, 0x8(%rsi)
                	leaq	-0x208(%rbp), %rsi
                	leaq	-0x1(%rax), %rcx
                	movl	%ecx, 0xc(%rsi)
                	leaq	-0x208(%rbp), %rcx
                	movslq	0xc(%rcx), %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rdx)
                	leaq	-0x208(%rbp), %rcx
@@ -664,4 +664,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

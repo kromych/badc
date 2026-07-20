@@ -89,6 +89,7 @@ impl Compiler {
                     fields: Vec::new(),
                     is_union,
                     is_vector: false,
+                    is_array: false,
                 });
                 let id = self.structs.len() - 1;
                 if let Some(scope) = self.tag_scopes.last_mut() {
@@ -107,6 +108,8 @@ impl Compiler {
         // before this function returns.
         let saved_typedef_base_array_size = self.pending.typedef_base_array_size;
         self.pending.typedef_base_array_size = 0;
+        let saved_typedef_base_array_dims =
+            core::mem::take(&mut self.pending.typedef_base_array_dims);
 
         let mut offset = 0usize;
         // Running max field alignment for the aggregate. Each
@@ -315,6 +318,8 @@ impl Compiler {
                 let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
                 if typedef_array > 0 {
                     self.pending.typedef_base_array_size = typedef_array;
+                    self.pending.typedef_base_array_dims =
+                        self.symbols[self.lex.curr_id_idx].array_dims.clone();
                 }
                 // Carry the typedef's fn-pointer lineage forward
                 // (mirrors `decl_base.rs` for the non-aggregate
@@ -578,6 +583,9 @@ impl Compiler {
                     && self.pending.declarator_leading_ptr_count == 0
                 {
                     field_array_size = typedef_dim;
+                    if id_idx != usize::MAX {
+                        self.apply_typedef_array_dims(id_idx);
+                    }
                 }
                 // Capture the fn-pointer lineage tag from the
                 // declarator (set by the function-pointer branch
@@ -794,6 +802,7 @@ impl Compiler {
         }
         self.next()?; // consume `}`
         self.pending.typedef_base_array_size = saved_typedef_base_array_size;
+        self.pending.typedef_base_array_dims = saved_typedef_base_array_dims;
 
         // Struct alignment tops out at 16 -- the widest the data section
         // and static-object placement honor. `#pragma pack(N)` further

@@ -1,7 +1,7 @@
-/* #212 regression: the alloca underflow trap must fire only past the
- * per-frame arena floor, so an allocation that nearly fills the arena
- * (just under ALLOCA_ARENA_SLOTS*8 = 8192 bytes) still succeeds. An
- * over-tight floor would wrongly trap this valid allocation. */
+/* Historical regression: alloca once drew from a fixed 8192-byte
+ * per-frame arena whose bounds check could trap a valid allocation
+ * just under the limit. alloca now moves the stack pointer, but the
+ * near-8K allocation stays locked in as a size regression. */
 
 #include <string.h>
 #include <alloca.h>

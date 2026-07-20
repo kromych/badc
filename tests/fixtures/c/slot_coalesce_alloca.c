@@ -1,10 +1,9 @@
 /* A function that calls alloca and also has disjoint-lifetime declared
-   scalars. Slot coalescing reuses the scalar slots and compacts the frame,
-   but the per-frame alloca arena -- reserved below the named locals -- must
-   stay within the prologue's stack reservation. If the frame is compacted
-   below the arena, the alloca storage lands at or under the stack pointer and
-   a callee's frame overlaps it. `burn` writes only its own array; `buf` must
-   read back unchanged across the call. Returns 0 on success. */
+   scalars. Slot coalescing must not disturb the alloca-carved storage:
+   if the frame model and the runtime allocation disagree, the alloca
+   storage overlaps a callee's frame. `burn` writes only its own array;
+   `buf` must read back unchanged across the call. Returns 0 on
+   success. */
 
 static long burn(int n) {
     volatile long acc[24];

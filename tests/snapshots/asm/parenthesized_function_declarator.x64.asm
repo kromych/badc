@@ -19,7 +19,7 @@ Disassembly of section .text:
 <two>:
                	leaq	<rip>, %rcx
                	movq	%rdi, %rax
-               	shlq	$0x1, %rax
+               	shlq	%rax
                	movl	%eax, (%rcx)
                	movq	%rcx, %rax
                	retq

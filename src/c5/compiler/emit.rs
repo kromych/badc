@@ -593,6 +593,9 @@ impl Compiler {
         sym.is_zero_len_array = sym.h_is_zero_len_array;
         sym.is_scope_static = false;
         sym.is_scope_typedef = false;
+        // The register-asm binding belongs to the block-scope local
+        // being unbound, never to the restored outer symbol.
+        sym.asm_reg = None;
     }
 
     // ---- AST helpers ----
@@ -648,6 +651,7 @@ impl Compiler {
             is_variadic,
             is_inline: self.pending_is_inline,
             is_always_inline: self.pending_is_always_inline,
+            is_naked: self.pending_is_naked,
             n_locals: self.max_loc_offs,
             name: self.current_function_name.clone(),
             param_tys,
@@ -663,6 +667,7 @@ impl Compiler {
         };
         self.pending_is_inline = false;
         self.pending_is_always_inline = false;
+        self.pending_is_naked = false;
         self.finished_functions.push(finished);
     }
 

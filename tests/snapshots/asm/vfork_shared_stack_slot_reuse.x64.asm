@@ -456,5 +456,3 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	ud2
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

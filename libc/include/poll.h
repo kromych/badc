@@ -18,6 +18,12 @@ typedef unsigned long nfds_t;
 #define POLLHUP 0x010
 #define POLLNVAL 0x020
 
+// XSI normal/priority-band events; the values match macOS and Linux.
+#define POLLRDNORM 0x040
+#define POLLRDBAND 0x080
+#define POLLWRNORM 0x100
+#define POLLWRBAND 0x200
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::poll, "_poll")

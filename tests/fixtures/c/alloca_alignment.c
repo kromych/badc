@@ -1,6 +1,6 @@
 /* alloca returns storage suitably aligned for any object: the established
-   practice is the platform's maximum scalar alignment, 16 bytes. The arena
-   bump rounds the request up to a 16-byte multiple so successive results stay
+   practice is the platform's maximum scalar alignment, 16 bytes. The stack
+   move rounds the request up to a 16-byte multiple so successive results stay
    aligned. Distinct non-multiple-of-16 sizes exercise the rounding. Returns 0
    on success. */
 static void *sink(void *p){ return p; }

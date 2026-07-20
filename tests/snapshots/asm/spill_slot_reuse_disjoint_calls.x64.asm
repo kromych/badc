@@ -16,7 +16,7 @@ Disassembly of section .text:
                	imulq	$-0x1, %rdi, %rax
                	retq
                	movq	%rdi, %rax
-               	shlq	$0x1, %rax
+               	shlq	%rax
                	retq
 
 <twogroups>:
@@ -98,4 +98,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

@@ -349,9 +349,10 @@ pub(crate) enum Inst {
         asm: alloc::boxed::Box<AsmBlock>,
         args: Vec<ValueId>,
     },
-    /// Per-frame alloca arena bookkeeping setup. Slot index is
-    /// the alloca-top FP-slot offset. Produces no SSA value;
-    /// emitted purely for the side effect.
+    /// Marks the function as using `alloca` / VLAs when the slot is
+    /// non-zero (the parser's reserved slot index): the body moves sp
+    /// at runtime, so the codegen switches spill addressing to the
+    /// frame pointer. Zero means no alloca. Produces no SSA value.
     AllocaInit(i64),
     /// The i-th declared parameter's incoming value, tagged with
     /// the parameter's natural load width. The walker emits one
@@ -557,6 +558,9 @@ pub(crate) enum AsmConstraint {
     /// Any allocatable general register (`r`, or the register arm of
     /// `rm`/`g`).
     Reg,
+    /// Any allocatable SIMD/FP register (AArch64 `w`): the operand value is
+    /// held in a `d`/`s` register and `%N` resolves to it.
+    Fp,
     /// A specific general register named by a class letter (`a`->rax,
     /// `b`->rbx, `c`->rcx, `d`->rdx, `S`->rsi, `D`->rdi); the value is
     /// the architectural register number.
@@ -604,6 +608,10 @@ pub(crate) struct AsmBlock {
     /// Registers preserved across the statement (explicit clobbers plus
     /// the operand registers), as a bitmask over register numbers 0..15.
     pub clobber_regs: u32,
+    /// SIMD/FP registers named in the clobber list, as a bitmask over the FP
+    /// register file (independent of `clobber_regs`). Empty for x86 targets,
+    /// whose FP clobbers ride the shared mask.
+    pub clobber_fp_regs: u32,
     /// A `"memory"` clobber was listed: an ordering barrier for memory
     /// accesses (C practice for `asm volatile("" ::: "memory")`).
     pub clobber_memory: bool,
@@ -651,6 +659,15 @@ pub(crate) enum Terminator {
     /// The target list lives in [`FunctionSsa::jump_tables`]
     /// because `Terminator` is `Copy`.
     JumpTable { idx: ValueId, table: u32 },
+    /// GCC `asm goto`: the block's last instruction is an
+    /// `Inst::InlineAsm` whose template may branch to any listed C
+    /// label. `jump_tables[table][0]` is the fall-through successor;
+    /// entries 1.. are the label targets in label-list order (a
+    /// template `%lK` reference names entry `1 + K`). The row rides
+    /// [`FunctionSsa::jump_tables`] like `JumpTable` because
+    /// `Terminator` is `Copy`; every edge is opaque to the branch
+    /// folds (the asm decides at runtime).
+    AsmGoto { table: u32 },
     /// Synthetic fall-through to a successor block. Preserved
     /// on the variant for object-file round-trips of SSA bodies
     /// that already carry it; new IR producers should use the
@@ -740,6 +757,10 @@ pub(crate) struct FunctionSsa {
     /// gcc / MSVC diagnostic; a plain `inline` that stays out of line is
     /// silent (it is only a hint).
     pub is_always_inline: bool,
+    /// True if the function carried `__attribute__((naked))`: emit no
+    /// prologue/epilogue and no implicit return; the body (inline asm) is the
+    /// function's entire machine code. Used for interrupt service routines.
+    pub is_naked: bool,
     /// Flat list of all SSA instructions in the function, indexed
     /// by [`ValueId`]. Each [`Block::inst_range`] is a contiguous
     /// slice of this list.

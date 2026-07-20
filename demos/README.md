@@ -134,6 +134,23 @@ End-to-end of the upstream [bzip2](https://sourceware.org/bzip2/)
 exercises a different code shape from miniz's deflate.
 See [`bzip2/README.md`](./bzip2/README.md).
 
+## libmill/, libdill/, coroutines/
+
+Cooperative-concurrency libraries whose context switches stress the
+inline-asm surface: [libmill](https://github.com/sustrik/libmill)
+(Go-style CSP coroutines + channels),
+[libdill](https://github.com/sustrik/libdill) (structured
+concurrency), and [tsoding/coroutines](https://github.com/tsoding/coroutines)
+(hand-written SysV asm in naked functions). Pinned upstream commits,
+fetched by each demo's `setup.py`; each smoke builds the library with
+badc at -O0 and -O and runs the upstream tests (spawn / yield /
+channel rendezvous; exact-output examples for coroutines). On x86-64,
+libmill / libdill run their upstream asm setjmp/longjmp context
+switches; other architectures use sigsetjmp. Both pair with a
+one-instruction asm sp move (see each setup.py for the badc-motivated
+patches); coroutines compiles unpatched but runs only on linux-x86_64
+by upstream design.
+
 ## gui_hello/
 
 Three "show a window with a label" demos -- Win32 (using the
@@ -218,6 +235,19 @@ its own linker -- no external `ld`/`lld`, no `GenFw` -- that the firmware
 loads and runs; the app formats through EDK II's `UnicodeSPrint` and writes
 to `ConOut`, so a correct boot exercises the whole closure end to end. See
 [`edk2/README.md`](./edk2/README.md).
+
+## kernel/
+
+Freestanding UEFI "kernels" badc compiles for x86_64 and AArch64, booted under
+QEMU through the UEFI firmware badc built (OVMF on x86_64, ArmVirtQemu/AAVMF on
+aarch64). `kernel.c` is a live end-to-end test of badc's inline assembly on the
+boot path (`cpuid` + a table-encoder `bswap` on x86_64, `mrs` on AArch64,
+raw-byte templates on both). `preempt.c` is a preemptive multitasking kernel: it
+installs its own timer interrupt and context-switches three threads on every
+tick through a `__attribute__((naked))` interrupt service routine, on both
+x86_64 (8259 PIC + 8254 PIT + IDT) and AArch64 (GICv2 + virtual generic timer +
+EL1 vector table). The build is the hard gate; each target also boots where QEMU
+and the firmware are present. See [`kernel/README.md`](./kernel/README.md).
 
 ## nt_hello/
 

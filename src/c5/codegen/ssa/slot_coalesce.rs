@@ -13,7 +13,7 @@
 //! compacts the frame. A slot is a candidate only when every reference to it
 //! is a scalar `LoadLocal` / `StoreLocal`; any slot whose address is taken
 //! (`LocalAddr`), that backs an aggregate call result (`ret_slot_local`),
-//! that holds an `alloca` arena (`AllocaInit`), that is an interior cell of a
+//! that carries a non-zero `AllocaInit`, that is an interior cell of a
 //! multi-cell object (`multi_cell_slots`), or that the emit reaches through a
 //! `FunctionSsa` field rather than an instruction (`indirect_result_slot`,
 //! `param_local_slots`) is reserved, so a reused scalar never lands on storage
@@ -77,12 +77,10 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
     }
     let movable = |off: i64| off < 0 && -off > floor && -off <= total;
 
-    // Leave a function with a dynamic alloca arena uncoalesced. The alloca-top
-    // slot is a positive index this pass never remaps, and the arena of
-    // `ALLOCA_ARENA_SLOTS` below it (walk.rs `effective_locals`) is reached by
-    // a running pointer rather than by named slots, so compacting the frame
-    // around it is unsafe without a model that tracks the arena.
-    // TODO: such a model would let alloca functions compact too.
+    // Leave a dynamic-sp function (alloca / VLA) uncoalesced. Its runtime
+    // allocations are reached through computed pointers this pass does not
+    // model, so compacting the named slots around them is not proven safe.
+    // TODO: model the computed pointers so alloca functions compact too.
     if f.insts
         .iter()
         .any(|i| matches!(i, Inst::AllocaInit(slot) if *slot > 0))

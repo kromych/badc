@@ -93,6 +93,10 @@ pub(crate) struct Frame {
     pub va_n_params: usize,
     /// ABI carried for the redirect's slot mapping.
     pub va_abi: super::Abi,
+    /// The body moves sp at runtime (`alloca` / C99 6.7.6.2 VLA), so
+    /// spill slots are addressed through fp and the epilogue
+    /// re-establishes sp from fp before tearing the frame down.
+    pub dynamic_sp: bool,
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target: Target) -> Frame {
@@ -145,6 +149,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
         va_param_fp_mask: func.param_fp_mask,
         va_n_params: func.n_params,
         va_abi: abi,
+        dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func),
     }
 }
 
@@ -523,6 +528,122 @@ fn emit_sp_ldr_d_auto(code: &mut Vec<u8>, dt: u8, off: u32) {
     emit_sp_ldr_d(code, dt, off, Reg(16));
 }
 
+/// Allocator-spill accessors. A static frame reads the slot at
+/// `[sp + sp_off]`; a dynamic-sp frame (alloca / VLA,
+/// `Frame::dynamic_sp`) reads the same byte at
+/// `[fp - (frame_bytes - sp_off)]`, since sp moves at runtime while fp
+/// stays put. The fp displacement uses the unscaled-signed `ldur` /
+/// `stur` form in reach, else builds the address with the imm12 +
+/// shift-12 split.
+fn fp_spill_delta(frame: Frame, sp_off: u32) -> u32 {
+    frame.frame_bytes - sp_off
+}
+
+/// Materialise `fp - delta` into `dst` (imm12 + shift-12 split).
+fn emit_fp_minus_off(code: &mut Vec<u8>, dst: Reg, delta: u32) {
+    let hi = delta & !0xfff;
+    let lo = delta & 0xfff;
+    if hi != 0 {
+        emit(
+            code,
+            super::encode::enc_sub_imm_lsl12(dst, Reg(29), hi >> 12),
+        );
+        if lo != 0 {
+            emit(code, enc_sub_imm(dst, dst, lo));
+        }
+    } else {
+        emit(code, enc_sub_imm(dst, Reg(29), lo));
+    }
+}
+
+/// Spill-slot 8-byte load into `rt`. The fp-based out-of-reach form
+/// builds the address into `rt` itself, mirroring [`emit_sp_ldr_x`].
+fn emit_spill_ldr_x(code: &mut Vec<u8>, frame: Frame, rt: Reg, sp_off: u32) {
+    if !frame.dynamic_sp {
+        emit_sp_ldr_x(code, rt, sp_off);
+        return;
+    }
+    let delta = fp_spill_delta(frame, sp_off);
+    if delta <= 255 {
+        emit(code, super::encode::enc_ldur(rt, Reg(29), -(delta as i32)));
+    } else {
+        emit_fp_minus_off(code, rt, delta);
+        emit(code, enc_ldr_imm(rt, rt, 0));
+    }
+}
+
+/// Spill-slot 8-byte store of `rt`; `addr_scratch` (distinct from
+/// `rt`) carries the base when the displacement is out of reach.
+fn emit_spill_str_x(code: &mut Vec<u8>, frame: Frame, rt: Reg, sp_off: u32, addr_scratch: Reg) {
+    if !frame.dynamic_sp {
+        emit_sp_str_x(code, rt, sp_off, addr_scratch);
+        return;
+    }
+    let delta = fp_spill_delta(frame, sp_off);
+    if delta <= 255 {
+        emit(code, super::encode::enc_stur(rt, Reg(29), -(delta as i32)));
+    } else {
+        debug_assert_ne!(rt.0, addr_scratch.0, "spill str: addr scratch aliases data");
+        emit_fp_minus_off(code, addr_scratch, delta);
+        emit(code, enc_str_imm(rt, addr_scratch, 0));
+    }
+}
+
+/// Spill-slot 8-byte store picking an IP-pool address scratch that
+/// differs from the data register.
+fn emit_spill_str_x_auto(code: &mut Vec<u8>, frame: Frame, rt: Reg, sp_off: u32) {
+    let addr_scratch = if rt.0 == 16 { Reg(17) } else { Reg(16) };
+    emit_spill_str_x(code, frame, rt, sp_off, addr_scratch);
+}
+
+/// Spill-slot 8-byte store at a site where only `borrow` (a live
+/// register, stack-saved around the store) can carry the base.
+fn emit_spill_str_x_borrow(code: &mut Vec<u8>, frame: Frame, rt: Reg, sp_off: u32, borrow: Reg) {
+    if !frame.dynamic_sp {
+        emit_sp_str_x_borrow(code, rt, sp_off, borrow);
+        return;
+    }
+    let delta = fp_spill_delta(frame, sp_off);
+    if delta <= 255 {
+        emit(code, super::encode::enc_stur(rt, Reg(29), -(delta as i32)));
+        return;
+    }
+    debug_assert_ne!(rt.0, borrow.0, "spill str borrow: borrow aliases data");
+    emit(code, super::encode::enc_str_pre(borrow, Reg(31), -16));
+    emit_fp_minus_off(code, borrow, delta);
+    emit(code, enc_str_imm(rt, borrow, 0));
+    emit(code, super::encode::enc_ldr_post(borrow, Reg(31), 16));
+}
+
+/// Spill-slot 8-byte FP load into d-reg `dt`; `addr_scratch` is a GPR.
+fn emit_spill_ldr_d(code: &mut Vec<u8>, frame: Frame, dt: u8, sp_off: u32, addr_scratch: Reg) {
+    if !frame.dynamic_sp {
+        emit_sp_ldr_d(code, dt, sp_off, addr_scratch);
+        return;
+    }
+    emit_fp_minus_off(code, addr_scratch, fp_spill_delta(frame, sp_off));
+    emit(code, enc_ldr_d_imm(dt, addr_scratch, 0));
+}
+
+/// Spill-slot 8-byte FP store of d-reg `dt`; `addr_scratch` is a GPR.
+fn emit_spill_str_d(code: &mut Vec<u8>, frame: Frame, dt: u8, sp_off: u32, addr_scratch: Reg) {
+    if !frame.dynamic_sp {
+        emit_sp_str_d(code, dt, sp_off, addr_scratch);
+        return;
+    }
+    emit_fp_minus_off(code, addr_scratch, fp_spill_delta(frame, sp_off));
+    emit(code, enc_str_d_imm(dt, addr_scratch, 0));
+}
+
+/// Spill-slot FP store / load with x16 as the address scratch.
+fn emit_spill_str_d_auto(code: &mut Vec<u8>, frame: Frame, dt: u8, sp_off: u32) {
+    emit_spill_str_d(code, frame, dt, sp_off, Reg(16));
+}
+
+fn emit_spill_ldr_d_auto(code: &mut Vec<u8>, frame: Frame, dt: u8, sp_off: u32) {
+    emit_spill_ldr_d(code, frame, dt, sp_off, Reg(16));
+}
+
 /// Branch placeholder recorded mid-walk; resolved once every
 /// block's start offset is known.
 #[derive(Debug, Clone, Copy)]
@@ -569,6 +690,7 @@ pub(crate) fn emit_function(
     variadic_targets: &alloc::collections::BTreeSet<usize>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -602,7 +724,12 @@ pub(crate) fn emit_function(
     let macho_tlv_descriptors_snapshot = macho_tlv_descriptors.len();
     let elf_tpoff_snapshot = elf_tpoff_fixups.len();
 
-    emit_prologue(code, func, alloc, frame, abi);
+    // A `__attribute__((naked))` function emits no prologue/epilogue; its
+    // inline-asm body is the entire function (an interrupt vector or ISR
+    // returning via `eret`). The matching `Terminator::Return` emits nothing.
+    if !func.is_naked {
+        emit_prologue(code, func, alloc, frame, abi);
+    }
     super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
     // Per-parameter incoming-register plan; consumed by the per-inst
@@ -699,9 +826,9 @@ pub(crate) fn emit_function(
                     Place::IntReg(r) => ext(code, Reg(r)),
                     Place::Spill(slot) => {
                         let sp_off = spill_off(frame, slot);
-                        emit_sp_ldr_x(code, scratch.primary, sp_off);
+                        emit_spill_ldr_x(code, frame, scratch.primary, sp_off);
                         ext(code, scratch.primary);
-                        emit_sp_str_x(code, scratch.primary, sp_off, scratch.secondary);
+                        emit_spill_str_x(code, frame, scratch.primary, sp_off, scratch.secondary);
                     }
                     Place::None | Place::FpReg(_) => {}
                 }
@@ -774,11 +901,6 @@ pub(crate) fn emit_function(
     // `Terminator::JumpTable`. Each 32-bit entry is patched to
     // `block_offset - table_start` once every block is laid out.
     let mut jump_table_fixups: Vec<(usize, u32)> = Vec::new();
-    // Per-function alloca bookkeeping. Set by `Inst::AllocaInit`
-    // and read by `Inst::Intrinsic { kind: Alloca }`; zero
-    // means the function doesn't use alloca.
-    let mut current_alloca_top: u32 = 0;
-
     for (block_idx, block) in func.blocks.iter().enumerate() {
         block_offsets[block_idx] = code.len();
         super::ssa::emit_common::record_block_start_pc(
@@ -790,6 +912,11 @@ pub(crate) fn emit_function(
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
             let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+            // A naked function's machine code is exactly its inline asm; the
+            // compiler-inserted alloca/return-value scaffolding is dropped.
+            if func.is_naked && !matches!(inst, Inst::InlineAsm { .. }) {
+                continue;
+            }
             // Skip pure insts whose value isn't consumed by any
             // other inst or terminator. Walker-side pattern folds
             // (LoadLocal, indexed-load) sometimes leave the
@@ -832,7 +959,41 @@ pub(crate) fn emit_function(
                 block_addr_fixups.push((adr_site, *tb, rd));
                 if let Place::Spill(slot) = place {
                     let sp_off = spill_off(frame, slot);
-                    emit_sp_str_x_auto(code, rd, sp_off);
+                    emit_spill_str_x_auto(code, frame, rd, sp_off);
+                }
+                continue;
+            }
+            // `asm goto`: the label branches patch against block
+            // offsets via the enclosing `branch_fixups`, which
+            // `emit_inst` has no access to; lower it here (same
+            // pattern as `Inst::BlockAddr` above).
+            if let Inst::InlineAsm { asm, args } = inst
+                && let Terminator::AsmGoto { table } = block.terminator
+            {
+                if !emit_inline_asm_aarch64(
+                    code,
+                    asm,
+                    args,
+                    alloc,
+                    frame,
+                    fixups,
+                    name2entpc,
+                    Some(AsmGotoCtxA64 {
+                        row: &func.jump_tables[table as usize],
+                        branch_fixups: &mut branch_fixups,
+                    }),
+                ) {
+                    code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
+                    macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                    macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
+                    return false;
                 }
                 continue;
             }
@@ -861,6 +1022,7 @@ pub(crate) fn emit_function(
                     variadic_targets,
                     extern_tls_names,
                     param_plan: &emit_param_plan,
+                    name2entpc,
                 };
                 emit_inst(
                     &mut cx,
@@ -871,7 +1033,6 @@ pub(crate) fn emit_function(
                     fixups,
                     macho_tlv_fixups,
                     macho_tlv_descriptors,
-                    &mut current_alloca_top,
                 )
             };
             if !inst_ok {
@@ -938,6 +1099,9 @@ pub(crate) fn emit_function(
             return false;
         }
         match block.terminator {
+            // A naked function's inline-asm body provides its own return (eret);
+            // emit no epilogue for the synthetic return.
+            Terminator::Return(_) if func.is_naked => {}
             Terminator::Return(v) => emit_return(code, v, alloc, frame, &scratch, func, abi),
             Terminator::Jmp(t) => {
                 // Fall through when the target is the next block in
@@ -1169,6 +1333,20 @@ pub(crate) fn emit_function(
                 jump_table_fixups.push((code.len(), table));
                 let entries = func.jump_tables[table as usize].len();
                 code.resize(code.len() + entries * 4, 0);
+            }
+            Terminator::AsmGoto { table } => {
+                // The label branches were lowered inside the
+                // `Inst::InlineAsm`; only the fall-through edge (row
+                // entry 0) is emitted here.
+                let fall = func.jump_tables[table as usize][0];
+                if fall as usize != block_idx + 1 {
+                    branch_fixups.push(BranchFixup {
+                        site: code.len(),
+                        target: fall,
+                        kind: LocalBranchKind::B,
+                    });
+                    emit(code, enc_b(0));
+                }
             }
             Terminator::TailExt(binding_idx) => {
                 // Tail-jump through the GOT-patched trampoline:
@@ -1824,6 +2002,24 @@ fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame
     debug_assert!(!alloc_pending, "frame fold requested with no callee save");
 }
 
+/// Re-establish `sp = fp - frame_bytes` in a dynamic-sp frame before
+/// the epilogue's sp-relative restores. No-op for static frames. A
+/// split displacement is computed into x16 and committed with one
+/// write, so sp never rests above still-unrestored frame bytes (a
+/// signal delivered mid-sequence pushes its frame below sp).
+fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
+    if !frame.dynamic_sp {
+        return;
+    }
+    let bytes = frame.frame_bytes;
+    if bytes < 4096 {
+        emit(code, enc_sub_imm(Reg(31), Reg(29), bytes));
+    } else {
+        emit_fp_minus_off(code, Reg(16), bytes);
+        emit(code, enc_add_imm(Reg(31), Reg(16), 0));
+    }
+}
+
 /// Restore what [`emit_prologue_saved_regs`] saved, in mirror order
 /// (x19, gprs descending, fp regs descending) so the offset-0 access
 /// comes last and, when `fold != 0`, tears the frame down as a
@@ -2026,6 +2222,612 @@ struct FnCtx<'a> {
     variadic_targets: &'a alloc::collections::BTreeSet<usize>,
     extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     param_plan: &'a [super::ArgPlacement],
+    /// Function name -> entry PC, for resolving an inline-asm `bl` / `b` to a
+    /// named symbol.
+    name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
+}
+
+/// Block-target branch context for an `asm goto` statement: the
+/// `jump_tables` row (`[fall_through, label targets...]`) and the
+/// enclosing function's branch-fixup list. Template `%lK` branches
+/// land on local restore trampolines whose final `b` is patched to the
+/// label's block like any other block-local branch.
+struct AsmGotoCtxA64<'a> {
+    row: &'a [super::super::ir::BlockId],
+    branch_fixups: &'a mut Vec<BranchFixup>,
+}
+
+/// A template branch to a local (`Nf` / `Nb`) or `asm goto` (`%lK`)
+/// label, recorded as a placeholder word and patched once the target
+/// offset is known.
+enum LabelBranch {
+    B,
+    BCond(u8),
+    Cb { nz: bool, rt: u8, is64: bool },
+    Tb { nz: bool, rt: u8, bit: u8 },
+    Adr { rd: u8 },
+}
+
+/// Encode a resolved label branch; `delta` is the byte displacement
+/// from the branch instruction to its target. `Adr` is byte-granular
+/// and handled by the caller.
+fn label_branch_word(kind: &LabelBranch, delta: i64) -> Result<u32, alloc::string::String> {
+    use alloc::string::String;
+    if delta % 4 != 0 {
+        return Err(String::from(
+            "aarch64 inline asm: label target is not word-aligned",
+        ));
+    }
+    let words = (delta / 4) as i32;
+    let fits = |bits: u32| {
+        let lim = 1i32 << (bits - 1);
+        (-lim..lim).contains(&words)
+    };
+    Ok(match *kind {
+        LabelBranch::B => {
+            if !fits(26) {
+                return Err(String::from(
+                    "aarch64 inline asm: branch target out of range",
+                ));
+            }
+            super::encode::enc_b(words)
+        }
+        // B.cond: 0101_0100 | imm19 << 5 | cond.
+        LabelBranch::BCond(c) => {
+            if !fits(19) {
+                return Err(String::from(
+                    "aarch64 inline asm: branch target out of range",
+                ));
+            }
+            0x5400_0000 | (((words as u32) & 0x7_FFFF) << 5) | c as u32
+        }
+        // CBZ/CBNZ: sf | 0011_010z | imm19 << 5 | Rt.
+        LabelBranch::Cb { nz, rt, is64 } => {
+            if !fits(19) {
+                return Err(String::from(
+                    "aarch64 inline asm: branch target out of range",
+                ));
+            }
+            (if is64 { 1u32 << 31 } else { 0 })
+                | (if nz { 0x3500_0000 } else { 0x3400_0000 })
+                | (((words as u32) & 0x7_FFFF) << 5)
+                | rt as u32
+        }
+        // TBZ/TBNZ: bit<5> | 0011_011z | bit<4:0> << 19 | imm14 << 5 | Rt.
+        LabelBranch::Tb { nz, rt, bit } => {
+            if !fits(14) {
+                return Err(String::from(
+                    "aarch64 inline asm: branch target out of range",
+                ));
+            }
+            ((bit as u32 >> 5) << 31)
+                | (if nz { 0x3700_0000 } else { 0x3600_0000 })
+                | ((bit as u32 & 31) << 19)
+                | (((words as u32) & 0x3FFF) << 5)
+                | rt as u32
+        }
+        LabelBranch::Adr { .. } => {
+            return Err(String::from(
+                "aarch64 inline asm: adr is not a branch encoding",
+            ));
+        }
+    })
+}
+
+/// Lower an `Inst::InlineAsm` (GCC extended asm) on AArch64. Assigns each
+/// register operand a machine register per its constraint, saves the registers
+/// the block overwrites, captures the operand values / addresses to a stack
+/// region, loads the inputs, encodes the register-concrete template through the
+/// table encoder, and stores the outputs back through their addresses. Raw-byte
+/// pieces emit their literal bytes verbatim. `x16` / `x17` are the bridge
+/// scratch, so the operand pool is `x0..x15`. `goto_ctx` is present for
+/// the `asm goto` form (the statement is the last instruction of a
+/// `Terminator::AsmGoto` block).
+fn emit_inline_asm_aarch64(
+    code: &mut Vec<u8>,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    fixups: &mut Vec<super::encode::Fixup>,
+    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    goto_ctx: Option<AsmGotoCtxA64<'_>>,
+) -> bool {
+    use super::super::ir::AsmConstraint;
+    use super::asm::{AsmOpndA64, assign_operand_regs, parse_template};
+    use super::encode::{enc_add_imm, enc_str_imm, enc_str32_imm, enc_strh_imm, enc_sub_imm};
+    use super::table::{self, Opnd};
+    use alloc::string::String;
+
+    let insns = match parse_template(&asm.template) {
+        Ok(i) => i,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    let op_reg = match assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs) {
+        Ok(r) => r,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    // Registers the block overwrites: the operand registers plus the explicit
+    // clobber list. GP operands and clobbers land in the x0..x15 save set; `w`
+    // operands and FP clobbers are in the independent d0..d7 file and are saved
+    // separately. A `w` operand must be a double (the SSA model's only FP width
+    // is f64).
+    let mut used_mask: u32 = asm.clobber_regs & 0xFFFF;
+    let mut fp_used_mask: u32 = asm.clobber_fp_regs & 0xFF;
+    for (i, op) in asm.operands.iter().enumerate() {
+        let Some(r) = op_reg[i] else { continue };
+        if matches!(op.constraint, AsmConstraint::Fp) {
+            if op.width != 8 {
+                bail_msg("aarch64 inline asm: only double `w` operands are supported");
+                return false;
+            }
+            fp_used_mask |= 1 << r;
+        } else {
+            used_mask |= 1 << r;
+        }
+    }
+    let save_list: Vec<u8> = (0u8..16).filter(|r| used_mask & (1 << r) != 0).collect();
+    let fp_save_list: Vec<u8> = (0u8..8).filter(|r| fp_used_mask & (1 << r) != 0).collect();
+
+    let n = asm.operands.len();
+    let n_saved = save_list.len();
+    let n_fp_saved = fp_save_list.len();
+    // Stack region: captures at [sp + i*8], then the saved GP registers, then
+    // the saved FP registers. Kept 16-byte aligned per AAPCS64.
+    let size = (((n + n_saved + n_fp_saved) * 8) as u32 + 15) & !15;
+    if size >= 4096 {
+        bail_msg("aarch64 inline asm: operand frame too large");
+        return false;
+    }
+    if size > 0 {
+        emit(code, enc_sub_imm(Reg(31), Reg(31), size));
+    }
+    let cap_off = |i: usize| (i * 8) as u32;
+    let save_off = |j: usize| ((n + j) * 8) as u32;
+    let fp_save_off = |k: usize| ((n + n_saved + k) * 8) as u32;
+
+    // Save the clobbered registers, then capture each operand's value (input) /
+    // address (output) -- both before any operand register is overwritten.
+    for (j, &r) in save_list.iter().enumerate() {
+        emit_sp_str_x_auto(code, Reg(r), save_off(j));
+    }
+    for (k, &r) in fp_save_list.iter().enumerate() {
+        emit_sp_str_d_auto(code, r, fp_save_off(k));
+    }
+    for (i, &a) in args.iter().enumerate() {
+        let Some(place) = alloc.places.get(a as usize).copied() else {
+            bail_msg("aarch64 inline asm: operand place missing");
+            return false;
+        };
+        // A `w` input captures its FP value; every other operand captures an
+        // integer value (input) or a destination address (output). sp has moved
+        // by `size` since the allocator laid out its sp-relative spill slots, so
+        // a spilled place must be read through the shifted form.
+        if matches!(asm.operands[i].constraint, AsmConstraint::Fp) && !asm.operands[i].is_output {
+            let Some(d) = materialize_fp_shifted(code, place, 16, frame, size) else {
+                bail_msg("aarch64 inline asm: `w` operand not a floating-point place");
+                return false;
+            };
+            emit_sp_str_d_auto(code, d, cap_off(i));
+        } else {
+            let Some(r) = materialize_int_shifted(code, place, Reg(16), frame, size) else {
+                bail_msg("aarch64 inline asm: operand not an integer place");
+                return false;
+            };
+            emit_sp_str_x_auto(code, r, cap_off(i));
+        }
+    }
+    // Load inputs and memory addresses into their assigned registers; a `+`
+    // read-write output loads its current value from the destination address.
+    for (i, op) in asm.operands.iter().enumerate() {
+        let Some(r) = op_reg[i] else { continue };
+        if matches!(op.constraint, AsmConstraint::Fp) {
+            // A `w` input loads its captured FP value into the d-register; a
+            // read-write `w` output loads the current value from the address.
+            if !op.is_output {
+                emit_sp_ldr_d_auto(code, r, cap_off(i));
+            } else if op.is_rw {
+                emit_sp_ldr_x(code, Reg(16), cap_off(i)); // x16 = destination address
+                emit(code, super::encode::enc_ldr_d_imm(r, Reg(16), 0));
+            }
+            continue;
+        }
+        if matches!(op.constraint, AsmConstraint::Mem) || !op.is_output {
+            emit_sp_ldr_x(code, Reg(r), cap_off(i));
+        } else if op.is_rw {
+            emit_sp_ldr_x(code, Reg(16), cap_off(i)); // x16 = destination address
+            let ok = match op.width {
+                8 => {
+                    emit(code, super::encode::enc_ldr_imm(Reg(r), Reg(16), 0));
+                    true
+                }
+                4 => {
+                    emit(code, super::encode::enc_ldr32_imm(Reg(r), Reg(16), 0));
+                    true
+                }
+                2 => {
+                    emit(code, super::encode::enc_ldrh_imm(Reg(r), Reg(16), 0));
+                    true
+                }
+                1 => {
+                    emit(code, super::encode::enc_ldrb_imm(Reg(r), Reg(16), 0));
+                    true
+                }
+                _ => false,
+            };
+            if !ok {
+                bail_msg("aarch64 inline asm: unsupported read-write operand width");
+                return false;
+            }
+        }
+    }
+    // Resolve one symbolic operand to a table operand; label references have
+    // no table form and are handled by the branch path below.
+    let conv = |o: &AsmOpndA64| -> Result<Opnd, String> {
+        let resolve_ref = |idx: u8| -> Option<u8> { op_reg.get(idx as usize).copied().flatten() };
+        Ok(match *o {
+            AsmOpndA64::Imm(v) => Opnd::Imm(v),
+            AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
+            AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
+            AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
+            AsmOpndA64::Reg { num, is64 } => Opnd::Reg { num, is64 },
+            AsmOpndA64::VReg { num, is_d } => Opnd::VReg { num, is_d },
+            AsmOpndA64::QReg(num) => Opnd::QReg(num),
+            AsmOpndA64::VScalar { num, size } => Opnd::VScalar { num, size },
+            AsmOpndA64::FpImm(v) => Opnd::FpImm(v),
+            AsmOpndA64::VecReg { num, size, q } => Opnd::VecReg { num, size, q },
+            AsmOpndA64::VecElem { num, size, index } => Opnd::VecElem { num, size, index },
+            AsmOpndA64::VecList {
+                first,
+                count,
+                size,
+                q,
+            } => Opnd::VecList {
+                first,
+                count,
+                size,
+                q,
+            },
+            AsmOpndA64::Ref { idx, is64 } => {
+                let Some(r) = resolve_ref(idx) else {
+                    return Err(String::from(
+                        "aarch64 inline asm: operand reference is not a register",
+                    ));
+                };
+                if matches!(asm.operands[idx as usize].constraint, AsmConstraint::Fp) {
+                    // `%sN` selects the single view, `%dN` / bare the double.
+                    Opnd::VReg {
+                        num: r,
+                        is_d: is64.unwrap_or(true),
+                    }
+                } else {
+                    let is64 = is64.unwrap_or(asm.operands[idx as usize].width >= 8);
+                    Opnd::Reg { num: r, is64 }
+                }
+            }
+            AsmOpndA64::Mem { base, off, pre } => {
+                let base = match base {
+                    super::asm::MemBase::Reg(n) => n,
+                    super::asm::MemBase::Ref(idx) => {
+                        let Some(r) = resolve_ref(idx) else {
+                            return Err(String::from(
+                                "aarch64 inline asm: memory base is not a register",
+                            ));
+                        };
+                        r
+                    }
+                };
+                Opnd::Mem { base, off, pre }
+            }
+            AsmOpndA64::MemReg {
+                base,
+                index,
+                option,
+                shift,
+            } => {
+                let reg_of = |b: super::asm::MemBase| match b {
+                    super::asm::MemBase::Reg(n) => Some(n),
+                    super::asm::MemBase::Ref(idx) => resolve_ref(idx),
+                };
+                let (Some(base), Some(index)) = (reg_of(base), reg_of(index)) else {
+                    return Err(String::from(
+                        "aarch64 inline asm: memory operand is not a register",
+                    ));
+                };
+                Opnd::MemReg {
+                    base,
+                    index,
+                    option,
+                    shift,
+                }
+            }
+            AsmOpndA64::Cond(c) => Opnd::Cond(c),
+            AsmOpndA64::Label { .. } | AsmOpndA64::GotoLabel(_) => {
+                return Err(String::from(
+                    "aarch64 inline asm: label reference outside a branch",
+                ));
+            }
+        })
+    };
+    // Local labels: definitions record the code offset they stand at; branches
+    // to them emit a placeholder word and are patched once the block's layout
+    // is final (a `Nb` reference binds to the most recent definition of N at
+    // or before the branch, `Nf` to the next one after it).
+    let mut label_defs: Vec<(u32, usize)> = Vec::new();
+    let mut label_fixups: Vec<(usize, LabelBranch, u32, bool)> = Vec::new();
+    // `asm goto` label branches: `(site, kind, label_index)` per `%lK`
+    // reference, patched to the label's restore trampoline (or to the
+    // shared fall-through restore when the target is the fall-through
+    // block).
+    let mut goto_sites: Vec<(usize, LabelBranch, usize)> = Vec::new();
+
+    // Encode each template instruction; raw-byte pieces emit verbatim.
+    for insn in &insns {
+        if let Some(num) = insn.label_def {
+            label_defs.push((num, code.len()));
+            continue;
+        }
+        if !insn.bytes.is_empty() {
+            code.extend_from_slice(&insn.bytes);
+            continue;
+        }
+        // A direct `bl` / `b` to a symbol: resolve the name to its entry PC and
+        // record a fixup the post-pass patches to a rel26 once every function's
+        // address is final -- the same mechanism as a compiler-emitted call.
+        if let Some(name) = &insn.sym_target {
+            let Some(&ent_pc) = name2entpc.get(name.as_str()) else {
+                bail_msg(&alloc::format!(
+                    "aarch64 inline asm: unknown bl/b target `{name}`"
+                ));
+                return false;
+            };
+            let (kind, word) = if insn.mnemonic == "bl" {
+                (BranchKind::Bl, super::encode::enc_bl(0))
+            } else {
+                (BranchKind::B, super::encode::enc_b(0))
+            };
+            fixups.push(Fixup {
+                native_offset: code.len(),
+                target_ent_pc: ent_pc,
+                kind,
+            });
+            emit(code, word);
+            continue;
+        }
+        let goto_label = match insn.operands.last() {
+            Some(&AsmOpndA64::GotoLabel(k)) => Some(k),
+            _ => None,
+        };
+        if matches!(insn.operands.last(), Some(AsmOpndA64::Label { .. })) || goto_label.is_some() {
+            let kind = match insn.mnemonic.as_str() {
+                "b" if insn.operands.len() == 1 => LabelBranch::B,
+                "cbz" | "cbnz" if insn.operands.len() == 2 => match conv(&insn.operands[0]) {
+                    Ok(Opnd::Reg { num: rt, is64 }) => LabelBranch::Cb {
+                        nz: insn.mnemonic == "cbnz",
+                        rt,
+                        is64,
+                    },
+                    Ok(_) => {
+                        bail_msg("aarch64 inline asm: cbz/cbnz operand must be a register");
+                        return false;
+                    }
+                    Err(m) => {
+                        bail_msg(&m);
+                        return false;
+                    }
+                },
+                "tbz" | "tbnz" if insn.operands.len() == 3 => {
+                    let (rt, is64) = match conv(&insn.operands[0]) {
+                        Ok(Opnd::Reg { num, is64 }) => (num, is64),
+                        Ok(_) => {
+                            bail_msg("aarch64 inline asm: tbz/tbnz operand must be a register");
+                            return false;
+                        }
+                        Err(m) => {
+                            bail_msg(&m);
+                            return false;
+                        }
+                    };
+                    let AsmOpndA64::Imm(bit) = insn.operands[1] else {
+                        bail_msg("aarch64 inline asm: tbz/tbnz bit number must be an immediate");
+                        return false;
+                    };
+                    if bit < 0 || bit >= if is64 { 64 } else { 32 } {
+                        bail_msg("aarch64 inline asm: tbz/tbnz bit number out of range");
+                        return false;
+                    }
+                    LabelBranch::Tb {
+                        nz: insn.mnemonic == "tbnz",
+                        rt,
+                        bit: bit as u8,
+                    }
+                }
+                "adr" if insn.operands.len() == 2 => match conv(&insn.operands[0]) {
+                    Ok(Opnd::Reg { num, is64: true }) => LabelBranch::Adr { rd: num },
+                    Ok(_) => {
+                        bail_msg("aarch64 inline asm: adr destination must be a 64-bit register");
+                        return false;
+                    }
+                    Err(m) => {
+                        bail_msg(&m);
+                        return false;
+                    }
+                },
+                m => {
+                    let cond = m.strip_prefix("b.").and_then(super::asm::cond_code);
+                    let Some(c) = cond.filter(|_| insn.operands.len() == 1) else {
+                        bail_msg("aarch64 inline asm: label branch must be b/b.cond/cbz/cbnz");
+                        return false;
+                    };
+                    LabelBranch::BCond(c)
+                }
+            };
+            if let Some(k) = goto_label {
+                let Some(ctx) = goto_ctx.as_ref() else {
+                    bail_msg("aarch64 inline asm: `%l` label reference outside `asm goto`");
+                    return false;
+                };
+                if 1 + k as usize >= ctx.row.len() {
+                    bail_msg("aarch64 inline asm: `%l` label index out of range");
+                    return false;
+                }
+                if matches!(kind, LabelBranch::Adr { .. }) {
+                    bail_msg("aarch64 inline asm: adr cannot take an `asm goto` label");
+                    return false;
+                }
+                goto_sites.push((code.len(), kind, k as usize));
+                emit(code, 0);
+                continue;
+            }
+            let Some(&AsmOpndA64::Label { num, forward }) = insn.operands.last() else {
+                unreachable!("guard admits Label or GotoLabel only");
+            };
+            label_fixups.push((code.len(), kind, num, forward));
+            emit(code, 0);
+            continue;
+        }
+        let mut ops: Vec<Opnd> = Vec::new();
+        for o in &insn.operands {
+            match conv(o) {
+                Ok(opnd) => ops.push(opnd),
+                Err(m) => {
+                    bail_msg(&m);
+                    return false;
+                }
+            }
+        }
+        match table::encode(&insn.mnemonic, &ops) {
+            Ok(word) => emit(code, word),
+            Err(m) => {
+                bail_msg(&m);
+                return false;
+            }
+        }
+    }
+    // Patch the label branches now that every definition's offset is known.
+    for &(site, ref kind, num, forward) in &label_fixups {
+        let target = if forward {
+            label_defs
+                .iter()
+                .find(|&&(n, off)| n == num && off > site)
+                .map(|&(_, off)| off)
+        } else {
+            label_defs
+                .iter()
+                .rev()
+                .find(|&&(n, off)| n == num && off <= site)
+                .map(|&(_, off)| off)
+        };
+        let Some(target) = target else {
+            bail_msg("aarch64 inline asm: undefined local label");
+            return false;
+        };
+        let delta = target as i64 - site as i64;
+        // `adr` materializes a byte-granular PC-relative address (rel21,
+        // unscaled), unlike the word-aligned, word-scaled branch offsets.
+        if let LabelBranch::Adr { rd } = *kind {
+            if !(-(1i64 << 20)..(1i64 << 20)).contains(&delta) {
+                bail_msg("aarch64 inline asm: adr target out of +/-1MiB range");
+                return false;
+            }
+            let word = super::encode::enc_adr(Reg(rd), delta as i32);
+            code[site..site + 4].copy_from_slice(&word.to_le_bytes());
+            continue;
+        }
+        match label_branch_word(kind, delta) {
+            Ok(word) => code[site..site + 4].copy_from_slice(&word.to_le_bytes()),
+            Err(m) => {
+                bail_msg(&m);
+                return false;
+            }
+        }
+    }
+    // Store the register outputs back through their captured addresses (x16
+    // holds the address; the operand pool is untouched).
+    for (i, op) in asm.operands.iter().enumerate() {
+        if !op.is_output || matches!(op.constraint, AsmConstraint::Mem) {
+            continue;
+        }
+        let Some(r) = op_reg[i] else { continue };
+        emit_sp_ldr_x(code, Reg(16), cap_off(i));
+        if matches!(op.constraint, AsmConstraint::Fp) {
+            emit(code, super::encode::enc_str_d_imm(r, Reg(16), 0));
+            continue;
+        }
+        match op.width {
+            8 => emit(code, enc_str_imm(Reg(r), Reg(16), 0)),
+            4 => emit(code, enc_str32_imm(Reg(r), Reg(16), 0)),
+            2 => emit(code, enc_strh_imm(Reg(r), Reg(16), 0)),
+            1 => emit(code, super::encode::enc_strb_imm(Reg(r), Reg(16), 0)),
+            _ => {
+                bail_msg("aarch64 inline asm: unsupported output width");
+                return false;
+            }
+        }
+    }
+    // Restore the saved registers and free the frame.
+    let emit_restore = |code: &mut Vec<u8>| {
+        for (j, &r) in save_list.iter().enumerate() {
+            emit_sp_ldr_x(code, Reg(r), save_off(j));
+        }
+        for (k, &r) in fp_save_list.iter().enumerate() {
+            emit_sp_ldr_d_auto(code, r, fp_save_off(k));
+        }
+        if size > 0 {
+            emit(code, enc_add_imm(Reg(31), Reg(31), size));
+        }
+    };
+    let restore_start = code.len();
+    emit_restore(code);
+    // `asm goto`: each `%lK` branch leaves mid-template, before the
+    // restore just emitted on the fall-through path, so it lands on a
+    // trampoline that repeats the restore and branches to the label's
+    // block through the enclosing function's branch fixups. A label
+    // whose target is the fall-through block reuses the fall-through
+    // restore instead.
+    if let Some(ctx) = goto_ctx {
+        let mut tramp_at: Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
+        if goto_sites
+            .iter()
+            .any(|&(_, _, k)| ctx.row[1 + k] != ctx.row[0])
+        {
+            let skip_site = code.len();
+            emit(code, 0); // b over the trampolines, patched below
+            for &(_, _, k) in &goto_sites {
+                if ctx.row[1 + k] == ctx.row[0] || tramp_at[k].is_some() {
+                    continue;
+                }
+                tramp_at[k] = Some(code.len());
+                emit_restore(code);
+                ctx.branch_fixups.push(BranchFixup {
+                    site: code.len(),
+                    target: ctx.row[1 + k],
+                    kind: LocalBranchKind::B,
+                });
+                emit(code, super::encode::enc_b(0));
+            }
+            let words = ((code.len() - skip_site) / 4) as i32;
+            let word = super::encode::enc_b(words);
+            code[skip_site..skip_site + 4].copy_from_slice(&word.to_le_bytes());
+        }
+        for &(site, ref kind, k) in &goto_sites {
+            let target = tramp_at[k].unwrap_or(restore_start);
+            match label_branch_word(kind, target as i64 - site as i64) {
+                Ok(word) => code[site..site + 4].copy_from_slice(&word.to_le_bytes()),
+                Err(m) => {
+                    bail_msg(&m);
+                    return false;
+                }
+            }
+        }
+    }
+    true
 }
 
 fn emit_inst(
@@ -2037,7 +2839,6 @@ fn emit_inst(
     fixups: &mut Vec<Fixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
-    current_alloca_top: &mut u32,
 ) -> bool {
     // Unpack the read-only per-function context into the per-field names the
     // lowering below uses, so the body is unchanged.
@@ -2052,6 +2853,7 @@ fn emit_inst(
         variadic_targets,
         extern_tls_names,
         param_plan,
+        name2entpc,
     } = *fcx;
     // The bundled emit output now arrives in `cx`; recreate the per-field
     // names as disjoint reborrows so the per-`Inst` lowering below is unchanged.
@@ -2063,32 +2865,11 @@ fn emit_inst(
     let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
     match inst {
         Inst::AllocaInit(slot) => {
-            // Slot 0: this function doesn't use alloca; emit
-            // nothing (matches the pool path). Non-zero: the
-            // bookkeeping slot lives at `[fp - slot*8]` and the
-            // first alloca call subtracts from the value stored
-            // there. Initialise the slot with its own address so
-            // alloca(n) lands at `address - n`, the top of the
-            // arena reserved by the prologue's local-slot count.
-            if *slot == 0 {
-                return true;
-            }
-            let top_offset = (*slot as u32) * 8;
-            *current_alloca_top = top_offset;
-            if top_offset < 4096 {
-                emit(code, enc_sub_imm(Reg(16), Reg(29), top_offset));
-            } else {
-                let high = top_offset & !0xfff;
-                let low = top_offset & 0xfff;
-                emit(
-                    code,
-                    super::encode::enc_sub_imm_lsl12(Reg(16), Reg(29), high >> 12),
-                );
-                if low != 0 {
-                    emit(code, enc_sub_imm(Reg(16), Reg(16), low));
-                }
-            }
-            emit(code, enc_str_imm(Reg(16), Reg(16), 0));
+            // Slot 0: this function doesn't use alloca. Non-zero:
+            // the function moves sp at runtime; `Frame::dynamic_sp`
+            // carries the fact to the spill addressing, the alloca
+            // intrinsics, and the epilogue. No code either way.
+            let _ = slot;
             true
         }
         Inst::ParamRef { idx, kind } => {
@@ -2120,7 +2901,7 @@ fn emit_inst(
                     }
                     Place::Spill(slot) => {
                         let sp_off = spill_off(frame, slot);
-                        emit_sp_str_d_auto(code, d, sp_off);
+                        emit_spill_str_d_auto(code, frame, d, sp_off);
                     }
                     _ => {
                         bail_msg("ParamRef: FP param dst not fp reg / spill");
@@ -2153,7 +2934,7 @@ fn emit_inst(
                 Place::Spill(slot) => {
                     sign_extend(code, scratch.primary);
                     let sp_off = spill_off(frame, slot);
-                    emit_sp_str_x(code, scratch.primary, sp_off, scratch.secondary);
+                    emit_spill_str_x(code, frame, scratch.primary, sp_off, scratch.secondary);
                 }
                 _ => {
                     bail_msg("ParamRef: dst not int reg / spill");
@@ -2170,7 +2951,7 @@ fn emit_inst(
             load_imm64(code, rd, *value as u64);
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_x_auto(code, rd, sp_off);
+                emit_spill_str_x_auto(code, frame, rd, sp_off);
             }
             true
         }
@@ -2192,7 +2973,7 @@ fn emit_inst(
             });
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_x_auto(code, rd, sp_off);
+                emit_spill_str_x_auto(code, frame, rd, sp_off);
             }
             true
         }
@@ -2207,7 +2988,7 @@ fn emit_inst(
             pending_func_fixups.push((adrp_offset, *target_ent_pc));
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_x_auto(code, rd, sp_off);
+                emit_spill_str_x_auto(code, frame, rd, sp_off);
             }
             true
         }
@@ -2237,7 +3018,7 @@ fn emit_inst(
             emit(code, enc_add_imm(rd, rd, 0));
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_x_auto(code, rd, sp_off);
+                emit_spill_str_x_auto(code, frame, rd, sp_off);
             }
             true
         }
@@ -2407,19 +3188,9 @@ fn emit_inst(
             frame,
             scratch,
         ),
-        Inst::Intrinsic { kind, args } => emit_intrinsic(
-            code,
-            func,
-            abi,
-            *kind,
-            args,
-            dst,
-            v,
-            alloc,
-            frame,
-            scratch,
-            *current_alloca_top,
-        ),
+        Inst::Intrinsic { kind, args } => {
+            emit_intrinsic(code, func, abi, *kind, args, dst, v, alloc, frame, scratch)
+        }
         Inst::Fneg(src) => {
             let src_place = alloc
                 .places
@@ -2449,7 +3220,7 @@ fn emit_inst(
             }
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_d_auto(code, dd, sp_off);
+                emit_spill_str_d_auto(code, frame, dd, sp_off);
             }
             true
         }
@@ -2510,7 +3281,7 @@ fn emit_inst(
             );
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_d_auto(code, dd, sp_off);
+                emit_spill_str_d_auto(code, frame, dd, sp_off);
             }
             true
         }
@@ -2551,7 +3322,7 @@ fn emit_inst(
                     emit(code, enc);
                     if let Place::Spill(slot) = dst {
                         let sp_off = spill_off(frame, slot);
-                        emit_sp_str_d_auto(code, dd, sp_off);
+                        emit_spill_str_d_auto(code, frame, dd, sp_off);
                     }
                     true
                 }
@@ -2586,7 +3357,7 @@ fn emit_inst(
                     emit(code, enc);
                     if let Place::Spill(slot) = dst {
                         let sp_off = spill_off(frame, slot);
-                        emit_sp_str_x_auto(code, rd, sp_off);
+                        emit_spill_str_x_auto(code, frame, rd, sp_off);
                     }
                     true
                 }
@@ -2609,7 +3380,7 @@ fn emit_inst(
                     emit(code, enc_fcvt_d_s(dd, dn));
                     if let Place::Spill(slot) = dst {
                         let sp_off = spill_off(frame, slot);
-                        emit_sp_str_d_auto(code, dd, sp_off);
+                        emit_spill_str_d_auto(code, frame, dd, sp_off);
                     }
                     true
                 }
@@ -2626,7 +3397,7 @@ fn emit_inst(
                     emit(code, enc_fcvt_s_d(dd, dn));
                     if let Place::Spill(slot) = dst {
                         let sp_off = spill_off(frame, slot);
-                        emit_sp_str_d_auto(code, dd, sp_off);
+                        emit_spill_str_d_auto(code, frame, dd, sp_off);
                     }
                     true
                 }
@@ -2650,6 +3421,9 @@ fn emit_inst(
             // phi's allocated Place already holds the merged
             // value.
             true
+        }
+        Inst::InlineAsm { asm, args } => {
+            emit_inline_asm_aarch64(code, asm, args, alloc, frame, fixups, name2entpc, None)
         }
         _ => false,
     }
@@ -2958,7 +3732,7 @@ fn emit_va_arg_aapcs64(
         Place::IntReg(_) => {}
         Place::Spill(slot) => {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, scratch.primary, sp_off);
+            emit_spill_str_x_auto(code, frame, scratch.primary, sp_off);
         }
         Place::None => {}
         Place::FpReg(_) => {
@@ -2984,7 +3758,6 @@ fn emit_intrinsic(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-    current_alloca_top: u32,
 ) -> bool {
     use crate::c5::op::Intrinsic as I;
     let intrinsic = match I::from_i64(kind) {
@@ -3228,7 +4001,7 @@ fn emit_intrinsic(
                 Place::IntReg(r) if rd.0 != r => emit_mov_reg(code, Reg(r), rd),
                 Place::Spill(slot) => {
                     let sp_off = spill_off(frame, slot);
-                    emit_sp_str_x_auto(code, rd, sp_off);
+                    emit_spill_str_x_auto(code, frame, rd, sp_off);
                 }
                 _ => {}
             }
@@ -3313,13 +4086,14 @@ fn emit_intrinsic(
             true
         }
         I::Alloca => {
-            // alloca(n): round n up to 16-byte alignment, load
-            // the current arena top from the bookkeeping slot
-            // (initialised by `Inst::AllocaInit`), subtract n
-            // to get the new top, write it back, return the new
-            // top. `args[0]` carries the requested size; the
-            // result of the intrinsic is the new top pointer.
-            if current_alloca_top == 0 {
+            // alloca(n): move sp down by `n` rounded up to 16 bytes
+            // and return the new sp. The 16-byte rounding keeps sp
+            // aligned (AAPCS64 5.2.2.1); the frame's spill slots and
+            // locals stay reachable through fp (`Frame::dynamic_sp`).
+            // The storage is reclaimed by the epilogue's
+            // `sub sp, fp, #frame_bytes`, or earlier by an
+            // `AllocaRestore` closing a VLA scope (C99 6.2.4p2).
+            if !frame.dynamic_sp {
                 bail_msg("Alloca: AllocaInit didn't run for this function");
                 return false;
             }
@@ -3327,8 +4101,8 @@ fn emit_intrinsic(
                 bail_msg("Alloca: expected 1 arg");
                 return false;
             }
-            let Some(rd) = int_reg(dst) else {
-                bail_msg("Alloca: dst not int reg");
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                bail_msg("Alloca: dst not int reg / spill");
                 return false;
             };
             let size_place = alloc
@@ -3346,47 +4120,37 @@ fn emit_intrinsic(
                 code,
                 super::encode::enc_and_imm_neg16(scratch.secondary, scratch.secondary),
             );
-            // x16 = &arena_top -- the bookkeeping slot's address.
-            let top_offset = current_alloca_top;
-            if top_offset < 4096 {
-                emit(code, enc_sub_imm(scratch.primary, Reg(29), top_offset));
-            } else {
-                let high = top_offset & !0xfff;
-                let low = top_offset & 0xfff;
+            // rd = sp - aligned_size, the final sp value. rd is an
+            // allocator register or x16; x17 holds the size, so the
+            // two never alias.
+            emit(code, enc_add_imm(rd, Reg(31), 0));
+            emit(code, enc_sub_reg(rd, rd, scratch.secondary));
+            if abi.stack_probe {
+                // Windows commits stack on demand behind a guard page:
+                // walk sp down page by page, touching each, before
+                // committing the final value (mirrors the prologue's
+                // `emit_stack_alloc` probe loop). x17 (the dead size)
+                // carries the page count.
                 emit(
                     code,
-                    super::encode::enc_sub_imm_lsl12(scratch.primary, Reg(29), high >> 12),
+                    super::encode::enc_lsr_imm(scratch.secondary, scratch.secondary, 12),
                 );
-                if low != 0 {
-                    emit(code, enc_sub_imm(scratch.primary, scratch.primary, low));
-                }
+                emit(code, enc_cbz(scratch.secondary, 5));
+                emit(code, super::encode::enc_sub_imm_lsl12(Reg(31), Reg(31), 1));
+                emit(code, enc_str_imm(scratch.secondary, Reg(31), 0));
+                emit(
+                    code,
+                    super::encode::enc_subs_imm(scratch.secondary, scratch.secondary, 1),
+                );
+                emit(code, super::encode::enc_b_cond(super::encode::Cond::Ne, -3));
             }
-            // *x16 -= aligned_size; rd = new top.
-            emit(code, enc_ldr_imm(rd, scratch.primary, 0));
-            emit(code, enc_sub_reg(rd, rd, scratch.secondary));
-            // Trap on arena underflow: a bumped pointer below the
-            // per-frame arena floor (x16 - ALLOCA_ARENA_SLOTS*8) would
-            // scribble the saved-register area, so fault deterministically
-            // rather than corrupt the stack. TODO: lower alloca to a real
-            // SP decrement for unbounded sizes.
-            let arena_bytes = (crate::c5::op::ALLOCA_ARENA_SLOTS * 8) as u32;
-            emit(
-                code,
-                super::encode::enc_sub_imm_lsl12(
-                    scratch.secondary,
-                    scratch.primary,
-                    arena_bytes >> 12,
-                ),
-            );
-            emit(code, super::encode::enc_cmp_reg(rd, scratch.secondary));
-            emit(code, super::encode::enc_b_cond(super::encode::Cond::Hs, 2));
-            emit(code, 0xD420_0020); // brk #1
-            emit(code, enc_str_imm(rd, scratch.primary, 0));
+            emit(code, enc_add_imm(Reg(31), rd, 0));
+            spill_local_addr_to_dst(code, dst, rd, frame);
             true
         }
         I::AllocaSave => {
-            // Read the arena top for a VLA block snapshot (C99 6.7.6.2).
-            if current_alloca_top == 0 {
+            // Snapshot sp for a VLA block (C99 6.2.4p2).
+            if !frame.dynamic_sp {
                 bail_msg("AllocaSave: AllocaInit didn't run for this function");
                 return false;
             }
@@ -3394,14 +4158,14 @@ fn emit_intrinsic(
                 bail_msg("AllocaSave: dst not int reg / spill");
                 return false;
             };
-            emit_arena_top_addr(code, scratch.secondary, current_alloca_top);
-            emit(code, enc_ldr_imm(rd, scratch.secondary, 0));
+            emit(code, enc_add_imm(rd, Reg(31), 0));
             spill_local_addr_to_dst(code, dst, rd, frame);
             true
         }
         I::AllocaRestore => {
-            // Restore the arena top on VLA block exit.
-            if current_alloca_top == 0 {
+            // Restore the saved sp on VLA block exit, reclaiming the
+            // block's VLA storage (per iteration for a loop body).
+            if !frame.dynamic_sp {
                 bail_msg("AllocaRestore: AllocaInit didn't run for this function");
                 return false;
             }
@@ -3421,8 +4185,7 @@ fn emit_intrinsic(
                     return false;
                 }
             };
-            emit_arena_top_addr(code, scratch.secondary, current_alloca_top);
-            emit(code, enc_str_imm(v, scratch.secondary, 0));
+            emit(code, enc_add_imm(Reg(31), v, 0));
             true
         }
         I::SetjmpAArch64 => {
@@ -3711,7 +4474,7 @@ fn emit_intrinsic(
             emit(code, inst);
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_d_auto(code, dd, sp_off);
+                emit_spill_str_d_auto(code, frame, dd, sp_off);
             }
             true
         }
@@ -3928,7 +4691,7 @@ fn emit_call_ext(
         }
     } else if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, Reg(0), sp_off);
+        emit_spill_str_x_auto(code, frame, Reg(0), sp_off);
     }
     true
 }
@@ -4200,7 +4963,7 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: boo
             Place::IntReg(r) => emit(code, enc_fmov_d_to_x(Reg(r), 0)),
             Place::Spill(slot) => {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_d_auto(code, 0, sp_off);
+                emit_spill_str_d_auto(code, frame, 0, sp_off);
             }
             Place::None => {}
         }
@@ -4222,7 +4985,7 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: boo
             // The allocator gives Spill the same 8-byte slot
             // regardless of result kind, so store the wide
             // pattern via x0 directly.
-            emit_sp_str_x_auto(code, Reg(0), sp_off);
+            emit_spill_str_x_auto(code, frame, Reg(0), sp_off);
         }
         Place::None => {}
     }
@@ -4483,7 +5246,7 @@ fn emit_mcpy(
         }
     } else if let Place::Spill(slot) = dst_place {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, dst_r, sp_off);
+        emit_spill_str_x_auto(code, frame, dst_r, sp_off);
     }
     true
 }
@@ -5167,26 +5930,7 @@ fn spill_local_addr_to_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Fram
         // the other scratch carries the base when the slot is beyond
         // the scaled-imm12 reach.
         let addr_scratch = if src.0 == 16 { Reg(17) } else { Reg(16) };
-        emit_sp_str_x(code, src, sp_off, addr_scratch);
-    }
-}
-
-/// Materialize the per-frame alloca-arena bookkeeping slot address
-/// (`fp - top_offset`) into `reg`. Mirrors the `AllocaInit` /
-/// `Alloca` address computation for the VLA save / restore ops.
-fn emit_arena_top_addr(code: &mut Vec<u8>, reg: Reg, top_offset: u32) {
-    if top_offset < 4096 {
-        emit(code, enc_sub_imm(reg, Reg(29), top_offset));
-    } else {
-        let high = top_offset & !0xfff;
-        let low = top_offset & 0xfff;
-        emit(
-            code,
-            super::encode::enc_sub_imm_lsl12(reg, Reg(29), high >> 12),
-        );
-        if low != 0 {
-            emit(code, enc_sub_imm(reg, reg, low));
-        }
+        emit_spill_str_x(code, frame, src, sp_off, addr_scratch);
     }
 }
 
@@ -5278,7 +6022,7 @@ fn emit_load(
         }
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dd, sp_off);
+            emit_spill_str_d_auto(code, frame, dd, sp_off);
         }
         return true;
     }
@@ -5295,7 +6039,7 @@ fn emit_load(
         emit(code, enc_ldr_d_imm(dd, rn, disp));
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dd, sp_off);
+            emit_spill_str_d_auto(code, frame, dd, sp_off);
         }
         return true;
     }
@@ -5316,7 +6060,7 @@ fn emit_load(
     }
     if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, rd, sp_off);
+        emit_spill_str_x_auto(code, frame, rd, sp_off);
     }
     true
 }
@@ -5367,7 +6111,7 @@ fn emit_load_local(
         }
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dd, sp_off);
+            emit_spill_str_d_auto(code, frame, dd, sp_off);
         }
         return true;
     }
@@ -5395,7 +6139,7 @@ fn emit_load_local(
         }
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dd, sp_off);
+            emit_spill_str_d_auto(code, frame, dd, sp_off);
         }
         return true;
     }
@@ -5423,7 +6167,7 @@ fn emit_load_local(
         emit(code, word);
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -5446,7 +6190,7 @@ fn emit_load_local(
     emit(code, word);
     if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, rd, sp_off);
+        emit_spill_str_x_auto(code, frame, rd, sp_off);
     }
     true
 }
@@ -5509,7 +6253,7 @@ fn emit_store_local(
                     emit(code, super::encode::enc_fmov_s_s(rd, sn));
                 }
             } else if let Place::Spill(slot) = dst {
-                emit_sp_str_d_auto(code, sn, spill_off(frame, slot));
+                emit_spill_str_d_auto(code, frame, sn, spill_off(frame, slot));
             }
             return true;
         }
@@ -5541,7 +6285,7 @@ fn emit_store_local(
                 emit(code, enc_fmov_x_to_d(rd, scratch.primary));
             }
         } else if let Place::Spill(slot) = dst {
-            emit_sp_str_d_auto(code, dn, spill_off(frame, slot));
+            emit_spill_str_d_auto(code, frame, dn, spill_off(frame, slot));
         }
         return true;
     }
@@ -5576,7 +6320,7 @@ fn emit_store_local(
             }
             Place::Spill(slot) => {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_d_auto(code, dn, sp_off);
+                emit_spill_str_d_auto(code, frame, dn, sp_off);
             }
             _ => {}
         }
@@ -5636,7 +6380,7 @@ fn emit_store_local(
         }
         Place::Spill(slot) => {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rv, sp_off);
+            emit_spill_str_x_auto(code, frame, rv, sp_off);
         }
         Place::None => {}
         Place::FpReg(_) => return false,
@@ -5737,7 +6481,7 @@ fn emit_load_indexed(
     emit(code, word);
     if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, rd, sp_off);
+        emit_spill_str_x_auto(code, frame, rd, sp_off);
     }
     true
 }
@@ -5851,7 +6595,7 @@ fn emit_store_indexed(
         }
         Place::Spill(slot) => {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rv, sp_off);
+            emit_spill_str_x_auto(code, frame, rv, sp_off);
         }
         Place::None => {}
         Place::FpReg(_) => return false,
@@ -5912,7 +6656,7 @@ fn emit_store(
                 }
             } else if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
-                emit_sp_str_d_auto(code, sn, sp_off);
+                emit_spill_str_d_auto(code, frame, sn, sp_off);
             }
             return true;
         }
@@ -5948,7 +6692,7 @@ fn emit_store(
             }
         } else if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dn, sp_off);
+            emit_spill_str_d_auto(code, frame, dn, sp_off);
         }
         return true;
     }
@@ -5964,7 +6708,7 @@ fn emit_store(
             }
         } else if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dn, sp_off);
+            emit_spill_str_d_auto(code, frame, dn, sp_off);
         }
         return true;
     }
@@ -5998,7 +6742,7 @@ fn emit_store(
         }
     } else if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, rs, sp_off);
+        emit_spill_str_x_auto(code, frame, rs, sp_off);
     }
     true
 }
@@ -6073,7 +6817,7 @@ fn emit_binop(
         emit(code, word);
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_d_auto(code, dd, sp_off);
+            emit_spill_str_d_auto(code, frame, dd, sp_off);
         }
         return true;
     }
@@ -6102,7 +6846,7 @@ fn emit_binop(
         emit(code, enc_cset(rd, cond));
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -6147,7 +6891,7 @@ fn emit_binop(
         emit(code, word);
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -6167,7 +6911,7 @@ fn emit_binop(
         emit(code, enc_cset(rd, cond));
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -6196,7 +6940,7 @@ fn emit_binop(
         emit(code, enc_msub(rd, quot, rm, rn));
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -6218,7 +6962,7 @@ fn emit_binop(
     emit(code, word);
     if let Some(slot) = spill_to {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, rd, sp_off);
+        emit_spill_str_x_auto(code, frame, rd, sp_off);
     }
     true
 }
@@ -6320,7 +7064,7 @@ fn emit_binop_imm(
         emit(code, word);
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -6392,7 +7136,7 @@ fn emit_binop_imm(
         emit(code, word);
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -6411,7 +7155,7 @@ fn emit_binop_imm(
         emit(code, enc_cset(rd, cond));
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -6429,7 +7173,7 @@ fn emit_binop_imm(
         emit(code, enc_cset(rd, cond));
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
-            emit_sp_str_x_auto(code, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
         }
         return true;
     }
@@ -6457,7 +7201,7 @@ fn emit_binop_imm(
     emit(code, word);
     if let Some(slot) = spill_to {
         let sp_off = spill_off(frame, slot);
-        emit_sp_str_x_auto(code, rd, sp_off);
+        emit_spill_str_x_auto(code, frame, rd, sp_off);
     }
     true
 }
@@ -6486,8 +7230,11 @@ fn materialize_int_shifted(
     match place {
         Place::IntReg(r) => Some(Reg(r)),
         Place::Spill(slot) => {
-            let sp_off = spill_off(frame, slot) + sp_shift;
-            emit_sp_ldr_x(code, scratch, sp_off);
+            // The shift compensates a temporary sp move; the fp-based
+            // dynamic-sp form is immune to it.
+            let shift = if frame.dynamic_sp { 0 } else { sp_shift };
+            let sp_off = spill_off(frame, slot) + shift;
+            emit_spill_ldr_x(code, frame, scratch, sp_off);
             Some(scratch)
         }
         Place::FpReg(_) | Place::None => None,
@@ -6512,11 +7259,14 @@ fn materialize_fp_shifted(
     match place {
         Place::FpReg(r) => Some(r),
         Place::Spill(slot) => {
-            let sp_off = spill_off(frame, slot) + sp_shift;
+            // The shift compensates a temporary sp move; the fp-based
+            // dynamic-sp form is immune to it.
+            let shift = if frame.dynamic_sp { 0 } else { sp_shift };
+            let sp_off = spill_off(frame, slot) + shift;
             // FP spill reloads need a GPR base when the slot is beyond
             // the scaled-imm12 reach; x16 is the primary scratch and
             // holds no int operand during an FP-value lowering.
-            emit_sp_ldr_d(code, scratch_d, sp_off, Reg(16));
+            emit_spill_ldr_d(code, frame, scratch_d, sp_off, Reg(16));
             Some(scratch_d)
         }
         // c5's constant-folder emits FP values as `Imm` of the
@@ -6544,7 +7294,7 @@ fn materialize_fp_f32(code: &mut Vec<u8>, place: Place, scratch_d: u8, frame: Fr
         Place::FpReg(r) => Some(r),
         Place::Spill(slot) => {
             let sp_off = spill_off(frame, slot);
-            emit_sp_ldr_d(code, scratch_d, sp_off, Reg(16));
+            emit_spill_ldr_d(code, frame, scratch_d, sp_off, Reg(16));
             Some(scratch_d)
         }
         Place::IntReg(r) => {
@@ -6693,19 +7443,19 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
     fn fp_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
         // FP phi moves keep all values in d-regs, so the GPR scratch x16 is
         // free to carry the base for out-of-reach slots.
-        emit_sp_str_d_auto(code, src, spill_off(frame, slot));
+        emit_spill_str_d_auto(code, frame, src, spill_off(frame, slot));
     }
     fn fp_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
-        emit_sp_ldr_d_auto(code, dst, spill_off(frame, slot));
+        emit_spill_ldr_d_auto(code, frame, dst, spill_off(frame, slot));
     }
     fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_mov_reg(code, Reg(dst), Reg(src));
     }
     fn int_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8, base: u8) {
-        emit_sp_str_x(code, Reg(src), spill_off(frame, slot), Reg(base));
+        emit_spill_str_x(code, frame, Reg(src), spill_off(frame, slot), Reg(base));
     }
     fn int_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
-        emit_sp_ldr_x(code, Reg(dst), spill_off(frame, slot));
+        emit_spill_ldr_x(code, frame, Reg(dst), spill_off(frame, slot));
     }
     fn int_spill_to_spill(
         &self,
@@ -6716,14 +7466,14 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
         stage: u8,
         hold: u8,
     ) {
-        emit_sp_ldr_x(code, Reg(stage), spill_off(frame, src));
+        emit_spill_ldr_x(code, frame, Reg(stage), spill_off(frame, src));
         // The value occupies `stage` and `hold` may carry a live cycle
         // source, so the store borrows `hold` via a stack save/restore when
         // the destination slot is out of reach.
-        emit_sp_str_x_borrow(code, Reg(stage), spill_off(frame, dst), Reg(hold));
+        emit_spill_str_x_borrow(code, frame, Reg(stage), spill_off(frame, dst), Reg(hold));
     }
     fn int_spill_store_auto(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
-        emit_sp_str_x_auto(code, Reg(src), spill_off(frame, slot));
+        emit_spill_str_x_auto(code, frame, Reg(src), spill_off(frame, slot));
     }
     fn break_place_cycle(
         &self,
@@ -7176,7 +7926,7 @@ fn emit_return(
             match place {
                 Place::Spill(slot) => {
                     let sp_off = spill_off(frame, slot);
-                    emit_sp_ldr_d_auto(code, 0, sp_off);
+                    emit_spill_ldr_d_auto(code, frame, 0, sp_off);
                 }
                 _ => {
                     let src = materialize_int(code, place, scratch.primary, frame)
@@ -7199,6 +7949,10 @@ fn emit_return(
         emit(code, enc_ret(Reg(30)));
         return;
     }
+    // A dynamic-sp frame re-establishes `sp = fp - frame_bytes` first,
+    // so the sp-relative restores below read the prologue-time
+    // addresses regardless of the body's alloca moves.
+    restore_dynamic_sp(code, frame);
     // Restore fp/lr first in the folded shape (the lr load feeds `ret`,
     // so it issues off sp before the writeback chain), then x19 and the
     // callee-saved GPRs / FP regs in mirror order of the prologue's
@@ -7303,6 +8057,7 @@ mod tests {
                 &variadic_targets,
                 &mut tlv_fx,
                 &mut tlv_desc,
+                &alloc::collections::BTreeMap::new(),
             )
         };
         assert!(
@@ -7470,6 +8225,7 @@ mod tests {
                 &variadic_targets,
                 &mut tlv_fx,
                 &mut tlv_desc,
+                &alloc::collections::BTreeMap::new(),
             )
         };
         assert!(ok, "binop handler should cover Add + Shl + Shr");
@@ -7536,6 +8292,7 @@ mod tests {
                 &variadic_targets,
                 &mut tlv_fx,
                 &mut tlv_desc,
+                &alloc::collections::BTreeMap::new(),
             )
         };
         assert!(

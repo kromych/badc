@@ -113,6 +113,53 @@ impl Compiler {
         }
     }
 
+    /// Parse the GCC declarator suffix `asm("reg")` on a block-scope
+    /// declaration and resolve the register name for the current
+    /// target. Only the `register`-class automatic form is modelled;
+    /// GCC's other use of the suffix (a linkage-name rename) is TODO.
+    /// The named register must be one the inline-asm operand pool can
+    /// carry: x86-64 GPRs minus rsp / rbp / r10 / r11 (emit scratch),
+    /// AArch64 x0..x15 (x16 / x17 are emit scratch).
+    fn parse_register_asm_suffix(
+        &mut self,
+        is_register: bool,
+        is_static: bool,
+        is_extern: bool,
+    ) -> Result<u8, C5Error> {
+        self.next()?; // consume `asm`
+        self.consume(b'(', "`(` expected after declarator `asm`")?;
+        if self.lex.tk != '"' {
+            return Err(self.compile_err("declarator `asm`: register name string expected"));
+        }
+        let nstart = self.lex.ival as usize;
+        self.next()?; // consume the string
+        let name_bytes: alloc::vec::Vec<u8> = self.data[nstart..].to_vec();
+        self.data.truncate(nstart);
+        self.consume(b')', "`)` expected after declarator `asm(\"...\")`")?;
+        if !is_register || is_static || is_extern {
+            return Err(self.compile_err("declarator `asm` is only supported on `register` locals"));
+        }
+        let name = core::str::from_utf8(&name_bytes).unwrap_or("");
+        let name = name.trim_start_matches('%');
+        let reg = if self.target.is_aarch64() {
+            match super::super::codegen::aarch64::asm::clobber_reg_name(name) {
+                Some((false, num)) if num < 16 => Some(num),
+                _ => None,
+            }
+        } else {
+            match super::super::codegen::x86_64::asm::reg_by_name(name) {
+                Some((num, _)) if num < 16 && !matches!(num, 4 | 5 | 10 | 11) => Some(num),
+                _ => None,
+            }
+        };
+        match reg {
+            Some(r) => Ok(r),
+            None => Err(self.compile_err(alloc::format!(
+                "declarator `asm`: `{name}` is not a supported register for this target"
+            ))),
+        }
+    }
+
     pub(super) fn parse_function_body_local_decl(
         &mut self,
         maybe_unused: bool,
@@ -122,6 +169,9 @@ impl Compiler {
         // Block-scope `_Thread_local` / `__thread` gives a `static` object
         // thread storage duration (C11 6.7.1).
         let mut is_thread_local = false;
+        // `register` storage class: gates the `asm("reg")` declarator
+        // suffix (GCC register-asm variables).
+        let mut is_register = false;
         let mut saw_specifier = false;
         let mut qual_bits: i64 = 0;
         // Reset the const carrier for this declaration; the leading
@@ -142,6 +192,11 @@ impl Compiler {
             }
             if self.lex.tk == Token::ThreadLocal {
                 is_thread_local = true;
+            }
+            if self.lex.tk == Token::FuncSpec
+                && self.symbols[self.lex.curr_id_idx].name == "register"
+            {
+                is_register = true;
             }
             // `volatile` qualifies the declared type (C99 6.7.3); `const`
             // is recorded out-of-band for value folding.
@@ -180,6 +235,11 @@ impl Compiler {
             }
             if self.lex.tk == Token::ThreadLocal {
                 is_thread_local = true;
+            }
+            if self.lex.tk == Token::FuncSpec
+                && self.symbols[self.lex.curr_id_idx].name == "register"
+            {
+                is_register = true;
             }
             qual_bits |= self.lex_volatile_bit();
             self.pending.base_is_const |= self.lex_is_const_qual();
@@ -220,6 +280,16 @@ impl Compiler {
             self.pending.vla_allowed = true;
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = false;
+            // GCC declarator suffix `asm("reg")`: a register-asm
+            // variable. Only the register-class local form is
+            // modelled (the binding is honored for `r`-class asm
+            // operands); the rename form on other declarators is
+            // TODO.
+            let asm_reg = if self.lex.tk == Token::Asm {
+                Some(self.parse_register_asm_suffix(is_register, is_static, is_extern)?)
+            } else {
+                None
+            };
             // Trailing cleanup wins for this declarator; else the leading one.
             let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
             // C23 6.7.13.5 `[[maybe_unused]]` / GNU
@@ -258,6 +328,7 @@ impl Compiler {
             if typedef_dim > 0 && array_size == 0 && self.pending.declarator_leading_ptr_count == 0
             {
                 array_size = typedef_dim;
+                self.apply_typedef_array_dims(loc_idx);
             }
             self.ty = ty;
             // C99 6.2.2p4: a block-scope `extern` declaration of an
@@ -350,6 +421,7 @@ impl Compiler {
             } else {
                 self.symbols[loc_idx].class = Token::Loc as i64;
                 self.symbols[loc_idx].type_ = ty;
+                self.symbols[loc_idx].asm_reg = asm_reg;
                 self.symbols[loc_idx].was_referenced = false;
                 self.symbols[loc_idx].decl_line = self.lex.line;
                 let decl_file = self.intern_source_file() as u32;

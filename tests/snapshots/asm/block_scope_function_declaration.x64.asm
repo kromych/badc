@@ -100,4 +100,3 @@ Disassembly of section .text:
 <label>:
                	leaq	<rip>, %rax
                	retq
-               	addb	%al, 0x41(%rdx)

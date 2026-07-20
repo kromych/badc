@@ -278,9 +278,17 @@ impl Compiler {
         self.next()?; // consume `typedef`
         let lbt = self.parse_decl_base_type()?;
         while self.lex.tk != ';' {
-            let (id_idx, ty, _) = self.parse_declarator(lbt)?;
+            let (id_idx, mut ty, mut td_array) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
                 return Err(self.compile_err("typedef requires a name"));
+            }
+            // `__attribute__((vector_size(N)))` on the typedef rebuilds its type
+            // into a GCC vector here, matching the file-scope path. Without it
+            // the attribute leaked to the first subsequent declaration and was
+            // then consumed, so a second use of the typedef resolved as a scalar.
+            if self.pending.attr_vector_size > 0 {
+                let n = core::mem::take(&mut self.pending.attr_vector_size);
+                ty = self.make_vector_type(ty, n);
             }
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             // C99 function-type typedef: `typedef RET NAME(args);`
@@ -315,6 +323,16 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
+            // Preserve an array / vector typedef's element count (C99 6.7.7):
+            // the file-scope path stores this (run_compile), but the block-scope
+            // path dropped it, so a second declaration using the typedef
+            // (`typedef int A4[4]; A4 a; A4 b;`) resolved A4 as a scalar. Fold
+            // in a base-typedef dimension too (`typedef A4 B;`).
+            let typedef_dim = self.pending.typedef_base_array_size;
+            if typedef_dim != 0 && td_array == 0 {
+                td_array = typedef_dim;
+            }
+            self.symbols[id_idx].array_size = td_array;
             if typedef_fpi > 0 {
                 self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
             }
@@ -464,6 +482,7 @@ impl Compiler {
             if typedef_dim > 0 && array_size == 0 && self.pending.declarator_leading_ptr_count == 0
             {
                 array_size = typedef_dim;
+                self.apply_typedef_array_dims(loc_idx);
             }
             self.ty = ty;
 
@@ -758,7 +777,7 @@ impl Compiler {
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
         // C99 6.2.4p2: a VLA declared directly in this block has its
         // storage reclaimed on block exit. Track whether any appears so
-        // the block is bracketed with the alloca-arena save / restore.
+        // the block is bracketed with the stack save / restore.
         let mut block_has_vla = false;
         while self.lex.tk != '}' {
             // C23 6.7.13 / 6.8: an attribute-specifier-sequence may
@@ -854,9 +873,9 @@ impl Compiler {
             }
         }
         self.cleanup_scopes.pop();
-        // C99 6.2.4p2: bracket a VLA-declaring block so the arena top
-        // is snapshotted on entry and restored on exit, reclaiming the
-        // VLA storage (per iteration when the block is a loop body).
+        // C99 6.2.4p2: bracket a VLA-declaring block so the stack
+        // pointer is snapshotted on entry and restored on exit,
+        // reclaiming the VLA storage (per iteration for a loop body).
         if block_has_vla {
             let save_slot = self.reserve_slots(1);
             let pos = self.ast_src_pos();
@@ -1038,14 +1057,21 @@ impl Compiler {
     fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
         self.next()?; // asm / __asm__ / __asm
         // Optional qualifiers (`volatile` / `__volatile__`, `inline`,
-        // `goto`). Only `volatile` carries a code-generation effect
-        // (it must not be elided); it rides the parsed asm block.
+        // `goto`). `volatile` must not be elided and rides the parsed
+        // asm block; `goto` selects the label-list grammar and is
+        // implicitly volatile.
         let mut is_volatile = false;
+        let mut is_goto = false;
         while self.lex.tk == Token::TypeQual
             || self.lex.tk == Token::Inline
             || self.lex.tk == Token::ForceInline
+            || self.lex.tk == Token::Goto
         {
             if self.lex.tk == Token::TypeQual {
+                is_volatile = true;
+            }
+            if self.lex.tk == Token::Goto {
+                is_goto = true;
                 is_volatile = true;
             }
             self.next()?;
@@ -1067,6 +1093,12 @@ impl Compiler {
             self.next()?;
         }
         let template: alloc::vec::Vec<u8> = self.data[tstart..].to_vec();
+        // `asm goto` takes the general extended-asm path directly: the
+        // operand-free template shortcuts below have no label grammar.
+        if is_goto {
+            self.data.truncate(tstart);
+            return self.parse_extended_asm(template, is_volatile, true);
+        }
         // The x87 FPU control-word forms carry exactly one memory operand.
         // Detect them from the template before the operand-rejection loop.
         // Collapse interior whitespace runs to a single space so templates
@@ -1283,7 +1315,7 @@ impl Compiler {
         // are dropped from the data section; the parsed block references
         // its operand expressions by AST id.
         self.data.truncate(tstart);
-        self.parse_extended_asm(template, is_volatile)
+        self.parse_extended_asm(template, is_volatile, false)
     }
 
     /// Consume the `: outputs : inputs : clobbers` region and the
@@ -1305,35 +1337,63 @@ impl Compiler {
     }
 
     /// Parse the operand lists of a GCC extended-asm statement into an
-    /// [`ast::AsmBlockAst`] and emit an [`ast::Expr::InlineAsm`]. The
-    /// grammar is `: outputs : inputs : clobbers`, each operand a
-    /// constraint string and a parenthesised expression (an lvalue for
-    /// an output, an rvalue for an input); a clobber is a bare string.
-    /// On entry the template is consumed and the cursor is at the first
-    /// `:` (or `)` when there is no operand list).
+    /// [`ast::AsmBlockAst`] and emit an [`ast::Expr::InlineAsm`] (or an
+    /// [`ast::Stmt::AsmGoto`] for `asm goto`). The grammar is
+    /// `: outputs : inputs : clobbers`, plus `: labels` for `asm goto`;
+    /// each operand is a constraint string and a parenthesised
+    /// expression (an lvalue for an output, an rvalue for an input); a
+    /// clobber is a bare string; a label is an identifier naming a C
+    /// label of the enclosing function. On entry the template is
+    /// consumed and the cursor is at the first `:` (or `)` when there
+    /// is no operand list).
     fn parse_extended_asm(
         &mut self,
         template: alloc::vec::Vec<u8>,
         volatile: bool,
+        is_goto: bool,
     ) -> Result<(), C5Error> {
         use super::super::ast::{AsmBlockAst, Expr, UnOp};
         use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand};
         let mut operands: alloc::vec::Vec<AsmOperand> = alloc::vec::Vec::new();
         let mut operand_exprs: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
         let mut clobber_regs: u32 = 0;
+        let mut clobber_fp_regs: u32 = 0;
         let mut clobber_memory = false;
         let mut n_outputs = 0usize;
-        // Section 1 = outputs, 2 = inputs, 3+ = clobbers.
+        let mut label_ids: alloc::vec::Vec<super::super::ast::LabelId> = alloc::vec::Vec::new();
+        let mut label_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
+        // Section 1 = outputs, 2 = inputs, 3 = clobbers; 4 = labels
+        // for `asm goto` (3+ folds into clobbers otherwise).
         let mut section: u8 = 0;
         let data_base = self.data.len();
         while self.lex.tk != ')' {
             if self.lex.tk == ':' {
                 section += 1;
+                if is_goto && section > 4 {
+                    self.data.truncate(data_base);
+                    return Err(self.compile_err("inline asm goto: too many `:` sections"));
+                }
                 self.next()?;
                 continue;
             }
             if self.lex.tk == ',' {
                 self.next()?;
+                continue;
+            }
+            if is_goto && section >= 4 {
+                // Label list: identifiers naming C labels (forward
+                // references allowed, as for `goto`).
+                if self.lex.tk != Token::Id {
+                    self.data.truncate(data_base);
+                    return Err(self.compile_err("inline asm goto: label identifier expected"));
+                }
+                let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+                if !self.labels.iter().any(|n| n == &name) {
+                    self.unresolved_gotos.push(name.clone());
+                }
+                label_ids.push(self.ast_label_by_name(&name));
+                label_names.push(name);
                 continue;
             }
             if self.lex.tk != '"' {
@@ -1355,15 +1415,43 @@ impl Compiler {
                 let name = cstr.trim_start_matches('%');
                 if name == "memory" {
                     clobber_memory = true;
-                } else if name != "cc"
-                    && !name.is_empty()
-                    && let Some((reg, _)) = super::super::codegen::x86_64::asm::reg_by_name(name)
-                {
-                    clobber_regs |= 1 << reg;
+                } else if name != "cc" && !name.is_empty() {
+                    // The register-name spelling is arch-specific; badc knows the
+                    // target, so AArch64 clobbers resolve through the AArch64
+                    // names (GP and the independent SIMD/FP file), x86 through its.
+                    if self.target.is_aarch64() {
+                        if let Some((is_fp, num)) =
+                            super::super::codegen::aarch64::asm::clobber_reg_name(name)
+                        {
+                            if is_fp {
+                                clobber_fp_regs |= 1 << num;
+                            } else {
+                                clobber_regs |= 1 << num;
+                            }
+                        }
+                    } else if let Some((reg, _)) =
+                        super::super::codegen::x86_64::asm::reg_by_name(name)
+                    {
+                        // clobber_regs is the GP mask (0..15); clobber_fp_regs the
+                        // XMM mask. Other register marks (MMX/CR/DR/SEG) are not
+                        // tracked.
+                        use super::super::codegen::x86_64::asm::XMM_BASE;
+                        if reg < 16 {
+                            clobber_regs |= 1 << reg;
+                        } else if (XMM_BASE..XMM_BASE + 16).contains(&reg) {
+                            clobber_fp_regs |= 1 << (reg - XMM_BASE);
+                        }
+                    }
                 }
                 continue;
             }
             let is_output = section == 1;
+            // TODO: support `asm goto` output operands (GCC 11 added
+            // them; the label paths would need output store-back).
+            if is_goto && is_output {
+                self.data.truncate(data_base);
+                return Err(self.compile_err("inline asm goto: output operands are not supported"));
+            }
             let (constraint, is_rw) = match Self::parse_asm_constraint(cstr, is_output, n_outputs) {
                 Some(c) => c,
                 None => {
@@ -1379,10 +1467,73 @@ impl Compiler {
             }
             self.next()?; // consume `(`
             self.expr(Token::Assign as i64)?;
+            // A `register T v asm("reg")` local used as an `r`-class
+            // operand binds to its named register (the one placement
+            // GCC guarantees for asm-declared register variables).
+            let constraint = match constraint {
+                AsmConstraint::Reg => {
+                    let pinned = self.ast_acc.and_then(|id| match self.ast.expr(id) {
+                        Expr::Ident { sym, .. } => self.symbols[*sym as usize].asm_reg,
+                        _ => None,
+                    });
+                    match pinned {
+                        Some(r) => AsmConstraint::Fixed(r),
+                        None => constraint,
+                    }
+                }
+                c => c,
+            };
             let width = self.size_of_type(self.ty).min(8) as u8;
+            // The x86 `x` operand path moves a full 128-bit value (movups), so
+            // it requires a 16-byte operand (a __m128i / vector). A scalar
+            // float / double `x` operand is not yet supported and is rejected
+            // rather than over-reading / over-writing its storage. AArch64 `w`
+            // has its own (scalar-double) width check in the emitter.
+            if matches!(constraint, AsmConstraint::Fp)
+                && !self.target.is_aarch64()
+                && self.size_of_type(self.ty) != 16
+            {
+                self.data.truncate(data_base);
+                return Err(self
+                    .compile_err("inline asm: only 16-byte (__m128i) `x` operands are supported"));
+            }
             // Outputs pass the destination address; a memory operand (input or
-            // output) is likewise reached through its address.
+            // output) is likewise reached through its address, so it must be an
+            // lvalue. A non-lvalue (a call / cast / arithmetic result) is not
+            // directly addressable; reject it with a diagnostic rather than
+            // taking the address of an rvalue, which the walker cannot lower
+            // (it would reach `walk_expr_lvalue`'s unsupported-expression path
+            // as an internal error). Matches GCC ("... is not directly
+            // addressable" / an output operand must be an lvalue). An empty
+            // accumulator falls through to the "operand expression expected"
+            // check below.
             if is_output || matches!(constraint, AsmConstraint::Mem) {
+                let addressable = match self.ast_acc {
+                    Some(id) => {
+                        use super::super::ast::Expr;
+                        matches!(
+                            self.ast.expr(id),
+                            Expr::Ident { .. }
+                                | Expr::Index { .. }
+                                | Expr::Member { .. }
+                                | Expr::CompoundLiteral { .. }
+                                | Expr::Binary { .. }
+                                | Expr::Unary {
+                                    op: UnOp::Deref,
+                                    ..
+                                }
+                        )
+                    }
+                    None => true,
+                };
+                if !addressable {
+                    self.data.truncate(data_base);
+                    return Err(self.compile_err(if is_output {
+                        "inline asm: output operand must be an lvalue"
+                    } else {
+                        "inline asm: memory operand is not directly addressable (must be an lvalue)"
+                    }));
+                }
                 self.ty += Ty::Ptr as i64;
                 self.ast_apply_unary(UnOp::AddrOf);
             }
@@ -1419,10 +1570,25 @@ impl Compiler {
                 clobber_regs |= 1 << r;
             }
         }
+        // `asm goto` requires a label list; canonicalize the template's
+        // `%l[name]` / `%lN` references to label-list indices while the
+        // names and operand count are at hand.
+        let template = if is_goto {
+            if label_ids.is_empty() {
+                return Err(self.compile_err("inline asm goto: at least one label is required"));
+            }
+            match Self::rewrite_goto_label_refs(&template, &label_names, operands.len()) {
+                Ok(t) => t,
+                Err(m) => return Err(self.compile_err(m)),
+            }
+        } else {
+            template
+        };
         let block = AsmBlock {
             template,
             operands,
             clobber_regs,
+            clobber_fp_regs,
             clobber_memory,
             volatile,
         };
@@ -1430,14 +1596,98 @@ impl Compiler {
         self.ast.asm_blocks.push(AsmBlockAst {
             block,
             operand_exprs,
+            labels: label_ids,
         });
         self.mark_emit_other();
+        if is_goto {
+            // A statement with successors, not an expression: the
+            // walker closes the block with `Terminator::AsmGoto`.
+            self.flush_pending_stores();
+            let pos = self.ast_src_pos();
+            self.ast
+                .push_stmt(super::super::ast::Stmt::AsmGoto(idx), pos);
+            return Ok(());
+        }
         self.ty = Ty::Int as i64;
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(Expr::InlineAsm(idx), pos);
         self.ast_acc = Some(id);
         let _ = self.ast_emit_expr_stmt();
         Ok(())
+    }
+
+    /// Canonicalize `asm goto` label references: `%l[name]` and `%lN`
+    /// (GCC numbers labels after all operands) both become `%lK` with
+    /// `K` the label-list index, so the per-arch template parsers need
+    /// no operand-count context. Unknown names and out-of-range
+    /// numbers are rejected here, where the source position is known.
+    fn rewrite_goto_label_refs(
+        template: &[u8],
+        label_names: &[alloc::string::String],
+        n_operands: usize,
+    ) -> Result<alloc::vec::Vec<u8>, alloc::string::String> {
+        let mut out: alloc::vec::Vec<u8> = alloc::vec::Vec::with_capacity(template.len());
+        let mut i = 0usize;
+        while i < template.len() {
+            if template[i] != b'%' {
+                out.push(template[i]);
+                i += 1;
+                continue;
+            }
+            if template.get(i + 1) == Some(&b'%') {
+                out.extend_from_slice(&template[i..i + 2]);
+                i += 2;
+                continue;
+            }
+            if template.get(i + 1) != Some(&b'l') {
+                out.push(template[i]);
+                i += 1;
+                continue;
+            }
+            if template.get(i + 2) == Some(&b'[') {
+                let start = i + 3;
+                let Some(len) = template[start..].iter().position(|&c| c == b']') else {
+                    return Err(alloc::string::String::from(
+                        "inline asm goto: unterminated `%l[` label reference",
+                    ));
+                };
+                let name = core::str::from_utf8(&template[start..start + len]).unwrap_or("");
+                let Some(k) = label_names.iter().position(|n| n == name) else {
+                    return Err(alloc::format!(
+                        "inline asm goto: `%l[{name}]` names no listed label"
+                    ));
+                };
+                out.extend_from_slice(alloc::format!("%l{k}").as_bytes());
+                i = start + len + 1;
+                continue;
+            }
+            let ds = i + 2;
+            let mut de = ds;
+            while template.get(de).is_some_and(u8::is_ascii_digit) {
+                de += 1;
+            }
+            if de == ds {
+                return Err(alloc::string::String::from(
+                    "inline asm goto: `%l` needs a number or `[name]`",
+                ));
+            }
+            let n: usize = core::str::from_utf8(&template[ds..de])
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(|| {
+                    alloc::string::String::from("inline asm goto: bad `%l` label number")
+                })?;
+            if n < n_operands || n - n_operands >= label_names.len() {
+                return Err(alloc::format!(
+                    "inline asm goto: `%l{n}` is out of range \
+                     ({n_operands} operands, {} labels)",
+                    label_names.len()
+                ));
+            }
+            out.extend_from_slice(alloc::format!("%l{}", n - n_operands).as_bytes());
+            i = de;
+        }
+        Ok(out)
     }
 
     /// Classify a GCC operand constraint string into an
@@ -1487,14 +1737,25 @@ impl Compiler {
         {
             return Some((AsmConstraint::Mem, is_rw));
         }
-        let has_reg = body.contains(['r', 'm', 'g', 'q']);
+        // A general-register alternative subsumes any specific-register or
+        // FP letter alongside it: `"rax"` is the multi-alternative r|a|x,
+        // not a register name, and GCC may satisfy it with any GP register.
+        let has_general = body.contains(['r', 'q', 'g']);
+        let has_reg = has_general || body.contains('m');
         // A specific-register letter (possibly combined with `i` as in
         // `ci`: the value takes that register, or an immediate).
-        if let Some(reg) = body.chars().find_map(fixed) {
+        if !has_general && let Some(reg) = body.chars().find_map(fixed) {
             if has_imm {
                 return Some((AsmConstraint::RegOrImm(reg), is_rw));
             }
             return Some((AsmConstraint::Fixed(reg), is_rw));
+        }
+        // A SIMD/FP-register value: AArch64 `w`, or x86 `x` (an XMM register).
+        // Neither letter collides with the register/immediate/memory classes
+        // handled above, so the mapping is target-independent; the backend
+        // emitter reads the constraint to pick the v-register or xmm file.
+        if !has_general && (body.contains('w') || body.contains('x')) {
+            return Some((AsmConstraint::Fp, is_rw));
         }
         if has_reg {
             return Some((AsmConstraint::Reg, is_rw));
@@ -2461,7 +2722,8 @@ impl Compiler {
                     // if by assignment. Diagnose a return of an
                     // incompatible struct type, matching the assignment
                     // path.
-                    if let Some(reason) = Self::type_warning(ret_ty, self.ty, false) {
+                    if let Some(reason) = Self::type_warning(&self.structs, ret_ty, self.ty, false)
+                    {
                         let want = super::types::format_type(ret_ty, &self.structs);
                         let got = super::types::format_type(self.ty, &self.structs);
                         self.warn_at(
@@ -2487,9 +2749,13 @@ impl Compiler {
                     // rewrites `self.ty`.
                     let rhs_is_zero = self.last_emit_is_zero();
                     let rhs_is_untyped = self.last_emit_was_indirect_call();
-                    if let Some(reason) =
-                        Self::type_warning_with_flags(ret_ty, self.ty, rhs_is_zero, rhs_is_untyped)
-                    {
+                    if let Some(reason) = Self::type_warning_with_flags(
+                        &self.structs,
+                        ret_ty,
+                        self.ty,
+                        rhs_is_zero,
+                        rhs_is_untyped,
+                    ) {
                         let want = super::types::format_type(ret_ty, &self.structs);
                         let got = super::types::format_type(self.ty, &self.structs);
                         self.warn_at(

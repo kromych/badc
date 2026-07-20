@@ -52,6 +52,7 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
         func.name = f.name.clone();
         func.is_inline = f.is_inline;
         func.is_always_inline = f.is_always_inline;
+        func.is_naked = f.is_naked;
         // Seed declared multi-cell extents alongside the synthetic ones the
         // walker recorded. Slot coalescing reserves every interior cell.
         func.multi_cell_slots.extend_from_slice(&f.multi_cell_slots);

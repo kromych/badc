@@ -50,8 +50,8 @@ pub(crate) fn promotable_slots(func: &FunctionSsa) -> BTreeSet<i64> {
             Inst::LocalAddr(off) => {
                 address_taken.insert(*off);
             }
-            // A non-zero alloca top names a frame-resident arena the
-            // per-arch emit reads directly; `AllocaInit(0)` is the
+            // A non-zero `AllocaInit` marks a dynamic-sp function; keep
+            // its reserved slot unpromoted. `AllocaInit(0)` is the
             // unconditional no-alloca marker and aliases nothing.
             Inst::AllocaInit(off) if *off != 0 => {
                 address_taken.insert(*off);
@@ -88,7 +88,7 @@ pub(crate) fn successors(
             ..
         } => alloc::vec![*target, *fall_through],
         Terminator::GotoIndirect { .. } => cg_targets.to_vec(),
-        Terminator::JumpTable { table, .. } => {
+        Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } => {
             let mut out: Vec<BlockId> = Vec::new();
             for &t in &jump_tables[*table as usize] {
                 if !out.contains(&t) {
@@ -456,6 +456,7 @@ pub(crate) fn insert_phis(
             Terminator::Jmp(_)
             | Terminator::FallThrough(_)
             | Terminator::TailExt(_)
+            | Terminator::AsmGoto { .. }
             | Terminator::Unreachable => {}
         }
     }
@@ -867,8 +868,8 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     if std::env::var("BADC_NO_MEM2REG").is_ok() {
         return Vec::new();
     }
-    // A function with a non-zero alloca top grows its frame at
-    // runtime and reaches it through a computed pointer, so no slot is
+    // A function with a non-zero `AllocaInit` allocates stack at
+    // runtime and reaches it through computed pointers, so no slot is
     // promoted there; `AllocaInit(0)` is the unconditional no-alloca
     // marker and is ignored. Taken addresses of individual locals are
     // handled per slot in `promotable_slots`: `LoadLocal` /
@@ -1258,6 +1259,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             Terminator::Jmp(_)
             | Terminator::FallThrough(_)
             | Terminator::TailExt(_)
+            | Terminator::AsmGoto { .. }
             | Terminator::Unreachable => {}
         }
     }
@@ -1304,6 +1306,7 @@ mod tests {
             is_variadic: false,
             is_inline: false,
             is_always_inline: false,
+            is_naked: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,

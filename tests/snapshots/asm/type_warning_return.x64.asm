@@ -50,5 +50,3 @@ Disassembly of section .text:
 <main>:
                	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

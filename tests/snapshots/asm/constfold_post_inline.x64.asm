@@ -90,7 +90,7 @@ Disassembly of section .text:
                	movabsq	$-0x8, %rax
                	movq	%rax, -0x18(%rbp)
                	movq	-0x18(%rbp), %rax
-               	sarq	$0x1, %rax
+               	sarq	%rax
                	cmpq	$-0x4, %rax
                	je	<addr>
                	movl	$0x2b, %eax

@@ -36,7 +36,7 @@ Disassembly of section .text:
                	incq	%rdx
                	movl	%edx, (%rcx)
                	movslq	%edx, %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	cmpq	$0x8, %rax
@@ -149,4 +149,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

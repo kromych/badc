@@ -71,7 +71,11 @@ def build_smoke(badc: Path, out_path: Path, optimize: bool) -> None:
     cmd: list[str | os.PathLike[str]] = [str(badc)]
     if optimize:
         cmd.append("-O")
-    cmd += ["-I", str(STB_DIR), "-include", "msvc_compat.h", "-", "-o", str(out_path)]
+    # demos/include/simd supplies the badc inline-asm <emmintrin.h> shim so
+    # stb_image's SSE2 path builds on x86-64 (see smoke_main.c's SIMD opt-outs).
+    simd_inc = REPO_ROOT / "demos" / "include" / "simd"
+    cmd += ["-I", str(STB_DIR), "-I", str(simd_inc),
+            "-include", "msvc_compat.h", "-", "-o", str(out_path)]
     subprocess.run(cmd, input=combined, check=True)
 
 

@@ -48,9 +48,10 @@ pub(crate) fn slots16(n_slots: u32) -> u32 {
 }
 
 /// True when the emitted form of `inst` addresses the locals region
-/// (negative slot offset): slot loads / stores / address-takes, the
-/// alloca-arena bookkeeping store, and a call gathering an aggregate
-/// return into its result-temp slot. Purely structural; whether the
+/// (negative slot offset): slot loads / stores / address-takes, a
+/// non-zero `AllocaInit` (its reserved slot keeps the locals region
+/// live), and a call gathering an aggregate return into its
+/// result-temp slot. Purely structural; whether the
 /// instruction is emitted at all is `is_dead_pure`'s decision, and the
 /// frame gate below combines the two so it cannot disagree with the
 /// per-inst emit skip.
@@ -468,6 +469,32 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                 }
                 out
             }
+            Terminator::AsmGoto { table } => {
+                // Moves emitted here run on the fall-through path only;
+                // the template's label branches bypass them. A label
+                // target with a phi fed by this block therefore needs
+                // the synthetic edge block `split_crit_edges` inserts;
+                // seeing one here is an invariant violation, so fail
+                // the emit rather than run the wrong moves.
+                let row = &func.jump_tables[table as usize];
+                for &t in &row[1..] {
+                    if t == row[0] {
+                        // Same block as the fall-through: the label
+                        // trampoline reuses the fall-through path.
+                        continue;
+                    }
+                    let range = func.blocks[t as usize].inst_range.clone();
+                    for id in range {
+                        let Inst::Phi { incoming, .. } = &func.insts[id as usize] else {
+                            break;
+                        };
+                        if incoming.iter().any(|(p, _)| *p == self_block) {
+                            return false;
+                        }
+                    }
+                }
+                alloc::vec![row[0]]
+            }
             Terminator::Return(_) | Terminator::TailExt(_) | Terminator::Unreachable => {
                 alloc::vec![]
             }
@@ -688,7 +715,123 @@ pub(crate) fn bail_msg(backend: &str, reason: &str) {
     if std::env::var("BADC_DUMP_SSA").is_ok() {
         eprintln!("ssa emit {backend}: bailed -- {reason}");
     }
+    #[cfg(feature = "std")]
+    LAST_BAIL.with(|b| *b.borrow_mut() = Some(alloc::string::String::from(reason)));
     let _ = (backend, reason);
+}
+
+#[cfg(feature = "std")]
+std::thread_local! {
+    /// The most recent [`bail_msg`] reason on this thread. The native-emit
+    /// driver clears it before each function and reads it on a failure, so an
+    /// unencodable inline-asm form reports its specific cause rather than the
+    /// generic "op outside the implemented subset" fallback.
+    static LAST_BAIL: core::cell::RefCell<Option<alloc::string::String>> =
+        const { core::cell::RefCell::new(None) };
+}
+
+/// Take (and clear) the most recent [`bail_msg`] reason on this thread.
+#[cfg(feature = "std")]
+pub(crate) fn take_bail() -> Option<alloc::string::String> {
+    LAST_BAIL.with(|b| b.borrow_mut().take())
+}
+
+/// Per-process counter behind the `%=` template escape.
+static ASM_INSTANCE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Expand the `%=` template escape: every occurrence in one template gets the
+/// same number, unique per expansion (GCC gives each asm instance its own).
+/// `%%` is the literal-percent escape, so its trailing `%` never starts a
+/// `%=`. Returns `None` when the template has no `%=` (the common case).
+pub(crate) fn expand_template_uniq(text: &str) -> Option<alloc::string::String> {
+    if !text.contains("%=") {
+        return None;
+    }
+    let uniq = ASM_INSTANCE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    let mut out = alloc::string::String::with_capacity(text.len() + 8);
+    let mut it = text.chars().peekable();
+    while let Some(c) = it.next() {
+        if c != '%' {
+            out.push(c);
+            continue;
+        }
+        match it.peek() {
+            Some('%') => {
+                out.push_str("%%");
+                it.next();
+            }
+            Some('=') => {
+                out.push_str(&alloc::format!("{uniq}"));
+                it.next();
+            }
+            _ => out.push('%'),
+        }
+    }
+    Some(out)
+}
+
+/// Parse an inline-asm template whose every piece is raw machine bytes,
+/// returning the concatenated little-endian bytes, or `None` when any piece is
+/// a mnemonic the caller must encode itself. A piece is raw bytes when it is a
+/// run of 2-hex-digit tokens (`CC C3 90`) or a `.byte` / `.word` / `.long` /
+/// `.quad` directive of integer constants. Arch-neutral so both backends emit
+/// raw-byte asm identically.
+pub(crate) fn parse_raw_template(template: &[u8]) -> Option<alloc::vec::Vec<u8>> {
+    let text = core::str::from_utf8(template).ok()?;
+    let mut out = alloc::vec::Vec::new();
+    let mut any = false;
+    for piece in text.split([';', '\n']) {
+        let piece = piece.trim();
+        if piece.is_empty() {
+            continue;
+        }
+        any = true;
+        out.extend_from_slice(&parse_raw_piece(piece)?);
+    }
+    any.then_some(out)
+}
+
+fn parse_raw_piece(piece: &str) -> Option<alloc::vec::Vec<u8>> {
+    let width = match piece.split_whitespace().next()? {
+        ".byte" => Some(1usize),
+        ".word" | ".2byte" => Some(2),
+        ".long" | ".4byte" => Some(4),
+        ".quad" | ".8byte" => Some(8),
+        _ => None,
+    };
+    if let Some(w) = width {
+        let args = piece[piece.find(char::is_whitespace)?..].trim();
+        let mut out = alloc::vec::Vec::new();
+        for a in args.split(',') {
+            out.extend_from_slice(&(parse_raw_int(a.trim())? as u64).to_le_bytes()[..w]);
+        }
+        return Some(out);
+    }
+    // Bare hex-byte run: every whitespace-delimited token is exactly two hex
+    // digits, so a mnemonic (letters) is never mistaken for one.
+    let toks: alloc::vec::Vec<&str> = piece.split_whitespace().collect();
+    (!toks.is_empty()
+        && toks
+            .iter()
+            .all(|t| t.len() == 2 && t.bytes().all(|b| b.is_ascii_hexdigit())))
+    .then(|| {
+        toks.iter()
+            .map(|t| u8::from_str_radix(t, 16).unwrap())
+            .collect()
+    })
+}
+
+fn parse_raw_int(s: &str) -> Option<i64> {
+    let (neg, s) = match s.strip_prefix('-') {
+        Some(r) => (true, r),
+        None => (false, s),
+    };
+    let v = if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        i64::from_str_radix(h, 16).ok()?
+    } else {
+        s.parse::<i64>().ok()?
+    };
+    Some(if neg { -v } else { v })
 }
 
 /// Translate a c5-stack slot index (the operand of an
@@ -729,6 +872,17 @@ pub(crate) fn c5_slot_to_fp_offset(off: i64, param_stride: i64) -> i64 {
 /// `sp = fp - frame_bytes` then yields the SP-relative offset.
 pub(crate) fn spill_slot_sp_offset(frame_bytes: u32, alloc_spill_base: u32, slot: u32) -> u32 {
     frame_bytes - alloc_spill_base - (slot + 1) * 8
+}
+
+/// True when the body allocates stack at runtime (`alloca` or a C99
+/// 6.7.6.2 VLA): the walker emits a non-zero `AllocaInit` slot for such
+/// functions. The per-arch emits then address spill slots through the
+/// frame pointer, since sp moves at the allocation sites, and their
+/// epilogues re-establish sp from the frame pointer.
+pub(crate) fn uses_dynamic_alloca(func: &super::super::ir::FunctionSsa) -> bool {
+    func.insts
+        .iter()
+        .any(|i| matches!(i, super::super::ir::Inst::AllocaInit(slot) if *slot != 0))
 }
 
 /// Record a `.debug_line` row for the instruction `v`. The
@@ -851,5 +1005,42 @@ pub(crate) fn record_block_start_pc(
     // middle (or end) of `main` instead of its prologue.
     if block_idx > 0 && block_start_pc != 0 && block_start_pc < pc_to_native.len() {
         pc_to_native[block_start_pc] = code_len;
+    }
+}
+
+#[cfg(test)]
+mod raw_template_tests {
+    use super::parse_raw_template;
+
+    #[test]
+    fn bare_hex_and_directives() {
+        // Bare hex-byte run (`;` / whitespace separated), read as hex.
+        assert_eq!(
+            parse_raw_template(b"CC; C3; 90").unwrap(),
+            [0xCC, 0xC3, 0x90]
+        );
+        assert_eq!(
+            parse_raw_template(b"1f 20 03 d5").unwrap(),
+            [0x1f, 0x20, 0x03, 0xd5]
+        );
+        // `.byte` / `.word` / `.long` / `.quad`, little-endian at width.
+        assert_eq!(
+            parse_raw_template(b".byte 0x1f, 0x20, 0x03, 0xd5").unwrap(),
+            [0x1f, 0x20, 0x03, 0xd5]
+        );
+        assert_eq!(parse_raw_template(b".word 0x1234").unwrap(), [0x34, 0x12]);
+        assert_eq!(parse_raw_template(b".byte 144").unwrap(), [0x90]);
+        // Mixed directive + hex-run pieces concatenate.
+        assert_eq!(parse_raw_template(b".byte 0x90; 90").unwrap(), [0x90, 0x90]);
+    }
+
+    #[test]
+    fn rejects_mnemonics_and_empty() {
+        // A piece that is a mnemonic (letters) is not a raw-byte template.
+        assert!(parse_raw_template(b"nop").is_none());
+        assert!(parse_raw_template(b".byte 0x90; add %rax, %rbx").is_none());
+        // An empty template carries no bytes.
+        assert!(parse_raw_template(b"").is_none());
+        assert!(parse_raw_template(b"   ").is_none());
     }
 }

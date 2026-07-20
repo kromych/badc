@@ -23,7 +23,7 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rax
                	retq
                	movq	%rax, %rcx
-               	shlq	$0x1, %rcx
+               	shlq	%rcx
                	leaq	<rip>, %rdi
                	leaq	0x1(%rcx), %rax
                	movl	%eax, (%rdi)
@@ -44,4 +44,3 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

@@ -331,6 +331,7 @@ impl Compiler {
         constructor: &mut bool,
         destructor: &mut bool,
         always_inline: &mut bool,
+        naked: &mut bool,
     ) {
         // The bare `noreturn` spelling lexes as the <stdnoreturn.h>
         // keyword token, not an identifier; both name this attribute.
@@ -368,6 +369,11 @@ impl Compiler {
                 // GNU `always_inline`: a mandatory inline request. Recorded so
                 // the inliner can warn when it cannot honor it.
                 *always_inline = true;
+            } else if n == "naked" || n == "__naked__" {
+                // GNU `naked`: emit no prologue/epilogue; the body is the
+                // function's entire machine code (inline asm). Used for
+                // interrupt service routines that return via `iretq`/`eret`.
+                *naked = true;
             }
         }
     }
@@ -402,6 +408,7 @@ impl Compiler {
         let mut constructor = false;
         let mut destructor = false;
         let mut always_inline = false;
+        let mut naked = false;
         let mut init_priority: Option<u32> = None;
         loop {
             if self.lex.tk == Token::Attribute {
@@ -479,6 +486,7 @@ impl Compiler {
                             &mut saw_constructor,
                             &mut saw_destructor,
                             &mut always_inline,
+                            &mut naked,
                         );
                         self.next()?;
                         if saw_aligned {
@@ -576,6 +584,7 @@ impl Compiler {
                             &mut saw_constructor,
                             &mut saw_destructor,
                             &mut always_inline,
+                            &mut naked,
                         );
                         self.next()?;
                         if saw_aligned && self.lex.tk == '(' {
@@ -630,6 +639,9 @@ impl Compiler {
             // A mandatory inline request implies `inline`.
             self.pending_is_inline = true;
             self.pending_is_always_inline = true;
+        }
+        if naked {
+            self.pending_is_naked = true;
         }
         if let Some(p) = init_priority {
             self.pending.attr_init_priority = Some(p);
@@ -724,6 +736,19 @@ impl Compiler {
                 self.symbols[self.lex.curr_id_idx].name.as_str(),
                 "const" | "__const" | "__const__"
             )
+    }
+
+    /// Fold a multi-dim typedef alias's dimension list onto the bound
+    /// symbol, mirroring what a literal `T x[A][B]` declarator records.
+    /// Callers gate on the same condition as the element-count fold
+    /// (`typedef_base_array_size` consumed, declarator added no `*`s
+    /// and no brackets of its own).
+    pub(super) fn apply_typedef_array_dims(&mut self, idx: usize) {
+        if self.pending.typedef_base_array_dims.len() >= 2 {
+            let dims = self.pending.typedef_base_array_dims.clone();
+            self.symbols[idx].inner_array_size = dims[1];
+            self.symbols[idx].array_dims = dims;
+        }
     }
 
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
@@ -860,6 +885,8 @@ impl Compiler {
             // to a pointer to the element (C99 6.7.5.3p7).
             if typedef_array != 0 {
                 self.pending.typedef_base_array_size = typedef_array;
+                self.pending.typedef_base_array_dims =
+                    self.symbols[self.lex.curr_id_idx].array_dims.clone();
             }
             self.next()?;
             aliased

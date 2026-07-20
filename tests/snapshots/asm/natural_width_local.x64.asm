@@ -14,4 +14,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	xorq	%rax, %rax
                	retq
-               	addb	%al, 0x41(%rdx)

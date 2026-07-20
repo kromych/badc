@@ -81,6 +81,12 @@ fn run_one(func: &mut FunctionSsa) {
     if !func.computed_goto_targets.is_empty()
         || func.has_returns_twice_call
         || func.insts.iter().any(|i| matches!(i, Inst::BlockAddr(_)))
+        // An asm-goto label edge may enter a loop body from outside the
+        // loop; expanding iterations would bind it to one copy.
+        || func
+            .blocks
+            .iter()
+            .any(|b| matches!(b.terminator, Terminator::AsmGoto { .. }))
     {
         return;
     }

@@ -634,7 +634,7 @@ impl Compiler {
         // the declared type. Only pointer-vs-int mismatches are
         // diagnosed here, matching the assignment path.
         let init_ty = if value == 0 { 0 } else { Ty::Int as i64 };
-        if let Some(reason) = Self::type_warning(var_ty, init_ty, value == 0) {
+        if let Some(reason) = Self::type_warning(&self.structs, var_ty, init_ty, value == 0) {
             let var_s = super::types::format_type(var_ty, &self.structs);
             let init_s = super::types::format_type(init_ty, &self.structs);
             self.warn_at(

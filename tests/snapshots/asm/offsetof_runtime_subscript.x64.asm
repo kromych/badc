@@ -30,7 +30,7 @@ Disassembly of section .text:
                	imulq	$0xc, %rcx, %rdx
                	addq	$0x58, %rdx
                	imulq	$0x6, %rcx, %rsi
-               	shlq	$0x1, %rsi
+               	shlq	%rsi
                	addq	$0x58, %rsi
                	cmpq	%rsi, %rdx
                	jne	<addr>
@@ -60,5 +60,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

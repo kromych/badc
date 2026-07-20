@@ -263,6 +263,15 @@ impl Compiler {
         // the array) even when the typedef's element type is itself a
         // pointer.
         self.pending.declarator_leading_ptr_count = leading_ptr_count;
+        // C99 6.7.7p3 + 6.7.6.1: `A *p` for an array typedef `A` declares
+        // a pointer to the array. Rebuild the flat tag into the
+        // aggregate-backed pointer-to-array form so the array layer rides
+        // the type through typedefs and extra pointer levels. A deferred
+        // alias (`typedef T X[]`, carried as `-1`) has no complete pointee
+        // and stays a flat element pointer.
+        if leading_ptr_count > 0 && self.pending.typedef_base_array_size > 0 {
+            ty = self.ptr_to_array_typedef_ty(base, ty, leading_ptr_count);
+        }
         // Fn-pointer lineage propagation: if the caller pre-seeded
         // `pending_fn_ptr_indirection` from a typedef-of-fn-ptr
         // base type, the leading `*`s here add directly to the
@@ -458,7 +467,13 @@ impl Compiler {
                         }
                         self.accept(']')?;
                     }
-                    inner_ty += Ty::Ptr as i64;
+                    // The aggregate-backed rebuild below carries the
+                    // dimensions for the pointer form; only the
+                    // redundant-paren shape `T (name)[N]` keeps the
+                    // per-bracket level bump.
+                    if inner_ptr_levels == 0 {
+                        inner_ty += Ty::Ptr as i64;
+                    }
                 } else {
                     break;
                 }
@@ -484,18 +499,24 @@ impl Compiler {
                 inner_ty += Ty::Ptr as i64;
                 self.pending.fn_ptr_indirection = Some(1);
             }
-            if idx != usize::MAX && !pointee_dims.is_empty() {
-                // Pointer-to-array shape: `T (*p)[M1][M2]...[Mn]`.
-                // Store dims with a leading 0 sentinel so the
-                // indexing paths can disambiguate from a decayed
-                // array (which has dims[0] > 0). The peel-one-Ptr
-                // step at use-time recovers the decayed-array
-                // encoding so the existing multi-dim stride
-                // logic applies unchanged.
-                let mut dims = alloc::vec::Vec::with_capacity(pointee_dims.len() + 1);
-                dims.push(0);
-                dims.extend(pointee_dims);
-                self.symbols[idx].array_dims = dims;
+            if !pointee_dims.is_empty() {
+                if !saw_fn_signature && inner_ptr_levels > 0 {
+                    // Pointer-to-array shape `T (*p)[M1]...[Mn]`: fold
+                    // the pointee dimensions into the aggregate-backed
+                    // tag, one pointer level per inner `*`. Also covers
+                    // the abstract form `T (*)[N]` (no symbol).
+                    inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
+                        + inner_ptr_levels * (Ty::Ptr as i64))
+                        | (inner_ty & super::types::VOLATILE_BIT);
+                } else if idx != usize::MAX {
+                    // Redundant-paren shape `T (name)[N]`: keep the
+                    // per-bracket level plus the leading-0 sentinel dims
+                    // the indexing paths expect.
+                    let mut dims = alloc::vec::Vec::with_capacity(pointee_dims.len() + 1);
+                    dims.push(0);
+                    dims.extend(pointee_dims);
+                    self.symbols[idx].array_dims = dims;
+                }
             }
             return Ok((idx, inner_ty, inner_array_size));
         }
@@ -678,7 +699,11 @@ impl Compiler {
             if array_size > 0 {
                 let typedef_dim = self.pending.typedef_base_array_size;
                 if typedef_dim > 0 {
-                    dims.push(typedef_dim);
+                    if self.pending.typedef_base_array_dims.len() >= 2 {
+                        dims.extend(self.pending.typedef_base_array_dims.iter().copied());
+                    } else {
+                        dims.push(typedef_dim);
+                    }
                     array_size *= typedef_dim;
                 }
             }
@@ -740,25 +765,11 @@ impl Compiler {
             // No `[` suffix at all -- the declarator is a scalar or
             // pointer. Same rationale as above: scrub any stale
             // multi-dim metadata carried over from an earlier
-            // binding of the same name.
+            // binding of the same name. A pointer over an array
+            // typedef needs no symbol-side shape: the leading-`*`
+            // epilogue already folded the array layer into the type.
             self.symbols[idx].inner_array_size = 0;
             self.symbols[idx].array_dims = alloc::vec::Vec::new();
-            // C99 6.7.7p3 + 6.7.6.1: a declarator `T *p` whose
-            // base type `T` is an array typedef declares `p` as
-            // a pointer to the typedef's element-array. Record
-            // the inner dimension on the symbol so a subsequent
-            // `p[i]` (which decays to a row pointer) strides by
-            // the row width and a chained `p[i][j]` resolves
-            // correctly. The outer dim is a non-zero placeholder:
-            // only `dims[1..]` participates in the per-level
-            // stride computation, but the multi-dim decay path
-            // bails when `dims[0] == 0`, which is reserved for
-            // declarator-level pointer-to-array shapes.
-            if leading_ptr_count > 0 && self.pending.typedef_base_array_size > 0 {
-                let inner = self.pending.typedef_base_array_size;
-                self.symbols[idx].inner_array_size = inner;
-                self.symbols[idx].array_dims = alloc::vec![1, inner];
-            }
         }
 
         // GNU C / C23: an attribute-specifier-list may trail the declarator

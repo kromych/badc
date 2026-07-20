@@ -445,8 +445,8 @@ int getloadavg(double *loadavg, int nelem);
 #ifdef __APPLE__
 #pragma binding(libc::sys_icache_invalidate, "_sys_icache_invalidate")
 void sys_icache_invalidate(void *start, long long len);
-static inline void __clear_cache(void *begin, void *end) {
-    sys_icache_invalidate(begin, (long long)((char *)end - (char *)begin));
+static inline void __clear_cache(void *__begin, void *__end) {
+    sys_icache_invalidate(__begin, (long long)((char *)__end - (char *)__begin));
 }
 #endif
 
@@ -462,7 +462,7 @@ static inline void __clear_cache(void *begin, void *end) {
 ** libgcc_s.so.1 next to libc. */
 #pragma dylib(libgcc_s, "libgcc_s.so.1")
 #pragma binding(libgcc_s::__clear_cache, "__clear_cache")
-void __clear_cache(void *begin, void *end);
+void __clear_cache(void *__begin, void *__end);
 /* AAPCS64 returns `long double` (IEEE binary128) in v0 as a
 ** single 128-bit Q register. c5 stores `long double` in an
 ** 8-byte FP64 slot, so callers of Linux C library functions that return
@@ -498,8 +498,8 @@ static inline char *canonicalize_file_name(const char *path) {
 #pragma binding(kernel32::GetCurrentProcess, "GetCurrentProcess")
 int FlushInstructionCache(void *hProcess, void *lpBaseAddress, long long dwSize);
 void *GetCurrentProcess(void);
-static inline void __clear_cache(void *begin, void *end) {
-    FlushInstructionCache(GetCurrentProcess(), begin,
-                          (long long)((char *)end - (char *)begin));
+static inline void __clear_cache(void *__begin, void *__end) {
+    FlushInstructionCache(GetCurrentProcess(), __begin,
+                          (long long)((char *)__end - (char *)__begin));
 }
 #endif

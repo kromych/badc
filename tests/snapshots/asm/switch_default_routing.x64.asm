@@ -14,4 +14,3 @@ Disassembly of section .text:
                	movl	$0x64, %eax
                	movl	$0x64, %eax
                	retq
-               	addb	%al, 0x41(%rdx)

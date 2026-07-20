@@ -121,5 +121,3 @@ Disassembly of section .text:
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -1,14 +1,3 @@
-/// Per-function alloca arena size, in 8-byte slots. Sized to
-/// cover the FFT-class scratch buffer (~4 KB of float
-/// temporaries) and smaller block-array workspaces with
-/// headroom, without bloating every alloca-using frame to a
-/// megabyte. A function that allocates past the arena traps at
-/// runtime: the emit bounds-checks the bumped cursor against the
-/// arena floor instead of letting it scribble the saved-register /
-/// pool area below. TODO: lower alloca to a real stack-pointer
-/// decrement to support arbitrarily large allocations.
-pub const ALLOCA_ARENA_SLOTS: i64 = 1024;
-
 /// Compiler-builtin intrinsic discriminant. Each lowering target
 /// dispatches on this value to emit the per-arch sequence.
 /// Keep the discriminants stable -- the `.o` SSA-body wire
@@ -186,15 +175,14 @@ pub enum Intrinsic {
     /// (eax/edx destinations) then the input value (ecx = register index).
     /// x86_64 only. The interpreter zeroes the outputs.
     Xgetbv = 45,
-    /// Read the current per-frame alloca-arena top pointer (the
-    /// bookkeeping slot the matching `AllocaInit` set up). Takes no
-    /// argument, returns the top. Used to snapshot the arena on entry
-    /// to a block that declares a variable-length array (C99 6.7.6.2)
-    /// so the storage is reclaimed on block exit.
+    /// Read the current stack pointer (the VM's frame bump cursor).
+    /// Takes no argument, returns the value. Snapshots the stack on
+    /// entry to a block that declares a variable-length array (C99
+    /// 6.7.6.2) so the storage is reclaimed on block exit.
     AllocaSave = 46,
-    /// Write the per-frame alloca-arena top pointer back to a value a
-    /// prior `AllocaSave` captured. One argument (the saved top);
-    /// returns nothing. Reclaims a VLA block's storage on exit.
+    /// Restore the stack pointer to a value a prior `AllocaSave`
+    /// captured. One argument (the saved value); returns nothing.
+    /// Reclaims a VLA block's storage on exit.
     AllocaRestore = 47,
     /// `__builtin_clrsb(x)` / `__builtin_clrsbll(x)` -- count leading
     /// redundant sign bits of a 32-bit / 64-bit signed value: the number

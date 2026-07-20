@@ -761,6 +761,13 @@ fn run_func<H: Host>(
                     "vm_ssa: Terminator::TailExt not implemented".to_string(),
                 ));
             }
+            Terminator::AsmGoto { .. } => {
+                // The template's label branches have no interpreted
+                // form; asm goto is native-only.
+                break Err(C5Error::Runtime(
+                    "vm_ssa: asm goto is not supported by the interpreter".to_string(),
+                ));
+            }
             Terminator::Unreachable => {
                 // Sealed after a noreturn call; reaching it means the call
                 // returned when it should not have.
@@ -2020,8 +2027,44 @@ fn run_inline_asm(
     use crate::c5::ir::AsmRegSize;
 
     let insns = parse_template(&asm.template).map_err(C5Error::Runtime)?;
-    let op_reg = crate::c5::codegen::x86_64::asm::assign_operand_regs(&asm.operands)
-        .map_err(C5Error::Runtime)?;
+    // An `asm goto` label branch transfers control between blocks,
+    // which this per-instruction evaluator cannot model.
+    if insns.iter().any(|i| {
+        i.operands
+            .iter()
+            .any(|o| matches!(o, AsmOpnd::GotoLabel(_)))
+    }) {
+        return Err(C5Error::Runtime(alloc::string::String::from(
+            "inline asm: asm goto is not supported under --interp",
+        )));
+    }
+    // Explicit `disp(%reg)` references and label addresses touch machine
+    // memory / code layout the register model does not carry.
+    if insns.iter().any(|i| {
+        i.operands
+            .iter()
+            .any(|o| matches!(o, AsmOpnd::Mem { .. } | AsmOpnd::LabelAddr { .. }))
+    }) {
+        return Err(C5Error::Runtime(alloc::string::String::from(
+            "inline asm: explicit memory operands are not supported under --interp",
+        )));
+    }
+    let op_reg =
+        crate::c5::codegen::x86_64::asm::assign_operand_regs(&asm.operands, asm.clobber_fp_regs)
+            .map_err(C5Error::Runtime)?;
+    // The interpreter models only the 16 GPRs; an `x` (xmm) operand carries a
+    // 128-bit SSE value that has no modelled slot. Such asm also uses SSE
+    // instructions, refused below -- reject the operand up front with a clear
+    // message rather than mis-model it as a GPR.
+    if asm
+        .operands
+        .iter()
+        .any(|op| matches!(op.constraint, crate::c5::ir::AsmConstraint::Fp))
+    {
+        return Err(C5Error::Runtime(alloc::string::String::from(
+            "inline asm: `x` (xmm) register operands are not supported under --interp",
+        )));
+    }
     // Model register file; operand `%N` reads / writes its assigned slot.
     let mut xregs = [0i64; 16];
     // Seed input registers, and the current value of a `+` (read-write)
@@ -2051,6 +2094,11 @@ fn run_inline_asm(
                     None => (frame.regs[args[idx as usize] as usize], sz),
                 }
             }
+            // Label / memory references are refused before this loop.
+            AsmOpnd::Label { .. }
+            | AsmOpnd::LabelAddr { .. }
+            | AsmOpnd::GotoLabel(_)
+            | AsmOpnd::Mem { .. } => (0, AsmRegSize::Long),
         }
     };
     // The model register a destination operand writes into.
@@ -2060,13 +2108,43 @@ fn run_inline_asm(
             // segment, marked >= 16) has no modelled slot: no-op.
             AsmOpnd::Reg { reg, .. } => (reg < 16).then_some(reg as usize),
             AsmOpnd::Ref { idx, .. } => op_reg[idx as usize].map(|r| r as usize),
-            AsmOpnd::Imm(_) => None,
+            AsmOpnd::Imm(_)
+            | AsmOpnd::Label { .. }
+            | AsmOpnd::LabelAddr { .. }
+            | AsmOpnd::GotoLabel(_)
+            | AsmOpnd::Mem { .. } => None,
         }
     };
 
     for insn in &insns {
         let ops = &insn.operands;
         match insn.mnemonic {
+            // Literal machine bytes are opaque to the register model, like the
+            // privileged / port ops below: no modelled effect under the VM.
+            Mnemonic::RawBytes => {}
+            // The interpreter is not a CPU emulator: a mnemonic reached through
+            // the catalogue is refused rather than modelled. Such inline asm is
+            // an ahead-of-time / JIT construct, executed natively there.
+            Mnemonic::Table(name) => {
+                return Err(C5Error::Runtime(alloc::format!(
+                    "inline asm: `{name}` is not supported under --interp"
+                )));
+            }
+            Mnemonic::Sse2Rr { .. }
+            | Mnemonic::SseMov { .. }
+            | Mnemonic::SseShufImm { .. }
+            | Mnemonic::SseShiftImm { .. }
+            | Mnemonic::Vex { .. }
+            | Mnemonic::VexMov { .. }
+            | Mnemonic::Vex2 { .. }
+            | Mnemonic::VexImm3 { .. }
+            | Mnemonic::VexImm2 { .. } => {
+                // The interpreter has no XMM register file; SSE inline asm is a
+                // native / JIT construct, refused here rather than mis-modelled.
+                return Err(C5Error::Runtime(alloc::string::String::from(
+                    "inline asm: SSE register ops are not supported under --interp",
+                )));
+            }
             Mnemonic::Nop | Mnemonic::Rdtsc | Mnemonic::Rdtscp => {
                 // No host clock: the timestamp read produces zero in the
                 // registers it defines (rax/rdx, and rcx for rdtscp).

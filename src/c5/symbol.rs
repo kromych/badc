@@ -114,7 +114,7 @@ pub(crate) struct Symbol {
 
     /// True for a C99 6.7.6.2 variable-length array local: the
     /// element count is a runtime expression, so the storage is
-    /// allocated from the per-frame alloca arena rather than a fixed
+    /// allocated from the stack at runtime rather than a fixed
     /// frame slot. `type_` holds the element type; `array_size` stays
     /// 0 (it is not a constant array). `vla_ptr_slot` is the hidden
     /// frame slot holding the runtime base pointer; `vla_size_slot`
@@ -372,6 +372,13 @@ pub(crate) struct Symbol {
     /// and dead-store diagnostics for this symbol, matching the
     /// documented effect of the attribute.
     pub maybe_unused: bool,
+
+    /// GCC `register T v asm("reg")`: the architectural number of the
+    /// named general register. GCC guarantees the binding only when
+    /// the variable is an `r`-class inline-asm operand; such an
+    /// operand's constraint resolves to `AsmConstraint::Fixed` with
+    /// this number. `None` for ordinary symbols.
+    pub asm_reg: Option<u8>,
 }
 
 /// C99 6.2.2 linkage class. `None` is the default for block-scope

@@ -5,6 +5,8 @@
 pub(crate) mod asm;
 pub(crate) mod emit;
 pub(crate) mod encode;
+mod isa_x86_table;
+pub(crate) mod table;
 
 // Resolve the codegen-level paths the two large modules reference relative to
 // their original location, now that they sit one level deeper.

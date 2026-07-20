@@ -92,6 +92,7 @@
 #define EOVERFLOW       84
 #define EOPNOTSUPP      102
 #define EILSEQ          92
+#define ECANCELED       89
 #elif defined(__linux__)
 #define EAGAIN          11
 #define EDEADLK         35

@@ -3156,6 +3156,135 @@ fn asm_section_is_not_duplicated_by_branch_relaxation() {
 }
 
 #[test]
+fn asm_section_numeric_labels_are_per_instance_unique() {
+    // GNU as numeric labels inside a section are local to one asm instance.
+    // Two expansions of the same bug-table-shaped block must not collide:
+    // each cross-section `.long 14472b - .` relocates to its own copy of the
+    // string in `.bstr`, a distinct per-instance symbol. Without unique
+    // identities the second `14472:` is a duplicate-label error, or both
+    // entries point at one string (a silent miscompile).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let entry = |file: &str| {
+        format!(
+            "__asm__ volatile(\
+                \".pushsection .btab,\\\"aw\\\"\\n\"\
+                \"14470:\\t.long 14471f - .\\n\"\
+                \".pushsection .bstr,\\\"a\\\"\\n\"\
+                \"14472:\\t.string \\\"{file}\\\"\\n\"\
+                \".popsection\\n\"\
+                \".long 14472b - .\\n\"\
+                \".popsection\\n\"\
+                \"14471:\\tnop\\n\");"
+        )
+    };
+    let src = format!(
+        "void a(void) {{ {} }}\n\
+         void b(void) {{ {} }}\n\
+         int main(void) {{ a(); b(); return 0; }}\n",
+        entry("aa"),
+        entry("bb"),
+    );
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(src.clone()).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = |n: &str| {
+            sections
+                .iter()
+                .find(|(name, _, _, _)| name == n)
+                .unwrap_or_else(|| panic!("{target:?}: {n} section missing"))
+        };
+        // Two 8-byte entries (a text ref and a string ref each).
+        assert_eq!(sec(".btab").3.len(), 16, "{target:?}: two entries");
+        // Both strings present, neither merged nor overwritten.
+        assert_eq!(&sec(".bstr").3, b"aa\0bb\0", "{target:?}: both strings");
+        let bstr_idx = sections
+            .iter()
+            .position(|(n, _, _, _)| n == ".bstr")
+            .unwrap();
+        let rela = sec(".rela.btab");
+        assert_eq!(rela.3.len(), 4 * 24, "{target:?}: four relocs");
+        let symtab = &sec(".symtab").3;
+        // The two string references (field offsets 4 and 12) must resolve to
+        // distinct symbols, both in `.bstr`, at the two string offsets.
+        let mut str_syms = alloc::vec::Vec::new();
+        for k in 0..4 {
+            let r_off = u64::from_le_bytes(rela.3[k * 24..k * 24 + 8].try_into().unwrap());
+            let r_info = u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+            if r_off == 4 || r_off == 12 {
+                let sym = (r_info >> 32) as usize;
+                let shndx =
+                    u16::from_le_bytes(symtab[sym * 24 + 6..sym * 24 + 8].try_into().unwrap());
+                let value =
+                    u64::from_le_bytes(symtab[sym * 24 + 8..sym * 24 + 16].try_into().unwrap());
+                assert_eq!(shndx as usize, bstr_idx, "{target:?}: str ref into .bstr");
+                str_syms.push((sym, value));
+            }
+        }
+        assert_eq!(str_syms.len(), 2, "{target:?}: two string references");
+        assert_ne!(
+            str_syms[0].0, str_syms[1].0,
+            "{target:?}: per-instance-distinct symbols"
+        );
+        let mut values = [str_syms[0].1, str_syms[1].1];
+        values.sort_unstable();
+        assert_eq!(values, [0, 3], "{target:?}: the two string offsets");
+    }
+}
+
+#[test]
+fn asm_section_org_pads_to_label_plus_operand() {
+    // `.org 2b + %c0` (the `__bug_table` entry size) pads to a section-local
+    // label's offset plus an `i`-class operand constant. Two instances of the
+    // numeric label `2` stay independent. Byte-identical padding to gas.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let entry = "__asm__ volatile(\
+        \"1:\\tnop\\n\"\
+        \".pushsection .otab,\\\"aw\\\"\\n\"\
+        \"2:\\t.long 1b - .\\n\"\
+        \"\\t.word 11\\n\"\
+        \"\\t.org 2b + %c0\\n\"\
+        \".popsection\\n\" : : \"i\"(12));";
+    let src = format!(
+        "void a(void) {{ {entry} }}\n\
+         void b(void) {{ {entry} }}\n\
+         int main(void) {{ a(); b(); return 0; }}\n"
+    );
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(src.clone()).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".otab")
+            .unwrap_or_else(|| panic!("{target:?}: .otab missing"));
+        // Two entries, each padded to `2b + 12` = 12 bytes.
+        assert_eq!(sec.3.len(), 24, "{target:?}: two 12-byte entries");
+        // The `.word 11` line field sits after the 4-byte text reference; the
+        // rest of each entry is `.org` zero padding.
+        let line0 = u16::from_le_bytes(sec.3[4..6].try_into().unwrap());
+        let line1 = u16::from_le_bytes(sec.3[16..18].try_into().unwrap());
+        assert_eq!((line0, line1), (11, 11), "{target:?}: line fields");
+        assert!(
+            sec.3[6..12].iter().all(|&b| b == 0),
+            "{target:?}: entry A pad"
+        );
+        assert!(
+            sec.3[18..24].iter().all(|&b| b == 0),
+            "{target:?}: entry B pad"
+        );
+    }
+}
+
+#[test]
 fn asm_section_values_fold_constant_expressions() {
     // A named section's data value may be an integer constant expression,
     // not just a literal; the folded value is what lands in the section.

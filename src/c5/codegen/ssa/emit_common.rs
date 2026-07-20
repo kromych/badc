@@ -795,6 +795,13 @@ pub(crate) enum AsmSectionItem {
     AlignArch(u32),
     /// `.org n`: pad with zero bytes to section offset `n`.
     Org(u32),
+    /// `.org label + expr`: pad to a section-local label's offset plus a
+    /// constant expression (`.org 2b + %c3`, the `__bug_table` entry size).
+    /// The label and expression resolve at materialize time.
+    OrgLabel {
+        label: alloc::string::String,
+        addend: alloc::string::String,
+    },
     /// `.ascii` / `.asciz` / `.string` payload (NUL included when the
     /// directive appends one).
     Bytes(alloc::vec::Vec<u8>),
@@ -1057,7 +1064,9 @@ pub(crate) fn extract_asm_sections(
                 // to follow a label on the same line.
                 let (mut tok, mut rest) = (tok, rest);
                 while let Some(name) = tok.strip_suffix(':') {
-                    if !is_asm_symbol_name(name) {
+                    // A numeric label (`2:`, `14470:`) is a GNU as local label;
+                    // the materializer gives each a per-instance-unique symbol.
+                    if !is_asm_symbol_name(name) && !is_numeric_label(name) {
                         return Err(alloc::format!("inline asm: bad label `{tok}:`"));
                     }
                     blocks[idx]
@@ -1107,6 +1116,10 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
             flags = alloc::string::String::from(f);
         } else if let Some(t) = p.strip_prefix('@').or_else(|| p.strip_prefix('%')) {
             sh_type = Some(alloc::string::String::from(t));
+        } else if parse_raw_int(p).is_some() {
+            // The entsize of a `M`-flagged mergeable section
+            // (`.rodata.str,"aMS",@progbits,1`). The merge/strings flags are
+            // dropped for a relocatable object, so its entsize is too.
         } else if !p.is_empty() {
             return Err(alloc::format!("inline asm: bad section argument `{p}`"));
         }
@@ -1127,6 +1140,21 @@ fn is_asm_symbol_name(name: &str) -> bool {
         && name
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$'))
+}
+
+/// A GNU as local numeric label: all decimal digits (`2`, `14470`). Its
+/// definition (`2:`) and references (`2b` / `2f`) are local to one asm
+/// instance, so the materializer renames each to a unique symbol.
+fn is_numeric_label(name: &str) -> bool {
+    !name.is_empty() && name.bytes().all(|c| c.is_ascii_digit())
+}
+
+/// Split a numeric-label reference into its digits, dropping a trailing
+/// GNU as direction suffix (`14472b` / `14471f` -> `14472` / `14471`).
+/// Returns `None` when the reference is not a numeric label.
+fn numeric_label_digits(name: &str) -> Option<&str> {
+    let digits = name.strip_suffix(['b', 'f']).unwrap_or(name);
+    is_numeric_label(digits).then_some(digits)
 }
 
 /// Parse one directive inside a named section.
@@ -1167,10 +1195,23 @@ fn parse_section_item(
             Ok(AsmSectionItem::Align(1 << e))
         }
         ".org" => {
-            let n = parse_raw_int(rest)
-                .filter(|&n| n >= 0)
-                .ok_or_else(|| alloc::format!("inline asm: bad `.org` offset `{rest}`"))?;
-            Ok(AsmSectionItem::Org(n as u32))
+            if let Some(n) = parse_raw_int(rest).filter(|&n| n >= 0) {
+                return Ok(AsmSectionItem::Org(n as u32));
+            }
+            // `.org label + expr`: the target is a section-local label's offset
+            // plus a constant. Split on the first `+`; the label must be a
+            // backward numeric reference or a symbol name.
+            let (label, addend) = rest
+                .split_once('+')
+                .map(|(l, r)| (l.trim(), r.trim()))
+                .unwrap_or((rest.trim(), "0"));
+            if numeric_label_digits(label).is_none() && !is_asm_symbol_name(label) {
+                return Err(alloc::format!("inline asm: bad `.org` offset `{rest}`"));
+            }
+            Ok(AsmSectionItem::OrgLabel {
+                label: alloc::string::String::from(label),
+                addend: alloc::string::String::from(addend),
+            })
         }
         ".ascii" | ".asciz" | ".string" => {
             let s = rest
@@ -1336,6 +1377,32 @@ pub(crate) fn materialize_asm_sections(
     align_is_p2: bool,
     sink: &mut alloc::vec::Vec<AsmSection>,
 ) -> Result<(), alloc::string::String> {
+    // GNU as numeric labels (`2:`, `14470:`) are local to one asm instance;
+    // the same digits recur across every expansion of a macro like the bug
+    // table, so the accumulating sink would collide them. Rename each
+    // definition to a per-instance-unique symbol. Built once for the whole
+    // call so a reference in one block resolves a definition in another (the
+    // bug table's `.long 14472b - .` reaches a label defined in `.rodata.str`).
+    let uniq = ASM_INSTANCE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    let mut num_unique: alloc::collections::BTreeMap<&str, alloc::string::String> =
+        alloc::collections::BTreeMap::new();
+    for name in blocks
+        .iter()
+        .flat_map(|b| &b.items)
+        .filter_map(|it| match it {
+            AsmSectionItem::Label(n) if is_numeric_label(n) => Some(n.as_str()),
+            _ => None,
+        })
+    {
+        if num_unique
+            .insert(name, alloc::format!(".Lc5_asmsec_{uniq}_{name}"))
+            .is_some()
+        {
+            return Err(alloc::format!(
+                "inline asm: numeric label `{name}` defined twice in one asm instance"
+            ));
+        }
+    }
     for b in blocks {
         let sec = match sink
             .iter_mut()
@@ -1380,6 +1447,34 @@ pub(crate) fn materialize_asm_sections(
                         sec.bytes.push(0);
                     }
                 }
+                AsmSectionItem::OrgLabel { label, addend } => {
+                    // Resolve the label's offset within this section (defined
+                    // above), then pad to that plus the constant addend.
+                    let lname = numeric_label_digits(label)
+                        .and_then(|d| num_unique.get(d).map(alloc::string::String::as_str))
+                        .unwrap_or(label);
+                    let base = sec
+                        .labels
+                        .iter()
+                        .find(|l| l.name == lname && l.offset != PENDING_LABEL)
+                        .map(|l| l.offset)
+                        .ok_or_else(|| {
+                            alloc::format!(
+                                "inline asm: `.org` label `{label}` is not defined above"
+                            )
+                        })?;
+                    let add =
+                        eval_const_expr_ops(addend, &|idx| const_of(idx)).ok_or_else(|| {
+                            alloc::string::String::from("inline asm: non-constant `.org` addend")
+                        })?;
+                    let target = base as i64 + add;
+                    if target < sec.bytes.len() as i64 {
+                        return Err(alloc::string::String::from(
+                            "inline asm: `.org` moves backwards",
+                        ));
+                    }
+                    sec.bytes.resize(target as usize, 0);
+                }
                 AsmSectionItem::Org(n) => {
                     if (*n as usize) < sec.bytes.len() {
                         return Err(alloc::string::String::from(
@@ -1390,6 +1485,11 @@ pub(crate) fn materialize_asm_sections(
                 }
                 AsmSectionItem::Bytes(bs) => sec.bytes.extend_from_slice(bs),
                 AsmSectionItem::Label(name) => {
+                    // A numeric label carries its per-instance-unique symbol.
+                    let name = num_unique
+                        .get(name.as_str())
+                        .map(alloc::string::String::as_str)
+                        .unwrap_or(name);
                     let at = sec.bytes.len() as u32;
                     match sec.labels.iter_mut().find(|l| l.name == *name) {
                         // A pending `.globl` entry is the definition site.
@@ -1400,7 +1500,7 @@ pub(crate) fn materialize_asm_sections(
                             ));
                         }
                         None => sec.labels.push(AsmSectionLabel {
-                            name: name.clone(),
+                            name: alloc::string::String::from(name),
                             offset: at,
                             global: false,
                         }),
@@ -1451,9 +1551,18 @@ pub(crate) fn materialize_asm_sections(
                                         "inline asm: section reference needs a 4- or 8-byte field",
                                     ));
                                 }
+                                // A template text label resolves to a text
+                                // offset; a numeric section label to its
+                                // per-instance-unique symbol; any other name is
+                                // a plain symbol reference.
                                 let target = match label_off(name) {
                                     Some(off) => AsmSectionTarget::Text(off),
-                                    None => AsmSectionTarget::Symbol(name.clone()),
+                                    None => match numeric_label_digits(name)
+                                        .and_then(|d| num_unique.get(d))
+                                    {
+                                        Some(uni) => AsmSectionTarget::Symbol(uni.clone()),
+                                        None => AsmSectionTarget::Symbol(name.clone()),
+                                    },
                                 };
                                 sec.relocs.push(AsmSectionReloc {
                                     offset: sec.bytes.len() as u32,

@@ -807,6 +807,17 @@ fn typeof_expression() {
 }
 
 #[test]
+fn typeof_abstract_array_type() {
+    // `__typeof__(type-name)` accepts an abstract array type -- `T [N]`,
+    // `T []`, `T [N][M]` (C99 6.7.6) -- and yields the array type: sizeof /
+    // _Alignof report the array's size and alignment, a declarator through
+    // the specifier is an array, and an omitted bound is an incomplete array
+    // type (compatible with any bound, distinct from a pointer). Sizes match
+    // GCC and clang; also checked at run time.
+    assert_eq!(run_fixture("typeof_abstract_array_type.c"), 0);
+}
+
+#[test]
 fn file_scope_typeof() {
     // `typeof` / `__typeof__` as a file-scope declaration specifier, over a
     // type-name or an expression operand. The block-scope path already

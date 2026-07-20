@@ -230,13 +230,14 @@ impl Compiler {
 
     /// `typeof ( type-name )` / `typeof ( expression )` (C23 6.7.2.5,
     /// the GCC `__typeof__` extension). The result is the operand's
-    /// type. A type-name operand parses as a base type plus any
-    /// abstract pointer decoration; an expression operand is parsed
+    /// type. A type-name operand parses as a base type plus any abstract
+    /// pointer and array decoration; an expression operand is parsed
     /// unevaluated and its type recovered, mirroring `sizeof`'s
-    /// expression branch. Only the flat scalar / pointer / aggregate
-    /// type the rest of the parser carries is recovered; an array
-    /// operand's element type is returned (the dimension is dropped,
-    /// matching the decay the value contexts already apply).
+    /// expression branch. The flat scalar / pointer / aggregate tag is
+    /// returned; an array operand (a `T [N]` type name or an array-typed
+    /// expression) leaves its element count on the array carrier so a
+    /// declarator through the specifier is an array, while a decayed
+    /// value-context expression keeps only the element type.
     pub(super) fn parse_typeof_specifier(&mut self) -> Result<i64, C5Error> {
         self.next()?; // typeof
         if self.lex.tk != '(' {
@@ -284,8 +285,59 @@ impl Compiler {
                 self.pending.typedef_base_array_size = 0;
                 self.pending.typedef_base_array_dims.clear();
             }
-            self.pending.typeof_operand_was_array =
-                self.pending.typedef_base_array_size != 0 && !had_ptr;
+            // Abstract array declarator in the type name: `typeof(T [N])`,
+            // `typeof(T [])`, `typeof(T [N][M])` (C99 6.7.6). The bracketed
+            // dimensions are outer; an array-typedef base supplies the inner.
+            if self.lex.tk == Token::Brak {
+                let base_extent = core::mem::take(&mut self.pending.typedef_base_array_size);
+                let base_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
+                let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+                while self.lex.tk == Token::Brak {
+                    self.next()?;
+                    // An omitted bound (`T []`) is an incomplete array (-1).
+                    let n = if self.lex.tk == ']' {
+                        -1
+                    } else {
+                        let n = self.parse_constant_int()?;
+                        if n < 0 {
+                            return Err(self.compile_err(
+                                "array dimension in a type name must not be negative",
+                            ));
+                        }
+                        n
+                    };
+                    if self.lex.tk != ']' {
+                        return Err(
+                            self.compile_err("close bracket expected in an array type name")
+                        );
+                    }
+                    self.next()?;
+                    dims.push(n);
+                }
+                // Fold in an array-typedef base's dimensions, gated on its
+                // size carrier: the dims list alone can be a prior parse's
+                // stale value.
+                if base_extent != 0 {
+                    if base_dims.is_empty() {
+                        dims.push(base_extent);
+                    } else {
+                        dims.extend(base_dims);
+                    }
+                }
+                // The carrier holds the total element count; a two-plus dim
+                // list rides alongside for per-row strides.
+                self.pending.typedef_base_array_size = if dims.iter().all(|&d| d > 0) {
+                    dims.iter().product::<i64>()
+                } else {
+                    -1
+                };
+                self.pending.typedef_base_array_dims = if dims.len() >= 2 {
+                    dims
+                } else {
+                    alloc::vec::Vec::new()
+                };
+            }
+            self.pending.typeof_operand_was_array = self.pending.typedef_base_array_size != 0;
             inner
         } else {
             let mut inner = self.parse_unevaluated_expr_ty(true)?;

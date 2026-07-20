@@ -868,6 +868,79 @@ pub(crate) struct AsmSectionLabel {
     pub global: bool,
 }
 
+/// Resolve constant assembler conditionals (`.if` / `.elseif` / `.else` /
+/// `.endif`), keeping only the taken branch. `.if <expr>` and `.ifeq` /
+/// `.ifne` / `.ifgt` / `.iflt` / `.ifge` / `.ifle` test a constant expression;
+/// a non-constant condition is an error. Returns `None` when the template has
+/// no conditional. This runs before section extraction so a dropped branch
+/// takes its `.pushsection` with it. Statements are the `;` / newline pieces
+/// the rest of the pipeline splits on, rejoined with newlines.
+pub(crate) fn strip_asm_conditionals(
+    text: &str,
+) -> Result<Option<alloc::string::String>, alloc::string::String> {
+    if !text.contains(".if") {
+        return Ok(None);
+    }
+    // Each open conditional: (this branch emits, some branch already taken).
+    let mut stack: alloc::vec::Vec<(bool, bool)> = alloc::vec::Vec::new();
+    let emitting = |st: &[(bool, bool)]| st.iter().all(|&(on, _)| on);
+    let cond_of = |tok: &str, rest: &str| -> Result<bool, alloc::string::String> {
+        let v = eval_asm_if_condition(rest)
+            .ok_or_else(|| alloc::format!("inline asm: non-constant `{tok}` condition `{rest}`"))?;
+        Ok(match tok {
+            ".ifeq" => v == 0,
+            ".ifne" | ".if" => v != 0,
+            ".ifgt" => v > 0,
+            ".iflt" => v < 0,
+            ".ifge" => v >= 0,
+            ".ifle" => v <= 0,
+            _ => return Err(alloc::format!("inline asm: unsupported conditional `{tok}`")),
+        })
+    };
+    let mut out = alloc::string::String::with_capacity(text.len());
+    for piece in text.split([';', '\n']) {
+        let trimmed = piece.trim();
+        let (tok, rest) = match trimmed.find(char::is_whitespace) {
+            Some(p) => (&trimmed[..p], trimmed[p..].trim()),
+            None => (trimmed, ""),
+        };
+        match tok {
+            ".if" | ".ifeq" | ".ifne" | ".ifgt" | ".iflt" | ".ifge" | ".ifle" => {
+                let taken = emitting(&stack) && cond_of(tok, rest)?;
+                stack.push((taken, taken));
+            }
+            ".elseif" => {
+                let outer = emitting(&stack[..stack.len().saturating_sub(1)]);
+                let frame = stack
+                    .last_mut()
+                    .ok_or("inline asm: `.elseif` without `.if`")?;
+                let taken = outer && !frame.1 && cond_of(".if", rest)?;
+                frame.0 = taken;
+                frame.1 |= taken;
+            }
+            ".else" => {
+                let outer = emitting(&stack[..stack.len().saturating_sub(1)]);
+                let frame = stack.last_mut().ok_or("inline asm: `.else` without `.if`")?;
+                frame.0 = outer && !frame.1;
+                frame.1 = true;
+            }
+            ".endif" => {
+                stack.pop().ok_or("inline asm: `.endif` without `.if`")?;
+            }
+            _ => {
+                if !trimmed.is_empty() && emitting(&stack) {
+                    out.push_str(trimmed);
+                    out.push('\n');
+                }
+            }
+        }
+    }
+    if !stack.is_empty() {
+        return Err(alloc::string::String::from("inline asm: unterminated `.if`"));
+    }
+    Ok(Some(out))
+}
+
 /// Split a template into its code text and its section blocks. Returns
 /// `None` when the template has no section directives (the common case).
 /// The section stack starts at the code stream; `.pushsection` pushes a
@@ -1698,6 +1771,37 @@ pub(crate) fn eval_const_expr_ops(s: &str, op: &dyn Fn(u8) -> Option<i64>) -> Op
     (i == b.len()).then_some(v)
 }
 
+/// Evaluate an assembler `.if` condition: a constant expression that may
+/// compare with the relational operators (`==`, `!=`, `<`, `>`, `<=`, `>=`),
+/// which bind looser than the arithmetic operators (GNU as convention). A
+/// non-zero result is true. `None` when the condition is not a constant.
+pub(crate) fn eval_asm_if_condition(s: &str) -> Option<i64> {
+    let b = s.as_bytes();
+    let mut i = 0usize;
+    let v = const_relational(b, &mut i, &|_| None)?;
+    skip_ws(b, &mut i);
+    (i == b.len()).then_some(v)
+}
+
+fn const_relational(b: &[u8], i: &mut usize, op: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
+    let mut v = const_bitor(b, i, op)?;
+    loop {
+        skip_ws(b, i);
+        let (rel, len): (fn(i64, i64) -> bool, usize) = match (b.get(*i), b.get(*i + 1)) {
+            (Some(b'='), Some(b'=')) => (|a, c| a == c, 2),
+            (Some(b'!'), Some(b'=')) => (|a, c| a != c, 2),
+            (Some(b'<'), Some(b'=')) => (|a, c| a <= c, 2),
+            (Some(b'>'), Some(b'=')) => (|a, c| a >= c, 2),
+            (Some(b'<'), n) if n != Some(&b'<') => (|a, c| a < c, 1),
+            (Some(b'>'), n) if n != Some(&b'>') => (|a, c| a > c, 1),
+            _ => return Some(v),
+        };
+        *i += len;
+        let rhs = const_bitor(b, i, op)?;
+        v = rel(v, rhs) as i64;
+    }
+}
+
 fn skip_ws(b: &[u8], i: &mut usize) {
     while *i < b.len() && b[*i].is_ascii_whitespace() {
         *i += 1;
@@ -2297,6 +2401,31 @@ mod asm_section_tests {
                 addend: 0,
             }],
         );
+    }
+
+    #[test]
+    fn asm_conditionals_keep_the_taken_branch() {
+        // `.if <expr>` compares with the relational operators; a non-zero
+        // result keeps the branch. `.else` / `.elseif` select the live arm,
+        // and a dropped branch takes its `.pushsection` with it.
+        assert_eq!(eval_asm_if_condition("1 == 1"), Some(1));
+        assert_eq!(eval_asm_if_condition("1 != 1"), Some(0));
+        assert_eq!(eval_asm_if_condition("(1 << 2) >= 4"), Some(1));
+        assert_eq!(eval_asm_if_condition("nop"), None);
+        let reduce = |t: &str| strip_asm_conditionals(t).unwrap().unwrap();
+        assert_eq!(reduce(".if 1 == 1\nnop\n.endif\n"), "nop\n");
+        assert_eq!(reduce(".if 0\nbad\n.else\ngood\n.endif\n"), "good\n");
+        assert_eq!(
+            reduce(".if 0\n.pushsection .x\n.byte 1\n.popsection\n.endif\nkeep\n"),
+            "keep\n"
+        );
+        // A false outer branch suppresses a true inner one.
+        assert_eq!(reduce(".if 0\n.if 1\nx\n.endif\n.endif\ny\n"), "y\n");
+        // Unbalanced and non-constant conditions are rejected.
+        assert!(strip_asm_conditionals(".if 1\nnop\n").is_err());
+        assert!(strip_asm_conditionals(".if x\n.endif\n").is_err());
+        // A template with no conditional is left untouched.
+        assert!(strip_asm_conditionals("nop\n").unwrap().is_none());
     }
 
     #[test]

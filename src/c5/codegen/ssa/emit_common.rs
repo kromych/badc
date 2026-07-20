@@ -773,6 +773,10 @@ pub(crate) enum AsmSectionValue {
         minuend: alloc::string::String,
         subtrahend: alloc::string::String,
     },
+    /// A constant expression mixing integer literals with `%N` operand
+    /// constants (`(1 << 15) | (%0)`). Stored as text and evaluated at
+    /// materialize time, where the operand constants are known.
+    Expr(alloc::string::String),
 }
 
 /// One item of an in-template section block, in source order.
@@ -1102,6 +1106,13 @@ fn parse_section_value(a: &str) -> Result<AsmSectionValue, alloc::string::String
         }
         return Err(alloc::format!("inline asm: bad section value `{a}`"));
     }
+    // A constant expression mixing integer literals with `%N` operand
+    // constants (`(1 << 15) | (%0)`); deferred as text and resolved at
+    // materialize time. Label / symbol references are not constants and fall
+    // through to the forms below.
+    if a.contains('%') && eval_const_expr_ops(a, &|_| Some(0)).is_some() {
+        return Ok(AsmSectionValue::Expr(alloc::string::String::from(a)));
+    }
     let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
     let is_name = |s: &str| !s.is_empty() && s.bytes().all(ident);
     // A single `-` splits `ref - .` (PC-relative against the field's own
@@ -1253,6 +1264,17 @@ pub(crate) fn materialize_asm_sections(
                                         "inline asm: non-constant section data value",
                                     )
                                 })?;
+                                sec.bytes.extend_from_slice(
+                                    &(c as u64).to_le_bytes()[..*width as usize],
+                                );
+                            }
+                            AsmSectionValue::Expr(text) => {
+                                let c = eval_const_expr_ops(text, &|idx| const_of(idx))
+                                    .ok_or_else(|| {
+                                        alloc::string::String::from(
+                                            "inline asm: non-constant section data value",
+                                        )
+                                    })?;
                                 sec.bytes.extend_from_slice(
                                     &(c as u64).to_le_bytes()[..*width as usize],
                                 );
@@ -1626,9 +1648,18 @@ fn parse_raw_int(s: &str) -> Option<i64> {
 /// Returns `None` when the text is not a self-contained constant, which is
 /// how a label or symbol reference is distinguished from an expression.
 pub(crate) fn eval_const_expr(s: &str) -> Option<i64> {
+    eval_const_expr_ops(s, &|_| None)
+}
+
+/// Evaluate a constant expression whose leaves may include `%N` / `%cN` /
+/// `%PN` operand references, resolved through `op` (an operand's compile-time
+/// constant). With `op` yielding `None` this is the literal-only evaluator
+/// above; a section value defers `op` to materialize time, where the operand
+/// constants are known.
+pub(crate) fn eval_const_expr_ops(s: &str, op: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
     let b = s.as_bytes();
     let mut i = 0usize;
-    let v = const_bitor(b, &mut i)?;
+    let v = const_bitor(b, &mut i, op)?;
     skip_ws(b, &mut i);
     (i == b.len()).then_some(v)
 }
@@ -1641,77 +1672,77 @@ fn skip_ws(b: &[u8], i: &mut usize) {
 
 /// `|` is the loosest binding operator modelled; each level below consumes
 /// its tighter operand first, giving C's precedence.
-fn const_bitor(b: &[u8], i: &mut usize) -> Option<i64> {
-    let mut v = const_bitxor(b, i)?;
+fn const_bitor(b: &[u8], i: &mut usize, op: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
+    let mut v = const_bitxor(b, i, op)?;
     loop {
         skip_ws(b, i);
         // `||` is not an assembler expression operator; only a single `|`.
         if *i < b.len() && b[*i] == b'|' && b.get(*i + 1) != Some(&b'|') {
             *i += 1;
-            v |= const_bitxor(b, i)?;
+            v |= const_bitxor(b, i, op)?;
         } else {
             return Some(v);
         }
     }
 }
 
-fn const_bitxor(b: &[u8], i: &mut usize) -> Option<i64> {
-    let mut v = const_bitand(b, i)?;
+fn const_bitxor(b: &[u8], i: &mut usize, op: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
+    let mut v = const_bitand(b, i, op)?;
     loop {
         skip_ws(b, i);
         if *i < b.len() && b[*i] == b'^' {
             *i += 1;
-            v ^= const_bitand(b, i)?;
+            v ^= const_bitand(b, i, op)?;
         } else {
             return Some(v);
         }
     }
 }
 
-fn const_bitand(b: &[u8], i: &mut usize) -> Option<i64> {
-    let mut v = const_shift(b, i)?;
+fn const_bitand(b: &[u8], i: &mut usize, op: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
+    let mut v = const_shift(b, i, op)?;
     loop {
         skip_ws(b, i);
         if *i < b.len() && b[*i] == b'&' && b.get(*i + 1) != Some(&b'&') {
             *i += 1;
-            v &= const_shift(b, i)?;
+            v &= const_shift(b, i, op)?;
         } else {
             return Some(v);
         }
     }
 }
 
-fn const_shift(b: &[u8], i: &mut usize) -> Option<i64> {
-    let mut v = const_add(b, i)?;
+fn const_shift(b: &[u8], i: &mut usize, op: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
+    let mut v = const_add(b, i, op)?;
     loop {
         skip_ws(b, i);
-        let op = match (b.get(*i), b.get(*i + 1)) {
+        let sh = match (b.get(*i), b.get(*i + 1)) {
             (Some(b'<'), Some(b'<')) => b'<',
             (Some(b'>'), Some(b'>')) => b'>',
             _ => return Some(v),
         };
         *i += 2;
-        let rhs = const_add(b, i)?;
+        let rhs = const_add(b, i, op)?;
         // A shift count outside the width is not a constant this evaluator
         // will invent a value for.
         if !(0..64).contains(&rhs) {
             return None;
         }
-        v = if op == b'<' { v << rhs } else { v >> rhs };
+        v = if sh == b'<' { v << rhs } else { v >> rhs };
     }
 }
 
-fn const_add(b: &[u8], i: &mut usize) -> Option<i64> {
-    let mut v = const_mul(b, i)?;
+fn const_add(b: &[u8], i: &mut usize, op: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
+    let mut v = const_mul(b, i, op)?;
     loop {
         skip_ws(b, i);
-        let op = match b.get(*i) {
+        let add = match b.get(*i) {
             Some(&c @ (b'+' | b'-')) => c,
             _ => return Some(v),
         };
         *i += 1;
-        let rhs = const_mul(b, i)?;
-        v = if op == b'+' {
+        let rhs = const_mul(b, i, op)?;
+        v = if add == b'+' {
             v.checked_add(rhs)?
         } else {
             v.checked_sub(rhs)?
@@ -1719,17 +1750,17 @@ fn const_add(b: &[u8], i: &mut usize) -> Option<i64> {
     }
 }
 
-fn const_mul(b: &[u8], i: &mut usize) -> Option<i64> {
-    let mut v = const_unary(b, i)?;
+fn const_mul(b: &[u8], i: &mut usize, op: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
+    let mut v = const_unary(b, i, op)?;
     loop {
         skip_ws(b, i);
-        let op = match b.get(*i) {
+        let mul = match b.get(*i) {
             Some(&c @ (b'*' | b'/' | b'%')) => c,
             _ => return Some(v),
         };
         *i += 1;
-        let rhs = const_unary(b, i)?;
-        v = match op {
+        let rhs = const_unary(b, i, op)?;
+        v = match mul {
             b'*' => v.checked_mul(rhs)?,
             _ if rhs == 0 => return None,
             b'/' => v.checked_div(rhs)?,
@@ -1738,29 +1769,43 @@ fn const_mul(b: &[u8], i: &mut usize) -> Option<i64> {
     }
 }
 
-fn const_unary(b: &[u8], i: &mut usize) -> Option<i64> {
+fn const_unary(b: &[u8], i: &mut usize, op: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
     skip_ws(b, i);
     match b.get(*i) {
         Some(b'-') => {
             *i += 1;
-            const_unary(b, i)?.checked_neg()
+            const_unary(b, i, op)?.checked_neg()
         }
         Some(b'+') => {
             *i += 1;
-            const_unary(b, i)
+            const_unary(b, i, op)
         }
         Some(b'~') => {
             *i += 1;
-            Some(!const_unary(b, i)?)
+            Some(!const_unary(b, i, op)?)
         }
         Some(b'(') => {
             *i += 1;
-            let v = const_bitor(b, i)?;
+            let v = const_bitor(b, i, op)?;
             skip_ws(b, i);
             (b.get(*i) == Some(&b')')).then(|| {
                 *i += 1;
                 v
             })
+        }
+        // `%N` / `%cN` / `%PN`: an operand's compile-time constant, resolved
+        // by the caller. A bare `%` or a non-operand form is not a constant.
+        Some(b'%') => {
+            *i += 1;
+            if matches!(b.get(*i), Some(b'c' | b'P')) {
+                *i += 1;
+            }
+            let start = *i;
+            while *i < b.len() && b[*i].is_ascii_digit() {
+                *i += 1;
+            }
+            let idx: u8 = core::str::from_utf8(&b[start..*i]).ok()?.parse().ok()?;
+            op(idx)
         }
         _ => const_literal(b, i),
     }
@@ -2157,6 +2202,29 @@ mod asm_section_tests {
         );
         // A three-term expression is still unsupported.
         assert!(parse_section_value("a - b - c").is_err());
+    }
+
+    #[test]
+    fn section_operand_constant_expression() {
+        // `(1 << 15) | (%0)`: a constant expression whose leaves are integer
+        // literals and an operand constant. It parses as a deferred `Expr` and
+        // materializes with the operand resolved (a cpucap number 37, so
+        // 0x8000 | 37 = 0x8025).
+        assert_eq!(
+            parse_section_value("(1 << 15) | (%0)").unwrap(),
+            AsmSectionValue::Expr(alloc::string::String::from("(1 << 15) | (%0)")),
+        );
+        let text = ".pushsection .altinstructions,\"a\"\n.hword (1 << 15) | (%0)\n.popsection\n";
+        let (_code, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(&blocks, &|idx| (idx == 0).then_some(37), &|_| None, false, &mut sink)
+            .unwrap();
+        assert_eq!(sink[0].bytes, alloc::vec![0x25, 0x80]);
+        // A non-constant operand leaves the expression unresolved.
+        let mut sink2 = alloc::vec::Vec::new();
+        let err = materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink2)
+            .unwrap_err();
+        assert!(err.contains("non-constant"), "{err}");
     }
 
     #[test]

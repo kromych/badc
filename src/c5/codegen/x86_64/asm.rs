@@ -258,6 +258,24 @@ pub(crate) enum Concrete {
     Imm(i64),
 }
 
+/// Reject any `%N` template reference past the end of the operand list.
+/// Both the native emitter and the interpreter index the operand list by
+/// a reference's number, so the bound is checked once, up front.
+pub(crate) fn check_operand_refs(insns: &[AsmInsn], n_operands: usize) -> Result<(), String> {
+    for insn in insns {
+        for o in &insn.operands {
+            if let AsmOpnd::Ref { idx, .. } = *o
+                && idx as usize >= n_operands
+            {
+                return Err(alloc::format!(
+                    "inline asm: `%{idx}` names no operand ({n_operands} operands)"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Map an AT&T register name (without the `%` prefix) to its
 /// architectural number and access size. Covers the 8/16/32/64-bit
 /// names for the 16 GPRs.

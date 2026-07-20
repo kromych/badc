@@ -2049,6 +2049,8 @@ fn run_inline_asm(
             "inline asm: explicit memory operands are not supported under --interp",
         )));
     }
+    crate::c5::codegen::x86_64::asm::check_operand_refs(&insns, asm.operands.len())
+        .map_err(C5Error::Runtime)?;
     let op_reg =
         crate::c5::codegen::x86_64::asm::assign_operand_regs(&asm.operands, asm.clobber_fp_regs)
             .map_err(C5Error::Runtime)?;

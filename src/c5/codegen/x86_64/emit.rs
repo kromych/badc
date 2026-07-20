@@ -5934,6 +5934,10 @@ fn emit_inline_asm(
             return false;
         }
     };
+    if let Err(m) = super::asm::check_operand_refs(&insns, asm.operands.len()) {
+        bail_msg(&m);
+        return false;
+    }
     let op_reg = match super::asm::assign_operand_regs(&asm.operands, asm.clobber_fp_regs) {
         Ok(r) => r,
         Err(m) => {

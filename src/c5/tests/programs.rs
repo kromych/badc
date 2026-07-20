@@ -2448,6 +2448,16 @@ fn pointer_to_array_arithmetic_scales_by_array_size() {
 }
 
 #[test]
+fn pointer_to_array_cast_keeps_pointee_size() {
+    // C99 6.7.6: the abstract declarator `T (*)[N]` in a cast builds the
+    // same type as the named `T (*p)[N]`, so `sizeof(*(T (*)[N])p)` is the
+    // row and arithmetic strides by it. The dimension used to be parsed and
+    // discarded, and the deref of the cast result was swallowed by the
+    // function-pointer decay branch.
+    assert_eq!(run_fixture("pointer_to_array_cast.c"), 0);
+}
+
+#[test]
 fn typedef_at_function_body_top_level() {
     // C99 6.7.7 + 6.2.1: a `typedef` is a declaration valid at the
     // function-body top level (before or after a statement), with block

@@ -2017,8 +2017,15 @@ impl Compiler {
                 // shapes consume cleanly.
                 let mut cast_fn_proto = None;
                 if self.lex.tk == '(' {
-                    let (nested_ptrs, proto) = self.parse_abstract_ptr_declarator(true)?;
-                    t += nested_ptrs * (Ty::Ptr as i64);
+                    let (nested_ptrs, proto, dims) = self.parse_abstract_ptr_declarator(true)?;
+                    // `T (*)[N]`: fold the pointee dimensions into the
+                    // aggregate-backed tag so the pointee keeps its size,
+                    // matching the named declarator `T (*p)[N]`.
+                    if !dims.is_empty() && nested_ptrs > 0 {
+                        t = self.array_agg_type(t, &dims) + nested_ptrs * (Ty::Ptr as i64);
+                    } else {
+                        t += nested_ptrs * (Ty::Ptr as i64);
+                    }
                     // Abstract fn-ptr declarator: the inner `*`
                     // count IS the indirection from the cast's
                     // result down to the fn-ptr rvalue, plus 1
@@ -2242,7 +2249,18 @@ impl Compiler {
             // `io_methods *`-returning fn-ptr typedef)
             // the pop is short-circuited and the
             // garbage call target slips through.
-            if self.pending.fn_ptr_chain_depth == 0 {
+            if let Some(id) = self.ptr_array_id_depth1(self.ty) {
+                // Tested ahead of the function-pointer decay below: a
+                // pointer-to-array tag is never a function pointer, and a
+                // cast leaves the chain depth at 0, which would otherwise
+                // take the decay branch and drop the dereference.
+                //
+                // Pointer-to-array at the last level: `*p` reaches the
+                // array itself, which decays to the element pointer
+                // (C99 6.3.2.1p3). The operand's load already produced
+                // the row address; no further load, no Ptr peel.
+                self.decay_ptr_array_value(id);
+            } else if self.pending.fn_ptr_chain_depth == 0 {
                 // Decay no-op. Keep depth at 0: the decayed
                 // result is itself a fn-ptr rvalue, so any
                 // further `*`s also decay. No scalar load fired,

@@ -142,6 +142,13 @@ impl Compiler {
                 self.parse_static_assert()?;
                 continue;
             }
+            // An empty struct-declaration (a stray `;`) declares no
+            // member. gcc and clang accept it in a member list as an
+            // extension, diagnosed only under `-pedantic`.
+            if self.lex.tk == ';' {
+                self.next()?;
+                continue;
+            }
             // Reset the typedef-array carrier between field groups
             // (`jmp_buf env;` then `int code;`). The aggregate
             // parser has its own inline base-type reader and does

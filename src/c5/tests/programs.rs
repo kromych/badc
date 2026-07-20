@@ -4158,6 +4158,14 @@ fn builtin_choose_expr() {
 }
 
 #[test]
+fn empty_declaration() {
+    // A stray `;` declares nothing: accepted in a struct/union member
+    // list and at file scope (gcc/clang extension), without opening a
+    // new field group or perturbing layout.
+    assert_eq!(run_fixture("empty_declaration.c"), 0);
+}
+
+#[test]
 fn builtin_constant_p() {
     // `__builtin_constant_p(x)` folds to 1 for a constant operand and 0
     // for a runtime one, in both constant-expression and runtime

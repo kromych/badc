@@ -1269,3 +1269,55 @@ fn section_and_alias_operand_constraints() {
         "not an object defined earlier",
     );
 }
+
+fn expect_compiles(src: &str, what: &str) {
+    assert!(
+        Compiler::new(src.to_string()).compile().is_ok(),
+        "{} should compile, got {:?}",
+        what,
+        Compiler::new(src.to_string()).compile().err(),
+    );
+}
+
+#[test]
+fn empty_declaration_accepted_where_gcc_accepts_it() {
+    // A stray `;` declares nothing. gcc and clang accept an empty
+    // declaration in a struct/union member list and at file scope
+    // (diagnosed only under `-pedantic`).
+    expect_compiles(
+        "struct S { void *lock;; };\n\
+         int main(void) { struct S s; s.lock = 0; return s.lock != 0; }",
+        "a trailing `;` in a member list",
+    );
+    expect_compiles(
+        "struct S { ; int x; };\n\
+         int main(void) { struct S s; s.x = 0; return s.x; }",
+        "a leading `;` in a member list",
+    );
+    expect_compiles(
+        "struct S { ; };\n\
+         int main(void) { struct S s; (void)s; return 0; }",
+        "a member list holding only `;`",
+    );
+    expect_compiles(
+        "union U { int a;;; long b; };\n\
+         int main(void) { union U u; u.a = 0; return u.a; }",
+        "repeated `;` in a union member list",
+    );
+    expect_compiles(
+        "int a;;\n; int b;\n\
+         int main(void) { a = 0; b = 0; return a + b; }",
+        "an empty declaration at file scope",
+    );
+}
+
+#[test]
+fn empty_declaration_in_enum_list_rejected() {
+    // gcc and clang both reject a `;` in an enumerator list ("expected
+    // ',' or '}'"), so the member-list extension does not extend here.
+    expect_compile_error(
+        "enum E { A;, B };\n\
+         int main(void) { return A; }",
+        "bad enum identifier",
+    );
+}

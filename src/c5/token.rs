@@ -396,6 +396,11 @@ pub(crate) enum Token {
     /// `typeof(initializer)`. Added at the end so the operator
     /// ordinals are unchanged.
     AutoType,
+    /// GCC `__label__ name, ...;`: a declaration at the start of a block
+    /// giving each name a label scoped to that block rather than to the
+    /// whole function. Added at the end so the operator ordinals are
+    /// unchanged.
+    LocalLabel,
 }
 
 /// Map a token-id (the value stored in `lex.tk` as i64) back to a
@@ -466,6 +471,7 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::Break as i64 => "`break`",
         x if x == Token::Continue as i64 => "`continue`",
         x if x == Token::Goto as i64 => "`goto`",
+        x if x == Token::LocalLabel as i64 => "`__label__`",
         x if x == Token::Switch as i64 => "`switch`",
         x if x == Token::Case as i64 => "`case`",
         x if x == Token::Default as i64 => "`default`",

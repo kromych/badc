@@ -1980,6 +1980,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("__signed", Token::Signed),
     ("__signed__", Token::Signed),
     ("__extension__", Token::Extension),
+    ("__label__", Token::LocalLabel),
     ("unsigned", Token::Unsigned),
     ("short", Token::Short),
     ("long", Token::Long),

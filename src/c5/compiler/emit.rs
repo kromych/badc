@@ -1341,6 +1341,23 @@ impl Compiler {
             .push_stmt(super::super::ast::Stmt::Default { body }, pos)
     }
 
+    /// Map a label name as written to the key it interns under. A name
+    /// declared `__label__` by an open block resolves to that block's
+    /// unique key, innermost first; any other name is function-scoped
+    /// and keys under itself. Every label consumer (`label:`, `goto`,
+    /// `&&label`, the `asm goto` label list) resolves through here, so
+    /// the block-scoped and function-scoped name spaces stay disjoint.
+    pub(super) fn resolve_label_name(&self, name: &str) -> alloc::string::String {
+        for scope in self.local_label_scopes.iter().rev() {
+            for (declared, key) in scope.iter().rev() {
+                if declared == name {
+                    return key.clone();
+                }
+            }
+        }
+        alloc::string::String::from(name)
+    }
+
     /// Allocate a fresh AST label slot. `self.labels` /
     /// `self.unresolved_gotos` track names for the goto-vs-label
     /// diagnostics; the AST mirror keeps a flat per-function id
@@ -1466,6 +1483,16 @@ impl Compiler {
             .ast
             .push_expr(super::super::ast::Expr::Assign { lhs, rhs, ty }, pos);
         self.ast_acc = Some(id);
+    }
+}
+
+/// Recover the name as written from a label key. Keys minted for
+/// `__label__` declarations carry a `#<seq>` suffix that must not reach
+/// a diagnostic; function-scoped keys are the name itself.
+pub(super) fn label_display_name(key: &str) -> &str {
+    match key.find('#') {
+        Some(cut) => &key[..cut],
+        None => key,
     }
 }
 

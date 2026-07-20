@@ -612,6 +612,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("local_aggregate_runtime_init.c", 0),
     ("aggregate_init_struct_member_copy.c", 0),
     ("computed_goto.c", 0),
+    ("local_label.c", 0),
     ("label_addr_array_init.c", 0),
     ("static_init_once_guard.c", 0),
     ("computed_goto_static_table.c", 0),

@@ -1191,6 +1191,17 @@ pub(crate) fn scan_label_names(text: &str) -> Vec<&str> {
 pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
     let text =
         core::str::from_utf8(tmpl).map_err(|_| String::from("inline asm: non-UTF8 template"))?;
+    let stripped;
+    let text = match super::super::ssa::emit_common::strip_asm_comments(
+        text,
+        super::super::ssa::emit_common::AsmComments::X86,
+    ) {
+        Some(t) => {
+            stripped = t;
+            stripped.as_str()
+        }
+        None => text,
+    };
     let expanded;
     let text = match super::super::ssa::emit_common::expand_template_uniq(text) {
         Some(t) => {

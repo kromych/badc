@@ -1148,14 +1148,91 @@ pub(crate) fn materialize_asm_sections(
 pub(crate) fn materialize_file_asm(
     templates: &[alloc::string::String],
     align_is_p2: bool,
+    comments: AsmComments,
     sink: &mut alloc::vec::Vec<AsmSection>,
 ) -> Result<(), alloc::string::String> {
     for text in templates {
+        let stripped = strip_asm_comments(text, comments);
+        let text = stripped.as_deref().unwrap_or(text);
         if let Some((_code, blocks)) = extract_asm_sections(text)? {
             materialize_asm_sections(&blocks, &|_| None, &|_| None, align_is_p2, sink)?;
         }
     }
     Ok(())
+}
+
+/// Assembler comment syntax of a target.
+///
+/// Both targets accept `/* */` block comments anywhere, keep `;` and newline
+/// as statement separators, and never strip inside a string literal. They
+/// differ in the line-comment characters:
+///
+/// * x86-64: `#` starts a comment anywhere in a line. GNU as rejects `//` as
+///   junk after an operand, so no valid template relies on it and treating it
+///   as a comment matches the clang integrated assembler.
+/// * aarch64: `//` starts a comment anywhere. `#` prefixes an immediate
+///   (`mov x0, #1`) and starts a comment only as the first token of a
+///   statement, which is where the `#`-prefixed line markers appear.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum AsmComments {
+    X86,
+    A64,
+}
+
+/// Strip assembler comments from an inline-asm template. A block comment
+/// becomes one space so the tokens around it stay separate; a line comment
+/// runs to the newline, which is kept because it separates statements.
+/// Returns `None` when the template has no comment character.
+///
+/// Comments go before statement splitting: a line comment swallows any `;`
+/// after it, and a `;` or newline inside a block comment does not separate
+/// statements.
+pub(crate) fn strip_asm_comments(text: &str, syntax: AsmComments) -> Option<alloc::string::String> {
+    if !text.contains("/*") && !text.contains("//") && !text.contains('#') {
+        return None;
+    }
+    let b = text.as_bytes();
+    let mut out = alloc::string::String::with_capacity(text.len());
+    let mut i = 0;
+    // A statement starts at the template start and after every separator;
+    // leading whitespace does not end it.
+    let mut at_stmt_start = true;
+    while i < b.len() {
+        let c = b[i];
+        if c == b'"' {
+            let start = i;
+            i += 1;
+            while i < b.len() && b[i] != b'"' {
+                i += if b[i] == b'\\' { 2 } else { 1 };
+            }
+            i = b.len().min(i + 1);
+            out.push_str(&text[start..i]);
+            at_stmt_start = false;
+            continue;
+        }
+        if c == b'/' && b.get(i + 1) == Some(&b'*') {
+            // An unterminated block comment runs to the end of the template.
+            i = text[i + 2..].find("*/").map_or(b.len(), |p| i + 2 + p + 2);
+            out.push(' ');
+            continue;
+        }
+        let line_comment = (c == b'/' && b.get(i + 1) == Some(&b'/'))
+            || (c == b'#' && (syntax == AsmComments::X86 || at_stmt_start));
+        if line_comment {
+            while i < b.len() && b[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if c == b'\n' || c == b';' {
+            at_stmt_start = true;
+        } else if !c.is_ascii_whitespace() {
+            at_stmt_start = false;
+        }
+        out.push(char::from(c));
+        i += 1;
+    }
+    Some(out)
 }
 
 /// Per-process counter behind the `%=` template escape.
@@ -1432,6 +1509,95 @@ pub(crate) fn record_block_start_pc(
     // middle (or end) of `main` instead of its prologue.
     if block_idx > 0 && block_start_pc != 0 && block_start_pc < pc_to_native.len() {
         pc_to_native[block_start_pc] = code_len;
+    }
+}
+
+#[cfg(test)]
+mod asm_comment_tests {
+    use super::*;
+
+    fn x86(t: &str) -> alloc::string::String {
+        strip_asm_comments(t, AsmComments::X86).unwrap_or_else(|| t.into())
+    }
+    fn a64(t: &str) -> alloc::string::String {
+        strip_asm_comments(t, AsmComments::A64).unwrap_or_else(|| t.into())
+    }
+
+    /// A template with no comment character is returned untouched.
+    #[test]
+    fn no_comment_chars_is_none() {
+        assert!(strip_asm_comments("mov %rax, %rbx", AsmComments::X86).is_none());
+        assert!(strip_asm_comments("mov x0, x1", AsmComments::A64).is_none());
+    }
+
+    /// Block comments are stripped on both targets, including multi-line and
+    /// mid-instruction forms, and leave a separator behind.
+    #[test]
+    fn block_comments_stripped_on_both_targets() {
+        assert_eq!(x86("mov %rax, %rbx /* tail */"), "mov %rax, %rbx  ");
+        assert_eq!(a64("mov x0, x1 /* tail */"), "mov x0, x1  ");
+        // Multi-line: the newline inside the comment does not separate.
+        assert_eq!(x86("/* a\nb */ nop"), "  nop");
+        // Mid-instruction: the surrounding tokens stay separate.
+        assert_eq!(x86("mov %rax,/* c */%rbx"), "mov %rax, %rbx");
+        // A `;` inside a block comment does not split a statement.
+        assert_eq!(a64("mov x0, x1 /* a ; b */"), "mov x0, x1  ");
+    }
+
+    /// x86-64 takes `#` as a line comment anywhere in the line; the comment
+    /// swallows a following `;` because it runs to the newline.
+    #[test]
+    fn x86_hash_is_a_line_comment() {
+        assert_eq!(x86("mov %rax, %rbx # trailing"), "mov %rax, %rbx ");
+        assert_eq!(x86("nop # a ; nop\nnop"), "nop \nnop");
+        assert_eq!(x86("# whole line\nnop"), "\nnop");
+    }
+
+    /// aarch64 takes `#` as the immediate prefix, not a comment, unless it
+    /// opens a statement (template start, after a newline, or after a `;`).
+    #[test]
+    fn a64_hash_is_an_immediate_not_a_comment() {
+        assert_eq!(a64("mov x0, #1"), "mov x0, #1");
+        assert_eq!(a64("movz x3, #0x1234, lsl #16"), "movz x3, #0x1234, lsl #16");
+        // Statement-opening `#` comments to end of line, leading whitespace
+        // included, and swallows a `;` after it.
+        assert_eq!(a64("   # lead\nmov x0, #1"), "   \nmov x0, #1");
+        assert_eq!(a64("mov x0, #1 ; # c ; mov x2, #3\nnop"), "mov x0, #1 ; \nnop");
+    }
+
+    /// `//` is a line comment on both targets: it is aarch64's comment
+    /// character, and GNU as rejects it on x86-64 so no template relies on it.
+    #[test]
+    fn slash_slash_is_a_line_comment() {
+        assert_eq!(a64("mov x0, x1 // tail"), "mov x0, x1 ");
+        assert_eq!(x86("mov %rax, %rbx // tail"), "mov %rax, %rbx ");
+        assert_eq!(a64("// whole\nmov x0, x1"), "\nmov x0, x1");
+    }
+
+    /// `;` separates statements on both targets and is never a comment.
+    #[test]
+    fn semicolon_is_a_separator_not_a_comment() {
+        assert_eq!(x86("nop ; nop # c"), "nop ; nop ");
+        assert_eq!(a64("mov x0, #1 ; mov x2, #3"), "mov x0, #1 ; mov x2, #3");
+    }
+
+    /// A comment character inside a string literal is data: GNU as keeps it,
+    /// so a quoted section name or `.ascii` payload survives intact.
+    #[test]
+    fn comment_chars_inside_strings_are_kept() {
+        assert_eq!(x86(".ascii \"a /* b\""), ".ascii \"a /* b\"");
+        assert_eq!(x86(".section \"a#b\",\"a\" # c"), ".section \"a#b\",\"a\" ");
+        assert_eq!(a64(".ascii \"x // y\""), ".ascii \"x // y\"");
+        // An escaped quote does not end the literal.
+        assert_eq!(x86(".ascii \"a\\\" /* b\""), ".ascii \"a\\\" /* b\"");
+    }
+
+    /// The condition-code output macro shape from the sweep: a block comment
+    /// between two instructions of one template.
+    #[test]
+    fn block_comment_between_instructions() {
+        let t = "btl %2,%1\n\t/* output condition code c*/\n\tsetc %[_cc_c]\n";
+        assert_eq!(x86(t), "btl %2,%1\n\t \n\tsetc %[_cc_c]\n");
     }
 }
 

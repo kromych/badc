@@ -1730,7 +1730,12 @@ pub(crate) fn lower(
     let mut asm_sections: Vec<super::ssa::emit_common::AsmSection> = Vec::new();
     // File-scope asm section blocks precede the per-function ones
     // (`.align` takes a byte count on x86-64 ELF).
-    super::ssa::emit_common::materialize_file_asm(&program.file_asm, false, &mut asm_sections)
+    super::ssa::emit_common::materialize_file_asm(
+        &program.file_asm,
+        false,
+        super::ssa::emit_common::AsmComments::X86,
+        &mut asm_sections,
+    )
         .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();

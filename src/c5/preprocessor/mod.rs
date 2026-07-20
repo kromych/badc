@@ -750,11 +750,18 @@ impl Preprocessor {
     /// `gcc`/`clang -std=c11` does, so portable code uses the standard
     /// path for the GNU-only features badc lacks.
     pub fn enable_gnu(&mut self) {
-        // The claimed version stays at 4.2.1. Raising it to 5.1 to clear
-        // the common `__GNUC__ < 5` gates makes real headers select paths
-        // badc cannot compile: an array type-name argument to
-        // `__builtin_types_compatible_p`, and `<x86intrin.h>`. Raise it
-        // once those are backed.
+        // The claimed version stays at 4.2.1. The language features a 5.1
+        // claim implies are backed -- `__atomic_*` (4.7), `asm goto`
+        // (4.5), `__builtin_types_compatible_p` including array type
+        // names, designated-initializer ranges, `__builtin_*_overflow`
+        // (5.1) -- but the version also gates the x86 intrinsic surface.
+        // Real code keys `<x86intrin.h>` and the SSE2 / SSSE3 / SSE4.1 /
+        // AES-NI / PCLMUL / RDRAND intrinsic families off `__GNUC__ >=
+        // 4.4`, along with per-function `__attribute__((target(...)))`.
+        // badc lowers none of those, so 4.2.1 is the highest version it
+        // can claim without selecting paths it cannot compile. Raise it
+        // once the intrinsics are lowered, not merely once a header
+        // named `<x86intrin.h>` exists.
         self.macros.insert("__GNUC__".to_string(), "4".to_string());
         self.macros
             .insert("__GNUC_MINOR__".to_string(), "2".to_string());

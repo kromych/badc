@@ -452,11 +452,13 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<InsnBuf, String> {
     let rm_hi = rm_op.map(|o| reg_num(o) >= 8).unwrap_or(false);
     // REX.X extends a SIB index register.
     let index_hi = matches!(rm_op, Some(Opnd::Mem { index: Some(i), .. }) if i >= 8);
-    // A byte operation naming spl/bpl/sil/dil (4..8) needs a REX to reach the
-    // new byte registers rather than ah/ch/dh/bh.
-    let byte_rex = opw == 1
-        && (matches!(reg_op, Some(Opnd::Reg { num, .. }) if (4..8).contains(&num))
-            || matches!(rm_op, Some(Opnd::Reg { num, .. }) if (4..8).contains(&num)));
+    // A byte register spl/bpl/sil/dil (4..8) needs a REX to be named at all,
+    // otherwise those encodings mean ah/ch/dh/bh. The requirement is a
+    // property of the operand, not of the operation width: movsx/movzx mix a
+    // byte source with a wider destination, so `opw` is not 1 there.
+    let byte_reg =
+        |o: Option<Opnd>| matches!(o, Some(Opnd::Reg { num, width: 1 }) if (4..8).contains(&num));
+    let byte_rex = byte_reg(reg_op) || byte_reg(rm_op);
     if w || reg_hi || rm_hi || index_hi || byte_rex {
         code.push(rex(w, reg_hi, index_hi, rm_hi));
     }

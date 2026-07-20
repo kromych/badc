@@ -1824,6 +1824,74 @@ fn atomic128_store_insert_aarch64() {
     assert!(any_bic, "store-insert must emit a BIC (mask clear)");
 }
 
+/// The AArch64 `Q` constraint: a memory operand whose address is a single
+/// base register, substituted as `[xN]`. Operand registers assign in pool
+/// order (x0, x1, ...), so the expected words are exact; each is verified
+/// against `clang -target aarch64-linux-gnu`.
+#[test]
+fn q_constraint_acquire_release_aarch64() {
+    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    let program = Compiler::with_target(
+        "long la(long *p){ long v;\n\
+           __asm__ volatile(\"ldar %0, %1\" : \"=r\"(v) : \"Q\"(*p) : \"memory\");\n\
+           return v; }\n\
+         void sr(long *p, long v){\n\
+           __asm__ volatile(\"stlr %1, %0\" : \"=Q\"(*p) : \"r\"(v) : \"memory\"); }\n\
+         int main(){ return 0; }"
+            .to_string(),
+        Target::LinuxAarch64,
+    )
+    .compile()
+    .expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, NativeOptions::default())
+        .expect("emit LinuxAarch64");
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    // `=r` -> x0, `Q` -> x1; `=Q` -> x0, `r` -> x1.
+    assert!(words().any(|w| w == 0xC8DF_FC20), "ldar x0, [x1]");
+    assert!(words().any(|w| w == 0xC89F_FC01), "stlr x1, [x0]");
+}
+
+/// The `+Q` read-write form in an LL/SC retry loop: one `%2` reference
+/// feeds both exclusive instructions, and the `%w` modifiers on the other
+/// operands are unaffected. The four words must be contiguous; each is
+/// verified against `clang -target aarch64-linux-gnu`.
+#[test]
+fn q_constraint_llsc_loop_aarch64() {
+    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    let program = Compiler::with_target(
+        "unsigned fa(unsigned *p, unsigned inc){ unsigned res, tmp;\n\
+           __asm__ volatile(\"1: ldxr %w0, %2\\n\\t\"\n\
+                            \"add %w0, %w0, %w3\\n\\t\"\n\
+                            \"stxr %w1, %w0, %2\\n\\t\"\n\
+                            \"cbnz %w1, 1b\"\n\
+                            : \"=&r\"(res), \"=&r\"(tmp), \"+Q\"(*p)\n\
+                            : \"r\"(inc) : \"memory\");\n\
+           return res; }\n\
+         int main(){ return 0; }"
+            .to_string(),
+        Target::LinuxAarch64,
+    )
+    .compile()
+    .expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, NativeOptions::default())
+        .expect("emit LinuxAarch64");
+    // res -> x0, tmp -> x1, `+Q` -> x2 (address), inc -> x3.
+    let expected: [u32; 4] = [
+        0x885F_7C40, // ldxr w0, [x2]
+        0x0B03_0000, // add w0, w0, w3
+        0x8801_7C40, // stxr w1, w0, [x2]
+        0x35FF_FFA1, // cbnz w1, 1b (-12)
+    ];
+    let found = bytes.windows(16).any(|w| {
+        (0..4).all(|i| u32::from_le_bytes(w[i * 4..i * 4 + 4].try_into().unwrap()) == expected[i])
+    });
+    assert!(found, "expected the contiguous ldxr/add/stxr/cbnz loop");
+}
+
 /// Bytes of the section named `name` in an ELF64 little-endian
 /// object, or `None` when absent. Reads only the section header
 /// table and the section-name string table.

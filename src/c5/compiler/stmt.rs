@@ -1534,7 +1534,7 @@ impl Compiler {
             // addressable" / an output operand must be an lvalue). An empty
             // accumulator falls through to the "operand expression expected"
             // check below.
-            if is_output || matches!(constraint, AsmConstraint::Mem) {
+            if is_output || matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase) {
                 let addressable = match self.ast_acc {
                     Some(id) => {
                         use super::super::ast::Expr;
@@ -1796,9 +1796,10 @@ impl Compiler {
     /// [`ir::AsmConstraint`] and whether it is a read-write (`+`)
     /// output. `is_output` selects the output vs input grammar;
     /// `n_outputs` is the count of outputs already parsed, so a digit
-    /// (matching) constraint resolves to an earlier output; `is_x86`
-    /// enables the x86_64-only flag-output form. Returns `None` for a
-    /// constraint the codegen does not model.
+    /// (matching) constraint resolves to an earlier output. `is_x86`
+    /// selects the target-specific letters: the flag-output form on
+    /// x86_64, `Q` on AArch64. Returns `None` for a constraint the
+    /// codegen does not model.
     ///
     /// A constraint naming several alternatives (`rm`, `=qm`, `ri`) is
     /// satisfied by the register alternative whenever the constraint
@@ -1831,6 +1832,11 @@ impl Compiler {
         // would be read as ordinary class letters.
         if body.contains('@') {
             return None;
+        }
+        // AArch64 `Q`: a base-register-only memory operand. The x86 `Q`
+        // (the legacy high-byte register class) is not modeled.
+        if !is_x86 && body == "Q" {
+            return Some((AsmConstraint::MemBase, is_rw));
         }
         // A matching constraint ties an input to an earlier output.
         if let Some(d) = body.chars().find(|c| c.is_ascii_digit()) {

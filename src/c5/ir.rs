@@ -584,6 +584,11 @@ pub(crate) enum AsmConstraint {
     /// nibble; after the template runs, `set<cond>` materializes 0 or 1
     /// into the destination, zero-extended to the operand width.
     Flags(u8),
+    /// AArch64 `Q` (`Q`, `=Q`, `+Q`): a memory operand whose address is a
+    /// single base register with no offset, the addressing mode the
+    /// acquire/release and exclusive instructions take. Assigned a
+    /// register to hold the address; a template `%N` substitutes as `[xN]`.
+    MemBase,
 }
 
 /// One operand of a GCC extended-asm statement.

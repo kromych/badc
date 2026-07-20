@@ -2464,7 +2464,7 @@ fn emit_inline_asm_aarch64(
             }
             continue;
         }
-        if matches!(op.constraint, AsmConstraint::Mem) || !op.is_output {
+        if matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::MemBase) || !op.is_output {
             emit_sp_ldr_x(code, Reg(r), cap_off(i));
         } else if op.is_rw {
             emit_sp_ldr_x(code, Reg(16), cap_off(i)); // x16 = destination address
@@ -2550,6 +2550,14 @@ fn emit_inline_asm_aarch64(
                     Opnd::VReg {
                         num: r,
                         is_d: is64.unwrap_or(true),
+                    }
+                } else if matches!(asm.operands[idx as usize].constraint, AsmConstraint::MemBase) {
+                    // A `Q` operand substitutes as the whole memory
+                    // reference `[xN]` through its address register.
+                    Opnd::Mem {
+                        base: r,
+                        off: 0,
+                        pre: false,
                     }
                 } else {
                     let is64 = is64.unwrap_or(asm.operands[idx as usize].width >= 8);
@@ -2853,7 +2861,7 @@ fn emit_inline_asm_aarch64(
     // semantics), so the sequence repeats on each trampoline.
     let emit_outputs = |code: &mut Vec<u8>| -> bool {
         for (i, op) in asm.operands.iter().enumerate() {
-            if !op.is_output || matches!(op.constraint, AsmConstraint::Mem) {
+            if !op.is_output || matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::MemBase) {
                 continue;
             }
             let Some(r) = op_reg[i] else { continue };

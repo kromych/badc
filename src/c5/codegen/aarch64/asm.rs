@@ -1152,7 +1152,7 @@ pub(crate) fn assign_operand_regs(
     // x0..x15 are the allocatable pool; x16/x17 are the emitter's scratch.
     let pool: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
     for (i, op) in operands.iter().enumerate() {
-        if matches!(op.constraint, C::Reg | C::Mem) {
+        if matches!(op.constraint, C::Reg | C::Mem | C::MemBase) {
             let r = pool
                 .iter()
                 .copied()
@@ -1754,6 +1754,29 @@ mod tests {
         let insns = parse_template(b"cbnz %w0, %l1").unwrap();
         assert_eq!(insns[0].mnemonic, "cbnz");
         assert_eq!(insns[0].operands[1], AsmOpndA64::GotoLabel(1));
+    }
+
+    #[test]
+    fn assign_mem_base_operands() {
+        use crate::c5::ir::{AsmConstraint as C, AsmOperand};
+        let op = |constraint, is_output, is_rw| AsmOperand {
+            constraint,
+            is_output,
+            is_rw,
+            width: 4,
+        };
+        // The LL/SC operand shape `=&r, =&r, +Q, r`: the `Q` operand takes a
+        // pool register for its address, like `m`.
+        let ops = [
+            op(C::Reg, true, false),
+            op(C::Reg, true, false),
+            op(C::MemBase, true, true),
+            op(C::Reg, false, false),
+        ];
+        assert_eq!(
+            assign_operand_regs(&ops, 0, 0).unwrap(),
+            [Some(0), Some(1), Some(2), Some(3)]
+        );
     }
 
     #[test]

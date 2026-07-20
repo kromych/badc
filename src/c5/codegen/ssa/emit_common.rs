@@ -1551,6 +1551,9 @@ mod asm_comment_tests {
         assert_eq!(x86("mov %rax,/* c */%rbx"), "mov %rax, %rbx");
         // A `;` inside a block comment does not split a statement.
         assert_eq!(a64("mov x0, x1 /* a ; b */"), "mov x0, x1  ");
+        // A block comment spanning a newline joins the statements around it,
+        // which GNU as also does (and then rejects the run-on statement).
+        assert_eq!(a64("mov x0, x1 /* a\nb */ mov x2, x3"), "mov x0, x1   mov x2, x3");
     }
 
     /// x86-64 takes `#` as a line comment anywhere in the line; the comment

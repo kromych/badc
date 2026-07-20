@@ -128,13 +128,6 @@ impl Compiler {
         // share the bits left in a larger-typed neighbour's unit.
         let mut bf_active = false;
         let mut bf_bit_cursor: usize = 0;
-        // Set once any field is declared. The empty-aggregate floor to
-        // 1 byte below applies only to a truly fieldless `struct {}`; an
-        // aggregate with members whose sizes sum to 0 (flexible /
-        // zero-length arrays, or nested size-0 aggregates) has size 0
-        // (gcc / clang), and flooring it would add a spurious byte that
-        // mis-pads any enclosing aggregate.
-        let mut saw_field = false;
         while self.lex.tk != '}' {
             // C11 6.7.2.1: a static_assert-declaration may appear in the
             // struct-declaration-list. It declares no member, so handle
@@ -451,7 +444,6 @@ impl Compiler {
                         } else {
                             (inner_field.anon_union_group, inner_id as u32 + 1)
                         };
-                        saw_field = true;
                         self.structs[struct_id].fields.push(StructField {
                             name: inner_field.name,
                             offset: base_offset + inner_field.offset,
@@ -779,7 +771,6 @@ impl Compiler {
 
                 let field_inner_array_size = self.symbols[id_idx].inner_array_size;
                 let field_array_dims = core::mem::take(&mut self.symbols[id_idx].array_dims);
-                saw_field = true;
                 self.structs[struct_id].fields.push(StructField {
                     name: field_name,
                     offset: field_offset,

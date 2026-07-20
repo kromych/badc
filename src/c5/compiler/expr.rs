@@ -3208,14 +3208,15 @@ impl Compiler {
                     let else_npc = else_ast.is_some_and(|e| self.expr_is_null_pointer_constant(e));
                     let then_sp = is_struct_ty(then_ty) && struct_ptr_depth(then_ty) > 0;
                     let else_sp = is_struct_ty(else_ty) && struct_ptr_depth(else_ty) > 0;
+                    // Both pointers: the null-pointer-constant arm yields the
+                    // other arm's type, and a `void*` arm yields `void*`. The
+                    // two rules pick the same side here, so they share an arm.
                     result_ty = if then_ptr && else_ptr && then_npc && !else_npc {
                         else_ty
-                    } else if then_ptr && else_ptr && else_npc && !then_npc {
-                        then_ty
                     } else if then_ptr
                         && else_ptr
-                        && is_void_ptr_ty(then_ty)
-                        && !is_char_band_ptr_ty(else_ty)
+                        && ((else_npc && !then_npc)
+                            || (is_void_ptr_ty(then_ty) && !is_char_band_ptr_ty(else_ty)))
                     {
                         then_ty
                     } else if then_ptr

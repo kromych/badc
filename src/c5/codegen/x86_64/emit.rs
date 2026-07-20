@@ -1826,6 +1826,9 @@ pub(crate) fn emit_function(
                         name2entpc,
                         asm_sections,
                         asm_extern_call_sites,
+                        data_fixups,
+                        user_extern_data_refs,
+                        extern_data_names,
                         Some(AsmGotoCtx {
                             row: &func.jump_tables[table as usize],
                             branch_fixups: &mut branch_fixups,
@@ -1865,6 +1868,7 @@ pub(crate) fn emit_function(
                         param_from_home: &param_from_home,
                         param_plan: &param_plan,
                         name2entpc,
+                        extern_data_names,
                     };
                     emit_inst(&mut cx, inst, v, place, &fcx, fixups)
                 };
@@ -1890,6 +1894,7 @@ pub(crate) fn emit_function(
                     user_extern_data_refs.push(super::UserExternDataRef {
                         instr_offset: popped.adrp_offset,
                         symbol_name: name.clone(),
+                        direct_pcrel: None,
                     });
                 }
             }
@@ -2809,6 +2814,10 @@ struct FnCtx<'a> {
     /// Function name -> entry PC, for resolving an inline-asm `call`/`jmp` to a
     /// bare symbol into a relocation.
     name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
+    /// Value-id -> cross-TU data symbol name (the `Inst::ImmData` extern
+    /// refs), for resolving an inline-asm `%a` address operand naming an
+    /// external global to a direct RIP-relative relocation.
+    extern_data_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
 }
 
 fn emit_inst(
@@ -2834,12 +2843,14 @@ fn emit_inst(
         param_from_home,
         param_plan,
         name2entpc,
+        extern_data_names,
     } = *fcx;
     // The bundled emit output now arrives in `cx`; recreate the per-field
     // names as disjoint reborrows so the per-`Inst` lowering below is unchanged.
     let code = &mut *cx.code;
     let plt_call_fixups = &mut *cx.plt_call_fixups;
     let data_fixups = &mut *cx.data_fixups;
+    let user_extern_data_refs = &mut *cx.user_extern_data_refs;
     let pending_func_fixups = &mut *cx.pending_func_fixups;
     let tls_index_fixups = &mut *cx.tls_index_fixups;
     let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
@@ -3180,6 +3191,9 @@ fn emit_inst(
             name2entpc,
             asm_sections,
             asm_extern_call_sites,
+            data_fixups,
+            user_extern_data_refs,
+            extern_data_names,
             None,
         ),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
@@ -5971,6 +5985,64 @@ fn asm_mem_size(
     })
 }
 
+/// RIP-relative target of an inline-asm `%a` address operand: an
+/// `i`-class operand naming a link-time data address (`&global`,
+/// optionally offset by a constant).
+enum AsmRipSym {
+    /// Cross-TU global: `offset` is the constant byte offset added to the
+    /// named symbol.
+    Extern {
+        name: alloc::string::String,
+        offset: i64,
+    },
+    /// Global defined in this unit: `data_offset` is its byte offset in the
+    /// merged data segment.
+    Local { data_offset: i64 },
+}
+
+/// Resolve an inline-asm `%a` address operand to a RIP-relative relocation
+/// target. `arg` is the operand's SSA value-id; the accepted shapes are an
+/// `Inst::ImmData` (a global's address) and that address plus a constant
+/// (`&global + k`, the struct-field case). Returns `None` when the operand
+/// is not a link-time data address.
+fn asm_riprel_target(
+    func: &FunctionSsa,
+    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    arg: u32,
+) -> Option<AsmRipSym> {
+    use super::super::ir::{BinOp, Inst};
+    let (base_vid, offset) = match func.insts.get(arg as usize)? {
+        Inst::ImmData(off) => (arg, *off),
+        Inst::BinopI {
+            op: BinOp::Add,
+            lhs,
+            rhs_imm,
+        } => match func.insts.get(*lhs as usize) {
+            Some(Inst::ImmData(off)) => (*lhs, off + rhs_imm),
+            _ => return None,
+        },
+        Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        } => match (func.insts.get(*lhs as usize), func.insts.get(*rhs as usize)) {
+            (Some(Inst::ImmData(off)), Some(Inst::Imm(c))) => (*lhs, off + c),
+            (Some(Inst::Imm(c)), Some(Inst::ImmData(off))) => (*rhs, off + c),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    match extern_data_names.get(&base_vid) {
+        Some(name) => Some(AsmRipSym::Extern {
+            name: name.clone(),
+            offset,
+        }),
+        None => Some(AsmRipSym::Local {
+            data_offset: offset,
+        }),
+    }
+}
+
 /// Lower an `Inst::InlineAsm` (GCC extended asm with operands). Assigns
 /// each register operand a machine register per its constraint, saves
 /// the registers it and the clobber list overwrite, loads the inputs,
@@ -5992,6 +6064,9 @@ fn emit_inline_asm(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     asm_sections: &mut Vec<super::ssa::emit_common::AsmSection>,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
+    data_fixups: &mut Vec<DataFixup>,
+    user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
+    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
 ) -> bool {
     use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg, Inst};
@@ -6353,6 +6428,12 @@ fn emit_inline_asm(
         // instruction (an extended-asm instruction reaches at most one such
         // operand). `None` unless a resolved memory operand carries a segment.
         let mut operand_seg: Option<u8> = None;
+        // A `%a` address operand naming a link-time symbol lowers to a
+        // RIP-relative reference; the relocation against the symbol is
+        // recorded after the instruction encodes, at its disp32 field. Holds
+        // the target and the operand's template displacement (folded into the
+        // reloc addend). At most one memory operand per instruction.
+        let mut riprel_reloc: Option<(AsmRipSym, i64)> = None;
         for o in &insn.operands {
             let c = match *o {
                 AsmOpnd::Imm(val) => Concrete::Imm(val),
@@ -6432,8 +6513,30 @@ fn emit_inline_asm(
                             }
                         }
                     };
-                    let Some(base) = resolve(base) else {
-                        return fail("inline asm: memory base must be a register operand");
+                    // A `%a` / `disp(%N)` operand whose `%N` is an `i`-class
+                    // symbolic address (`&global`) resolves to no register:
+                    // emit a RIP-relative reference the linker resolves against
+                    // the symbol, as gcc does for `%a` (`sym(%rip)`). A scaled
+                    // index cannot ride the RIP-relative form.
+                    let sym = match base {
+                        super::asm::AsmMemBase::Ref(bi) if index.is_none() => args
+                            .get(bi as usize)
+                            .and_then(|a| asm_riprel_target(func, extern_data_names, *a)),
+                        _ => None,
+                    };
+                    let base = match (resolve(base), sym) {
+                        (Some(b), _) => b,
+                        (None, Some(sym)) => {
+                            riprel_reloc = Some((sym, disp as i64));
+                            concrete.push(Concrete::RipRel {
+                                disp: 0,
+                                size: size.unwrap_or(AsmRegSize::Quad),
+                            });
+                            continue;
+                        }
+                        (None, None) => {
+                            return fail("inline asm: memory base must be a register operand");
+                        }
                     };
                     let index = match index {
                         Some(i) => match resolve(i) {
@@ -6469,6 +6572,13 @@ fn emit_inline_asm(
             };
             concrete.push(c);
         }
+        // A RIP-relative symbolic operand puts its disp32 at the end of the
+        // instruction; a trailing immediate would displace it, so the reloc
+        // offset below would be wrong. Reject that combination rather than
+        // relocate the wrong bytes.
+        if riprel_reloc.is_some() && concrete.iter().any(|c| matches!(c, Concrete::Imm(_))) {
+            return fail("inline asm: `%a` symbolic operand with an immediate");
+        }
         // A segment override is a legacy prefix preceding the opcode. It comes
         // from a template `%gs:` / `%fs:` or from a `__seg_gs` / `__seg_fs`
         // memory operand; the two never conflict on one instruction.
@@ -6478,6 +6588,29 @@ fn emit_inline_asm(
         if let Err(m) = super::asm::encode(code, insn.mnemonic, insn.suffix, &concrete) {
             bail_msg(&m);
             return false;
+        }
+        // Record the RIP-relative relocation against the operand's symbol.
+        // The disp32 occupies the last four bytes of the instruction just
+        // encoded; both channels place the reloc at `instr_offset + 3`, so
+        // anchor three bytes before it. gcc's addend is the operand's
+        // constant offset less the 4-byte PC-relative end skew.
+        if let Some((sym, disp)) = riprel_reloc.take() {
+            let instr_offset = code.len() - 4 - 3;
+            match sym {
+                AsmRipSym::Extern { name, offset } => {
+                    user_extern_data_refs.push(super::UserExternDataRef {
+                        instr_offset,
+                        symbol_name: name,
+                        direct_pcrel: Some(offset + disp - 4),
+                    });
+                }
+                AsmRipSym::Local { data_offset } => {
+                    data_fixups.push(DataFixup {
+                        adrp_offset: instr_offset,
+                        data_offset: (data_offset + disp) as u64,
+                    });
+                }
+            }
         }
     }
     // Patch each label reference now that every definition's offset is

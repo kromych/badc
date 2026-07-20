@@ -2188,6 +2188,7 @@ pub(crate) fn lower(
             user_extern_data_refs.push(super::UserExternDataRef {
                 instr_offset,
                 symbol_name: (*name).into(),
+                direct_pcrel: None,
             });
             continue;
         }

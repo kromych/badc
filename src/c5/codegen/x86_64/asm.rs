@@ -309,6 +309,16 @@ pub(crate) enum Concrete {
         disp: i32,
         size: AsmRegSize,
     },
+    /// A RIP-relative reference `disp(%rip)` to a link-time symbol address:
+    /// a `%a`-modified `i`-class operand naming `&global` (the x86 percpu
+    /// `%%gs:%a[var]` shape). `disp` is the in-instruction displacement (0;
+    /// the symbol resolves through a relocation the emitter records at the
+    /// disp32 field). The reloc target and addend ride the emitter side, not
+    /// this operand.
+    RipRel {
+        disp: i32,
+        size: AsmRegSize,
+    },
     Imm(i64),
 }
 
@@ -1796,6 +1806,10 @@ fn table_opnd(c: &Concrete) -> super::table::Opnd {
             disp,
             width: size.bytes(),
         },
+        Concrete::RipRel { disp, size } => Opnd::RipRel {
+            disp,
+            width: size.bytes(),
+        },
         Concrete::Imm(v) => Opnd::Imm(v),
     }
 }
@@ -1977,7 +1991,7 @@ pub(crate) fn encode(
                     code.extend_from_slice(&[0x0F, opcode]);
                     modrm_mem(code, v_field & 7, base, disp);
                 }
-                Concrete::Imm(_) | Concrete::AbsMem { .. } => {
+                Concrete::Imm(_) | Concrete::AbsMem { .. } | Concrete::RipRel { .. } => {
                     return Err(String::from(
                         "inline asm: `movd` operand must be a register or memory",
                     ));
@@ -2443,7 +2457,7 @@ pub(crate) fn encode(
                     code.push(op_cl);
                     code.push(modrm_reg(src_reg, dst_reg));
                 }
-                Concrete::Mem { .. } | Concrete::AbsMem { .. } => {
+                Concrete::Mem { .. } | Concrete::AbsMem { .. } | Concrete::RipRel { .. } => {
                     return Err(String::from("inline asm: double-shift count in memory"));
                 }
             }
@@ -2527,7 +2541,7 @@ pub(crate) fn encode(
 fn as_reg(op: Concrete) -> Result<(u8, AsmRegSize), String> {
     match op {
         Concrete::Reg { reg, size } => Ok((reg, size)),
-        Concrete::Mem { .. } | Concrete::AbsMem { .. } => {
+        Concrete::Mem { .. } | Concrete::AbsMem { .. } | Concrete::RipRel { .. } => {
             Err(String::from("inline asm: unexpected memory operand"))
         }
         Concrete::Imm(_) => Err(String::from("inline asm: register operand expected")),

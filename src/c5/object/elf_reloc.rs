@@ -1717,6 +1717,21 @@ pub(super) fn write_relocatable(
             .position(|n| *n == r.symbol_name.as_str())
             .expect("user_extern_data_names contains every ref's name");
         let sym_idx = user_extern_data_sym_idx[pos] as u64;
+        // A segment-qualified inline-asm `%a` operand takes a direct
+        // `R_X86_64_PC32` against the symbol (x86_64 only): the access rides
+        // the symbol's link-time value, so the GOT indirection the default
+        // form uses would be wrong. The disp32 sits at `instr_offset + 3`.
+        if let Some(addend) = r.direct_pcrel {
+            write_struct(
+                &mut rela_bytes,
+                &Elf64Rela {
+                    r_offset: r.instr_offset as u64 + 3,
+                    r_info: (sym_idx << 32) | R_X86_64_PC32 as u64,
+                    r_addend: addend,
+                },
+            );
+            continue;
+        }
         match machine_for_rela {
             Machine::X86_64 => emit_got_ref_relocs(
                 machine_for_rela,
@@ -2081,10 +2096,13 @@ pub(super) fn write_relocatable(
     // data references (`user_extern_data_refs`) on x86_64 only --
     // aarch64 keeps those direct (see the reloc loop above). Same
     // length as `build.text`.
+    // A `direct_pcrel` ref is already a `mov`/`op sym(%rip)` in the emitted
+    // text, not a `lea` to rewrite into a GOT load; skip those.
     let mut got_site_offsets: alloc::vec::Vec<usize> = match machine_for_rela {
         Machine::X86_64 => build
             .user_extern_data_refs
             .iter()
+            .filter(|r| r.direct_pcrel.is_none())
             .map(|r| r.instr_offset)
             .collect(),
         Machine::Aarch64 => alloc::vec::Vec::new(),

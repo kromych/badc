@@ -1087,6 +1087,38 @@ fn parse_section_item(tok: &str, rest: &str) -> Result<AsmSectionItem, alloc::st
     }
 }
 
+/// If `s` is a single parenthesised group (the leading `(` matches the
+/// trailing `)`), return its interior; otherwise `None`.
+fn enclosed_by_parens(s: &str) -> Option<&str> {
+    let b = s.as_bytes();
+    if b.first() != Some(&b'(') || b.last() != Some(&b')') {
+        return None;
+    }
+    let mut depth = 0u32;
+    for (i, &c) in b.iter().enumerate() {
+        match c {
+            b'(' => depth += 1,
+            b')' => depth = depth.checked_sub(1)?,
+            _ => {}
+        }
+        if depth == 0 && i + 1 < b.len() {
+            return None; // the leading paren closed before the end
+        }
+    }
+    (depth == 0).then(|| s[1..s.len() - 1].trim())
+}
+
+/// Strip fully-enclosing parentheses from a label operand. `_ASM_EXTABLE`
+/// wraps its label in parentheses (`.long (1b) - .`); the parentheses are
+/// grouping, so `(1b)` names the same label as `1b`.
+fn strip_label_parens(s: &str) -> &str {
+    let mut s = s.trim();
+    while let Some(inner) = enclosed_by_parens(s) {
+        s = inner;
+    }
+    s
+}
+
 /// Parse one data-directive value: a constant, an operand reference, or
 /// a label / symbol reference (optionally `- .` PC-relative).
 fn parse_section_value(a: &str) -> Result<AsmSectionValue, alloc::string::String> {
@@ -1116,9 +1148,10 @@ fn parse_section_value(a: &str) -> Result<AsmSectionValue, alloc::string::String
     let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
     let is_name = |s: &str| !s.is_empty() && s.bytes().all(ident);
     // A single `-` splits `ref - .` (PC-relative against the field's own
-    // position) from `label_a - label_b` (a constant label distance).
+    // position) from `label_a - label_b` (a constant label distance). A label
+    // may be parenthesised (`(1b) - .`).
     if let Some((l, r)) = a.split_once('-') {
-        let (l, r) = (l.trim(), r.trim());
+        let (l, r) = (strip_label_parens(l), strip_label_parens(r));
         if r == "." {
             if !is_name(l) {
                 return Err(alloc::format!("inline asm: bad section value `{a}`"));
@@ -1136,6 +1169,7 @@ fn parse_section_value(a: &str) -> Result<AsmSectionValue, alloc::string::String
         }
         return Err(alloc::format!("inline asm: unsupported expression `{a}`"));
     }
+    let a = strip_label_parens(a);
     if !is_name(a) {
         return Err(alloc::format!("inline asm: bad section value `{a}`"));
     }
@@ -2225,6 +2259,44 @@ mod asm_section_tests {
         let err = materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink2)
             .unwrap_err();
         assert!(err.contains("non-constant"), "{err}");
+    }
+
+    #[test]
+    fn section_parenthesised_label_reference() {
+        // `_ASM_EXTABLE` wraps its label in parentheses (`.long (1b) - .`).
+        // The parentheses are grouping, so it resolves like the bare `1b - .`,
+        // and a parenthesised label distance like the bare form.
+        assert_eq!(
+            parse_section_value("(1b) - .").unwrap(),
+            AsmSectionValue::Ref {
+                name: alloc::string::String::from("1b"),
+                pcrel: true,
+            },
+        );
+        assert_eq!(
+            parse_section_value("(2b) - (1b)").unwrap(),
+            AsmSectionValue::LabelDiff {
+                minuend: alloc::string::String::from("2b"),
+                subtrahend: alloc::string::String::from("1b"),
+            },
+        );
+        // The materialized field is a PC-relative reloc to the label's text
+        // offset, as for the unparenthesised reference.
+        let text = "1: nop\n.pushsection __ex_table,\"a\"\n.long (1b) - .\n.popsection\n";
+        let (_code, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(&blocks, &|_| None, &|n| (n == "1b").then_some(0x40), false, &mut sink)
+            .unwrap();
+        assert_eq!(
+            sink[0].relocs,
+            alloc::vec![AsmSectionReloc {
+                offset: 0,
+                width: 4,
+                pcrel: true,
+                target: AsmSectionTarget::Text(0x40),
+                addend: 0,
+            }],
+        );
     }
 
     #[test]

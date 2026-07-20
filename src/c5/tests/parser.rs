@@ -28,6 +28,25 @@ fn empty_source_has_no_main() {
 }
 
 #[test]
+fn overaligned_automatic_is_rejected() {
+    // Frame slots are 8 bytes and the prologue does not realign the
+    // stack, so an automatic object cannot be placed on a boundary wider
+    // than the 16 bytes the frame pointer guarantees. Rejecting is
+    // preferable to handing back an under-aligned address; static storage
+    // carries any supported alignment. Both an explicit request on the
+    // declarator and one inherited from an over-aligned type are caught.
+    expect_compile_error(
+        "int main(void) { int __attribute__((aligned(64))) a; return (int)(long)&a; }",
+        "not supported here",
+    );
+    expect_compile_error(
+        "struct __attribute__((aligned(64))) S { int x; };\n\
+         int main(void) { struct S a; return (int)(long)&a.x; }",
+        "automatic object of a 64-byte-aligned type is not supported",
+    );
+}
+
+#[test]
 fn source_with_only_a_global_has_no_main() {
     expect_compile_error("int x;", "main() not defined");
 }
@@ -1496,8 +1515,22 @@ fn file_scope_asm_constraints() {
         "asm volatile(\".section .modinfo,\\\"a\\\"\\n.asciz \\\"v=1\\\"\\n.previous\");\n\
         int main(void) { return 0; }",
     );
+    // `.globl` / `.global` outside a section gives the named symbol
+    // external linkage; a name this unit does not define has no effect.
+    ok("static int f(void) { return 0; } asm(\".globl f\"); int main(void) { return f(); }");
+    ok("static int v = 1; __asm__(\".global v\"); int main(void) { return v - 1; }");
+    ok("asm(\".globl f\"); static int f(void) { return 0; } int main(void) { return f(); }");
+    ok("asm(\".globl nosuchsymbol\"); int main(void) { return 0; }");
+    ok("static int f(void) { return 0; }\n\
+         asm(\".pushsection .a,\\\"a\\\"\\n.quad 1\\n.popsection\\n.globl f\");\n\
+         int main(void) { return f(); }");
     expect_compile_error(
         "asm(\"nop\"); int main(void) { return 0; }",
+        "section data directives only",
+    );
+    // `.globl` with no operand is not a directive this accepts.
+    expect_compile_error(
+        "asm(\".globl\"); int main(void) { return 0; }",
         "section data directives only",
     );
     expect_compile_error(

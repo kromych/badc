@@ -554,6 +554,26 @@ fn cacheline_aligned_member() {
 }
 
 #[test]
+fn overaligned_data_placement() {
+    // Objects with an explicit `aligned(N)` above 16 land on their
+    // boundary in the emitted image: the static data-DCE rebase keeps
+    // each object's full alignment residue. Runtime address checks,
+    // matched against GCC and clang on x86-64 and aarch64. The native /
+    // JIT parity lists carry the same fixture (the VM does not compact).
+    assert_eq!(run_fixture("overaligned_data_placement.c"), 0);
+}
+
+#[test]
+fn overaligned_type_placement() {
+    // An object whose alignment comes from its type (an over-aligned
+    // struct member raising the aggregate), with no attribute on the
+    // declarator, is placed on that boundary for file-scope, block-scope
+    // static, and initialised storage. Runtime address checks, matched
+    // against GCC and clang on x86-64 and aarch64.
+    assert_eq!(run_fixture("overaligned_type_placement.c"), 0);
+}
+
+#[test]
 fn packed_enum() {
     // `enum __attribute__((packed))` uses the smallest integer type holding
     // its values, changing the layout of an embedding struct (a real-world

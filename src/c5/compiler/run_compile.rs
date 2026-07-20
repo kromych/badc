@@ -137,14 +137,14 @@ impl Compiler {
             match engine::extract_asm_sections(text) {
                 Err(m) => return Err(self.compile_err(m)),
                 Ok(Some((code, blocks))) => {
-                    if code.split_whitespace().next().is_some() {
+                    if !self.take_file_scope_asm_globl(&code) {
                         return Err(self
                             .compile_err("file-scope asm supports section data directives only"));
                     }
                     blocks
                 }
                 Ok(None) => {
-                    if text.split_whitespace().next().is_some() {
+                    if !self.take_file_scope_asm_globl(text) {
                         return Err(self
                             .compile_err("file-scope asm supports section data directives only"));
                     }
@@ -1821,19 +1821,6 @@ impl Compiler {
                     // with no attribute in sight.
                     let want_align =
                         core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty));
-                    // An explicit request on the declarator is placed up to
-                    // MAX_STATIC_ALIGN (checked above). Alignment coming
-                    // from the TYPE is only verified to be placed up to
-                    // MAX_OBJECT_ALIGN, so diagnose a wider one instead of
-                    // silently under-aligning the object.
-                    let type_align = self.align_of_type(ty);
-                    if type_align > super::MAX_OBJECT_ALIGN && req_align <= 0 {
-                        return Err(self.compile_err(format!(
-                            "object of a {type_align}-byte-aligned type is not supported \
-                             (at most {}); the type may still be used for layout",
-                            super::MAX_OBJECT_ALIGN
-                        )));
-                    }
                     let decl_align: usize = if want_align > 8 {
                         if thread_local && (req_align > 8 || want_align > 16) {
                             return Err(self.compile_err(
@@ -1850,17 +1837,6 @@ impl Compiler {
                     // definition starts on the object's boundary.
                     if decl_align > 8 {
                         self.align_data_to(decl_align);
-                    }
-                    // An object with an initializer takes its offset from
-                    // the initializer writer, which does not preserve a
-                    // boundary wider than 16. Diagnose rather than
-                    // under-align it.
-                    // TODO: align the initialized-object path and drop this.
-                    if type_align > 16 && req_align <= 0 && self.lex.tk == Token::Assign {
-                        return Err(self.compile_err(format!(
-                            "initialised object of a {type_align}-byte-aligned type is \
-                             not supported (at most 16); leave it zero-initialised"
-                        )));
                     }
                     let was_extern_only_decl =
                         extern_seen && self.lex.tk != Token::Assign && array_size != -1;
@@ -2623,8 +2599,44 @@ impl Compiler {
             self.next()?;
         }
         self.resolve_pending_aliases()?;
+        self.resolve_file_scope_asm_globl();
         self.warn_unused_static_functions();
         Ok(())
+    }
+
+    /// Record the `.globl` / `.global` names in file-scope asm text that sits
+    /// outside any section block, and report whether the text held nothing
+    /// else. A directive naming no symbol of this unit is accepted and has no
+    /// effect, as it does when the assembler sees it.
+    fn take_file_scope_asm_globl(&mut self, text: &str) -> bool {
+        for piece in text.split([';', '\n']) {
+            let piece = piece.trim();
+            if piece.is_empty() {
+                continue;
+            }
+            let (tok, rest) = match piece.find(char::is_whitespace) {
+                Some(p) => (&piece[..p], piece[p..].trim()),
+                None => (piece, ""),
+            };
+            if !matches!(tok, ".globl" | ".global") || rest.is_empty() {
+                return false;
+            }
+            self.pending_asm_globl.push(rest.into());
+        }
+        true
+    }
+
+    /// Give external linkage to the names a file-scope `asm(".globl name");`
+    /// declared. Applied once the unit is complete: the directive may precede
+    /// the definition it names.
+    fn resolve_file_scope_asm_globl(&mut self) {
+        for name in core::mem::take(&mut self.pending_asm_globl) {
+            for s in self.symbols.iter_mut() {
+                if s.name == name && s.defined_here {
+                    s.linkage = crate::c5::symbol::Linkage::External;
+                }
+            }
+        }
     }
 
     /// Bind aliases whose target had not been defined when the declarator was

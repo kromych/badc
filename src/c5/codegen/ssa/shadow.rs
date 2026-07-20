@@ -545,9 +545,10 @@ pub(crate) fn compact_program_data(
     // whose start the parser did not record glues onto its predecessor):
     // the relative layout inside the copied span is preserved, and a
     // congruent base preserves the absolute alignment of every object in
-    // it. badc lays `.data` out at 8-byte alignment; 16 covers any
-    // wider scalar without measurable padding cost.
-    const ALIGN: i64 = 16;
+    // it. `ALIGN` is the section's own alignment, which the writers place
+    // `.data` and `.bss` at, so preserving residues modulo it preserves
+    // each object's absolute alignment up to that of the whole section.
+    let align: i64 = (program.data_align.max(16)).next_power_of_two() as i64;
     let obj_end = |i: usize| -> i64 { if i + 1 < n { starts[i + 1] } else { data_len } };
     // A relocation writes a (generally non-zero) value into its slot at
     // link/write time, so the slot's object is initialised data even when
@@ -602,8 +603,8 @@ pub(crate) fn compact_program_data(
     let mut new_data: Vec<u8> = Vec::with_capacity(program.data.len());
     for i in 0..n {
         if live[i] && !is_bss(i) {
-            let want = starts[i].rem_euclid(ALIGN);
-            while (new_data.len() as i64).rem_euclid(ALIGN) != want {
+            let want = starts[i].rem_euclid(align);
+            while (new_data.len() as i64).rem_euclid(align) != want {
                 new_data.push(0);
             }
             new_base[i] = new_data.len() as i64;
@@ -618,7 +619,7 @@ pub(crate) fn compact_program_data(
     // object's bss-relative offset must carry the same alignment residue
     // as its `.data` offset, which only holds when the base is aligned.
     if (0..n).any(&is_bss) {
-        while (new_data.len() as i64).rem_euclid(ALIGN) != 0 {
+        while (new_data.len() as i64).rem_euclid(align) != 0 {
             new_data.push(0);
         }
     }
@@ -626,8 +627,8 @@ pub(crate) fn compact_program_data(
     let mut bss_cursor = bss_base;
     for i in 0..n {
         if is_bss(i) {
-            let want = starts[i].rem_euclid(ALIGN);
-            while bss_cursor.rem_euclid(ALIGN) != want {
+            let want = starts[i].rem_euclid(align);
+            while bss_cursor.rem_euclid(align) != want {
                 bss_cursor += 1;
             }
             new_base[i] = bss_cursor;

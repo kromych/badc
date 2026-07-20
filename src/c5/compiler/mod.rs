@@ -34,20 +34,13 @@ pub(crate) use type_layout::{StructReturnAbi, host_abi_agg_desc, struct_return_a
 pub(crate) mod types;
 
 /// Largest alignment (in bytes) honored on a static object via C11
-/// `_Alignas` / the GCC `aligned` attribute. Static objects are placed at
-/// this alignment in `.data`; automatic objects stay capped lower because
-/// stack-frame realignment is not implemented. A page covers the common
-/// cache-line (64) and page-aligned requests.
+/// `_Alignas` / the GCC `aligned` attribute, whether the request comes
+/// from the declarator or the object's type. Static objects (file-scope,
+/// block-scope static, and initialised or zero-init alike) are placed at
+/// this alignment in `.data` / `.bss`; automatic objects stay capped lower
+/// because stack-frame realignment is not implemented. A page covers the
+/// common cache-line (64) and page-aligned requests.
 pub(crate) const MAX_STATIC_ALIGN: usize = 4096;
-
-/// Widest alignment an object DEFINITION is placed at. Struct layout
-/// (`sizeof`, `_Alignof`, member offsets) honors the full
-/// [`MAX_STATIC_ALIGN`] range, but the placement of an object of such a
-/// type is only verified to hold at this boundary; wider requests are
-/// diagnosed rather than silently under-aligned. Covers the cache-line
-/// alignment that motivates over-aligned members.
-/// TODO: raise once `.data` / `.bss` object placement is verified wider.
-pub(crate) const MAX_OBJECT_ALIGN: usize = 64;
 
 /// Captured enum tag + constants for DWARF emission. C99 6.7.2.2
 /// enums collapse to `int` in c5 -- the tag carries no semantic
@@ -1189,6 +1182,10 @@ pub struct Compiler {
     /// Each entry is the alias symbol, its target name, and whether the
     /// declarator was an object rather than a function.
     pending_aliases: Vec<(usize, String, bool)>,
+    /// Names given external linkage by a file-scope `asm(".globl name");`.
+    /// The directive may precede the definition, so the names are applied
+    /// once the unit is complete.
+    pending_asm_globl: Vec<String>,
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -1661,6 +1658,7 @@ impl Compiler {
             init_funcs: Vec::new(),
             function_aliases: Vec::new(),
             pending_aliases: Vec::new(),
+            pending_asm_globl: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
             pending: Pending::default(),

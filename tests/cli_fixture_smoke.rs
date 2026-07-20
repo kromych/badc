@@ -82,6 +82,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("register_var_asm_operand.c", "linux-aarch64"), // x86-64 extended-asm operand pinning
     ("inline_asm_x64_sib.c", "linux-aarch64"), // x86-64 scaled-index memory operands
     ("cpuid_partial_outputs.c", "linux-aarch64"), // x86-64 cpuid
+    ("inline_asm_x64_flag_outputs.c", "linux-aarch64"), // x86-64 `=@cc` flag outputs
 ];
 
 #[test]

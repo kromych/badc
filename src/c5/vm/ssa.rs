@@ -2054,6 +2054,8 @@ fn run_inline_asm(
             "inline asm: explicit memory operands are not supported under --interp",
         )));
     }
+    crate::c5::codegen::x86_64::asm::check_operand_refs(&insns, asm.operands.len())
+        .map_err(C5Error::Runtime)?;
     let op_reg =
         crate::c5::codegen::x86_64::asm::assign_operand_regs(&asm.operands, asm.clobber_fp_regs)
             .map_err(C5Error::Runtime)?;
@@ -2068,6 +2070,17 @@ fn run_inline_asm(
     {
         return Err(C5Error::Runtime(alloc::string::String::from(
             "inline asm: `x` (xmm) register operands are not supported under --interp",
+        )));
+    }
+    // The interpreter carries no condition-flag state across template
+    // instructions, so a flag output has nothing to read.
+    if asm
+        .operands
+        .iter()
+        .any(|op| matches!(op.constraint, crate::c5::ir::AsmConstraint::Flags(_)))
+    {
+        return Err(C5Error::Runtime(alloc::string::String::from(
+            "inline asm: `=@cc` flag outputs are not supported under --interp",
         )));
     }
     // Model register file; operand `%N` reads / writes its assigned slot.

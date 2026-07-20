@@ -745,6 +745,13 @@ impl Preprocessor {
         // regardless of this macro.)
         self.macros
             .insert("__STRICT_ANSI__".to_string(), "1".to_string());
+        // `=@cc<cond>` inline-asm flag outputs (GCC 6). Implemented for
+        // x86_64 only, so the macro follows the target predefine rather
+        // than the dialect alone.
+        if self.macros.contains_key("__x86_64__") {
+            self.macros
+                .insert("__GCC_ASM_FLAG_OUTPUTS__".to_string(), "1".to_string());
+        }
     }
 
     /// Enable / disable gcc-`-H`-style include tracing. When on,

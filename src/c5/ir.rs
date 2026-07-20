@@ -579,6 +579,11 @@ pub(crate) enum AsmConstraint {
     /// through it (not a register). Assigned a register to hold the
     /// address; the instruction dereferences that register.
     Mem,
+    /// A flag output (`=@cc<cond>`): the asm block's condition flags are
+    /// the operand's value. The payload is the x86_64 condition-code
+    /// nibble; after the template runs, `set<cond>` materializes 0 or 1
+    /// into the destination, zero-extended to the operand width.
+    Flags(u8),
 }
 
 /// One operand of a GCC extended-asm statement.

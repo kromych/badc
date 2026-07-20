@@ -290,6 +290,49 @@ pub(crate) enum Concrete {
     Imm(i64),
 }
 
+/// Reject any `%N` template reference past the end of the operand list.
+/// Both the native emitter and the interpreter index the operand list by
+/// a reference's number, so the bound is checked once, up front.
+pub(crate) fn check_operand_refs(insns: &[AsmInsn], n_operands: usize) -> Result<(), String> {
+    for insn in insns {
+        for o in &insn.operands {
+            if let AsmOpnd::Ref { idx, .. } = *o
+                && idx as usize >= n_operands
+            {
+                return Err(alloc::format!(
+                    "inline asm: `%{idx}` names no operand ({n_operands} operands)"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Map the condition suffix of a `=@cc<cond>` flag-output constraint to
+/// its x86_64 condition-code nibble (the value shared by `Jcc`, `SETcc`
+/// and `CMOVcc`). Covers the synonym spellings GCC accepts.
+pub(crate) fn flag_cond_code(cond: &str) -> Option<u8> {
+    Some(match cond {
+        "o" => 0x0,
+        "no" => 0x1,
+        "b" | "c" | "nae" => 0x2,
+        "ae" | "nb" | "nc" => 0x3,
+        "e" | "z" => 0x4,
+        "ne" | "nz" => 0x5,
+        "be" | "na" => 0x6,
+        "a" | "nbe" => 0x7,
+        "s" => 0x8,
+        "ns" => 0x9,
+        "p" | "pe" => 0xA,
+        "np" | "po" => 0xB,
+        "l" | "nge" => 0xC,
+        "ge" | "nl" => 0xD,
+        "le" | "ng" => 0xE,
+        "g" | "nle" => 0xF,
+        _ => return None,
+    })
+}
+
 /// Map an AT&T register name (without the `%` prefix) to its
 /// architectural number and access size. Covers the 8/16/32/64-bit
 /// names for the 16 GPRs.
@@ -420,10 +463,12 @@ pub(crate) fn assign_operand_regs(
         }
     }
     // `r` operands take free pool registers (rax rbx rcx rdx rsi rdi r8 r9);
-    // a memory operand takes one too, to hold its address.
+    // a memory operand takes one too, to hold its address, and a flag output
+    // one to receive its `setcc` result. Every pool register is byte
+    // addressable under REX, as `setcc` requires.
     let pool = [0u8, 3, 1, 2, 6, 7, 8, 9];
     for (i, op) in operands.iter().enumerate() {
-        if matches!(op.constraint, C::Reg | C::Mem) {
+        if matches!(op.constraint, C::Reg | C::Mem | C::Flags(_)) {
             let r = pool
                 .iter()
                 .copied()

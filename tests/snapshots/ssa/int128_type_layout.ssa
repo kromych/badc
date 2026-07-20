@@ -4,7 +4,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(24)                                      -> x0
+    v1   ImmData(16)                                      -> x0
     v2   LocalAddr(-2)                                    -> x1
     v3   Mcpy { dst=v2, src=v1, size=16 }                 -> x1
     v4   LocalAddr(-2)                                    -> x1

@@ -441,10 +441,11 @@ pub fn link_native_objects_with_shared_libs(
         data_align = data_align.max(obj.data_align);
         data_bases.push(data.len());
         data.extend_from_slice(&obj.data);
-        // Each unit's bss offsets carry an alignment residue modulo 16
-        // (the `.bss` sh_addralign the per-unit writer claims); a
-        // 16-aligned unit base preserves it.
-        bss_size = align_usize(bss_size, 16);
+        // Each unit's bss offsets carry an alignment residue modulo the
+        // `.bss` sh_addralign the per-unit writer claims, which tracks
+        // the unit's widest object alignment; a unit base aligned to the
+        // same value preserves it.
+        bss_size = align_usize(bss_size, obj.data_align.max(16));
         bss_bases.push(bss_size);
         bss_size += obj.bss_size;
     }

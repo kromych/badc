@@ -172,6 +172,7 @@ impl Compiler {
             is_variadic: false,
             anon_union_group: 0,
             anon_struct_group: 0,
+            explicit_align: 0,
         };
         self.structs.push(StructDef {
             name: "__int128".to_string(),
@@ -258,6 +259,7 @@ impl Compiler {
             is_variadic: false,
             anon_union_group: 0,
             anon_struct_group: 0,
+            explicit_align: 0,
         };
         self.structs.push(StructDef {
             name: "__builtin_va_list".to_string(),
@@ -341,6 +343,7 @@ impl Compiler {
             is_variadic: false,
             anon_union_group: 0,
             anon_struct_group: 0,
+            explicit_align: 0,
         };
         self.structs.push(StructDef {
             name,
@@ -390,6 +393,7 @@ impl Compiler {
             is_variadic: false,
             anon_union_group: 0,
             anon_struct_group: 0,
+            explicit_align: 0,
         };
         self.structs.push(StructDef {
             name,
@@ -545,8 +549,7 @@ impl Compiler {
     /// Mirrors the C alignment rule: the value lives on a boundary
     /// equal to its size for scalars (`char` = 1, `int` = 4,
     /// `long` / pointer = 8). Struct values inherit the max
-    /// alignment of their fields, but c5 currently caps struct
-    /// alignment at 8 to match the rest of the IR's slot model.
+    /// alignment of their fields, capped at `MAX_STATIC_ALIGN`.
     pub(super) fn align_of_type(&self, ty: i64) -> usize {
         let ty = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
         if ty == Ty::Float as i64 {
@@ -559,7 +562,8 @@ impl Compiler {
             if struct_ptr_depth(ty) > 0 {
                 8
             } else {
-                // Struct alignment = max field alignment, capped at 8.
+                // Struct alignment = max field alignment, capped at
+                // MAX_STATIC_ALIGN.
                 // Computed eagerly during layout so we don't have to
                 // walk every nested struct on each call.
                 self.structs[struct_id_of(ty)].align.max(1)

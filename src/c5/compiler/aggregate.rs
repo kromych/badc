@@ -31,8 +31,9 @@ impl Compiler {
     /// self-referential pointer fields can find the aggregate
     /// mid-definition. Field offsets are placed at each field's
     /// natural alignment (`int` packs at 4, `long` / pointer at 8,
-    /// `char` at 1); the aggregate's own alignment is the max of
-    /// its fields' alignments, capped at 8.
+    /// `char` at 1), or at an explicit `aligned(N)` / `_Alignas(N)`
+    /// request; the aggregate's own alignment is the max of its
+    /// fields' alignments.
     ///
     /// On entry `tk` is `{`; on exit `tk` is the token AFTER the
     /// closing `}` (typically `;`).
@@ -56,6 +57,27 @@ impl Compiler {
         let r = self.parse_aggregate_body_inner(name, is_union, packed);
         self.pending.attr_align = self.pending.attr_align.max(decl_attr_align);
         r
+    }
+
+    /// Consume a pending `__attribute__((aligned(N)))` / `_Alignas(N)`
+    /// carried by a member and validate it. Struct layout honors any
+    /// power-of-two alignment up to `MAX_STATIC_ALIGN`, which is what the
+    /// data section and static-object placement can realise; an automatic
+    /// object of such a type is diagnosed at its declaration instead.
+    fn take_member_align(&mut self) -> Result<i64, C5Error> {
+        let m_align = core::mem::take(&mut self.pending.attr_align);
+        if m_align > 0 && !(m_align as usize).is_power_of_two() {
+            return Err(
+                self.compile_err(format!("member alignment {m_align} is not a power of two"))
+            );
+        }
+        if m_align > super::MAX_STATIC_ALIGN as i64 {
+            return Err(self.compile_err(format!(
+                "member alignment {m_align} is not supported (at most {})",
+                super::MAX_STATIC_ALIGN
+            )));
+        }
+        Ok(m_align)
     }
 
     fn parse_aggregate_body_inner(
@@ -114,9 +136,8 @@ impl Compiler {
 
         let mut offset = 0usize;
         // Running max field alignment for the aggregate. Each
-        // non-bitfield field bumps this if its natural alignment
-        // exceeds the running max. The final struct alignment is
-        // capped at 8 because the rest of c5's IR slots at 8.
+        // non-bitfield field bumps this if its alignment exceeds the
+        // running max.
         let mut struct_align: usize = 1;
         // Bit-packing state for contiguous bitfields. `bf_bit_cursor`
         // is the next free bit position measured from the start of the
@@ -174,14 +195,7 @@ impl Compiler {
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::Attribute {
                     self.skip_attribute_specifiers()?;
-                    // Member alignment is honored up to 16 (the aggregate's
-                    // own alignment); a larger request is a diagnostic.
-                    let m_align = core::mem::take(&mut self.pending.attr_align);
-                    if m_align > 16 {
-                        return Err(self.compile_err(format!(
-                            "member alignment {m_align} is not supported (at most 16)"
-                        )));
-                    }
+                    let m_align = self.take_member_align()?;
                     if m_align > 0 {
                         group_align = group_align.max(m_align as usize);
                     }
@@ -275,9 +289,7 @@ impl Compiler {
                 let inner_id = if self.lex.tk == '{' {
                     let id =
                         self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;
-                    if self.skip_attribute_specifiers()? {
-                        self.repack_struct(id);
-                    }
+                    self.apply_post_body_attributes(id)?;
                     id
                 } else {
                     self.find_or_forward_declare_struct(&inner_name)
@@ -460,6 +472,7 @@ impl Compiler {
                             is_variadic: inner_field.is_variadic,
                             anon_union_group: union_group,
                             anon_struct_group: struct_group,
+                            explicit_align: inner_field.explicit_align,
                         });
                     }
 
@@ -563,12 +576,7 @@ impl Compiler {
                 // a struct-level `packed`.
                 self.skip_attribute_specifiers()?;
                 let field_packed = core::mem::take(&mut self.pending.attr_packed);
-                let m_align = core::mem::take(&mut self.pending.attr_align);
-                if m_align > 16 {
-                    return Err(self.compile_err(format!(
-                        "member alignment {m_align} is not supported (at most 16)"
-                    )));
-                }
+                let m_align = self.take_member_align()?;
                 // Alignment for this declarator only (a comma-list peer
                 // without its own attribute keeps the group alignment).
                 let decl_align = if m_align > 0 { m_align as usize } else { 0 };
@@ -720,11 +728,14 @@ impl Compiler {
                     // value via [`Lexer::current_pack`]; default is
                     // 8 (no-op) so unpacked structs lay out exactly
                     // as before.
-                    let pack = if packed || field_packed {
-                        1
-                    } else {
-                        self.lex.current_pack()
-                    };
+                    // `__attribute__((packed))` and `#pragma pack(N)` clamp
+                    // different things. The attribute drops a member's
+                    // NATURAL alignment to 1 but leaves an explicit
+                    // `aligned(N)` on that member standing; the pragma
+                    // clamps the finished value, explicit request included.
+                    // GCC and clang agree on both.
+                    let attr_packed = packed || field_packed;
+                    let pack = self.lex.current_pack();
                     let elem_size = self.size_of_type(field_ty);
                     // A complete but empty `struct {}` member contributes no
                     // storage and no alignment (GCC): the following member
@@ -746,14 +757,17 @@ impl Compiler {
                     } else {
                         elem_size
                     };
-                    let mut field_align = if is_empty_aggregate {
+                    // `aligned(N)` raises the field above its natural
+                    // alignment; `#pragma pack(N)` then lowers the result,
+                    // explicit attribute included (GCC and clang both give
+                    // alignment 1 for an `aligned(64)` member under
+                    // `pack(1)`). A pack request above 16 packs nothing.
+                    let natural_align = if is_empty_aggregate || attr_packed {
                         1
                     } else {
-                        self.align_of_type(field_ty).min(pack)
+                        self.align_of_type(field_ty)
                     };
-                    // `aligned(N)` raises the field's alignment above its
-                    // natural alignment and above `#pragma pack`.
-                    field_align = field_align.max(group_align).max(decl_align);
+                    let field_align = natural_align.max(group_align).max(decl_align).min(pack);
                     if field_align > struct_align {
                         struct_align = field_align;
                     }
@@ -787,6 +801,7 @@ impl Compiler {
                     is_variadic: field_is_variadic,
                     anon_union_group: 0,
                     anon_struct_group: 0,
+                    explicit_align: group_align.max(decl_align) as u32,
                 });
 
                 if self.lex.tk == ',' {
@@ -805,18 +820,18 @@ impl Compiler {
         self.pending.typedef_base_array_size = saved_typedef_base_array_size;
         self.pending.typedef_base_array_dims = saved_typedef_base_array_dims;
 
-        // Struct alignment tops out at 16 -- the widest the data section
-        // and static-object placement honor. `#pragma pack(N)` further
-        // clamps the cap; field-level clamping above already prevents
+        // Struct alignment tops out at `MAX_STATIC_ALIGN` -- the widest the
+        // data section and static-object placement honor. `#pragma pack(N)`
+        // further clamps the cap; field-level clamping above already prevents
         // struct_align from exceeding pack, but cap here too so an empty
         // struct under `pack(1)` still ends up with align=1.
-        // NOTE: an automatic (stack) object of a 16-aligned type is still
-        // rejected at its declaration -- the frame uses 8-byte slots.
-        // Struct layout, static locals, and globals honor 16.
-        let struct_align =
-            struct_align
-                .min(16)
-                .min(if packed { 1 } else { self.lex.current_pack() });
+        // NOTE: an automatic (stack) object of an over-aligned type is
+        // rejected at its declaration -- the frame uses 8-byte slots and
+        // does not realign. Struct layout, static locals and globals honor
+        // the full range.
+        let struct_align = struct_align
+            .min(super::MAX_STATIC_ALIGN)
+            .min(self.lex.current_pack());
         // Pad the struct's tail up to its alignment so consecutive
         // elements of an array preserve every field's natural
         // alignment. A struct with no named member -- empty, or holding
@@ -831,6 +846,24 @@ impl Compiler {
         Ok(struct_id)
     }
 
+    /// Apply the attributes trailing an aggregate body
+    /// (`struct S { ... } __attribute__((packed, aligned(64)));`) to the
+    /// already-laid-out struct. `packed` re-lays the fields; an
+    /// `aligned(N)` raises the aggregate's alignment and its tail
+    /// padding, and every other attribute leaves the layout alone.
+    pub(super) fn apply_post_body_attributes(&mut self, struct_id: usize) -> Result<(), C5Error> {
+        if self.skip_attribute_specifiers()? {
+            self.repack_struct(struct_id);
+        }
+        let req = self.take_member_align()?;
+        if req > 0 {
+            let align = self.structs[struct_id].align.max(req as usize);
+            self.structs[struct_id].align = align;
+            self.structs[struct_id].size = round_up(self.structs[struct_id].size, align);
+        }
+        Ok(())
+    }
+
     /// Re-lay a struct's fields with `__attribute__((packed))`
     /// semantics: no inter-member padding and an alignment of 1. Used
     /// when the attribute marker follows the body, after the fields were
@@ -839,6 +872,8 @@ impl Compiler {
     /// bit level with no storage-unit padding (the GCC/clang packed
     /// layout; C99 6.7.2.1p11 leaves the unit implementation-defined);
     /// a non-bitfield member starts at the next byte boundary.
+    /// A member carrying an explicit `aligned(N)` keeps that boundary:
+    /// `packed` removes natural padding, not a requested alignment.
     pub(super) fn repack_struct(&mut self, struct_id: usize) {
         self.structs[struct_id].align = 1;
         if self.structs[struct_id].is_union {
@@ -846,6 +881,7 @@ impl Compiler {
         }
         let n = self.structs[struct_id].fields.len();
         let mut bit_cursor = 0usize;
+        let mut max_explicit_align = 1usize;
         let mut bitfields: Vec<(usize, usize)> = Vec::new();
         let mut i = 0usize;
         while i < n {
@@ -886,9 +922,9 @@ impl Compiler {
                 continue;
             }
 
-            let (ty, array_size, bit_width) = {
+            let (ty, array_size, bit_width, explicit_align) = {
                 let f = &self.structs[struct_id].fields[i];
-                (f.ty, f.array_size, f.bit_width)
+                (f.ty, f.array_size, f.bit_width, f.explicit_align as usize)
             };
             if bit_width > 0 {
                 // TODO: a field whose bits would span more than an
@@ -902,7 +938,13 @@ impl Compiler {
                 i += 1;
                 continue;
             }
-            let offset = bit_cursor.div_ceil(8);
+            // An explicit `aligned(N)` survives packing: it still places
+            // the member on its boundary and still raises the aggregate.
+            let mut offset = bit_cursor.div_ceil(8);
+            if explicit_align > 1 {
+                offset = round_up(offset, explicit_align);
+                max_explicit_align = max_explicit_align.max(explicit_align);
+            }
             self.structs[struct_id].fields[i].offset = offset;
             let storage = if array_size > 0 {
                 self.size_of_type(ty) * array_size as usize
@@ -931,7 +973,11 @@ impl Compiler {
             f.bit_offset = (bit_start - off * 8) as u32;
             f.bit_unit_size = unit as u8;
         }
-        self.structs[struct_id].size = size;
+        // A surviving explicit member alignment raises the packed
+        // aggregate too, so an array of it keeps every member on its
+        // requested boundary.
+        self.structs[struct_id].align = max_explicit_align;
+        self.structs[struct_id].size = round_up(size, max_explicit_align);
     }
 
     /// Byte storage a non-bitfield member occupies in a packed layout:

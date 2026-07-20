@@ -2178,15 +2178,17 @@ pub(super) fn write_relocatable(
     });
 
     // .bss (no file bytes) -- zero-init data segregated past the file
-    // image; the linker zero-fills it. `sh_addralign` 16 matches the
-    // segregation's alignment.
+    // image; the linker zero-fills it. It holds objects carved out of
+    // the same offset space as `.data`, so it carries the same
+    // alignment: an over-aligned object is as likely to be zero-init
+    // as not, and a fixed 16 would silently under-align it.
     sh.push(Elf64Shdr {
         sh_name: shstrtab_offs[3],
         sh_type: SHT_NOBITS,
         sh_flags: SHF_ALLOC | SHF_WRITE,
         sh_offset: out.len() as u64,
         sh_size: build.bss_size as u64,
-        sh_addralign: 16,
+        sh_addralign: data_align.max(16),
         ..Default::default()
     });
 

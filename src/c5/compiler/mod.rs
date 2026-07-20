@@ -40,6 +40,15 @@ pub(crate) mod types;
 /// cache-line (64) and page-aligned requests.
 pub(crate) const MAX_STATIC_ALIGN: usize = 4096;
 
+/// Widest alignment an object DEFINITION is placed at. Struct layout
+/// (`sizeof`, `_Alignof`, member offsets) honors the full
+/// [`MAX_STATIC_ALIGN`] range, but the placement of an object of such a
+/// type is only verified to hold at this boundary; wider requests are
+/// diagnosed rather than silently under-aligned. Covers the cache-line
+/// alignment that motivates over-aligned members.
+/// TODO: raise once `.data` / `.bss` object placement is verified wider.
+pub(crate) const MAX_OBJECT_ALIGN: usize = 64;
+
 /// Captured enum tag + constants for DWARF emission. C99 6.7.2.2
 /// enums collapse to `int` in c5 -- the tag carries no semantic
 /// weight at the type level -- but preserving the (name, value)
@@ -179,6 +188,13 @@ pub struct StructField {
     /// { { 1, 2 } }`). Zero for a regular field and for anonymous-union
     /// members, which the `anon_union_group` path handles.
     pub anon_struct_group: u32,
+    /// Alignment requested for this field by an explicit
+    /// `__attribute__((aligned(N)))` / `_Alignas(N)`, or 0 when the
+    /// field sits at its type's natural alignment. `packed` drops a
+    /// field's natural alignment but not an explicit request (GCC and
+    /// clang both keep an `aligned(64)` member 64-aligned inside a
+    /// packed struct), so the re-lay path needs the request preserved.
+    pub explicit_align: u32,
 }
 
 /// Optional preprocessor / driver knobs threaded through compiler

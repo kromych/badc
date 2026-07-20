@@ -543,6 +543,17 @@ fn aligned_member() {
 }
 
 #[test]
+fn cacheline_aligned_member() {
+    // Member alignment above 16 -- cache-line alignment (64, and 128 on
+    // some configurations). Member offsets and padding, aggregate size and
+    // alignment, arrays, nesting, `_Alignas(type-name)`, the `#pragma pack`
+    // and `packed` interactions, and the runtime alignment of the objects
+    // badc places. Every constant checked against GCC and clang on x86-64
+    // and aarch64.
+    assert_eq!(run_fixture("cacheline_aligned_member.c"), 0);
+}
+
+#[test]
 fn packed_enum() {
     // `enum __attribute__((packed))` uses the smallest integer type holding
     // its values, changing the layout of an embedding struct (a real-world

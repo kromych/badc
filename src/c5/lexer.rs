@@ -7,18 +7,21 @@ use super::error::C5Error;
 use super::symbol::Symbol;
 use super::token::{Tok, Token, Ty};
 
-/// Default struct-alignment cap when no `#pragma pack(N)` is
-/// active. Matches the aggregate-layout cap of 16 bytes; no natural
-/// type exceeds 8, so this only lets an explicit
-/// `__attribute__((aligned(16)))` survive, and explicit pack pragmas
-/// can lower it.
-const DEFAULT_PACK: usize = 16;
+/// Member-alignment cap when no `#pragma pack(N)` is active: none.
+/// A member's alignment is then whatever its type or an explicit
+/// `__attribute__((aligned(N)))` asks for.
+const DEFAULT_PACK: usize = usize::MAX;
 
-/// Clamp a user-supplied pack value to `[1, DEFAULT_PACK]`. C99
-/// permits 1, 2, 4, 8, 16. `0` is treated as "default" (matching
-/// `#pragma pack()` with no arg).
+/// Largest pack value that packs. GCC and clang honor 1, 2, 4, 8 and
+/// 16; a larger request packs nothing, since no natural alignment
+/// exceeds 16, and it must not clamp an explicit `aligned(N)` either.
+const MAX_HONORED_PACK: usize = 16;
+
+/// Clamp a user-supplied pack value. `0` means "default" (matching
+/// `#pragma pack()` with no arg); anything above [`MAX_HONORED_PACK`]
+/// packs nothing.
 fn clamp_pack(n: usize) -> usize {
-    if n == 0 || n > DEFAULT_PACK {
+    if n == 0 || n > MAX_HONORED_PACK {
         DEFAULT_PACK
     } else {
         n

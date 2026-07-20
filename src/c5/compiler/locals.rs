@@ -352,9 +352,24 @@ impl Compiler {
                 self.symbols[loc_idx].is_const_qualified = self.pending.base_is_const
                     && array_size == 0
                     && super::types::is_integer_scalar_ty(ty);
-                if req_align > 8 {
-                    self.align_data_to(req_align as usize);
-                    self.data_align = self.data_align.max(req_align as usize);
+                // As for a file-scope object: the type's own alignment
+                // counts even when the declarator carries no attribute.
+                // A block-scope static is allocated while a function body
+                // is being parsed and its slot does not keep a boundary
+                // wider than 16, so diagnose rather than under-align.
+                // TODO: place block-scope statics like file-scope objects
+                // and lift this to MAX_OBJECT_ALIGN.
+                let want_align = core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty));
+                if self.align_of_type(ty) > 16 && req_align <= 0 {
+                    return Err(self.compile_err(format!(
+                        "block-scope static of a {}-byte-aligned type is not \
+                         supported (at most 16); move it to file scope",
+                        self.align_of_type(ty)
+                    )));
+                }
+                if want_align > 8 {
+                    self.align_data_to(want_align);
+                    self.data_align = self.data_align.max(want_align);
                 }
                 self.allocate_static_local(loc_idx, ty, array_size)?;
                 self.ast_emit_static_local_decl(loc_idx as u32);
@@ -373,6 +388,22 @@ impl Compiler {
                 self.pending_local_init_ast = None;
                 self.pending_local_aggregate_ast = None;
                 self.pending_local_runtime_elements.clear();
+                // A type can carry an over-alignment without any attribute
+                // on this declarator: an `aligned(64)` member raises its
+                // whole aggregate. Frame slots are 8 bytes wide and the
+                // prologue does not realign the stack, so the frame cannot
+                // place an object on a boundary wider than the 16 bytes the
+                // frame pointer itself guarantees. Diagnose those rather
+                // than hand back an address that does not meet the type's
+                // alignment. A pointer object holds its own
+                // pointer-aligned value, whatever its pointee asks for.
+                let ty_align = self.align_of_type(ty);
+                if ty_align > 16 && !is_pointer_ty(ty) {
+                    return Err(self.compile_err(format!(
+                        "automatic object of a {ty_align}-byte-aligned type is not \
+                         supported (the frame aligns to at most 16); use static storage"
+                    )));
+                }
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
                 // Dual-emit: push `Decl::Local { sym, slot_off,
                 // init }`. The init flavour comes from whichever

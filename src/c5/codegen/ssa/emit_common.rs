@@ -1252,6 +1252,11 @@ fn parse_section_value(a: &str) -> Result<AsmSectionValue, alloc::string::String
     if let Some(v) = parse_raw_int(a) {
         return Ok(AsmSectionValue::Const(v));
     }
+    // A fully-enclosing parenthesis group is grouping only; strip it so
+    // `((insn) - .)` (the aarch64 exception table) reduces like `(insn) - .`
+    // and `(((x)))` like `x`. A group that closes before the end
+    // (`(a) - (b)`, `(1 << 15) | (%0)`) is left for the handling below.
+    let a = strip_label_parens(a);
     if let Some(rest) = a.strip_prefix('%') {
         let body = rest
             .strip_prefix('c')
@@ -2394,6 +2399,40 @@ mod asm_section_tests {
         );
         // A three-term expression is still unsupported.
         assert!(parse_section_value("a - b - c").is_err());
+    }
+
+    #[test]
+    fn section_value_strips_enclosing_parens() {
+        // A fully-enclosing paren group is grouping only. The aarch64
+        // exception table wraps the whole PC-relative expression
+        // (`.long ((insn) - .)`); it must reduce like the single-paren form.
+        assert_eq!(
+            parse_section_value("((1b) - .)").unwrap(),
+            parse_section_value("(1b) - .").unwrap(),
+        );
+        assert_eq!(
+            parse_section_value("((1b) - .)").unwrap(),
+            AsmSectionValue::Ref {
+                name: alloc::string::String::from("1b"),
+                pcrel: true,
+            }
+        );
+        assert_eq!(
+            parse_section_value("(((sym)))").unwrap(),
+            AsmSectionValue::Ref {
+                name: alloc::string::String::from("sym"),
+                pcrel: false,
+            }
+        );
+        // A group closing before the end is not a full enclosure: the two
+        // parenthesised labels stay a constant distance.
+        assert_eq!(
+            parse_section_value("(662b) - (661b)").unwrap(),
+            AsmSectionValue::LabelDiff {
+                minuend: alloc::string::String::from("662b"),
+                subtrahend: alloc::string::String::from("661b"),
+            }
+        );
     }
 
     #[test]

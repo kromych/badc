@@ -3253,6 +3253,60 @@ fn asm_section_operand_expression_and_parenthesised_label() {
 }
 
 #[test]
+fn asm_section_double_parenthesised_label_relocates() {
+    // The aarch64 exception table wraps the whole PC-relative expression in
+    // an outer paren: `.long ((insn) - .)`. It must relocate exactly like the
+    // single-paren form: a 4-byte PC-relative field per label, no folded
+    // constant. Byte-structure identical to gas.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int load_ex(int *p) {\n\
+            int r = 0;\n\
+            __asm__ volatile(\"1:\\tnop\\n\"\n\
+                \".pushsection .exx,\\\"a\\\"\\n\"\n\
+                \".long ((1b) - .)\\n\"\n\
+                \".long ((2f) - .)\\n\"\n\
+                \".short 0\\n\"\n\
+                \".popsection\\n\"\n\
+                \"2:\\n\" : \"=r\"(r) : \"r\"(*p));\n\
+            return r;\n\
+        }\n\
+        int main(void) { int v = 1; return load_ex(&v); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".exx")
+            .unwrap_or_else(|| panic!("{target:?}: .exx section missing"));
+        // Two 4-byte PC-relative fields plus a 2-byte word.
+        assert_eq!(sec.3.len(), 4 + 4 + 2, "{target:?}: section size");
+        let rela = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.exx")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.exx missing"));
+        assert_eq!(rela.3.len(), 2 * 24, "{target:?}: two PC-relative relocs");
+        let prel32 = match target {
+            Target::LinuxX64 => 2u64,
+            _ => 261,
+        };
+        for k in 0..2 {
+            let r_info = u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+            assert_eq!(
+                r_info & 0xFFFF_FFFF,
+                prel32,
+                "{target:?}: reloc {k} pcrel32"
+            );
+        }
+    }
+}
+
+#[test]
 fn asm_section_label_difference_is_a_constant() {
     // `label_a - label_b` between two template labels is the constant byte
     // distance in the emitted code, sized to the directive. Byte-for-byte

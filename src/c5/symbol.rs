@@ -410,7 +410,6 @@ pub(crate) struct Symbol {
     /// and dead-store diagnostics for this symbol, matching the
     /// documented effect of the attribute.
     pub maybe_unused: bool,
-
 }
 
 /// The machine register a `register T name asm("reg")` declaration

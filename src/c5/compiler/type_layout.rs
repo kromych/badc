@@ -187,8 +187,7 @@ impl Compiler {
     /// True when the current identifier spells the GCC builtin type name
     /// `__builtin_va_list`.
     pub(super) fn is_lex_va_list_spelling(&self) -> bool {
-        self.lex.tk == Token::Id
-            && self.symbols[self.lex.curr_id_idx].name == "__builtin_va_list"
+        self.lex.tk == Token::Id && self.symbols[self.lex.curr_id_idx].name == "__builtin_va_list"
     }
 
     /// Base type for `__builtin_va_list`, resolving to the same

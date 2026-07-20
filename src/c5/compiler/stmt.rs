@@ -624,9 +624,7 @@ impl Compiler {
             }
 
             if self.pending.auto_type_single_declarator && self.lex.tk == ',' {
-                return Err(
-                    self.compile_err("`__auto_type` declaration takes a single declarator")
-                );
+                return Err(self.compile_err("`__auto_type` declaration takes a single declarator"));
             }
             self.accept(',')?;
         }
@@ -1774,13 +1772,8 @@ impl Compiler {
                 ));
             };
             let name = core::str::from_utf8(&template[bstart..bstart + len]).unwrap_or("");
-            let Some(n) = names
-                .iter()
-                .position(|o| o.as_deref() == Some(name))
-            else {
-                return Err(alloc::format!(
-                    "inline asm: `%[{name}]` names no operand"
-                ));
+            let Some(n) = names.iter().position(|o| o.as_deref() == Some(name)) else {
+                return Err(alloc::format!("inline asm: `%[{name}]` names no operand"));
             };
             out.push(b'%');
             if let Some(m) = modifier {

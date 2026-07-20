@@ -4346,7 +4346,11 @@ fn file_scope_asm_and_register_variable_run() {
     // `extern typeof` redeclaration, an asm block emitting the name
     // into a custom section (a no-op for the VM), and a stack-pointer
     // register variable read from a function.
-    let sp = if cfg!(target_arch = "x86_64") { "rsp" } else { "sp" };
+    let sp = if cfg!(target_arch = "x86_64") {
+        "rsp"
+    } else {
+        "sp"
+    };
     let src = alloc::format!(
         "
         int export_me(int v) {{ return v + 2; }}

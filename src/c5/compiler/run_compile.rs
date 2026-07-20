@@ -127,33 +127,30 @@ impl Compiler {
             return Err(self.compile_err("`asm goto` is not supported at file scope"));
         }
         if self.lex.tk == ':' {
-            return Err(
-                self.compile_err("inline asm operands are not supported at file scope")
-            );
+            return Err(self.compile_err("inline asm operands are not supported at file scope"));
         }
         self.consume(b')', "`)` expected after inline asm")?;
         self.consume(b';', "`;` expected after file-scope `asm`")?;
         let text = core::str::from_utf8(&template)
             .map_err(|_| self.compile_err("file-scope asm template is not valid UTF-8"))?;
-        let blocks = match engine::extract_asm_sections(text) {
-            Err(m) => return Err(self.compile_err(m)),
-            Ok(Some((code, blocks))) => {
-                if code.split_whitespace().next().is_some() {
-                    return Err(self.compile_err(
-                        "file-scope asm supports section data directives only",
-                    ));
+        let blocks =
+            match engine::extract_asm_sections(text) {
+                Err(m) => return Err(self.compile_err(m)),
+                Ok(Some((code, blocks))) => {
+                    if code.split_whitespace().next().is_some() {
+                        return Err(self
+                            .compile_err("file-scope asm supports section data directives only"));
+                    }
+                    blocks
                 }
-                blocks
-            }
-            Ok(None) => {
-                if text.split_whitespace().next().is_some() {
-                    return Err(self.compile_err(
-                        "file-scope asm supports section data directives only",
-                    ));
+                Ok(None) => {
+                    if text.split_whitespace().next().is_some() {
+                        return Err(self
+                            .compile_err("file-scope asm supports section data directives only"));
+                    }
+                    return Ok(());
                 }
-                return Ok(());
-            }
-        };
+            };
         for b in &blocks {
             for item in &b.items {
                 if let engine::AsmSectionItem::Data { values, .. } = item
@@ -173,7 +170,9 @@ impl Compiler {
         let mut scratch: alloc::vec::Vec<engine::AsmSection> = alloc::vec::Vec::new();
         let aarch64 = matches!(
             self.target,
-            crate::Target::MacOSAarch64 | crate::Target::LinuxAarch64 | crate::Target::WindowsAarch64
+            crate::Target::MacOSAarch64
+                | crate::Target::LinuxAarch64
+                | crate::Target::WindowsAarch64
         );
         engine::materialize_asm_sections(&blocks, &|_| None, &|_| None, aarch64, &mut scratch)
             .map_err(|m| self.compile_err(m))?;
@@ -516,7 +515,12 @@ impl Compiler {
                     // linkage-name rename. TODO: file-scope declarator
                     // `asm("name")` linkage-name rename.
                     if self.pending.saw_register_storage {
-                        self.parse_file_scope_register_binding(id_idx, ty, static_seen, extern_seen)?;
+                        self.parse_file_scope_register_binding(
+                            id_idx,
+                            ty,
+                            static_seen,
+                            extern_seen,
+                        )?;
                         self.accept(',')?;
                         continue;
                     }
@@ -1063,9 +1067,7 @@ impl Compiler {
                         // through it resolve to the target's entry.
                         if let Some(target) = self.pending.attr_alias.take() {
                             let tgt = self.symbols.iter().position(|s| {
-                                s.name == target
-                                    && s.class == Token::Fun as i64
-                                    && s.defined_here
+                                s.name == target && s.class == Token::Fun as i64 && s.defined_here
                             });
                             let Some(tgt) = tgt else {
                                 return Err(self.compile_err(format!(

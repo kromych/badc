@@ -665,7 +665,11 @@ pub(super) fn write_relocatable(
             let Some(sec) = fn_section.get(name.as_str()) else {
                 continue;
             };
-            let lo = build.pc_to_native.get(ent_pc).copied().unwrap_or(usize::MAX);
+            let lo = build
+                .pc_to_native
+                .get(ent_pc)
+                .copied()
+                .unwrap_or(usize::MAX);
             let hi = build
                 .func_ent_pcs
                 .get(i + 1)
@@ -679,9 +683,8 @@ pub(super) fn write_relocatable(
             g.0 = g.0.min(lo);
             g.1 = g.1.max(hi);
         }
-        let internal = |msg: String| -> C5Error {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&msg))
-        };
+        let internal =
+            |msg: String| -> C5Error { C5Error::Compile(crate::c5::error::fmt_internal_err(&msg)) };
         for (sec, (lo, hi)) in &text_groups {
             let e = carve
                 .table
@@ -751,7 +754,11 @@ pub(super) fn write_relocatable(
         // Assign packed in-section bases: text groups keep their
         // internal layout wholesale; data objects pack 8-aligned.
         sizes.resize(carve.table.entries.len(), 0);
-        for r in carve.text_ranges.iter_mut().chain(carve.data_ranges.iter_mut()) {
+        for r in carve
+            .text_ranges
+            .iter_mut()
+            .chain(carve.data_ranges.iter_mut())
+        {
             let base = (sizes[r.entry] + 7) & !7;
             r.new_base = base;
             sizes[r.entry] = base + (r.old_hi - r.old_lo);
@@ -1310,7 +1317,10 @@ pub(super) fn write_relocatable(
     for (i, a) in program.function_aliases.iter().enumerate() {
         let Some(ti) = func_strs.iter().position(|n| n == &a.target) else {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("alias `{}`: target `{}` has no emitted body", a.name, a.target),
+                &format!(
+                    "alias `{}`: target `{}` has no emitted body",
+                    a.name, a.target
+                ),
             )));
         };
         let (lo, hi) = func_extent(ti)?;
@@ -2032,7 +2042,11 @@ pub(super) fn write_relocatable(
             ent.bytes
                 .extend_from_slice(&text_body[r.old_lo as usize..r.old_hi as usize]);
         }
-        let carve_hi = carve.text_ranges.last().map(|r| r.old_hi as usize).unwrap_or(0);
+        let carve_hi = carve
+            .text_ranges
+            .last()
+            .map(|r| r.old_hi as usize)
+            .unwrap_or(0);
         text_body.drain(carve.text_keep_len..carve_hi);
     }
     let text_off = round_up(out.len() as u64, 16);
@@ -2083,7 +2097,8 @@ pub(super) fn write_relocatable(
         let file_hi = (r.old_hi as usize).min(data_body.len());
         ent.bytes.extend_from_slice(&data_body[file_lo..file_hi]);
         // A `.bss`-resident (wholly zero) object contributes zeros.
-        ent.bytes.resize(ent.bytes.len() + (size - (file_hi - file_lo)), 0);
+        ent.bytes
+            .resize(ent.bytes.len() + (size - (file_hi - file_lo)), 0);
         data_body[file_lo..file_hi].fill(0);
     }
     // Inline-asm payloads follow the attribute content of their entry

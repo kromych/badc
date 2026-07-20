@@ -1375,8 +1375,7 @@ impl Preprocessor {
                                 active = taken;
                             }
                             Directive::If(expr) => {
-                                let taken =
-                                    active && self.eval_condition(expr, dline, filename)?;
+                                let taken = active && self.eval_condition(expr, dline, filename)?;
                                 cond_stack.push(CondFrame {
                                     parent_active: active,
                                     this_branch_taken: taken,

@@ -257,8 +257,10 @@ impl Compiler {
                 let fty = self.symbols[idx].type_ + Ty::Ptr as i64;
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.base_is_function_type = true;
-                self.pending.typedef_fn_proto =
-                    Some((self.symbols[idx].params.len(), self.symbols[idx].is_variadic));
+                self.pending.typedef_fn_proto = Some((
+                    self.symbols[idx].params.len(),
+                    self.symbols[idx].is_variadic,
+                ));
                 self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
                 self.next()?; // identifier
                 self.next()?; // )
@@ -423,11 +425,9 @@ impl Compiler {
         reg: Option<crate::c5::symbol::AsmRegister>,
     ) -> Result<(), C5Error> {
         use crate::c5::symbol::AsmRegister as R;
-        if matches!(reg, Some(R::StackPointer | R::FramePointer)) && self.lex.tk == Token::Assign
-        {
-            return Err(self.compile_err(
-                "a stack- or frame-pointer register variable cannot be initialized",
-            ));
+        if matches!(reg, Some(R::StackPointer | R::FramePointer)) && self.lex.tk == Token::Assign {
+            return Err(self
+                .compile_err("a stack- or frame-pointer register variable cannot be initialized"));
         }
         Ok(())
     }
@@ -461,8 +461,8 @@ impl Compiler {
         }
         let prior_class = self.symbols[id_idx].class;
         if prior_class != 0 {
-            let same = prior_class == Token::Loc as i64
-                && self.symbols[id_idx].asm_register == Some(reg);
+            let same =
+                prior_class == Token::Loc as i64 && self.symbols[id_idx].asm_register == Some(reg);
             if !same {
                 return Err(self.compile_err(format!(
                     "`{}` conflicts with a prior declaration",
@@ -504,7 +504,9 @@ impl Compiler {
         let n = name.trim_start_matches('%');
         let aarch64 = matches!(
             self.target,
-            crate::Target::MacOSAarch64 | crate::Target::LinuxAarch64 | crate::Target::WindowsAarch64
+            crate::Target::MacOSAarch64
+                | crate::Target::LinuxAarch64
+                | crate::Target::WindowsAarch64
         );
         let resolved = if aarch64 {
             match n {
@@ -575,9 +577,7 @@ impl Compiler {
     pub(super) fn parse_auto_type_specifier(&mut self) -> Result<i64, C5Error> {
         self.next()?; // __auto_type
         if self.lex.tk != Token::Id {
-            return Err(
-                self.compile_err("`__auto_type` requires a plain identifier declarator")
-            );
+            return Err(self.compile_err("`__auto_type` requires a plain identifier declarator"));
         }
         let snap = self.lex.snapshot();
         self.next()?; // identifier
@@ -586,9 +586,7 @@ impl Compiler {
         }
         self.next()?; // =
         if self.lex.tk == '{' {
-            return Err(
-                self.compile_err("`__auto_type` initializer must be a single expression")
-            );
+            return Err(self.compile_err("`__auto_type` initializer must be a single expression"));
         }
         let ty = self.parse_unevaluated_expr_ty(false)?;
         // The initializer decayed any array to a pointer; the declared
@@ -997,9 +995,7 @@ impl Compiler {
         attr: &str,
     ) -> Result<alloc::string::String, C5Error> {
         if self.lex.tk != '"' {
-            return Err(
-                self.compile_err(format!("`{attr}` operand must be a string literal"))
-            );
+            return Err(self.compile_err(format!("`{attr}` operand must be a string literal")));
         }
         let start = self.lex.ival as usize;
         self.next()?;
@@ -1096,8 +1092,7 @@ impl Compiler {
 
     /// True when the current token is the `register` storage class.
     pub(super) fn lex_is_register_storage(&self) -> bool {
-        self.lex.tk == Token::FuncSpec
-            && self.symbols[self.lex.curr_id_idx].name == "register"
+        self.lex.tk == Token::FuncSpec && self.symbols[self.lex.curr_id_idx].name == "register"
     }
 
     /// True when the current token is the `const` type qualifier.

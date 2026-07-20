@@ -1216,10 +1216,14 @@ fn file_scope_asm_constraints() {
             .unwrap_or_else(|e| panic!("expected accept, got {e}"));
     };
     ok("asm(\"\"); int main(void) { return 0; }");
-    ok("__asm__(\".pushsection .note.x,\\\"a\\\"\\n.long 1\\n.popsection\");\n\
-        int main(void) { return 0; }");
-    ok("asm volatile(\".section .modinfo,\\\"a\\\"\\n.asciz \\\"v=1\\\"\\n.previous\");\n\
-        int main(void) { return 0; }");
+    ok(
+        "__asm__(\".pushsection .note.x,\\\"a\\\"\\n.long 1\\n.popsection\");\n\
+        int main(void) { return 0; }",
+    );
+    ok(
+        "asm volatile(\".section .modinfo,\\\"a\\\"\\n.asciz \\\"v=1\\\"\\n.previous\");\n\
+        int main(void) { return 0; }",
+    );
     expect_compile_error(
         "asm(\"nop\"); int main(void) { return 0; }",
         "section data directives only",

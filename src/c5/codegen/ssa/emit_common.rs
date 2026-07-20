@@ -757,7 +757,10 @@ pub(crate) enum AsmSectionValue {
     /// A template label (`1b`, `name`) or a symbol, optionally
     /// PC-relative (`ref - .`). The emitter resolves a template label to
     /// a text offset; an unknown name is a symbol reference.
-    Ref { name: alloc::string::String, pcrel: bool },
+    Ref {
+        name: alloc::string::String,
+        pcrel: bool,
+    },
 }
 
 /// One item of an in-template section block, in source order.
@@ -1109,8 +1112,9 @@ pub(crate) fn materialize_asm_sections(
                                         "inline asm: non-constant section data value",
                                     )
                                 })?;
-                                sec.bytes
-                                    .extend_from_slice(&(c as u64).to_le_bytes()[..*width as usize]);
+                                sec.bytes.extend_from_slice(
+                                    &(c as u64).to_le_bytes()[..*width as usize],
+                                );
                             }
                             AsmSectionValue::Ref { name, pcrel } => {
                                 if !matches!(width, 4 | 8) {
@@ -1129,8 +1133,7 @@ pub(crate) fn materialize_asm_sections(
                                     target,
                                     addend: 0,
                                 });
-                                sec.bytes
-                                    .extend_from_slice(&[0u8; 8][..*width as usize]);
+                                sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
                             }
                         }
                     }
@@ -1509,9 +1512,7 @@ mod asm_section_tests {
         materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
         assert_eq!(sink.len(), 1);
         assert_eq!(sink[0].bytes.len(), 8);
-        assert!(
-            extract_asm_sections(".pushsection .a,\"a\"\n.popsection\n.popsection").is_err()
-        );
+        assert!(extract_asm_sections(".pushsection .a,\"a\"\n.popsection\n.popsection").is_err());
         // No section directives: the fast path returns None.
         assert!(extract_asm_sections("nop").unwrap().is_none());
     }
@@ -1526,9 +1527,7 @@ mod asm_section_tests {
         materialize_asm_sections(&blocks, &|_| None, &|_| None, true, &mut sink).unwrap();
         assert_eq!(sink[0].align, 8);
         let mut sink = alloc::vec::Vec::new();
-        assert!(
-            materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).is_err()
-        );
+        assert!(materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).is_err());
         // `.align 8` under the x86 convention is 8 bytes.
         let text = ".pushsection .t,\"a\"\n.align 8\n.byte 1\n.popsection";
         let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();

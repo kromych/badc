@@ -112,7 +112,6 @@ fn flag_output_is_rejected_where_it_has_no_meaning() {
     );
 }
 
-
 #[test]
 fn template_operand_reference_past_the_operand_list_is_diagnosed() {
     use crate::{NativeOptions, Target};
@@ -182,9 +181,7 @@ fn flag_output_macro_is_advertised_only_where_implemented() {
         if gnu {
             pp.enable_gnu();
         }
-        pp.process(probe)
-            .unwrap_or_default()
-            .contains("yes")
+        pp.process(probe).unwrap_or_default().contains("yes")
     };
     assert!(check(crate::Target::LinuxX64, true));
     assert!(!check(crate::Target::LinuxAarch64, true));

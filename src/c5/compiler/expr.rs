@@ -969,9 +969,8 @@ impl Compiler {
                         }
                         self.ast_psh();
                         if self.lex.tk != ',' {
-                            return Err(self.compile_err(format!(
-                                "intrinsic `{fn_name}` takes two operands"
-                            )));
+                            return Err(self
+                                .compile_err(format!("intrinsic `{fn_name}` takes two operands")));
                         }
                         self.next()?;
                         self.expr(Token::Assign as i64)?;

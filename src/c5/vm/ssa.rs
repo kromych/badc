@@ -2041,14 +2041,12 @@ fn run_inline_asm(
     // Explicit `disp(%reg)` references and label addresses touch machine
     // memory / code layout the register model does not carry.
     if insns.iter().any(|i| {
-        i.operands
-            .iter()
-            .any(|o| {
-                matches!(
-                    o,
-                    AsmOpnd::Mem { .. } | AsmOpnd::AbsMem { .. } | AsmOpnd::LabelAddr { .. }
-                )
-            })
+        i.operands.iter().any(|o| {
+            matches!(
+                o,
+                AsmOpnd::Mem { .. } | AsmOpnd::AbsMem { .. } | AsmOpnd::LabelAddr { .. }
+            )
+        })
     }) {
         return Err(C5Error::Runtime(alloc::string::String::from(
             "inline asm: explicit memory operands are not supported under --interp",

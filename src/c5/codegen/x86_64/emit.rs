@@ -6133,10 +6133,15 @@ fn emit_inline_asm(
         // constant): the operand's captured value is the address. `lea`
         // materializes it into the destination; `call` / `jmp` branch
         // through it (r11 scratch).
-        if let Some((k, idx)) = insn.operands.iter().enumerate().find_map(|(k, o)| match *o {
-            AsmOpnd::RefConst { idx, .. } if const_of(idx).is_none() => Some((k, idx)),
-            _ => None,
-        }) {
+        if let Some((k, idx)) = insn
+            .operands
+            .iter()
+            .enumerate()
+            .find_map(|(k, o)| match *o {
+                AsmOpnd::RefConst { idx, .. } if const_of(idx).is_none() => Some((k, idx)),
+                _ => None,
+            })
+        {
             let name = match insn.mnemonic {
                 super::asm::Mnemonic::Table(n) => n,
                 _ => "",
@@ -6147,7 +6152,9 @@ fn emit_inline_asm(
                         AsmOpnd::Reg { reg, .. } if reg < 16 => reg,
                         AsmOpnd::Ref { idx, .. } => match op_reg[idx as usize] {
                             Some(r) => r,
-                            None => return fail("inline asm: `lea` destination must be a register"),
+                            None => {
+                                return fail("inline asm: `lea` destination must be a register");
+                            }
                         },
                         _ => return fail("inline asm: `lea` destination must be a register"),
                     };
@@ -6168,9 +6175,7 @@ fn emit_inline_asm(
                     ]);
                 }
                 _ => {
-                    return fail(
-                        "inline asm: `%c`/`%P` address operand outside lea/call/jmp",
-                    );
+                    return fail("inline asm: `%c`/`%P` address operand outside lea/call/jmp");
                 }
             }
             continue;
@@ -6368,9 +6373,7 @@ fn emit_inline_asm(
                         Some(i) => match resolve(i) {
                             Some(r) => Some(r),
                             None => {
-                                return fail(
-                                    "inline asm: memory index must be a register operand",
-                                );
+                                return fail("inline asm: memory index must be a register operand");
                             }
                         },
                         None => None,
@@ -6448,9 +6451,7 @@ fn emit_inline_asm(
             let num = if let Some(i) = names.iter().position(|&n| n == name) {
                 super::asm::NAMED_LABEL_BASE + i as u32
             } else {
-                let digits = name
-                    .strip_suffix(['b', 'f'])
-                    .unwrap_or(name);
+                let digits = name.strip_suffix(['b', 'f']).unwrap_or(name);
                 if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
                     return None;
                 }

@@ -1005,9 +1005,10 @@ fn split_seg_prefix(tok: &str) -> Option<(u8, &str)> {
 /// name) or an operand reference `%N` (an optional `q` size letter is the
 /// 64-bit name the address requires anyway).
 fn parse_mem_base(tok: &str) -> Option<AsmMemBase> {
-    let body = tok.trim().strip_prefix("%%").or_else(|| {
-        tok.trim().strip_prefix('%')
-    })?;
+    let body = tok
+        .trim()
+        .strip_prefix("%%")
+        .or_else(|| tok.trim().strip_prefix('%'))?;
     let digits = body.strip_prefix('q').unwrap_or(body);
     if !digits.is_empty() && digits.bytes().all(|c| c.is_ascii_digit()) {
         return Some(AsmMemBase::Ref(digits.parse().ok()?));
@@ -1326,9 +1327,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 let tok = match split_seg_prefix(op) {
                     Some((byte, rem)) => {
                         if seg.is_some_and(|s| s != byte) {
-                            return Err(String::from(
-                                "inline asm: conflicting segment overrides",
-                            ));
+                            return Err(String::from("inline asm: conflicting segment overrides"));
                         }
                         seg = Some(byte);
                         if let Some(v) = parse_int(rem) {

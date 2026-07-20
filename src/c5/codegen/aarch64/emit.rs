@@ -2495,10 +2495,7 @@ fn emit_inline_asm_aarch64(
     }
     // The constant value of an `i`-class operand reference, if any.
     let const_of = |idx: u8| -> Option<i64> {
-        match func
-            .insts
-            .get(*args.get(idx as usize)? as usize)
-        {
+        match func.insts.get(*args.get(idx as usize)? as usize) {
             Some(super::super::ir::Inst::Imm(v)) => Some(*v),
             _ => None,
         }
@@ -2551,7 +2548,10 @@ fn emit_inline_asm_aarch64(
                         num: r,
                         is_d: is64.unwrap_or(true),
                     }
-                } else if matches!(asm.operands[idx as usize].constraint, AsmConstraint::MemBase) {
+                } else if matches!(
+                    asm.operands[idx as usize].constraint,
+                    AsmConstraint::MemBase
+                ) {
                     // A `Q` operand substitutes as the whole memory
                     // reference `[xN]` through its address register.
                     Opnd::Mem {
@@ -2637,14 +2637,15 @@ fn emit_inline_asm_aarch64(
             for o in &insn.operands {
                 let v = match *o {
                     AsmOpndA64::Imm(v) => v,
-                    AsmOpndA64::RefConst(idx) | AsmOpndA64::Ref { idx, .. } => match const_of(idx)
-                    {
-                        Some(v) => v,
-                        None => {
-                            bail_msg("aarch64 inline asm: non-constant data-directive value");
-                            return false;
+                    AsmOpndA64::RefConst(idx) | AsmOpndA64::Ref { idx, .. } => {
+                        match const_of(idx) {
+                            Some(v) => v,
+                            None => {
+                                bail_msg("aarch64 inline asm: non-constant data-directive value");
+                                return false;
+                            }
                         }
-                    },
+                    }
                     _ => {
                         bail_msg("aarch64 inline asm: unsupported data-directive value");
                         return false;
@@ -2861,7 +2862,8 @@ fn emit_inline_asm_aarch64(
     // semantics), so the sequence repeats on each trampoline.
     let emit_outputs = |code: &mut Vec<u8>| -> bool {
         for (i, op) in asm.operands.iter().enumerate() {
-            if !op.is_output || matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::MemBase) {
+            if !op.is_output || matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::MemBase)
+            {
                 continue;
             }
             let Some(r) = op_reg[i] else { continue };

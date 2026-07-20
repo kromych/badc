@@ -168,8 +168,7 @@ pub(crate) fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &P
     // in-image reference; an alias symbol's `val` is its target's
     // entry, referenced through the alias name at link time.
     for s in &program.symbols {
-        if s.class == Token::Fun as i64 && (s.is_used || s.is_alias || s.section_name.is_some())
-        {
+        if s.class == Token::Fun as i64 && (s.is_used || s.is_alias || s.section_name.is_some()) {
             queue.push(s.val as usize);
         }
     }

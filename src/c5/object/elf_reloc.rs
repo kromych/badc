@@ -129,6 +129,7 @@ const R_X86_64_PC32: u32 = 2;
 const R_X86_64_PLT32: u32 = 4;
 const R_X86_64_GOTPCREL: u32 = 9;
 const R_X86_64_32: u32 = 10;
+const R_X86_64_PC64: u32 = 24;
 // Local-exec TLS: the linker writes the (negative, variant-2) TP-relative
 // offset of the symbol into the `add r64, imm32` immediate.
 const R_X86_64_TPOFF32: u32 = 23;
@@ -136,6 +137,8 @@ const R_X86_64_TPOFF32: u32 = 23;
 // AArch64 reloc types (ELF for the ARM 64-bit architecture, table 5-1).
 const R_AARCH64_ABS64: u32 = 257;
 const R_AARCH64_ABS32: u32 = 258;
+const R_AARCH64_PREL64: u32 = 260;
+const R_AARCH64_PREL32: u32 = 261;
 const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
 const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
@@ -1209,7 +1212,16 @@ pub(super) fn write_relocatable(
     };
     let init_sections =
         build_init_array_sections(&program.init_funcs, &func_symidx_by_name, rtype_abs64_init)?;
-    let num_sections: usize = base_sections + 2 * init_sections.len();
+    // Inline-asm `.pushsection` sections: one header per section plus a
+    // companion `.rela.*` for those carrying relocations.
+    let asm_secs = &build.asm_sections;
+    let asm_rela_names: Vec<String> = asm_secs
+        .iter()
+        .map(|s| format!(".rela{}", s.name))
+        .collect();
+    let asm_rela_count = asm_secs.iter().filter(|s| !s.relocs.is_empty()).count();
+    let num_sections: usize =
+        base_sections + 2 * init_sections.len() + asm_secs.len() + asm_rela_count;
 
     // Section name table. Index map below mirrors the SHIDX_*
     // constants above (one entry per non-null section).
@@ -1242,6 +1254,12 @@ pub(super) fn write_relocatable(
     for s in &init_sections {
         shstrtab_names.push(s.name.as_str());
         shstrtab_names.push(s.rela_name.as_str());
+    }
+    // Inline-asm section names, each followed by its `.rela.*` name.
+    let asm_names_start = shstrtab_names.len();
+    for (s, rela_name) in asm_secs.iter().zip(asm_rela_names.iter()) {
+        shstrtab_names.push(s.name.as_str());
+        shstrtab_names.push(rela_name.as_str());
     }
     let (shstrtab_bytes, shstrtab_offs) = build_strtab(&shstrtab_names);
 
@@ -1703,6 +1721,96 @@ pub(super) fn write_relocatable(
             sh_entsize: ELF64_RELA_SIZE as u64,
             ..Default::default()
         });
+    }
+
+    // Inline-asm `.pushsection` sections. Each carries its accumulated
+    // bytes; a reference into the code resolves against the `.text`
+    // section symbol with the target's offset as the addend, and a named
+    // symbol against its `.symtab` entry. `@nobits` maps to SHT_NOBITS.
+    for (k, s) in asm_secs.iter().enumerate() {
+        let mut flags: u64 = 0;
+        for c in s.flags.bytes() {
+            match c {
+                b'a' => flags |= SHF_ALLOC,
+                b'w' => flags |= SHF_WRITE,
+                b'x' => flags |= SHF_EXECINSTR,
+                // Merge / strings / group flags are layout hints a
+                // relocatable object can omit without changing meaning.
+                _ => {}
+            }
+        }
+        let sh_type = match s.sh_type.as_deref() {
+            Some("nobits") => SHT_NOBITS,
+            _ => SHT_PROGBITS,
+        };
+        let mut rela_bytes: Vec<u8> = Vec::with_capacity(s.relocs.len() * ELF64_RELA_SIZE);
+        for r in &s.relocs {
+            use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
+            let (sym_idx, addend) = match &r.target {
+                AsmSectionTarget::Text(off) => (text_sym_idx, *off as i64 + r.addend),
+                AsmSectionTarget::Symbol(name) => {
+                    let Some(&idx) = func_symidx_by_name.get(name) else {
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            &format!(
+                                "elf_reloc: inline-asm section references unknown symbol `{name}`"
+                            ),
+                        )));
+                    };
+                    (idx as u64, r.addend)
+                }
+            };
+            let rtype = match (machine_for_rela, r.pcrel, r.width) {
+                (Machine::X86_64, false, 8) => R_X86_64_64,
+                (Machine::X86_64, false, _) => R_X86_64_32,
+                (Machine::X86_64, true, 8) => R_X86_64_PC64,
+                (Machine::X86_64, true, _) => R_X86_64_PC32,
+                (Machine::Aarch64, false, 8) => R_AARCH64_ABS64,
+                (Machine::Aarch64, false, _) => R_AARCH64_ABS32,
+                (Machine::Aarch64, true, 8) => R_AARCH64_PREL64,
+                (Machine::Aarch64, true, _) => R_AARCH64_PREL32,
+            };
+            write_struct(
+                &mut rela_bytes,
+                &Elf64Rela {
+                    r_offset: r.offset as u64,
+                    r_info: (sym_idx << 32) | rtype as u64,
+                    r_addend: addend,
+                },
+            );
+        }
+        let align = s.align.max(1) as u64;
+        let sec_shndx = sh.len() as u32;
+        let sec_off = round_up(out.len() as u64, align);
+        out.resize(sec_off as usize, 0);
+        if sh_type != SHT_NOBITS {
+            out.extend_from_slice(&s.bytes);
+        }
+        sh.push(Elf64Shdr {
+            sh_name: shstrtab_offs[asm_names_start + 2 * k],
+            sh_type,
+            sh_flags: flags,
+            sh_offset: sec_off,
+            sh_size: s.bytes.len() as u64,
+            sh_addralign: align,
+            ..Default::default()
+        });
+        if !rela_bytes.is_empty() {
+            let rela_off = round_up(out.len() as u64, 8);
+            out.resize(rela_off as usize, 0);
+            out.extend_from_slice(&rela_bytes);
+            sh.push(Elf64Shdr {
+                sh_name: shstrtab_offs[asm_names_start + 2 * k + 1],
+                sh_type: SHT_RELA,
+                sh_flags: SHF_INFO_LINK,
+                sh_offset: rela_off,
+                sh_size: rela_bytes.len() as u64,
+                sh_link: SHIDX_SYMTAB as u32,
+                sh_info: sec_shndx,
+                sh_addralign: 8,
+                sh_entsize: ELF64_RELA_SIZE as u64,
+                ..Default::default()
+            });
+        }
     }
 
     debug_assert_eq!(sh.len(), num_sections);
@@ -2208,6 +2316,7 @@ mod tests {
     fn empty_build_for(_machine: Machine) -> Build {
         use super::super::{Abi, OutputKind, ResolvedImports};
         Build {
+            asm_sections: Vec::new(),
             copy_relocs: Default::default(),
             text: Vec::new(),
             data: Vec::new(),

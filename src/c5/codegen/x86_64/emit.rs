@@ -1533,6 +1533,7 @@ pub(crate) fn emit_function(
     let ssa_line_rows = &mut *cx.ssa_line_rows;
     let pc_to_native = &mut *cx.pc_to_native;
     let prologue_native = &mut *cx.prologue_native;
+    let asm_sections = &mut *cx.asm_sections;
     let snapshot = code.len();
     let fixups_snapshot = fixups.len();
     let plt_call_fixups_snapshot = plt_call_fixups.len();
@@ -1811,6 +1812,7 @@ pub(crate) fn emit_function(
                         frame,
                         fixups,
                         name2entpc,
+                        asm_sections,
                         Some(AsmGotoCtx {
                             row: &func.jump_tables[table as usize],
                             branch_fixups: &mut branch_fixups,
@@ -1834,6 +1836,7 @@ pub(crate) fn emit_function(
                         ssa_line_rows: &mut *ssa_line_rows,
                         pc_to_native: &mut *pc_to_native,
                         prologue_native: &mut *prologue_native,
+                        asm_sections: &mut *asm_sections,
                     };
                     let fcx = FnCtx {
                         func,
@@ -2817,6 +2820,7 @@ fn emit_inst(
     let pending_func_fixups = &mut *cx.pending_func_fixups;
     let tls_index_fixups = &mut *cx.tls_index_fixups;
     let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
+    let asm_sections = &mut *cx.asm_sections;
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca. Non-zero:
@@ -3142,7 +3146,16 @@ fn emit_inst(
             emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
         }
         Inst::InlineAsm { asm, args } => emit_inline_asm(
-            code, asm, args, func, alloc, frame, fixups, name2entpc, None,
+            code,
+            asm,
+            args,
+            func,
+            alloc,
+            frame,
+            fixups,
+            name2entpc,
+            asm_sections,
+            None,
         ),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
         Inst::Fma {
@@ -5923,11 +5936,31 @@ fn emit_inline_asm(
     frame: Frame,
     fixups: &mut Vec<super::encode::Fixup>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    asm_sections: &mut Vec<super::ssa::emit_common::AsmSection>,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
 ) -> bool {
     use super::super::ir::{AsmConstraint, AsmRegSize, Inst};
     use super::asm::{AsmOpnd, Concrete};
-    let insns = match super::asm::parse_template(&asm.template) {
+    // Expand `%=` once so the code text and any `.pushsection` content
+    // share one instance number, then split off the section blocks; the
+    // arch parser sees only the code text.
+    let Ok(raw_text) = core::str::from_utf8(&asm.template) else {
+        return fail("inline asm: non-UTF8 template");
+    };
+    let expanded = super::ssa::emit_common::expand_template_uniq(raw_text);
+    let text = expanded.as_deref().unwrap_or(raw_text);
+    let extracted = match super::ssa::emit_common::extract_asm_sections(text) {
+        Ok(e) => e,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    let (code_text, section_blocks) = match &extracted {
+        Some((c, b)) => (c.as_str(), b.as_slice()),
+        None => (text, &[][..]),
+    };
+    let insns = match super::asm::parse_template(code_text.as_bytes()) {
         Ok(i) => i,
         Err(m) => {
             bail_msg(&m);
@@ -6024,6 +6057,13 @@ fn emit_inline_asm(
     // (or to the shared fall-through restore when the label target is
     // the fall-through block).
     let mut goto_sites: alloc::vec::Vec<(usize, usize, usize)> = alloc::vec::Vec::new();
+    // The constant value of an `i`-class operand reference, if any.
+    let const_of = |idx: u8| -> Option<i64> {
+        match func.insts.get(*args.get(idx as usize)? as usize) {
+            Some(Inst::Imm(v)) => Some(*v),
+            _ => None,
+        }
+    };
     // Encode each template instruction with its operands resolved to the
     // assigned registers, explicit registers, and immediates.
     for insn in &insns {
@@ -6037,13 +6077,6 @@ fn emit_inline_asm(
             code.extend_from_slice(&insn.bytes);
             continue;
         }
-        // The constant value of an `i`-class operand reference, if any.
-        let const_of = |idx: u8| -> Option<i64> {
-            match func.insts.get(*args.get(idx as usize)? as usize) {
-                Some(Inst::Imm(v)) => Some(*v),
-                _ => None,
-            }
-        };
         // A data directive with operand references (`.long %c0`): each
         // argument must resolve to a compile-time constant, emitted
         // little-endian at the directive width.
@@ -6400,6 +6433,43 @@ fn emit_inline_asm(
         };
         let rel = target as i64 - (at as i64 + 4);
         code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());
+    }
+    // Materialize the `.pushsection` blocks now that every label's text
+    // offset is known. A reference that names a template label resolves
+    // to its offset; any other name is a symbol relocation.
+    if !section_blocks.is_empty() {
+        let names = super::asm::scan_label_names(code_text);
+        let label_off = |name: &str| -> Option<usize> {
+            let num = if let Some(i) = names.iter().position(|&n| n == name) {
+                super::asm::NAMED_LABEL_BASE + i as u32
+            } else {
+                let digits = name
+                    .strip_suffix(['b', 'f'])
+                    .unwrap_or(name);
+                if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
+                    return None;
+                }
+                digits.parse().ok()?
+            };
+            // Sections follow the code textually; a `Nb` (or bare `N`)
+            // reference binds to the last definition, `Nf` to the first.
+            let forward = name.ends_with('f') && !names.contains(&name);
+            let mut defs = label_defs.iter().filter(|&&(n, _)| n == num);
+            if forward {
+                defs.map(|&(_, off)| off).min()
+            } else {
+                defs.next_back().map(|&(_, off)| off)
+            }
+        };
+        if let Err(m) = super::ssa::emit_common::materialize_asm_sections(
+            section_blocks,
+            &|idx| const_of(idx),
+            &label_off,
+            asm_sections,
+        ) {
+            bail_msg(&m);
+            return false;
+        }
     }
     // Store the register outputs back through their captured addresses. A
     // memory operand needs no store-back: the instruction wrote memory.

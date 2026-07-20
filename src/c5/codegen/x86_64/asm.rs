@@ -1123,6 +1123,24 @@ fn split_label_def(piece: &str) -> Option<(&str, &str)> {
     }
 }
 
+/// Named local labels defined in the template's code text, in definition
+/// order (the intern order the `NAMED_LABEL_BASE + index` label numbers
+/// use). Shared with the emitter's section materialization so a section
+/// reference resolves a name to the same number.
+pub(crate) fn scan_label_names(text: &str) -> Vec<&str> {
+    let mut names: Vec<&str> = Vec::new();
+    for piece in text.split([';', '\n']) {
+        let mut p = piece.trim();
+        while let Some((name, rest)) = split_label_def(p) {
+            if !name.as_bytes()[0].is_ascii_digit() && !names.contains(&name) {
+                names.push(name);
+            }
+            p = rest.trim();
+        }
+    }
+    names
+}
+
 /// Parse an AT&T inline-asm template into its instruction sequence.
 /// Instructions are separated by `;` or newlines; operands by commas.
 pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
@@ -1138,16 +1156,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
     };
     // Pre-scan the label definitions so operand parsing can tell a local
     // label from a symbol; named labels intern in definition order.
-    let mut names: Vec<&str> = Vec::new();
-    for piece in text.split([';', '\n']) {
-        let mut p = piece.trim();
-        while let Some((name, rest)) = split_label_def(p) {
-            if !name.as_bytes()[0].is_ascii_digit() && !names.contains(&name) {
-                names.push(name);
-            }
-            p = rest.trim();
-        }
-    }
+    let names = scan_label_names(text);
     let mut insns = Vec::new();
     for piece in text.split([';', '\n']) {
         let mut piece = piece.trim();

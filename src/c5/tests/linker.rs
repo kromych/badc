@@ -2615,3 +2615,91 @@ fn divmod_constant_branch_drops_its_dead_callee() {
         "the __builtin_constant_p-false runtime fallback arm is dead and must be eliminated"
     );
 }
+
+/// Minimal ELF64 section-header walk for the tests below: returns
+/// `(name, sh_type, sh_flags, bytes)` per section.
+fn elf_sections(bytes: &[u8]) -> alloc::vec::Vec<(String, u32, u64, alloc::vec::Vec<u8>)> {
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64le(0x28) as usize;
+    let shentsize = u16le(0x3A);
+    let shnum = u16le(0x3C);
+    let shstrndx = u16le(0x3E);
+    let strtab_off = u64le(shoff + shstrndx * shentsize + 0x18) as usize;
+    let mut out = alloc::vec::Vec::new();
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        let name_off = strtab_off + u32le(sh) as usize;
+        let name_end = bytes[name_off..].iter().position(|&b| b == 0).unwrap() + name_off;
+        let name = String::from_utf8_lossy(&bytes[name_off..name_end]).into_owned();
+        let sh_type = u32le(sh + 0x04);
+        let sh_flags = u64le(sh + 0x08);
+        let off = u64le(sh + 0x18) as usize;
+        let size = u64le(sh + 0x20) as usize;
+        let body = if sh_type == 8 {
+            alloc::vec::Vec::new() // SHT_NOBITS
+        } else {
+            bytes[off..off + size].to_vec()
+        };
+        out.push((name, sh_type, sh_flags, body));
+    }
+    out
+}
+
+#[test]
+fn inline_asm_pushsection_lands_in_relocatable_object() {
+    // A `.pushsection` data block must appear as a named section of the
+    // `-c` object, with its constants resolved and its label references
+    // emitted as relocations against `.text`.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int f(int *p) {\n\
+            int r;\n\
+            __asm__(\"1: nop\\n\"\n\
+                \".pushsection .discard.probe,\\\"a\\\"\\n\"\n\
+                \".balign 8\\n\"\n\
+                \".quad 1b\\n\"\n\
+                \".long 1b - .\\n\"\n\
+                \".long %c[k]\\n\"\n\
+                \".popsection\\n\"\n\
+                \"mov %1, %0\"\n\
+                : \"=r\"(r) : \"r\"(*p), [k] \"i\"(42));\n\
+            return r;\n\
+        }\n\
+        int main(void) { int v = 42; return f(&v); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src))
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".discard.probe")
+            .unwrap_or_else(|| panic!("{target:?}: .discard.probe section missing"));
+        assert_eq!(sec.1, 1, "{target:?}: SHT_PROGBITS expected");
+        assert_eq!(sec.2 & 0x2, 0x2, "{target:?}: SHF_ALLOC expected");
+        // 8 (quad label ref) + 4 (pcrel ref) + 4 (constant 42).
+        assert_eq!(sec.3.len(), 16, "{target:?}: section size");
+        assert_eq!(&sec.3[12..16], &42u32.to_le_bytes(), "{target:?}: %c value");
+        // The companion .rela with two entries against .text.
+        let rela = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.discard.probe")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.discard.probe missing"));
+        assert_eq!(rela.1, 4, "{target:?}: SHT_RELA expected");
+        assert_eq!(rela.3.len(), 2 * 24, "{target:?}: two relocations");
+        let r_info = |k: usize| u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+        let (abs64, prel32) = match target {
+            Target::LinuxX64 => (1u64, 2u64),
+            _ => (257, 261),
+        };
+        assert_eq!(r_info(0) & 0xFFFF_FFFF, abs64, "{target:?}: abs64 type");
+        assert_eq!(r_info(1) & 0xFFFF_FFFF, prel32, "{target:?}: pcrel32 type");
+    }
+}

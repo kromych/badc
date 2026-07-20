@@ -705,6 +705,7 @@ pub(crate) fn emit_function(
     let ssa_line_rows = &mut *cx.ssa_line_rows;
     let pc_to_native = &mut *cx.pc_to_native;
     let prologue_native = &mut *cx.prologue_native;
+    let asm_sections = &mut *cx.asm_sections;
     let abi = target.abi();
     let frame = compute_frame(func, alloc, abi, target);
     let scratch = ScratchPool::new();
@@ -979,6 +980,7 @@ pub(crate) fn emit_function(
                     frame,
                     fixups,
                     name2entpc,
+                    asm_sections,
                     Some(AsmGotoCtxA64 {
                         row: &func.jump_tables[table as usize],
                         branch_fixups: &mut branch_fixups,
@@ -1011,6 +1013,7 @@ pub(crate) fn emit_function(
                     ssa_line_rows: &mut *ssa_line_rows,
                     pc_to_native: &mut *pc_to_native,
                     prologue_native: &mut *prologue_native,
+                    asm_sections: &mut *asm_sections,
                 };
                 let fcx = FnCtx {
                     func,
@@ -2333,6 +2336,7 @@ fn emit_inline_asm_aarch64(
     frame: Frame,
     fixups: &mut Vec<super::encode::Fixup>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    asm_sections: &mut Vec<super::ssa::emit_common::AsmSection>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> bool {
     use super::super::ir::AsmConstraint;
@@ -2341,7 +2345,27 @@ fn emit_inline_asm_aarch64(
     use super::table::{self, Opnd};
     use alloc::string::String;
 
-    let insns = match parse_template(&asm.template) {
+    // Expand `%=` once so the code text and any `.pushsection` content
+    // share one instance number, then split off the section blocks; the
+    // arch parser sees only the code text.
+    let Ok(raw_text) = core::str::from_utf8(&asm.template) else {
+        bail_msg("aarch64 inline asm: non-UTF8 template");
+        return false;
+    };
+    let expanded = super::ssa::emit_common::expand_template_uniq(raw_text);
+    let text = expanded.as_deref().unwrap_or(raw_text);
+    let extracted = match super::ssa::emit_common::extract_asm_sections(text) {
+        Ok(e) => e,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    let (code_text, section_blocks) = match &extracted {
+        Some((c, b)) => (c.as_str(), b.as_slice()),
+        None => (text, &[][..]),
+    };
+    let insns = match parse_template(code_text.as_bytes()) {
         Ok(i) => i,
         Err(m) => {
             bail_msg(&m);
@@ -2793,6 +2817,35 @@ fn emit_inline_asm_aarch64(
             }
         }
     }
+    // Materialize the `.pushsection` blocks now that every label's text
+    // offset is known. A reference that names a numeric template label
+    // resolves to its offset; any other name is a symbol relocation.
+    if !section_blocks.is_empty() {
+        let label_off = |name: &str| -> Option<usize> {
+            let digits = name.strip_suffix(['b', 'f']).unwrap_or(name);
+            if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
+                return None;
+            }
+            let num: u32 = digits.parse().ok()?;
+            // Sections follow the code textually; a `Nb` (or bare `N`)
+            // reference binds to the last definition, `Nf` to the first.
+            let mut defs = label_defs.iter().filter(|&&(n, _)| n == num);
+            if name.ends_with('f') {
+                defs.map(|&(_, off)| off).min()
+            } else {
+                defs.next_back().map(|&(_, off)| off)
+            }
+        };
+        if let Err(m) = super::ssa::emit_common::materialize_asm_sections(
+            section_blocks,
+            &|idx| const_of(idx),
+            &label_off,
+            asm_sections,
+        ) {
+            bail_msg(&m);
+            return false;
+        }
+    }
     // Store the register outputs back through their captured addresses (x16
     // holds the address; the operand pool is untouched).
     for (i, op) in asm.operands.iter().enumerate() {
@@ -2908,6 +2961,7 @@ fn emit_inst(
     let pending_func_fixups = &mut *cx.pending_func_fixups;
     let tls_index_fixups = &mut *cx.tls_index_fixups;
     let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
+    let asm_sections = &mut *cx.asm_sections;
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca. Non-zero:
@@ -3467,9 +3521,18 @@ fn emit_inst(
             // value.
             true
         }
-        Inst::InlineAsm { asm, args } => {
-            emit_inline_asm_aarch64(code, asm, args, func, alloc, frame, fixups, name2entpc, None)
-        }
+        Inst::InlineAsm { asm, args } => emit_inline_asm_aarch64(
+            code,
+            asm,
+            args,
+            func,
+            alloc,
+            frame,
+            fixups,
+            name2entpc,
+            asm_sections,
+            None,
+        ),
         _ => false,
     }
 }
@@ -8077,6 +8140,7 @@ mod tests {
         let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
+        let mut asm_sections = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -8089,6 +8153,7 @@ mod tests {
                 ssa_line_rows: &mut ssa_line_rows,
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut prologue_native,
+                asm_sections: &mut asm_sections,
             };
             emit_function(
                 &func,
@@ -8245,6 +8310,7 @@ mod tests {
         let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
+        let mut asm_sections = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -8257,6 +8323,7 @@ mod tests {
                 ssa_line_rows: &mut ssa_line_rows,
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut prologue_native,
+                asm_sections: &mut asm_sections,
             };
             emit_function(
                 &func,
@@ -8312,6 +8379,7 @@ mod tests {
         let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
+        let mut asm_sections = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -8324,6 +8392,7 @@ mod tests {
                 ssa_line_rows: &mut ssa_line_rows,
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut prologue_native,
+                asm_sections: &mut asm_sections,
             };
             emit_function(
                 &func,

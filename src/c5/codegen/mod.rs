@@ -1493,6 +1493,11 @@ pub(crate) struct Build {
     /// longer holds the value (a stale `DW_OP_fbreg` would make the
     /// debugger read uninitialised frame memory).
     pub promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    /// Named sections accumulated from inline-asm `.pushsection` data
+    /// directives. The relocatable ELF writer appends one section per
+    /// entry; the executable writers do not map them (TODO: alloc
+    /// sections in direct executables).
+    pub asm_sections: Vec<ssa::emit_common::AsmSection>,
     /// Per-function map from a declared local's original frame slot to the
     /// new slot it was coalesced onto, keyed by `ent_pc`. The slot-coalescing
     /// pass compacts the frame regardless of debug info; the debug-info

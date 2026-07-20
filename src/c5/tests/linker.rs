@@ -3849,3 +3849,47 @@ fn inline_asm_branch_target_with_a_non_constant_operand_is_diagnosed() {
         );
     }
 }
+
+#[test]
+fn asm_address_constraint_renders_as_a_memory_reference() {
+    // The `p` constraint takes its operand as an address in a general
+    // register; `%a` renders that register as an address reference, so the
+    // instruction encodes a memory operand rather than a register-direct one.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let opts = || NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let text = |src: &str, target| {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let bytes = emit_native_with_options(&program, target, opts()).expect("emit");
+        elf_sections(&bytes)
+            .into_iter()
+            .find(|(n, _, _, _)| n == ".text")
+            .expect(".text")
+            .3
+    };
+
+    // AArch64 `prfm pldl1keep, [Xn]`: the base register is the operand and
+    // the immediate offset is zero.
+    let a64 = text(
+        "void pl(const void *p) { __asm__ volatile(\"prfm pldl1keep, %a0\\n\" : : \"p\" (p)); }\nint main(void) { return 0; }\n",
+        Target::LinuxAarch64,
+    );
+    let found = a64.chunks_exact(4).any(|w| {
+        let w = u32::from_le_bytes(w.try_into().unwrap());
+        w & 0xFFFF_FC1F == 0xF980_0000
+    });
+    assert!(found, "aarch64: `prfm pldl1keep, [Xn]` not encoded");
+
+    // x86-64 `prefetcht0 (%reg)`: opcode 0F 18 /1 with a mod=00 ModR/M, the
+    // base-only memory form. A `%0` operand would encode mod=11 instead.
+    let x64 = text(
+        "void pl(const void *p) { __asm__ volatile(\"prefetcht0 %a0\" : : \"p\" (p)); }\nint main(void) { return 0; }\n",
+        Target::LinuxX64,
+    );
+    let found = x64.windows(3).any(|w| {
+        w[0] == 0x0F && w[1] == 0x18 && w[2] >> 6 == 0 && (w[2] >> 3) & 7 == 1 && w[2] & 7 != 4
+    });
+    assert!(found, "x86-64: `prefetcht0 (%reg)` not encoded");
+}

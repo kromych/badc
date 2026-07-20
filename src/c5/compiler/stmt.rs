@@ -1909,6 +1909,15 @@ impl Compiler {
         if !is_x86 && body == "Q" {
             return Some((AsmConstraint::MemBase, is_rw));
         }
+        // `p`: an address operand. The operand expression is a valid address
+        // taken by value into a general register, so unlike `m` it accepts any
+        // pointer-valued rvalue and forces no addressing mode. The `%a`
+        // modifier renders that register as an address reference. Matched
+        // exactly: the aarch64 `U`-prefixed memory classes spell their own
+        // multi-letter names and must keep reaching the `m` path below.
+        if body == "p" {
+            return Some((AsmConstraint::Reg, is_rw));
+        }
         // A matching constraint ties an input to an earlier output.
         if let Some(d) = body.chars().find(|c| c.is_ascii_digit()) {
             let idx = d as u8 - b'0';

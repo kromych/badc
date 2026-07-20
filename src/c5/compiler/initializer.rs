@@ -2062,8 +2062,53 @@ impl Compiler {
             self.next()?;
         }
         if self.lex.tk == '{' {
-            self.pending.compound_lit_close_parens = grouping;
-            return Ok(true);
+            // C99 6.5.2.5p1: `( type-name ){ ... }` is a primary expression.
+            // Elide the redundant `( type-name )` cast and let the brace list
+            // fill the member in place only when the literal is the complete
+            // value -- a terminator (`,`/`}`/`;`/`)`/`]` or end of input)
+            // follows it and its grouping parens. When a postfix
+            // (`.`/`->`/`[`/`(`/`++`/`--`) or an operator continues the
+            // literal it is a sub-expression, so the whole run goes to the
+            // expression parser instead. The `;` terminator matters because
+            // this detector also fronts the outer literal of a declaration
+            // initializer (`T v = (T){ ... };`).
+            let at_brace = self.lex.snapshot();
+            // `next` appends string literals to `data`; this is a lookahead, so
+            // record the length and truncate any bytes the scan appends before
+            // the real parse re-reads the same tokens.
+            let data_mark = self.data.len();
+            let mut brace_depth: i64 = 0;
+            while self.lex.tk != 0 {
+                if self.lex.tk == '{' {
+                    brace_depth += 1;
+                } else if self.lex.tk == '}' {
+                    brace_depth -= 1;
+                    if brace_depth == 0 {
+                        self.next()?; // past the literal's closing `}`
+                        break;
+                    }
+                }
+                self.next()?;
+            }
+            for _ in 0..grouping {
+                if self.lex.tk == ')' {
+                    self.next()?;
+                }
+            }
+            let complete = self.lex.tk == 0
+                || self.lex.tk == ','
+                || self.lex.tk == '}'
+                || self.lex.tk == ';'
+                || self.lex.tk == ')'
+                || self.lex.tk == ']';
+            self.data.truncate(data_mark);
+            if complete {
+                self.lex.restore(at_brace);
+                self.pending.compound_lit_close_parens = grouping;
+                return Ok(true);
+            }
+            self.lex.restore(snap);
+            return Ok(false);
         }
         self.lex.restore(snap);
         Ok(false)

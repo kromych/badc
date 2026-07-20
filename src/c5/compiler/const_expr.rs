@@ -411,6 +411,58 @@ impl Compiler {
         Ok(if is_const { 1 } else { 0 })
     }
 
+    /// Fold a bit-count builtin (`clz` / `ctz` / `popcount` and the 64-bit
+    /// `ll` forms; the `l` forms alias one of these per the target's `long`
+    /// width) with a constant argument. Returns `None` without consuming
+    /// input for anything else. A non-constant argument propagates as a
+    /// non-constant expression, so an array declarator treats the dimension
+    /// as a VLA. The argument is truncated to the operand width; at zero
+    /// `clz` / `ctz` yield the bit width, matching the walker's runtime
+    /// lowering and GCC.
+    fn try_fold_bitcount_builtin(&mut self) -> Result<Option<i64>, C5Error> {
+        use crate::c5::op::Intrinsic;
+        if self.lex.tk != Token::Id {
+            return Ok(None);
+        }
+        let idx = self.lex.curr_id_idx;
+        let not_real_fn = self.symbols[idx].class != Token::Fun as i64
+            && self.symbols[idx].class != Token::Sys as i64;
+        let kind = match self.pp_intrinsics.get(&self.symbols[idx].name).copied() {
+            Some(intr) if not_real_fn => match Intrinsic::from_i64(intr) {
+                Some(
+                    k @ (Intrinsic::Clz
+                    | Intrinsic::Ctz
+                    | Intrinsic::Popcount
+                    | Intrinsic::Clzll
+                    | Intrinsic::Ctzll
+                    | Intrinsic::Popcountll),
+                ) => k,
+                _ => return Ok(None),
+            },
+            _ => return Ok(None),
+        };
+        self.next()?; // builtin name
+        if self.lex.tk != '(' {
+            return Err(self.compile_err("`(` expected after bit-count builtin"));
+        }
+        self.next()?;
+        let arg = self.parse_const_expr_cond_val()?.as_i128();
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected to close bit-count builtin"));
+        }
+        self.next()?;
+        let v = match kind {
+            Intrinsic::Clz => (arg as u32).leading_zeros() as i64,
+            Intrinsic::Ctz => (arg as u32).trailing_zeros() as i64,
+            Intrinsic::Popcount => (arg as u32).count_ones() as i64,
+            Intrinsic::Clzll => (arg as u64).leading_zeros() as i64,
+            Intrinsic::Ctzll => (arg as u64).trailing_zeros() as i64,
+            Intrinsic::Popcountll => (arg as u64).count_ones() as i64,
+            _ => unreachable!(),
+        };
+        Ok(Some(v))
+    }
+
     /// Parse a C11 6.7.10 `_Static_assert(<const-int-expr>,
     /// "<string-literal>");` (or its C23 `static_assert` alias).
     /// On entry the current token is `Token::StaticAssert`. The
@@ -897,6 +949,14 @@ impl Compiler {
             }
             self.next()?;
             let v = self.eval_constant_p_operand()?;
+            return Ok(ConstVal::int(v));
+        }
+        // GCC bit-count builtins (`__builtin_clz` / `ctz` / `popcount` and
+        // their `l` / `ll` forms) fold to an `int` when the argument is a
+        // constant expression, so an `ilog2`-style array bound or a
+        // `_Static_assert` resolves at parse time instead of being taken for
+        // a VLA.
+        if let Some(v) = self.try_fold_bitcount_builtin()? {
             return Ok(ConstVal::int(v));
         }
         if self.lex.tk == Token::BuiltinOffsetof {

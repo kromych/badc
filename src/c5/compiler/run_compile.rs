@@ -784,6 +784,9 @@ impl Compiler {
                         indices: alloc::vec::Vec::new(),
                         types,
                         is_variadic,
+                        // A typedef-carried prototype; the empty-list
+                        // spelling does not reach here.
+                        is_prototyped: true,
                     });
                 }
 

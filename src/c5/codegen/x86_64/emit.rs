@@ -1824,11 +1824,11 @@ pub(crate) fn emit_function(
                         frame,
                         fixups,
                         name2entpc,
+                        extern_data_names,
                         asm_sections,
                         asm_extern_call_sites,
                         data_fixups,
                         user_extern_data_refs,
-                        extern_data_names,
                         Some(AsmGotoCtx {
                             row: &func.jump_tables[table as usize],
                             branch_fixups: &mut branch_fixups,
@@ -1864,11 +1864,11 @@ pub(crate) fn emit_function(
                         imports,
                         variadic_targets,
                         extern_tls_names,
+                        extern_data_names,
                         tls_total_size,
                         param_from_home: &param_from_home,
                         param_plan: &param_plan,
                         name2entpc,
-                        extern_data_names,
                     };
                     emit_inst(&mut cx, inst, v, place, &fcx, fixups)
                 };
@@ -2808,16 +2808,16 @@ struct FnCtx<'a> {
     imports: &'a super::ResolvedImports,
     variadic_targets: &'a alloc::collections::BTreeSet<usize>,
     extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    /// `Inst::ImmData` value-id -> cross-TU data symbol name, for an `i`-class
+    /// inline-asm operand that names an external address, whether in a section
+    /// field or via a `%a` address operand.
+    extern_data_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     tls_total_size: usize,
     param_from_home: &'a [bool],
     param_plan: &'a [super::ArgPlacement],
     /// Function name -> entry PC, for resolving an inline-asm `call`/`jmp` to a
     /// bare symbol into a relocation.
     name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
-    /// Value-id -> cross-TU data symbol name (the `Inst::ImmData` extern
-    /// refs), for resolving an inline-asm `%a` address operand naming an
-    /// external global to a direct RIP-relative relocation.
-    extern_data_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
 }
 
 fn emit_inst(
@@ -2839,11 +2839,11 @@ fn emit_inst(
         imports,
         variadic_targets,
         extern_tls_names,
+        extern_data_names,
         tls_total_size,
         param_from_home,
         param_plan,
         name2entpc,
-        extern_data_names,
     } = *fcx;
     // The bundled emit output now arrives in `cx`; recreate the per-field
     // names as disjoint reborrows so the per-`Inst` lowering below is unchanged.
@@ -3189,11 +3189,11 @@ fn emit_inst(
             frame,
             fixups,
             name2entpc,
+            extern_data_names,
             asm_sections,
             asm_extern_call_sites,
             data_fixups,
             user_extern_data_refs,
-            extern_data_names,
             None,
         ),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
@@ -6062,11 +6062,11 @@ fn emit_inline_asm(
     frame: Frame,
     fixups: &mut Vec<super::encode::Fixup>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     asm_sections: &mut Vec<super::ssa::emit_common::AsmSection>,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     data_fixups: &mut Vec<DataFixup>,
     user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
-    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
 ) -> bool {
     use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg, Inst};
@@ -6671,8 +6671,12 @@ fn emit_inline_asm(
         // An `i`-class operand naming a link-time data address (`.long %c0 - .`
         // where `%c0` is `&sym` or a string literal) relocates against the
         // data image, resolved like the operand's own `ImmData` lowering.
-        let operand_sym = |idx: u8| -> Option<super::ssa::emit_common::AsmSectionTarget> {
-            super::ssa::emit_common::asm_operand_data_target(&func.insts, *args.get(idx as usize)?)
+        let operand_sym = |idx: u8| -> Option<(super::ssa::emit_common::AsmSectionTarget, i64)> {
+            super::ssa::emit_common::asm_operand_data_target(
+                &func.insts,
+                *args.get(idx as usize)?,
+                &|vid| extern_data_names.get(&vid).cloned(),
+            )
         };
         // An `asm goto` label operand (`.long %l0 - .`): the goto row's block
         // index. Its text offset is not final here; the reloc carries the

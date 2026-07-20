@@ -11,13 +11,16 @@ Disassembly of section .text:
                	ud2
 
 <barrier_input>:
-               	pushq	%rax
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	(%rsp), %rax
-               	addq	$0x8, %rsp
-               	popq	%rax
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rax, -0x10(%rbp)
+               	movq	%rdi, -0x8(%rbp)
+               	movq	-0x8(%rbp), %rax
+               	movq	-0x10(%rbp), %rax
                	xorq	%rax, %rax
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq
 
 <barrier_memory>:

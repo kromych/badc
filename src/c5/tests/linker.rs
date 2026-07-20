@@ -3850,6 +3850,134 @@ fn inline_asm_branch_target_with_a_non_constant_operand_is_diagnosed() {
     }
 }
 
+/// Symbol table lookup: `(st_shndx, st_value, binding, type, index)` of the
+/// named symbol in an ELF object's `.symtab`.
+fn elf_symbol(bytes: &[u8], name: &str) -> Option<(u16, u64, u8, u8, usize)> {
+    let sections = elf_sections(bytes);
+    let symtab = &sections.iter().find(|(n, _, _, _)| n == ".symtab")?.3;
+    let strtab = &sections.iter().find(|(n, _, _, _)| n == ".strtab")?.3;
+    for i in 0..symtab.len() / 24 {
+        let s = &symtab[i * 24..i * 24 + 24];
+        let st_name = u32::from_le_bytes(s[0..4].try_into().unwrap()) as usize;
+        let end = strtab[st_name..].iter().position(|&b| b == 0)? + st_name;
+        if &strtab[st_name..end] == name.as_bytes() {
+            let st_info = s[4];
+            return Some((
+                u16::from_le_bytes(s[6..8].try_into().unwrap()),
+                u64::from_le_bytes(s[8..16].try_into().unwrap()),
+                st_info >> 4,
+                st_info & 0xF,
+                i,
+            ));
+        }
+    }
+    None
+}
+
+#[test]
+fn inline_asm_section_label_defines_a_symbol() {
+    // A label written inside a file-scope `asm()` named section defines a
+    // symbol in that section at its offset within it, matching GNU as:
+    // undecorated labels bind locally, `.globl` promotes to external.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"int foo = 7;
+asm(".section \".export_symbol\",\"a\"\n"
+    "__export_symbol_foo:\n"
+    "\t.asciz \"GPL\"\n"
+    "\t.balign 8\n"
+    "\t.quad foo\n"
+    ".globl __export_global\n"
+    "__export_global:\n"
+    "\t.quad 0\n"
+    ".previous\n");
+int main(void) { return 0; }
+"#;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        // The quoted section name is unquoted, as GNU as spells it.
+        let idx = sections
+            .iter()
+            .position(|(n, _, _, _)| n == ".export_symbol")
+            .unwrap_or_else(|| panic!("{target:?}: .export_symbol section missing"));
+        let sec = &sections[idx];
+        assert_eq!(sec.1, 1, "{target:?}: SHT_PROGBITS expected");
+        assert_eq!(sec.2 & 0x2, 0x2, "{target:?}: SHF_ALLOC expected");
+        // "GPL\0" padded to 8, the quad symbol ref, then the second quad.
+        assert_eq!(sec.3.len(), 24, "{target:?}: section size");
+
+        let (shndx, value, bind, ty, local_i) = elf_symbol(&bytes, "__export_symbol_foo")
+            .unwrap_or_else(|| panic!("{target:?}: label symbol missing"));
+        assert_eq!(shndx as usize, idx, "{target:?}: label section index");
+        assert_eq!(value, 0, "{target:?}: label offset within the section");
+        assert_eq!(bind, 0, "{target:?}: undecorated label binds locally");
+        assert_eq!(ty, 0, "{target:?}: STT_NOTYPE expected");
+
+        let (g_shndx, g_value, g_bind, _, global_i) = elf_symbol(&bytes, "__export_global")
+            .unwrap_or_else(|| panic!("{target:?}: .globl label symbol missing"));
+        assert_eq!(
+            g_shndx as usize, idx,
+            "{target:?}: .globl label section index"
+        );
+        assert_eq!(g_value, 16, "{target:?}: .globl label offset");
+        assert_eq!(g_bind, 1, "{target:?}: `.globl` binds externally");
+        // ELF requires every LOCAL symbol to precede every GLOBAL one.
+        assert!(
+            local_i < global_i,
+            "{target:?}: local label must precede the global one"
+        );
+    }
+}
+
+#[test]
+fn inline_asm_section_label_is_relocation_target() {
+    // A data reference to a label defined in the same named section
+    // resolves to that label's symbol, not to an undefined import.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"asm(".section \".tbl\",\"a\"\n"
+    "\t.quad 0\n"
+    "anchor:\n"
+    "\t.quad anchor\n"
+    ".previous\n");
+int main(void) { return 0; }
+"#;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let idx = sections
+            .iter()
+            .position(|(n, _, _, _)| n == ".tbl")
+            .unwrap_or_else(|| panic!("{target:?}: .tbl section missing"));
+        let (shndx, value, _, _, sym_i) = elf_symbol(&bytes, "anchor")
+            .unwrap_or_else(|| panic!("{target:?}: anchor symbol missing"));
+        assert_eq!(shndx as usize, idx, "{target:?}: anchor section index");
+        assert_eq!(value, 8, "{target:?}: anchor offset");
+        let rela = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.tbl")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.tbl missing"));
+        assert_eq!(rela.3.len(), 24, "{target:?}: one relocation");
+        let r_offset = u64::from_le_bytes(rela.3[0..8].try_into().unwrap());
+        let r_info = u64::from_le_bytes(rela.3[8..16].try_into().unwrap());
+        assert_eq!(r_offset, 8, "{target:?}: relocation at the second quad");
+        assert_eq!(
+            (r_info >> 32) as usize,
+            sym_i,
+            "{target:?}: relocation targets the label symbol"
+        );
+    }
+}
+
 #[test]
 fn asm_address_constraint_renders_as_a_memory_reference() {
     // The `p` constraint takes its operand as an address in a general

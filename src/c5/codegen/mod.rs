@@ -1817,10 +1817,18 @@ pub(crate) struct UserExternDataRef {
     /// Byte offset within `Build::text` of the `adrp` /
     /// `lea`-prefix instruction. The writer pairs it with the
     /// follow-up `add` on aarch64 to emit both halves of the
-    /// page-relative load.
+    /// page-relative load. For a `direct_pcrel` entry the disp32
+    /// starts at `instr_offset + 3` as for the GOT form.
     pub instr_offset: usize,
     /// Symbol name of the cross-TU data global.
     pub symbol_name: alloc::string::String,
+    /// `None` for the default GOT-relaxable load. `Some(addend)` for a
+    /// direct `R_X86_64_PC32` against the symbol (x86_64 only), the shape a
+    /// segment-qualified inline-asm `%a` operand takes (`%%gs:sym(%rip)`):
+    /// the access rides the symbol's link-time value, so a GOT indirection
+    /// would be wrong. `addend` is the operand's constant offset less the
+    /// 4-byte PC-relative end skew.
+    pub direct_pcrel: Option<i64>,
 }
 
 /// Relocation for a function-pointer literal (`Inst::ImmCode`).

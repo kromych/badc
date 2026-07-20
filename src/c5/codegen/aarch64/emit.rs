@@ -1095,6 +1095,7 @@ pub(crate) fn emit_function(
                 user_extern_data_refs.push(super::UserExternDataRef {
                     instr_offset: popped.adrp_offset,
                     symbol_name: name.clone(),
+                    direct_pcrel: None,
                 });
             }
         }

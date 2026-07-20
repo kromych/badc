@@ -1787,6 +1787,57 @@ fn cpuid_matching_constraint_x86_64() {
 }
 
 #[test]
+fn cpuid_partial_outputs_with_clobbers_x86_64() {
+    // A `cpuid` with one output operand and the other implicit outputs
+    // listed as clobbers (a common max-leaf probe) lowers to the same
+    // intrinsic; the clobbered registers store to scratch slots and the
+    // absent `c` input defaults to subleaf 0.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(
+        "static unsigned leaf_max(void) {\n\
+         unsigned m;\n\
+         __asm__ volatile(\"cpuid\" : \"=a\"(m) : \"a\"(0) : \"rbx\", \"rcx\", \"rdx\");\n\
+         return m;\n\
+         }\n\
+         int main(void){ return (int)(leaf_max() & 0); }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    assert!(
+        bytes.windows(2).any(|w| w == [0x0F, 0xA2]),
+        "cpuid opcode (0F A2) must be emitted for the partial-output form"
+    );
+}
+
+#[test]
+fn cpuid_uncovered_implicit_output_rejected() {
+    // An implicit output register that is neither an output operand nor
+    // a clobber is rejected: the instruction overwrites it behind the
+    // register allocator's back.
+    let err = Compiler::new(
+        "static unsigned leaf_max(void) {\n\
+         unsigned m;\n\
+         __asm__ volatile(\"cpuid\" : \"=a\"(m) : \"a\"(0));\n\
+         return m;\n\
+         }\n\
+         int main(void){ return (int)leaf_max(); }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect_err("cpuid with uncovered implicit outputs must be rejected");
+    assert!(
+        format!("{err}").contains("output operand or a clobber"),
+        "{err}"
+    );
+}
+
+#[test]
 fn same_named_statics_keep_their_own_prologue_anchor() {
     // The post-prologue anchor map is keyed by the function's merged
     // entry offset. Name-keying handed a later unit's same-named

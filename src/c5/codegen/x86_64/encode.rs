@@ -1703,6 +1703,7 @@ pub(crate) fn lower(
         alloc::collections::BTreeMap::new();
     let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
+    let mut asm_sections: Vec<super::ssa::emit_common::AsmSection> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
@@ -1996,6 +1997,7 @@ pub(crate) fn lower(
                 ssa_line_rows: &mut ssa_line_rows,
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut func_prologue_native,
+                asm_sections: &mut asm_sections,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2222,6 +2224,7 @@ pub(crate) fn lower(
     };
 
     Ok(Build {
+        asm_sections,
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),

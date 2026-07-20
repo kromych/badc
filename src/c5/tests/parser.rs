@@ -982,15 +982,18 @@ fn constructor_is_not_reported_unused() {
 }
 
 #[test]
-fn asm_goto_rejects_output_operands() {
-    // TODO: asm-goto outputs (GCC 11) need label-path store-back.
-    expect_compile_error(
+fn asm_goto_accepts_output_operands() {
+    // GCC 11 `asm goto` outputs: valid on every exit path (the emitters
+    // store outputs on the fall-through and each label trampoline).
+    Compiler::new(
         "int f(int x) { int o; \
              __asm__ goto(\"nop\" : \"=r\"(o) : \"r\"(x) : : out); \
              return 1; out: return 2; } \
-         int main(void) { return f(0); }",
-        "inline asm goto: output operands are not supported",
-    );
+         int main(void) { return f(0); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("asm goto with an output operand must compile");
 }
 
 #[test]

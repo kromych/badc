@@ -705,6 +705,7 @@ pub(crate) fn emit_function(
     let ssa_line_rows = &mut *cx.ssa_line_rows;
     let pc_to_native = &mut *cx.pc_to_native;
     let prologue_native = &mut *cx.prologue_native;
+    let asm_sections = &mut *cx.asm_sections;
     let abi = target.abi();
     let frame = compute_frame(func, alloc, abi, target);
     let scratch = ScratchPool::new();
@@ -974,10 +975,12 @@ pub(crate) fn emit_function(
                     code,
                     asm,
                     args,
+                    func,
                     alloc,
                     frame,
                     fixups,
                     name2entpc,
+                    asm_sections,
                     Some(AsmGotoCtxA64 {
                         row: &func.jump_tables[table as usize],
                         branch_fixups: &mut branch_fixups,
@@ -1010,6 +1013,7 @@ pub(crate) fn emit_function(
                     ssa_line_rows: &mut *ssa_line_rows,
                     pc_to_native: &mut *pc_to_native,
                     prologue_native: &mut *prologue_native,
+                    asm_sections: &mut *asm_sections,
                 };
                 let fcx = FnCtx {
                     func,
@@ -2327,10 +2331,12 @@ fn emit_inline_asm_aarch64(
     code: &mut Vec<u8>,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
+    func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
     fixups: &mut Vec<super::encode::Fixup>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    asm_sections: &mut Vec<super::ssa::emit_common::AsmSection>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> bool {
     use super::super::ir::AsmConstraint;
@@ -2339,7 +2345,27 @@ fn emit_inline_asm_aarch64(
     use super::table::{self, Opnd};
     use alloc::string::String;
 
-    let insns = match parse_template(&asm.template) {
+    // Expand `%=` once so the code text and any `.pushsection` content
+    // share one instance number, then split off the section blocks; the
+    // arch parser sees only the code text.
+    let Ok(raw_text) = core::str::from_utf8(&asm.template) else {
+        bail_msg("aarch64 inline asm: non-UTF8 template");
+        return false;
+    };
+    let expanded = super::ssa::emit_common::expand_template_uniq(raw_text);
+    let text = expanded.as_deref().unwrap_or(raw_text);
+    let extracted = match super::ssa::emit_common::extract_asm_sections(text) {
+        Ok(e) => e,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    let (code_text, section_blocks) = match &extracted {
+        Some((c, b)) => (c.as_str(), b.as_slice()),
+        None => (text, &[][..]),
+    };
+    let insns = match parse_template(code_text.as_bytes()) {
         Ok(i) => i,
         Err(m) => {
             bail_msg(&m);
@@ -2467,12 +2493,31 @@ fn emit_inline_asm_aarch64(
             }
         }
     }
+    // The constant value of an `i`-class operand reference, if any.
+    let const_of = |idx: u8| -> Option<i64> {
+        match func
+            .insts
+            .get(*args.get(idx as usize)? as usize)
+        {
+            Some(super::super::ir::Inst::Imm(v)) => Some(*v),
+            _ => None,
+        }
+    };
     // Resolve one symbolic operand to a table operand; label references have
     // no table form and are handled by the branch path below.
     let conv = |o: &AsmOpndA64| -> Result<Opnd, String> {
         let resolve_ref = |idx: u8| -> Option<u8> { op_reg.get(idx as usize).copied().flatten() };
         Ok(match *o {
             AsmOpndA64::Imm(v) => Opnd::Imm(v),
+            // `%cN` / `%PN`: the operand's compile-time constant, bare.
+            AsmOpndA64::RefConst(idx) => match const_of(idx) {
+                Some(v) => Opnd::Imm(v),
+                None => {
+                    return Err(String::from(
+                        "aarch64 inline asm: non-constant `%c` operand",
+                    ));
+                }
+            },
             AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
             AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
             AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
@@ -2575,6 +2620,30 @@ fn emit_inline_asm_aarch64(
         }
         if !insn.bytes.is_empty() {
             code.extend_from_slice(&insn.bytes);
+            continue;
+        }
+        // A data directive with operand references (`.long %c0`): each
+        // argument must resolve to a compile-time constant, emitted
+        // little-endian at the directive width.
+        if let Some(w) = super::super::ssa::emit_common::data_directive_width(&insn.mnemonic) {
+            for o in &insn.operands {
+                let v = match *o {
+                    AsmOpndA64::Imm(v) => v,
+                    AsmOpndA64::RefConst(idx) | AsmOpndA64::Ref { idx, .. } => match const_of(idx)
+                    {
+                        Some(v) => v,
+                        None => {
+                            bail_msg("aarch64 inline asm: non-constant data-directive value");
+                            return false;
+                        }
+                    },
+                    _ => {
+                        bail_msg("aarch64 inline asm: unsupported data-directive value");
+                        return false;
+                    }
+                };
+                code.extend_from_slice(&(v as u64).to_le_bytes()[..w]);
+            }
             continue;
         }
         // A direct `bl` / `b` to a symbol: resolve the name to its entry PC and
@@ -2748,29 +2817,61 @@ fn emit_inline_asm_aarch64(
             }
         }
     }
-    // Store the register outputs back through their captured addresses (x16
-    // holds the address; the operand pool is untouched).
-    for (i, op) in asm.operands.iter().enumerate() {
-        if !op.is_output || matches!(op.constraint, AsmConstraint::Mem) {
-            continue;
-        }
-        let Some(r) = op_reg[i] else { continue };
-        emit_sp_ldr_x(code, Reg(16), cap_off(i));
-        if matches!(op.constraint, AsmConstraint::Fp) {
-            emit(code, super::encode::enc_str_d_imm(r, Reg(16), 0));
-            continue;
-        }
-        match op.width {
-            8 => emit(code, enc_str_imm(Reg(r), Reg(16), 0)),
-            4 => emit(code, enc_str32_imm(Reg(r), Reg(16), 0)),
-            2 => emit(code, enc_strh_imm(Reg(r), Reg(16), 0)),
-            1 => emit(code, super::encode::enc_strb_imm(Reg(r), Reg(16), 0)),
-            _ => {
-                bail_msg("aarch64 inline asm: unsupported output width");
-                return false;
+    // Materialize the `.pushsection` blocks now that every label's text
+    // offset is known. A reference that names a numeric template label
+    // resolves to its offset; any other name is a symbol relocation.
+    if !section_blocks.is_empty() {
+        let label_off = |name: &str| -> Option<usize> {
+            let digits = name.strip_suffix(['b', 'f']).unwrap_or(name);
+            if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
+                return None;
             }
+            let num: u32 = digits.parse().ok()?;
+            // Sections follow the code textually; a `Nb` (or bare `N`)
+            // reference binds to the last definition, `Nf` to the first.
+            let mut defs = label_defs.iter().filter(|&&(n, _)| n == num);
+            if name.ends_with('f') {
+                defs.map(|&(_, off)| off).min()
+            } else {
+                defs.next_back().map(|&(_, off)| off)
+            }
+        };
+        if let Err(m) = super::ssa::emit_common::materialize_asm_sections(
+            section_blocks,
+            &|idx| const_of(idx),
+            &label_off,
+            true,
+            asm_sections,
+        ) {
+            bail_msg(&m);
+            return false;
         }
     }
+    // Store the register outputs back through their captured addresses (x16
+    // holds the address; the operand pool is untouched). For `asm goto`
+    // the outputs are stored on every exit path (GCC 11 output
+    // semantics), so the sequence repeats on each trampoline.
+    let emit_outputs = |code: &mut Vec<u8>| -> bool {
+        for (i, op) in asm.operands.iter().enumerate() {
+            if !op.is_output || matches!(op.constraint, AsmConstraint::Mem) {
+                continue;
+            }
+            let Some(r) = op_reg[i] else { continue };
+            emit_sp_ldr_x(code, Reg(16), cap_off(i));
+            if matches!(op.constraint, AsmConstraint::Fp) {
+                emit(code, super::encode::enc_str_d_imm(r, Reg(16), 0));
+                continue;
+            }
+            match op.width {
+                8 => emit(code, enc_str_imm(Reg(r), Reg(16), 0)),
+                4 => emit(code, enc_str32_imm(Reg(r), Reg(16), 0)),
+                2 => emit(code, enc_strh_imm(Reg(r), Reg(16), 0)),
+                1 => emit(code, super::encode::enc_strb_imm(Reg(r), Reg(16), 0)),
+                _ => return false,
+            }
+        }
+        true
+    };
     // Restore the saved registers and free the frame.
     let emit_restore = |code: &mut Vec<u8>| {
         for (j, &r) in save_list.iter().enumerate() {
@@ -2783,14 +2884,18 @@ fn emit_inline_asm_aarch64(
             emit(code, enc_add_imm(Reg(31), Reg(31), size));
         }
     };
-    let restore_start = code.len();
+    let exit_start = code.len();
+    if !emit_outputs(code) {
+        bail_msg("aarch64 inline asm: unsupported output width");
+        return false;
+    }
     emit_restore(code);
     // `asm goto`: each `%lK` branch leaves mid-template, before the
-    // restore just emitted on the fall-through path, so it lands on a
-    // trampoline that repeats the restore and branches to the label's
-    // block through the enclosing function's branch fixups. A label
-    // whose target is the fall-through block reuses the fall-through
-    // restore instead.
+    // store-backs and restore just emitted on the fall-through path, so
+    // it lands on a trampoline that repeats them and branches to the
+    // label's block through the enclosing function's branch fixups. A
+    // label whose target is the fall-through block reuses the
+    // fall-through exit sequence instead.
     if let Some(ctx) = goto_ctx {
         let mut tramp_at: Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
         if goto_sites
@@ -2804,6 +2909,10 @@ fn emit_inline_asm_aarch64(
                     continue;
                 }
                 tramp_at[k] = Some(code.len());
+                if !emit_outputs(code) {
+                    bail_msg("aarch64 inline asm: unsupported output width");
+                    return false;
+                }
                 emit_restore(code);
                 ctx.branch_fixups.push(BranchFixup {
                     site: code.len(),
@@ -2817,7 +2926,7 @@ fn emit_inline_asm_aarch64(
             code[skip_site..skip_site + 4].copy_from_slice(&word.to_le_bytes());
         }
         for &(site, ref kind, k) in &goto_sites {
-            let target = tramp_at[k].unwrap_or(restore_start);
+            let target = tramp_at[k].unwrap_or(exit_start);
             match label_branch_word(kind, target as i64 - site as i64) {
                 Ok(word) => code[site..site + 4].copy_from_slice(&word.to_le_bytes()),
                 Err(m) => {
@@ -2863,6 +2972,7 @@ fn emit_inst(
     let pending_func_fixups = &mut *cx.pending_func_fixups;
     let tls_index_fixups = &mut *cx.tls_index_fixups;
     let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
+    let asm_sections = &mut *cx.asm_sections;
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca. Non-zero:
@@ -3422,9 +3532,18 @@ fn emit_inst(
             // value.
             true
         }
-        Inst::InlineAsm { asm, args } => {
-            emit_inline_asm_aarch64(code, asm, args, alloc, frame, fixups, name2entpc, None)
-        }
+        Inst::InlineAsm { asm, args } => emit_inline_asm_aarch64(
+            code,
+            asm,
+            args,
+            func,
+            alloc,
+            frame,
+            fixups,
+            name2entpc,
+            asm_sections,
+            None,
+        ),
         _ => false,
     }
 }
@@ -8047,6 +8166,7 @@ mod tests {
         let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
+        let mut asm_sections = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -8059,6 +8179,7 @@ mod tests {
                 ssa_line_rows: &mut ssa_line_rows,
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut prologue_native,
+                asm_sections: &mut asm_sections,
             };
             emit_function(
                 &func,
@@ -8215,6 +8336,7 @@ mod tests {
         let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
+        let mut asm_sections = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -8227,6 +8349,7 @@ mod tests {
                 ssa_line_rows: &mut ssa_line_rows,
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut prologue_native,
+                asm_sections: &mut asm_sections,
             };
             emit_function(
                 &func,
@@ -8282,6 +8405,7 @@ mod tests {
         let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
+        let mut asm_sections = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -8294,6 +8418,7 @@ mod tests {
                 ssa_line_rows: &mut ssa_line_rows,
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut prologue_native,
+                asm_sections: &mut asm_sections,
             };
             emit_function(
                 &func,

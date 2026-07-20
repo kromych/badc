@@ -67,6 +67,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("atomic128_ldst.c", "linux-x64"), // aarch64 128-bit ldp/stp, ldxp/stxp
     ("inline_asm_a64_dp.c", "linux-x64"), // aarch64 mul/csel (x86 mul is 1-operand)
     ("inline_asm_a64_labels.c", "linux-x64"), // aarch64 local-label branches
+    ("inline_asm_a64_barriers.c", "linux-x64"), // aarch64 dmb/dsb/isb/clrex
     ("divq_udiv_qrnnd.c", "linux-aarch64"), // x86-64 128/64 divq
     ("rdtsc_host_ticks.c", "linux-aarch64"), // x86-64 rdtsc
     ("inline_asm_memory_operand.c", "linux-aarch64"), // x86-64 lock cmpxchg/xadd
@@ -79,6 +80,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_setjmp_label.c", "linux-aarch64"), // x86-64 asm context switch
     ("inline_asm_x64_mem_disp.c", "linux-aarch64"), // x86-64 disp(%reg) memory operands
     ("register_var_asm_operand.c", "linux-aarch64"), // x86-64 extended-asm operand pinning
+    ("inline_asm_x64_sib.c", "linux-aarch64"), // x86-64 scaled-index memory operands
 ];
 
 #[test]

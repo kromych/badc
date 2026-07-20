@@ -27,6 +27,10 @@ pub(crate) enum AsmOpndA64 {
     /// `%N` / `%wN` / `%xN`: operand N of the statement, at the register width
     /// named by the modifier (or the operand's own width when unmodified).
     Ref { idx: u8, is64: Option<bool> },
+    /// `%cN` / `%PN`: operand N substituted as a bare constant, without
+    /// immediate syntax. Valid on an `i`-class operand; the emitter
+    /// resolves the compile-time constant value.
+    RefConst(u8),
     /// An explicit register: `x5` / `w5` / `sp` / `xzr` (`num == 31` is the
     /// zero register or SP, per the instruction).
     Reg { num: u8, is64: bool },
@@ -237,6 +241,26 @@ fn sysop_base(mnem: &str, op: &str) -> Option<u32> {
         _ => return None,
     };
     Some(0xD508_0000 | (op1 << 16) | (crn << 12) | (crm << 8) | (op2 << 5))
+}
+
+/// The 4-bit CRm value of a `dmb` / `dsb` barrier option, or None if the
+/// name is not one. `isb` takes only `sy`; `clrex` only a numeric imm.
+fn barrier_option(name: &str) -> Option<u32> {
+    Some(match name.to_ascii_lowercase().as_str() {
+        "sy" => 15,
+        "st" => 14,
+        "ld" => 13,
+        "ish" => 11,
+        "ishst" => 10,
+        "ishld" => 9,
+        "nsh" => 7,
+        "nshst" => 6,
+        "nshld" => 5,
+        "osh" => 3,
+        "oshst" => 2,
+        "oshld" => 1,
+        _ => return None,
+    })
 }
 
 /// The 5-bit prefetch-operation code of a `prfm` op name
@@ -700,6 +724,17 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
                 .map_err(|_| format!("inline asm: bad goto-label reference `{tok}`"))?;
             return Ok(AsmOpndA64::GotoLabel(k));
         }
+        // `%cN` / `%PN`: a bare-constant substitution.
+        if let Some(&m) = rest.as_bytes().first()
+            && matches!(m, b'c' | b'P')
+            && rest.len() > 1
+            && rest[1..].bytes().all(|c| c.is_ascii_digit())
+        {
+            let idx: u8 = rest[1..]
+                .parse()
+                .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            return Ok(AsmOpndA64::RefConst(idx));
+        }
         // `%N` (natural width); the GP views `%wN` (32) / `%xN` (64); and the FP
         // scalar views `%sN` (single) / `%dN` (double). A view flag rides `is64`
         // (w/s = 32, x/d = 64) and the emitter resolves it against the operand's
@@ -818,6 +853,31 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 continue;
             }
         }
+        // A `.byte`-family directive whose arguments reference operands
+        // (`.long %c0`) resolves its values at emit time; the directive
+        // keyword rides the mnemonic field.
+        if let Some((tok, rest)) = piece
+            .split_once(char::is_whitespace)
+            .filter(|(_, r)| r.contains('%'))
+            && emit_common::data_directive_width(tok).is_some()
+        {
+            let mut operands = Vec::new();
+            for a in split_operands(rest) {
+                // Directive arguments are bare integers, not `#`-prefixed.
+                operands.push(match parse_int(a) {
+                    Some(v) => AsmOpndA64::Imm(v),
+                    None => parse_operand(a)?,
+                });
+            }
+            insns.push(AsmInsnA64 {
+                mnemonic: String::from(tok),
+                operands,
+                bytes: Vec::new(),
+                label_def: None,
+                sym_target: None,
+            });
+            continue;
+        }
         // Reuse the shared raw-byte recognizer for a single piece.
         if let Some(bytes) = emit_common::parse_raw_template(piece.as_bytes()) {
             insns.push(AsmInsnA64 {
@@ -914,6 +974,41 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 });
                 continue;
             }
+        }
+        // Barriers: `dmb` / `dsb` take a domain option (default `sy`), `isb`
+        // takes only `sy`, `clrex` a numeric imm. All are constant and encode
+        // to their word here: `1101 0101 0000 0011 0011 CRm opc 11111` with
+        // opc 4 (dsb), 5 (dmb), 6 (isb), 2 (clrex). Byte-verified vs clang.
+        if matches!(mnem, "dmb" | "dsb" | "isb" | "clrex") {
+            let toks = split_operands(rest);
+            if toks.len() > 1 {
+                return Err(format!("inline asm: `{mnem}` takes at most one option"));
+            }
+            let crm = match toks.first() {
+                None => 15,
+                Some(t) => match barrier_option(t) {
+                    Some(v) if matches!(mnem, "dmb" | "dsb") || (mnem == "isb" && v == 15) => v,
+                    _ => match t.strip_prefix('#').and_then(parse_int) {
+                        Some(v) if (0..=15).contains(&v) => v as u32,
+                        _ => return Err(format!("inline asm: bad `{mnem}` option `{t}`")),
+                    },
+                },
+            };
+            let opc = match mnem {
+                "dsb" => 4u32,
+                "dmb" => 5,
+                "isb" => 6,
+                _ => 2, // clrex
+            };
+            let word = 0xD503_301F | (crm << 8) | (opc << 5);
+            insns.push(AsmInsnA64 {
+                mnemonic: String::new(),
+                operands: Vec::new(),
+                bytes: word.to_le_bytes().to_vec(),
+                label_def: None,
+                sym_target: None,
+            });
+            continue;
         }
         // `dc` / `ic` / `tlbi` name a system operation as the first token and
         // take an optional address register. The op resolves to a base word; the
@@ -1181,6 +1276,41 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn barrier_encodings() {
+        // Every dmb/dsb domain option, isb, and clrex encode to their
+        // constant words. Expected words from
+        // `clang --target=aarch64-unknown-linux-gnu`.
+        #[rustfmt::skip]
+        let cases: &[(&[u8], u32)] = &[
+            (b"dmb sy",    0xd5033fbf), (b"dmb ish",   0xd5033bbf),
+            (b"dmb ishld", 0xd50339bf), (b"dmb ishst", 0xd5033abf),
+            (b"dmb osh",   0xd50333bf), (b"dmb oshld", 0xd50331bf),
+            (b"dmb oshst", 0xd50332bf), (b"dmb nsh",   0xd50337bf),
+            (b"dmb nshld", 0xd50335bf), (b"dmb nshst", 0xd50336bf),
+            (b"dmb ld",    0xd5033dbf), (b"dmb st",    0xd5033ebf),
+            (b"dmb",       0xd5033fbf),
+            (b"dsb sy",    0xd5033f9f), (b"dsb ish",   0xd5033b9f),
+            (b"dsb ishst", 0xd5033a9f), (b"dsb ld",    0xd5033d9f),
+            (b"dsb st",    0xd5033e9f),
+            (b"isb",       0xd5033fdf), (b"isb sy",    0xd5033fdf),
+            (b"clrex",     0xd5033f5f), (b"clrex #7",  0xd503375f),
+        ];
+        for (tmpl, want) in cases {
+            let insns = parse_template(tmpl).unwrap();
+            assert_eq!(insns.len(), 1);
+            assert_eq!(
+                insns[0].bytes,
+                want.to_le_bytes(),
+                "template {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+        // An unknown option and an isb domain option are rejected.
+        assert!(parse_template(b"dmb full").is_err());
+        assert!(parse_template(b"isb ish").is_err());
     }
 
     #[test]

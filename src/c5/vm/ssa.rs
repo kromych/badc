@@ -2043,7 +2043,12 @@ fn run_inline_asm(
     if insns.iter().any(|i| {
         i.operands
             .iter()
-            .any(|o| matches!(o, AsmOpnd::Mem { .. } | AsmOpnd::LabelAddr { .. }))
+            .any(|o| {
+                matches!(
+                    o,
+                    AsmOpnd::Mem { .. } | AsmOpnd::AbsMem { .. } | AsmOpnd::LabelAddr { .. }
+                )
+            })
     }) {
         return Err(C5Error::Runtime(alloc::string::String::from(
             "inline asm: explicit memory operands are not supported under --interp",
@@ -2094,11 +2099,17 @@ fn run_inline_asm(
                     None => (frame.regs[args[idx as usize] as usize], sz),
                 }
             }
+            // `%cN` / `%PN`: the operand's value, as an immediate.
+            AsmOpnd::RefConst { idx, .. } => (
+                frame.regs[args[idx as usize] as usize],
+                AsmRegSize::from_width(asm.operands[idx as usize].width),
+            ),
             // Label / memory references are refused before this loop.
             AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
             | AsmOpnd::GotoLabel(_)
-            | AsmOpnd::Mem { .. } => (0, AsmRegSize::Long),
+            | AsmOpnd::Mem { .. }
+            | AsmOpnd::AbsMem { .. } => (0, AsmRegSize::Long),
         }
     };
     // The model register a destination operand writes into.
@@ -2109,19 +2120,22 @@ fn run_inline_asm(
             AsmOpnd::Reg { reg, .. } => (reg < 16).then_some(reg as usize),
             AsmOpnd::Ref { idx, .. } => op_reg[idx as usize].map(|r| r as usize),
             AsmOpnd::Imm(_)
+            | AsmOpnd::RefConst { .. }
             | AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
             | AsmOpnd::GotoLabel(_)
-            | AsmOpnd::Mem { .. } => None,
+            | AsmOpnd::Mem { .. }
+            | AsmOpnd::AbsMem { .. } => None,
         }
     };
 
     for insn in &insns {
         let ops = &insn.operands;
         match insn.mnemonic {
-            // Literal machine bytes are opaque to the register model, like the
-            // privileged / port ops below: no modelled effect under the VM.
-            Mnemonic::RawBytes => {}
+            // Literal machine bytes and emit-time data directives are opaque
+            // to the register model, like the privileged / port ops below:
+            // no modelled effect under the VM.
+            Mnemonic::RawBytes | Mnemonic::Data(_) => {}
             // The interpreter is not a CPU emulator: a mnemonic reached through
             // the catalogue is refused rather than modelled. Such inline asm is
             // an ahead-of-time / JIT construct, executed natively there.

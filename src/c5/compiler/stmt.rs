@@ -1353,6 +1353,8 @@ impl Compiler {
         use super::super::ast::{AsmBlockAst, Expr, UnOp};
         use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand};
         let mut operands: alloc::vec::Vec<AsmOperand> = alloc::vec::Vec::new();
+        let mut operand_names: alloc::vec::Vec<Option<alloc::string::String>> =
+            alloc::vec::Vec::new();
         let mut operand_exprs: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
         let mut clobber_regs: u32 = 0;
         let mut clobber_fp_regs: u32 = 0;
@@ -1393,6 +1395,19 @@ impl Compiler {
                 label_ids.push(self.ast_label_by_name(&name));
                 label_names.push(name);
                 continue;
+            }
+            // GCC named operand: `[name]` before the constraint string.
+            // The name is addressable in the template as `%[name]`.
+            let mut op_name: Option<alloc::string::String> = None;
+            if self.lex.tk == Token::Brak && section <= 2 {
+                self.next()?; // `[`
+                if self.lex.tk != Token::Id {
+                    self.data.truncate(data_base);
+                    return Err(self.compile_err("inline asm: operand name expected after `[`"));
+                }
+                op_name = Some(self.symbols[self.lex.curr_id_idx].name.clone());
+                self.next()?; // name
+                self.consume(b']', "`]` expected after asm operand name")?;
             }
             if self.lex.tk != '"' {
                 self.data.truncate(data_base);
@@ -1444,12 +1459,6 @@ impl Compiler {
                 continue;
             }
             let is_output = section == 1;
-            // TODO: support `asm goto` output operands (GCC 11 added
-            // them; the label paths would need output store-back).
-            if is_goto && is_output {
-                self.data.truncate(data_base);
-                return Err(self.compile_err("inline asm goto: output operands are not supported"));
-            }
             let (constraint, is_rw) = match Self::parse_asm_constraint(cstr, is_output, n_outputs) {
                 Some(c) => c,
                 None => {
@@ -1542,6 +1551,7 @@ impl Compiler {
                 }
             };
             operand_exprs.push(e);
+            operand_names.push(op_name);
             operands.push(AsmOperand {
                 constraint,
                 is_output,
@@ -1567,6 +1577,17 @@ impl Compiler {
                 clobber_regs |= 1 << r;
             }
         }
+        // Canonicalize `%[name]` / `%<modifier>[name]` operand references
+        // to their positional `%N` / `%<modifier>N` forms while the names
+        // are at hand, so the per-arch template parsers see one spelling.
+        let template = if operand_names.iter().any(Option::is_some) {
+            match Self::rewrite_named_operand_refs(&template, &operand_names) {
+                Ok(t) => t,
+                Err(m) => return Err(self.compile_err(m)),
+            }
+        } else {
+            template
+        };
         // `asm goto` requires a label list; canonicalize the template's
         // `%l[name]` / `%lN` references to label-list indices while the
         // names and operand count are at hand.
@@ -1683,6 +1704,69 @@ impl Compiler {
             }
             out.extend_from_slice(alloc::format!("%l{}", n - n_operands).as_bytes());
             i = de;
+        }
+        Ok(out)
+    }
+
+    /// Canonicalize named operand references: `%[name]` and
+    /// `%<modifier>[name]` (one modifier letter, e.g. `%c[x]` / `%w[x]`)
+    /// become `%N` / `%<modifier>N` with `N` the operand's position.
+    /// `%l[label]` is the `asm goto` label reference and is left for
+    /// [`Self::rewrite_goto_label_refs`]. Unknown names are rejected here,
+    /// where the source position is known.
+    fn rewrite_named_operand_refs(
+        template: &[u8],
+        names: &[Option<alloc::string::String>],
+    ) -> Result<alloc::vec::Vec<u8>, alloc::string::String> {
+        let mut out: alloc::vec::Vec<u8> = alloc::vec::Vec::with_capacity(template.len());
+        let mut i = 0usize;
+        while i < template.len() {
+            if template[i] != b'%' {
+                out.push(template[i]);
+                i += 1;
+                continue;
+            }
+            if template.get(i + 1) == Some(&b'%') {
+                out.extend_from_slice(&template[i..i + 2]);
+                i += 2;
+                continue;
+            }
+            // `%[name]` or `%<modifier>[name]`; `%l[` is a goto label.
+            let (modifier, bstart) = match template.get(i + 1) {
+                Some(&b'[') => (None, i + 2),
+                Some(&m)
+                    if m.is_ascii_alphabetic()
+                        && m != b'l'
+                        && template.get(i + 2) == Some(&b'[') =>
+                {
+                    (Some(m), i + 3)
+                }
+                _ => {
+                    out.push(template[i]);
+                    i += 1;
+                    continue;
+                }
+            };
+            let Some(len) = template[bstart..].iter().position(|&c| c == b']') else {
+                return Err(alloc::string::String::from(
+                    "inline asm: unterminated `%[` operand reference",
+                ));
+            };
+            let name = core::str::from_utf8(&template[bstart..bstart + len]).unwrap_or("");
+            let Some(n) = names
+                .iter()
+                .position(|o| o.as_deref() == Some(name))
+            else {
+                return Err(alloc::format!(
+                    "inline asm: `%[{name}]` names no operand"
+                ));
+            };
+            out.push(b'%');
+            if let Some(m) = modifier {
+                out.push(m);
+            }
+            out.extend_from_slice(alloc::format!("{n}").as_bytes());
+            i = bstart + len + 1;
         }
         Ok(out)
     }

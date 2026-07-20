@@ -25,6 +25,9 @@ pub(crate) struct EmitCtx<'a> {
     pub(crate) ssa_line_rows: &'a mut alloc::vec::Vec<(usize, u32, u32)>,
     pub(crate) pc_to_native: &'a mut [usize],
     pub(crate) prologue_native: &'a mut alloc::collections::BTreeMap<usize, usize>,
+    /// Named sections accumulated from inline-asm `.pushsection` data
+    /// directives; the object writers append them to the emitted object.
+    pub(crate) asm_sections: &'a mut alloc::vec::Vec<AsmSection>,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
@@ -736,6 +739,408 @@ pub(crate) fn take_bail() -> Option<alloc::string::String> {
     LAST_BAIL.with(|b| b.borrow_mut().take())
 }
 
+// ------------------------------------------------------------------
+// In-template assembler sections: `.pushsection` / `.section` data
+// directives accumulated into named sections of the emitted object.
+// Shared by both arch template parsers; the emitter resolves operand
+// and label references and appends the finished [`AsmSection`]s to the
+// build's section sink.
+// ------------------------------------------------------------------
+
+/// One value of a section data directive.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AsmSectionValue {
+    Const(i64),
+    /// `%N` / `%cN` / `%c[name]` (canonicalized): the operand's
+    /// compile-time constant.
+    OperandConst(u8),
+    /// A template label (`1b`, `name`) or a symbol, optionally
+    /// PC-relative (`ref - .`). The emitter resolves a template label to
+    /// a text offset; an unknown name is a symbol reference.
+    Ref { name: alloc::string::String, pcrel: bool },
+}
+
+/// One item of an in-template section block, in source order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AsmSectionItem {
+    /// A `.byte`-family directive: element width plus its values.
+    Data {
+        width: u8,
+        values: alloc::vec::Vec<AsmSectionValue>,
+    },
+    /// `.balign n` / `.p2align e`, resolved to a byte alignment.
+    Align(u32),
+    /// `.align n`: GNU as interprets the argument per target -- a byte
+    /// count on x86 ELF, a power-of-two exponent on AArch64. Resolved by
+    /// the materializer under the arch's convention.
+    AlignArch(u32),
+    /// `.org n`: pad with zero bytes to section offset `n`.
+    Org(u32),
+    /// `.ascii` / `.asciz` / `.string` payload (NUL included when the
+    /// directive appends one).
+    Bytes(alloc::vec::Vec<u8>),
+}
+
+/// A parsed `.pushsection` / `.section` block of a template.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AsmSectionBlock {
+    pub name: alloc::string::String,
+    /// Flag letters from the `"flags"` argument (`a`, `w`, `x`, ...).
+    pub flags: alloc::string::String,
+    /// `@type` / `%type` argument (`progbits`, `nobits`, ...), if any.
+    pub sh_type: Option<alloc::string::String>,
+    pub items: alloc::vec::Vec<AsmSectionItem>,
+}
+
+/// A relocation of a materialized section against the object.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AsmSectionReloc {
+    /// Byte offset of the field within the section.
+    pub offset: u32,
+    /// Field width in bytes (4 or 8).
+    pub width: u8,
+    /// PC-relative (`ref - .`) rather than absolute.
+    pub pcrel: bool,
+    pub target: AsmSectionTarget,
+    pub addend: i64,
+}
+
+/// Relocation target of a section field.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AsmSectionTarget {
+    /// A byte offset into the emitted text (a resolved template label).
+    Text(usize),
+    /// A named symbol.
+    Symbol(alloc::string::String),
+}
+
+/// A materialized named section: bytes plus relocations, accumulated
+/// across the unit's inline-asm statements. The object writers append
+/// one output section per distinct `(name, flags, sh_type)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AsmSection {
+    pub name: alloc::string::String,
+    pub flags: alloc::string::String,
+    pub sh_type: Option<alloc::string::String>,
+    pub bytes: alloc::vec::Vec<u8>,
+    pub relocs: alloc::vec::Vec<AsmSectionReloc>,
+    /// Largest `.balign` seen; the object writer aligns the section.
+    pub align: u32,
+}
+
+/// Split a template into its code text and its section blocks. Returns
+/// `None` when the template has no section directives (the common case).
+/// The section stack starts at the code stream; `.pushsection` pushes a
+/// named section, `.popsection` pops, `.section` replaces the top, and
+/// `.previous` swaps the top two. Only data directives are accepted
+/// inside a named section (code in sections is TODO).
+pub(crate) fn extract_asm_sections(
+    text: &str,
+) -> Result<Option<(alloc::string::String, alloc::vec::Vec<AsmSectionBlock>)>, alloc::string::String>
+{
+    if !text.contains(".pushsection") && !text.contains(".section") {
+        return Ok(None);
+    }
+    let mut code = alloc::string::String::with_capacity(text.len());
+    let mut blocks: alloc::vec::Vec<AsmSectionBlock> = alloc::vec::Vec::new();
+    // Stack of indices into `blocks`; `None` is the code stream.
+    let mut stack: alloc::vec::Vec<Option<usize>> = alloc::vec![None];
+    for piece in text.split([';', '\n']) {
+        let piece = piece.trim();
+        let (tok, rest) = match piece.find(char::is_whitespace) {
+            Some(p) => (&piece[..p], piece[p..].trim()),
+            None => (piece, ""),
+        };
+        match tok {
+            ".pushsection" | ".section" => {
+                let block = parse_section_args(rest)?;
+                let idx = blocks.len();
+                blocks.push(block);
+                if tok == ".pushsection" {
+                    stack.push(Some(idx));
+                } else {
+                    *stack.last_mut().unwrap() = Some(idx);
+                }
+                continue;
+            }
+            ".popsection" => {
+                if stack.len() < 2 {
+                    return Err(alloc::string::String::from(
+                        "inline asm: `.popsection` without `.pushsection`",
+                    ));
+                }
+                stack.pop();
+                continue;
+            }
+            ".previous" => {
+                if stack.len() >= 2 {
+                    let n = stack.len();
+                    stack.swap(n - 1, n - 2);
+                } else {
+                    // A `.section` at stack bottom returns to the code
+                    // stream.
+                    stack[0] = None;
+                }
+                continue;
+            }
+            _ => {}
+        }
+        if piece.is_empty() {
+            continue;
+        }
+        match *stack.last().unwrap() {
+            None => {
+                code.push_str(piece);
+                code.push('\n');
+            }
+            Some(idx) => blocks[idx].items.push(parse_section_item(tok, rest)?),
+        }
+    }
+    Ok(Some((code, blocks)))
+}
+
+/// Parse the argument list of `.pushsection` / `.section`:
+/// `name[,"flags"[,@type]]`.
+fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::String> {
+    let mut parts = rest.split(',').map(str::trim);
+    let name = parts
+        .next()
+        .filter(|n| !n.is_empty())
+        .ok_or_else(|| alloc::string::String::from("inline asm: section name expected"))?;
+    let mut flags = alloc::string::String::new();
+    let mut sh_type = None;
+    for p in parts {
+        if let Some(f) = p.strip_prefix('"').and_then(|p| p.strip_suffix('"')) {
+            flags = alloc::string::String::from(f);
+        } else if let Some(t) = p.strip_prefix('@').or_else(|| p.strip_prefix('%')) {
+            sh_type = Some(alloc::string::String::from(t));
+        } else if !p.is_empty() {
+            return Err(alloc::format!("inline asm: bad section argument `{p}`"));
+        }
+    }
+    Ok(AsmSectionBlock {
+        name: alloc::string::String::from(name),
+        flags,
+        sh_type,
+        items: alloc::vec::Vec::new(),
+    })
+}
+
+/// Parse one directive inside a named section.
+fn parse_section_item(tok: &str, rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
+    if let Some(w) = data_directive_width(tok) {
+        let mut values = alloc::vec::Vec::new();
+        for a in rest.split(',') {
+            values.push(parse_section_value(a.trim())?);
+        }
+        return Ok(AsmSectionItem::Data {
+            width: w as u8,
+            values,
+        });
+    }
+    match tok {
+        ".balign" => {
+            let n = parse_raw_int(rest)
+                .filter(|&n| n > 0 && (n as u64).is_power_of_two())
+                .ok_or_else(|| alloc::format!("inline asm: bad alignment `{rest}`"))?;
+            Ok(AsmSectionItem::Align(n as u32))
+        }
+        ".align" => {
+            let n = parse_raw_int(rest)
+                .filter(|&n| (1..=4096).contains(&n))
+                .ok_or_else(|| alloc::format!("inline asm: bad alignment `{rest}`"))?;
+            Ok(AsmSectionItem::AlignArch(n as u32))
+        }
+        ".p2align" => {
+            let e = parse_raw_int(rest)
+                .filter(|&e| (0..=12).contains(&e))
+                .ok_or_else(|| alloc::format!("inline asm: bad alignment `{rest}`"))?;
+            Ok(AsmSectionItem::Align(1 << e))
+        }
+        ".org" => {
+            let n = parse_raw_int(rest)
+                .filter(|&n| n >= 0)
+                .ok_or_else(|| alloc::format!("inline asm: bad `.org` offset `{rest}`"))?;
+            Ok(AsmSectionItem::Org(n as u32))
+        }
+        ".ascii" | ".asciz" | ".string" => {
+            let s = rest
+                .strip_prefix('"')
+                .and_then(|r| r.strip_suffix('"'))
+                .ok_or_else(|| {
+                    alloc::format!("inline asm: string literal expected after `{tok}`")
+                })?;
+            let mut bytes: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
+            let mut it = s.bytes();
+            while let Some(b) = it.next() {
+                // The template already went through C string parsing; only
+                // the simple escapes survive here.
+                if b == b'\\' {
+                    match it.next() {
+                        Some(b'n') => bytes.push(b'\n'),
+                        Some(b't') => bytes.push(b'\t'),
+                        Some(b'0') => bytes.push(0),
+                        Some(c) => bytes.push(c),
+                        None => break,
+                    }
+                } else {
+                    bytes.push(b);
+                }
+            }
+            if tok != ".ascii" {
+                bytes.push(0);
+            }
+            Ok(AsmSectionItem::Bytes(bytes))
+        }
+        _ => Err(alloc::format!(
+            "inline asm: unsupported directive `{tok}` in a named section"
+        )),
+    }
+}
+
+/// Parse one data-directive value: a constant, an operand reference, or
+/// a label / symbol reference (optionally `- .` PC-relative).
+fn parse_section_value(a: &str) -> Result<AsmSectionValue, alloc::string::String> {
+    if let Some(v) = parse_raw_int(a) {
+        return Ok(AsmSectionValue::Const(v));
+    }
+    if let Some(rest) = a.strip_prefix('%') {
+        let body = rest
+            .strip_prefix('c')
+            .or_else(|| rest.strip_prefix('P'))
+            .unwrap_or(rest);
+        if !body.is_empty() && body.bytes().all(|c| c.is_ascii_digit()) {
+            let idx: u8 = body
+                .parse()
+                .map_err(|_| alloc::format!("inline asm: bad operand reference `{a}`"))?;
+            return Ok(AsmSectionValue::OperandConst(idx));
+        }
+        return Err(alloc::format!("inline asm: bad section value `{a}`"));
+    }
+    // `ref - .`: PC-relative against the field's own position.
+    let (name, pcrel) = match a.split_once('-') {
+        Some((l, r)) if r.trim() == "." => (l.trim(), true),
+        None => (a, false),
+        _ => return Err(alloc::format!("inline asm: unsupported expression `{a}`")),
+    };
+    let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
+    if name.is_empty() || !name.bytes().all(ident) {
+        return Err(alloc::format!("inline asm: bad section value `{a}`"));
+    }
+    Ok(AsmSectionValue::Ref {
+        name: alloc::string::String::from(name),
+        pcrel,
+    })
+}
+
+/// Materialize the parsed section blocks: resolve operand constants and
+/// label references, lay out the bytes, and merge into the sink by
+/// `(name, flags, sh_type)`. `const_of` yields an `i`-class operand's
+/// constant; `label_off` resolves a template-label name to its text
+/// offset (`None` means the name is a symbol).
+pub(crate) fn materialize_asm_sections(
+    blocks: &[AsmSectionBlock],
+    const_of: &dyn Fn(u8) -> Option<i64>,
+    label_off: &dyn Fn(&str) -> Option<usize>,
+    align_is_p2: bool,
+    sink: &mut alloc::vec::Vec<AsmSection>,
+) -> Result<(), alloc::string::String> {
+    for b in blocks {
+        let sec = match sink
+            .iter_mut()
+            .find(|s| s.name == b.name && s.flags == b.flags && s.sh_type == b.sh_type)
+        {
+            Some(s) => s,
+            None => {
+                sink.push(AsmSection {
+                    name: b.name.clone(),
+                    flags: b.flags.clone(),
+                    sh_type: b.sh_type.clone(),
+                    bytes: alloc::vec::Vec::new(),
+                    relocs: alloc::vec::Vec::new(),
+                    align: 1,
+                });
+                sink.last_mut().unwrap()
+            }
+        };
+        for item in &b.items {
+            // `.align`'s argument is a byte count on x86 ELF, a
+            // power-of-two exponent on AArch64 (GNU as convention).
+            let resolved;
+            let item = match item {
+                AsmSectionItem::AlignArch(n) => {
+                    let bytes = if align_is_p2 { 1u32 << n.min(&12) } else { *n };
+                    if !bytes.is_power_of_two() {
+                        return Err(alloc::string::String::from(
+                            "inline asm: `.align` is not a power of two",
+                        ));
+                    }
+                    resolved = AsmSectionItem::Align(bytes);
+                    &resolved
+                }
+                other => other,
+            };
+            match item {
+                AsmSectionItem::AlignArch(_) => unreachable!("resolved above"),
+                AsmSectionItem::Align(n) => {
+                    sec.align = sec.align.max(*n);
+                    while sec.bytes.len() % *n as usize != 0 {
+                        sec.bytes.push(0);
+                    }
+                }
+                AsmSectionItem::Org(n) => {
+                    if (*n as usize) < sec.bytes.len() {
+                        return Err(alloc::string::String::from(
+                            "inline asm: `.org` moves backwards",
+                        ));
+                    }
+                    sec.bytes.resize(*n as usize, 0);
+                }
+                AsmSectionItem::Bytes(bs) => sec.bytes.extend_from_slice(bs),
+                AsmSectionItem::Data { width, values } => {
+                    for v in values {
+                        match v {
+                            AsmSectionValue::Const(c) => sec
+                                .bytes
+                                .extend_from_slice(&(*c as u64).to_le_bytes()[..*width as usize]),
+                            AsmSectionValue::OperandConst(idx) => {
+                                let c = const_of(*idx).ok_or_else(|| {
+                                    alloc::string::String::from(
+                                        "inline asm: non-constant section data value",
+                                    )
+                                })?;
+                                sec.bytes
+                                    .extend_from_slice(&(c as u64).to_le_bytes()[..*width as usize]);
+                            }
+                            AsmSectionValue::Ref { name, pcrel } => {
+                                if !matches!(width, 4 | 8) {
+                                    return Err(alloc::string::String::from(
+                                        "inline asm: section reference needs a 4- or 8-byte field",
+                                    ));
+                                }
+                                let target = match label_off(name) {
+                                    Some(off) => AsmSectionTarget::Text(off),
+                                    None => AsmSectionTarget::Symbol(name.clone()),
+                                };
+                                sec.relocs.push(AsmSectionReloc {
+                                    offset: sec.bytes.len() as u32,
+                                    width: *width,
+                                    pcrel: *pcrel,
+                                    target,
+                                    addend: 0,
+                                });
+                                sec.bytes
+                                    .extend_from_slice(&[0u8; 8][..*width as usize]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Per-process counter behind the `%=` template escape.
 static ASM_INSTANCE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
@@ -791,14 +1196,19 @@ pub(crate) fn parse_raw_template(template: &[u8]) -> Option<alloc::vec::Vec<u8>>
     any.then_some(out)
 }
 
+/// Element width of a `.byte`-family data directive keyword, or `None`.
+pub(crate) fn data_directive_width(tok: &str) -> Option<usize> {
+    Some(match tok {
+        ".byte" => 1,
+        ".word" | ".2byte" | ".short" | ".hword" => 2,
+        ".long" | ".4byte" | ".int" => 4,
+        ".quad" | ".8byte" => 8,
+        _ => return None,
+    })
+}
+
 fn parse_raw_piece(piece: &str) -> Option<alloc::vec::Vec<u8>> {
-    let width = match piece.split_whitespace().next()? {
-        ".byte" => Some(1usize),
-        ".word" | ".2byte" => Some(2),
-        ".long" | ".4byte" => Some(4),
-        ".quad" | ".8byte" => Some(8),
-        _ => None,
-    };
+    let width = data_directive_width(piece.split_whitespace().next()?);
     if let Some(w) = width {
         let args = piece[piece.find(char::is_whitespace)?..].trim();
         let mut out = alloc::vec::Vec::new();
@@ -1005,6 +1415,109 @@ pub(crate) fn record_block_start_pc(
     // middle (or end) of `main` instead of its prologue.
     if block_idx > 0 && block_start_pc != 0 && block_start_pc < pc_to_native.len() {
         pc_to_native[block_start_pc] = code_len;
+    }
+}
+
+#[cfg(test)]
+mod asm_section_tests {
+    use super::*;
+
+    #[test]
+    fn extract_and_materialize() {
+        let text = "1: nop\n.pushsection .discard.t,\"aw\",@progbits\n.balign 8\n.quad 1b\n.long 1b - .\n.long %c0, 7\n.asciz \"hi\"\n.popsection\nnop\n";
+        let (code, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        assert_eq!(code, "1: nop\nnop\n");
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].name, ".discard.t");
+        assert_eq!(blocks[0].flags, "aw");
+        assert_eq!(blocks[0].sh_type.as_deref(), Some("progbits"));
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(
+            &blocks,
+            &|idx| (idx == 0).then_some(42),
+            &|name| (name == "1b").then_some(0x40),
+            false,
+            &mut sink,
+        )
+        .unwrap();
+        assert_eq!(sink.len(), 1);
+        let s = &sink[0];
+        assert_eq!(s.align, 8);
+        // 8 (quad) + 4 (pcrel long) + 4 + 4 (consts) + 3 ("hi\0").
+        assert_eq!(s.bytes.len(), 23);
+        assert_eq!(&s.bytes[12..16], &42u32.to_le_bytes());
+        assert_eq!(&s.bytes[16..20], &7u32.to_le_bytes());
+        assert_eq!(&s.bytes[20..23], b"hi\0");
+        assert_eq!(s.relocs.len(), 2);
+        assert_eq!(
+            s.relocs[0],
+            AsmSectionReloc {
+                offset: 0,
+                width: 8,
+                pcrel: false,
+                target: AsmSectionTarget::Text(0x40),
+                addend: 0
+            }
+        );
+        assert_eq!(
+            s.relocs[1],
+            AsmSectionReloc {
+                offset: 8,
+                width: 4,
+                pcrel: true,
+                target: AsmSectionTarget::Text(0x40),
+                addend: 0
+            }
+        );
+    }
+
+    #[test]
+    fn section_previous_and_symbols() {
+        // `.section` + `.previous` return to the code stream; an unknown
+        // name resolves as a symbol target.
+        let text = "nop\n.section .fixup,\"ax\"\n.quad handler\n.previous\nnop\n";
+        let (code, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        assert_eq!(code, "nop\nnop\n");
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
+        assert_eq!(
+            sink[0].relocs[0].target,
+            AsmSectionTarget::Symbol(alloc::string::String::from("handler"))
+        );
+        // Two blocks naming one section merge; a `.popsection` without a
+        // push is rejected.
+        let text = ".pushsection .a,\"a\"\n.long 1\n.popsection\n.pushsection .a,\"a\"\n.long 2\n.popsection\n";
+        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
+        assert_eq!(sink.len(), 1);
+        assert_eq!(sink[0].bytes.len(), 8);
+        assert!(
+            extract_asm_sections(".pushsection .a,\"a\"\n.popsection\n.popsection").is_err()
+        );
+        // No section directives: the fast path returns None.
+        assert!(extract_asm_sections("nop").unwrap().is_none());
+    }
+
+    #[test]
+    fn align_convention_per_arch() {
+        // `.align 3` is 2^3 = 8 bytes under the AArch64 convention and a
+        // (rejected, non-power-of-two) byte count under the x86 one.
+        let text = ".pushsection .t,\"a\"\n.align 3\n.byte 1\n.popsection";
+        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, true, &mut sink).unwrap();
+        assert_eq!(sink[0].align, 8);
+        let mut sink = alloc::vec::Vec::new();
+        assert!(
+            materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).is_err()
+        );
+        // `.align 8` under the x86 convention is 8 bytes.
+        let text = ".pushsection .t,\"a\"\n.align 8\n.byte 1\n.popsection";
+        let (_, blocks) = extract_asm_sections(text).unwrap().unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
+        assert_eq!(sink[0].align, 8);
     }
 }
 

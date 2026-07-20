@@ -162,15 +162,23 @@ pub(crate) enum Opnd {
         disp: i32,
         width: u8,
     },
+    /// Absolute memory `disp32` with no base or index: ModRM mod=00 rm=100,
+    /// SIB base=101 index=100 (none). Meaningful under a segment override,
+    /// where the displacement is segment-relative.
+    AbsMem {
+        disp: i32,
+        width: u8,
+    },
     Imm(i64),
 }
 
 impl Opnd {
     fn width(self) -> Option<u8> {
         match self {
-            Opnd::Reg { width, .. } | Opnd::Mem { width, .. } | Opnd::RipRel { width, .. } => {
-                Some(width)
-            }
+            Opnd::Reg { width, .. }
+            | Opnd::Mem { width, .. }
+            | Opnd::RipRel { width, .. }
+            | Opnd::AbsMem { width, .. } => Some(width),
             Opnd::Imm(_) => None,
         }
     }
@@ -193,10 +201,14 @@ fn pat_matches(p: OpPat, o: Opnd, opw: u8) -> bool {
         (OpPat::Reg(w), Opnd::Reg { width, .. }) => wbytes(w, opw) == Some(width),
         (OpPat::Rm(w), Opnd::Reg { width, .. }) => wbytes(w, opw) == Some(width),
         (OpPat::Rm(w), Opnd::Mem { width, .. }) => wbytes(w, opw) == Some(width),
-        (OpPat::Rm(w), Opnd::RipRel { width, .. }) => wbytes(w, opw) == Some(width),
+        (OpPat::Rm(w), Opnd::RipRel { width, .. } | Opnd::AbsMem { width, .. }) => {
+            wbytes(w, opw) == Some(width)
+        }
         (OpPat::Mem(w), Opnd::Mem { width, .. }) => wbytes(w, opw) == Some(width),
-        (OpPat::Mem(w), Opnd::RipRel { width, .. }) => wbytes(w, opw) == Some(width),
-        (OpPat::MemAny, Opnd::Mem { .. } | Opnd::RipRel { .. }) => true,
+        (OpPat::Mem(w), Opnd::RipRel { width, .. } | Opnd::AbsMem { width, .. }) => {
+            wbytes(w, opw) == Some(width)
+        }
+        (OpPat::MemAny, Opnd::Mem { .. } | Opnd::RipRel { .. } | Opnd::AbsMem { .. }) => true,
         (OpPat::Fixed(num, w), Opnd::Reg { num: n, width }) => {
             n == num && wbytes(w, opw) == Some(width)
         }
@@ -286,8 +298,8 @@ fn reg_num(o: Opnd) -> u8 {
     match o {
         Opnd::Reg { num, .. } => num,
         Opnd::Mem { base, .. } => base,
-        // RIP-relative has no base register (rm=101 is fixed): no REX.B.
-        Opnd::RipRel { .. } | Opnd::Imm(_) => 0,
+        // RIP-relative / absolute have no base register: no REX.B.
+        Opnd::RipRel { .. } | Opnd::AbsMem { .. } | Opnd::Imm(_) => 0,
     }
 }
 
@@ -497,6 +509,12 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<InsnBuf, String> {
             Some(Opnd::RipRel { disp, .. }) => {
                 // mod=00 rm=101: RIP-relative, disp32 follows.
                 code.push(((regfield & 7) << 3) | 5);
+                code.extend_from_slice(&disp.to_le_bytes());
+            }
+            Some(Opnd::AbsMem { disp, .. }) => {
+                // mod=00 rm=100, SIB base=101 index=100: absolute disp32.
+                code.push(((regfield & 7) << 3) | 4);
+                code.push(0x25);
                 code.extend_from_slice(&disp.to_le_bytes());
             }
             _ => return Err(String::from("inline asm: form needs an r/m operand")),

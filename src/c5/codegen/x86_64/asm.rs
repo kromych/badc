@@ -25,6 +25,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::super::ir::AsmRegSize;
+use super::super::ssa::emit_common::data_directive_width;
 
 /// Base mnemonic of a template instruction (AT&T size suffix folded
 /// out into [`AsmInsn::suffix`]).
@@ -171,6 +172,10 @@ pub(crate) enum Mnemonic {
     /// instructions the mnemonic catalogue does not cover; the bytes are
     /// emitted verbatim.
     RawBytes,
+    /// A `.byte`-family data directive whose arguments reference operands
+    /// (`.long %c0`), so the values resolve at emit time. The payload is the
+    /// element width in bytes; the operands are the directive arguments.
+    Data(u8),
     /// A general-purpose / system mnemonic recognized straight from the
     /// catalogue, not one of the bespoke forms above. The string is the
     /// catalogue mnemonic; [`encode`] routes it through the table encoder with
@@ -185,14 +190,29 @@ pub(crate) enum AsmOpnd {
     /// `%N` / `%<size>N`: operand N of the asm statement, at the named
     /// register-name size (or the operand's own width when unmodified).
     Ref { idx: u8, size: Option<AsmRegSize> },
+    /// `%cN` / `%PN`: operand N substituted as a bare constant (`%c`) or a
+    /// bare symbol / constant address (`%P`), without the `$` immediate
+    /// syntax. Valid on an `i`-class operand; the emitter resolves a
+    /// compile-time constant to an immediate and an address value to the
+    /// operand's captured value (`lea` / `call` / `jmp` positions).
+    RefConst { idx: u8, symbolic: bool },
     /// `%%reg`: an explicit register named in the template.
     Reg { reg: u8, size: AsmRegSize },
     /// `$imm`: a literal immediate.
     Imm(i64),
     /// `disp(%%reg)` / `disp(%N)`: an explicit memory reference written in
     /// the template -- a byte displacement off a 64-bit base register (named
-    /// directly or through a register-class operand reference).
-    Mem { base: AsmMemBase, disp: i32 },
+    /// directly or through a register-class operand reference), with an
+    /// optional scaled index (`disp(%%base, %%index, scale)`).
+    Mem {
+        base: AsmMemBase,
+        index: Option<AsmMemBase>,
+        scale: u8,
+        disp: i32,
+    },
+    /// `seg:disp` with no base register (`%%gs:0x28`): an absolute
+    /// displacement, meaningful under the instruction's segment override.
+    AbsMem { disp: i32 },
     /// `Nf` / `Nb`: a local-label reference (label number plus direction --
     /// `f` forward, `b` backward), the target of a `jmp` / `jcc` within the
     /// block. The emitter resolves it to a rel32 against the label definition.
@@ -227,6 +247,9 @@ pub(crate) const NAMED_LABEL_BASE: u32 = 1 << 31;
 pub(crate) struct AsmInsn {
     pub mnemonic: Mnemonic,
     pub suffix: Option<AsmRegSize>,
+    /// Segment-override prefix byte (0x64 `%%fs:`, 0x65 `%%gs:`) written on
+    /// the instruction's memory operand; emitted before the opcode.
+    pub seg: Option<u8>,
     pub operands: Vec<AsmOpnd>,
     /// Literal bytes for a [`Mnemonic::RawBytes`] piece; empty otherwise.
     pub bytes: Vec<u8>,
@@ -248,10 +271,19 @@ pub(crate) enum Concrete {
         reg: u8,
         size: AsmRegSize,
     },
-    /// A memory reference `disp(%base)`: `base` holds the address, `disp` a
-    /// byte displacement (0 for a memory-constrained `m` template operand).
+    /// A memory reference `disp(%base)` / `disp(%base, %index, scale)`:
+    /// `base` holds the address, `disp` a byte displacement (0 for a
+    /// memory-constrained `m` template operand).
     Mem {
         base: u8,
+        index: Option<u8>,
+        scale: u8,
+        disp: i32,
+        size: AsmRegSize,
+    },
+    /// An absolute displacement (`%%gs:0x28`), addressed with no base
+    /// register; meaningful under a segment override.
+    AbsMem {
         disp: i32,
         size: AsmRegSize,
     },
@@ -854,6 +886,20 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
                 .map_err(|_| format!("inline asm: bad goto-label reference `{tok}`"))?;
             return Ok(AsmOpnd::GotoLabel(k));
         }
+        // `%cN` / `%PN`: a bare-constant / bare-symbol substitution.
+        if let Some(&m) = body.as_bytes().first()
+            && matches!(m, b'c' | b'P')
+            && body.len() > 1
+            && body[1..].bytes().all(|c| c.is_ascii_digit())
+        {
+            let idx: u8 = body[1..]
+                .parse()
+                .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            return Ok(AsmOpnd::RefConst {
+                idx,
+                symbolic: m == b'P',
+            });
+        }
         // `%N` or `%<size>N`. A leading size modifier is a single
         // letter b/w/k/q before the operand digits.
         let (size, digits) = match body.as_bytes().first() {
@@ -871,13 +917,97 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
     Err(format!("inline asm: unsupported operand `{tok}`"))
 }
 
-/// Parse `prefix(inner)`: the `disp(%%reg)` / `disp(%N)` memory forms and
-/// the `LABEL(%rip)` label-address form. `None` for shapes not modelled;
-/// scaled-index bases split at the operand commas and never reach here.
-/// TODO: `disp(%base, %index, scale)` needs comma-aware operand splitting.
+/// Split an operand list on commas, but not commas inside `(...)` (a
+/// scaled-index memory operand carries its own commas, as in
+/// `8(%%rax, %%rbx, 4)`).
+fn split_asm_operands(rest: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let (mut depth, mut start) = (0i32, 0usize);
+    for (i, c) in rest.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ',' if depth == 0 => {
+                out.push(rest[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let last = rest[start..].trim();
+    if !last.is_empty() {
+        out.push(last);
+    }
+    out
+}
+
+/// Segment-override prefix byte for a leading `%%fs:` / `%%gs:` (or the
+/// single-`%` basic-asm spelling), with the remainder of the token.
+fn split_seg_prefix(tok: &str) -> Option<(u8, &str)> {
+    for (name, byte) in [("fs:", 0x64u8), ("gs:", 0x65)] {
+        if let Some(rest) = tok
+            .strip_prefix("%%")
+            .or_else(|| tok.strip_prefix('%'))
+            .and_then(|t| t.strip_prefix(name))
+        {
+            return Some((byte, rest));
+        }
+    }
+    None
+}
+
+/// Parse a base / index register of a memory operand: `%%reg` (a 64-bit GP
+/// name) or an operand reference `%N` (an optional `q` size letter is the
+/// 64-bit name the address requires anyway).
+fn parse_mem_base(tok: &str) -> Option<AsmMemBase> {
+    let body = tok.trim().strip_prefix("%%").or_else(|| {
+        tok.trim().strip_prefix('%')
+    })?;
+    let digits = body.strip_prefix('q').unwrap_or(body);
+    if !digits.is_empty() && digits.bytes().all(|c| c.is_ascii_digit()) {
+        return Some(AsmMemBase::Ref(digits.parse().ok()?));
+    }
+    let (reg, size) = reg_by_name(body)?;
+    if reg >= 16 || size != AsmRegSize::Quad {
+        return None;
+    }
+    Some(AsmMemBase::Reg(reg))
+}
+
+/// Parse `prefix(inner)`: the `disp(%%reg)` / `disp(%N)` /
+/// `disp(%%base, %%index, scale)` memory forms and the `LABEL(%rip)`
+/// label-address form. `None` for shapes not modelled.
 fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOpnd> {
     let prefix = prefix.trim();
     let inner = inner.trim();
+    // `(base, index, scale)`: a SIB form. The bare `(base, index)` defaults
+    // the scale to 1.
+    let parts = split_asm_operands(inner);
+    if parts.len() >= 2 {
+        if parts.len() > 3 {
+            return None;
+        }
+        let disp = if prefix.is_empty() {
+            0i32
+        } else {
+            i32::try_from(parse_int(prefix)?).ok()?
+        };
+        let base = parse_mem_base(parts[0])?;
+        let index = parse_mem_base(parts[1])?;
+        let scale = match parts.get(2) {
+            Some(s) => match parse_int(s)? {
+                v @ (1 | 2 | 4 | 8) => v as u8,
+                _ => return None,
+            },
+            None => 1,
+        };
+        return Some(AsmOpnd::Mem {
+            base,
+            index: Some(index),
+            scale,
+            disp,
+        });
+    }
     let reg_body = inner
         .strip_prefix("%%")
         .or_else(|| inner.strip_prefix('%'))?;
@@ -906,23 +1036,12 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
     } else {
         i32::try_from(parse_int(prefix)?).ok()?
     };
-    // An operand-reference base `%N` (an optional `q` size letter is the
-    // 64-bit name the address requires anyway).
-    let digits = reg_body.strip_prefix('q').unwrap_or(reg_body);
-    if !digits.is_empty() && digits.bytes().all(|c| c.is_ascii_digit()) {
-        return Some(AsmOpnd::Mem {
-            base: AsmMemBase::Ref(digits.parse().ok()?),
-            disp,
-        });
-    }
-    // An explicit base register; only the 64-bit GP names address memory in
-    // long mode (32-bit bases need the 0x67 prefix, not modelled).
-    let (reg, size) = reg_by_name(reg_body)?;
-    if reg >= 16 || size != AsmRegSize::Quad {
-        return None;
-    }
+    // An operand-reference base `%N` or an explicit 64-bit base register
+    // (32-bit bases need the 0x67 prefix, not modelled).
     Some(AsmOpnd::Mem {
-        base: AsmMemBase::Reg(reg),
+        base: parse_mem_base(inner)?,
+        index: None,
+        scale: 1,
         disp,
     })
 }
@@ -953,13 +1072,7 @@ fn parse_int(s: &str) -> Option<i64> {
 /// The bare form reads its tokens as hexadecimal (so `90` is `0x90`); the
 /// directive form reads C-style integer constants (`0x`-prefixed or decimal).
 fn parse_raw_bytes(piece: &str) -> Option<Result<Vec<u8>, String>> {
-    let width = match piece.split_whitespace().next()? {
-        ".byte" => Some(1usize),
-        ".word" | ".2byte" => Some(2),
-        ".long" | ".4byte" => Some(4),
-        ".quad" | ".8byte" => Some(8),
-        _ => None,
-    };
+    let width = data_directive_width(piece.split_whitespace().next()?);
     if let Some(w) = width {
         let args = piece[piece.find(char::is_whitespace).unwrap()..].trim();
         let mut out = Vec::new();
@@ -1010,6 +1123,24 @@ fn split_label_def(piece: &str) -> Option<(&str, &str)> {
     }
 }
 
+/// Named local labels defined in the template's code text, in definition
+/// order (the intern order the `NAMED_LABEL_BASE + index` label numbers
+/// use). Shared with the emitter's section materialization so a section
+/// reference resolves a name to the same number.
+pub(crate) fn scan_label_names(text: &str) -> Vec<&str> {
+    let mut names: Vec<&str> = Vec::new();
+    for piece in text.split([';', '\n']) {
+        let mut p = piece.trim();
+        while let Some((name, rest)) = split_label_def(p) {
+            if !name.as_bytes()[0].is_ascii_digit() && !names.contains(&name) {
+                names.push(name);
+            }
+            p = rest.trim();
+        }
+    }
+    names
+}
+
 /// Parse an AT&T inline-asm template into its instruction sequence.
 /// Instructions are separated by `;` or newlines; operands by commas.
 pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
@@ -1025,16 +1156,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
     };
     // Pre-scan the label definitions so operand parsing can tell a local
     // label from a symbol; named labels intern in definition order.
-    let mut names: Vec<&str> = Vec::new();
-    for piece in text.split([';', '\n']) {
-        let mut p = piece.trim();
-        while let Some((name, rest)) = split_label_def(p) {
-            if !name.as_bytes()[0].is_ascii_digit() && !names.contains(&name) {
-                names.push(name);
-            }
-            p = rest.trim();
-        }
-    }
+    let names = scan_label_names(text);
     let mut insns = Vec::new();
     for piece in text.split([';', '\n']) {
         let mut piece = piece.trim();
@@ -1058,6 +1180,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             insns.push(AsmInsn {
                 mnemonic: Mnemonic::RawBytes,
                 suffix: None,
+                seg: None,
                 operands: Vec::new(),
                 bytes: Vec::new(),
                 sym_target: None,
@@ -1074,12 +1197,40 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         if piece.starts_with(".cfi_") {
             continue;
         }
+        // A `.byte`-family directive whose arguments reference operands
+        // (`.long %c0`) resolves its values at emit time.
+        if let Some((tok, rest)) = piece
+            .split_once(char::is_whitespace)
+            .filter(|(_, r)| r.contains('%'))
+            && let Some(w) = data_directive_width(tok)
+        {
+            let mut operands = Vec::new();
+            for a in rest.split(',') {
+                // Directive arguments are bare integers, not `$`-prefixed.
+                let a = a.trim();
+                operands.push(match parse_int(a) {
+                    Some(v) => AsmOpnd::Imm(v),
+                    None => parse_operand(a, &names)?,
+                });
+            }
+            insns.push(AsmInsn {
+                mnemonic: Mnemonic::Data(w as u8),
+                suffix: None,
+                seg: None,
+                operands,
+                bytes: Vec::new(),
+                sym_target: None,
+                label_def: None,
+            });
+            continue;
+        }
         // A raw-byte piece (hex-byte run or `.byte`-family directive) emits its
         // bytes verbatim with no operands.
         if let Some(bytes) = parse_raw_bytes(piece) {
             insns.push(AsmInsn {
                 mnemonic: Mnemonic::RawBytes,
                 suffix: None,
+                seg: None,
                 operands: Vec::new(),
                 bytes: bytes?,
                 sym_target: None,
@@ -1111,6 +1262,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             insns.push(AsmInsn {
                 mnemonic,
                 suffix,
+                seg: None,
                 operands: Vec::new(),
                 bytes: Vec::new(),
                 sym_target: Some(alloc::string::String::from(rest)),
@@ -1119,14 +1271,38 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             continue;
         }
         let mut operands = Vec::new();
+        let mut seg: Option<u8> = None;
         if !rest.is_empty() {
-            for op in rest.split(',') {
-                operands.push(parse_operand(op.trim(), &names)?);
+            for op in split_asm_operands(rest) {
+                // A `%%fs:` / `%%gs:` segment override rides the instruction
+                // (one memory operand per instruction); the remainder is the
+                // memory reference, a bare integer being an absolute
+                // displacement.
+                let tok = match split_seg_prefix(op) {
+                    Some((byte, rem)) => {
+                        if seg.is_some_and(|s| s != byte) {
+                            return Err(String::from(
+                                "inline asm: conflicting segment overrides",
+                            ));
+                        }
+                        seg = Some(byte);
+                        if let Some(v) = parse_int(rem) {
+                            let disp = i32::try_from(v)
+                                .map_err(|_| format!("inline asm: bad displacement `{op}`"))?;
+                            operands.push(AsmOpnd::AbsMem { disp });
+                            continue;
+                        }
+                        rem
+                    }
+                    None => op,
+                };
+                operands.push(parse_operand(tok, &names)?);
             }
         }
         insns.push(AsmInsn {
             mnemonic,
             suffix,
+            seg,
             operands,
             bytes: Vec::new(),
             sym_target: None,
@@ -1395,10 +1571,20 @@ fn table_opnd(c: &Concrete) -> super::table::Opnd {
             num: reg,
             width: size.bytes(),
         },
-        Concrete::Mem { base, disp, size } => Opnd::Mem {
+        Concrete::Mem {
             base,
-            index: None,
-            scale: 1,
+            index,
+            scale,
+            disp,
+            size,
+        } => Opnd::Mem {
+            base,
+            index,
+            scale,
+            disp,
+            width: size.bytes(),
+        },
+        Concrete::AbsMem { disp, size } => Opnd::AbsMem {
             disp,
             width: size.bytes(),
         },
@@ -1423,6 +1609,17 @@ pub(crate) fn encode(
             .ok_or_else(|| format!("inline asm: unknown catalogue mnemonic `{name}`"))?;
         code.extend_from_slice(&super::table::encode(mnem, width, &tops)?);
         return Ok(());
+    }
+    // The bespoke arms below address memory through `modrm_mem` (base +
+    // displacement only); a scaled index reaches them only on an
+    // unmodelled shape.
+    if ops
+        .iter()
+        .any(|o| matches!(o, Concrete::Mem { index: Some(_), .. }))
+    {
+        return Err(String::from(
+            "inline asm: scaled-index memory operand unsupported for this instruction",
+        ));
     }
     match mnemonic {
         // Raw bytes carry their payload on the `AsmInsn`, not in `ops`; the
@@ -1504,7 +1701,7 @@ pub(crate) fn encode(
                     code.extend_from_slice(&[0x0F, opcode]);
                     modrm_mem(code, v_field & 7, base, disp);
                 }
-                Concrete::Imm(_) => {
+                Concrete::Imm(_) | Concrete::AbsMem { .. } => {
                     return Err(String::from(
                         "inline asm: `movd` operand must be a register or memory",
                     ));
@@ -1970,7 +2167,7 @@ pub(crate) fn encode(
                     code.push(op_cl);
                     code.push(modrm_reg(src_reg, dst_reg));
                 }
-                Concrete::Mem { .. } => {
+                Concrete::Mem { .. } | Concrete::AbsMem { .. } => {
                     return Err(String::from("inline asm: double-shift count in memory"));
                 }
             }
@@ -2050,7 +2247,9 @@ pub(crate) fn encode(
 fn as_reg(op: Concrete) -> Result<(u8, AsmRegSize), String> {
     match op {
         Concrete::Reg { reg, size } => Ok((reg, size)),
-        Concrete::Mem { .. } => Err(String::from("inline asm: unexpected memory operand")),
+        Concrete::Mem { .. } | Concrete::AbsMem { .. } => {
+            Err(String::from("inline asm: unexpected memory operand"))
+        }
         Concrete::Imm(_) => Err(String::from("inline asm: register operand expected")),
     }
 }
@@ -2111,6 +2310,10 @@ mod tests {
                     _ => None,
                 })
             });
+            let reg_of = |b: AsmMemBase| match b {
+                AsmMemBase::Reg(r) => r,
+                AsmMemBase::Ref(_) => panic!("explicit-register template expected"),
+            };
             let ops: Vec<Concrete> = insn
                 .operands
                 .iter()
@@ -2118,16 +2321,27 @@ mod tests {
                     AsmOpnd::Reg { reg, size } => Concrete::Reg { reg, size },
                     AsmOpnd::Imm(v) => Concrete::Imm(v),
                     AsmOpnd::Mem {
-                        base: AsmMemBase::Reg(r),
+                        base,
+                        index,
+                        scale,
                         disp,
                     } => Concrete::Mem {
-                        base: r,
+                        base: reg_of(base),
+                        index: index.map(reg_of),
+                        scale,
+                        disp,
+                        size: mem_size.unwrap_or(AsmRegSize::Quad),
+                    },
+                    AsmOpnd::AbsMem { disp } => Concrete::AbsMem {
                         disp,
                         size: mem_size.unwrap_or(AsmRegSize::Quad),
                     },
                     other => panic!("unexpected operand {other:?}"),
                 })
                 .collect();
+            if let Some(seg) = insn.seg {
+                out.push(seg);
+            }
             encode(&mut out, insn.mnemonic, insn.suffix, &ops).unwrap();
         }
         out
@@ -2184,6 +2398,74 @@ mod tests {
                 core::str::from_utf8(tmpl).unwrap()
             );
         }
+    }
+
+    #[test]
+    fn segment_and_sib_operands() {
+        // Segment-override and scaled-index forms vs clang
+        // (`clang --target=x86_64-unknown-linux-gnu`).
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            // %%gs:disp absolute (mod=00 rm=100, SIB 0x25, disp32), the
+            // seg prefix first (before 66 / REX).
+            (b"movq %%gs:0x28, %%rax", &[0x65, 0x48, 0x8b, 0x04, 0x25, 0x28, 0x00, 0x00, 0x00]),
+            (b"movl %%gs:0x10, %%ecx", &[0x65, 0x8b, 0x0c, 0x25, 0x10, 0x00, 0x00, 0x00]),
+            (b"movq %%rbx, %%gs:0x28", &[0x65, 0x48, 0x89, 0x1c, 0x25, 0x28, 0x00, 0x00, 0x00]),
+            (b"movq %%fs:0x0, %%r9",   &[0x64, 0x4c, 0x8b, 0x0c, 0x25, 0x00, 0x00, 0x00, 0x00]),
+            (b"addq $1, %%gs:0x30",
+             &[0x65, 0x48, 0x83, 0x04, 0x25, 0x30, 0x00, 0x00, 0x00, 0x01]),
+            (b"movw %%gs:0x40, %%dx",  &[0x65, 0x66, 0x8b, 0x14, 0x25, 0x40, 0x00, 0x00, 0x00]),
+            (b"movb %%gs:0x5, %%al",   &[0x65, 0x8a, 0x04, 0x25, 0x05, 0x00, 0x00, 0x00]),
+            (b"movq %%gs:0x28, %%r12", &[0x65, 0x4c, 0x8b, 0x24, 0x25, 0x28, 0x00, 0x00, 0x00]),
+            // Segment prefix on a based reference.
+            (b"movq %%gs:8(%%rdx), %%rax", &[0x65, 0x48, 0x8b, 0x42, 0x08]),
+            // SIB forms `disp(%%base, %%index, scale)` / `(%%base, %%index)`.
+            (b"movq (%%rax,%%rbx,4), %%rcx",    &[0x48, 0x8b, 0x0c, 0x98]),
+            (b"movq 8(%%rax,%%rbx,8), %%rcx",   &[0x48, 0x8b, 0x4c, 0xd8, 0x08]),
+            (b"movl -4(%%r8,%%r9,2), %%edx",    &[0x43, 0x8b, 0x54, 0x48, 0xfc]),
+            (b"movq (%%rax,%%rbx), %%rcx",      &[0x48, 0x8b, 0x0c, 0x18]),
+            (b"leaq (%%rax,%%rbx,4), %%rcx",    &[0x48, 0x8d, 0x0c, 0x98]),
+            (b"movq %%rcx, 16(%%rsp,%%rdx)",    &[0x48, 0x89, 0x4c, 0x14, 0x10]),
+            (b"movb %%cl, 3(%%rbp,%%rdi,2)",    &[0x88, 0x4c, 0x7d, 0x03]),
+        ];
+        for (tmpl, want) in cases {
+            assert_eq!(
+                asm_bytes(tmpl),
+                *want,
+                "template {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn const_modifier_refs() {
+        // `%cN` / `%PN` parse to bare-constant operand references.
+        let insns = parse_template(b"lea %P0, %%rax").unwrap();
+        assert_eq!(
+            insns[0].operands[0],
+            AsmOpnd::RefConst {
+                idx: 0,
+                symbolic: true
+            }
+        );
+        // A data directive referencing an operand defers to emit time,
+        // carrying the directive width.
+        let insns = parse_template(b".long %c0").unwrap();
+        assert_eq!(insns[0].mnemonic, Mnemonic::Data(4));
+        assert_eq!(
+            insns[0].operands[0],
+            AsmOpnd::RefConst {
+                idx: 0,
+                symbolic: false
+            }
+        );
+        let insns = parse_template(b".quad %c1, 7").unwrap();
+        assert_eq!(insns[0].mnemonic, Mnemonic::Data(8));
+        assert_eq!(insns[0].operands[1], AsmOpnd::Imm(7));
+        // A constant-only directive stays on the raw-byte path.
+        let insns = parse_template(b".long 42").unwrap();
+        assert_eq!(insns[0].mnemonic, Mnemonic::RawBytes);
     }
 
     #[test]
@@ -2362,6 +2644,8 @@ mod tests {
         // destination still sets REX.R, a high base REX.B.
         let mem = |base: u8| Concrete::Mem {
             base,
+            index: None,
+            scale: 1,
             disp: 0,
             size: AsmRegSize::Quad,
         };
@@ -2387,6 +2671,8 @@ mod tests {
         };
         let mem = |base: u8| Concrete::Mem {
             base,
+            index: None,
+            scale: 1,
             disp: 0,
             size: AsmRegSize::Quad,
         };
@@ -2562,6 +2848,8 @@ mod tests {
         };
         let mem = |base: u8| Concrete::Mem {
             base,
+            index: None,
+            scale: 1,
             disp: 0,
             size: AsmRegSize::Quad,
         };
@@ -2815,6 +3103,8 @@ mod tests {
         // to memory uses store_op. Byte-exact vs clang.
         let mem = |base: u8| Concrete::Mem {
             base,
+            index: None,
+            scale: 1,
             disp: 0,
             size: AsmRegSize::Quad,
         };
@@ -2886,6 +3176,8 @@ mod tests {
         };
         let mem = |base: u8| Concrete::Mem {
             base,
+            index: None,
+            scale: 1,
             disp: 0,
             size: AsmRegSize::Quad,
         };

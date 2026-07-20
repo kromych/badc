@@ -1608,6 +1608,7 @@ impl Compiler {
                     pos,
                 );
                 self.ast_acc = Some(id);
+                self.reg_var_read_expr = Some(id);
             } else {
                 let identifier_is_local = self.symbols[id_idx].class == Token::Loc as i64;
                 if identifier_is_local {

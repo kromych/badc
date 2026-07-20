@@ -648,6 +648,7 @@ impl Compiler {
     pub(super) fn ast_reset(&mut self) {
         self.ast = super::super::ast::Ast::new();
         self.ast_acc = None;
+        self.reg_var_read_expr = None;
         self.ast_vstack.clear();
         self.ast_labels.clear();
     }

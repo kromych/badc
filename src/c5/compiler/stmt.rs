@@ -1535,6 +1535,15 @@ impl Compiler {
             } else {
                 constraint
             };
+            // A stack- / frame-pointer register variable names the register
+            // itself, which is its own storage: there is no object to address
+            // and nothing to store back. Carry its current value in as a plain
+            // input so the operand still occupies its `%N` slot. Writing such a
+            // variable is rejected in the expression path, so an asm that
+            // leaves the register changed is equally unsupported.
+            let reg_var_operand = self.ast_acc.is_some() && self.ast_acc == self.reg_var_read_expr;
+            let stores_back = is_output && !reg_var_operand;
+            let is_rw = is_rw && !reg_var_operand;
             // Outputs pass the destination address; a memory operand (input or
             // output) is likewise reached through its address, so it must be an
             // lvalue. A non-lvalue (a call / cast / arithmetic result) is not
@@ -1568,7 +1577,7 @@ impl Compiler {
                 };
                 if !addressable {
                     self.data.truncate(data_base);
-                    return Err(self.compile_err(if is_output {
+                    return Err(self.compile_err(if stores_back {
                         "inline asm: output operand must be an lvalue"
                     } else {
                         "inline asm: memory operand is not directly addressable (must be an lvalue)"
@@ -1588,7 +1597,7 @@ impl Compiler {
             operand_names.push(op_name);
             operands.push(AsmOperand {
                 constraint,
-                is_output,
+                is_output: stores_back,
                 is_rw,
                 width,
             });
@@ -3109,6 +3118,24 @@ impl Compiler {
         } else {
             Ok(false)
         }
+    }
+
+    /// Consume the separator between declarators of one declaration.
+    /// C99 6.7p1: an init-declarator-list is comma-separated and the
+    /// declaration ends at `;`. A declarator followed by anything else --
+    /// typically a second identifier, which is how an unrecognized type
+    /// qualifier reads -- is a syntax error, not the start of another
+    /// declarator.
+    pub(super) fn accept_declarator_separator(&mut self) -> Result<(), C5Error> {
+        if self.lex.tk == ',' {
+            self.next()?;
+        } else if self.lex.tk != ';' && self.lex.tk != '}' && self.lex.tk != 0 {
+            return Err(self.compile_err(alloc::format!(
+                "expected `,` or `;` after declarator (got {})",
+                super::super::token::describe(self.lex.tk)
+            )));
+        }
+        Ok(())
     }
 
     /// Capture the data-segment offset of the current string literal,

@@ -1206,6 +1206,136 @@ fn file_scope_register_asm_binding() {
 }
 
 #[test]
+fn two_identifiers_in_declarator_position_are_rejected() {
+    // C99 6.7p1: the declarators of one declaration are comma-separated
+    // and the list ends at `;`. A second identifier after a declarator is
+    // a syntax error at both file and block scope; it used to be read as
+    // another declarator, so an unrecognized type qualifier silently
+    // declared a variable and a capability probe for it succeeded.
+    for src in [
+        "int foo bar; int main(void) { return 0; }",
+        "int a b c; int main(void) { return 0; }",
+        "extern int foo bar; int main(void) { return 0; }",
+        "static int foo bar; int main(void) { return 0; }",
+        "int *p q; int main(void) { return 0; }",
+        "int a = 1 b; int main(void) { return 0; }",
+        "int __seg_fs fs; int main(void) { return 0; }",
+        "int __seg_gs gs; int main(void) { return 0; }",
+        "int main(void) { int foo bar; return 0; }",
+        "int main(void) { int a = 1 b; return 0; }",
+    ] {
+        expect_compile_error(src, "expected `,` or `;` after declarator");
+    }
+}
+
+#[test]
+fn declaration_lists_still_parse() {
+    // The separator check must not disturb the legitimate shapes: multiple
+    // declarators, initializers, pointers, arrays and their designators,
+    // prototypes, typedef and tag names, attributes and old-style
+    // parameter declarations.
+    let ok = |src: &str| {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("expected accept for {src:?}, got {e}"))
+    };
+    ok("int a, b; int main(void) { return a + b; }");
+    ok("int *p, q = 3; int main(void) { return q; }");
+    ok("int a[3] = {1, 2, 3}, b = 4; int main(void) { return a[0] + b; }");
+    ok("int m[2][2] = {[0][1] = 3, [1][0] = 4}; int main(void) { return m[0][1]; }");
+    ok(
+        "struct P { int x, y; }; struct P a[2] = {{1, 2}, {3, 4}}, b = {5, 6}; \
+        int main(void) { return a[0].x + b.x; }",
+    );
+    ok("int f(int), g(void); int main(void) { return g(); }");
+    ok("typedef int mi; mi v; int main(void) { return v; }");
+    ok("typedef int A, B; int main(void) { A a = 1; B b = 2; return a + b; }");
+    ok("typedef int (*F)(int); F a, b; int main(void) { return a == b; }");
+    ok("struct S { int m; }; struct S s; int main(void) { return s.m; }");
+    ok("enum E { A, B }; enum E e; int main(void) { return e; }");
+    ok("int x __attribute__((unused)); int main(void) { return 0; }");
+    ok("extern int e; int main(void) { return e; }");
+    ok("char *s = \"a\", *t = \"b\"; int main(void) { return s[0] + t[0]; }");
+    // Old-style definition: the parameter declarations are their own
+    // declarations, each ending at its `;`.
+    ok("int f(a, b) int a; int b; { return a + b; } int main(void) { return f(1, 2); }");
+    ok("int main(void) { int a = 1, *p = &a, c[2] = {1, 2}; return a + *p + c[0]; }");
+    ok("int main(void) { typedef int T; T v = 1; return v; }");
+    ok("int main(void) { static int s = 5; return s; }");
+}
+
+#[test]
+fn asm_output_operand_lvalue_matrix() {
+    // A stack- / frame-pointer register variable names a register, not an
+    // object: it is a valid output operand even though it has no address.
+    // Everything else keeps the lvalue requirement, including
+    // `__builtin_frame_address`, which reads back as the same intrinsic a
+    // frame-pointer register variable does but is not an lvalue.
+    #[cfg(target_arch = "x86_64")]
+    let (sp, fp, gp) = ("rsp", "rbp", "r12");
+    #[cfg(target_arch = "aarch64")]
+    let (sp, fp, gp) = ("sp", "x29", "x9");
+    let ok = |src: &str| {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("expected accept for {src:?}, got {e}"))
+    };
+    // A stack- / frame-pointer operand binds on x86_64. AArch64's asm
+    // surface is pattern-matched rather than constraint-driven, so it
+    // diagnoses the operand instead of binding it.
+    #[cfg(target_arch = "x86_64")]
+    let sp_fp_operand = ok;
+    #[cfg(target_arch = "aarch64")]
+    let sp_fp_operand = |src: &str| {
+        expect_compile_error(src, "register variable operand is not supported");
+    };
+    // File-scope binding used as a read-write output: a template that
+    // perturbs the stack pointer declares it this way.
+    sp_fp_operand(&format!(
+        "register unsigned long sp_reg asm(\"{sp}\");\n\
+         int main(void) {{ return 0; }} void f(void) {{ __asm__ __volatile__(\"\" : \"+r\"(sp_reg) : : \"memory\"); }}"
+    ));
+    // Block-scope bindings, write-only and read-write, stack and frame.
+    sp_fp_operand(&format!(
+        "int main(void) {{ return 0; }} void f(void) {{ register unsigned long s asm(\"{sp}\"); \
+         __asm__ __volatile__(\"\" : \"=r\"(s) : : \"memory\"); }}"
+    ));
+    sp_fp_operand(&format!(
+        "int main(void) {{ return 0; }} void f(void) {{ register unsigned long b asm(\"{fp}\"); \
+         __asm__ __volatile__(\"\" : \"+r\"(b) : : \"memory\"); }}"
+    ));
+    // A general-purpose register variable and the ordinary lvalue forms
+    // keep working as outputs.
+    ok(&format!(
+        "int main(void) {{ return 0; }} void f(void) {{ register long r asm(\"{gp}\"); \
+         __asm__ __volatile__(\"\" : \"=r\"(r)); }}"
+    ));
+    ok("struct S { int m; }; \
+        int main(void) { return 0; } void f(struct S *p, int *q, int a[2]) { int v; \
+        __asm__(\"\" : \"=r\"(v)); __asm__(\"\" : \"=r\"(p->m)); \
+        __asm__(\"\" : \"=r\"(*q)); __asm__(\"\" : \"=r\"(a[1])); }");
+    // Genuine rvalues stay rejected: a call result, a cast, and the
+    // frame-address intrinsic.
+    expect_compile_error(
+        "int g(void); int main(void) { return 0; } void f(void) { __asm__(\"\" : \"=r\"(g())); }",
+        "output operand must be an lvalue",
+    );
+    expect_compile_error(
+        "int main(void) { return 0; } void f(long a) { __asm__(\"\" : \"=r\"((int)a)); }",
+        "output operand must be an lvalue",
+    );
+    expect_compile_error(
+        "int main(void) { return 0; } void f(void) { __asm__(\"\" : \"=r\"(__builtin_frame_address(0))); }",
+        "output operand must be an lvalue",
+    );
+    // A memory operand still needs an address.
+    expect_compile_error(
+        "int g(void); int main(void) { return 0; } void f(void) { int r; __asm__(\"\" : \"=r\"(r) : \"m\"(g())); }",
+        "not directly addressable",
+    );
+}
+
+#[test]
 fn file_scope_asm_constraints() {
     // `asm("...")` between declarations accepts section data
     // directives (and an empty template); instructions, operands,

@@ -860,6 +860,11 @@ pub struct Compiler {
     /// Read by the speculative pass that sizes a FAM-bearing object's
     /// storage before the real fill runs; `None` between measurements.
     flex_array_measured_count: Option<usize>,
+    /// Node the most recent stack- / frame-pointer register-variable read
+    /// produced. Compared by identity so the extended-asm operand parser can
+    /// tell such a read from the identically-shaped `__builtin_frame_address`
+    /// intrinsic.
+    reg_var_read_expr: Option<super::ast::ExprId>,
     /// Type of the current expression -- set by `expr` callees, read by callers
     /// to decide between byte and word loads/stores and for pointer scaling.
     ty: i64,
@@ -1580,6 +1585,7 @@ impl Compiler {
             data,
             data_object_starts: Vec::new(),
             flex_array_measured_count: None,
+            reg_var_read_expr: None,
             ty: 0,
             loc_offs: 0,
             committed_loc_offs: 0,

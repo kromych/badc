@@ -3285,6 +3285,107 @@ fn asm_section_org_pads_to_label_plus_operand() {
 }
 
 #[test]
+fn asm_string_operand_data_is_emitted() {
+    // A string-literal `i`-class operand is interned into the data buffer
+    // while lexing the operand list, and the walk lowers its `Expr::StrLit`
+    // to an `ImmData` at that offset. The bytes must survive into the object;
+    // the operand parse used to truncate the buffer on the way out, leaving
+    // the reference dangling past the image.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int probe(void) {\n\
+            __asm__ volatile(\"\" : : \"i\"(\"asm_operand_marker\"));\n\
+            return 0;\n\
+        }\n\
+        int main(void) { return probe(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let emitted = sections
+            .iter()
+            .any(|(_, _, _, body)| body.windows(18).any(|w| w == b"asm_operand_marker"));
+        assert!(emitted, "{target:?}: string operand data must be emitted");
+    }
+}
+
+#[test]
+fn asm_section_operand_symbol_relocates_to_data() {
+    // `.long %c0 - .` where `%c0` is an `i`-class operand naming a link-time
+    // address (a string literal, the bug table's file pointer) relocates
+    // PC-relative to that data. The string must be emitted -- it is interned
+    // while lexing the operand and referenced only by the section field. A
+    // second field adds a constant operand to the base (`.quad %c1 + %c2 - .`,
+    // the static-key jump entry). Byte-structure identical to gas.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int probe(void) {\n\
+            __asm__ volatile(\n\
+                \"1:\\tnop\\n\"\n\
+                \".pushsection .optab,\\\"aw\\\"\\n\"\n\
+                \".long %c0 - .\\n\"\n\
+                \".quad %c0 + %c1 - .\\n\"\n\
+                \".popsection\\n\" : : \"i\"(\"probe.c\"), \"i\"(4));\n\
+            return 0;\n\
+        }\n\
+        int main(void) { return probe(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".optab")
+            .unwrap_or_else(|| panic!("{target:?}: .optab section missing"));
+        // A 4-byte and an 8-byte PC-relative field.
+        assert_eq!(sec.3.len(), 4 + 8, "{target:?}: section size");
+        // The operand string is emitted so the field has a target to reach.
+        let has_string = sections
+            .iter()
+            .any(|(_, _, _, body)| body.windows(7).any(|w| w == b"probe.c"));
+        assert!(has_string, "{target:?}: operand string emitted");
+        let rela = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.optab")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.optab missing"));
+        assert_eq!(rela.3.len(), 2 * 24, "{target:?}: two relocs");
+        let (prel32, prel64) = match target {
+            Target::LinuxX64 => (2u64, 24u64),
+            _ => (261, 260),
+        };
+        let r_info =
+            |k: usize| u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+        let r_addend =
+            |k: usize| i64::from_le_bytes(rela.3[k * 24 + 16..k * 24 + 24].try_into().unwrap());
+        assert_eq!(
+            r_info(0) & 0xFFFF_FFFF,
+            prel32,
+            "{target:?}: `.long %c0 - .` pcrel32"
+        );
+        assert_eq!(
+            r_info(1) & 0xFFFF_FFFF,
+            prel64,
+            "{target:?}: `.quad ... - .` pcrel64"
+        );
+        // The second field's operand addend (`+ %c1`, the constant 4) folds
+        // into the relocation addend, atop the string's own data offset.
+        assert_eq!(
+            r_addend(1) - r_addend(0),
+            4,
+            "{target:?}: `+ %c1` addend folds in"
+        );
+    }
+}
+
+#[test]
 fn asm_section_values_fold_constant_expressions() {
     // A named section's data value may be an integer constant expression,
     // not just a literal; the folded value is what lands in the section.

@@ -2949,10 +2949,22 @@ fn emit_inline_asm_aarch64(
                 defs.next_back().map(|&(_, off)| off)
             }
         };
+        // An `i`-class operand naming a link-time data address (`.quad %c0 - .`
+        // where `%c0` is `&sym`) relocates against the data image, resolved
+        // like the operand's own `ImmData` lowering.
+        let operand_sym = |idx: u8| -> Option<super::ssa::emit_common::AsmSectionTarget> {
+            match func.insts.get(*args.get(idx as usize)? as usize) {
+                Some(super::super::ir::Inst::ImmData(off)) => {
+                    Some(super::ssa::emit_common::AsmSectionTarget::Data(*off as u64))
+                }
+                _ => None,
+            }
+        };
         if let Err(m) = super::ssa::emit_common::materialize_asm_sections(
             section_blocks,
             &|idx| const_of(idx),
             &label_off,
+            &operand_sym,
             true,
             asm_sections,
         ) {

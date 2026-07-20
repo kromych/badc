@@ -1784,6 +1784,13 @@ pub(super) fn write_relocatable(
                         Some((te, new_off)) => (carve.sym_idx[te], new_off as i64 + r.addend),
                         None => (text_sym_idx, *off as i64 + r.addend),
                     },
+                    AsmSectionTarget::Data(off) => match carve.map_data(*off) {
+                        Some((de, new_off)) => (carve.sym_idx[de], new_off as i64 + r.addend),
+                        None => {
+                            let (sym, o) = data_section_ref(*off as i64);
+                            (sym, o + r.addend)
+                        }
+                    },
                     AsmSectionTarget::Symbol(name) => {
                         if let Some(&idx) = asm_label_symidx.get(name.as_str()) {
                             (idx as u64, r.addend)

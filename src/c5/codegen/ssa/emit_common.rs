@@ -777,6 +777,20 @@ pub(crate) enum AsmSectionValue {
     /// constants (`(1 << 15) | (%0)`). Stored as text and evaluated at
     /// materialize time, where the operand constants are known.
     Expr(alloc::string::String),
+    /// A relocation whose base is an `i`-class operand naming a link-time
+    /// address (`%cN`) or an `asm goto` label (`%lN`), optionally with a
+    /// constant addend and `- .` PC-relative. `%c0 + %c1 - .` (a static-key
+    /// jump entry) folds `%c1` into the addend; `.long %c0 - .` (the bug
+    /// table's file pointer) has no addend.
+    OperandReloc {
+        idx: u8,
+        /// `%l` (an `asm goto` label) rather than `%c` (an operand address).
+        goto: bool,
+        /// Constant addend expression (operand constants + literals), empty
+        /// when absent.
+        addend: alloc::string::String,
+        pcrel: bool,
+    },
 }
 
 /// One item of an in-template section block, in source order.
@@ -843,6 +857,10 @@ pub(crate) enum AsmSectionTarget {
     Text(usize),
     /// A named symbol.
     Symbol(alloc::string::String),
+    /// A byte offset into the emitted data image (an `i`-class operand
+    /// naming a link-time address, `.long %c0 - .`). Resolved against the
+    /// `.data` / `.bss` section symbol like a `DataFixup`.
+    Data(u64),
 }
 
 /// A materialized named section: bytes plus relocations, accumulated
@@ -1287,6 +1305,57 @@ fn strip_label_parens(s: &str) -> &str {
     s
 }
 
+/// If `s` ends with `- .` (subtract the field's own position), return the
+/// base expression before it; otherwise `None`.
+fn strip_trailing_pcrel(s: &str) -> Option<&str> {
+    let base = s
+        .trim_end()
+        .strip_suffix('.')?
+        .trim_end()
+        .strip_suffix('-')?;
+    Some(base.trim_end())
+}
+
+/// Parse an operand / goto-label relocation value: a `%cN` operand address
+/// or `%lN` goto label, with an optional `+ addend` constant expression and
+/// `- .` PC-relative marker. Returns `None` when `a` is not such a form (a
+/// bare `%cN` stays a constant operand handled by the caller).
+fn parse_operand_reloc(a: &str) -> Option<Result<AsmSectionValue, alloc::string::String>> {
+    let rest = a.strip_prefix('%')?;
+    let (goto, rest) = if let Some(r) = rest.strip_prefix('l') {
+        (true, r)
+    } else if let Some(r) = rest.strip_prefix('c').or_else(|| rest.strip_prefix('P')) {
+        (false, r)
+    } else {
+        return None;
+    };
+    let end = rest
+        .bytes()
+        .position(|c| !c.is_ascii_digit())
+        .unwrap_or(rest.len());
+    let idx: u8 = rest.get(..end)?.parse().ok()?;
+    let (tail, pcrel) = match strip_trailing_pcrel(rest[end..].trim()) {
+        Some(base) => (base, true),
+        None => (rest[end..].trim(), false),
+    };
+    // A `%l` goto label always relocates; a `%c` operand only when it is
+    // PC-relative or carries an addend (a bare `%cN` is a plain constant).
+    let addend = match tail.strip_prefix('+') {
+        Some(rest) => rest.trim(),
+        None if tail.is_empty() => "",
+        None => return None,
+    };
+    if !goto && !pcrel && addend.is_empty() {
+        return None;
+    }
+    Some(Ok(AsmSectionValue::OperandReloc {
+        idx,
+        goto,
+        addend: alloc::string::String::from(addend),
+        pcrel,
+    }))
+}
+
 /// Parse one data-directive value: a constant, an operand reference, or
 /// a label / symbol reference (optionally `- .` PC-relative).
 fn parse_section_value(a: &str) -> Result<AsmSectionValue, alloc::string::String> {
@@ -1298,6 +1367,11 @@ fn parse_section_value(a: &str) -> Result<AsmSectionValue, alloc::string::String
     // and `(((x)))` like `x`. A group that closes before the end
     // (`(a) - (b)`, `(1 << 15) | (%0)`) is left for the handling below.
     let a = strip_label_parens(a);
+    // `%c0 - .` / `%c0 + %c1 - .` / `%l0 - .`: a relocation to an operand's
+    // link-time address or an `asm goto` label.
+    if let Some(v) = parse_operand_reloc(a) {
+        return v;
+    }
     if let Some(rest) = a.strip_prefix('%') {
         let body = rest
             .strip_prefix('c')
@@ -1369,11 +1443,14 @@ fn value_fits_width(v: i64, width: u8) -> bool {
 /// label references, lay out the bytes, and merge into the sink by
 /// `(name, flags, sh_type)`. `const_of` yields an `i`-class operand's
 /// constant; `label_off` resolves a template-label name to its text
-/// offset (`None` means the name is a symbol).
+/// offset (`None` means the name is a symbol); `operand_sym` yields the
+/// relocation target of an `i`-class operand that names a link-time
+/// address (`.long %c0 - .`) rather than a constant.
 pub(crate) fn materialize_asm_sections(
     blocks: &[AsmSectionBlock],
     const_of: &dyn Fn(u8) -> Option<i64>,
     label_off: &dyn Fn(&str) -> Option<usize>,
+    operand_sym: &dyn Fn(u8) -> Option<AsmSectionTarget>,
     align_is_p2: bool,
     sink: &mut alloc::vec::Vec<AsmSection>,
 ) -> Result<(), alloc::string::String> {
@@ -1594,6 +1671,47 @@ pub(crate) fn materialize_asm_sections(
                                     &(diff as u64).to_le_bytes()[..*width as usize],
                                 );
                             }
+                            AsmSectionValue::OperandReloc {
+                                idx,
+                                goto,
+                                addend,
+                                pcrel,
+                            } => {
+                                if !matches!(width, 4 | 8) {
+                                    return Err(alloc::string::String::from(
+                                        "inline asm: section reference needs a 4- or 8-byte field",
+                                    ));
+                                }
+                                if *goto {
+                                    return Err(alloc::string::String::from(
+                                        "inline asm: `asm goto` label in a section is not supported",
+                                    ));
+                                }
+                                let target = operand_sym(*idx).ok_or_else(|| {
+                                    alloc::format!(
+                                        "inline asm: operand `%c{idx}` does not name a link-time address"
+                                    )
+                                })?;
+                                let add = if addend.is_empty() {
+                                    0
+                                } else {
+                                    eval_const_expr_ops(addend, &|i| const_of(i)).ok_or_else(
+                                        || {
+                                            alloc::string::String::from(
+                                                "inline asm: non-constant section reloc addend",
+                                            )
+                                        },
+                                    )?
+                                };
+                                sec.relocs.push(AsmSectionReloc {
+                                    offset: sec.bytes.len() as u32,
+                                    width: *width,
+                                    pcrel: *pcrel,
+                                    target,
+                                    addend: add,
+                                });
+                                sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
+                            }
                         }
                     }
                 }
@@ -1622,7 +1740,7 @@ pub(crate) fn materialize_file_asm(
         let stripped = strip_asm_comments(text, comments);
         let text = stripped.as_deref().unwrap_or(text);
         if let Some((_code, blocks)) = extract_asm_sections(text, align_is_p2)? {
-            materialize_asm_sections(&blocks, &|_| None, &|_| None, align_is_p2, sink)?;
+            materialize_asm_sections(&blocks, &|_| None, &|_| None, &|_| None, align_is_p2, sink)?;
         }
     }
     Ok(())
@@ -2439,6 +2557,7 @@ mod asm_section_tests {
             &blocks,
             &|idx| (idx == 0).then_some(42),
             &|name| (name == "1b").then_some(0x40),
+            &|_| None,
             false,
             &mut sink,
         )
@@ -2561,6 +2680,7 @@ mod asm_section_tests {
             &blocks,
             &|idx| (idx == 0).then_some(37),
             &|_| None,
+            &|_| None,
             false,
             &mut sink,
         )
@@ -2569,7 +2689,8 @@ mod asm_section_tests {
         // A non-constant operand leaves the expression unresolved.
         let mut sink2 = alloc::vec::Vec::new();
         let err =
-            materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink2).unwrap_err();
+            materialize_asm_sections(&blocks, &|_| None, &|_| None, &|_| None, false, &mut sink2)
+                .unwrap_err();
         assert!(err.contains("non-constant"), "{err}");
     }
 
@@ -2601,6 +2722,7 @@ mod asm_section_tests {
             &blocks,
             &|_| None,
             &|n| (n == "1b").then_some(0x40),
+            &|_| None,
             false,
             &mut sink,
         )
@@ -2669,6 +2791,7 @@ mod asm_section_tests {
             &blocks,
             &|_| None,
             &|n| (n == "1b").then_some(0),
+            &|_| None,
             true,
             &mut sink,
         )
@@ -2695,6 +2818,7 @@ mod asm_section_tests {
                 "2b" => Some(4),
                 _ => None,
             },
+            &|_| None,
             false,
             &mut sink,
         )
@@ -2721,6 +2845,7 @@ mod asm_section_tests {
                 "2b" => Some(256),
                 _ => None,
             },
+            &|_| None,
             false,
             &mut sink,
         )
@@ -2747,7 +2872,8 @@ mod asm_section_tests {
         let (code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         assert_eq!(code, "nop\nnop\n");
         let mut sink = alloc::vec::Vec::new();
-        materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, &|_| None, false, &mut sink)
+            .unwrap();
         assert_eq!(
             sink[0].relocs[0].target,
             AsmSectionTarget::Symbol(alloc::string::String::from("handler"))
@@ -2757,7 +2883,8 @@ mod asm_section_tests {
         let text = ".pushsection .a,\"a\"\n.long 1\n.popsection\n.pushsection .a,\"a\"\n.long 2\n.popsection\n";
         let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = alloc::vec::Vec::new();
-        materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, &|_| None, false, &mut sink)
+            .unwrap();
         assert_eq!(sink.len(), 1);
         assert_eq!(sink[0].bytes.len(), 8);
         assert!(
@@ -2774,15 +2901,20 @@ mod asm_section_tests {
         let text = ".pushsection .t,\"a\"\n.align 3\n.byte 1\n.popsection";
         let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = alloc::vec::Vec::new();
-        materialize_asm_sections(&blocks, &|_| None, &|_| None, true, &mut sink).unwrap();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, &|_| None, true, &mut sink)
+            .unwrap();
         assert_eq!(sink[0].align, 8);
         let mut sink = alloc::vec::Vec::new();
-        assert!(materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).is_err());
+        assert!(
+            materialize_asm_sections(&blocks, &|_| None, &|_| None, &|_| None, false, &mut sink)
+                .is_err()
+        );
         // `.align 8` under the x86 convention is 8 bytes.
         let text = ".pushsection .t,\"a\"\n.align 8\n.byte 1\n.popsection";
         let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = alloc::vec::Vec::new();
-        materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, &|_| None, false, &mut sink)
+            .unwrap();
         assert_eq!(sink[0].align, 8);
     }
 
@@ -2795,7 +2927,8 @@ mod asm_section_tests {
         let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         assert_eq!(blocks[0].name, ".export");
         let mut sink = alloc::vec::Vec::new();
-        materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, &|_| None, false, &mut sink)
+            .unwrap();
         let s = &sink[0];
         assert_eq!(s.bytes.len(), 16);
         assert_eq!(
@@ -2821,8 +2954,9 @@ mod asm_section_tests {
         let text = ".pushsection .t,\"a\"\ndup:\n.quad 0\ndup:\n.popsection\n";
         let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = alloc::vec::Vec::new();
-        let err = materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink)
-            .expect_err("duplicate label must be rejected");
+        let err =
+            materialize_asm_sections(&blocks, &|_| None, &|_| None, &|_| None, false, &mut sink)
+                .expect_err("duplicate label must be rejected");
         assert!(err.contains("duplicate label"), "{err}");
     }
 
@@ -2835,7 +2969,8 @@ mod asm_section_tests {
         assert_eq!(blocks[0].name, ".initcall7.init");
         assert_eq!(blocks[0].flags, "a");
         let mut sink = alloc::vec::Vec::new();
-        materialize_asm_sections(&blocks, &|_| None, &|_| None, false, &mut sink).unwrap();
+        materialize_asm_sections(&blocks, &|_| None, &|_| None, &|_| None, false, &mut sink)
+            .unwrap();
         let s = &sink[0];
         assert_eq!(s.bytes.len(), 4);
         assert_eq!(s.labels.len(), 1);

@@ -174,8 +174,15 @@ impl Compiler {
                 | crate::Target::LinuxAarch64
                 | crate::Target::WindowsAarch64
         );
-        engine::materialize_asm_sections(&blocks, &|_| None, &|_| None, aarch64, &mut scratch)
-            .map_err(|m| self.compile_err(m))?;
+        engine::materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            aarch64,
+            &mut scratch,
+        )
+        .map_err(|m| self.compile_err(m))?;
         self.file_asm.push(String::from(text));
         Ok(())
     }

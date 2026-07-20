@@ -1715,7 +1715,11 @@ impl Compiler {
         }
         self.next()?; // consume the outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
-        self.data.truncate(data_base);
+        // Keep any operand data emitted above: a string-literal operand
+        // (`"i"(__FILE__)`) is interned into `self.data` while lexing and its
+        // offset is baked into the `Expr::StrLit` the walk lowers to an
+        // `ImmData`; truncating here would leave that reference dangling. Only
+        // the error paths roll the data back.
 
         // Every register operand is preserved across the statement.
         for (op, _) in operands.iter().zip(operand_exprs.iter()) {

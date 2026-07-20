@@ -4675,3 +4675,83 @@ fn asm_address_constraint_renders_as_a_memory_reference() {
     });
     assert!(found, "x86-64: `prefetcht0 (%reg)` not encoded");
 }
+
+#[test]
+fn x86_percpu_seg_a_operand_uses_a_direct_pcrel_reloc() {
+    // The x86 percpu read accessors apply the `%a` address modifier to an
+    // `i`-class operand naming a percpu global, under a `%%gs:` prefix:
+    // `movq %%gs:%a[var], %[val]` with `[var] "i" (&pcpu_hot.field)`. gcc
+    // lowers this to `65 48 8b 05 <disp32>` (mov %gs:sym(%rip), reg) plus a
+    // direct R_X86_64_PC32 against the symbol -- never a GOT load, since the
+    // access rides the symbol's link-time value. Verify the encoding and the
+    // reloc for both a zero and a non-zero folded field offset, with a
+    // negative control that no relaxable GOT reloc lands on the same access.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    // psABI x86_64 reloc types.
+    const R_X86_64_PC32: u32 = 2;
+    const R_X86_64_REX_GOTPCRELX: u32 = 42;
+
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let src = "\
+        extern struct pcpu_t { unsigned long cur; unsigned long nxt; } pcpu_hot;\n\
+        unsigned long read_cur(void) { unsigned long v;\n\
+          __asm__(\"movq %%gs:%a[var], %[val]\" : [val] \"=r\" (v)\n\
+                  : [var] \"i\" (&pcpu_hot.cur)); return v; }\n\
+        unsigned long read_nxt(void) { unsigned long v;\n\
+          __asm__(\"movq %%gs:%a[var], %[val]\" : [val] \"=r\" (v)\n\
+                  : [var] \"i\" (&pcpu_hot.nxt)); return v; }\n";
+    let program = Compiler::with_options(
+        src.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse");
+
+    // `65 48 8b <modrm>` with mod=00 rm=101 is `mov %gs:disp32(%rip), reg`
+    // for any destination register; the disp32 field follows the modrm.
+    let disp32_offsets: alloc::vec::Vec<u64> = obj
+        .text
+        .windows(4)
+        .enumerate()
+        .filter(|(_, w)| w[0] == 0x65 && w[1] == 0x48 && w[2] == 0x8b && (w[3] & 0xC7) == 0x05)
+        .map(|(i, _)| (i + 4) as u64)
+        .collect();
+    assert_eq!(
+        disp32_offsets.len(),
+        2,
+        "both percpu reads must encode `mov %gs:sym(%rip), reg`"
+    );
+
+    let mut addends: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+    for off in &disp32_offsets {
+        let direct = obj
+            .text_relocs
+            .iter()
+            .find(|r| r.offset == *off && r.rtype == R_X86_64_PC32)
+            .unwrap_or_else(|| panic!("direct PC32 reloc missing at disp32 {off}"));
+        assert_eq!(
+            obj.symbols[direct.sym_idx].name, "pcpu_hot",
+            "the reloc must target the percpu symbol"
+        );
+        assert!(
+            !obj.text_relocs
+                .iter()
+                .any(|r| r.offset == *off && r.rtype == R_X86_64_REX_GOTPCRELX),
+            "a segment-relative percpu access must not ride a GOT load"
+        );
+        addends.push(direct.addend);
+    }
+    // gcc's addend is the folded field offset less the 4-byte PC32 end skew:
+    // `cur` (offset 0) -> -4, `nxt` (offset 8) -> +4.
+    addends.sort_unstable();
+    assert_eq!(addends, [-4, 4], "PC32 addend must be field offset - 4");
+}

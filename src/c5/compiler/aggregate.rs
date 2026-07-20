@@ -301,6 +301,11 @@ impl Compiler {
                 // Needed for kernel-UAPI structs (`asm/sigcontext.h`).
                 self.next()?;
                 self.builtin_int128_tag()
+            } else if self.is_lex_va_list_spelling() {
+                // GCC `__builtin_va_list` field: the target's `va_list`
+                // representation.
+                self.next()?;
+                self.builtin_va_list_tag()
             } else if !mods.saw_int_mod && self.is_lex_typedef_name() {
                 // Guarded by `!saw_int_mod`: C99 6.7.2p2 forbids
                 // combining a typedef-name with `unsigned`/`short`/

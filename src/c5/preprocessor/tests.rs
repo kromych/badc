@@ -138,6 +138,36 @@ fn vendor_and_stdc_pragmas_are_silent() {
 }
 
 #[test]
+fn builtin_expect_is_predefined() {
+    // `__builtin_expect(exp, c)` is available with no header and no
+    // auto-include; the expansion is the first operand.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process("int f(int v) { return __builtin_expect(v > 1, 1); }\n")
+        .expect("preprocessor failed");
+    assert!(
+        out.contains("(v > 1)") && !out.contains("__builtin_expect"),
+        "expected the predefined expansion, got: {out}"
+    );
+}
+
+#[test]
+fn va_builtins_are_preregistered() {
+    // The __builtin_va_* intrinsics are registered with no header, so
+    // freestanding code reaches them directly; <stdarg.h>'s
+    // `#pragma intrinsic` re-registration maps to the same ids.
+    let pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    for name in [
+        "__builtin_va_start",
+        "__builtin_va_arg",
+        "__builtin_va_end",
+        "__builtin_va_copy",
+    ] {
+        assert!(pp.intrinsics.contains_key(name), "{name} not preregistered");
+    }
+}
+
+#[test]
 fn pragma_intrinsic_bare_and_quoted_forms() {
     // MSVC's `#pragma intrinsic(name, name, ...)` names bare identifiers
     // as an inlining hint; c5 registers the ones it lowers specially and

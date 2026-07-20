@@ -3216,6 +3216,56 @@ fn va_copy_clones_va_list_cursor() {
 }
 
 #[test]
+fn builtin_va_list_type_and_gcc_builtin_shapes() {
+    // `__builtin_va_list` is a builtin type name usable with no header
+    // (`typedef __builtin_va_list va_list;`), and the __builtin_va_*
+    // operations take the GCC call shapes: the va_list and the
+    // rightmost fixed parameter by name, __builtin_va_arg yielding the
+    // argument value. <stdarg.h> aliases the same type, so the two
+    // spellings are interchangeable.
+    assert_eq!(run_fixture("builtin_va_list_typedef.c"), 0);
+}
+
+#[test]
+fn builtin_expect_is_predefined() {
+    // `__builtin_expect` is predefined -- available in a translation
+    // unit with no #include and no auto-include; its value is the
+    // first operand.
+    assert_eq!(run_fixture("builtin_expect_no_header.c"), 0);
+}
+
+#[test]
+fn builtin_va_list_typedef_at_file_scope() {
+    // Parser: `typedef __builtin_va_list va_list;` at file scope binds
+    // the alias to the target's representation, including through a
+    // second-level alias (the `__gnuc_va_list` indirection freestanding
+    // stdarg headers use).
+    let src = "
+        typedef __builtin_va_list __gnuc_va_list;
+        typedef __gnuc_va_list va_list;
+        int main(void) {
+            return sizeof(va_list) == sizeof(__gnuc_va_list)
+                && sizeof(va_list) == sizeof(__builtin_va_list) ? 0 : 1;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn builtin_va_list_direct_declaration_at_block_scope() {
+    // Parser: `__builtin_va_list ap;` declares an object of the
+    // target's va_list representation directly at block scope.
+    let src = "
+        int main(void) {
+            __builtin_va_list ap;
+            (void)ap;
+            return sizeof(ap) == sizeof(__builtin_va_list) ? 0 : 1;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn macro_paste_result_is_rescanned() {
     // C99 6.10.3.4: after a function-like macro's body is built,
     // the result is re-scanned for further replacement; when the

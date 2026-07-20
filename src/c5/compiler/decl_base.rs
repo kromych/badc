@@ -841,6 +841,11 @@ impl Compiler {
             // modeled as a 16-byte aggregate for layout / sizeof / copy.
             self.next()?;
             self.builtin_int128_tag()
+        } else if self.is_lex_va_list_spelling() {
+            // GCC `__builtin_va_list`: the target's `va_list`
+            // representation, usable with no header.
+            self.next()?;
+            self.builtin_va_list_tag()
         } else if !m.saw_int_mod && self.is_lex_typedef_name() {
             // Typedef-name as base type. Resolve to the aliased
             // type and consume the identifier. Guarded by

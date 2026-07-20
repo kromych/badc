@@ -259,6 +259,11 @@ impl Compiler {
                 // integer type, modeled as a 16-byte aggregate.
                 self.next()?;
                 bt = self.builtin_int128_tag();
+            } else if self.is_lex_va_list_spelling() {
+                // GCC `__builtin_va_list` at file scope: the target's
+                // `va_list` representation, usable with no header.
+                self.next()?;
+                bt = self.builtin_va_list_tag();
             } else if self.is_lex_typedef_name() {
                 // Typedef-name as base type at file scope: `Foo bar;`
                 // where `Foo` was bound by a prior `typedef`.

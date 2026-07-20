@@ -1501,6 +1501,55 @@ impl Compiler {
                 // Same fn-pointer decay as the `Token::Fun` branch: a
                 // following unary `*` is a no-op.
                 self.pending.fn_ptr_chain_depth = 0;
+            } else if self.symbols[id_idx].class == Token::Loc as i64
+                && matches!(
+                    self.symbols[id_idx].asm_register,
+                    Some(
+                        crate::c5::symbol::AsmRegister::StackPointer
+                            | crate::c5::symbol::AsmRegister::FramePointer
+                    )
+                )
+            {
+                // A stack- / frame-pointer register variable: the read is
+                // a direct register move, no storage behind it. Writes
+                // have no meaning; reject them here where the following
+                // token is visible.
+                if self.lex.tk == Token::Assign
+                    || self.lex.tk == Token::AssignOp
+                    || self.lex.tk == Token::Inc
+                    || self.lex.tk == Token::Dec
+                {
+                    return Err(self.compile_err(format!(
+                        "cannot write register variable `{}`",
+                        self.symbols[id_idx].name
+                    )));
+                }
+                self.symbols[id_idx].was_referenced = true;
+                self.symbols[id_idx].was_read = true;
+                self.mark_emit_other();
+                self.ty = self.symbols[id_idx].type_;
+                let kind = match self.symbols[id_idx].asm_register {
+                    Some(crate::c5::symbol::AsmRegister::FramePointer) => {
+                        crate::c5::op::Intrinsic::FrameAddress
+                    }
+                    _ => crate::c5::op::Intrinsic::StackPointer,
+                };
+                let mut args = alloc::vec::Vec::new();
+                if kind == crate::c5::op::Intrinsic::FrameAddress {
+                    // FrameAddress carries the (ignored) level operand.
+                    args.push(self.ast_emit_int_lit(0, Ty::Int as i64));
+                }
+                let intr_ty = self.ty;
+                let pos = self.ast_src_pos();
+                let id = self.ast.push_expr(
+                    super::super::ast::Expr::Intrinsic {
+                        kind: kind as i64,
+                        args,
+                        ty: intr_ty,
+                    },
+                    pos,
+                );
+                self.ast_acc = Some(id);
             } else {
                 let identifier_is_local = self.symbols[id_idx].class == Token::Loc as i64;
                 if identifier_is_local {

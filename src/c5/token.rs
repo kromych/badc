@@ -391,6 +391,11 @@ pub(crate) enum Token {
     /// expression yielding the byte offset of the member as an integer
     /// constant. The standard `offsetof` macro may expand to it.
     BuiltinOffsetof,
+    /// GCC `__auto_type`: a type specifier that takes the declared
+    /// variable's type from its initializer, as if spelled
+    /// `typeof(initializer)`. Added at the end so the operator
+    /// ordinals are unchanged.
+    AutoType,
 }
 
 /// Map a token-id (the value stored in `lex.tk` as i64) back to a
@@ -487,6 +492,7 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::Generic as i64 => "`_Generic`",
         x if x == Token::BuiltinTypesCompatible as i64 => "`__builtin_types_compatible_p`",
         x if x == Token::BuiltinOffsetof as i64 => "`__builtin_offsetof`",
+        x if x == Token::AutoType as i64 => "`__auto_type`",
         x if x == Token::Void as i64 => "`void`",
         _ => return format!("token id {tk}"),
     };

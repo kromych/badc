@@ -346,6 +346,10 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("vla_scope_reclaim_loop.c", 0),
     ("vla_param_decay.c", 0),
     ("arithmetic.c", 60),
+    ("register_var_stack_pointer.c", 0),
+    ("register_var_asm_operand.c", 0),
+    ("attribute_weak_alias.c", 0),
+    ("attribute_section_placement.c", 0),
     ("compound_literal_struct_field.c", 0),
     ("goto.c", 5),
     ("switch_statement.c", 25),
@@ -1401,4 +1405,67 @@ fn badc_caller_oversize_struct_return_from_foreign() {
         Some(0),
         "badc mis-returned a > 16-byte aggregate from a foreign callee (System V sret ABI)"
     );
+}
+
+/// A weak function definition is overridden by a strong definition in
+/// a sibling unit (ELF STB_WEAK semantics), with no
+/// multiple-definition error; calls resolve to the strong body.
+#[test]
+fn weak_definition_overridden_by_strong_at_runtime() {
+    use crate::{CompileOptions, Program};
+
+    const WEAK_UNIT: &str = "\
+int pick(void) __attribute__((weak));\n\
+int pick(void) { return 1; }\n\
+int main(void) { return pick(); }\n";
+    const STRONG_UNIT: &str = "int pick(void) { return 2; }\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_main = compile(WEAK_UNIT);
+    let prog_strong = compile(STRONG_UNIT);
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_main, &prog_strong],
+        Target::LinuxX64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf64-weak", "weak_override");
+    {
+        use std::io::Write;
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "the strong definition must win over the weak one"
+    );
+}
+
+/// An undefined weak function reference resolves to address 0; the
+/// `if (fn) fn();` guard therefore skips the call.
+#[test]
+fn undefined_weak_function_guard() {
+    let code = build_and_run(
+        "extern void optional_hook(void) __attribute__((weak));\n\
+         int main(void) {\n\
+             if (optional_hook) {\n\
+                 optional_hook();\n\
+                 return 1;\n\
+             }\n\
+             return 0;\n\
+         }\n",
+        "undef_weak_guard",
+    );
+    assert_eq!(code, 0, "undefined weak must read as a null pointer");
 }

@@ -7306,6 +7306,16 @@ fn emit_intrinsic(
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }
+        I::StackPointer => {
+            // A `register T v asm("rsp")` read: the current stack pointer.
+            let Some(rd) = int_or_spill_dst(dst) else {
+                bail_msg("StackPointer: dst not int reg / spill");
+                return false;
+            };
+            emit_mov_rr(code, rd, Reg::RSP);
+            spill_dst_to_slot(code, dst, rd, frame);
+            true
+        }
         I::ReturnAddress => {
             // __builtin_return_address(0): the return address the call
             // pushed, at [rbp + 8] above the saved rbp. Level 0 only.

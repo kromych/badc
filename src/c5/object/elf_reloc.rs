@@ -397,6 +397,153 @@ fn data_global_byte_size(sym: &crate::c5::symbol::Symbol) -> u64 {
 /// link: the writer emits `.rela.text` (SHT_RELA, `sh_info` = the
 /// `.text` section index) with one entry per call site, so a TU with
 /// cross-TU calls resolves at link time.
+/// One byte range moving from `.text` / `.data` / `.bss` into a named
+/// section: `[old_lo, old_hi)` in the pre-carve offset space lands at
+/// `new_base` within `table.entries[entry]`.
+#[derive(Debug, Clone, Copy)]
+struct CarveRange {
+    old_lo: u64,
+    old_hi: u64,
+    new_base: u64,
+    entry: usize,
+}
+
+/// The `__attribute__((section("name")))` placement plan: the named
+/// sections plus the maps that retarget symbols and relocations from
+/// the default sections into them.
+#[derive(Debug, Clone, Default)]
+struct CarvePlan {
+    table: super::section_table::SectionTable,
+    /// Sorted by `old_lo`; a contiguous tail run of `.text`.
+    text_ranges: Vec<CarveRange>,
+    /// Sorted by `old_lo`; absolute offsets in the unified
+    /// `.data`-then-`.bss` space.
+    data_ranges: Vec<CarveRange>,
+    /// `.text` prefix length that stays in place.
+    text_keep_len: usize,
+    /// Per-entry section index / STT_SECTION symbol index.
+    shndx: Vec<u16>,
+    sym_idx: Vec<u64>,
+}
+
+impl CarvePlan {
+    fn is_empty(&self) -> bool {
+        self.table.is_empty()
+    }
+
+    fn map_in(ranges: &[CarveRange], off: u64) -> Option<(usize, u64)> {
+        let i = ranges.partition_point(|r| r.old_lo <= off);
+        if i == 0 {
+            return None;
+        }
+        let r = &ranges[i - 1];
+        if off < r.old_hi {
+            Some((r.entry, r.new_base + (off - r.old_lo)))
+        } else {
+            None
+        }
+    }
+
+    /// New (entry, offset) for a pre-carve `.text` offset, when moved.
+    fn map_text(&self, off: u64) -> Option<(usize, u64)> {
+        Self::map_in(&self.text_ranges, off)
+    }
+
+    /// New (entry, offset) for a pre-carve unified data offset, when
+    /// moved.
+    fn map_data(&self, off: u64) -> Option<(usize, u64)> {
+        Self::map_in(&self.data_ranges, off)
+    }
+
+    /// Rewrite one relocation row: a reference through a default
+    /// section symbol whose addend falls in a moved range switches to
+    /// the named section's symbol and rebased addend.
+    fn retarget(
+        &self,
+        info: &mut u64,
+        addend: &mut i64,
+        text_sym: u64,
+        data_sym: u64,
+        bss_sym: u64,
+        data_file_len: u64,
+    ) {
+        let sym = *info >> 32;
+        let rtype = *info & 0xffff_ffff;
+        // `R_X86_64_PC32` rows store the target offset skewed by the
+        // pc-relative correction; every other section-relative row
+        // stores it directly. (The aarch64 types all sit above 0x100,
+        // so the numeric check cannot misfire.)
+        let skew: i64 = if rtype == R_X86_64_PC32 as u64 { -4 } else { 0 };
+        let real = (*addend - skew) as u64;
+        let mapped = if sym == text_sym {
+            self.map_text(real)
+        } else if sym == data_sym {
+            self.map_data(real)
+        } else if sym == bss_sym {
+            self.map_data(real + data_file_len)
+        } else {
+            None
+        };
+        if let Some((e, new_off)) = mapped {
+            *info = (self.sym_idx[e] << 32) | rtype;
+            *addend = new_off as i64 + skew;
+        }
+    }
+}
+
+/// Partition a serialized `.rela` payload against the carve plan:
+/// every row is retargeted (section-symbol + addend rewrite), and a
+/// row whose `r_offset` sits in a moved range is drained into the
+/// owning named section's relocation list with a rebased offset.
+/// `applies_to_text` selects which offset space `r_offset` lives in.
+fn carve_partition_relas(
+    bytes: &mut Vec<u8>,
+    plan: &mut CarvePlan,
+    applies_to_text: bool,
+    text_sym: u64,
+    data_sym: u64,
+    bss_sym: u64,
+    data_file_len: u64,
+) {
+    if plan.is_empty() || bytes.is_empty() {
+        return;
+    }
+    let mut kept: Vec<u8> = Vec::with_capacity(bytes.len());
+    for row in bytes.chunks_exact(ELF64_RELA_SIZE) {
+        let r_offset = u64::from_le_bytes(row[0..8].try_into().unwrap());
+        let mut r_info = u64::from_le_bytes(row[8..16].try_into().unwrap());
+        let mut r_addend = i64::from_le_bytes(row[16..24].try_into().unwrap());
+        plan.retarget(
+            &mut r_info,
+            &mut r_addend,
+            text_sym,
+            data_sym,
+            bss_sym,
+            data_file_len,
+        );
+        let home = if applies_to_text {
+            plan.map_text(r_offset)
+        } else {
+            plan.map_data(r_offset)
+        };
+        if let Some((e, new_off)) = home {
+            plan.table.entries[e]
+                .relas
+                .push(super::section_table::SectionRela {
+                    offset: new_off,
+                    sym: r_info >> 32,
+                    rtype: (r_info & 0xffff_ffff) as u32,
+                    addend: r_addend,
+                });
+            continue;
+        }
+        kept.extend_from_slice(&r_offset.to_le_bytes());
+        kept.extend_from_slice(&r_info.to_le_bytes());
+        kept.extend_from_slice(&r_addend.to_le_bytes());
+    }
+    *bytes = kept;
+}
+
 pub(super) fn write_relocatable(
     program: &Program,
     build: &Build,
@@ -464,6 +611,153 @@ pub(super) fn write_relocatable(
     // adds two more (the array + its `.rela`), counted once the groups
     // are known below.
     let base_sections: usize = if has_tls { 17 } else { 15 };
+
+    // ---- `__attribute__((section("name")))` placement plan ----
+    //
+    // Functions with a section attribute were grouped at the `.text`
+    // tail by the emission-order pass; each group's byte range moves
+    // into its named section, and `.text` keeps only the default
+    // prefix (plus the trailing version marker). Data objects with a
+    // section attribute move their `.data` / `.bss` byte range into
+    // the named section; the vacated file bytes are zeroed in place so
+    // no other data offset shifts. Symbols and relocations touching a
+    // moved range are retargeted below. Named sections take the
+    // indices right after the fixed set; `.init_array` groups follow.
+    // TODO: `.debug_info` / `.debug_line` still describe carved
+    // functions at their pre-carve `.text` offsets.
+    let mut carve = CarvePlan::default();
+    {
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        let fn_section: alloc::collections::BTreeMap<&str, &str> = program
+            .symbols
+            .iter()
+            .filter(|s| s.class == Token::Fun as i64 && s.defined_here && s.section_name.is_some())
+            .map(|s| (s.name.as_str(), s.section_name.as_deref().unwrap_or("")))
+            .collect();
+        // The emitted code ends at the last recorded native offset;
+        // the version marker sits past it and stays in `.text`.
+        let code_end = build
+            .pc_to_native
+            .last()
+            .copied()
+            .unwrap_or(build.text.len());
+        // (group_lo, group_hi) accumulated per section name.
+        let mut text_groups: alloc::collections::BTreeMap<&str, (usize, usize)> =
+            alloc::collections::BTreeMap::new();
+        for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
+            let Some(name) = build.func_names.get(i) else {
+                continue;
+            };
+            let Some(sec) = fn_section.get(name.as_str()) else {
+                continue;
+            };
+            let lo = build.pc_to_native.get(ent_pc).copied().unwrap_or(usize::MAX);
+            let hi = build
+                .func_ent_pcs
+                .get(i + 1)
+                .and_then(|&next| build.pc_to_native.get(next).copied())
+                .unwrap_or(code_end)
+                .min(code_end);
+            if lo == usize::MAX || lo >= hi {
+                continue;
+            }
+            let g = text_groups.entry(sec).or_insert((lo, hi));
+            g.0 = g.0.min(lo);
+            g.1 = g.1.max(hi);
+        }
+        let internal = |msg: String| -> C5Error {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&msg))
+        };
+        for (sec, (lo, hi)) in &text_groups {
+            let e = carve
+                .table
+                .get_or_insert(sec, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16)
+                .map_err(internal)?;
+            carve.text_ranges.push(CarveRange {
+                old_lo: *lo as u64,
+                old_hi: *hi as u64,
+                new_base: 0,
+                entry: e,
+            });
+        }
+        carve.text_ranges.sort_by_key(|r| r.old_lo);
+        // The groups must tile the `.text` tail: every carved byte
+        // sits past every default-section function, and no two groups
+        // interleave. The emission-order pass guarantees this; a
+        // violation is an internal error, not a silent miscompile.
+        if let Some(first) = carve.text_ranges.first() {
+            carve.text_keep_len = first.old_lo as usize;
+            let mut prev_hi = first.old_lo;
+            for r in &carve.text_ranges {
+                if r.old_lo != prev_hi {
+                    return Err(internal(format!(
+                        "named-section text groups are not contiguous at offset {}",
+                        r.old_lo
+                    )));
+                }
+                prev_hi = r.old_hi;
+            }
+            if prev_hi as usize != code_end {
+                return Err(internal(format!(
+                    "named-section text groups do not end at the code tail ({prev_hi} vs {code_end})"
+                )));
+            }
+        } else {
+            carve.text_keep_len = build.text.len();
+        }
+        // Data objects. Zero-sized records are skipped -- there is
+        // nothing to place.
+        for sym in &program.symbols {
+            if sym.class != Token::Glo as i64
+                || !sym.defined_here
+                || sym.is_alias
+                || sym.is_thread_local
+                || sym.section_name.is_none()
+                || !matches!(sym.linkage, Linkage::External | Linkage::Internal)
+            {
+                continue;
+            }
+            let size = (sym.reserved_data_bytes as u64).max(data_global_byte_size(sym));
+            if size == 0 {
+                continue;
+            }
+            let sec = sym.section_name.as_deref().unwrap_or("");
+            let e = carve
+                .table
+                .get_or_insert(sec, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8)
+                .map_err(internal)?;
+            carve.data_ranges.push(CarveRange {
+                old_lo: sym.val as u64,
+                old_hi: sym.val as u64 + size,
+                new_base: 0,
+                entry: e,
+            });
+        }
+        carve.data_ranges.sort_by_key(|r| r.old_lo);
+        // Assign packed in-section bases: text groups keep their
+        // internal layout wholesale; data objects pack 8-aligned.
+        let mut sizes: Vec<u64> = alloc::vec![0; carve.table.entries.len()];
+        for r in carve.text_ranges.iter_mut().chain(carve.data_ranges.iter_mut()) {
+            let base = (sizes[r.entry] + 7) & !7;
+            r.new_base = base;
+            sizes[r.entry] = base + (r.old_hi - r.old_lo);
+        }
+        for w in carve.data_ranges.windows(2) {
+            if w[0].old_hi > w[1].old_lo {
+                return Err(internal(format!(
+                    "named-section data ranges overlap at offset {}",
+                    w[1].old_lo
+                )));
+            }
+        }
+        for (k, e) in carve.table.entries.iter().enumerate() {
+            let _ = e;
+            carve.shndx.push((base_sections + 2 * k) as u16);
+            carve.sym_idx.push(0);
+        }
+    }
+    let named_section_count = carve.table.entries.len();
 
     // Strtab + symtab construction. The file symbol leads
     // (binding LOCAL, type FILE); per-function symbols follow
@@ -533,6 +827,16 @@ pub(super) fn write_relocatable(
     } else {
         (0, 0)
     };
+    // One STT_SECTION symbol per named section so relocations into a
+    // carved range can reference the section + offset.
+    for k in 0..named_section_count {
+        carve.sym_idx[k] = symbols.len() as u64;
+        symbols.push(Elf64Sym {
+            st_info: pack_sym_info(STB_LOCAL, STT_SECTION),
+            st_shndx: carve.shndx[k],
+            ..Default::default()
+        });
+    }
     // `first_global` is set after the static-linkage function
     // symbols are pushed below; ELF requires every LOCAL symbol
     // to precede every GLOBAL one and `.symtab`'s `sh_info`
@@ -563,9 +867,31 @@ pub(super) fn write_relocatable(
         program
             .symbols
             .iter()
-            .filter(|s| s.class == Token::Fun as i64 && s.defined_here)
+            .filter(|s| s.class == Token::Fun as i64 && s.defined_here && !s.is_alias)
             .map(|s| (s.val as usize, s.linkage))
             .collect()
+    };
+    // `__attribute__((weak))` symbols bind STB_WEAK wherever the name
+    // surfaces: as a definition or as an UNDEF reference.
+    let weak_names: alloc::collections::BTreeSet<&str> = {
+        use crate::c5::token::Token;
+        program
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.is_weak
+                    && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64)
+                    && !s.name.is_empty()
+            })
+            .map(|s| s.name.as_str())
+            .collect()
+    };
+    let bind_for = |name: &str| -> u8 {
+        if weak_names.contains(name) {
+            STB_WEAK
+        } else {
+            STB_GLOBAL
+        }
     };
     let mut local_func_idxs: Vec<usize> = Vec::new();
     let mut global_func_idxs: Vec<usize> = Vec::new();
@@ -628,11 +954,15 @@ pub(super) fn write_relocatable(
     // Unique cross-TU user-function names referenced by
     // `user_extern_call_sites`. Each gets exactly one
     // undefined symbol entry; multiple call sites against the
-    // same callee share it.
+    // same callee share it. Sites whose callee is defined in
+    // this unit (cross-named-section calls) resolve against the
+    // defined symbol instead and need no UNDEF entry.
+    let defined_fn_names: alloc::collections::BTreeSet<&str> =
+        build.func_names.iter().map(|s| s.as_str()).collect();
     let mut user_extern_names: Vec<&str> = Vec::new();
     for site in &build.user_extern_call_sites {
         let s = site.symbol_name.as_str();
-        if !user_extern_names.contains(&s) {
+        if !defined_fn_names.contains(s) && !user_extern_names.contains(&s) {
             user_extern_names.push(s);
         }
     }
@@ -790,6 +1120,10 @@ pub(super) fn write_relocatable(
     for s in &prologue_end_names {
         all_names.push(s.as_str());
     }
+    let fn_alias_names_start = all_names.len();
+    for a in &program.function_aliases {
+        all_names.push(a.name.as_str());
+    }
     let (strtab_bytes, name_offs) = build_strtab(&all_names);
     // Patch the file symbol's name offset against the final
     // strtab.
@@ -822,16 +1156,25 @@ pub(super) fn write_relocatable(
     // external (STB_GLOBAL) functions.
     let mut func_symidx_by_name: alloc::collections::BTreeMap<String, u32> =
         alloc::collections::BTreeMap::new();
+    // Where a `.text` offset ends up: the named section's index and
+    // rebased offset for a carved range, `.text` itself otherwise.
+    let text_place = |off: u64| -> (u16, u64) {
+        match carve.map_text(off) {
+            Some((e, new_off)) => (carve.shndx[e], new_off),
+            None => (SHIDX_TEXT, off),
+        }
+    };
     // STB_LOCAL function symbols. Emitted before `first_global`
     // so the LOCAL block is contiguous as ELF requires.
     for &i in &local_func_idxs {
         let (lo, hi) = func_extent(i)?;
+        let (shndx, value) = text_place(lo as u64);
         func_symidx_by_name.insert(func_strs[i].clone(), symbols.len() as u32);
         symbols.push(Elf64Sym {
             st_name: name_offs[1 + i],
             st_info: pack_sym_info(STB_LOCAL, STT_FUNC),
-            st_shndx: SHIDX_TEXT,
-            st_value: lo as u64,
+            st_shndx: shndx,
+            st_value: value,
             st_size: hi.saturating_sub(lo) as u64,
             ..Default::default()
         });
@@ -841,25 +1184,49 @@ pub(super) fn write_relocatable(
     // byte offset of the first post-prologue instruction; size
     // stays zero (a marker, not a code region).
     for (j, &(_i, post_native)) in prologue_end_entries.iter().enumerate() {
+        let (shndx, value) = text_place(post_native as u64);
         symbols.push(Elf64Sym {
             st_name: name_offs[prologue_end_names_start + j],
             st_info: pack_sym_info(STB_LOCAL, STT_NOTYPE),
-            st_shndx: SHIDX_TEXT,
-            st_value: post_native as u64,
+            st_shndx: shndx,
+            st_value: value,
             st_size: 0,
             ..Default::default()
         });
     }
     let first_global = symbols.len() as u32;
-    // STB_GLOBAL function symbols.
+    // STB_GLOBAL (or, for `__attribute__((weak))` definitions,
+    // STB_WEAK) function symbols.
     for &i in &global_func_idxs {
         let (lo, hi) = func_extent(i)?;
+        let (shndx, value) = text_place(lo as u64);
         func_symidx_by_name.insert(func_strs[i].clone(), symbols.len() as u32);
         symbols.push(Elf64Sym {
             st_name: name_offs[1 + i],
-            st_info: pack_sym_info(STB_GLOBAL, STT_FUNC),
-            st_shndx: SHIDX_TEXT,
-            st_value: lo as u64,
+            st_info: pack_sym_info(bind_for(&func_strs[i]), STT_FUNC),
+            st_shndx: shndx,
+            st_value: value,
+            st_size: hi.saturating_sub(lo) as u64,
+            ..Default::default()
+        });
+    }
+
+    // `alias("target")` function symbols: an additional name at the
+    // target's extent.
+    for (i, a) in program.function_aliases.iter().enumerate() {
+        let Some(ti) = func_strs.iter().position(|n| n == &a.target) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("alias `{}`: target `{}` has no emitted body", a.name, a.target),
+            )));
+        };
+        let (lo, hi) = func_extent(ti)?;
+        let (shndx, value) = text_place(lo as u64);
+        func_symidx_by_name.insert(a.name.clone(), symbols.len() as u32);
+        symbols.push(Elf64Sym {
+            st_name: name_offs[fn_alias_names_start + i],
+            st_info: pack_sym_info(if a.weak { STB_WEAK } else { STB_GLOBAL }, STT_FUNC),
+            st_shndx: shndx,
+            st_value: value,
             st_size: hi.saturating_sub(lo) as u64,
             ..Default::default()
         });
@@ -891,11 +1258,11 @@ pub(super) fn write_relocatable(
     // name's position in `user_extern_names` to its symbol-table
     // index for the reloc loop below.
     let mut user_extern_sym_idx: Vec<usize> = Vec::with_capacity(user_extern_names.len());
-    for (i, _name) in user_extern_names.iter().enumerate() {
+    for (i, name) in user_extern_names.iter().enumerate() {
         user_extern_sym_idx.push(symbols.len());
         symbols.push(Elf64Sym {
             st_name: name_offs[user_extern_names_start + i],
-            st_info: pack_sym_info(STB_GLOBAL, STT_NOTYPE),
+            st_info: pack_sym_info(bind_for(name), STT_NOTYPE),
             st_shndx: SHN_UNDEF,
             ..Default::default()
         });
@@ -928,13 +1295,19 @@ pub(super) fn write_relocatable(
     // Defined data globals: STB_GLOBAL + STT_OBJECT, in `.data` or, for
     // a wholly-zero object, `.bss`. C99 6.2.2: external-linkage objects
     // surface by name so sibling TUs can resolve `extern T x;`.
-    for (i, (_, val, size)) in defined_data_globals.iter().enumerate() {
-        let (sym_sec, value) = data_section_ref(*val);
+    for (i, (name, val, size)) in defined_data_globals.iter().enumerate() {
+        let (shndx, value) = match carve.map_data(*val as u64) {
+            Some((e, new_off)) => (carve.shndx[e], new_off),
+            None => {
+                let (sym_sec, value) = data_section_ref(*val);
+                (sym_sec as u16, value as u64)
+            }
+        };
         symbols.push(Elf64Sym {
             st_name: name_offs[defined_data_globals_start + i],
-            st_info: pack_sym_info(STB_GLOBAL, STT_OBJECT),
-            st_shndx: sym_sec as u16,
-            st_value: value as u64,
+            st_info: pack_sym_info(bind_for(name), STT_OBJECT),
+            st_shndx: shndx,
+            st_value: value,
             st_size: *size,
             ..Default::default()
         });
@@ -944,11 +1317,11 @@ pub(super) fn write_relocatable(
     // SHN_UNDEF. The linker resolves these against the matching
     // defined-data globals emitted by sibling units (above).
     let mut user_extern_data_sym_idx: Vec<usize> = Vec::with_capacity(user_extern_data_names.len());
-    for (i, _name) in user_extern_data_names.iter().enumerate() {
+    for (i, name) in user_extern_data_names.iter().enumerate() {
         user_extern_data_sym_idx.push(symbols.len());
         symbols.push(Elf64Sym {
             st_name: name_offs[user_extern_data_names_start + i],
-            st_info: pack_sym_info(STB_GLOBAL, STT_OBJECT),
+            st_info: pack_sym_info(bind_for(name), STT_OBJECT),
             st_shndx: SHN_UNDEF,
             ..Default::default()
         });
@@ -1004,11 +1377,18 @@ pub(super) fn write_relocatable(
             * ELF64_RELA_SIZE,
     );
     for site in &build.user_extern_call_sites {
-        let pos = user_extern_names
-            .iter()
-            .position(|n| *n == site.symbol_name.as_str())
-            .expect("user_extern_names contains every site's symbol name");
-        let sym_idx = user_extern_sym_idx[pos] as u64;
+        // A callee defined in this unit (a cross-named-section call)
+        // resolves against its defined symbol; otherwise the UNDEF.
+        let sym_idx = match func_symidx_by_name.get(site.symbol_name.as_str()) {
+            Some(&i) => i as u64,
+            None => {
+                let pos = user_extern_names
+                    .iter()
+                    .position(|n| *n == site.symbol_name.as_str())
+                    .expect("user_extern_names contains every site's symbol name");
+                user_extern_sym_idx[pos] as u64
+            }
+        };
         let (rtype, r_offset, r_addend) = match machine_for_rela {
             Machine::X86_64 => (R_X86_64_PLT32, site.instr_offset as u64 + 1, -4i64),
             Machine::Aarch64 => (R_AARCH64_CALL26, site.instr_offset as u64, 0),
@@ -1194,6 +1574,19 @@ pub(super) fn write_relocatable(
         })
         .collect();
 
+    // Route `.rela.text` rows applying within a carved range into the
+    // owning named section, and retarget rows whose section-symbol
+    // addend points into one.
+    carve_partition_relas(
+        &mut rela_bytes,
+        &mut carve,
+        true,
+        text_sym_idx,
+        data_sym_idx,
+        bss_sym_idx,
+        data_file_len as u64,
+    );
+
     // `.init_array` / `.fini_array` groups. C99 has no such attribute;
     // GNU practice (matched by every mainstream toolchain) lowers each
     // `__attribute__((constructor))` into an `SHT_INIT_ARRAY` pointer
@@ -1209,7 +1602,8 @@ pub(super) fn write_relocatable(
     };
     let init_sections =
         build_init_array_sections(&program.init_funcs, &func_symidx_by_name, rtype_abs64_init)?;
-    let num_sections: usize = base_sections + 2 * init_sections.len();
+    let num_sections: usize =
+        base_sections + 2 * named_section_count + 2 * init_sections.len();
 
     // Section name table. Index map below mirrors the SHIDX_*
     // constants above (one entry per non-null section).
@@ -1235,6 +1629,13 @@ pub(super) fn write_relocatable(
     if has_tls {
         shstrtab_names.push(".tdata");
         shstrtab_names.push(".tbss");
+    }
+    // Named (`__attribute__((section))`) sections and their `.rela`
+    // companions take the indices right after the fixed set.
+    let named_names_start = shstrtab_names.len();
+    for e in &carve.table.entries {
+        shstrtab_names.push(e.name.as_str());
+        shstrtab_names.push(e.rela_name.as_str());
     }
     // `.init_array*` / `.fini_array*` names and their `.rela.*`
     // companions, appended last so the fixed and TLS indices stay put.
@@ -1312,8 +1713,22 @@ pub(super) fn write_relocatable(
             .filter(|s| s.is_addr)
             .map(|s| s.instr_offset),
     );
-    let text_body =
+    let mut text_body =
         rewrite_extern_addr_loads_to_got(machine_for_rela, &build.text, &got_site_offsets);
+    // Carve the named-section function groups out of the `.text` tail;
+    // the default prefix and the trailing version marker stay.
+    if !carve.text_ranges.is_empty() {
+        for r in &carve.text_ranges {
+            let ent = &mut carve.table.entries[r.entry];
+            if (ent.bytes.len() as u64) < r.new_base {
+                ent.bytes.resize(r.new_base as usize, 0);
+            }
+            ent.bytes
+                .extend_from_slice(&text_body[r.old_lo as usize..r.old_hi as usize]);
+        }
+        let carve_hi = carve.text_ranges.last().map(|r| r.old_hi as usize).unwrap_or(0);
+        text_body.drain(carve.text_keep_len..carve_hi);
+    }
     let text_off = round_up(out.len() as u64, 16);
     out.resize(text_off as usize, 0);
     out.extend_from_slice(&text_body);
@@ -1322,7 +1737,7 @@ pub(super) fn write_relocatable(
         sh_type: SHT_PROGBITS,
         sh_flags: SHF_ALLOC | SHF_EXECINSTR,
         sh_offset: text_off,
-        sh_size: build.text.len() as u64,
+        sh_size: text_body.len() as u64,
         sh_addralign: 16,
         ..Default::default()
     });
@@ -1349,16 +1764,32 @@ pub(super) fn write_relocatable(
 
     // .data -- `sh_addralign` carries the unit's base data alignment
     // so the linker places this unit's data at a multiple of it.
+    // Objects moved into a named section copy their bytes there and
+    // leave zeroed file bytes behind, so no other offset shifts.
+    let mut data_body = build.data.clone();
+    for r in &carve.data_ranges {
+        let ent = &mut carve.table.entries[r.entry];
+        if (ent.bytes.len() as u64) < r.new_base {
+            ent.bytes.resize(r.new_base as usize, 0);
+        }
+        let size = (r.old_hi - r.old_lo) as usize;
+        let file_lo = (r.old_lo as usize).min(data_body.len());
+        let file_hi = (r.old_hi as usize).min(data_body.len());
+        ent.bytes.extend_from_slice(&data_body[file_lo..file_hi]);
+        // A `.bss`-resident (wholly zero) object contributes zeros.
+        ent.bytes.resize(ent.bytes.len() + (size - (file_hi - file_lo)), 0);
+        data_body[file_lo..file_hi].fill(0);
+    }
     let data_align = build.data_align.max(8) as u64;
     let data_off = round_up(out.len() as u64, data_align);
     out.resize(data_off as usize, 0);
-    out.extend_from_slice(&build.data);
+    out.extend_from_slice(&data_body);
     sh.push(Elf64Shdr {
         sh_name: shstrtab_offs[2],
         sh_type: SHT_PROGBITS,
         sh_flags: SHF_ALLOC | SHF_WRITE,
         sh_offset: data_off,
-        sh_size: build.data.len() as u64,
+        sh_size: data_body.len() as u64,
         sh_addralign: data_align,
         ..Default::default()
     });
@@ -1500,6 +1931,18 @@ pub(super) fn write_relocatable(
         };
         write_struct(&mut rela_data_bytes, &rela);
     }
+    // Rows applying within a carved data range move to the owning
+    // named section; section-symbol targets into carved ranges are
+    // retargeted (both directions already handled for `.rela.text`).
+    carve_partition_relas(
+        &mut rela_data_bytes,
+        &mut carve,
+        false,
+        text_sym_idx,
+        data_sym_idx,
+        bss_sym_idx,
+        data_file_len as u64,
+    );
     let rela_data_off = round_up(out.len() as u64, 8);
     out.resize(rela_data_off as usize, 0);
     out.extend_from_slice(&rela_data_bytes);
@@ -1667,6 +2110,49 @@ pub(super) fn write_relocatable(
     let _ = SHIDX_DEBUG_ABBREV;
     let _ = SHIDX_DEBUG_LINE;
     let _ = SHIDX_RELA_DEBUG_LINE;
+
+    // Named (`__attribute__((section))`) sections, each followed by
+    // its `.rela` companion. The indices were planned right after the
+    // fixed set (`carve.shndx`).
+    for (k, e) in carve.table.entries.iter().enumerate() {
+        debug_assert_eq!(sh.len(), carve.shndx[k] as usize);
+        let sec_off = round_up(out.len() as u64, e.align);
+        out.resize(sec_off as usize, 0);
+        out.extend_from_slice(&e.bytes);
+        sh.push(Elf64Shdr {
+            sh_name: shstrtab_offs[named_names_start + 2 * k],
+            sh_type: e.sh_type,
+            sh_flags: e.flags,
+            sh_offset: sec_off,
+            sh_size: e.bytes.len() as u64,
+            sh_addralign: e.align,
+            ..Default::default()
+        });
+        let mut rb: Vec<u8> = Vec::with_capacity(e.relas.len() * ELF64_RELA_SIZE);
+        for r in &e.relas {
+            let rela = Elf64Rela {
+                r_offset: r.offset,
+                r_info: (r.sym << 32) | r.rtype as u64,
+                r_addend: r.addend,
+            };
+            write_struct(&mut rb, &rela);
+        }
+        let rela_off = round_up(out.len() as u64, 8);
+        out.resize(rela_off as usize, 0);
+        out.extend_from_slice(&rb);
+        sh.push(Elf64Shdr {
+            sh_name: shstrtab_offs[named_names_start + 2 * k + 1],
+            sh_type: SHT_RELA,
+            sh_flags: SHF_INFO_LINK,
+            sh_offset: rela_off,
+            sh_size: rb.len() as u64,
+            sh_link: SHIDX_SYMTAB as u32,
+            sh_info: carve.shndx[k] as u32,
+            sh_addralign: 8,
+            sh_entsize: ELF64_RELA_SIZE as u64,
+            ..Default::default()
+        });
+    }
 
     // `.init_array` / `.fini_array` groups. Each is a zero-filled array
     // of 8-byte pointers (the paired `.rela.*` binds each slot to its
@@ -2202,6 +2688,7 @@ mod tests {
             user_ssa_funcs: Vec::new(),
             extern_function_imports: Vec::new(),
             init_funcs: Vec::new(),
+            function_aliases: Vec::new(),
         }
     }
 

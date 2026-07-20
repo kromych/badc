@@ -15,6 +15,7 @@ pub(crate) mod elf_reloc;
 pub(crate) mod mach_o;
 #[cfg(feature = "native-emit")]
 pub(crate) mod pe;
+pub(crate) mod section_table;
 #[cfg(feature = "std")]
 pub(crate) mod so_versions;
 

@@ -719,6 +719,26 @@ pub(in crate::c5::compiler) struct Pending {
     /// feature; this is the GCC/Clang extension that scope-guard and
     /// auto-cleanup idioms rely on).
     pub attr_cleanup: Option<usize>,
+    /// A consumed `__attribute__((weak))`: the declared symbol binds
+    /// STB_WEAK in the object's symbol table.
+    pub attr_weak: bool,
+    /// A consumed `__attribute__((used))`: keep the definition in the
+    /// object even when nothing in the unit references it.
+    pub attr_used: bool,
+    /// A consumed `__attribute__((section("name")))`: the named object
+    /// section the declared symbol's bytes go to.
+    pub attr_section: Option<alloc::string::String>,
+    /// A consumed `__attribute__((alias("target")))`: the declared name
+    /// is an additional symbol for `target`.
+    pub attr_alias: Option<alloc::string::String>,
+    /// A consumed `register` storage-class specifier. Gates the GNU
+    /// explicit-register `asm("reg")` declarator suffix; a plain
+    /// `register` without the suffix stays the historical no-op hint.
+    pub saw_register_storage: bool,
+    /// Set by an `__auto_type` base-type parse: the declaration must
+    /// hold exactly one declarator, so the declarator loop rejects a
+    /// `,` while this is set. Cleared when the declaration ends.
+    pub auto_type_single_declarator: bool,
 }
 
 impl Default for Pending {
@@ -773,6 +793,12 @@ impl Default for Pending {
             attr_destructor: false,
             attr_init_priority: None,
             attr_cleanup: None,
+            attr_weak: false,
+            attr_used: false,
+            attr_section: None,
+            attr_alias: None,
+            saw_register_storage: false,
+            auto_type_single_declarator: false,
         }
     }
 }
@@ -1088,6 +1114,9 @@ pub struct Compiler {
     /// `Program::init_funcs`. Populated at each function-body close
     /// when `pending.attr_constructor` / `attr_destructor` is set.
     init_funcs: Vec<crate::c5::program::InitFunc>,
+    /// `__attribute__((alias("target")))` function declarations, moved
+    /// onto `Program::function_aliases`.
+    function_aliases: Vec<crate::c5::program::FunctionAlias>,
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -1554,6 +1583,7 @@ impl Compiler {
             code_relocs: Vec::new(),
             pending_exports,
             init_funcs: Vec::new(),
+            function_aliases: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
             pending: Pending::default(),
@@ -1955,6 +1985,7 @@ impl Compiler {
             user_ssa_funcs: Vec::new(),
             extern_function_imports: extern_imports,
             init_funcs: self.init_funcs,
+            function_aliases: self.function_aliases,
         })
     }
 }

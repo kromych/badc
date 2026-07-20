@@ -2632,6 +2632,14 @@ fn run_intrinsic(
             frame.regs[v as usize] = frame.stack_base as i64;
             Ok(())
         }
+        Intrinsic::StackPointer => {
+            // No native stack pointer in the interpreter; return this
+            // frame's arena base, the same proxy `FrameAddress` uses. It
+            // is non-zero and stable within a frame, enough for callers
+            // that store or compare it.
+            frame.regs[v as usize] = frame.stack_base as i64;
+            Ok(())
+        }
         Intrinsic::ReturnAddress => {
             // No native return address in the interpreter; return a stable
             // non-zero per-frame proxy, enough for callers that only store

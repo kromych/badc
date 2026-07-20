@@ -2278,16 +2278,26 @@ pub(crate) fn lower(
         .map(|(pc, name)| (*pc, name.as_str()))
         .collect();
     let mut user_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
-    let resolved_fixups: Vec<Fixup> = if extern_pc_lookup.is_empty() {
-        fixups
-    } else {
+    // A direct branch whose call site and callee live in different
+    // named sections likewise becomes a by-name call relocation: the
+    // sections' relative placement is a link-time decision.
+    let section_ctx =
+        super::section_fixup_ctx(program, &ssa_funcs, &pc_to_native, native.output_kind);
+    let resolved_fixups: Vec<Fixup> = {
         let mut out = Vec::with_capacity(fixups.len());
         for f in fixups {
+            let is_tail = matches!(f.kind, BranchKind::Jmp);
             if let Some(name) = extern_pc_lookup.get(&f.target_ent_pc) {
-                let is_tail = matches!(f.kind, BranchKind::Jmp);
                 user_extern_call_sites.push(super::UserExternCallSite {
                     instr_offset: f.native_offset,
                     symbol_name: (*name).into(),
+                    is_tail,
+                });
+            } else if let Some(name) = section_ctx.reloc_callee(f.native_offset, f.target_ent_pc)
+            {
+                user_extern_call_sites.push(super::UserExternCallSite {
+                    instr_offset: f.native_offset,
+                    symbol_name: name.into(),
                     is_tail,
                 });
             } else {

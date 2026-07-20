@@ -1898,6 +1898,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("typeof", Token::Typeof),
     ("__typeof__", Token::Typeof),
     ("__typeof", Token::Typeof),
+    ("__auto_type", Token::AutoType),
     ("__attribute__", Token::Attribute),
     ("__attribute", Token::Attribute),
     ("__declspec", Token::Attribute),

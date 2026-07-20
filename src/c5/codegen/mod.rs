@@ -2054,6 +2054,86 @@ pub(crate) fn lower_for(
     Ok(build)
 }
 
+/// Decides which direct-branch fixups must become by-name call
+/// relocations because the call site and the callee live in different
+/// object sections (`__attribute__((section("name")))`). Sections are
+/// placed independently at link time, so a relocatable object cannot
+/// bake a relative displacement across them. Empty (never matches) for
+/// non-relocatable output, where every function stays in `.text`.
+pub(crate) struct SectionFixupCtx {
+    /// (native start offset, per-func section id), ascending by start.
+    starts: alloc::vec::Vec<(usize, u32)>,
+    /// Function `ent_pc` -> (section id, name index).
+    by_pc: alloc::collections::BTreeMap<usize, (u32, usize)>,
+    /// Function names, indexed by the map above.
+    names: alloc::vec::Vec<String>,
+}
+
+impl SectionFixupCtx {
+    /// The callee's name when the branch at `site_off` targeting
+    /// function `target_pc` crosses a section boundary; `None` when
+    /// the branch resolves in place.
+    pub(crate) fn reloc_callee(&self, site_off: usize, target_pc: usize) -> Option<&str> {
+        let &(callee_sec, name_idx) = self.by_pc.get(&target_pc)?;
+        let i = self.starts.partition_point(|&(s, _)| s <= site_off);
+        let site_sec = if i == 0 { 0 } else { self.starts[i - 1].1 };
+        if site_sec == callee_sec {
+            return None;
+        }
+        Some(self.names[name_idx].as_str())
+    }
+}
+
+/// Build the [`SectionFixupCtx`] for the just-emitted function layout.
+/// `funcs` is the emission order; `pc_to_native` maps each `ent_pc` to
+/// its native start offset.
+pub(crate) fn section_fixup_ctx(
+    program: &Program,
+    funcs: &[crate::c5::ir::FunctionSsa],
+    pc_to_native: &[usize],
+    output_kind: OutputKind,
+) -> SectionFixupCtx {
+    use crate::c5::token::Token;
+    let empty = SectionFixupCtx {
+        starts: alloc::vec::Vec::new(),
+        by_pc: alloc::collections::BTreeMap::new(),
+        names: alloc::vec::Vec::new(),
+    };
+    if output_kind != OutputKind::Relocatable {
+        return empty;
+    }
+    let section_of: alloc::collections::BTreeMap<&str, &str> = program
+        .symbols
+        .iter()
+        .filter(|s| s.class == Token::Fun as i64 && s.defined_here && s.section_name.is_some())
+        .map(|s| (s.name.as_str(), s.section_name.as_deref().unwrap_or("")))
+        .collect();
+    if section_of.is_empty() {
+        return empty;
+    }
+    // Intern the section names; id 0 is the default section.
+    let mut sec_ids: alloc::collections::BTreeMap<&str, u32> = alloc::collections::BTreeMap::new();
+    let mut ctx = empty;
+    for f in funcs {
+        let sec = match section_of.get(f.name.as_str()) {
+            Some(name) => {
+                let next = sec_ids.len() as u32 + 1;
+                *sec_ids.entry(name).or_insert(next)
+            }
+            None => 0,
+        };
+        let Some(&start) = pc_to_native.get(f.ent_pc) else {
+            continue;
+        };
+        let name_idx = ctx.names.len();
+        ctx.names.push(f.name.clone());
+        ctx.by_pc.insert(f.ent_pc, (sec, name_idx));
+        ctx.starts.push((start, sec));
+    }
+    ctx.starts.sort_unstable();
+    ctx
+}
+
 /// Append the [`crate::OUTPUT_MARKER`] to the tail of
 /// `Build::text`. The bytes never get executed -- the entry
 /// point is at `build.entry_offset` and every function ends

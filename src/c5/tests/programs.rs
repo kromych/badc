@@ -1072,6 +1072,36 @@ fn flex_array_member_static_init() {
 }
 
 #[test]
+fn attribute_section_placement() {
+    // `section("name")` placements: the interpreter ignores them; the
+    // native object writer places the bytes (locked by the object-level
+    // tests). The program's behavior is identical either way.
+    assert_eq!(run_fixture("attribute_section_placement.c"), 0);
+}
+
+#[test]
+fn attribute_weak_alias() {
+    // `weak` / `alias` / `used`: the interpreter resolves an alias to
+    // its target at parse time; weak binding is an object-file
+    // property it ignores.
+    assert_eq!(run_fixture("attribute_weak_alias.c"), 0);
+}
+
+#[test]
+fn register_var_stack_pointer() {
+    // `register T name asm("sp"/"rsp"/"x29"/"rbp")` reads compile; the
+    // interpreter substitutes its per-frame proxy for both pointers.
+    assert_eq!(run_fixture("register_var_stack_pointer.c"), 0);
+}
+
+#[test]
+fn auto_type_inference() {
+    // GNU `__auto_type`: initializer supplies the declared type, at
+    // block and file scope; arrays decay to pointers.
+    assert_eq!(run_fixture("auto_type_inference.c"), 0);
+}
+
+#[test]
 fn attribute_hot_cold_accepted() {
     // GNU `hot` / `cold` hints parse in declaration and declarator
     // positions without altering behavior.

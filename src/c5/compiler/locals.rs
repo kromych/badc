@@ -128,6 +128,7 @@ impl Compiler {
         // qualifier loop here consumes `const` (a TypeQual) before the
         // base-type parse, so record it as we go.
         self.pending.base_is_const = false;
+        self.pending.saw_register_storage = false;
         while self.lex.tk == Token::Extern
             || self.lex.tk == Token::Static
             || self.lex.tk == Token::ThreadLocal
@@ -142,6 +143,9 @@ impl Compiler {
             }
             if self.lex.tk == Token::ThreadLocal {
                 is_thread_local = true;
+            }
+            if self.lex_is_register_storage() {
+                self.pending.saw_register_storage = true;
             }
             // `volatile` qualifies the declared type (C99 6.7.3); `const`
             // is recorded out-of-band for value folding.
@@ -180,6 +184,9 @@ impl Compiler {
             }
             if self.lex.tk == Token::ThreadLocal {
                 is_thread_local = true;
+            }
+            if self.lex_is_register_storage() {
+                self.pending.saw_register_storage = true;
             }
             qual_bits |= self.lex_volatile_bit();
             self.pending.base_is_const |= self.lex_is_const_qual();
@@ -220,6 +227,7 @@ impl Compiler {
             self.pending.vla_allowed = true;
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = false;
+            let asm_reg = self.parse_register_asm_binding(is_static, is_extern)?;
             // Trailing cleanup wins for this declarator; else the leading one.
             let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
             // C23 6.7.13.5 `[[maybe_unused]]` / GNU
@@ -355,6 +363,10 @@ impl Compiler {
                 let decl_file = self.intern_source_file() as u32;
                 self.symbols[loc_idx].decl_file = decl_file;
                 self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
+                // Unconditional write so a reused symbol slot does not
+                // leak a stale binding from an outer name.
+                self.symbols[loc_idx].asm_register = asm_reg;
+                self.check_register_asm_init(asm_reg)?;
                 self.pending_local_init_ast = None;
                 self.pending_local_aggregate_ast = None;
                 self.pending_local_runtime_elements.clear();
@@ -416,9 +428,15 @@ impl Compiler {
                 self.register_cleanup_var(loc_idx, fn_sym);
             }
 
+            if self.pending.auto_type_single_declarator && self.lex.tk == ',' {
+                return Err(
+                    self.compile_err("`__auto_type` declaration takes a single declarator")
+                );
+            }
             self.accept(',')?;
         }
         self.next()?;
+        self.pending.auto_type_single_declarator = false;
         Ok(())
     }
 

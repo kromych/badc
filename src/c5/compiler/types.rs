@@ -603,6 +603,7 @@ pub(super) fn is_type_start_token(tk: Tok) -> bool {
         || tk == Token::Extern
         || tk == Token::Static
         || tk == Token::Typeof
+        || tk == Token::AutoType
         || is_decl_modifier(tk)
 }
 

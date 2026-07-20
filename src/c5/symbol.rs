@@ -61,6 +61,36 @@ pub(crate) struct Symbol {
     /// like a regular global (single-threaded execution).
     pub is_thread_local: bool,
 
+    /// GNU explicit-register variable: `register T name asm("reg")`
+    /// binds the local to a machine register. Stack- and frame-pointer
+    /// bindings compile reads into direct register moves; a
+    /// general-purpose binding keeps normal slot storage and pins the
+    /// variable's inline-asm operands to the named register.
+    pub asm_register: Option<AsmRegister>,
+    /// Shadow slot for `asm_register` (see `h_class`).
+    pub h_asm_register: Option<AsmRegister>,
+
+    /// `__attribute__((weak))`: the symbol binds STB_WEAK in the
+    /// object's symbol table, for a definition (a strong definition
+    /// elsewhere overrides it) and for a declaration (an unresolved
+    /// reference links to address 0 instead of failing).
+    pub is_weak: bool,
+
+    /// `__attribute__((used))`: keep the definition in the object even
+    /// when nothing in the unit references it.
+    pub is_used: bool,
+
+    /// `__attribute__((section("name")))`: the named object section the
+    /// symbol's bytes go to instead of the default `.text` / `.data` /
+    /// `.bss` placement.
+    pub section_name: Option<String>,
+
+    /// `__attribute__((alias("target")))`: this symbol is an additional
+    /// name for its target; `val` carries the target's entry / offset.
+    /// Excluded from the per-pc linkage join in the object writers so
+    /// it cannot clobber the target's own linkage.
+    pub is_alias: bool,
+
     /// For an array-typed local or global, the declared element
     /// count from `int xs[N]`. Zero means "not an array" (the
     /// symbol is a scalar, struct value, or pointer). The
@@ -372,6 +402,22 @@ pub(crate) struct Symbol {
     /// and dead-store diagnostics for this symbol, matching the
     /// documented effect of the attribute.
     pub maybe_unused: bool,
+}
+
+/// The machine register a `register T name asm("reg")` declaration
+/// names, resolved against the compile target. The stack and frame
+/// pointers are singled out because reading them is the pervasive use
+/// and needs no allocator involvement; any other general-purpose
+/// register carries its architectural number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AsmRegister {
+    /// rsp / esp (x86-64), sp (aarch64).
+    StackPointer,
+    /// rbp / ebp (x86-64), x29 / fp (aarch64).
+    FramePointer,
+    /// Any other bindable general-purpose register, by architectural
+    /// number.
+    Gp(u8),
 }
 
 /// C99 6.2.2 linkage class. `None` is the default for block-scope

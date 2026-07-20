@@ -296,6 +296,11 @@ pub enum Intrinsic {
     /// operand (0F 00 /2). The op takes the operand's address; the
     /// interpreter treats it as a no-op (no modelled LDTR).
     X86Lldt = 80,
+    /// Read of a `register T name asm("rsp"/"sp")` variable -- the
+    /// current stack pointer, as a `void *`-shaped value. No arguments.
+    /// The interpreter returns the frame's arena base (the same proxy
+    /// `FrameAddress` uses); native code reads rsp / sp directly.
+    StackPointer = 81,
 }
 
 impl Intrinsic {
@@ -381,6 +386,7 @@ impl Intrinsic {
             78 => Some(Intrinsic::X86Lidt),
             79 => Some(Intrinsic::X86Clflush),
             80 => Some(Intrinsic::X86Lldt),
+            81 => Some(Intrinsic::StackPointer),
             _ => None,
         }
     }

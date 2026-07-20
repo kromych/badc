@@ -99,6 +99,7 @@ There are various demo's under [`demos`](./demos/):
 * [`raylib`](./demos/raylib/) - Library for games, (there is also [`loderunner`](./demos/raylib/loderunner.c) game included) ([raylib.com](https://www.raylib.com/)),
 * [`curl`](./demos/curl/) - The library and the tools that handle HTTP and friends on PCs, smart phones/watches, TVs, ... ([curl.se](https://curl.se/)),
 * [`Python`](./demos/python/) - Python 3.14 ([python.org](https://www.python.org/)),
+* [`libmill`](./demos/libmill/) ([sustrik/libmill](https://github.com/sustrik/libmill)), [`libdill`](./demos/libdill/) ([sustrik/libdill](https://github.com/sustrik/libdill)), [`coroutines`](./demos/coroutines/) ([tsoding/coroutines](https://github.com/tsoding/coroutines)) - cooperative-concurrency libraries whose context switches exercise badc's **inline assembly** (stack-pointer moves plus `setjmp`/`longjmp` across stacks) end to end,
 * [`qemu`](./demos/qemu/) - the QEMU system emulator ([qemu.org](https://www.qemu.org/)); badc compiles the full source (well over a thousand translation units per target) and self-links the emulator with its own linker. Both `qemu-system-aarch64` and `qemu-system-x86_64`, self-compiled and self-linked, boot a Linux kernel + busybox initramfs **through UEFI firmware** (OVMF on x86_64, ArmVirtQemu/AAVMF on aarch64) to an interactive userspace shell, and power off cleanly under TCG. The CI boot runs badc's own build of that firmware -- the self-host rung (see the `edk2` demo), with a badc-built nasm assembling the x86 firmware -- so the gated boot is badc end to end.
 
 Besides these, there are some fun test fixtures implementing Horner scheme, RK4,
@@ -606,7 +607,9 @@ runner additionally runs the demo smokes -- sqlite3, miniz,
 kissfft, bzip2, tweetnacl, monocypher, bearssl, lua, stb,
 chibicc, tinycc, nasm, yasm, edk2, gui_hello, nt_loader --
 end-to-end (or build-only for the GUI demos, which need a
-display; edk2 additionally boots its `.efi` under OVMF). See
+display; edk2 additionally boots its `.efi` under OVMF). The
+cooperative-concurrency demos (libmill, libdill, coroutines)
+run on the POSIX lanes and skip on Windows. See
 [`demos/`](./demos/) for what each exercises. The PE-via-
 WINE lane is gated on `BADC_RUN_WINE=1`; a bare `cargo test`
 on a developer machine skips it, and CI doesn't currently

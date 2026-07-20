@@ -32,6 +32,9 @@ use super::object::{
 const R_X86_64_PC32: u32 = 2;
 const R_X86_64_PLT32: u32 = 4;
 const R_X86_64_GOTPCREL: u32 = 9;
+// Relaxable variant of GOTPCREL marking a `REX mov reg, [rip+disp32]`
+// GOT load (psABI B.2); emitted by c5's writer and other toolchains.
+const R_X86_64_REX_GOTPCRELX: u32 = 42;
 const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
 const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
@@ -785,7 +788,7 @@ pub fn link_native_objects_with_shared_libs(
                     ..*reloc
                 };
                 &relaxed_reloc
-            } else if reloc.rtype == R_X86_64_GOTPCREL {
+            } else if reloc.rtype == R_X86_64_GOTPCREL || reloc.rtype == R_X86_64_REX_GOTPCRELX {
                 // x86_64 flavor of the same relaxation: turn the
                 // `mov reg, [rip+disp32]` GOT load back into the `lea`
                 // it came from (opcode 0x8b -> 0x8d, two bytes before

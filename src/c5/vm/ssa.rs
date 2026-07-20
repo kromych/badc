@@ -2230,10 +2230,19 @@ fn run_inline_asm(
             | Mnemonic::Monitor
             | Mnemonic::Mwait
             | Mnemonic::Hlt
-            | Mnemonic::Lock => {
+            | Mnemonic::Prefix(_) => {
                 // Interrupt-flag / cache / MSR-write / monitor-wait / halt
-                // control and the lock prefix: no observable effect on the
-                // VM's register model.
+                // control and the legacy prefixes: no observable effect on
+                // the VM's register model.
+            }
+            // The string primitives step %rsi / %rdi and access guest memory,
+            // and the x87 / far-call memory forms have no register-model
+            // equivalent. Rejecting keeps the VM from silently skipping a
+            // memory effect the caller depends on.
+            Mnemonic::Fixed(_) | Mnemonic::StringOp { .. } | Mnemonic::MemExt { .. } => {
+                return Err(C5Error::Runtime(alloc::string::String::from(
+                    "inline asm: string / x87 / far-call instruction is not supported under the VM",
+                )));
             }
             Mnemonic::Inc | Mnemonic::Dec => {
                 let (v, sz) = value_of(&ops[0], &xregs);

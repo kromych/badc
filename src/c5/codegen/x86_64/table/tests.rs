@@ -115,6 +115,15 @@ fn double_precision_and_ext_moves() {
     // movzx / movsx keep the source and destination widths distinct.
     assert_eq!(enc("movzx", &[r(1, 8), m(2, 1)]), [0x48, 0x0f, 0xb6, 0x0a]); // movzx rcx, byte [rdx]
     assert_eq!(enc("movsxd", &[r(0, 8), r(1, 4)]), [0x48, 0x63, 0xc1]); // movsxd rax, ecx
+    // A byte source of spl/bpl/sil/dil takes a REX even though the operation
+    // width is that of the wider destination; without it the encoding names
+    // ah/ch/dh/bh instead.
+    assert_eq!(enc("movsx", &[r(4, 4), r(7, 1)]), [0x40, 0x0f, 0xbe, 0xe7]); // movsx esp, dil
+    assert_eq!(
+        enc("movzx", &[r(3, 2), r(5, 1)]),
+        [0x66, 0x40, 0x0f, 0xb6, 0xdd]
+    ); // movzx bx, bpl
+    assert_eq!(enc("movsx", &[r(4, 4), r(3, 1)]), [0x0f, 0xbe, 0xe3]); // movsx esp, bl: no REX
 }
 
 #[test]
@@ -481,13 +490,72 @@ mod differential {
         }
     }
 
-    /// Run objdump on a `.byte` blob and return the single normalized
-    /// (mnemonic, operands) it decodes to, or an error string.
-    fn disasm(bytes: &[u8]) -> Result<(String, Vec<String>), String> {
+    /// A temp stem unique to this invocation. A content-derived name collides
+    /// whenever two concurrent callers assemble the same text, which alias
+    /// mnemonics guarantee (`sal r9b, cl` and `shl r9b, cl` are one encoding);
+    /// the loser then reads a file the winner has already removed.
+    fn temp_stem(prefix: &str) -> String {
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        alloc::format!("badc-{prefix}-{}-{n}", std::process::id())
+    }
+
+    /// Assemble `src`, disassemble the result, and return the single
+    /// normalized (mnemonic, operands) it decodes to. Errors carry the tool
+    /// invocation and its output so a CI log is diagnosable on its own.
+    fn assemble_and_decode(src: &str, prefix: &str) -> Result<(String, Vec<String>), String> {
         let dir = std::env::temp_dir();
-        let stem = alloc::format!("badc-asm-{}", bytes_hash(bytes));
+        let stem = temp_stem(prefix);
         let s = dir.join(alloc::format!("{stem}.s"));
         let o = dir.join(alloc::format!("{stem}.o"));
+        let clean = |s: &std::path::Path, o: &std::path::Path| {
+            let _ = std::fs::remove_file(s);
+            let _ = std::fs::remove_file(o);
+        };
+        std::fs::write(&s, src).map_err(|e| alloc::format!("write {}: {e}", s.display()))?;
+        let asm_cmd = alloc::format!(
+            "clang --target=x86_64-linux-gnu -c {} -o {}",
+            s.display(),
+            o.display()
+        );
+        let out = Command::new("clang")
+            .args(["--target=x86_64-linux-gnu", "-c"])
+            .arg(&s)
+            .arg("-o")
+            .arg(&o)
+            .output()
+            .map_err(|e| alloc::format!("spawn `{asm_cmd}`: {e}"))?;
+        if !out.status.success() {
+            clean(&s, &o);
+            return Err(alloc::format!(
+                "assemble failed ({}) `{asm_cmd}` src={src:?} stderr={:?}",
+                out.status,
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        let dis_cmd = alloc::format!("objdump -d --no-show-raw-insn {}", o.display());
+        let dis = Command::new("objdump")
+            .args(["-d", "--no-show-raw-insn"])
+            .arg(&o)
+            .output()
+            .map_err(|e| alloc::format!("spawn `{dis_cmd}`: {e}"))?;
+        clean(&s, &o);
+        let text = String::from_utf8_lossy(&dis.stdout);
+        let mut insns: Vec<_> = text.lines().filter_map(insn_body).map(normalize).collect();
+        if dis.status.success() && insns.len() == 1 {
+            return Ok(insns.pop().unwrap());
+        }
+        Err(alloc::format!(
+            "decoded to {} instructions ({}) `{dis_cmd}` src={src:?} stdout={:?} stderr={:?}",
+            insns.len(),
+            dis.status,
+            text.trim(),
+            String::from_utf8_lossy(&dis.stderr).trim()
+        ))
+    }
+
+    /// Decode an encoder-produced byte string back to an instruction.
+    fn disasm(bytes: &[u8]) -> Result<(String, Vec<String>), String> {
         let src = alloc::format!(
             ".text\n.byte {}\n",
             bytes
@@ -496,31 +564,7 @@ mod differential {
                 .collect::<Vec<_>>()
                 .join(",")
         );
-        std::fs::write(&s, src).map_err(|e| e.to_string())?;
-        let out = Command::new("clang")
-            .args(["--target=x86_64-linux-gnu", "-c"])
-            .arg(&s)
-            .arg("-o")
-            .arg(&o)
-            .output()
-            .map_err(|e| e.to_string())?;
-        if !out.status.success() {
-            let _ = std::fs::remove_file(&s);
-            return Err(String::from("assemble failed"));
-        }
-        let dis = Command::new("objdump")
-            .args(["-d", "--no-show-raw-insn"])
-            .arg(&o)
-            .output()
-            .map_err(|e| e.to_string())?;
-        let _ = std::fs::remove_file(&s);
-        let _ = std::fs::remove_file(&o);
-        let text = String::from_utf8_lossy(&dis.stdout);
-        let mut insns: Vec<_> = text.lines().filter_map(insn_body).map(normalize).collect();
-        match insns.len() {
-            1 => Ok(insns.pop().unwrap()),
-            n => Err(alloc::format!("decoded to {n} instructions")),
-        }
+        assemble_and_decode(&src, "asm")
     }
 
     /// An objdump disassembly line begins with a whitespace-indented hex
@@ -538,15 +582,6 @@ mod differential {
             return None;
         }
         Some(&line[tab + 1..])
-    }
-
-    fn bytes_hash(b: &[u8]) -> u64 {
-        // A stable non-crypto hash so concurrent cases use distinct temp files.
-        let mut h = 0xcbf29ce484222325u64;
-        for &x in b {
-            h = (h ^ x as u64).wrapping_mul(0x100000001b3);
-        }
-        h
     }
 
     /// Normalize an AT&T disassembly to (base-mnemonic, operand tokens) with
@@ -594,43 +629,20 @@ mod differential {
         (mn, ops)
     }
 
+    /// The instruction the assembler produces for a case, i.e. the intent the
+    /// encoder must match. `None` means the assembler rejected the text, which
+    /// the caller counts as a skip.
     fn clang_intent(itxt: &str) -> Option<(String, Vec<String>)> {
-        let dir = std::env::temp_dir();
-        let stem = alloc::format!("badc-int-{:x}", bytes_hash(itxt.as_bytes()));
-        let s = dir.join(alloc::format!("{stem}.s"));
-        let o = dir.join(alloc::format!("{stem}.o"));
-        std::fs::write(
-            &s,
-            alloc::format!(".intel_syntax noprefix\n.text\n{itxt}\n"),
-        )
-        .ok()?;
-        let out = Command::new("clang")
-            .args(["--target=x86_64-linux-gnu", "-c"])
-            .arg(&s)
-            .arg("-o")
-            .arg(&o)
-            .output()
-            .ok()?;
-        if !out.status.success() {
-            if std::env::var("BADC_FUZZ_DEBUG").is_ok() {
-                std::eprintln!(
-                    "intent asm fail [{itxt}]: {}",
-                    String::from_utf8_lossy(&out.stderr)
-                );
+        let src = alloc::format!(".intel_syntax noprefix\n.text\n{itxt}\n");
+        match assemble_and_decode(&src, "int") {
+            Ok(v) => Some(v),
+            Err(e) => {
+                if std::env::var("BADC_FUZZ_DEBUG").is_ok() {
+                    std::eprintln!("intent asm fail [{itxt}]: {e}");
+                }
+                None
             }
-            let _ = std::fs::remove_file(&s);
-            return None;
         }
-        let dis = Command::new("objdump")
-            .args(["-d", "--no-show-raw-insn"])
-            .arg(&o)
-            .output()
-            .ok()?;
-        let _ = std::fs::remove_file(&s);
-        let _ = std::fs::remove_file(&o);
-        let text = String::from_utf8_lossy(&dis.stdout);
-        let mut insns: Vec<_> = text.lines().filter_map(insn_body).map(normalize).collect();
-        (insns.len() == 1).then(|| insns.pop().unwrap())
     }
 
     /// Outcome tallies of a differential run. The contract is *never wrong,
@@ -753,6 +765,33 @@ mod differential {
         }
     }
 
+    /// Effective operation width of an instantiation: the widest register /
+    /// memory slot (what `op_width` will see). A byte-only form sits in the
+    /// fixed-width bucket, so `opw` alone is not it.
+    fn effective_width(f: &Form, opw: u8) -> u8 {
+        f.ops
+            .iter()
+            .filter_map(|&p| match p {
+                OpPat::Reg(w) | OpPat::Rm(w) | OpPat::Mem(w) | OpPat::Fixed(_, w) => wbytes(w, opw),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(opw)
+    }
+
+    /// A random immediate that the effective operand width can express. An
+    /// out-of-range value is not a catalogue gap: the encoder refuses to
+    /// truncate (the assembler silently does), so drawing one only removes the
+    /// case from coverage and inflates the gap tally.
+    fn rnd_imm(eff: u8, raw: u64) -> Opnd {
+        let span: i64 = match eff {
+            1 => 0x100,
+            2 => 0x10000,
+            _ => 0x3000,
+        };
+        Opnd::Imm((raw % span as u64) as i64 - span / 2)
+    }
+
     /// Synthesize differential cases for one form at one operation width.
     /// Each slot gets a small choice set (low / high registers, a register
     /// and a memory shape for r/m, a small and a wide immediate); the cases
@@ -761,18 +800,7 @@ mod differential {
     /// target at the assembler level but a raw displacement here, so the
     /// golden tests lock them instead.
     fn cases_for_form(f: &Form, opw: u8, out: &mut Vec<(&'static str, Vec<Opnd>)>) {
-        // Effective operation width of this instantiation: the widest
-        // register / memory slot (what `op_width` will see). A byte-only
-        // form sits in the fixed-width bucket, so `opw` alone is not it.
-        let eff = f
-            .ops
-            .iter()
-            .filter_map(|&p| match p {
-                OpPat::Reg(w) | OpPat::Rm(w) | OpPat::Mem(w) | OpPat::Fixed(_, w) => wbytes(w, opw),
-                _ => None,
-            })
-            .max()
-            .unwrap_or(opw);
+        let eff = effective_width(f, opw);
         let mut slots: Vec<Vec<Opnd>> = Vec::new();
         for &p in f.ops {
             let choices = match p {
@@ -907,7 +935,12 @@ mod differential {
         if !enabled() {
             return;
         }
-        let mut st = 0x0123_4567_89ab_cdefu64;
+        // `BADC_FUZZ_SEED` re-runs the same generator on a different draw; the
+        // default keeps the case set reproducible.
+        let mut st = match std::env::var("BADC_FUZZ_SEED") {
+            Ok(v) => v.parse().unwrap_or(0x0123_4567_89ab_cdefu64).max(1),
+            Err(_) => 0x0123_4567_89ab_cdefu64,
+        };
         let mut next = || {
             st ^= st << 13;
             st ^= st >> 7;
@@ -920,6 +953,7 @@ mod differential {
             let f = &forms[(next() as usize) % forms.len()];
             let widths = form_widths(f);
             let opw = widths[(next() as usize) % widths.len()];
+            let eff = effective_width(f, opw);
             let mut ops = Vec::new();
             for &p in f.ops {
                 let rnd_mem = |wb: u8, next: &mut dyn FnMut() -> u64| -> Opnd {
@@ -965,7 +999,7 @@ mod differential {
                         None => continue 'draw,
                     },
                     OpPat::Imm(ImmC::One) => Opnd::Imm(1),
-                    OpPat::Imm(_) => Opnd::Imm((next() as i32 % 0x3000) as i64 - 0x1000),
+                    OpPat::Imm(_) => rnd_imm(eff, next()),
                 };
                 ops.push(o);
             }
@@ -983,11 +1017,52 @@ mod differential {
             t.skip,
             t.gaps.iter().take(3).collect::<Vec<_>>()
         );
-        // Wrong bytes are the hard failure; a gap (a valid form the catalogue
-        // does not yet cover) is reported but tolerated by the fuzzer.
         assert_eq!(
             t.bad, 0,
             "fuzzed table encodings disagree with the assembler"
+        );
+        // The generator draws catalogue forms with operands each form admits,
+        // so every case must encode. A gap means the draw is unrepresentable
+        // (it once fed out-of-range immediates to byte operands) or the
+        // catalogue row is unreachable.
+        assert_eq!(t.gap, 0, "fuzzed case not encodable: {:?}", t.gaps);
+    }
+
+    /// The differential tests run concurrently and alias mnemonics make them
+    /// hand identical bytes to `disasm` (`sal r9b, cl` and `shl r9b, cl` are
+    /// one encoding), so the helper must not share temp files between calls.
+    #[test]
+    fn concurrent_disasm_is_isolated() {
+        if !enabled() {
+            return;
+        }
+        assert_eq!(
+            super::enc("sal", &[r(9, 1), r(1, 1)]),
+            super::enc("shl", &[r(9, 1), r(1, 1)])
+        );
+        let bytes = super::enc("sal", &[r(9, 1), r(1, 1)]);
+        let errs = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut threads = Vec::new();
+        for _ in 0..4 {
+            let (bytes, errs) = (bytes.clone(), errs.clone());
+            threads.push(std::thread::spawn(move || {
+                for _ in 0..100 {
+                    match disasm(&bytes) {
+                        Ok((mn, _)) => assert_eq!(mn, "shl"),
+                        Err(e) => errs.lock().unwrap().push(e),
+                    }
+                }
+            }));
+        }
+        for t in threads {
+            t.join().unwrap();
+        }
+        let errs = errs.lock().unwrap();
+        assert!(
+            errs.is_empty(),
+            "{} of 400 concurrent disasm calls failed, e.g. {:?}",
+            errs.len(),
+            errs.first()
         );
     }
 }

@@ -1175,6 +1175,217 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Reinterpret a value's bits across the integer / FP register
+    /// banks through an 8-byte stack slot. The `F64` load and store
+    /// kinds are defined as single moves with no widen or narrow, so
+    /// the round trip is bit-exact on every backend. Used by the
+    /// 128-bit / floating conversions, which assemble and dissect an
+    /// IEEE-754 double with integer arithmetic.
+    fn fp_bitcast(
+        &mut self,
+        b: &mut SsaBuilder,
+        v: ValueId,
+        store: StoreKind,
+        load: LoadKind,
+    ) -> ValueId {
+        let slot = b.alloc_synthetic_struct(8);
+        let addr = b.local_addr(slot);
+        b.store(addr, v, store);
+        b.load(addr, load)
+    }
+
+    /// One-based index of the most significant set bit of `x`, and 1
+    /// for `x == 0`. Branchless binary search: the IR has no
+    /// count-leading-zeros opcode, and every step shifts by a value
+    /// in [0,63] so the per-arch shifter's mod-64 rule never applies.
+    fn bit_length_64(b: &mut SsaBuilder, x: ValueId) -> ValueId {
+        let mut len = b.imm(1);
+        let mut cur = x;
+        for k in [32, 16, 8, 4, 2, 1] {
+            let y = b.binop_imm(BinOp::Shru, cur, k);
+            let c = b.binop_imm(BinOp::Ne, y, 0);
+            let s = b.binop_imm(BinOp::Mul, c, k);
+            len = b.binop(BinOp::Add, len, s);
+            cur = b.binop(BinOp::Shru, cur, s);
+        }
+        len
+    }
+
+    /// Convert the 128-bit integer `a` to `double`, or to `float` when
+    /// `to_float`, with the single round-to-nearest-even C99 6.3.1.4
+    /// requires (the result is the representable value nearest the
+    /// operand).
+    ///
+    /// The magnitude is pre-reduced to its top 64 significant bits with
+    /// the discarded bits collapsed into a sticky bit at position 0,
+    /// then converted once by the hardware unsigned converter and
+    /// scaled by the exact power of two that was shifted out. Position
+    /// 0 sits below the converter's own rounding position, and the
+    /// sticky bit preserves whether anything below the round bit was
+    /// set, so the pre-reduction cannot change which way the single
+    /// rounding goes. Scaling by a power of two is exact, so no second
+    /// rounding occurs.
+    fn int128_to_fp(
+        &mut self,
+        b: &mut SsaBuilder,
+        a: Halves,
+        signed: bool,
+        to_float: bool,
+    ) -> ValueId {
+        // A signed operand converts its magnitude and carries the sign
+        // into the scale factor; round-to-nearest-even is symmetric
+        // about zero, so the result matches converting the operand.
+        let (mag, sign_bit) = if signed {
+            let sgn = b.binop_imm(BinOp::Shr, a.1, 63);
+            let m = Self::int128_xor_sub(b, a, sgn);
+            let s = b.binop_imm(BinOp::And, sgn, i64::MIN);
+            (m, s)
+        } else {
+            (a, b.imm(0))
+        };
+        // Shift count that leaves exactly 64 significant bits, and 0
+        // when the magnitude already fits in 64 (the high half is then
+        // zero and no bits are discarded).
+        let hnz = b.binop_imm(BinOp::Ne, mag.1, 0);
+        let bl = Self::bit_length_64(b, mag.1);
+        let sh = b.binop(BinOp::Mul, bl, hnz);
+        // Sticky bit over the `sh` discarded low bits. The mask is
+        // built by shifting right rather than by `(1 << sh) - 1` so the
+        // count stays in [0,63]; it is forced to zero at `sh == 0`,
+        // where nothing is discarded.
+        let inv = {
+            let k = b.imm(64);
+            let d = b.binop(BinOp::Sub, k, sh);
+            b.binop_imm(BinOp::And, d, 63)
+        };
+        let mask = {
+            let ones = b.imm(-1);
+            let m = b.binop(BinOp::Shru, ones, inv);
+            let nz = b.binop_imm(BinOp::Ne, sh, 0);
+            b.binop(BinOp::Mul, m, nz)
+        };
+        let sticky = {
+            let dropped = b.binop(BinOp::And, mag.0, mask);
+            b.binop_imm(BinOp::Ne, dropped, 0)
+        };
+        let top = Self::int128_shift(b, BinOp::Shru, mag, sh).0;
+        let t = b.binop(BinOp::Or, top, sticky);
+        // The single rounding. A `float` result rounds to single
+        // precision here; the scaling below is exact, so narrowing the
+        // scaled product back to `float` does not round again.
+        let d = if to_float {
+            let f = b.fp_cast_to_f32(super::super::ir::FpCastKind::UIntToFp, t);
+            b.fp_widen_to_f64(f)
+        } else {
+            b.fp_cast(super::super::ir::FpCastKind::UIntToFp, t)
+        };
+        // Scale by +/- 2^sh, assembled as an IEEE-754 double: `sh` is
+        // at most 64, so the biased exponent stays in range.
+        let scale = {
+            let e = b.binop_imm(BinOp::Add, sh, 1023);
+            let bits = b.binop_imm(BinOp::Shl, e, 52);
+            let signed_bits = b.binop(BinOp::Or, bits, sign_bit);
+            self.fp_bitcast(b, signed_bits, StoreKind::I64, LoadKind::F64)
+        };
+        let r = b.binop(BinOp::Fmul, d, scale);
+        if to_float { b.fp_narrow_to_f32(r) } else { r }
+    }
+
+    /// Convert the floating value `v` to a 128-bit integer, truncating
+    /// toward zero (C99 6.3.1.4). The operand is dissected into its
+    /// IEEE-754 exponent and significand and the significand is shifted
+    /// into place, which discards the fraction exactly.
+    ///
+    /// C99 leaves an operand whose truncated value is out of range --
+    /// including an infinity or a NaN, and any negative operand
+    /// converted to the unsigned type -- undefined, and gcc and clang
+    /// differ from each other and between targets there. This lowering
+    /// saturates instead: a negative operand converted to the unsigned
+    /// type yields 0, and anything else out of range yields the target
+    /// type's minimum or maximum by the operand's sign. That is total,
+    /// deterministic, and identical across every backend and target,
+    /// and it matches the runtime routines both compilers call when
+    /// they do not expand the conversion inline.
+    fn fp_to_int128(&mut self, b: &mut SsaBuilder, v: ValueId, signed: bool) -> Halves {
+        // A `float` operand widens to double exactly, so one dissection
+        // serves both source types.
+        let d = b.fp_widen_to_f64(v);
+        let bits = self.fp_bitcast(b, d, StoreKind::F64, LoadKind::I64);
+        let sign = b.binop_imm(BinOp::Shr, bits, 63);
+        let abs = b.binop_imm(BinOp::And, bits, i64::MAX);
+        let exp = {
+            let e = b.binop_imm(BinOp::Shru, abs, 52);
+            b.binop_imm(BinOp::Sub, e, 1023)
+        };
+        let sig = {
+            let frac = b.binop_imm(BinOp::And, abs, (1i64 << 52) - 1);
+            b.binop_imm(BinOp::Or, frac, 1i64 << 52)
+        };
+        // The significand carries a factor of 2^52, so the value is
+        // `sig << (exp - 52)`; a negative count shifts right, which
+        // drops the fraction bits and truncates toward zero.
+        let k = b.binop_imm(BinOp::Sub, exp, 52);
+        let kneg = b.binop_imm(BinOp::Shr, k, 63);
+        let kabs = {
+            let x = b.binop(BinOp::Xor, k, kneg);
+            b.binop(BinOp::Sub, x, kneg)
+        };
+        let zero = b.imm(0);
+        let left = Self::int128_shift(b, BinOp::Shl, (sig, zero), kabs);
+        let right = Self::int128_shift(b, BinOp::Shru, (sig, zero), kabs);
+        let sel = |b: &mut SsaBuilder, small: ValueId, large: ValueId, m: ValueId| {
+            let nm = b.binop_imm(BinOp::Xor, m, -1);
+            let x = b.binop(BinOp::And, small, nm);
+            let y = b.binop(BinOp::And, large, m);
+            b.binop(BinOp::Or, x, y)
+        };
+        let mag = (sel(b, left.0, right.0, kneg), sel(b, left.1, right.1, kneg));
+        // `|v| < 1` truncates to zero. This also covers zero, the
+        // subnormals, and the out-of-range shift counts the dissection
+        // produces for them.
+        let keep = {
+            let neg_exp = b.binop_imm(BinOp::Shr, exp, 63);
+            b.binop_imm(BinOp::Xor, neg_exp, -1)
+        };
+        let mag = (
+            b.binop(BinOp::And, mag.0, keep),
+            b.binop(BinOp::And, mag.1, keep),
+        );
+        // Out of range once the magnitude reaches 2^128. An infinity
+        // and a NaN both land here, their exponent field being the
+        // maximum. The signed conversion uses the same limit so a
+        // magnitude in [2^127, 2^128) wraps to a negative result rather
+        // than saturating; that keeps -2^127 exact and matches gcc and
+        // clang, which agree on this case across targets.
+        let over = {
+            let o = b.binop_imm(BinOp::Ge, exp, 128);
+            let z = b.imm(0);
+            b.binop(BinOp::Sub, z, o)
+        };
+        if signed {
+            let mag = Self::int128_xor_sub(b, mag, sign);
+            let sat_lo = {
+                let ones = b.imm(-1);
+                b.binop(BinOp::Xor, ones, sign)
+            };
+            let sat_hi = {
+                let max = b.imm(i64::MAX);
+                b.binop(BinOp::Xor, max, sign)
+            };
+            (sel(b, mag.0, sat_lo, over), sel(b, mag.1, sat_hi, over))
+        } else {
+            let ones = b.imm(-1);
+            let r = (sel(b, mag.0, ones, over), sel(b, mag.1, ones, over));
+            // A negative operand yields 0 rather than the wrapped
+            // magnitude.
+            let keep_pos = b.binop_imm(BinOp::Xor, sign, -1);
+            (
+                b.binop(BinOp::And, r.0, keep_pos),
+                b.binop(BinOp::And, r.1, keep_pos),
+            )
+        }
+    }
+
     /// True when the expression's *value* is a 128-bit integer.
     fn expr_is_int128_value(&self, id: ExprId) -> bool {
         expr_ty(self.ast.expr(id)).is_some_and(|t| self.is_int128_value_ty(t))
@@ -1977,16 +2188,21 @@ impl<'a> Walker<'a> {
     /// low half and its sign fills the high half (C99 6.3.1.3/6.3.1.8
     /// widening). Shared by the cast, initializer, and assignment paths,
     /// which otherwise treat the scalar as a struct-rvalue address and
-    /// copy 16 bytes from it.
-    /// TODO: a floating source above the 64-bit range saturates into the
-    /// low half; it needs splitting across both halves.
+    /// copy 16 bytes from it. A floating source converts through
+    /// [`Self::fp_to_int128`], which fills both halves.
     fn store_scalar_as_int128(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         dst_addr: super::super::ir::ValueId,
         v: super::super::ir::ValueId,
         src_ty: i64,
+        dst_ty: i64,
     ) {
+        if is_floating_scalar(src_ty) {
+            let pair = self.fp_to_int128(b, v, (dst_ty & UNSIGNED_BIT) == 0);
+            self.int128_store(b, dst_addr, pair);
+            return;
+        }
         let low_ty = Ty::LongLong as i64 | (src_ty & UNSIGNED_BIT);
         let low = self.convert_scalar_value(b, v, src_ty, low_ty);
         let store_kind = store_kind_for(low_ty, self.target);
@@ -2022,7 +2238,7 @@ impl<'a> Walker<'a> {
                     let dst = b.local_addr(slot);
                     let src_ty = expr_ty(self.ast.expr(*init_id)).unwrap_or(ty);
                     if self.is_int128_value_ty(ty) && !is_struct_ty(src_ty) {
-                        self.store_scalar_as_int128(b, dst, v, src_ty);
+                        self.store_scalar_as_int128(b, dst, v, src_ty, ty);
                         return Ok(());
                     }
                     let size = self.struct_size(ty);
@@ -4018,13 +4234,15 @@ impl<'a> Walker<'a> {
                 // (the struct-rvalue address-as-value rule). A cast to an
                 // integer or pointer loads the object's low 8 bytes (its
                 // value mod 2^64); the convert then narrows to `to_ty`.
-                // Without the load the address is used as the value.
-                // TODO: a floating target needs both halves scaled and
-                // summed; it currently converts the address instead.
-                if self.is_int128_value_ty(src_ty)
-                    && !is_struct_ty(*to_ty)
-                    && !is_floating_scalar(*to_ty)
-                {
+                // Without the load the address is used as the value. A
+                // floating target instead converts the whole 128-bit
+                // value (C99 6.3.1.4) through `int128_to_fp`.
+                if self.is_int128_value_ty(src_ty) && !is_struct_ty(*to_ty) {
+                    if is_floating_scalar(*to_ty) {
+                        let pair = self.int128_load(b, v);
+                        let signed = (src_ty & UNSIGNED_BIT) == 0;
+                        return Ok(self.int128_to_fp(b, pair, signed, is_float_ty(*to_ty)));
+                    }
                     let low_ty = Ty::LongLong as i64 | UNSIGNED_BIT;
                     let low = b.load(v, load_kind_for(low_ty, self.target));
                     return Ok(self.convert_scalar_value(b, low, low_ty, *to_ty));
@@ -4036,7 +4254,7 @@ impl<'a> Walker<'a> {
                 if !is_struct_ty(src_ty) && self.is_int128_value_ty(*to_ty) {
                     let slot = b.alloc_synthetic_struct(16);
                     let addr = b.local_addr(slot);
-                    self.store_scalar_as_int128(b, addr, v, src_ty);
+                    self.store_scalar_as_int128(b, addr, v, src_ty, *to_ty);
                     return Ok(addr);
                 }
                 Ok(self.convert_scalar_value(b, v, src_ty, *to_ty))

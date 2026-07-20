@@ -795,6 +795,7 @@ mod tests {
             template: Vec::new(),
             operands: Vec::new(),
             clobber_regs: 0,
+            clobber_fp_regs: 0,
             clobber_memory: true,
             volatile: true,
         });

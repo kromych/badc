@@ -4113,6 +4113,25 @@ fn builtin_constant_p() {
 // round-trip on any host; the native x86_64 encoding is checked by the
 // snapshot suite and the box validation.
 #[test]
+fn inline_asm_byte_width_keeps_upper_bits() {
+    // A byte / word operation writes only the low lane of its destination
+    // and leaves the upper bits of the object as they were.
+    let src = "
+        int main(void) {
+            unsigned long long w = 0x1122334455667788ULL;
+            asm(\"xorb $0x80, %0\" : \"+m\"(w));
+            if (w != 0x1122334455667708ULL) return 1;
+            asm(\"addw $2, %0\" : \"+m\"(w));
+            if (w != 0x112233445566770AULL) return 2;
+            asm(\"shrb $1, %0\" : \"+m\"(w));
+            if (w != 0x1122334455667705ULL) return 3;
+            return 42;
+        }
+    ";
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
 fn inline_asm_shld_double_shift() {
     // `shld count, src, dst` (AT&T) shifts `dst` left by `count`, feeding
     // in the high bits of `src`. Constraints: `+r` read-write output, `r`

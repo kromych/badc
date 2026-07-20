@@ -2231,7 +2231,7 @@ fn run_inline_asm(
                     v.wrapping_sub(1)
                 };
                 if let Some(r) = dst_reg(&ops[0]) {
-                    xregs[r] = mask_width(res, w);
+                    xregs[r] = merge_width(xregs[r], res, w);
                 }
             }
             Mnemonic::Xadd => {
@@ -2239,12 +2239,12 @@ fn run_inline_asm(
                 let (src, ssz) = value_of(&ops[0], &xregs);
                 let (dst, dsz) = value_of(&ops[1], &xregs);
                 let w = insn.suffix.unwrap_or(dsz);
-                let sum = mask_width(dst.wrapping_add(src), w);
+                let sum = dst.wrapping_add(src);
                 if let Some(r) = dst_reg(&ops[1]) {
-                    xregs[r] = sum;
+                    xregs[r] = merge_width(xregs[r], sum, w);
                 }
                 if let Some(r) = dst_reg(&ops[0]) {
-                    xregs[r] = mask_width(dst, insn.suffix.unwrap_or(ssz));
+                    xregs[r] = merge_width(xregs[r], dst, insn.suffix.unwrap_or(ssz));
                 }
             }
             Mnemonic::Cmpxchg => {
@@ -2255,10 +2255,10 @@ fn run_inline_asm(
                 let w = insn.suffix.unwrap_or(dsz);
                 if mask_width(xregs[0], w) == mask_width(dst, w) {
                     if let Some(r) = dst_reg(&ops[1]) {
-                        xregs[r] = mask_width(src, w);
+                        xregs[r] = merge_width(xregs[r], src, w);
                     }
                 } else {
-                    xregs[0] = mask_width(dst, w);
+                    xregs[0] = merge_width(xregs[0], dst, w);
                 }
             }
             Mnemonic::Shld | Mnemonic::Shrd => {
@@ -2268,7 +2268,7 @@ fn run_inline_asm(
                 let w = insn.suffix.unwrap_or(dsz);
                 let res = double_shift(insn.mnemonic == Mnemonic::Shld, dst, src, count, w);
                 if let Some(r) = dst_reg(&ops[2]) {
-                    xregs[r] = res;
+                    xregs[r] = merge_width(xregs[r], res, w);
                 }
             }
             Mnemonic::Shl | Mnemonic::Shr | Mnemonic::Sar => {
@@ -2281,7 +2281,7 @@ fn run_inline_asm(
                 };
                 let res = single_shift(insn.mnemonic, dst, count, w);
                 if let Some(r) = dst_reg(ops.last().unwrap()) {
-                    xregs[r] = mask_width(res, w);
+                    xregs[r] = merge_width(xregs[r], res, w);
                 }
             }
             Mnemonic::Or
@@ -2302,7 +2302,7 @@ fn run_inline_asm(
                     _ => src,
                 };
                 if let Some(r) = dst_reg(&ops[1]) {
-                    xregs[r] = mask_width(res, w);
+                    xregs[r] = merge_width(xregs[r], res, w);
                 }
             }
         }
@@ -2328,6 +2328,17 @@ fn mask_width(v: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
         2 => v & 0xFFFF,
         4 => v & 0xFFFF_FFFF,
         _ => v,
+    }
+}
+
+/// Write a result into a model register with x86 destination semantics: a
+/// byte or word operation leaves the upper bits of the destination intact,
+/// a 32-bit operation zero-extends to 64.
+fn merge_width(prev: i64, res: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
+    match w.bytes() {
+        1 => (prev & !0xFFi64) | (res & 0xFF),
+        2 => (prev & !0xFFFFi64) | (res & 0xFFFF),
+        _ => mask_width(res, w),
     }
 }
 

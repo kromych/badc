@@ -79,6 +79,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_clflush.c", "linux-aarch64"), // x86-64 clflush/prefetch
     ("inline_asm_x64_setjmp_label.c", "linux-aarch64"), // x86-64 asm context switch
     ("inline_asm_x64_mem_disp.c", "linux-aarch64"), // x86-64 disp(%reg) memory operands
+    ("inline_asm_x64_imm_mem.c", "linux-aarch64"), // x86-64 byte/word imm-to-memory ALU
     ("register_var_asm_operand.c", "linux-aarch64"), // x86-64 extended-asm operand pinning
     ("inline_asm_x64_sib.c", "linux-aarch64"), // x86-64 scaled-index memory operands
 ];

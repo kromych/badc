@@ -2401,6 +2401,62 @@ mod tests {
     }
 
     #[test]
+    fn byte_word_imm_to_memory_alu() {
+        // The 80 / 66 81 / 66 83 /digit immediate-to-memory family plus
+        // mov (C6 / 66 C7) and test (F6 / 66 F7), with the access width
+        // taken from the AT&T suffix or a register operand. Expected bytes
+        // from `clang --target=x86_64-unknown-linux-gnu`.
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"addb $0x11, 16(%%rdx)",   &[0x80, 0x42, 0x10, 0x11]),
+            (b"orb $0x22, (%%rdx)",      &[0x80, 0x0a, 0x22]),
+            (b"adcb $0x33, (%%rdx)",     &[0x80, 0x12, 0x33]),
+            (b"sbbb $0x44, (%%rdx)",     &[0x80, 0x1a, 0x44]),
+            (b"andb $0x55, (%%rdx)",     &[0x80, 0x22, 0x55]),
+            (b"subb $0x66, (%%rdx)",     &[0x80, 0x2a, 0x66]),
+            (b"xorb $0x80, (%%rdx)",     &[0x80, 0x32, 0x80]),
+            (b"cmpb $0x77, (%%rdx)",     &[0x80, 0x3a, 0x77]),
+            (b"movb $0x42, (%%rdx)",     &[0xc6, 0x02, 0x42]),
+            (b"testb $0x01, (%%rdx)",    &[0xf6, 0x02, 0x01]),
+            (b"addw $0x1111, 16(%%rdx)", &[0x66, 0x81, 0x42, 0x10, 0x11, 0x11]),
+            (b"orw $0x2222, (%%rdx)",    &[0x66, 0x81, 0x0a, 0x22, 0x22]),
+            (b"adcw $0x3333, (%%rdx)",   &[0x66, 0x81, 0x12, 0x33, 0x33]),
+            (b"sbbw $0x4444, (%%rdx)",   &[0x66, 0x81, 0x1a, 0x44, 0x44]),
+            (b"andw $0x5555, (%%rdx)",   &[0x66, 0x81, 0x22, 0x55, 0x55]),
+            (b"subw $0x6666, (%%rdx)",   &[0x66, 0x81, 0x2a, 0x66, 0x66]),
+            (b"xorw $0x8000, (%%rdx)",   &[0x66, 0x81, 0x32, 0x00, 0x80]),
+            (b"cmpw $0x7777, (%%rdx)",   &[0x66, 0x81, 0x3a, 0x77, 0x77]),
+            (b"movw $0x4242, (%%rdx)",   &[0x66, 0xc7, 0x02, 0x42, 0x42]),
+            (b"testw $0x0101, (%%rdx)",  &[0x66, 0xf7, 0x02, 0x01, 0x01]),
+            // A small word immediate takes the 83 imms8 short form.
+            (b"addw $8, (%%rdx)",        &[0x66, 0x83, 0x02, 0x08]),
+            // REX.B bases (r13 forces disp8=0, r12 forces a SIB).
+            (b"xorb $0x80, (%%r13)",     &[0x41, 0x80, 0x75, 0x00, 0x80]),
+            (b"xorw $0x8000, 3(%%r12)",  &[0x66, 0x41, 0x81, 0x74, 0x24, 0x03, 0x00, 0x80]),
+            // No suffix: a register operand fixes the access width.
+            (b"xor %%bl, (%%rdx)",       &[0x30, 0x1a]),
+            (b"xor %%cx, (%%rdx)",       &[0x66, 0x31, 0x0a]),
+            // The same width selection drives the unary and shift groups.
+            (b"notb (%%rdx)",            &[0xf6, 0x12]),
+            (b"negb (%%rdx)",            &[0xf6, 0x1a]),
+            (b"incb (%%rdx)",            &[0xfe, 0x02]),
+            (b"decb (%%rdx)",            &[0xfe, 0x0a]),
+            (b"shlb $3, (%%rdx)",        &[0xc0, 0x22, 0x03]),
+            (b"shrw $3, (%%rdx)",        &[0x66, 0xc1, 0x2a, 0x03]),
+            (b"notw (%%rdx)",            &[0x66, 0xf7, 0x12]),
+            (b"incw (%%rdx)",            &[0x66, 0xff, 0x02]),
+        ];
+        for (tmpl, want) in cases {
+            assert_eq!(
+                asm_bytes(tmpl),
+                *want,
+                "template {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    #[test]
     fn segment_and_sib_operands() {
         // Segment-override and scaled-index forms vs clang
         // (`clang --target=x86_64-unknown-linux-gnu`).

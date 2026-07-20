@@ -2208,9 +2208,6 @@ fn run_inline_asm(
                 // Spin-hint / flags-push / breakpoint: no observable effect
                 // on the VM's register model (a debugger is not attached).
             }
-            Mnemonic::Pop => {
-                // No modelled machine stack; leave the destination as-is.
-            }
             Mnemonic::Movd => {
                 // No modelled MMX register file. A read into a GPR (the AT&T
                 // destination is a GPR: reg < 16) yields zero; a write into an

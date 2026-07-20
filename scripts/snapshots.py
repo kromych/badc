@@ -40,14 +40,17 @@ def repo_root() -> Path:
 
 
 def ensure_badc(root: Path) -> Path:
+    # Always rebuild: a stale binary compiles a fixture it does not
+    # understand as a skip, and a skip unlinks that fixture's snapshots,
+    # so the run reports no drift while removing content. The CLI needs
+    # `full`; without it the build leaves whatever binary was there.
     badc = root / "target" / "release" / "badc"
-    if not badc.is_file():
-        print("[snapshots] building badc release...", flush=True)
-        subprocess.run(
-            ["cargo", "build", "--release", "--quiet"],
-            cwd=root,
-            check=True,
-        )
+    print("[snapshots] building badc release...", flush=True)
+    subprocess.run(
+        ["cargo", "build", "--release", "--quiet", "--features", "full"],
+        cwd=root,
+        check=True,
+    )
     return badc
 
 

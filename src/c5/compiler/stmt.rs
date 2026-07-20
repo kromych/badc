@@ -1403,8 +1403,15 @@ impl Compiler {
             // The lexer appended the constraint bytes to the data
             // section; copy them out and drop them.
             let cstart = self.lex.ival as usize;
-            let cbytes: alloc::vec::Vec<u8> = self.data[cstart..].to_vec();
             self.next()?; // consume the constraint string
+            // C99 5.1.1.2 phase 6: adjacent string literals concatenate, as
+            // for the template above. Condition-code output macros are
+            // commonly spelled `"=@cc" "c"`, so the constraint is only
+            // complete once the following `"` tokens are consumed.
+            while self.lex.tk == '"' {
+                self.next()?;
+            }
+            let cbytes: alloc::vec::Vec<u8> = self.data[cstart..].to_vec();
             self.data.truncate(cstart);
             let cstr = core::str::from_utf8(&cbytes).unwrap_or("");
             if section >= 3 {

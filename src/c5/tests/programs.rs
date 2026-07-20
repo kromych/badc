@@ -269,6 +269,14 @@ fn cpuid_partial_outputs() {
 }
 
 #[test]
+fn get_cpuid_leaf_checks() {
+    // <cpuid.h> __get_cpuid / __get_cpuid_count range-check the leaf against
+    // __get_cpuid_max, select the extended maximum for leaves with bit 31 set,
+    // and leave the outputs untouched when they reject one.
+    assert_eq!(run_fixture("get_cpuid_leaf_checks.c"), 0);
+}
+
+#[test]
 fn cacheflush_asm() {
     // AArch64 `mrs ctr_el0` / `dc cvau` / `ic ivau` / `dsb ish` / `isb`
     // (a common cache-flush sequence) as fixed-encoding intrinsics. Run

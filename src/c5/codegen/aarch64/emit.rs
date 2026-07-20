@@ -2651,6 +2651,16 @@ fn emit_inst(
             // value.
             true
         }
+        Inst::InlineAsm { asm, .. } => {
+            // An empty template is a pure ordering barrier (`asm
+            // volatile("" ::: "memory")` and the no-unroll idiom): the
+            // SSA passes already refuse to move accesses across the
+            // instruction, and it encodes no machine bytes. Operands
+            // only extend their values' live ranges. Non-empty
+            // templates are not lowered on aarch64.
+            // TODO: general aarch64 extended-asm lowering.
+            asm.template.iter().all(|b| b.is_ascii_whitespace())
+        }
         _ => false,
     }
 }

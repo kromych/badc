@@ -1043,6 +1043,16 @@ pub struct Compiler {
     /// against `labels` at function end; an unresolved entry is
     /// a compile error.
     unresolved_gotos: Vec<String>,
+    /// One entry per open block, holding that block's `__label__`
+    /// declarations as (source name, unique key). A label name is
+    /// resolved by scanning the stack from the innermost block out,
+    /// so an inner declaration shadows an outer one and two sibling
+    /// blocks declaring the same name get distinct keys. Cleared at
+    /// every function start.
+    local_label_scopes: Vec<Vec<(String, String)>>,
+    /// Counter making each `__label__` declaration's key unique
+    /// within the function.
+    local_label_seq: u32,
     /// Per nested `switch` body: drained at switch close. The
     /// AST emitter records each case's constant on its `Stmt::Case`
     /// node; this stack is the parser-side depth tracker that
@@ -1607,6 +1617,8 @@ impl Compiler {
             nest_depth: 0,
             labels: Vec::new(),
             unresolved_gotos: Vec::new(),
+            local_label_scopes: Vec::new(),
+            local_label_seq: 0,
             switch_cases: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),

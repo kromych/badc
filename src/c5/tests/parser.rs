@@ -364,6 +364,148 @@ fn unresolved_goto_label() {
     expect_compile_error("int main() { goto nowhere; return 0; }", "unresolved label");
 }
 
+// GCC local labels (`__label__`). The accept/reject split below matches
+// gcc; clang differs on one case, noted at that test.
+
+#[test]
+fn local_label_binds_within_its_block() {
+    expect_compiles(
+        "int main() { __label__ done; if (1) goto done; done: return 0; }",
+        "a `__label__` defined in the declaring block",
+    );
+}
+
+#[test]
+fn local_label_same_name_in_sibling_blocks() {
+    // The point of the extension: each block's `l` is a separate label,
+    // so this is not a redefinition.
+    expect_compiles(
+        "int main() { { __label__ l; goto l; l: ; } { __label__ l; goto l; l: ; } return 0; }",
+        "one name declared `__label__` by two sibling blocks",
+    );
+}
+
+#[test]
+fn local_label_declaration_shadows_outer_one() {
+    expect_compiles(
+        "int main() { __label__ l; { __label__ l; goto l; l: ; } goto l; l: return 0; }",
+        "an inner `__label__` shadowing an outer one",
+    );
+}
+
+#[test]
+fn local_label_declaration_lists_several_names() {
+    expect_compiles(
+        "int main() { __label__ a, b; if (1) goto a; goto b; a: ; b: return 0; }",
+        "several names in one `__label__` declaration",
+    );
+}
+
+#[test]
+fn consecutive_local_label_declarations() {
+    expect_compiles(
+        "int main() { __label__ a; __label__ b; goto a; a: ; goto b; b: return 0; }",
+        "two `__label__` declarations leading one block",
+    );
+}
+
+#[test]
+fn local_label_reachable_from_nested_block() {
+    expect_compiles(
+        "int main() { __label__ l; { { goto l; } } l: return 0; }",
+        "a `goto` in a nested block targeting an enclosing local label",
+    );
+}
+
+#[test]
+fn address_of_local_label() {
+    expect_compiles(
+        "int main() { __label__ l; void *p = &&l; if (p) goto *p; l: return 0; }",
+        "`&&label` naming a local label",
+    );
+}
+
+#[test]
+fn local_label_declared_but_unused() {
+    // gcc accepts a local label that is never referenced; clang rejects
+    // it. Follow gcc: the declaration alone constrains nothing.
+    expect_compiles(
+        "int main() { __label__ l; return 0; }",
+        "an unreferenced `__label__` declaration",
+    );
+}
+
+#[test]
+fn local_label_in_a_statement_expression() {
+    // The motivating case: two expansions of one macro in a function,
+    // each defining the label its own body declares.
+    expect_compiles(
+        "int main(void) { int a = ({ __label__ o; int r = 0; goto o; o: ; r; }); \
+         int b = ({ __label__ o; int r = 1; goto o; o: ; r; }); return a + b - 1; }",
+        "a `__label__` in each of two statement expressions",
+    );
+}
+
+#[test]
+fn local_label_declared_but_not_defined() {
+    expect_compile_error(
+        "int main() { __label__ done; if (1) goto done; return 0; }",
+        "unresolved label: done",
+    );
+}
+
+#[test]
+fn goto_local_label_from_outside_its_block() {
+    // The declaration's scope ended with the block, so the `goto` names
+    // a function-scoped label that no statement defines.
+    expect_compile_error(
+        "int main() { { __label__ l; l: ; } goto l; return 0; }",
+        "unresolved label: l",
+    );
+}
+
+#[test]
+fn local_label_defined_twice_within_its_scope() {
+    expect_compile_error(
+        "int main() { __label__ l; { l: ; } l: return 0; }",
+        "redefinition of label `l`",
+    );
+}
+
+#[test]
+fn duplicate_local_label_declaration() {
+    expect_compile_error(
+        "int main() { __label__ l; __label__ l; goto l; l: return 0; }",
+        "duplicate local label declaration `l`",
+    );
+}
+
+#[test]
+fn local_label_declaration_after_a_statement() {
+    expect_compile_error(
+        "int main() { int x = 0; __label__ l; goto l; l: return x; }",
+        "`__label__` must appear at the start of its block",
+    );
+}
+
+#[test]
+fn local_label_declaration_after_a_nested_statement() {
+    expect_compile_error(
+        "int main() { { ; __label__ l; goto l; l: ; } return 0; }",
+        "`__label__` must appear at the start of its block",
+    );
+}
+
+#[test]
+fn address_of_undefined_label() {
+    // gcc and clang both reject taking the address of a label that no
+    // statement defines.
+    expect_compile_error(
+        "int main() { void *p = &&nowhere; return p != 0; }",
+        "unresolved label: nowhere",
+    );
+}
+
 #[test]
 fn missing_close_paren_in_if() {
     expect_compile_error("int main() { if (1 return 0; }", "close paren expected");

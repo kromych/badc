@@ -774,6 +774,42 @@ impl Compiler {
     /// statement may. Each declaration's bindings shadow outer
     /// symbols for the duration of the block and are restored on
     /// exit.
+    /// Parse `__label__ name, ... ;` and bind each name in the block
+    /// whose scope is currently innermost. GCC requires the declaration
+    /// to lead its block, before any other declaration or statement;
+    /// the callers enforce that by only dispatching here while no other
+    /// item has been parsed.
+    pub(super) fn parse_local_label_decl(&mut self) -> Result<(), C5Error> {
+        self.next()?; // consume `__label__`
+        loop {
+            if self.lex.tk != Token::Id {
+                return Err(self.compile_err("label name expected in `__label__` declaration"));
+            }
+            let name = self.symbols[self.lex.curr_id_idx].name.clone();
+            self.next()?;
+            let scope = self
+                .local_label_scopes
+                .last()
+                .expect("a block scope is open while parsing its `__label__` declaration");
+            if scope.iter().any(|(declared, _)| declared == &name) {
+                return Err(self.compile_err(format!("duplicate local label declaration `{name}`")));
+            }
+            let key = format!("{name}#{}", self.local_label_seq);
+            self.local_label_seq += 1;
+            self.local_label_scopes
+                .last_mut()
+                .expect("a block scope is open while parsing its `__label__` declaration")
+                .push((name, key));
+            if self.lex.tk == ',' {
+                self.next()?;
+                continue;
+            }
+            break;
+        }
+        self.consume(b';', "semicolon expected after `__label__` declaration")?;
+        Ok(())
+    }
+
     fn parse_block_stmt(&mut self) -> Result<super::super::ast::StmtId, C5Error> {
         self.next()?;
         self.cleanup_scopes.push(alloc::vec::Vec::new());
@@ -782,6 +818,9 @@ impl Compiler {
         // shadow same-named tags in any enclosing scope and go out of
         // scope when the block exits.
         self.tag_scopes.push(alloc::vec::Vec::new());
+        // GCC local labels declared by this block; see
+        // `Compiler::resolve_label_name`.
+        self.local_label_scopes.push(alloc::vec::Vec::new());
         let mut block_symbols = Vec::new();
 
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
@@ -789,7 +828,18 @@ impl Compiler {
         // storage reclaimed on block exit. Track whether any appears so
         // the block is bracketed with the stack save / restore.
         let mut block_has_vla = false;
+        let mut at_block_start = true;
         while self.lex.tk != '}' {
+            if self.lex.tk == Token::LocalLabel {
+                if !at_block_start {
+                    return Err(
+                        self.compile_err("`__label__` must appear at the start of its block")
+                    );
+                }
+                self.parse_local_label_decl()?;
+                continue;
+            }
+            at_block_start = false;
             // C23 6.7.13 / 6.8: an attribute-specifier-sequence may
             // lead either a declaration or a statement at block scope.
             // Consume it, then dispatch on the following token.
@@ -989,6 +1039,7 @@ impl Compiler {
         // `self.structs` stays reachable by id for any reference the
         // outer scope already holds.
         self.tag_scopes.pop();
+        self.local_label_scopes.pop();
         Ok(block_id)
     }
 
@@ -1399,10 +1450,14 @@ impl Compiler {
                 }
                 let name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
-                if !self.labels.iter().any(|n| n == &name) {
-                    self.unresolved_gotos.push(name.clone());
+                // `label_names` stays the name as written: the template
+                // references it as `%l[name]`. Only the binding resolves
+                // through the local-label scopes.
+                let key = self.resolve_label_name(&name);
+                if !self.labels.iter().any(|n| n == &key) {
+                    self.unresolved_gotos.push(key.clone());
                 }
-                label_ids.push(self.ast_label_by_name(&name));
+                label_ids.push(self.ast_label_by_name(&key));
                 label_names.push(name);
                 continue;
             }
@@ -2730,13 +2785,17 @@ impl Compiler {
         // load an assignment lvalue needs.
         self.pending.fn_ptr_chain_depth = -1;
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b':') {
-            let name = self.symbols[self.lex.curr_id_idx].name.clone();
+            let name = self.resolve_label_name(&self.symbols[self.lex.curr_id_idx].name.clone());
             // C99 6.8.1p3: a label name must be unique within its
-            // function (constraint). Two labeled statements with the same
-            // name would intern one SSA block and re-terminate it in the
-            // walker.
+            // function (constraint), and a `__label__` name within the
+            // block that declares it. Two labeled statements with the
+            // same name would intern one SSA block and re-terminate it
+            // in the walker.
             if self.labels.iter().any(|n| n == &name) {
-                return Err(self.compile_err(format!("redefinition of label `{name}`")));
+                return Err(self.compile_err(format!(
+                    "redefinition of label `{}`",
+                    super::emit::label_display_name(&name)
+                )));
             }
             self.labels.push(name.clone());
             let label = self.ast_label_by_name(&name);
@@ -2933,7 +2992,8 @@ impl Compiler {
                 if self.lex.tk != Token::Id {
                     return Err(self.compile_err("expected identifier after goto"));
                 }
-                let target_name = self.symbols[self.lex.curr_id_idx].name.clone();
+                let target_name =
+                    self.resolve_label_name(&self.symbols[self.lex.curr_id_idx].name.clone());
                 self.next()?;
 
                 self.flush_pending_stores();

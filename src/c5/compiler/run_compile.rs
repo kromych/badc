@@ -1224,6 +1224,8 @@ impl Compiler {
                     self.multi_cell_temps.clear();
                     self.labels.clear();
                     self.unresolved_gotos.clear();
+                    self.local_label_scopes.clear();
+                    self.local_label_seq = 0;
                     self.uses_alloca_in_current_fn = false;
                     self.func_vla_decls = 0;
                     self.ast_reset();
@@ -1377,7 +1379,21 @@ impl Compiler {
                     // `__attribute__((cleanup))` variables; cleaned on
                     // fall-through (below) and on every `return`.
                     self.cleanup_scopes.push(alloc::vec::Vec::new());
+                    // GCC local labels declared by the body's top-level
+                    // block; see `Compiler::resolve_label_name`.
+                    self.local_label_scopes.push(alloc::vec::Vec::new());
+                    let mut at_block_start = true;
                     while self.lex.tk != '}' {
+                        if self.lex.tk == Token::LocalLabel {
+                            if !at_block_start {
+                                return Err(self.compile_err(
+                                    "`__label__` must appear at the start of its block",
+                                ));
+                            }
+                            self.parse_local_label_decl()?;
+                            continue;
+                        }
+                        at_block_start = false;
                         // C23 6.7.13 / 6.8: an attribute-specifier-
                         // sequence may lead either a declaration or a
                         // statement at the function-body top level.
@@ -1461,6 +1477,7 @@ impl Compiler {
                     }
                     self.cleanup_scopes.pop();
                     self.tag_scopes.pop();
+                    self.local_label_scopes.pop();
                     // Wrap the function's top-level stmts into a
                     // Compound and pin it as `ast.body` so the
                     // walker has a single tree root to descend
@@ -1551,7 +1568,10 @@ impl Compiler {
 
                     for name in &self.unresolved_gotos {
                         if !self.labels.iter().any(|n| n == name) {
-                            return Err(self.compile_err(format!("unresolved label: {}", name)));
+                            return Err(self.compile_err(format!(
+                                "unresolved label: {}",
+                                super::emit::label_display_name(name)
+                            )));
                         }
                     }
 

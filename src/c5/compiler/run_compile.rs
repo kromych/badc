@@ -1801,17 +1801,48 @@ impl Compiler {
                             super::MAX_STATIC_ALIGN
                         )));
                     }
-                    let decl_align: usize = if req_align > 8 {
-                        if thread_local {
+                    // The object's alignment is the wider of what this
+                    // declarator asked for and what its type already
+                    // requires: an `aligned(64)` member raises its whole
+                    // aggregate, so `struct S g;` needs a 64-aligned slot
+                    // with no attribute in sight.
+                    let want_align =
+                        core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty));
+                    if want_align > super::MAX_OBJECT_ALIGN {
+                        return Err(self.compile_err(format!(
+                            "object alignment {want_align} is not supported \
+                             (at most {}); the type may still be used for layout",
+                            super::MAX_OBJECT_ALIGN
+                        )));
+                    }
+                    let decl_align: usize = if want_align > 8 {
+                        if thread_local && (req_align > 8 || want_align > 16) {
                             return Err(self.compile_err(
                                 "alignment above 8 is not supported for `_Thread_local` objects",
                             ));
                         }
-                        self.data_align = self.data_align.max(req_align as usize);
-                        req_align as usize
+                        self.data_align = self.data_align.max(want_align);
+                        want_align
                     } else {
                         8
                     };
+                    // Align the data cursor before any of the branches
+                    // below reserve storage, so a tentative or zero-init
+                    // definition starts on the object's boundary.
+                    if decl_align > 8 {
+                        self.align_data_to(decl_align);
+                    }
+                    // An object with an initializer takes its offset from
+                    // the initializer writer, which does not preserve a
+                    // boundary wider than 16. Diagnose rather than
+                    // under-align it.
+                    // TODO: align the initialized-object path and drop this.
+                    if want_align > 16 && self.lex.tk == Token::Assign {
+                        return Err(self.compile_err(format!(
+                            "initialised object of a {want_align}-byte-aligned type is \
+                             not supported (at most 16); leave it zero-initialised"
+                        )));
+                    }
                     let was_extern_only_decl =
                         extern_seen && self.lex.tk != Token::Assign && array_size != -1;
                     // `extern struct S s;` whose `struct S` has no fixed

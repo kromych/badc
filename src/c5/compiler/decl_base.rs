@@ -173,11 +173,9 @@ impl Compiler {
         };
         let id = if self.lex.tk == '{' {
             let id = self.parse_aggregate_body(&name, is_union, packed)?;
-            // `struct name { ... } __attribute__((packed))`: the attribute
-            // follows the body. Re-pack the already-laid-out fields.
-            if self.skip_attribute_specifiers()? {
-                self.repack_struct(id);
-            }
+            // `struct name { ... } __attribute__((...))`: the attributes
+            // follow the body and apply to the aggregate just laid out.
+            self.apply_post_body_attributes(id)?;
             id
         } else {
             // A trailing attribute on a tag use without a body
@@ -714,9 +712,9 @@ impl Compiler {
                 if self.lex.tk != '(' {
                     return Err(self.compile_err("`(` expected after attribute specifier"));
                 }
-                // C11 6.7.5 `_Alignas(constant-expression)`. The
-                // type-name form's alignment never exceeds 8 in this
-                // dialect and stays advisory.
+                // C11 6.7.5 `_Alignas(constant-expression)` and
+                // `_Alignas(type-name)`, the latter equivalent to
+                // `_Alignas(_Alignof(type-name))`.
                 if is_alignas {
                     self.next()?; // (
                     if self.lex.tk == Token::Num {
@@ -724,6 +722,20 @@ impl Compiler {
                         align = align.max(n);
                         if self.lex.tk != ')' {
                             return Err(self.compile_err("`)` expected after `_Alignas` operand"));
+                        }
+                        self.next()?;
+                    } else if self.lex_is_type_start() {
+                        let mut ty = self.parse_decl_base_type()?;
+                        while self.lex.tk == Token::MulOp {
+                            self.next()?;
+                            ty += Ty::Ptr as i64;
+                            while self.lex.tk == Token::TypeQual {
+                                self.next()?;
+                            }
+                        }
+                        align = align.max(self.align_of_type(ty) as i64);
+                        if self.lex.tk != ')' {
+                            return Err(self.compile_err("`)` expected after `_Alignas` type"));
                         }
                         self.next()?;
                     } else {

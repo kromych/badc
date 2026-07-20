@@ -1211,8 +1211,9 @@ impl Compiler {
             // GCC `__int128` / `__int128_t` / `__uint128_t` (and, via the
             // modifier soup, `unsigned __int128`): a 16-byte integer type,
             // modeled as a 16-byte aggregate for layout / sizeof / copy.
+            let tag = self.lex_int128_tag(m.saw_unsigned);
             self.next()?;
-            self.builtin_int128_tag()
+            tag
         } else if self.is_lex_va_list_spelling() {
             // GCC `__builtin_va_list`: the target's `va_list`
             // representation, usable with no header.
@@ -1292,6 +1293,9 @@ impl Compiler {
                 bt = m.char_tag(self.target.plain_char_signed());
             } else if base_tok == Token::Double && m.saw_long() {
                 self.pending.base_was_long_double = true;
+            } else if m.saw_unsigned && self.is_int128_ty(bt) {
+                // Trailing modifier form `__int128 unsigned`.
+                bt |= UNSIGNED_BIT;
             }
         }
 

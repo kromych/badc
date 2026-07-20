@@ -590,14 +590,16 @@ impl Compiler {
         // for `float`, f64 for `double`).
         let value = if var_is_float {
             self.to_storage_bits(
-                cv.as_float().to_bits() as i64,
+                cv.as_float().to_bits() as i128,
                 super::initializer::InitElemReloc::Float64Bits,
                 var_ty,
             )
         } else {
-            cv.as_int()
+            cv.as_i128()
         };
-        let write_size = if var_is_float {
+        // Integer slots are preallocated 8 bytes wide; the 16-byte
+        // integer needs both halves written.
+        let write_size = if var_is_float || self.is_int128_ty(var_ty) {
             self.size_of_type(var_ty)
         } else {
             8

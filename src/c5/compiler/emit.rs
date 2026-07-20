@@ -1400,7 +1400,16 @@ impl Compiler {
             return;
         };
         let pos = self.ast_src_pos();
-        let ty = self.ty;
+        // C99 6.5.8p6 / 6.5.9p3: a relational or equality operator yields
+        // `int` whatever the operands are. The parser still holds an
+        // operand type here (it retags after the emit, since the flavour
+        // pick reads both operand types), so stamp the result type here
+        // rather than leaving consumers to infer it from the operands.
+        let ty = if crate::c5::ast::walk::is_comparison_op(op) {
+            super::super::token::Ty::Int as i64
+        } else {
+            self.ty
+        };
         let id = self
             .ast
             .push_expr(super::super::ast::Expr::Binary { op, lhs, rhs, ty }, pos);

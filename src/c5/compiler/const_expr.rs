@@ -35,7 +35,7 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, integer_promote, is_floating_ty, is_pointer_ty, is_struct_ty, is_unsigned_ty,
-    narrow_const_int, strip_unsigned, struct_id_of, struct_ptr_depth, usual_arith_common_ty,
+    narrow_const_int, strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
 /// Compile-time arithmetic value of a constant expression. Integer
@@ -52,11 +52,11 @@ use super::types::{
 /// (`0xFFFFFFFFFFFFFFFFULL / 3` divides unsigned; `-1 < 1u`
 /// compares at `unsigned int`). Invariant: `val` holds the value
 /// in `ty`'s representation -- sign-extended for a signed type,
-/// zero-extended for an unsigned type narrower than 8 bytes, raw
-/// bits for an unsigned 8-byte type.
+/// zero-extended for an unsigned type narrower than 16 bytes, raw
+/// bits for an unsigned 16-byte type.
 #[derive(Copy, Clone, Debug)]
 pub(super) enum ConstVal {
-    Int { val: i64, ty: i64 },
+    Int { val: i128, ty: i64 },
     Float(f64),
 }
 
@@ -121,7 +121,7 @@ impl ConstVal {
     /// the other places C99 mandates `int`.
     fn int(v: i64) -> ConstVal {
         ConstVal::Int {
-            val: v,
+            val: v as i128,
             ty: Ty::Int as i64,
         }
     }
@@ -130,9 +130,15 @@ impl ConstVal {
     /// C's "cast to integer" semantics for the destination integer
     /// constant expression.
     pub(super) fn as_int(self) -> i64 {
+        self.as_i128() as i64
+    }
+
+    /// The full 128-bit value. The 16-byte integer initializer path needs
+    /// both halves; every other caller truncates via [`Self::as_int`].
+    pub(super) fn as_i128(self) -> i128 {
         match self {
             ConstVal::Int { val, .. } => val,
-            ConstVal::Float(v) => v as i64,
+            ConstVal::Float(v) => v as i128,
         }
     }
 
@@ -194,12 +200,14 @@ impl Compiler {
             };
             let bytes = self.size_of_type(pty);
             let uns = is_unsigned_ty(pty);
-            let lv = narrow_const_int(bytes, uns, false, l.as_int());
-            let sh = (r.as_int() & 63) as u32;
+            let lv = narrow_const_int(bytes, uns, false, l.as_i128());
+            // C99 6.5.7p3 leaves an out-of-range count undefined; mask to
+            // the promoted type's width, as the emitted shifts do.
+            let sh = (r.as_i128() as u32) & (bytes as u32 * 8 - 1);
             let v = if op == B::Shl {
-                (lv as u64).wrapping_shl(sh) as i64
+                (lv as u128).wrapping_shl(sh) as i128
             } else if uns {
-                ((lv as u64) >> sh) as i64
+                ((lv as u128) >> sh) as i128
             } else {
                 lv.wrapping_shr(sh)
             };
@@ -211,12 +219,12 @@ impl Compiler {
         let common = if ptr {
             Ty::LongLong as i64
         } else {
-            usual_arith_common_ty(a_ty, b_ty, self.target)
+            self.arith_common_ty(a_ty, b_ty)
         };
         let bytes = self.size_of_type(common);
         let uns = is_unsigned_ty(common);
-        let lv = narrow_const_int(bytes, uns, false, l.as_int());
-        let rv = narrow_const_int(bytes, uns, false, r.as_int());
+        let lv = narrow_const_int(bytes, uns, false, l.as_i128());
+        let rv = narrow_const_int(bytes, uns, false, r.as_i128());
         let val = match op {
             B::Or => lv | rv,
             B::Xor => lv ^ rv,
@@ -231,8 +239,8 @@ impl Compiler {
                     }
                     0
                 } else if uns {
-                    let (a, b) = (lv as u64, rv as u64);
-                    (if op == B::Rem { a % b } else { a / b }) as i64
+                    let (a, b) = (lv as u128, rv as u128);
+                    (if op == B::Rem { a % b } else { a / b }) as i128
                 } else if op == B::Rem {
                     lv.wrapping_rem(rv)
                 } else {
@@ -241,7 +249,7 @@ impl Compiler {
             }
             B::Lt | B::Le | B::Gt | B::Ge | B::Eq | B::Ne => {
                 let hold = if uns {
-                    let (a, b) = (lv as u64, rv as u64);
+                    let (a, b) = (lv as u128, rv as u128);
                     match op {
                         B::Lt => a < b,
                         B::Le => a <= b,
@@ -284,6 +292,12 @@ impl Compiler {
     /// under `-Wpedantic`).
     pub(super) fn parse_constant_int(&mut self) -> Result<i64, C5Error> {
         Ok(self.parse_const_expr_cond_val()?.as_int())
+    }
+
+    /// As [`Self::parse_constant_int`], keeping all 128 bits. Used by the
+    /// initializer paths, whose destination may be the 16-byte integer.
+    pub(super) fn parse_constant_i128(&mut self) -> Result<i128, C5Error> {
+        Ok(self.parse_const_expr_cond_val()?.as_i128())
     }
 
     /// Try to fold an array-declarator dimension to an integer
@@ -735,7 +749,7 @@ impl Compiler {
     /// type (C99 6.5.3.3: `-` and `~` apply the integer promotions
     /// and yield the promoted type). Pointer-typed operands keep
     /// their full-width value.
-    fn const_unary_promoted(&self, v: i64, operand_ty: i64) -> ConstVal {
+    fn const_unary_promoted(&self, v: i128, operand_ty: i64) -> ConstVal {
         if is_pointer_ty(operand_ty) {
             return ConstVal::Int {
                 val: v,
@@ -776,7 +790,7 @@ impl Compiler {
         if self.lex.tk == '~' {
             self.next()?;
             let v = self.parse_const_expr_unary_val()?;
-            return Ok(self.const_unary_promoted(!v.as_int(), v.int_ty()));
+            return Ok(self.const_unary_promoted(!v.as_i128(), v.int_ty()));
         }
         if self.lex.tk == Token::AndOp {
             // Address constant: full-width, no arithmetic conversion. A
@@ -792,7 +806,7 @@ impl Compiler {
                 ));
             }
             return Ok(ConstVal::Int {
-                val: a.value,
+                val: a.value as i128,
                 ty: Ty::Ptr as i64,
             });
         }
@@ -804,7 +818,7 @@ impl Compiler {
             self.next()?;
             let v = self.sizeof_operand_bytes()?;
             return Ok(ConstVal::Int {
-                val: v,
+                val: v as i128,
                 ty: self.size_t_ty(),
             });
         }
@@ -814,7 +828,7 @@ impl Compiler {
             self.next()?;
             let v = self.alignof_operand_bytes()?;
             return Ok(ConstVal::Int {
-                val: v,
+                val: v as i128,
                 ty: self.size_t_ty(),
             });
         }
@@ -895,7 +909,7 @@ impl Compiler {
                 .parse_builtin_offsetof(false)?
                 .expect("offsetof without a runtime subscript folds to a constant");
             return Ok(ConstVal::Int {
-                val: v,
+                val: v as i128,
                 ty: self.size_t_ty(),
             });
         }
@@ -1218,7 +1232,7 @@ impl Compiler {
                             bytes,
                             is_unsigned_ty(target_ty),
                             is_bool,
-                            v.as_int(),
+                            v.as_i128(),
                         ),
                         ty: target_ty,
                     }
@@ -1237,7 +1251,7 @@ impl Compiler {
             let v = self.lex.ival;
             let ty = self.literal_auto_promoted_type(v);
             self.next()?;
-            return Ok(ConstVal::Int { val: v, ty });
+            return Ok(ConstVal::Int { val: v as i128, ty });
         }
         if self.lex.tk == '"' {
             // String literal in a constant expression -- evaluates
@@ -1253,7 +1267,7 @@ impl Compiler {
             }
             self.data.push(0);
             return Ok(ConstVal::Int {
-                val: addr,
+                val: addr as i128,
                 ty: Ty::Ptr as i64,
             });
         }
@@ -1282,7 +1296,7 @@ impl Compiler {
             } else {
                 Ty::LongLong as i64
             };
-            return Ok(ConstVal::Int { val: v, ty });
+            return Ok(ConstVal::Int { val: v as i128, ty });
         }
         // C99 6.6 leaves it implementation-defined, but GCC and common
         // practice fold a `const`-qualified integer object with static
@@ -1308,7 +1322,7 @@ impl Compiler {
                     }
                     self.symbols[idx].was_referenced = true;
                     self.next()?;
-                    return Ok(ConstVal::Int { val: v, ty });
+                    return Ok(ConstVal::Int { val: v as i128, ty });
                 }
             }
         }

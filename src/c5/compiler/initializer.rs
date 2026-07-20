@@ -272,7 +272,7 @@ impl Compiler {
     /// Non-FP elem types and FP values destined for pointer
     /// slots (Data / Code relocs) pass through unchanged. Callers
     /// write `size_of_type(elem_ty)` low bytes of the result.
-    pub(super) fn to_storage_bits(&self, value: i64, reloc: InitElemReloc, elem_ty: i64) -> i64 {
+    pub(super) fn to_storage_bits(&self, value: i128, reloc: InitElemReloc, elem_ty: i64) -> i128 {
         let stripped = elem_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
         let is_float = stripped == Ty::Float as i64;
         let is_double = stripped == Ty::Double as i64;
@@ -282,7 +282,7 @@ impl Compiler {
             // toward zero); without this the raw IEEE-754 bit pattern
             // would land in the slot (e.g. `int a[] = {1.5}` -> 0).
             if matches!(reloc, InitElemReloc::Float64Bits) {
-                return f64::from_bits(value as u64) as i64;
+                return f64::from_bits(value as u64) as i128;
             }
             return value;
         }
@@ -296,7 +296,7 @@ impl Compiler {
         // a `static float arr[N] = { 1.0f, ... }` initializer.
         let f64_bits = match reloc {
             InitElemReloc::Float64Bits => value,
-            InitElemReloc::None => (value as f64).to_bits() as i64,
+            InitElemReloc::None => (value as f64).to_bits() as i128,
             // Data / Code relocs land in pointer-typed slots, not
             // FP slots; the upstream paths reject the type mix
             // before reaching here.
@@ -304,7 +304,7 @@ impl Compiler {
         };
         if is_float {
             let f = f64::from_bits(f64_bits as u64) as f32;
-            return f.to_bits() as i64;
+            return f.to_bits() as i128;
         }
         f64_bits
     }
@@ -312,11 +312,11 @@ impl Compiler {
     /// Write `n_bytes` little-endian bytes of `value` into
     /// `self.data` at byte offset `here`. Caller has already
     /// grown `self.data` to at least `here + n_bytes`.
-    fn write_init_bytes(&mut self, here: usize, value: i64, n_bytes: usize) {
-        // `value` carries at most 8 significant bytes; zero a wider
+    fn write_init_bytes(&mut self, here: usize, value: i128, n_bytes: usize) {
+        // `value` carries at most 16 significant bytes; zero a wider
         // destination's tail rather than wrapping the shift count.
         for i in 0..n_bytes {
-            self.data[here + i] = if i < 8 { (value >> (i * 8)) as u8 } else { 0 };
+            self.data[here + i] = if i < 16 { (value >> (i * 8)) as u8 } else { 0 };
         }
     }
 
@@ -359,7 +359,7 @@ impl Compiler {
     pub(super) fn collect_array_initializer(
         &mut self,
         elem_ty: i64,
-    ) -> Result<Vec<(i64, InitElemReloc)>, C5Error> {
+    ) -> Result<Vec<(i128, InitElemReloc)>, C5Error> {
         self.with_nesting("initializer", |c| {
             c.collect_array_initializer_inner(elem_ty)
         })
@@ -368,7 +368,7 @@ impl Compiler {
     fn collect_array_initializer_inner(
         &mut self,
         elem_ty: i64,
-    ) -> Result<Vec<(i64, InitElemReloc)>, C5Error> {
+    ) -> Result<Vec<(i128, InitElemReloc)>, C5Error> {
         // 2D inner-dim hint -- callers set this when the declarator
         // shape is `T xs[N][M]` so a nested `{ row }` that lists
         // fewer than M values gets zero-padded per C99 6.7.8p21
@@ -458,14 +458,14 @@ impl Compiler {
                     self.data.truncate(start_addr + elem_count * w);
                 }
             }
-            let elems: Vec<(i64, InitElemReloc)> = (0..elem_count)
+            let elems: Vec<(i128, InitElemReloc)> = (0..elem_count)
                 .map(|k| {
                     let base = start_addr + k * w;
                     let mut v: i64 = 0;
                     for b in 0..w {
                         v |= (self.data[base + b] as i64) << (b * 8);
                     }
-                    (v, InitElemReloc::None)
+                    (v as i128, InitElemReloc::None)
                 })
                 .collect();
             if brace_wrapped {
@@ -487,9 +487,9 @@ impl Compiler {
             if store_nul {
                 self.data.push(0);
             }
-            let elems: Vec<(i64, InitElemReloc)> = self.data[start_addr..]
+            let elems: Vec<(i128, InitElemReloc)> = self.data[start_addr..]
                 .iter()
-                .map(|&b| (b as i64, InitElemReloc::None))
+                .map(|&b| (b as i128, InitElemReloc::None))
                 .collect();
             if brace_wrapped {
                 self.expect_close_brace_after_wrapped_string()?;
@@ -503,7 +503,7 @@ impl Compiler {
             );
         }
         self.next()?;
-        let mut elements: Vec<(i64, InitElemReloc)> = Vec::new();
+        let mut elements: Vec<(i128, InitElemReloc)> = Vec::new();
         // C99 6.7.8 designated initializers: a `[N] = ...` clause
         // sets the write position to N; subsequent positional
         // entries (and chained `[K] = ...` clauses) continue
@@ -653,7 +653,7 @@ impl Compiler {
                         } else {
                             0
                         };
-                        elements[dst + k] = (b, InitElemReloc::None);
+                        elements[dst + k] = (b as i128, InitElemReloc::None);
                     }
                 }
                 // The string's bytes were appended to the data segment by
@@ -676,7 +676,7 @@ impl Compiler {
             // a plain entry fills the single slot at `cursor`.
             let end = desig_range_end.take().unwrap_or(cursor + 1);
             if elements.len() < end {
-                elements.resize(end, (0, InitElemReloc::None));
+                elements.resize(end, (0i128, InitElemReloc::None));
             }
             elements[cursor..end].fill((value, reloc));
             cursor = end;
@@ -696,7 +696,7 @@ impl Compiler {
     pub(super) fn pack_initializer_into_data(
         &mut self,
         elem_ty: i64,
-        elements: &[(i64, InitElemReloc)],
+        elements: &[(i128, InitElemReloc)],
     ) -> (usize, usize) {
         let elem_size = self.size_of_type(elem_ty);
         let start_addr = self.data.len();
@@ -714,7 +714,7 @@ impl Compiler {
                 let here = start_addr + idx * elem_size;
                 let bits = self.to_storage_bits(v, reloc, elem_ty);
                 self.write_init_bytes(here, bits, elem_size);
-                self.push_init_reloc(here, v, reloc);
+                self.push_init_reloc(here, v as i64, reloc);
             }
         }
         (start_addr, elements.len() * elem_size)
@@ -912,7 +912,7 @@ impl Compiler {
     /// integer). Returns the selected arm and consumes the closing `)`,
     /// or restores the lexer and returns `None` when the parens do not
     /// hold a conditional (so the caller's other paren handling runs).
-    fn try_const_cond_init_value(&mut self) -> Result<Option<(i64, InitElemReloc)>, C5Error> {
+    fn try_const_cond_init_value(&mut self) -> Result<Option<(i128, InitElemReloc)>, C5Error> {
         let snap = self.lex.snapshot();
         let data_snap = self.data.len();
         let restore = |s: &mut Self| {
@@ -965,7 +965,7 @@ impl Compiler {
         Ok(Some(if cond != 0 { then_arm } else { else_arm }))
     }
 
-    pub(super) fn parse_constant_init_value(&mut self) -> Result<(i64, InitElemReloc), C5Error> {
+    pub(super) fn parse_constant_init_value(&mut self) -> Result<(i128, InitElemReloc), C5Error> {
         // C11 6.5.1.1 generic selection as an aggregate initializer
         // element: select the association, then evaluate the winning
         // expression as a constant (which may itself be an address).
@@ -996,7 +996,7 @@ impl Compiler {
                         self.next()?;
                         if self.lex.tk == '{' && is_struct_ty(cl_ty) {
                             let (off, sym_idx) = self.emit_compound_literal_body(cl_ty)?;
-                            return Ok((off, InitElemReloc::Data(Some(sym_idx))));
+                            return Ok((off as i128, InitElemReloc::Data(Some(sym_idx))));
                         }
                     }
                 }
@@ -1018,7 +1018,7 @@ impl Compiler {
                     || self.lex.tk == ':'
                     || self.lex.tk == ')')
             {
-                return Ok((off, InitElemReloc::Data(Some(sym_idx))));
+                return Ok((off as i128, InitElemReloc::Data(Some(sym_idx))));
             }
             self.lex.restore(snap);
         }
@@ -1032,7 +1032,7 @@ impl Compiler {
         {
             let snap = self.lex.snapshot();
             let data_snap = self.data.len();
-            let mut selected: Option<(i64, InitElemReloc)> = None;
+            let mut selected: Option<(i128, InitElemReloc)> = None;
             if let Ok(cond) = self.parse_const_expr_or()
                 && self.lex.tk == Token::Cond
             {
@@ -1068,9 +1068,9 @@ impl Compiler {
                 let bits = self
                     .parse_const_expr_add_from(ConstVal::Float(f64::from_bits(v as u64)))?
                     .as_float();
-                return Ok((bits.to_bits() as i64, InitElemReloc::Float64Bits));
+                return Ok((bits.to_bits() as i128, InitElemReloc::Float64Bits));
             }
-            return Ok((v, InitElemReloc::Float64Bits));
+            return Ok((v as i128, InitElemReloc::Float64Bits));
         }
         // Negative float / integer literal: `-1.5e+020` lexes as
         // `-` followed by FloatNum, and `-42` as `-` followed by
@@ -1096,13 +1096,13 @@ impl Compiler {
                     let folded = self
                         .parse_const_expr_add_from(ConstVal::Float(f64::from_bits(bits as u64)))?
                         .as_float();
-                    return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
+                    return Ok((folded.to_bits() as i128, InitElemReloc::Float64Bits));
                 }
-                return Ok((bits, InitElemReloc::Float64Bits));
+                return Ok((bits as i128, InitElemReloc::Float64Bits));
             }
             if self.lex.tk == Token::Num {
                 self.lex.restore(snap);
-                let v = self.parse_constant_int()?;
+                let v = self.parse_constant_i128()?;
                 return Ok((v, InitElemReloc::None));
             }
             return Err(self.compile_err(format!(
@@ -1120,9 +1120,9 @@ impl Compiler {
                     let folded = self
                         .parse_const_expr_add_from(ConstVal::Float(f64::from_bits(bits)))?
                         .as_float();
-                    return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
+                    return Ok((folded.to_bits() as i128, InitElemReloc::Float64Bits));
                 }
-                return Ok((bits as i64, InitElemReloc::Float64Bits));
+                return Ok((bits as i128, InitElemReloc::Float64Bits));
             }
             if self.lex.tk == Token::Num {
                 // Leading `-Num` may head a binary integer chain
@@ -1134,7 +1134,7 @@ impl Compiler {
                 // `parse_constant_int`, which honours the C99 6.6
                 // precedence chain.
                 self.lex.restore(snap);
-                let v = self.parse_constant_int()?;
+                let v = self.parse_constant_i128()?;
                 return Ok((v, InitElemReloc::None));
             }
             // peek said "digit next", so the lexer must have
@@ -1159,7 +1159,7 @@ impl Compiler {
             self.lex.restore(snap);
             if signed_float_paren {
                 let bits = self.parse_const_expr_add_val()?.as_float();
-                return Ok((bits.to_bits() as i64, InitElemReloc::Float64Bits));
+                return Ok((bits.to_bits() as i128, InitElemReloc::Float64Bits));
             }
         }
         // `(type)expr` cast or `(expr)` parenthesized constant in a
@@ -1217,8 +1217,8 @@ impl Compiler {
                 if !self.post_cast_is_reloc_leaf()? {
                     self.lex.restore(snap);
                     return Ok(match self.parse_const_expr_cond_val()? {
-                        ConstVal::Float(f) => (f.to_bits() as i64, InitElemReloc::Float64Bits),
-                        v @ ConstVal::Int { .. } => (v.as_int(), InitElemReloc::None),
+                        ConstVal::Float(f) => (f.to_bits() as i128, InitElemReloc::Float64Bits),
+                        v @ ConstVal::Int { .. } => (v.as_i128(), InitElemReloc::None),
                     });
                 }
                 // Optional function-pointer abstract declarator
@@ -1272,7 +1272,7 @@ impl Compiler {
                         val: v,
                         ty: Ty::Int as i64,
                     })?;
-                    return Ok((folded.as_int(), InitElemReloc::None));
+                    return Ok((folded.as_i128(), InitElemReloc::None));
                 }
                 return Ok((v, reloc));
             }
@@ -1316,9 +1316,9 @@ impl Compiler {
                     let folded = self
                         .parse_const_expr_add_from(ConstVal::Float(v))?
                         .as_float();
-                    return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
+                    return Ok((folded.to_bits() as i128, InitElemReloc::Float64Bits));
                 }
-                return Ok((v.to_bits() as i64, InitElemReloc::Float64Bits));
+                return Ok((v.to_bits() as i128, InitElemReloc::Float64Bits));
             }
             // Nested cast around a string literal:
             // `((const T *)"...")` is a common header idiom for
@@ -1362,7 +1362,7 @@ impl Compiler {
             // initializer can use `((char *)"...")` and
             // `&((T *)0)->field` shapes inside arithmetic.
             self.lex.restore(snap);
-            let v = self.parse_constant_int()?;
+            let v = self.parse_constant_i128()?;
             return Ok((v, InitElemReloc::None));
         }
         if self.lex.tk == '"' {
@@ -1372,7 +1372,7 @@ impl Compiler {
                 self.next()?;
             }
             self.data.push(0);
-            return Ok((addr, InitElemReloc::Data(None)));
+            return Ok((addr as i128, InitElemReloc::Data(None)));
         }
         if self.lex.tk == Token::AndOp {
             // A static initializer leaf that begins with `&` folds to a
@@ -1389,7 +1389,7 @@ impl Compiler {
                 Some(idx) => InitElemReloc::Data(Some(idx)),
                 None => InitElemReloc::None,
             };
-            return Ok((a.value, reloc));
+            return Ok((a.value as i128, reloc));
         }
         if self.lex.tk == Token::Id {
             let idx = self.lex.curr_id_idx;
@@ -1400,7 +1400,7 @@ impl Compiler {
             if self.is_func_name_ident() {
                 let off = self.intern_func_name();
                 self.next()?;
-                return Ok((off, InitElemReloc::Data(None)));
+                return Ok((off as i128, InitElemReloc::Data(None)));
             }
             // C99 6.5.1: an identifier must be declared before use. An
             // undeclared identifier as an initializer element has no
@@ -1427,7 +1427,7 @@ impl Compiler {
                 self.symbols[idx].was_referenced = true;
                 let ent_pc = self.symbols[idx].val;
                 self.next()?;
-                return Ok((ent_pc, InitElemReloc::Code(idx)));
+                return Ok((ent_pc as i128, InitElemReloc::Code(idx)));
             }
             if class == Token::Num as i64 {
                 // Integer constant -- either a bare enum / macro
@@ -1437,7 +1437,7 @@ impl Compiler {
                 // trailing operator chain is folded in per C99
                 // 6.6, instead of returning the head value and
                 // leaving the operator to fail downstream.
-                let v = self.parse_constant_int()?;
+                let v = self.parse_constant_i128()?;
                 return Ok((v, InitElemReloc::None));
             }
             if class == Token::Sys as i64 {
@@ -1523,7 +1523,7 @@ impl Compiler {
                     off += n * stride;
                     depth += 1;
                 }
-                return Ok((off, InitElemReloc::Data(Some(idx))));
+                return Ok((off as i128, InitElemReloc::Data(Some(idx))));
             }
             return Err(self.compile_err(format!(
                 "identifier `{}` is not a constant-expression value",
@@ -1531,7 +1531,7 @@ impl Compiler {
             )));
         }
         // Fall back to integer literal (with optional unary `-`).
-        let v = self.parse_constant_int()?;
+        let v = self.parse_constant_i128()?;
         Ok((v, InitElemReloc::None))
     }
 
@@ -1544,7 +1544,7 @@ impl Compiler {
     fn parse_array_compound_literal(
         &mut self,
         elem_ty: i64,
-    ) -> Result<(i64, InitElemReloc), C5Error> {
+    ) -> Result<(i128, InitElemReloc), C5Error> {
         self.next()?; // consume `[`
         let declared_size: i64 = if self.lex.tk == ']' {
             -1
@@ -1606,7 +1606,7 @@ impl Compiler {
             self.data.push(0);
         }
         let sym_idx = self.intern_compound_literal_symbol(off, elem_ty);
-        Ok((off, InitElemReloc::Data(Some(sym_idx))))
+        Ok((off as i128, InitElemReloc::Data(Some(sym_idx))))
     }
 
     /// Create a synthetic internal `__compound.N` symbol anchored at
@@ -1815,7 +1815,7 @@ impl Compiler {
         let mut i = 0;
         while i < fields.len() && (!is_union || i == 0) {
             let f = &fields[i];
-            let elem = if is_struct_ty(f.ty) && struct_ptr_depth(f.ty) == 0 {
+            let elem = if self.is_traversable_aggregate_ty(f.ty) {
                 self.struct_flat_init_slots(struct_id_of(f.ty))
             } else {
                 1
@@ -2307,7 +2307,7 @@ impl Compiler {
                     };
                     let mem = self.structs[struct_id].fields[mem_idx].clone();
                     let mem_base = (var_offset as usize) + mem.offset;
-                    if is_struct_ty(mem.ty) && struct_ptr_depth(mem.ty) == 0 && self.lex.tk == '{' {
+                    if self.is_traversable_aggregate_ty(mem.ty) && self.lex.tk == '{' {
                         self.collect_struct_initializer_t(
                             struct_id_of(mem.ty),
                             target.rebased(mem_base as i64),
@@ -2552,7 +2552,7 @@ impl Compiler {
                 self.write_init_value(
                     field_base + idx,
                     1,
-                    b as i64,
+                    b as i128,
                     super::initializer::InitElemReloc::None,
                     field.ty,
                 );
@@ -2602,7 +2602,13 @@ impl Compiler {
                         v |= (self.data[base + b] as i64) << (b * 8);
                     }
                 }
-                self.write_init_value(field_base + idx * w, w, v, InitElemReloc::None, field.ty);
+                self.write_init_value(
+                    field_base + idx * w,
+                    w,
+                    v as i128,
+                    InitElemReloc::None,
+                    field.ty,
+                );
             }
         } else if field.array_size > 0 && self.lex.tk == '{' {
             self.next()?;
@@ -2617,7 +2623,7 @@ impl Compiler {
             for b in &mut self.data[field_base..field_base + region] {
                 *b = 0;
             }
-            let elem_is_struct = is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0;
+            let elem_is_struct = self.is_traversable_aggregate_ty(field.ty);
             let elem_sid = if elem_is_struct {
                 Some(struct_id_of(field.ty))
             } else {
@@ -2737,7 +2743,7 @@ impl Compiler {
                     break;
                 }
             }
-        } else if is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0 {
+        } else if self.is_traversable_aggregate_ty(field.ty) {
             let nested_sid = struct_id_of(field.ty);
             if self.lex.tk == '{' {
                 self.collect_struct_initializer(nested_sid, field_base as i64)?;
@@ -2777,7 +2783,7 @@ impl Compiler {
                 (1i64 << bit_width) - 1
             };
             let cleared = unit_value & !(mask << bit_offset);
-            let merged = cleared | ((value & mask) << bit_offset);
+            let merged = cleared | (((value as i64) & mask) << bit_offset);
             for i in 0..unit_bytes {
                 self.data[field_base + i] = ((merged >> (i * 8)) & 0xFF) as u8;
             }
@@ -2921,7 +2927,7 @@ impl Compiler {
         // A nested aggregate member initialized by a brace list (or a
         // compound literal naming its type) recurses through the shared
         // traversal at the member's offset (C99 6.7.8p13).
-        if is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0 && self.lex.tk == '{' {
+        if self.is_traversable_aggregate_ty(field.ty) && self.lex.tk == '{' {
             self.collect_struct_initializer_t(
                 struct_id_of(field.ty),
                 InitTarget::Runtime {
@@ -2965,8 +2971,7 @@ impl Compiler {
         // C99 6.7.8p13: a struct member may be initialized by a single
         // compatible struct expression (copied); a scalar value would be
         // brace elision into its sub-fields, which this path can't model.
-        if is_struct_ty(field.ty)
-            && struct_ptr_depth(field.ty) == 0
+        if self.is_traversable_aggregate_ty(field.ty)
             && !(is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0)
         {
             return Err(self
@@ -3076,13 +3081,13 @@ impl Compiler {
         &mut self,
         here: usize,
         field_size: usize,
-        value: i64,
+        value: i128,
         reloc: InitElemReloc,
         elem_ty: i64,
     ) {
         let bits = self.to_storage_bits(value, reloc, elem_ty);
         self.write_init_bytes(here, bits, field_size);
-        self.push_init_reloc(here, value, reloc);
+        self.push_init_reloc(here, value as i64, reloc);
     }
 
     /// Write packed initializer bytes into `self.data` at
@@ -3096,7 +3101,7 @@ impl Compiler {
         &mut self,
         var_offset: i64,
         elem_ty: i64,
-        elements: &[(i64, InitElemReloc)],
+        elements: &[(i128, InitElemReloc)],
     ) {
         let elem_size = self.size_of_type(elem_ty);
         let mut byte_off = var_offset as usize;
@@ -3108,7 +3113,7 @@ impl Compiler {
             // so the reloc-push helper's None branch is the only
             // one that fires for elem_size == 1. Keeping the call
             // unconditional drops the size-1 special case.
-            self.push_init_reloc(byte_off, v, reloc);
+            self.push_init_reloc(byte_off, v as i64, reloc);
             byte_off += elem_size;
         }
     }

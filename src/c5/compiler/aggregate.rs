@@ -300,8 +300,9 @@ impl Compiler {
             } else if self.is_lex_int128_spelling() {
                 // GCC `__int128` / `__uint128_t` field: a 16-byte type.
                 // Needed for kernel-UAPI structs (`asm/sigcontext.h`).
+                let tag = self.lex_int128_tag(mods.saw_unsigned);
                 self.next()?;
-                self.builtin_int128_tag()
+                tag
             } else if self.is_lex_va_list_spelling() {
                 // GCC `__builtin_va_list` field: the target's `va_list`
                 // representation.

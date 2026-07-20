@@ -89,20 +89,20 @@ pub(crate) fn is_volatile_ty(ty: i64) -> bool {
 /// included). Used by the constant-expression evaluator so a cast
 /// like `(int)UINT_MAX` folds to `-1` at parse time rather than
 /// retaining the un-narrowed operand.
-pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i64) -> i64 {
+pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i128) -> i128 {
     if is_bool {
-        return (v != 0) as i64;
+        return (v != 0) as i128;
     }
-    if bytes >= 8 {
+    if bytes >= 16 {
         return v;
     }
     let bits = (bytes * 8) as u32;
-    let mask: i64 = ((1u64 << bits) - 1) as i64;
+    let mask: i128 = ((1u128 << bits) - 1) as i128;
     let truncated = v & mask;
     if unsigned {
         truncated
     } else {
-        let sign_bit: i64 = 1i64 << (bits - 1);
+        let sign_bit: i128 = 1i128 << (bits - 1);
         (truncated ^ sign_bit).wrapping_sub(sign_bit)
     }
 }

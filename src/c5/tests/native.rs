@@ -918,6 +918,19 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // GCC 128-bit integer as a 16-byte type: sizeof, struct/array layout
     // (asm/sigcontext.h shape), by-value copy.
     ("int128_type_layout.c", 0),
+    // GCC 128-bit integer arithmetic, expanded over the two 64-bit
+    // halves: add / sub / neg / bitwise / increment with carry and
+    // borrow, shifts across the halfway point, the widening 64x64
+    // product, signed and unsigned comparison edges, and division /
+    // remainder with the C99 6.5.5 truncation-toward-zero sign rules.
+    ("int128_arith.c", 0),
+    ("int128_shift.c", 0),
+    ("int128_mul.c", 0),
+    ("int128_cmp.c", 0),
+    ("int128_divmod.c", 0),
+    ("int128_unary.c", 0),
+    ("int128_scalar_result.c", 0),
+    ("int128_struct_member.c", 0),
     // C99 7.13.2.1p3 / 6.7.3p6 / 5.1.2.3p2: volatile objects keep
     // their post-longjmp value, are re-read through aliases, and
     // unused volatile reads still execute.

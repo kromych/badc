@@ -18,6 +18,7 @@ use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, is_type_start_token,
     pointee_size_no_struct, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
+    usual_arith_common_ty,
 };
 use super::{StructDef, StructField};
 
@@ -147,12 +148,11 @@ impl Compiler {
     /// Type tag for the GCC 128-bit integer (`__int128` / `__uint128_t`).
     /// badc models it as a 16-byte aggregate `{ long long; long long; }`:
     /// declarations, struct / array layout, `sizeof`, and by-value copies
-    /// go through the struct machinery, while 128-bit arithmetic is an
-    /// aggregate-operand error (see `reject_aggregate_binop`) rather than
-    /// a silent truncation. Two `long long` fields make it exactly 16
-    /// bytes on every target (LLP64 `long` would be 8). Registered once,
-    /// on first use. Needed to parse Linux kernel-UAPI headers
-    /// (`asm/sigcontext.h`'s `__uint128_t vregs[32]`).
+    /// go through the struct machinery. The operators are expanded by the
+    /// walker over the two 64-bit halves, so the type stays an integer
+    /// type to the front end (see `arith_common_ty`). Two `long long`
+    /// fields make it exactly 16 bytes on every target (LLP64 `long`
+    /// would be 8). Registered once, on first use.
     pub(super) fn builtin_int128_tag(&mut self) -> i64 {
         if let Some(id) = self.structs.iter().position(|s| s.name == "__int128") {
             return struct_ty_for(id);
@@ -287,6 +287,20 @@ impl Compiler {
         }
         let id = struct_id_of(t);
         self.structs.get(id).is_some_and(|s| s.name == "__int128")
+    }
+
+    /// C99 6.3.1.8 usual arithmetic conversions, with the GCC 128-bit
+    /// integer ranked above every standard integer type. Two 128-bit
+    /// operands take the unsigned flavor when either is unsigned; a
+    /// 128-bit operand against a narrower type keeps its own
+    /// signedness, since it represents every value of that type.
+    pub(super) fn arith_common_ty(&self, a: i64, b: i64) -> i64 {
+        match (self.is_int128_ty(a), self.is_int128_ty(b)) {
+            (true, true) => a | (b & UNSIGNED_BIT),
+            (true, false) => a,
+            (false, true) => b,
+            (false, false) => usual_arith_common_ty(a, b, self.target),
+        }
     }
 
     /// Synthesize the aggregate that models a GCC `vector_size(n_bytes)` vector

@@ -237,9 +237,29 @@ fn zero_length_local_array() {
 fn int128_type_layout() {
     // GCC `__int128` / `__int128_t` / `__uint128_t` / `unsigned __int128`
     // as a 16-byte type: sizeof, struct / array layout (the aarch64
-    // asm/sigcontext.h shape), and by-value copy. 128-bit arithmetic is
-    // rejected separately (struct_value_arithmetic_is_rejected).
+    // asm/sigcontext.h shape), and by-value copy. The operators are
+    // covered by `int128_arithmetic`.
     assert_eq!(run_fixture("int128_type_layout.c"), 0);
+}
+
+#[test]
+fn int128_arithmetic() {
+    // GCC 128-bit integer arithmetic, expanded by the walker over the
+    // two 64-bit halves. Each fixture cross-checks against the values
+    // gcc / clang produce for the same expressions.
+    //   add / sub / neg / bitwise / ++ / -- with carry and borrow,
+    //   compound-assignment chains, mixed scalar operands
+    assert_eq!(run_fixture("int128_arith.c"), 0);
+    //   shifts by 0 / 1 / 63 / 64 / 65 / 127, constant and runtime
+    //   counts, logical and arithmetic right shift
+    assert_eq!(run_fixture("int128_shift.c"), 0);
+    //   the widening 64x64 -> 128 product and the wrapping 128-bit one
+    assert_eq!(run_fixture("int128_mul.c"), 0);
+    //   equality and all orderings, signed vs unsigned edges
+    assert_eq!(run_fixture("int128_cmp.c"), 0);
+    //   division / remainder, small and larger-than-64-bit divisors,
+    //   C99 6.5.5p6 truncation toward zero
+    assert_eq!(run_fixture("int128_divmod.c"), 0);
 }
 
 #[test]
@@ -3763,6 +3783,28 @@ fn struct_value_arithmetic_is_rejected() {
         Compiler::new(ok.to_string())
             .compile()
             .expect("valid struct pointer / member arithmetic must compile");
+    }
+
+    // The GCC 128-bit integer shares the aggregate layout machinery but
+    // is an integer type: every operator above is valid on it. The
+    // rejection must key on the plain struct / union case alone.
+    let int128_ok = [
+        "int f(__int128 a, __int128 b){return (int)(a+b);}",
+        "int f(__int128 a, __int128 b){return (int)(a*b);}",
+        "int f(unsigned __int128 a, unsigned __int128 b){return (int)(a/b);}",
+        "int f(__int128 a, int b){return (int)(a<<b);}",
+        "int f(__int128 a, __int128 b){return a<b;}",
+        "int f(__int128 a, __int128 b){return a==b;}",
+        "int f(__int128 a, int b){return (int)(a|b);}",
+        "int f(__int128 a){return a ? 1 : 0;}",
+        "int f(__int128 a, __int128 b){a+=b; return (int)a;}",
+        "int f(__int128 a){++a; return (int)a;}",
+    ];
+    for src in int128_ok {
+        let src = alloc::format!("{src} int main(void){{return 0;}}");
+        Compiler::new(src.clone())
+            .compile()
+            .unwrap_or_else(|e| panic!("128-bit integer arithmetic must compile: {src:?}: {e}"));
     }
 }
 

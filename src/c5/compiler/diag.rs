@@ -496,6 +496,19 @@ impl Compiler {
             return None;
         }
 
+        // The GCC 128-bit integer against an integer or pointer is a
+        // value conversion (C99 6.3.1.3), not a struct mismatch.
+        let is_int128 = |ty: i64| {
+            is_struct_ty(ty)
+                && struct_ptr_depth(ty) == 0
+                && structs
+                    .get(super::types::struct_id_of(ty))
+                    .is_some_and(|s| s.name == "__int128")
+        };
+        if is_int128(declared) != is_int128(actual) && !(decl_is_struct && act_is_struct) {
+            return None;
+        }
+
         // Struct types must match exactly (when one side is a struct).
         if decl_is_struct || act_is_struct {
             // Already returned None above when declared == actual; if we

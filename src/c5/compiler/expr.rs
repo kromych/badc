@@ -506,10 +506,9 @@ impl Compiler {
     /// C99 6.5.5-6.5.14: the arithmetic, bitwise, shift, relational,
     /// equality, and logical operators require scalar operands. Reject a
     /// struct / union *value* operand (a pointer to one is a scalar and
-    /// is fine) so `struct + struct` and 128-bit `__int128` arithmetic
-    /// surface an error instead of silently operating on the operand's
-    /// address. Called by each value-computing binary branch after both
-    /// operand types are known.
+    /// is fine) so `struct + struct` surfaces an error instead of
+    /// silently operating on the operand's address. Called by each
+    /// value-computing binary branch after both operand types are known.
     fn reject_aggregate_binop(&self, lhs_ty: i64, rhs_ty: i64, op: &str) -> Result<(), C5Error> {
         // GCC vector extension: a bitwise operator on two same-width vector
         // values is element-wise (no inter-lane carry, so the walker lowers it
@@ -522,11 +521,112 @@ impl Compiler {
         {
             return Ok(());
         }
+        // The GCC 128-bit integer shares the aggregate layout machinery
+        // but is an integer type: the walker expands each operator over
+        // its two 64-bit halves.
+        if self.is_int128_ty(lhs_ty) || self.is_int128_ty(rhs_ty) {
+            return Ok(());
+        }
         let is_aggregate_value = |ty: i64| is_struct_ty(ty) && struct_ptr_depth(ty) == 0;
         if is_aggregate_value(lhs_ty) || is_aggregate_value(rhs_ty) {
             return Err(self.compile_err(format!("invalid operands to binary `{op}`")));
         }
         Ok(())
+    }
+
+    /// Opcode for `E1 op= E2` given the operand types. C99 6.5.16.2p3:
+    /// the operation is `E1 op E2`, so divide / modulo signedness
+    /// follows the 6.3.1.8 common type of both operands, not the lvalue
+    /// alone (`int x; x /= 2u` divides unsigned). Pointer operands keep
+    /// the lvalue's signedness (no arithmetic common type). The shift
+    /// operators take the lvalue's signedness alone (6.5.7 promotes the
+    /// operands separately).
+    fn compound_assign_binop(
+        &self,
+        binop: i64,
+        lhs_ty: i64,
+        rhs_ty: i64,
+        op_is_fp: bool,
+    ) -> Result<super::super::ir::BinOp, C5Error> {
+        let div_unsigned = if op_is_fp || is_pointer_ty(lhs_ty) || is_pointer_ty(rhs_ty) {
+            is_unsigned_ty(lhs_ty)
+        } else {
+            is_unsigned_ty(self.arith_common_ty(lhs_ty, rhs_ty))
+        };
+        use super::super::ir::BinOp as B;
+        Ok(match binop {
+            x if x == Token::AddOp as i64 => {
+                if op_is_fp {
+                    B::Fadd
+                } else {
+                    B::Add
+                }
+            }
+            x if x == Token::SubOp as i64 => {
+                if op_is_fp {
+                    B::Fsub
+                } else {
+                    B::Sub
+                }
+            }
+            x if x == Token::MulOp as i64 => {
+                if op_is_fp {
+                    B::Fmul
+                } else {
+                    B::Mul
+                }
+            }
+            x if x == Token::DivOp as i64 => {
+                if op_is_fp {
+                    B::Fdiv
+                } else if div_unsigned {
+                    B::Divu
+                } else {
+                    B::Div
+                }
+            }
+            x if x == Token::ModOp as i64 => {
+                if div_unsigned {
+                    B::Modu
+                } else {
+                    B::Mod
+                }
+            }
+            x if x == Token::AndOp as i64 => B::And,
+            x if x == Token::OrOp as i64 => B::Or,
+            x if x == Token::XorOp as i64 => B::Xor,
+            x if x == Token::ShlOp as i64 => B::Shl,
+            x if x == Token::ShrOp as i64 => {
+                if is_unsigned_ty(lhs_ty) {
+                    B::Shru
+                } else {
+                    B::Shr
+                }
+            }
+            _ => return Err(self.compile_err("unknown compound-assign opcode")),
+        })
+    }
+
+    /// The lvalue and type for a `++` / `--` operand that cannot use the
+    /// generic trailing-load rewrite and must build `Expr::PreInc` /
+    /// `Expr::PostInc` directly: a bitfield member (its load is a
+    /// shift-and-mask sequence, not one scalar load) and the GCC 128-bit
+    /// integer (its lvalue's value is its address, so there is no
+    /// trailing load at all).
+    fn direct_inc_lvalue(&self) -> Option<(super::super::ast::ExprId, i64)> {
+        let lv = self.ast_acc?;
+        if let super::super::ast::Expr::Member {
+            bitfield: Some(_),
+            ty,
+            ..
+        } = self.ast.expr(lv)
+        {
+            return Some((lv, *ty));
+        }
+        if self.is_int128_ty(self.ty) {
+            return Some((lv, self.ty));
+        }
+        None
     }
 
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
@@ -2448,21 +2548,7 @@ impl Compiler {
             // helpers that pop the vstack regardless of whether the
             // build succeeded, so by the time `ast_emit_pre_inc`
             // fires the lvalue would otherwise be gone.
-            // A bitfield member cannot use the generic load-rewrite path;
-            // build Expr::PreInc over the bitfield Member directly (read
-            // old, store old +/- 1, yield the new value).
-            let bf_pre = self.ast_acc.and_then(|lv| {
-                if let super::super::ast::Expr::Member {
-                    bitfield: Some(_),
-                    ty,
-                    ..
-                } = self.ast.expr(lv)
-                {
-                    Some((lv, *ty))
-                } else {
-                    None
-                }
-            });
+            let bf_pre = self.direct_inc_lvalue();
             if let Some((lv, ety)) = bf_pre {
                 let by = if t == Token::Inc as i64 { 1 } else { -1 };
                 let src = self.ast_src_pos();
@@ -2571,6 +2657,10 @@ impl Compiler {
                             || x == Token::AndOp as i64
                             || x == Token::OrOp as i64
                     ))
+                // The GCC 128-bit integer is an integer type; the
+                // per-operator branch below routes it to the walker's
+                // half-pair expansion.
+                && !self.is_int128_ty(t)
             {
                 return Err(
                     self.compile_err("invalid operands to binary operator (aggregate type)")
@@ -2960,6 +3050,36 @@ impl Compiler {
                     self.ty = vec_ty;
                     continue;
                 }
+                // The GCC 128-bit integer: its lvalue's value is its
+                // address, so there is no trailing scalar load for the
+                // path below to rewrite. Build the `CompoundAssign`
+                // node directly; the walker evaluates the lvalue once
+                // (C99 6.5.16.2p3) and expands the operator over the
+                // two 64-bit halves.
+                if self.is_int128_ty(t) {
+                    let lhs_node = compound_lhs_ast
+                        .ok_or_else(|| self.compile_err("bad lvalue in compound assignment"))?;
+                    let lhs_ty = t;
+                    let pos = self.ast_src_pos();
+                    self.next()?;
+                    self.expr(Token::Assign as i64)?;
+                    let rhs_node = self
+                        .ast_acc
+                        .ok_or_else(|| self.compile_err("bad rhs in compound assignment"))?;
+                    let bop = self.compound_assign_binop(binop, lhs_ty, self.ty, false)?;
+                    let node = self.ast.push_expr(
+                        super::super::ast::Expr::CompoundAssign {
+                            op: bop,
+                            lhs: lhs_node,
+                            rhs: rhs_node,
+                            ty: lhs_ty,
+                        },
+                        pos,
+                    );
+                    self.ast_acc = Some(node);
+                    self.ty = lhs_ty;
+                    continue;
+                }
                 self.next()?;
                 // Rewrite the trailing load into a Psh so the
                 // address sits on the c5 stack across the compound
@@ -3052,70 +3172,7 @@ impl Compiler {
                 // converts the result back to the lvalue's integer
                 // type (C99 6.5.16.2).
                 let op_is_fp = lhs_is_fp || rhs_is_fp;
-                // C99 6.5.16.2p3: `E1 op= E2` computes `E1 op E2`, so
-                // divide / modulo signedness follows the 6.3.1.8 common
-                // type of both operands, not the lvalue alone (`int x;
-                // x /= 2u` divides unsigned). Pointer operands keep the
-                // lvalue's signedness (no arithmetic common type).
-                let div_unsigned = if op_is_fp || is_pointer_ty(lhs_ty) || is_pointer_ty(rhs_ty) {
-                    is_unsigned_ty(lhs_ty)
-                } else {
-                    is_unsigned_ty(usual_arith_common_ty(lhs_ty, rhs_ty, self.target))
-                };
-                use super::super::ir::BinOp as B;
-                let bop = match binop {
-                    x if x == Token::AddOp as i64 => {
-                        if op_is_fp {
-                            B::Fadd
-                        } else {
-                            B::Add
-                        }
-                    }
-                    x if x == Token::SubOp as i64 => {
-                        if op_is_fp {
-                            B::Fsub
-                        } else {
-                            B::Sub
-                        }
-                    }
-                    x if x == Token::MulOp as i64 => {
-                        if op_is_fp {
-                            B::Fmul
-                        } else {
-                            B::Mul
-                        }
-                    }
-                    x if x == Token::DivOp as i64 => {
-                        if op_is_fp {
-                            B::Fdiv
-                        } else if div_unsigned {
-                            B::Divu
-                        } else {
-                            B::Div
-                        }
-                    }
-                    x if x == Token::ModOp as i64 => {
-                        if div_unsigned {
-                            B::Modu
-                        } else {
-                            B::Mod
-                        }
-                    }
-                    x if x == Token::AndOp as i64 => B::And,
-                    x if x == Token::OrOp as i64 => B::Or,
-                    x if x == Token::XorOp as i64 => B::Xor,
-                    x if x == Token::ShlOp as i64 => B::Shl,
-                    x if x == Token::ShrOp as i64 => {
-                        if is_unsigned_ty(lhs_ty) {
-                            B::Shru
-                        } else {
-                            B::Shr
-                        }
-                    }
-                    _ => {
-                        return Err(self.compile_err("unknown compound-assign opcode"));
-                    }
-                };
+                let bop = self.compound_assign_binop(binop, lhs_ty, rhs_ty, op_is_fp)?;
                 self.ast_binop(bop);
                 self.ty = lhs_ty;
                 self.ast_assign();
@@ -3198,7 +3255,7 @@ impl Compiler {
                     result_ty = if arms_fp {
                         fp_result_ty(then_ty, else_ty)
                     } else {
-                        usual_arith_common_ty(then_ty, else_ty, self.target)
+                        self.arith_common_ty(then_ty, else_ty)
                     };
                 } else if then_ptr || else_ptr {
                     // C99 6.5.15p6, in order: a null pointer constant arm
@@ -3335,7 +3392,7 @@ impl Compiler {
                 self.ty = if is_vector_ty(&self.structs, lhs_ty) {
                     lhs_ty
                 } else {
-                    usual_arith_common_ty(lhs_ty, self.ty, self.target)
+                    self.arith_common_ty(lhs_ty, self.ty)
                 };
                 self.ast_binop(crate::c5::ir::BinOp::Or);
             } else if self.lex.tk == Token::XorOp {
@@ -3348,7 +3405,7 @@ impl Compiler {
                 self.ty = if is_vector_ty(&self.structs, lhs_ty) {
                     lhs_ty
                 } else {
-                    usual_arith_common_ty(lhs_ty, self.ty, self.target)
+                    self.arith_common_ty(lhs_ty, self.ty)
                 };
                 self.ast_binop(crate::c5::ir::BinOp::Xor);
             } else if self.lex.tk == Token::AndOp {
@@ -3361,7 +3418,7 @@ impl Compiler {
                 self.ty = if is_vector_ty(&self.structs, lhs_ty) {
                     lhs_ty
                 } else {
-                    usual_arith_common_ty(lhs_ty, self.ty, self.target)
+                    self.arith_common_ty(lhs_ty, self.ty)
                 };
                 self.ast_binop(crate::c5::ir::BinOp::And);
             } else if self.lex.tk == Token::EqOp || self.lex.tk == Token::NeOp {
@@ -3397,7 +3454,7 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, name)?;
                     self.ast_binop(fp_op);
-                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty, self.target)) {
+                } else if is_unsigned_ty(self.arith_common_ty(t, self.ty)) {
                     self.ast_binop(unsigned_op);
                 } else {
                     self.ast_binop(signed_op);
@@ -3566,7 +3623,7 @@ impl Compiler {
                     if is_pointer_ty(t) {
                         self.ty = t;
                     } else {
-                        self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
+                        self.ty = self.arith_common_ty(t, rhs_ty);
                     }
                     self.ast_binop(crate::c5::ir::BinOp::Add);
                     if !is_pointer_ty(t) {
@@ -3621,7 +3678,7 @@ impl Compiler {
                     if is_pointer_ty(t) {
                         self.ty = t;
                     } else {
-                        self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
+                        self.ty = self.arith_common_ty(t, rhs_ty);
                     }
                     self.ast_binop(crate::c5::ir::BinOp::Sub);
                     if !is_pointer_ty(t) {
@@ -3648,7 +3705,7 @@ impl Compiler {
                     // the post-conversion type, not the rhs's
                     // pre-conversion tag. Walker's post-op
                     // narrowing keys off `ty`.
-                    self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
+                    self.ty = self.arith_common_ty(t, rhs_ty);
                     self.ast_binop(crate::c5::ir::BinOp::Mul);
                     self.maybe_mask_to_unsigned_width(t, rhs_ty);
                 }
@@ -3671,7 +3728,7 @@ impl Compiler {
                     // unsigned width applied first -- otherwise a
                     // sign-extended `-1` enters the udiv as
                     // 0xFFFFFFFFFFFFFFFF instead of 0xFFFFFFFF.
-                    let common = usual_arith_common_ty(t, self.ty, self.target);
+                    let common = self.arith_common_ty(t, self.ty);
                     if is_unsigned_ty(common) {
                         // The masking sequence routes intermediate
                         // store-local / load-or / mask emits through
@@ -3710,6 +3767,12 @@ impl Compiler {
                             self.ast_acc = None;
                         }
                     } else {
+                        // Set the result type before building the node
+                        // so its `ty` is the C99 6.3.1.8 common type
+                        // rather than the rhs's pre-conversion tag; the
+                        // walker reads the node `ty` as the cast source
+                        // type. Mirrors the multiplicative path.
+                        self.ty = common;
                         self.ast_binop(crate::c5::ir::BinOp::Div);
                     }
                     self.ty = common;
@@ -3725,7 +3788,7 @@ impl Compiler {
                 if is_floating_scalar(self.ty) {
                     return Err(self.compile_err("`%` is not defined on floating-point operands"));
                 }
-                let common = usual_arith_common_ty(t, self.ty, self.target);
+                let common = self.arith_common_ty(t, self.ty);
                 if is_unsigned_ty(common) {
                     let lhs_ast = self.ast_vstack.pop().flatten();
                     let rhs_ast = self.ast_acc.take();
@@ -3751,10 +3814,30 @@ impl Compiler {
                         self.ast_acc = None;
                     }
                 } else {
+                    // Result type before the node build, as for `/`.
+                    self.ty = common;
                     self.ast_binop(crate::c5::ir::BinOp::Mod);
                 }
                 self.ty = common;
             } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {
+                if let Some((lv, ety)) = self.direct_inc_lvalue()
+                    && self.is_int128_ty(ety)
+                {
+                    let by = if self.lex.tk == Token::Inc { 1 } else { -1 };
+                    let src = self.ast_src_pos();
+                    self.next()?;
+                    let id = self.ast.push_expr(
+                        super::super::ast::Expr::PostInc {
+                            lvalue: lv,
+                            by,
+                            ty: ety,
+                        },
+                        src,
+                    );
+                    self.ast_acc = Some(id);
+                    self.ty = ety;
+                    continue;
+                }
                 let post_inc_lvalue = self.ast_acc;
                 self.rewrite_trailing_load_as_psh()
                     .ok_or_else(|| self.compile_err("bad lvalue in post-increment"))?;

@@ -35,7 +35,7 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, integer_promote, is_floating_ty, is_pointer_ty, is_struct_ty, is_unsigned_ty,
-    narrow_const_int, strip_unsigned, struct_id_of, struct_ptr_depth, usual_arith_common_ty,
+    narrow_const_int, strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
 /// Compile-time arithmetic value of a constant expression. Integer
@@ -211,7 +211,7 @@ impl Compiler {
         let common = if ptr {
             Ty::LongLong as i64
         } else {
-            usual_arith_common_ty(a_ty, b_ty, self.target)
+            self.arith_common_ty(a_ty, b_ty)
         };
         let bytes = self.size_of_type(common);
         let uns = is_unsigned_ty(common);

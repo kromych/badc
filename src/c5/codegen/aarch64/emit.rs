@@ -1452,6 +1452,14 @@ pub(crate) fn emit_function(
         let word = enc_adr(*rd, rel as i32);
         code[*site..*site + 4].copy_from_slice(&word.to_le_bytes());
     }
+    // Rewrite `asm goto` section fields (`.long %l0 - .`) to the label
+    // block's now-final text offset. Scoped to this function's contribution
+    // via the entry snapshot; only this pass's relocs survived the loop.
+    super::ssa::emit_common::resolve_asm_goto_relocs(
+        asm_sections,
+        &asm_sections_snapshot,
+        &|bid| block_offsets[bid as usize],
+    );
     // Patch each jump table's entries with the target block's offset
     // relative to the table base.
     for (table_start, table) in &jump_table_fixups {
@@ -2953,18 +2961,21 @@ fn emit_inline_asm_aarch64(
         // where `%c0` is `&sym`) relocates against the data image, resolved
         // like the operand's own `ImmData` lowering.
         let operand_sym = |idx: u8| -> Option<super::ssa::emit_common::AsmSectionTarget> {
-            match func.insts.get(*args.get(idx as usize)? as usize) {
-                Some(super::super::ir::Inst::ImmData(off)) => {
-                    Some(super::ssa::emit_common::AsmSectionTarget::Data(*off as u64))
-                }
-                _ => None,
-            }
+            super::ssa::emit_common::asm_operand_data_target(&func.insts, *args.get(idx as usize)?)
+        };
+        // An `asm goto` label operand (`.long %l0 - .`): the goto row's block
+        // index. Its text offset is not final here; the reloc carries the
+        // block and is rewritten after layout (see resolve_asm_goto_relocs).
+        let goto_block = |idx: u8| -> Option<u32> {
+            let ctx = goto_ctx.as_ref()?;
+            ctx.row.get(1 + idx as usize).copied()
         };
         if let Err(m) = super::ssa::emit_common::materialize_asm_sections(
             section_blocks,
             &|idx| const_of(idx),
             &label_off,
             &operand_sym,
+            &goto_block,
             true,
             asm_sections,
         ) {

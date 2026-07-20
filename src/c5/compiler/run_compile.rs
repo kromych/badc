@@ -179,6 +179,7 @@ impl Compiler {
             &|_| None,
             &|_| None,
             &|_| None,
+            &|_| None,
             aarch64,
             &mut scratch,
         )

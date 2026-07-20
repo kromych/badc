@@ -1791,6 +1791,13 @@ pub(super) fn write_relocatable(
                             (sym, o + r.addend)
                         }
                     },
+                    AsmSectionTarget::TextBlock(_) => {
+                        // Rewritten to `Text` after block layout; an unresolved
+                        // one here means the emit skipped resolve_asm_goto_relocs.
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            "elf_reloc: unresolved asm-goto section relocation",
+                        )));
+                    }
                     AsmSectionTarget::Symbol(name) => {
                         if let Some(&idx) = asm_label_symidx.get(name.as_str()) {
                             (idx as u64, r.addend)

@@ -3386,6 +3386,76 @@ fn asm_section_operand_symbol_relocates_to_data() {
 }
 
 #[test]
+fn asm_section_goto_label_relocates_to_block() {
+    // `.long %l0 - .` (a static-key jump entry) relocates PC-relative to an
+    // `asm goto` label's block. The block's text offset is not known when the
+    // section materializes, so the reloc carries the block and is rewritten
+    // after layout. The label ref lands in `.text`, alongside the template's
+    // own `1b`, while the operand address (`%c0`) targets the data image.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        static int key;\n\
+        int probe(void) {\n\
+            __asm__ goto(\n\
+                \"1:\\tnop\\n\"\n\
+                \".pushsection .jtab,\\\"aw\\\"\\n\"\n\
+                \".long 1b - ., %l[l_yes] - .\\n\"\n\
+                \".quad %c0 - .\\n\"\n\
+                \".popsection\\n\" : : \"i\"(&key) : : l_yes);\n\
+            return 0;\n\
+        l_yes:\n\
+            return 1;\n\
+        }\n\
+        int main(void) { return probe(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".jtab")
+            .unwrap_or_else(|| panic!("{target:?}: .jtab section missing"));
+        // `.long 1b - .`, `.long %l0 - .`, `.quad %c0 - .`.
+        assert_eq!(sec.3.len(), 4 + 4 + 8, "{target:?}: section size");
+        let rela = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.jtab")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.jtab missing"));
+        assert_eq!(rela.3.len(), 3 * 24, "{target:?}: three relocs");
+        let r_off = |k: usize| u64::from_le_bytes(rela.3[k * 24..k * 24 + 8].try_into().unwrap());
+        let r_info =
+            |k: usize| u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+        // Offsets 0/4 are the two `.long`s; offset 8 is the `.quad`.
+        let sym_at = |field: u64| -> u64 {
+            (0..3)
+                .find(|&k| r_off(k) == field)
+                .map(|k| r_info(k) >> 32)
+                .unwrap_or_else(|| panic!("{target:?}: no reloc at {field}"))
+        };
+        // Both the template label `1b` and the goto label `%l0` resolve into
+        // `.text` -- the same section symbol; the operand address does not.
+        assert_eq!(
+            sym_at(0),
+            sym_at(4),
+            "{target:?}: `%l0` resolves into .text"
+        );
+        assert_ne!(
+            sym_at(0),
+            sym_at(8),
+            "{target:?}: operand address is not in .text"
+        );
+        // No leftover TextBlock: every reloc names a defined symbol index.
+        for k in 0..3 {
+            assert_ne!(r_info(k) >> 32, 0, "{target:?}: reloc {k} has a symbol");
+        }
+    }
+}
+
+#[test]
 fn asm_section_values_fold_constant_expressions() {
     // A named section's data value may be an integer constant expression,
     // not just a literal; the folded value is what lands in the section.

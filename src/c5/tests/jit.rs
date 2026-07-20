@@ -1196,6 +1196,7 @@ fn jit_fixture(name: &str) -> i32 {
 }
 
 const JIT_FIXTURES: &[(&str, i32)] = &[
+    ("overaligned_data_placement.c", 0),
     ("mem2reg_cross_block.c", 42),
     ("mem2reg_addr_taken_neighbor.c", 42),
     ("mem2reg_i64_local.c", 84),

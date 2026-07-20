@@ -1387,7 +1387,8 @@ fn file_scope_asm_constraints() {
 #[test]
 fn section_and_alias_operand_constraints() {
     // `section` / `alias` take a string-literal operand; an alias
-    // target must be defined earlier in the unit.
+    // target must be defined somewhere in the unit (the definition may
+    // follow the alias declarator).
     expect_compile_error(
         "__attribute__((section(data))) int x; int main(void) { return x; }",
         "must be a string literal",
@@ -1395,12 +1396,12 @@ fn section_and_alias_operand_constraints() {
     expect_compile_error(
         "int aka(void) __attribute__((alias(\"missing\")));\n\
          int main(void) { return aka(); }",
-        "not a function defined earlier",
+        "not a function defined in this unit",
     );
     expect_compile_error(
         "int aka __attribute__((alias(\"missing_obj\")));\n\
          int main(void) { return aka; }",
-        "not an object defined earlier",
+        "not an object defined in this unit",
     );
 }
 

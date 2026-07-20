@@ -1070,10 +1070,17 @@ impl Compiler {
                                 s.name == target && s.class == Token::Fun as i64 && s.defined_here
                             });
                             let Some(tgt) = tgt else {
-                                return Err(self.compile_err(format!(
-                                    "alias target `{target}` is not a function defined \
-                                     earlier in this unit"
-                                )));
+                                // The target may be defined later in the unit;
+                                // retry once the unit is complete.
+                                self.pending_aliases.push((id_idx, target, false));
+                                self.symbols[id_idx].is_alias = true;
+                                for sym in self.symbols.iter_mut() {
+                                    if sym.class == Token::Loc as i64 {
+                                        Self::restore_shadowed_symbol(sym);
+                                    }
+                                }
+                                self.accept_declarator_separator()?;
+                                continue;
                             };
                             self.symbols[tgt].was_referenced = true;
                             self.symbols[id_idx].val = self.symbols[tgt].val;
@@ -1747,10 +1754,13 @@ impl Compiler {
                             s.name == target && s.class == Token::Glo as i64 && s.defined_here
                         });
                         let Some(tgt) = tgt else {
-                            return Err(self.compile_err(format!(
-                                "alias target `{target}` is not an object defined earlier \
-                                 in this unit"
-                            )));
+                            // The target may be defined later in the unit.
+                            self.pending_aliases.push((id_idx, target, true));
+                            self.symbols[id_idx].class = Token::Glo as i64;
+                            self.symbols[id_idx].type_ = ty;
+                            self.symbols[id_idx].is_alias = true;
+                            self.accept_declarator_separator()?;
+                            continue;
                         };
                         self.symbols[id_idx].class = Token::Glo as i64;
                         self.symbols[id_idx].type_ = ty;
@@ -2552,7 +2562,40 @@ impl Compiler {
             }
             self.next()?;
         }
+        self.resolve_pending_aliases()?;
         self.warn_unused_static_functions();
+        Ok(())
+    }
+
+    /// Bind aliases whose target had not been defined when the declarator was
+    /// parsed. The target must be defined in this unit: an alias to an
+    /// undefined symbol has no address to share.
+    fn resolve_pending_aliases(&mut self) -> Result<(), C5Error> {
+        for (id_idx, target, is_object) in core::mem::take(&mut self.pending_aliases) {
+            let want = if is_object { Token::Glo } else { Token::Fun } as i64;
+            let tgt = self
+                .symbols
+                .iter()
+                .position(|s| s.name == target && s.class == want && s.defined_here);
+            let Some(tgt) = tgt else {
+                let kind = if is_object { "an object" } else { "a function" };
+                return Err(self.compile_err(format!(
+                    "alias target `{target}` is not {kind} defined in this unit"
+                )));
+            };
+            self.symbols[tgt].was_referenced = true;
+            self.symbols[id_idx].val = self.symbols[tgt].val;
+            self.symbols[id_idx].defined_here = true;
+            self.symbols[id_idx].is_extern_decl = false;
+            if is_object {
+                self.symbols[id_idx].array_size = self.symbols[tgt].array_size;
+            } else {
+                let name = self.symbols[id_idx].name.clone();
+                let weak = self.symbols[id_idx].is_weak;
+                self.function_aliases
+                    .push(crate::c5::program::FunctionAlias { name, target, weak });
+            }
+        }
         Ok(())
     }
 

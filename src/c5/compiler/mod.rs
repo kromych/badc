@@ -54,6 +54,28 @@ pub(crate) const MAX_STATIC_ALIGN: usize = 4096;
 pub struct EnumDef {
     pub name: String,
     pub constants: Vec<(String, i64)>,
+    /// The enum's underlying integer type tag (`Ty::Int` for a plain
+    /// enum, a sub-int width for `__attribute__((packed))`). A bare
+    /// `enum Tag` reference resolves its size / alignment through this.
+    pub underlying_ty: i64,
+}
+
+impl EnumDef {
+    /// Byte size of the underlying integer type. Packed enums narrow to
+    /// 1/2/4/8; a plain enum is 4. Target-independent: the underlying
+    /// type is never `long`.
+    pub fn byte_size(&self) -> u8 {
+        let t = self.underlying_ty & !types::UNSIGNED_BIT;
+        if t == super::token::Ty::Char as i64 {
+            1
+        } else if t == super::token::Ty::Short as i64 {
+            2
+        } else if t == super::token::Ty::Int as i64 {
+            4
+        } else {
+            8
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

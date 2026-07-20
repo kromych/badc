@@ -582,6 +582,36 @@ fn packed_enum() {
 }
 
 #[test]
+fn builtin_bitcount_const() {
+    // `__builtin_clz` / `ctz` / `popcount` (and the `ll` forms) and
+    // `__builtin_constant_p` fold to integer constant expressions when their
+    // argument is constant, so an `ilog2`-style file-scope array bound is not
+    // taken for a VLA. Values match GCC and clang; also checked at run time.
+    assert_eq!(run_fixture("builtin_bitcount_const.c"), 0);
+}
+
+#[test]
+fn builtin_bitcount_zero_const_fold() {
+    // clz / ctz at zero are undefined per the standard; badc folds them to the
+    // bit width, matching GCC and the walker's run-time lowering (clang instead
+    // refuses to fold the zero case). Locking the value keeps the constant path
+    // and the run-time path in agreement.
+    assert_eq!(
+        run_str(
+            "int a[__builtin_clz(0) + 1];\n\
+             int b[__builtin_ctz(0) + 1];\n\
+             int c[__builtin_clzll(0) - 63];\n\
+             int main(void) {\n\
+                 return (sizeof(a)/sizeof(int) == 33)\n\
+                     && (sizeof(b)/sizeof(int) == 33)\n\
+                     && (sizeof(c)/sizeof(int) == 1) ? 0 : 1;\n\
+             }\n"
+        ),
+        0
+    );
+}
+
+#[test]
 fn hex_case_range() {
     // `case 0x10...0x20:` (no spaces around `...`, common after macro
     // expansion) must lex the hex integer + ellipsis, not a hex float; a

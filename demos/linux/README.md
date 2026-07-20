@@ -60,9 +60,10 @@ Because badc stops at the first error, a construct in a widely included
 header masks everything behind it. Two levers expose the masked tail
 without touching the tree:
 
-- `--pre-include shim/valist-shim.h` supplies the `__builtin_va_list` type
-  name (badc has the va intrinsics but not the type; the layout mirrors
-  badc's own stdarg.h). Compile-only: not ABI-audited.
+- `--pre-include <header>` forces a header in front of every unit, to
+  supply a macro or type badc lacks and measure what sits behind it (e.g.
+  `#define __SIZEOF_INT128__ 16`, which the kernel uses to gate its
+  `__u128` typedef). Compile-only: not ABI-audited.
 - `--pre-I <overlay-dir>` puts an include dir in front of the recorded
   ones; drop a patched copy of a gating header there (e.g. one that stubs
   the single construct badc rejects) and the failures behind it become

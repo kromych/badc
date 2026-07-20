@@ -178,8 +178,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--report", type=Path, help="write the markdown report here")
     ap.add_argument("--pre-include", type=Path, action="append", default=[],
                     help="header forced in front of every unit (repeatable); "
-                         "e.g. shim/valist-shim.h to unmask units otherwise "
-                         "blocked on the __builtin_va_list type name")
+                         "supplies a macro or type badc lacks, to unmask the "
+                         "units otherwise blocked behind it")
     ap.add_argument("--pre-I", type=Path, action="append", default=[],
                     help="include dir searched before the recorded ones "
                          "(repeatable); an overlay with a patched copy of a "

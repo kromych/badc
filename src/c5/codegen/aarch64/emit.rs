@@ -2528,10 +2528,10 @@ fn encode_deferred_asm_region(
             }
             if matches!(
                 insn.operands.last(),
-                Some(AsmOpndA64::Label { .. } | AsmOpndA64::GotoLabel(_))
+                Some(AsmOpndA64::Label { .. } | AsmOpndA64::GotoLabel(_) | AsmOpndA64::Here)
             ) {
                 return Err(String::from(
-                    "inline asm: a replacement branch to a label is not placed out of line",
+                    "inline asm: a replacement branch to a label or `.` is not placed out of line",
                 ));
             }
             let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
@@ -2898,6 +2898,11 @@ fn emit_inline_asm_aarch64(
                     "aarch64 inline asm: label reference outside a branch",
                 ));
             }
+            AsmOpndA64::Here => {
+                return Err(String::from(
+                    "aarch64 inline asm: `.` reference outside a branch",
+                ));
+            }
         })
     };
     // Local labels: definitions record the code offset they stand at; branches
@@ -2994,7 +2999,11 @@ fn emit_inline_asm_aarch64(
             Some(&AsmOpndA64::GotoLabel(k)) => Some(k),
             _ => None,
         };
-        if matches!(insn.operands.last(), Some(AsmOpndA64::Label { .. })) || goto_label.is_some() {
+        if matches!(
+            insn.operands.last(),
+            Some(AsmOpndA64::Label { .. } | AsmOpndA64::Here)
+        ) || goto_label.is_some()
+        {
             let kind = match insn.mnemonic.as_str() {
                 "b" if insn.operands.len() == 1 => LabelBranch::B,
                 "cbz" | "cbnz" if insn.operands.len() == 2 => match conv(&insn.operands[0]) {
@@ -3075,8 +3084,23 @@ fn emit_inline_asm_aarch64(
                 emit(code, 0);
                 continue;
             }
+            if matches!(insn.operands.last(), Some(AsmOpndA64::Here)) {
+                // `.` names the branch's own address: displacement zero.
+                let word = match kind {
+                    LabelBranch::Adr { rd } => super::encode::enc_adr(Reg(rd), 0),
+                    _ => match label_branch_word(&kind, 0) {
+                        Ok(w) => w,
+                        Err(m) => {
+                            bail_msg(&m);
+                            return false;
+                        }
+                    },
+                };
+                emit(code, word);
+                continue;
+            }
             let Some(&AsmOpndA64::Label { num, forward }) = insn.operands.last() else {
-                unreachable!("guard admits Label or GotoLabel only");
+                unreachable!("guard admits Label, Here or GotoLabel; the first two handled above");
             };
             label_fixups.push((code.len(), kind, num, forward));
             emit(code, 0);

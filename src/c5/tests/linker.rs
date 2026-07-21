@@ -196,6 +196,56 @@ int lse_fetch(int i, atomic_t *v) {
 }
 
 #[test]
+fn inline_asm_dot_branch_target_encodes_zero_displacement() {
+    // The device-load ordering barrier (`__io_ar`) branches to the location
+    // counter `.`: `cbnz %0, .` is a never-taken control dependency whose
+    // target is the branch instruction itself, so the encoded displacement is
+    // zero. `cbnz x0, .` is 0xB500_0000 (Rt field aside) and `b .` is
+    // 0x1400_0000, byte-identical to GNU as.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+unsigned long io_ar(unsigned long v) {
+    unsigned long tmp;
+    __asm__ volatile("eor %0, %1, %1\n\tcbnz %0, ." : "=r" (tmp) : "r" (v) : "memory");
+    return tmp;
+}
+void spin(void) { __asm__ volatile("b ."); }
+"#;
+    let copts = CompileOptions {
+        no_entry_point: true,
+        gnu: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(src.to_string(), Target::LinuxAarch64, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let words: alloc::vec::Vec<u32> = obj
+        .text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // CBNZ Rt (bits 4:0) is allocator-chosen; the rest is the 64-bit
+    // branch-to-self word with imm19 == 0.
+    let cbnz_mask = !0x1Fu32;
+    assert!(
+        words.iter().any(|&w| w & cbnz_mask == 0xB500_0000),
+        "`cbnz %0, .` must encode a zero-displacement branch-to-self: {words:08x?}"
+    );
+    assert!(
+        words.iter().any(|&w| w == 0x1400_0000),
+        "`b .` must encode a zero-displacement branch-to-self: {words:08x?}"
+    );
+}
+
+#[test]
 fn block_scope_externs_emit_distinct_undef_symbols() {
     // C99 6.2.2p4: a block-scope `extern` declaration has external
     // linkage and refers to the file-scope object of the same name in

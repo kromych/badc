@@ -4790,10 +4790,16 @@ impl Compiler {
                 self.parse_abstract_ptr_declarator(true)?
             } else {
                 self.next()?; // consume `(`
+                // C99 6.2.1p4: parameter names in this abstract function
+                // declarator (a cast / sizeof type name) have no scope.
+                // Record their types without binding the names, so one
+                // matching an enclosing local is not shadowed (which would
+                // corrupt the single-slot shadow the enclosing scope
+                // restores from).
+                let saved = self.pending.parsing_fn_ptr_proto;
+                self.pending.parsing_fn_ptr_proto = true;
                 let pp = self.parse_function_params()?;
-                for &p in &pp.indices {
-                    Self::restore_shadowed_symbol(&mut self.symbols[p]);
-                }
+                self.pending.parsing_fn_ptr_proto = saved;
                 (0, Some(pp), alloc::vec::Vec::new())
             };
             if let Some(pp) = proto {

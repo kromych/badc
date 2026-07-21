@@ -184,10 +184,16 @@ impl Compiler {
         if self.lex.tk == '(' {
             self.next()?;
             if capture_proto && plain && nested_ptrs > 0 {
+                // C99 6.2.1p4: the parameter names of a function declarator
+                // that is not part of a function definition have no scope.
+                // Record the pointee prototype's types without binding the
+                // names -- binding one that matches an enclosing local would
+                // overwrite the single-slot shadow the enclosing scope
+                // restores from at block / function exit.
+                let saved = self.pending.parsing_fn_ptr_proto;
+                self.pending.parsing_fn_ptr_proto = true;
                 let pp = self.parse_function_params()?;
-                for &p in &pp.indices {
-                    Self::restore_shadowed_symbol(&mut self.symbols[p]);
-                }
+                self.pending.parsing_fn_ptr_proto = saved;
                 proto = Some(pp);
             } else {
                 self.skip_balanced_parens_after_open()?;

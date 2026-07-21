@@ -246,6 +246,43 @@ void spin(void) { __asm__ volatile("b ."); }
 }
 
 #[test]
+fn inline_asm_x86_debug_register_mov_encodes_0f21_0f23() {
+    // AT&T spells the x86 debug registers DR0..DR7 `db0..db7` (also
+    // `dr0..dr7`). `mov %dbN, r64` is 0F 21 /r and `mov r64, %dbN` is 0F 23 /r;
+    // the ModRM reg field selects DRn, byte-identical to GNU as. The rm field
+    // (the GP register) is allocator-chosen and masked out.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+unsigned long read_db7(void) { unsigned long v; __asm__ volatile("mov %%db7, %0" : "=r"(v)); return v; }
+void write_db7(unsigned long v) { __asm__ volatile("mov %0, %%db7" : : "r"(v)); }
+int main(void) { write_db7(read_db7()); return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let text = &obj.text;
+    let has = |op: u8| {
+        text.windows(3)
+            .any(|w| w[0] == 0x0F && w[1] == op && (w[2] & 0xF8) == 0xF8)
+    };
+    assert!(
+        has(0x21),
+        "read of %db7 must encode as 0F 21 /r with reg=7: {text:02x?}"
+    );
+    assert!(
+        has(0x23),
+        "write of %db7 must encode as 0F 23 /r with reg=7: {text:02x?}"
+    );
+}
+
+#[test]
 fn block_scope_externs_emit_distinct_undef_symbols() {
     // C99 6.2.2p4: a block-scope `extern` declaration has external
     // linkage and refers to the file-scope object of the same name in

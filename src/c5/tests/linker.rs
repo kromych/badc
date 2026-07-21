@@ -4420,6 +4420,44 @@ fn x86_alternative_replacement_goto_branch_relocates_to_block() {
 }
 
 #[test]
+fn x86_static_cpu_has_memory_operand_replacement_is_rejected_cleanly() {
+    // The full `_static_cpu_has` shape: a permanent `.altinstr_aux` replacement
+    // `testb %[bitnum], %a[cap_byte]` (a data memory operand) followed by
+    // `jnz %l[t_yes]` / `jmp %l[t_no]`. The goto branches now encode (see the
+    // test above); the memory-operand replacement does not -- a RIP-relative
+    // reference whose displacement carries its own relocation is not assembled
+    // here, so it is rejected with a diagnostic naming the instruction rather
+    // than emitted at a wrong address.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        static const char cap[64];\n\
+        int probe(void) {\n\
+            __asm__ goto(\n\
+                \".pushsection .altinstr_aux,\\\"ax\\\"\\n\"\n\
+                \"6:\\n testb %[bitnum], %a[cap_byte]\\n jnz %l[t_yes]\\n jmp %l[t_no]\\n\"\n\
+                \".popsection\\n\"\n\
+                : : [bitnum] \"i\" (2), [cap_byte] \"i\" (&cap[2]) : : t_yes, t_no);\n\
+            return 0;\n\
+        t_yes:\n\
+            return 1;\n\
+        t_no:\n\
+            return 2;\n\
+        }\n\
+        int main(void) { return probe(); }\n";
+    let program = Compiler::new(String::from(src)).compile().expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let err = emit_native_with_options(&program, Target::LinuxX64, opts).unwrap_err();
+    let err = alloc::format!("{err:?}");
+    assert!(
+        err.contains("testb") && err.contains("register or immediate"),
+        "{err}"
+    );
+}
+
+#[test]
 fn aarch64_alternative_subsection_defers_replacement_and_relocates() {
     // The AArch64 ALTERNATIVE places its replacement in a `.subsection`, which
     // GNU as appends to `.text` after the function body -- out of the main

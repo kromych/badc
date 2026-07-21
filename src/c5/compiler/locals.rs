@@ -836,7 +836,15 @@ impl Compiler {
             } else if self.is_traversable_aggregate_ty(ty) {
                 let sid = struct_id_of(ty);
                 let var_offset = self.symbols[loc_idx].val;
+                // C99 6.5.2.5: `static T s = (T){ ... };` names its own
+                // type; drop the redundant cast so the brace list fills
+                // the struct, matching the file-scope allocator.
+                self.skip_opt_compound_literal_cast()?;
+                let cl_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
                 self.collect_struct_initializer(sid, var_offset)?;
+                for _ in 0..cl_parens {
+                    self.accept(')')?;
+                }
             } else {
                 let var_offset = self.symbols[loc_idx].val;
                 self.parse_global_initializer(ty, var_offset, false)?;

@@ -484,6 +484,15 @@ fn compound_literal_addr_init() {
 }
 
 #[test]
+fn static_local_compound_literal_struct() {
+    // C99 6.5.2.5: a block-scope `static` struct initialized by a compound
+    // literal naming its own type -- `static T s = (T){ ... };` -- drops the
+    // redundant cast, matching the file-scope allocator. Covers the anon-union
+    // nested-designator shape a spinlock static initializer expands to.
+    assert_eq!(run_fixture("static_local_compound_literal_struct.c"), 0);
+}
+
+#[test]
 fn scalar_compound_literal_lvalue() {
     // C99 6.5.2.5p4: a compound literal is an lvalue. Taking the address of a
     // scalar literal `&(int){5}` must work, not only the struct / array forms.
@@ -720,6 +729,14 @@ fn stmt_expr() {
 }
 
 #[test]
+fn stmt_expr_pointer_arith_arrow() {
+    // A statement expression ending in pointer arithmetic keeps the pointer
+    // result type (C99 6.5.6p8), so `({ ...; p - 1; })->field` resolves the
+    // single-level struct pointer -- the `task_pt_regs` macro shape.
+    assert_eq!(run_fixture("stmt_expr_pointer_arith_arrow.c"), 0);
+}
+
+#[test]
 fn generic_selection() {
     // C11 6.5.1.1 `_Generic`: type dispatch, `default`, the
     // unevaluated-non-selected rule, pointer-to-struct dispatch, and use
@@ -797,6 +814,14 @@ fn typeof_array_row() {
     // and a string literal all have array type. Drives a common
     // array-length macro over a row of a 2-D table.
     assert_eq!(run_fixture("typeof_array_row.c"), 0);
+}
+
+#[test]
+fn typeof_addr_of_array() {
+    // C99 6.5.3.2p3: `&arr` is a pointer-to-array, so `sizeof(&arr)` is a
+    // pointer's width and `typeof(&arr)` / `typeof(*(&arr))` round-trip. Drives
+    // the per-CPU `SHIFT_PERCPU_PTR` shape `(typeof(*(ptr)) *)(addr + off)`.
+    assert_eq!(run_fixture("typeof_addr_of_array.c"), 0);
 }
 
 #[test]

@@ -350,9 +350,19 @@ impl Compiler {
             // expression operands (the dims chain is not recoverable from
             // the decay markers).
             let n = core::mem::take(&mut self.pending.typeof_operand_array_size);
+            let bytes = core::mem::take(&mut self.pending.typeof_operand_array_bytes);
             if n != 0 && inner >= Ty::Ptr as i64 {
                 inner -= Ty::Ptr as i64;
                 self.pending.typedef_base_array_size = n;
+            } else if bytes > 0 && inner >= Ty::Ptr as i64 {
+                // Row size known by byte width: a pointer-to-array deref
+                // (`typeof(*p)`), a string literal, or a 1D row. Recover
+                // the element type and count so the specifier is the array,
+                // not the decayed element pointer.
+                let elem = inner - Ty::Ptr as i64;
+                let esize = (self.size_of_type(elem) as i64).max(1);
+                inner = elem;
+                self.pending.typedef_base_array_size = bytes / esize;
             }
             inner
         };
@@ -446,6 +456,15 @@ impl Compiler {
         self.pending.typeof_operand_was_array =
             self.pending.last_array_decay_size != 0 || self.pending.last_array_decay_bytes > 0;
         self.pending.typeof_operand_array_size = self.pending.last_array_decay_size;
+        // Capture the byte-width marker only for a 1D-reducible row: a
+        // pending multi-dim stride means the row is itself multi-dim and
+        // not expressible as a single element count.
+        self.pending.typeof_operand_array_bytes =
+            if self.pending.index_stride == 0 && self.pending.index_strides_tail.is_empty() {
+                self.pending.last_array_decay_bytes
+            } else {
+                0
+            };
         self.pending.last_array_decay_size = saved_decay;
         self.pending.last_array_decay_bytes = saved_decay_bytes;
         self.next_ent_pc = saved_text_len;

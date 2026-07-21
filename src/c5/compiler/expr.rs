@@ -2441,8 +2441,26 @@ impl Compiler {
                 // when `dbFileVers` is a `char[16]` field. The
                 // expression already yielded the array's address as
                 // its rvalue (no Li was emitted), so `&` is a no-op
-                // at the IR level; the type bump below tracks the
+                // at the IR level; the type bump above tracks the
                 // extra pointer level.
+                //
+                // C99 6.5.3.2p3: `&arr` has type pointer-to-array, not
+                // the decayed element pointer. For a known-size 1D array
+                // (`index_stride == 0`; multi-dim seeds a nonzero stride)
+                // rebuild the pointer-to-array aggregate so `(*p)[i]`,
+                // `sizeof(&arr)`, and `typeof(&arr)` see a real
+                // pointer-to-array rather than the element type.
+                let n = self.pending.last_array_decay_size;
+                if n > 0 && self.pending.index_stride == 0 {
+                    let elem_ty = pre_addr_ty - Ty::Ptr as i64;
+                    let agg = self.array_agg_type(elem_ty, &[n]);
+                    self.ty = agg + Ty::Ptr as i64;
+                }
+                // The result is a pointer; drop the operand's array-decay
+                // hint so a surrounding `sizeof` / `typeof` does not size
+                // or type it as the array itself (mirrors the `*` arm).
+                self.pending.last_array_decay_size = 0;
+                self.pending.last_array_decay_bytes = 0;
             } else if matches!(
                 self.ast_acc,
                 Some(id) if matches!(
@@ -3678,13 +3696,16 @@ impl Compiler {
                     // into element distance (skipped for `char*`,
                     // where byte and element counts coincide). Both
                     // operands share the pointer-to-array stride.
+                    // Stamp Int before the emits so the dual-emit tracker
+                    // records the result type (a statement expression ending
+                    // in `p - q` reads this node), not the operand pointer.
+                    self.ty = Ty::Int as i64;
                     self.ast_binop(crate::c5::ir::BinOp::Sub);
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale =
                             self.pointer_to_array_arith_stride(lhs_stride, t, self.pointee_size(t));
                         self.emit_binop_with_imm(crate::c5::ir::BinOp::Div, scale);
                     }
-                    self.ty = Ty::Int as i64;
                 } else if self.is_ptr_scaling_nontrivial(t) {
                     let scale =
                         self.pointer_to_array_arith_stride(lhs_stride, t, self.pointee_size(t));
@@ -3692,8 +3713,13 @@ impl Compiler {
                         carry_stride = scale;
                     }
                     self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
-                    self.ast_binop(crate::c5::ir::BinOp::Sub);
+                    // Set the pointer result type before the emit so the
+                    // dual-emit binop tracker stamps `Expr::Binary { ty }`
+                    // as the pointer (C99 6.5.6p8), not the scaled integer
+                    // index -- mirrors the `+` branch. A statement expression
+                    // ending in `p - i` reads this node as its value type.
                     self.ty = t;
+                    self.ast_binop(crate::c5::ir::BinOp::Sub);
                 } else {
                     let rhs_ty = self.ty;
                     // Pre-set the post-conversion result type so

@@ -3784,6 +3784,55 @@ fn asm_section_label_difference_is_a_constant() {
 }
 
 #[test]
+fn asm_section_local_label_difference_is_a_constant() {
+    // A label difference between two labels defined inside the same section is
+    // the constant byte distance there, not only for main-stream template
+    // labels. Byte-for-byte identical to GNU as: `.byte sb - sa` is 3 (the
+    // three data bytes between them), and `.long 1b - .` stays the section's
+    // one PC-relative relocation. Target-independent -- the distance is section
+    // data, not emitted code.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        void f(void) {\n\
+            __asm__ volatile(\"1: nop\\n\"\n\
+                \".pushsection .sldiff,\\\"a\\\"\\n\"\n\
+                \"sa:\\n\"\n\
+                \".byte 0x11, 0x22, 0x33\\n\"\n\
+                \"sb:\\n\"\n\
+                \".byte sb - sa\\n\"\n\
+                \".long 1b - .\\n\"\n\
+                \".popsection\\n\");\n\
+        }\n\
+        int main(void) { f(); return 0; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".sldiff")
+            .unwrap_or_else(|| panic!("{target:?}: .sldiff missing"));
+        // 3 data bytes + 1 (sb - sa) + 4 (pcrel long).
+        assert_eq!(sec.3.len(), 8, "{target:?}: section size");
+        assert_eq!(&sec.3[..3], &[0x11, 0x22, 0x33], "{target:?}: data bytes");
+        assert_eq!(
+            sec.3[3], 3,
+            "{target:?}: .byte sb - sa is the folded distance"
+        );
+        // Only `.long 1b - .` relocates; the section-local diff is a constant.
+        let reloc_count = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.sldiff")
+            .map_or(0, |r| r.3.len() / 24);
+        assert_eq!(reloc_count, 1, "{target:?}: exactly one reloc");
+    }
+}
+
+#[test]
 fn attribute_and_asm_pushsection_merge_into_one_section() {
     // An `__attribute__((section))` object and an inline-asm
     // `.pushsection` block naming the same section share one output

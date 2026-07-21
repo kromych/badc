@@ -538,6 +538,57 @@ fn inline_asm_operands_under_pressure() {
 }
 
 #[test]
+fn inline_asm_memory_output_to_local_under_pressure() {
+    // Four memory outputs to locals (`=m`, aarch64 `=Q`) and four register
+    // inputs: eight operands. Under a 2-register cap the operands spill to
+    // sp-relative slots, and a memory output carries its destination address
+    // as the operand. Reading a spilled place unshifted let a later operand
+    // capture the block's own scratch, corrupting an output address: a wrong
+    // store at -O0, a store through a bad pointer (SIGSEGV) at -O. The sibling
+    // above covers register outputs; this covers the memory-output address.
+    let src = r#"
+        static int asm_store4(int a, int b, int c, int d) {
+            int p = 0, q = 0, r = 0, s = 0;
+        #if defined(__aarch64__)
+            __asm__("str %w4, %0\n\t"
+                    "str %w5, %1\n\t"
+                    "str %w6, %2\n\t"
+                    "str %w7, %3"
+                    : "=Q"(p), "=Q"(q), "=Q"(r), "=Q"(s)
+                    : "r"(a), "r"(b), "r"(c), "r"(d));
+        #elif defined(__x86_64__)
+            __asm__("movl %4, %0\n\t"
+                    "movl %5, %1\n\t"
+                    "movl %6, %2\n\t"
+                    "movl %7, %3"
+                    : "=m"(p), "=m"(q), "=m"(r), "=m"(s)
+                    : "r"(a), "r"(b), "r"(c), "r"(d));
+        #else
+            p = a; q = b; r = c; s = d;
+        #endif
+            return p + q * 10 + r * 100 + s * 1000;
+        }
+        int main(void) {
+            return asm_store4(6, 7, 8, 9) == 9876 ? 0 : 1;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit(src, &["asm-mem-output-pressure"])
+    });
+    assert_eq!(
+        result, 0,
+        "inline-asm memory output captured a corrupt destination address under pressure"
+    );
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit_native_optimized(src, &["asm-mem-output-pressure-opt"])
+    });
+    assert_eq!(
+        result, 0,
+        "inline-asm memory output address read a corrupt place through the moved sp under -O"
+    );
+}
+
+#[test]
 fn division_with_spilled_dividend_under_pressure() {
     // On x86_64 the divmod lowering stages the dividend into the
     // destination register; when the allocator reuses the divisor's

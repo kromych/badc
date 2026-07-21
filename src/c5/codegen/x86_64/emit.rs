@@ -6464,6 +6464,11 @@ fn emit_inline_asm(
     let raw_text = stripped.as_deref().unwrap_or(raw_text);
     let expanded = super::ssa::emit_common::expand_template_uniq(raw_text);
     let text = expanded.as_deref().unwrap_or(raw_text);
+    // Rename any numeric label defined more than once in one asm instance to
+    // per-definition unique names, so the code and section resolvers below see
+    // single-definition labels.
+    let multidef = super::ssa::emit_common::rewrite_multidef_local_labels(text);
+    let text = multidef.as_deref().unwrap_or(text);
     let mut extracted = match super::ssa::emit_common::extract_asm_sections(text, false) {
         Ok(e) => e,
         Err(m) => {
@@ -6521,6 +6526,9 @@ fn emit_inline_asm(
         bail_msg(&m);
         return false;
     }
+    // Code-stream label names, so a `.skip` expression can size its padding
+    // from a named code label (a multiply-defined numeric label renamed above).
+    let code_label_names = super::asm::scan_label_names(code_text);
     // Registers the asm overwrites: the operand registers plus the explicit
     // clobber list. GP registers save to 8-byte scratch slots; `x` (xmm)
     // operands and FP clobbers live in the independent XMM file and take
@@ -6663,6 +6671,15 @@ fn emit_inline_asm(
                 }
                 if let Some(off) = section_measure.offset(name) {
                     return Some(off);
+                }
+                // A named code label (a multiply-defined numeric label renamed
+                // above): its text offset, already emitted at a `.skip` site.
+                if let Some(idx) = code_label_names.iter().position(|&n| n == name) {
+                    let num = super::asm::NAMED_LABEL_BASE + idx as u32;
+                    return label_defs
+                        .iter()
+                        .rfind(|&&(n, _)| n == num)
+                        .map(|&(_, off)| off as i64);
                 }
                 let digits = name.strip_suffix(['b', 'f'])?;
                 let num: u32 = digits.parse().ok()?;

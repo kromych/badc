@@ -814,6 +814,8 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("file_scope_asm_decls.c", 0),
     ("inline_asm_goto_output.c", 42),
     ("inline_asm_goto_multiret.c", 42),
+    ("inline_asm_output_reg.c", 42),
+    ("inline_naked_not_inlined.c", 0),
     ("inline_asm_constraint_alternatives.c", 42),
     ("compound_assign_int_fp.c", 0),
     ("signal_sig_t.c", 0),

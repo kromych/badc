@@ -36,8 +36,8 @@ Disassembly of section .text:
                	movq	-0x30(%rbp), %rbx
                	movq	-0x28(%rbp), %rcx
                	movq	(%rbx,%rcx,8), %rax
-               	movq	-0x38(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x38(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x50(%rbp), %rax
                	movq	-0x48(%rbp), %rcx
                	movq	-0x40(%rbp), %rbx
@@ -60,8 +60,8 @@ Disassembly of section .text:
                	movq	-0x30(%rbp), %rbx
                	movq	-0x28(%rbp), %rcx
                	movq	0x10(%rbx,%rcx,8), %rax
-               	movq	-0x38(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x38(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x50(%rbp), %rax
                	movq	-0x48(%rbp), %rcx
                	movq	-0x40(%rbp), %rbx
@@ -84,8 +84,8 @@ Disassembly of section .text:
                	movq	-0x30(%rbp), %rbx
                	movq	-0x28(%rbp), %rcx
                	movq	(%rbx,%rcx), %rax
-               	movq	-0x38(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x38(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x50(%rbp), %rax
                	movq	-0x48(%rbp), %rcx
                	movq	-0x40(%rbp), %rbx
@@ -108,8 +108,8 @@ Disassembly of section .text:
                	movq	-0x30(%rbp), %rbx
                	movq	-0x28(%rbp), %rcx
                	movl	(%rbx,%rcx,4), %eax
-               	movq	-0x38(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x38(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x50(%rbp), %rax
                	movq	-0x48(%rbp), %rcx
                	movq	-0x40(%rbp), %rbx
@@ -155,8 +155,8 @@ Disassembly of section .text:
                	movq	-0x30(%rbp), %rbx
                	movq	-0x28(%rbp), %rcx
                	leaq	0x8(%rbx,%rcx,8), %rax
-               	movq	-0x38(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x38(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x50(%rbp), %rax
                	movq	-0x48(%rbp), %rcx
                	movq	-0x40(%rbp), %rbx

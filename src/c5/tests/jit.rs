@@ -538,6 +538,58 @@ fn inline_asm_operands_under_pressure() {
 }
 
 #[test]
+fn register_asm_variable_pinned_to_staging_scratch_neighbor() {
+    // A local register variable bound to the register neighboring the
+    // emitter's asm-staging scratch (x86-64 r11, next to r10; AArch64 x0,
+    // used through GCC's `r0` spelling) must be honored as a `+r` operand:
+    // the value loads into the named register and the store-back reads it
+    // there, so the staging cannot use that register as its own scratch.
+    // Run under a 2-register cap so the operands spill and the staging
+    // exercises the scratch path.
+    let src = r#"
+        static long rt(long a, long b) {
+        #if defined(__aarch64__)
+            register long v asm("r0") = a;
+            __asm__ volatile("add %0, %0, %1" : "+r"(v) : "r"(b));
+        #elif defined(__x86_64__)
+            register long v asm("r11") = a;
+            __asm__ volatile("addq %1, %0" : "+r"(v) : "r"(b) : "cc");
+        #else
+            long v = a + b;
+        #endif
+            return v;
+        }
+        int main(void) { return rt(40, 2) == 42 ? 0 : 1; }
+    "#;
+    assert_eq!(
+        jit_exit(src, &["reg-asm-scratch-neighbor"]),
+        0,
+        "bound register not honored across asm staging"
+    );
+    assert_eq!(
+        jit_exit_native_optimized(src, &["reg-asm-scratch-neighbor-opt"]),
+        0,
+        "bound register not honored across asm staging (-O)"
+    );
+    // Under a 2-register cap the operands spill, so the staging exercises
+    // the scratch path that must not reuse the bound register.
+    let capped = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit(src, &["reg-asm-scratch-neighbor-cap"])
+    });
+    assert_eq!(
+        capped, 0,
+        "bound register not honored under register pressure"
+    );
+    let capped_opt = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit_native_optimized(src, &["reg-asm-scratch-neighbor-cap-opt"])
+    });
+    assert_eq!(
+        capped_opt, 0,
+        "bound register not honored under pressure (-O)"
+    );
+}
+
+#[test]
 fn inline_asm_memory_output_to_local_under_pressure() {
     // Four memory outputs to locals (`=m`, aarch64 `=Q`) and four register
     // inputs: eight operands. Under a 2-register cap the operands spill to

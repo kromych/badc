@@ -36,8 +36,8 @@ Disassembly of section .text:
                	movq	%rcx, -0x58(%rbp)
                	movq	%rax, -0x50(%rbp)
                	movq	%rax, -0x48(%rbp)
-               	movq	-0x58(%rbp), %r11
-               	movq	(%r11), %rax
+               	movq	-0x58(%rbp), %r10
+               	movq	(%r10), %rax
                	movq	-0x50(%rbp), %rbx
                	movq	-0x48(%rbp), %rcx
                	addq	(%rbx), %rax
@@ -45,8 +45,8 @@ Disassembly of section .text:
                	adcq	0x10(%rbx), %rax
                	adcq	0x18(%rbx), %rax
                	adcq	$0x0, %rax
-               	movq	-0x58(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x58(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x70(%rbp), %rax
                	movq	-0x68(%rbp), %rcx
                	movq	-0x60(%rbp), %rbx
@@ -70,8 +70,8 @@ Disassembly of section .text:
                	movq	%rcx, -0x58(%rbp)
                	movq	%rax, -0x50(%rbp)
                	movq	%rax, -0x48(%rbp)
-               	movq	-0x58(%rbp), %r11
-               	movq	(%r11), %rax
+               	movq	-0x58(%rbp), %r10
+               	movq	(%r10), %rax
                	movq	-0x50(%rbp), %rbx
                	movq	-0x48(%rbp), %rcx
                	addq	(%rbx), %rax
@@ -79,8 +79,8 @@ Disassembly of section .text:
                	adcq	0x10(%rbx), %rax
                	adcq	0x18(%rbx), %rax
                	adcq	$0x0, %rax
-               	movq	-0x58(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x58(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x70(%rbp), %rax
                	movq	-0x68(%rbp), %rcx
                	movq	-0x60(%rbp), %rbx
@@ -96,11 +96,11 @@ Disassembly of section .text:
                	leaq	-0x28(%rbp), %rax
                	movq	%rax, -0x70(%rbp)
                	movq	%rax, -0x68(%rbp)
-               	movq	-0x68(%rbp), %r11
-               	movq	(%r11), %rax
+               	movq	-0x68(%rbp), %r10
+               	movq	(%r10), %rax
                	addq	$0x19, %rax
-               	movq	-0x68(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x68(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x70(%rbp), %rax
                	movq	-0x28(%rbp), %rax
                	cmpq	$0x19, %rax

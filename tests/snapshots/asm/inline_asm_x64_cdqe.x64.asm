@@ -21,8 +21,8 @@ Disassembly of section .text:
                	movq	%rax, -0x40(%rbp)
                	movq	-0x40(%rbp), %rax
                	cltq
-               	movq	-0x48(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x48(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x50(%rbp), %rax
                	movq	-0x28(%rbp), %rax
                	movl	$0x2f, %ecx
@@ -32,8 +32,8 @@ Disassembly of section .text:
                	movq	%rcx, -0x40(%rbp)
                	movq	-0x40(%rbp), %rax
                	cltq
-               	movq	-0x48(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x48(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x50(%rbp), %rax
                	movq	-0x30(%rbp), %rcx
                	cmpq	$-0x5, %rax

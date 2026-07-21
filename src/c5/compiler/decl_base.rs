@@ -625,10 +625,12 @@ impl Compiler {
     }
 
     /// Resolve a `register T name asm("reg")` register name against the
-    /// compile target. The `%`-prefixed spelling is accepted. Registers
-    /// the emitters reserve as scratch (r10 / r11 on x86-64, x16 / x17
-    /// on aarch64) and non-general-purpose registers are rejected: a
-    /// binding through them cannot be honored.
+    /// compile target. The `%`-prefixed spelling is accepted, as is the
+    /// AArch64 `rN` spelling GCC accepts for `xN` (register-ABI operands
+    /// spell the binding `asm("r0")`). Registers the emitters reserve as
+    /// scratch (r10 on x86-64, x16 / x17 on aarch64) and non-general-
+    /// purpose registers are rejected: a binding through them cannot be
+    /// honored.
     pub(super) fn resolve_asm_register(
         &self,
         name: &str,
@@ -642,12 +644,24 @@ impl Compiler {
                 | crate::Target::WindowsAarch64
         );
         let resolved = if aarch64 {
-            match n {
+            // GCC accepts `rN` as an alias for `xN` on AArch64; normalize to
+            // the `x` spelling so one path resolves both (`r29`->frame
+            // pointer, `r16`..`r18` reserved, like their `x` forms).
+            let mut norm = alloc::string::String::new();
+            let m = match n.strip_prefix('r') {
+                Some(rest) if !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()) => {
+                    norm.push('x');
+                    norm.push_str(rest);
+                    norm.as_str()
+                }
+                _ => n,
+            };
+            match m {
                 "sp" | "wsp" => Some(R::StackPointer),
                 "fp" | "x29" | "w29" => Some(R::FramePointer),
                 "lr" => Some(R::Gp(30)),
                 _ => {
-                    let (prefix, rest) = n.split_at(1.min(n.len()));
+                    let (prefix, rest) = m.split_at(1.min(m.len()));
                     if (prefix == "x" || prefix == "w")
                         && let Ok(i) = rest.parse::<u8>()
                         && i <= 30
@@ -678,13 +692,14 @@ impl Compiler {
                 "rdi" | "edi" => Some(R::Gp(7)),
                 "r8" | "r8d" => Some(R::Gp(8)),
                 "r9" | "r9d" => Some(R::Gp(9)),
-                "r10" | "r10d" | "r11" | "r11d" => {
-                    // The emitters stage spills and asm operands through
-                    // r10 / r11; a binding there cannot be honored.
+                "r10" | "r10d" => {
+                    // r10 is the emitter's reserved asm-staging scratch
+                    // (SCRATCH_R10); a binding there cannot be honored.
                     return Err(self.compile_err(format!(
                         "register `{n}` is reserved and cannot hold a register variable"
                     )));
                 }
+                "r11" | "r11d" => Some(R::Gp(11)),
                 "r12" | "r12d" => Some(R::Gp(12)),
                 "r13" | "r13d" => Some(R::Gp(13)),
                 "r14" | "r14d" => Some(R::Gp(14)),

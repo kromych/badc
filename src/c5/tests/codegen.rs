@@ -3206,6 +3206,58 @@ fn register_asm_variable_pins_the_named_register() {
     );
 }
 
+/// The registers the emitters would otherwise reserve as asm-staging
+/// scratch are still bindable where honoring the pin is guaranteed:
+/// x86-64 r11 (r10 stays the scratch) and AArch64 r0 via GCC's `rN`
+/// spelling. A `+r` output round-trips through the named register, and
+/// the staging never uses it as scratch, so the template bytes fix it.
+#[test]
+fn register_asm_variable_binds_scratch_neighbor_and_r_spelling() {
+    use crate::{Compiler, NativeOptions, Target};
+    // x86-64: `addq %rax, %r11` (49 01 C3) -- %0 = r11 (the bound `+r`
+    // output), %1 = rax (first pool register for the input).
+    let src_x64 = "int main(void) { \
+        register long v asm(\"r11\") = 30; \
+        long b = 12; \
+        __asm__(\"addq %1, %0\" : \"+r\"(v) : \"r\"(b) : \"cc\"); \
+        return (int)v - 42; }";
+    let program = Compiler::with_target(src_x64.to_string(), Target::LinuxX64)
+        .compile()
+        .expect("register-asm r11 source compiles");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxX64,
+        NativeOptions::default(),
+    )
+    .expect("emit_native(LinuxX64)");
+    assert!(
+        bytes.windows(3).any(|w| w == [0x49, 0x01, 0xC3]),
+        "expected `addq %rax, %r11`"
+    );
+
+    // AArch64: `add x2, x0, x1` = 0x8B010002 -- %1 = r0 (=x0), %2 = r1
+    // (=x1), both via the `rN` spelling; %0 = out (next free pool reg).
+    let src_a64 = "int main(void) { \
+        register long a asm(\"r0\") = 30; \
+        register long b asm(\"r1\") = 10; \
+        long out; \
+        __asm__(\"add %0, %1, %2\" : \"=r\"(out) : \"r\"(a), \"r\"(b)); \
+        return (int)out - 40; }";
+    let program = Compiler::with_target(src_a64.to_string(), Target::LinuxAarch64)
+        .compile()
+        .expect("register-asm r0 source compiles");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("emit_native(LinuxAarch64)");
+    assert!(
+        bytes.windows(4).any(|w| w == 0x8B010002u32.to_le_bytes()),
+        "expected `add x2, x0, x1`"
+    );
+}
+
 /// `asm goto` lowers on both targets at -O0 and -O: the label branch
 /// leaves through a restore trampoline patched to the label's block.
 #[test]

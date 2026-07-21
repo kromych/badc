@@ -1216,10 +1216,13 @@ impl Compiler {
                 // leaf's address and the cast merely retypes it.
                 if !self.post_cast_is_reloc_leaf()? {
                     self.lex.restore(snap);
-                    return Ok(match self.parse_const_expr_cond_val()? {
-                        ConstVal::Float(f) => (f.to_bits() as i128, InitElemReloc::Float64Bits),
-                        v @ ConstVal::Int { .. } => (v.as_i128(), InitElemReloc::None),
-                    });
+                    return match self.parse_const_expr_cond_val()? {
+                        ConstVal::Float(f) => Ok((f.to_bits() as i128, InitElemReloc::Float64Bits)),
+                        v => Ok((
+                            self.require_integer_const(v)?.as_i128(),
+                            InitElemReloc::None,
+                        )),
+                    };
                 }
                 // Optional function-pointer abstract declarator
                 // `(*)(args)` after the base type. Same treatment
@@ -2154,10 +2157,44 @@ impl Compiler {
         self.next()?;
         let elem_is_struct = is_struct_ty(elem_ty) && struct_ptr_depth(elem_ty) == 0;
         let mut idx = 0usize;
+        let mut count = 0usize;
         while self.lex.tk != '}' {
-            let here = field_base + idx * elem_size;
-            grow_to(&mut self.data, here + elem_size);
+            // C99 6.7.8p7 array designator `[index] = value` (GCC also
+            // allows the range form `[lo ... hi]`): set the element the
+            // value fills; a positional element continues after it.
+            let mut range_hi = idx;
+            if self.lex.tk == Token::Brak {
+                self.next()?; // consume `[`
+                let n = self.parse_constant_int()?;
+                if n < 0 {
+                    return Err(self.compile_err(format!(
+                        "array designator index must be non-negative (got {n})"
+                    )));
+                }
+                let mut hi = n;
+                if self.lex.tk == Token::Ellipsis {
+                    self.next()?;
+                    hi = self.parse_constant_int()?;
+                    if hi < n {
+                        return Err(self.compile_err(format!(
+                            "array range designator high {hi} below low {n}"
+                        )));
+                    }
+                }
+                if self.lex.tk != ']' {
+                    return Err(self.compile_err("`]` expected after array designator index"));
+                }
+                self.next()?; // consume `]`
+                if self.lex.tk != Token::Assign {
+                    return Err(self.compile_err("`=` expected after array designator"));
+                }
+                self.next()?; // consume `=`
+                idx = n as usize;
+                range_hi = hi as usize;
+            }
             if elem_is_struct {
+                let here = field_base + idx * elem_size;
+                grow_to(&mut self.data, here + elem_size);
                 let sid = struct_id_of(elem_ty);
                 if self.lex.tk == '{' {
                     self.collect_struct_initializer(sid, here as i64)?;
@@ -2166,13 +2203,18 @@ impl Compiler {
                 }
             } else {
                 let (value, reloc) = self.parse_constant_init_value()?;
-                self.write_init_value(here, elem_size, value, reloc, elem_ty);
+                for i in idx..=range_hi {
+                    let here = field_base + i * elem_size;
+                    grow_to(&mut self.data, here + elem_size);
+                    self.write_init_value(here, elem_size, value, reloc, elem_ty);
+                }
             }
-            idx += 1;
+            idx = range_hi + 1;
+            count = count.max(idx);
             self.accept(',')?;
         }
         self.next()?; // consume `}`
-        self.flex_array_measured_count = Some(idx);
+        self.flex_array_measured_count = Some(count);
         Ok(())
     }
 
@@ -2301,6 +2343,23 @@ impl Compiler {
                 self.skip_opt_compound_literal_cast()?;
             }
             let close_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+            // C11 6.7.2.1: a field flattened from nested anonymous aggregates
+            // (a union nesting an anonymous struct, or the reverse) carries
+            // both group ids; a fully-braced initializer braces each level
+            // (`union { struct { u32 h, l; }; u64 hl; } x = { { { .l = 0 } } }`).
+            // Peel the levels recursively, outermost first.
+            if !designated
+                && field.anon_union_group != 0
+                && field.anon_struct_group != 0
+                && self.lex.tk == '{'
+            {
+                pos = self.fill_nested_anon_group_t(struct_id, field_idx, target)?;
+                for _ in 0..close_parens {
+                    self.accept(')')?;
+                }
+                self.accept(',')?;
+                continue;
+            }
             // C11 6.7.2.1: an anonymous struct flattened into the parent may
             // take a brace-enclosed sub-initializer that fills its members in
             // order (`union { struct { int a, b; }; ... } x = { { 1, 2 } }`).
@@ -2492,6 +2551,141 @@ impl Compiler {
         Ok(())
     }
 
+    /// The contiguous run of fields from `start` sharing `field`'s
+    /// `is_union`-kind anonymous group id, and that id. `0` id means the
+    /// field is not in that kind of anonymous group.
+    fn anon_group_run(&self, struct_id: usize, start: usize, is_union: bool) -> (u32, usize) {
+        let fields = &self.structs[struct_id].fields;
+        let group = if is_union {
+            fields[start].anon_union_group
+        } else {
+            fields[start].anon_struct_group
+        };
+        if group == 0 {
+            return (0, start);
+        }
+        let mut end = start;
+        while end < fields.len() {
+            let g = if is_union {
+                fields[end].anon_union_group
+            } else {
+                fields[end].anon_struct_group
+            };
+            if g != group {
+                break;
+            }
+            end += 1;
+        }
+        (group, end)
+    }
+
+    /// Fill a member flattened from nested anonymous aggregates (C11
+    /// 6.7.2.1) from a fully-braced initializer, the `{` at the cursor.
+    /// Each brace level matches one anonymous aggregate; the outermost
+    /// group -- the one with the wider contiguous run -- is peeled first,
+    /// and a member that itself opens a deeper group of the other kind
+    /// recurses. Returns the field index one past the outermost group.
+    fn fill_nested_anon_group_t(
+        &mut self,
+        struct_id: usize,
+        field_idx: usize,
+        target: InitTarget,
+    ) -> Result<usize, C5Error> {
+        let (union_group, union_end) = self.anon_group_run(struct_id, field_idx, true);
+        let (struct_group, struct_end) = self.anon_group_run(struct_id, field_idx, false);
+        // The wider run is the outer aggregate (a union nesting a struct
+        // has the wider union run; a struct nesting a union the reverse).
+        let is_union = union_end - field_idx >= struct_end - field_idx;
+        let (group, group_end) = if is_union {
+            (union_group, union_end)
+        } else {
+            (struct_group, struct_end)
+        };
+        self.fill_anon_group_level_t(struct_id, field_idx, is_union, group, group_end, target)?;
+        Ok(group_end)
+    }
+
+    /// Fill one anonymous-group level. A union takes a single member; a
+    /// struct fills its members in order. A member in a deeper group of
+    /// the other kind recurses (C11 6.7.2.1); a named aggregate member
+    /// takes an ordinary nested initializer.
+    fn fill_anon_group_level_t(
+        &mut self,
+        struct_id: usize,
+        start_idx: usize,
+        is_union: bool,
+        group: u32,
+        group_end: usize,
+        target: InitTarget,
+    ) -> Result<(), C5Error> {
+        let var_offset = target.base();
+        self.next()?; // consume `{`
+        let mut mem_pos = start_idx;
+        while self.lex.tk != '}' {
+            let mem_idx = if self.lex.tk == Token::Dot {
+                self.next()?;
+                if self.lex.tk != Token::Id {
+                    return Err(self.compile_err("field name expected after `.`"));
+                }
+                let nm = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+                if self.lex.tk != Token::Assign {
+                    return Err(self.compile_err(format!("`=` expected after `.{nm}` designator")));
+                }
+                self.next()?;
+                self.structs[struct_id]
+                    .fields
+                    .iter()
+                    .position(|f| {
+                        let g = if is_union {
+                            f.anon_union_group
+                        } else {
+                            f.anon_struct_group
+                        };
+                        g == group && f.name == nm
+                    })
+                    .ok_or_else(|| self.compile_err(format!("anonymous member {nm} not found")))?
+            } else {
+                while mem_pos < group_end {
+                    let g = if is_union {
+                        self.structs[struct_id].fields[mem_pos].anon_union_group
+                    } else {
+                        self.structs[struct_id].fields[mem_pos].anon_struct_group
+                    };
+                    if g == group {
+                        break;
+                    }
+                    mem_pos += 1;
+                }
+                if mem_pos >= group_end {
+                    return Err(self.compile_err("too many initializers for anonymous aggregate"));
+                }
+                mem_pos
+            };
+            let mem = self.structs[struct_id].fields[mem_idx].clone();
+            let mem_base = (var_offset as usize) + mem.offset;
+            let deeper = if is_union {
+                mem.anon_struct_group
+            } else {
+                mem.anon_union_group
+            };
+            if deeper != 0 && self.lex.tk == '{' {
+                self.fill_nested_anon_group_t(struct_id, mem_idx, target)?;
+            } else if self.is_traversable_aggregate_ty(mem.ty) && self.lex.tk == '{' {
+                self.collect_struct_initializer_t(
+                    struct_id_of(mem.ty),
+                    target.rebased(mem_base as i64),
+                )?;
+            } else {
+                self.fill_member_value_t(struct_id, &mem, target, mem_base, false)?;
+            }
+            mem_pos = mem_idx + 1;
+            self.accept(',')?;
+        }
+        self.next()?; // consume `}`
+        Ok(())
+    }
+
     /// Initialize one member at `field_base` from the current token
     /// position, dispatching on the member's shape:
     ///   * char-array member from a string literal (C99 6.7.8p14),
@@ -2676,6 +2870,38 @@ impl Compiler {
             };
             let mut idx: usize = 0;
             while self.lex.tk != '}' {
+                // C99 6.7.8p20: a row of a multi-dimensional scalar array
+                // member is itself brace-enclosed (`{ {r0}, {r1} }`). Fill
+                // up to `inner_array_size` elements from the row's braces --
+                // the region was pre-zeroed, so a short row keeps the rest
+                // zero -- then advance the flat cursor a whole row.
+                if field.inner_array_size != 0 && elem_sid.is_none() && self.lex.tk == '{' {
+                    let inner = field.inner_array_size as usize;
+                    self.next()?; // consume the row `{`
+                    let mut j = 0usize;
+                    while self.lex.tk != '}' {
+                        if j >= inner {
+                            return Err(self.compile_err(format!(
+                                "too many initializers for a row of `{}.{}`",
+                                self.structs[struct_id].name, field.name
+                            )));
+                        }
+                        let (value, reloc) = self.parse_constant_init_value()?;
+                        self.write_init_value(
+                            field_base + (idx + j) * elem_size,
+                            elem_size,
+                            value,
+                            reloc,
+                            field.ty,
+                        );
+                        j += 1;
+                        self.accept(',')?;
+                    }
+                    self.next()?; // consume the row `}`
+                    idx += inner;
+                    self.accept(',')?;
+                    continue;
+                }
                 // C99 6.7.8p7 array designator inside an array
                 // field's nested initializer. `[N] = value`
                 // jumps the write cursor to N; subsequent

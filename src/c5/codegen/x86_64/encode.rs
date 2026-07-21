@@ -1734,6 +1734,7 @@ pub(crate) fn lower(
         &program.file_asm,
         false,
         super::ssa::emit_common::AsmComments::X86,
+        &|blocks| crate::c5::codegen::encode_file_asm_section_code(blocks, target),
         &mut asm_sections,
     )
     .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;

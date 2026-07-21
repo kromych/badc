@@ -4318,6 +4318,182 @@ fn x86_alternative_call_replacement_encodes_and_relocates() {
 }
 
 #[test]
+fn aarch64_alternative_subsection_defers_replacement_and_relocates() {
+    // The AArch64 ALTERNATIVE places its replacement in a `.subsection`, which
+    // GNU as appends to `.text` after the function body -- out of the main
+    // sequence's fall-through path. badc encodes the replacement into a
+    // deferred region emitted after the body; the `.altinstructions` entry's
+    // `.word 663f - .` relocates against the replacement's final text offset,
+    // `.word 661b - .` against the original, both R_AARCH64_PREL32 -- the same
+    // construct GNU as emits. Equal `.byte` lengths make the `.org` a no-op.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        unsigned long f(void) {\n\
+            unsigned long off;\n\
+            __asm__(\n\
+                \"661:\\n\\tmrs %0, tpidr_el1\\n662:\\n\"\n\
+                \".pushsection .altinstructions,\\\"a\\\"\\n\"\n\
+                \" .word 661b - .\\n .word 663f - .\\n .hword 0x0134\\n\"\n\
+                \" .byte 662b-661b\\n .byte 664f-663f\\n\"\n\
+                \".popsection\\n\"\n\
+                \".subsection 1\\n663:\\n\\tmrs %0, tpidr_el2\\n664:\\n\"\n\
+                \".org . - (664b-663b) + (662b-661b)\\n\"\n\
+                \".org . - (662b-661b) + (664b-663b)\\n\"\n\
+                \".previous\\n\" : \"=r\" (off));\n\
+            return off;\n\
+        }\n\
+        int main(void) { return (int)f(); }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let body = |name: &str| {
+        sections
+            .iter()
+            .find(|(n, _, _, _)| n == name)
+            .unwrap_or_else(|| panic!("{name} missing"))
+            .3
+            .clone()
+    };
+    // The `.altinstructions` entry: word(661b-.) word(663f-.) hword(cpucap)
+    // byte(old_len) byte(new_len). The two words are reloc placeholders (0);
+    // cpucap 0x0134, both lengths the 4-byte instruction -- the GNU as bytes.
+    let alt = body(".altinstructions");
+    assert_eq!(alt.len(), 12);
+    assert_eq!(&alt[0..8], &[0u8; 8], "two PREL32 placeholders");
+    assert_eq!(&alt[8..12], &[0x34, 0x01, 4, 4], "cpucap 0x0134, old=new=4");
+    // Two R_AARCH64_PREL32 relocations against `.text`: the field at offset 0
+    // targets the original (661), the field at offset 4 the replacement (663).
+    // The addends are the labels' text offsets; the replacement's is larger,
+    // being appended after the body.
+    const R_AARCH64_PREL32: u64 = 261;
+    let rela = body(".rela.altinstructions");
+    assert_eq!(rela.len(), 48, "two relocations");
+    let entry = |i: usize| {
+        let b = &rela[i * 24..i * 24 + 24];
+        let off = u64::from_le_bytes(b[0..8].try_into().unwrap());
+        let info = u64::from_le_bytes(b[8..16].try_into().unwrap());
+        let add = i64::from_le_bytes(b[16..24].try_into().unwrap());
+        (off, info & 0xffff_ffff, add)
+    };
+    let by_off = |want: u64| (0..2).map(entry).find(|e| e.0 == want).expect("reloc");
+    let (_, t661, a661) = by_off(0);
+    let (_, t663, a663) = by_off(4);
+    assert_eq!(t661, R_AARCH64_PREL32, "661 field is PREL32");
+    assert_eq!(t663, R_AARCH64_PREL32, "663 field is PREL32");
+    assert!(a663 > a661, "replacement deferred after the original");
+    // The text at each addend is the encoded instruction: `mrs Xn, tpidr_el1`
+    // at the original, `mrs Xn, tpidr_el2` (the replacement) at 663, same Xn.
+    let text = body(".text");
+    let word = |o: i64| u32::from_le_bytes(text[o as usize..o as usize + 4].try_into().unwrap());
+    let el1 = word(a661);
+    let el2 = word(a663);
+    assert_eq!(el1 & 0xffff_ffe0, 0xd538_d080, "mrs _, tpidr_el1");
+    assert_eq!(el2 & 0xffff_ffe0, 0xd53c_d040, "mrs _, tpidr_el2");
+    assert_eq!(el1 & 0x1f, el2 & 0x1f, "same destination register");
+}
+
+#[test]
+fn aarch64_alternative_multi_instruction_replacement_defers_and_asserts_length() {
+    // A multi-instruction ALTERNATIVE (an LL/SC original replaced by an LSE
+    // sequence): the whole replacement defers after the body, the original's
+    // local backward branch (`cbnz .., 1b`) resolves within the main sequence,
+    // and the equal `.byte` lengths (five 4-byte instructions each) make the
+    // `.org` a no-op. The `.altinstructions` records both lengths as 20.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        unsigned char f(unsigned char x, volatile void *ptr) {\n\
+            unsigned char ret; unsigned long tmp;\n\
+            __asm__ volatile(\n\
+                \"661:\\n\\tprfm pstl1strm, %2\\n\"\n\
+                \"1:\\tldxrb %w0, %2\\n\\tstlxrb %w1, %w3, %2\\n\\tcbnz %w1, 1b\\n\\tdmb ish\\n662:\\n\"\n\
+                \".pushsection .altinstructions,\\\"a\\\"\\n .word 661b - .\\n .word 663f - .\\n\"\n\
+                \" .hword 40\\n .byte 662b-661b\\n .byte 664f-663f\\n.popsection\\n\"\n\
+                \".subsection 1\\n663:\\n\\tswpalb %w3, %w0, %2\\n\\tnop\\n\\tnop\\n\\tnop\\n\\tnop\\n664:\\n\"\n\
+                \".org . - (664b-663b) + (662b-661b)\\n.org . - (662b-661b) + (664b-663b)\\n.previous\\n\"\n\
+                : \"=&r\" (ret), \"=&r\" (tmp), \"+Q\" (*(unsigned char *)ptr) : \"r\" (x) : \"memory\");\n\
+            return ret;\n\
+        }\n\
+        int main(void) { unsigned char c = 0; return f(1, &c); }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let body = |name: &str| {
+        sections
+            .iter()
+            .find(|(n, _, _, _)| n == name)
+            .unwrap_or_else(|| panic!("{name} missing"))
+            .3
+            .clone()
+    };
+    // Both lengths are the five-instruction, 20-byte sequences (0x14).
+    let alt = body(".altinstructions");
+    assert_eq!(
+        &alt[8..12],
+        &[0x28, 0x00, 0x14, 0x14],
+        "cpucap 40, old=new=20"
+    );
+    let rela = body(".rela.altinstructions");
+    let addend = |i: usize| i64::from_le_bytes(rela[i * 24 + 16..i * 24 + 24].try_into().unwrap());
+    let (a661, a663) = (addend(0), addend(1));
+    assert!(a663 > a661, "replacement deferred after the body");
+    // The replacement's first instruction is `swpalb Ws, Wt, [Xn]` (LSE swap,
+    // byte, acquire-release): bits [31:21] are 0b00111000111 == 0x1c7.
+    let text = body(".text");
+    let swp = u32::from_le_bytes(text[a663 as usize..a663 as usize + 4].try_into().unwrap());
+    assert_eq!(swp >> 21, 0x1c7, "swpalb");
+    // The four following slots are `nop` (0xd503201f).
+    for k in 1..5 {
+        let o = a663 as usize + k * 4;
+        assert_eq!(
+            u32::from_le_bytes(text[o..o + 4].try_into().unwrap()),
+            0xd503_201f,
+            "nop padding slot {k}"
+        );
+    }
+}
+
+#[test]
+fn aarch64_alternative_length_mismatch_is_rejected() {
+    // The ALTERNATIVE `.org` pair asserts the replacement and original are the
+    // same length; GNU as fails with "attempt to move .org backwards" when
+    // they differ. A replacement one instruction longer than the original is
+    // rejected rather than emitted at the wrong length.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        unsigned long f(void) {\n\
+            unsigned long off;\n\
+            __asm__(\n\
+                \"661:\\n\\tmrs %0, tpidr_el1\\n662:\\n\"\n\
+                \".pushsection .altinstructions,\\\"a\\\"\\n .word 661b - .\\n .word 663f - .\\n .hword 1\\n .byte 662b-661b\\n .byte 664f-663f\\n.popsection\\n\"\n\
+                \".subsection 1\\n663:\\n\\tmrs %0, tpidr_el2\\n\\tnop\\n664:\\n.org . - (664b-663b) + (662b-661b)\\n.org . - (662b-661b) + (664b-663b)\\n.previous\\n\"\n\
+                : \"=r\" (off));\n\
+            return off;\n\
+        }\n\
+        int main(void) { return (int)f(); }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let err = emit_native_with_options(&program, Target::LinuxAarch64, opts).unwrap_err();
+    assert!(alloc::format!("{err:?}").contains("length"), "{err:?}");
+}
+
+#[test]
 fn attribute_and_asm_pushsection_merge_into_one_section() {
     // An `__attribute__((section))` object and an inline-asm
     // `.pushsection` block naming the same section share one output

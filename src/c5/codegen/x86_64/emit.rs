@@ -6855,7 +6855,8 @@ fn emit_inline_asm(
     // to its offset; any other name is a symbol relocation.
     if !section_blocks.is_empty() {
         let names = super::asm::scan_label_names(code_text);
-        let label_off = |name: &str| -> Option<usize> {
+        use super::ssa::emit_common::LabelLoc;
+        let label_off = |name: &str| -> Option<LabelLoc> {
             let num = if let Some(i) = names.iter().position(|&n| n == name) {
                 super::asm::NAMED_LABEL_BASE + i as u32
             } else {
@@ -6874,6 +6875,7 @@ fn emit_inline_asm(
             } else {
                 defs.next_back().map(|&(_, off)| off)
             }
+            .map(LabelLoc::Text)
         };
         // An `i`-class operand naming a link-time data address (`.long %c0 - .`
         // where `%c0` is `&sym` or a string literal) relocates against the

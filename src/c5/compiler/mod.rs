@@ -634,6 +634,15 @@ pub(in crate::c5::compiler) struct Pending {
     /// gets the dimension, mirroring an array typedef base.
     pub typeof_operand_array_size: i64,
 
+    /// Byte width of a `typeof` operand that decayed to the element
+    /// pointer with only the row size recorded (a pointer-to-array
+    /// deref `*p`, a string literal, or a 1D row of a multi-dim
+    /// subscript). Captured only when the row is 1D-reducible (no
+    /// pending multi-dim stride); `parse_typeof_specifier` recovers the
+    /// element count as `bytes / sizeof(elem)` so `typeof(*p)` is the
+    /// array type rather than the decayed element pointer.
+    pub typeof_operand_array_bytes: i64,
+
     /// Companion to `last_array_decay_size` for cases where the
     /// row's byte size is known directly but its shape can't be
     /// reduced to a single `count * sizeof(elem_ty)` pair --
@@ -837,6 +846,7 @@ impl Default for Pending {
             last_array_decay_size: 0,
             typeof_operand_was_array: false,
             typeof_operand_array_size: 0,
+            typeof_operand_array_bytes: 0,
             last_array_decay_bytes: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field
             // docs above.

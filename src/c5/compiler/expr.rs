@@ -2441,8 +2441,26 @@ impl Compiler {
                 // when `dbFileVers` is a `char[16]` field. The
                 // expression already yielded the array's address as
                 // its rvalue (no Li was emitted), so `&` is a no-op
-                // at the IR level; the type bump below tracks the
+                // at the IR level; the type bump above tracks the
                 // extra pointer level.
+                //
+                // C99 6.5.3.2p3: `&arr` has type pointer-to-array, not
+                // the decayed element pointer. For a known-size 1D array
+                // (`index_stride == 0`; multi-dim seeds a nonzero stride)
+                // rebuild the pointer-to-array aggregate so `(*p)[i]`,
+                // `sizeof(&arr)`, and `typeof(&arr)` see a real
+                // pointer-to-array rather than the element type.
+                let n = self.pending.last_array_decay_size;
+                if n > 0 && self.pending.index_stride == 0 {
+                    let elem_ty = pre_addr_ty - Ty::Ptr as i64;
+                    let agg = self.array_agg_type(elem_ty, &[n]);
+                    self.ty = agg + Ty::Ptr as i64;
+                }
+                // The result is a pointer; drop the operand's array-decay
+                // hint so a surrounding `sizeof` / `typeof` does not size
+                // or type it as the array itself (mirrors the `*` arm).
+                self.pending.last_array_decay_size = 0;
+                self.pending.last_array_decay_bytes = 0;
             } else if matches!(
                 self.ast_acc,
                 Some(id) if matches!(

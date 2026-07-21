@@ -817,6 +817,14 @@ fn typeof_array_row() {
 }
 
 #[test]
+fn typeof_addr_of_array() {
+    // C99 6.5.3.2p3: `&arr` is a pointer-to-array, so `sizeof(&arr)` is a
+    // pointer's width and `typeof(&arr)` / `typeof(*(&arr))` round-trip. Drives
+    // the per-CPU `SHIFT_PERCPU_PTR` shape `(typeof(*(ptr)) *)(addr + off)`.
+    assert_eq!(run_fixture("typeof_addr_of_array.c"), 0);
+}
+
+#[test]
 fn typeof_expression() {
     // `typeof(expr)` over a full expression: binary, shift, conditional
     // (the common MIN/MAX `typeof(1 ? (a) : (b))` shape), and comma operators.

@@ -1,15 +1,3 @@
-; --- SSA dump (ok=true) ent_pc=0 ---
-; name=ctx_jump
-fn ent_pc=0 n_params=1 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   LoadLocal { off=2, kind=I64 }                    -> x0
-    v4   InlineAsm { template="movq   (%%rax), %%rbx\n\tmovq   8(%%rax), %%rbp\n\tmovq   16(%%rax), %%r12\n\tmovq   24(%%rax), %%rdx\n\tmovq   32(%%rax), %%r13\n\tmovq   40(%%rax), %%r14\n\tmov    %%rdx, %%rsp\n\tmovq   48(%%rax), %%r15\n\tmovq   56(%%rax), %%rdx\n\t.cfi_def_cfa %%rdx, 0 \n\t.cfi_offset %%rbx, 0 \n\t.cfi_offset %%rbp, 8 \n\tjmp    *%%rdx\n\t", ops=1, args=[v1] } -> -
-    v5   Imm(0)                                           -> x0
-    terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=deep_touch
 fn ent_pc=1 n_params=1 variadic=false locals=34
@@ -71,36 +59,42 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v3   InlineAsm { template="lea     LJMPRET%=(%%rip), %%rcx\n\txor     %%rax, %%rax\n\tmov     %%rbx, (%%rdx)\n\tmov     %%rbp, 8(%%rdx)\n\tmov     %%r12, 16(%%rdx)\n\tmov     %%rsp, 24(%%rdx)\n\tmov     %%r13, 32(%%rdx)\n\tmov     %%r14, 40(%%rdx)\n\tmov     %%r15, 48(%%rdx)\n\tmov     %%rcx, 56(%%rdx)\n\tLJMPRET%=:\n\t", ops=2, args=[v1, v2] } -> -
     v4   LoadLocal { off=-1, kind=I32 }                   -> x0
     v5   BinopI { op=eq, lhs=v4, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v5, target=b4, fall=b1 }   (exit_acc=v5)
+    terminator Bz { cond=v5, target=b6, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
     v6   ImmData(104)                                     -> x0
     v7   Load { addr=v6, disp=0, kind=I32 }               -> x0
     v8   BinopI { op=ne, lhs=v7, rhs_imm=0 }              -> x0
     terminator Bz { cond=v8, target=b3, fall=b2 }   (exit_acc=v8)
   block 2  start_pc=0
-    v9   Imm(1)                                           -> x0
-    terminator Return(v9)   (exit_acc=v9)
+    v12  Imm(1)                                           -> x0
+    terminator Return(v12)   (exit_acc=v12)
   block 3  start_pc=0
-    v10  ImmData(104)                                     -> x0
-    v11  Imm(1)                                           -> x1
-    v12  Store { addr=v10, disp=0, value=v11, kind=I32 }  -> -
-    v13  Imm(4)                                           -> x7
-    v14  Call { target_pc=1, args=[v13], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v15  ImmData(24)                                      -> x0
-    v16  Call { target_pc=0, args=[v2], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v17  Imm(2)                                           -> x0
-    terminator Return(v17)   (exit_acc=v17)
+    v13  ImmData(104)                                     -> x0
+    v14  Imm(1)                                           -> x1
+    v15  Store { addr=v13, disp=0, value=v14, kind=I32 }  -> -
+    v16  Imm(4)                                           -> x7
+    v17  Call { target_pc=1, args=[v16], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v18  ImmData(24)                                      -> x0
+    terminator Jmp(b4)
   block 4  start_pc=0
-    v18  ImmData(104)                                     -> x0
-    v19  Load { addr=v18, disp=0, kind=I32 }              -> x0
-    v20  BinopI { op=ne, lhs=v19, rhs_imm=1 }             -> x0
-    terminator Bz { cond=v20, target=b6, fall=b5 }   (exit_acc=v20)
+    v22  Imm(0)                                           -> x0
+    v23  InlineAsm { template="movq   (%%rax), %%rbx\n\tmovq   8(%%rax), %%rbp\n\tmovq   16(%%rax), %%r12\n\tmovq   24(%%rax), %%rdx\n\tmovq   32(%%rax), %%r13\n\tmovq   40(%%rax), %%r14\n\tmov    %%rdx, %%rsp\n\tmovq   48(%%rax), %%r15\n\tmovq   56(%%rax), %%rdx\n\t.cfi_def_cfa %%rdx, 0 \n\t.cfi_offset %%rbx, 0 \n\t.cfi_offset %%rbp, 8 \n\tjmp    *%%rdx\n\t", ops=1, args=[v2] } -> -
+    v24  Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v24)
   block 5  start_pc=0
-    v21  Imm(3)                                           -> x0
-    terminator Return(v21)   (exit_acc=v21)
+    v19  Imm(2)                                           -> x0
+    terminator Return(v19)   (exit_acc=v19)
   block 6  start_pc=0
-    v22  Imm(42)                                          -> x0
-    terminator Return(v22)   (exit_acc=v22)
+    v9   ImmData(104)                                     -> x0
+    v10  Load { addr=v9, disp=0, kind=I32 }               -> x0
+    v11  BinopI { op=ne, lhs=v10, rhs_imm=1 }             -> x0
+    terminator Bz { cond=v11, target=b8, fall=b7 }   (exit_acc=v11)
+  block 7  start_pc=0
+    v20  Imm(3)                                           -> x0
+    terminator Return(v20)   (exit_acc=v20)
+  block 8  start_pc=0
+    v21  Imm(42)                                          -> x0
+    terminator Return(v21)   (exit_acc=v21)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

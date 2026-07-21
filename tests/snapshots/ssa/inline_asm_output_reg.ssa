@@ -1,114 +1,63 @@
-; --- SSA dump (ok=true) ent_pc=0 ---
-; name=get_seven
-fn ent_pc=0 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   Imm(7)                                           -> x0
-    terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=1 ---
-; name=read_directive_const
-fn ent_pc=1 n_params=0 variadic=false locals=2
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-2)                                    -> x0
-    v2   LocalAddr(-1)                                    -> x1
-    v3   Imm(42)                                          -> x2
-    v4   InlineAsm { template="jmp 2f\n\t1:\n\t.long %c2\n\t2:\n\tlea 1b(%%rip), %0\n\tmovl (%0), %1", ops=3, args=[v1, v2, v3] } -> -
-    v5   LoadLocal { off=-1, kind=I32 }                   -> x0
-    v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x1
-    v7   Extend { value=v5, kind=I32 }                    -> x1
-    terminator Return(v5)   (exit_acc=v5)
-; --- SSA dump (ok=true) ent_pc=2 ---
-; name=address_modifier
-fn ent_pc=2 n_params=0 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
-    v2   ImmData(8)                                       -> x1
-    v3   InlineAsm { template="lea %P1, %0", ops=2, args=[v1, v2] } -> -
-    v4   LoadLocal { off=-1, kind=I64 }                   -> x0
-    v5   Load { addr=v4, disp=0, kind=I32 }               -> x0
-    v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x1
-    v7   Extend { value=v5, kind=I32 }                    -> x1
-    terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=3 ---
-; name=call_modifier
-fn ent_pc=3 n_params=0 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
-    v2   ImmCode(ent_pc=0)                                -> x1
-    v3   InlineAsm { template="call *%P1", ops=2, args=[v1, v2] } -> -
-    v4   LoadLocal { off=-1, kind=I64 }                   -> x0
-    v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x1
-    v6   Extend { value=v4, kind=I32 }                    -> x1
-    v7   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x0
-    v8   Extend { value=v6, kind=I32 }                    -> x0
-    terminator Return(v8)   (exit_acc=v8)
-; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
-fn ent_pc=4 n_params=0 variadic=false locals=4
+fn ent_pc=3 n_params=0 variadic=false locals=6
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
+    v1   Imm(0)                                           -> x0
+    v2   StoreLocal { off=-1, value=v1, kind=I64 }        -> -
+    v3   LocalAddr(-1)                                    -> x0
+    v4   Imm(5)                                           -> x1
     terminator Jmp(b1)
   block 1  start_pc=0
-    v8   LocalAddr(-2)                                    -> x0
-    v9   LocalAddr(-1)                                    -> x1
-    v10  Imm(42)                                          -> x2
-    v11  InlineAsm { template="jmp 2f\n\t1:\n\t.long %c2\n\t2:\n\tlea 1b(%%rip), %0\n\tmovl (%0), %1", ops=3, args=[v8, v9, v10] } -> -
-    v12  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x1
-    v14  Extend { value=v12, kind=I32 }                   -> x1
-    terminator Jmp(b2)   (exit_acc=v12)
+    v15  Imm(0)                                           -> x2
+    v16  Imm(0)                                           -> x2
+    v17  InlineAsm { template="movq %1, (%0)", ops=2, args=[v3, v4] } -> -
+    v18  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v18)
   block 2  start_pc=0
-    v1   BinopI { op=ne, lhs=v12, rhs_imm=42 }            -> x0
-    terminator Bz { cond=v1, target=b4, fall=b3 }   (exit_acc=v1)
+    v5   Imm(10)                                          -> x0
+    terminator Jmp(b3)
   block 3  start_pc=0
-    v2   Imm(1)                                           -> x0
-    terminator Return(v2)   (exit_acc=v2)
+    v19  Imm(0)                                           -> x1
+    v20  LocalAddr(-4)                                    -> x1
+    v21  InlineAsm { template="leaq 7(%1), %0", ops=2, args=[v20, v5] } -> -
+    v22  LoadLocal { off=-4, kind=I64 }                   -> x0
+    terminator Jmp(b4)   (exit_acc=v22)
   block 4  start_pc=0
-    v15  LocalAddr(-3)                                    -> x0
-    v16  ImmData(8)                                       -> x1
-    v17  InlineAsm { template="lea %P1, %0", ops=2, args=[v15, v16] } -> -
-    v18  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v19  Load { addr=v18, disp=0, kind=I32 }              -> x0
-    v20  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x1
-    v21  Extend { value=v19, kind=I32 }                   -> x1
-    terminator Jmp(b5)   (exit_acc=v19)
+    v6   BinopI { op=ne, lhs=v22, rhs_imm=17 }            -> x0
+    terminator Bz { cond=v6, target=b6, fall=b5 }   (exit_acc=v6)
   block 5  start_pc=0
-    v3   BinopI { op=ne, lhs=v19, rhs_imm=33 }            -> x0
-    terminator Bz { cond=v3, target=b7, fall=b6 }   (exit_acc=v3)
+    v7   Imm(1)                                           -> x0
+    terminator Return(v7)   (exit_acc=v7)
   block 6  start_pc=0
-    v4   Imm(2)                                           -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v8   Imm(6)                                           -> x0
+    terminator Jmp(b7)
   block 7  start_pc=0
-    v22  LocalAddr(-4)                                    -> x0
-    v23  ImmCode(ent_pc=0)                                -> x1
-    v24  InlineAsm { template="call *%P1", ops=2, args=[v22, v23] } -> -
-    v25  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v26  BinopI { op=shl, lhs=v25, rhs_imm=32 }           -> x1
-    v27  Extend { value=v25, kind=I32 }                   -> x1
-    v28  BinopI { op=shl, lhs=v25, rhs_imm=32 }           -> x0
-    v29  Extend { value=v27, kind=I32 }                   -> x0
+    v23  Imm(0)                                           -> x1
+    v24  LocalAddr(-5)                                    -> x1
+    v25  LocalAddr(-6)                                    -> x2
+    v26  InlineAsm { template="movq %2, %0\n\tmovq %2, %1", ops=3, args=[v24, v25, v8] } -> -
+    v27  LoadLocal { off=-5, kind=I64 }                   -> x0
+    v28  LoadLocal { off=-6, kind=I64 }                   -> x1
+    v29  Binop { op=add, lhs=v27, rhs=v28 }               -> x0
     terminator Jmp(b8)   (exit_acc=v29)
   block 8  start_pc=0
-    v5   BinopI { op=ne, lhs=v29, rhs_imm=7 }             -> x0
-    terminator Bz { cond=v5, target=b10, fall=b9 }   (exit_acc=v5)
+    v9   BinopI { op=ne, lhs=v29, rhs_imm=12 }            -> x0
+    terminator Bz { cond=v9, target=b10, fall=b9 }   (exit_acc=v9)
   block 9  start_pc=0
-    v6   Imm(3)                                           -> x0
-    terminator Return(v6)   (exit_acc=v6)
+    v10  Imm(2)                                           -> x0
+    terminator Return(v10)   (exit_acc=v10)
   block 10  start_pc=0
-    v7   Imm(42)                                          -> x0
-    terminator Return(v7)   (exit_acc=v7)
+    v11  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v12  BinopI { op=ne, lhs=v11, rhs_imm=5 }             -> x0
+    terminator Bz { cond=v12, target=b12, fall=b11 }   (exit_acc=v12)
   block 11  start_pc=0
-    terminator Jmp(b4)
+    v13  Imm(3)                                           -> x0
+    terminator Return(v13)   (exit_acc=v13)
   block 12  start_pc=0
-    terminator Jmp(b7)
+    v14  Imm(42)                                          -> x0
+    terminator Return(v14)   (exit_acc=v14)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

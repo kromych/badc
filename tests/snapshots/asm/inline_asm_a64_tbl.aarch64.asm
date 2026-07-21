@@ -12,10 +12,10 @@ Disassembly of section .text:
                	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sxtw	x0, w0
-               	sxtw	x1, w1
-               	sub	x2, x29, #0x8
+               	sub	sp, sp, #0x20
+               	mov	x0, #0x2a               // =42
+               	mov	x1, #0x3                // =3
+               	sub	x2, x29, #0x18
                	sub	sp, sp, #0x50
                	str	x0, [sp, #0x18]
                	str	x1, [sp, #0x20]
@@ -41,30 +41,49 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x38]
                	ldr	d2, [sp, #0x40]
                	add	sp, sp, #0x50
-               	ldursw	x0, [x29, #-0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x0, #0x2a               // =42
-               	mov	x1, #0x3                // =3
-               	bl	<addr>
+               	ldursw	x0, [x29, #-0x18]
                	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2a               // =42
                	mov	x1, #0x10               // =16
-               	bl	<addr>
+               	sub	x2, x29, #0x20
+               	sub	sp, sp, #0x50
+               	str	x0, [sp, #0x18]
+               	str	x1, [sp, #0x20]
+               	str	x2, [sp, #0x28]
+               	str	d0, [sp, #0x30]
+               	str	d1, [sp, #0x38]
+               	str	d2, [sp, #0x40]
+               	str	x2, [sp]
+               	str	x0, [sp, #0x8]
+               	str	x1, [sp, #0x10]
+               	ldr	x1, [sp, #0x8]
+               	ldr	x2, [sp, #0x10]
+               	dup	v1.16b, w1
+               	dup	v2.16b, w2
+               	tbl	v0.16b, { v1.16b }, v2.16b
+               	umov	w0, v0.b[0]
+               	ldr	x16, [sp]
+               	str	w0, [x16]
+               	ldr	x0, [sp, #0x18]
+               	ldr	x1, [sp, #0x20]
+               	ldr	x2, [sp, #0x28]
+               	ldr	d0, [sp, #0x30]
+               	ldr	d1, [sp, #0x38]
+               	ldr	d2, [sp, #0x40]
+               	add	sp, sp, #0x50
+               	ldursw	x0, [x29, #-0x20]
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2a               // =42
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

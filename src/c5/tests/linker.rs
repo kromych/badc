@@ -187,6 +187,48 @@ unsigned long two_reads(void) {
 }
 
 #[test]
+fn inline_asm_inst_operand_folds_prefix_logical_not() {
+    // A `.inst` operand is an integer-constant-expression (C99 6.6). The
+    // AArch64 MSR-immediate word `0xd500401f | (op1 << 16 | op2 << 5) |
+    // ((!!x) << 8)` mixes `|`, `<<`, and prefix `!!` over constants. Prefix
+    // `!` (C99 6.5.3.3) yields 1/0, so `!!(0)` clears the imm field and
+    // `!!(1)` sets it. Byte-identical to GNU as: 0xd500409f and 0xd500419f.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+void inst_neg_zero(void) {
+    __asm__ volatile(".inst (0xd500401f | ((0) << 16 | (4) << 5) | ((!!(0)) << 8))");
+}
+void inst_neg_one(void) {
+    __asm__ volatile(".inst (0xd500401f | ((0) << 16 | (4) << 5) | ((!!(1)) << 8))");
+}
+int main(void) { inst_neg_zero(); inst_neg_one(); return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let words: alloc::vec::Vec<u32> = obj
+        .text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    assert!(
+        words.contains(&0xd500_409f),
+        "`!!(0)` must fold to 0, leaving the imm field clear: {words:08x?}"
+    );
+    assert!(
+        words.contains(&0xd500_419f),
+        "`!!(1)` must fold to 1, setting the imm field: {words:08x?}"
+    );
+}
+
+#[test]
 fn inline_asm_lse_arch_extension_directive_is_accepted() {
     // The arm64 LSE atomics prepend `.arch_extension lse` to every atomic asm
     // block to enable the LSE instruction set for the assembler. badc's encoder

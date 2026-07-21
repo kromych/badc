@@ -14,8 +14,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	%rax, %rcx
                	subq	%rax, %rcx
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
@@ -24,8 +23,7 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	0x40(%rax), %rcx
                	subq	%rax, %rcx
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	cmpq	$0x40, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
@@ -38,8 +36,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movq	%rcx, %rax
                	subq	%r10, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x44, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
@@ -50,8 +47,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	%rax, %r10
                	subq	%r10, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
@@ -63,8 +59,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movq	%rcx, %rax
                	subq	%r10, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x40, %rax
                	setne	%al
                	movzbq	%al, %rax
@@ -78,8 +73,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movq	%rcx, %rax
                	subq	%r10, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x80, %rax
                	setne	%al
                	movzbq	%al, %rax
@@ -92,8 +86,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movq	%rcx, %rax
                	subq	%r10, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x40, %rax
                	je	<addr>
                	movl	$0xb, %eax
@@ -103,8 +96,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movq	%rcx, %rax
                	subq	%r10, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0xc0, %rax
                	je	<addr>
                	movl	$0xc, %eax

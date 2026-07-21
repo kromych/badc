@@ -356,6 +356,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("vla_param_decay.c", 0),
     ("arithmetic.c", 60),
     ("inline_asm_x64_catalogue.c", 42),
+    ("inline_asm_clobber_probe.c", 42),
     ("inline_asm_x64_sse.c", 42),
     ("inline_asm_x64_setcc.c", 42),
     ("inline_asm_x64_cmov.c", 42),

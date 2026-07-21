@@ -2057,9 +2057,12 @@ fn run_inline_asm(
     }
     crate::c5::codegen::x86_64::asm::check_operand_refs(&insns, asm.operands.len())
         .map_err(C5Error::Runtime)?;
-    let op_reg =
-        crate::c5::codegen::x86_64::asm::assign_operand_regs(&asm.operands, asm.clobber_fp_regs)
-            .map_err(C5Error::Runtime)?;
+    let op_reg = crate::c5::codegen::x86_64::asm::assign_operand_regs(
+        &asm.operands,
+        asm.clobber_regs,
+        asm.clobber_fp_regs,
+    )
+    .map_err(C5Error::Runtime)?;
     // The interpreter models only the 16 GPRs; an `x` (xmm) operand carries a
     // 128-bit SSE value that has no modelled slot. Such asm also uses SSE
     // instructions, refused below -- reject the operand up front with a clear

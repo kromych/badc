@@ -490,10 +490,12 @@ const SEG_BASE: u8 = 48;
 /// for a pure immediate. Fixed and matching constraints take their
 /// required register; `r` operands take free registers from a fixed
 /// pool (never r10 / r11, which the emitter reserves as bridge scratch,
-/// nor rsp / rbp). Shared by the emitter and the interpreter so both
-/// resolve the template's `%N` references to the same registers.
+/// nor rsp / rbp, nor any GP register named in the clobber list).
+/// Shared by the emitter and the interpreter so both resolve the
+/// template's `%N` references to the same registers.
 pub(crate) fn assign_operand_regs(
     operands: &[crate::c5::ir::AsmOperand],
+    clobber_regs: u32,
     clobber_fp_regs: u32,
 ) -> Result<Vec<Option<u8>>, String> {
     use crate::c5::ir::AsmConstraint as C;
@@ -504,6 +506,14 @@ pub(crate) fn assign_operand_regs(
     for (i, op) in operands.iter().enumerate() {
         if let C::Fixed(r) | C::Bound(r) | C::RegOrImm(r) = op.constraint {
             assigned[i] = Some(r);
+            used[r as usize] = true;
+        }
+    }
+    // A clobbered GP register is unavailable for an operand: the template
+    // overwrites it, so an operand placed there would be corrupted. Marked
+    // after the fixed operands, whose register may itself be clobbered.
+    for r in 0..16u8 {
+        if clobber_regs & (1 << r) != 0 {
             used[r as usize] = true;
         }
     }
@@ -3405,12 +3415,37 @@ mod tests {
         // `x` operands take xmm0, xmm1, ... from a file independent of the GPRs,
         // so a mixed GP + xmm operand list assigns each from its own pool.
         let ops = [op(C::Reg), op(C::Fp), op(C::Reg), op(C::Fp)];
-        let a = assign_operand_regs(&ops, 0).unwrap();
+        let a = assign_operand_regs(&ops, 0, 0).unwrap();
         assert_eq!(a, [Some(0), Some(0), Some(3), Some(1)]); // rax, xmm0, rbx, xmm1
         // An xmm named in the clobber list is skipped: xmm0 clobbered pushes the
         // first `x` operand onto xmm1.
-        let a = assign_operand_regs(&[op(C::Fp), op(C::Fp)], 1 << 0).unwrap();
+        let a = assign_operand_regs(&[op(C::Fp), op(C::Fp)], 0, 1 << 0).unwrap();
         assert_eq!(a, [Some(1), Some(2)]);
+    }
+
+    #[test]
+    fn clobbered_gp_registers_are_excluded_from_the_operand_pool() {
+        use crate::c5::ir::{AsmConstraint as C, AsmOperand};
+        let op = |constraint| AsmOperand {
+            constraint,
+            is_output: false,
+            is_rw: false,
+            width: 8,
+            seg: crate::c5::ir::AsmSeg::None,
+        };
+        // Pool order is rax(0) rbx(3) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9).
+        // With rax/rbx/rcx/rdx clobbered, three `r` operands skip them and land
+        // on rsi/rdi/r8 rather than reusing a clobbered register.
+        let clob = (1 << 0) | (1 << 3) | (1 << 1) | (1 << 2);
+        let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
+        let a = assign_operand_regs(&gp, clob, 0).unwrap();
+        assert_eq!(a, [Some(6), Some(7), Some(8)]);
+        // A clobber list covering every pool register leaves nothing to assign;
+        // reject rather than reuse a clobbered register.
+        let all = [0u8, 3, 1, 2, 6, 7, 8, 9]
+            .iter()
+            .fold(0u32, |m, &r| m | (1 << r));
+        assert!(assign_operand_regs(&[op(C::Reg)], all, 0).is_err());
     }
 
     #[test]

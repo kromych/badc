@@ -92,6 +92,10 @@ pub(crate) enum AsmOpndA64 {
     /// (`forward` selects the next definition after the branch, otherwise the
     /// most recent one at or before it).
     Label { num: u32, forward: bool },
+    /// The location counter `.` as a branch target: the address of the branch
+    /// instruction itself, so the encoded displacement is zero (`cbnz %0, .`,
+    /// the device-load ordering barrier's never-taken control dependency).
+    Here,
     /// `%lK`: an `asm goto` label reference by label-list index (the
     /// frontend canonicalizes `%l[name]` and operand-relative `%lN` to
     /// this form). The emitter branches to the label's target block.
@@ -833,6 +837,11 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     // A condition code (for csel and other conditional forms).
     if let Some(c) = cond_code(tok) {
         return Ok(AsmOpndA64::Cond(c));
+    }
+    // The location counter `.` names the current instruction as a branch
+    // target (`b .`, `cbnz %0, .`); the emitter encodes a zero displacement.
+    if tok == "." {
+        return Ok(AsmOpndA64::Here);
     }
     // A local-label reference `Nb` / `Nf` (mnemonics never start with a digit).
     if let Some((digits, dir)) = tok

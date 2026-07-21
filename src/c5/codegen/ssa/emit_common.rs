@@ -758,12 +758,17 @@ pub(crate) enum AsmSectionValue {
     /// `%N` / `%cN` / `%c[name]` (canonicalized): the operand's
     /// compile-time constant.
     OperandConst(u8),
-    /// A template label (`1b`, `name`) or a symbol, optionally
-    /// PC-relative (`ref - .`). The emitter resolves a template label to
-    /// a text offset; an unknown name is a symbol reference.
+    /// A template label (`1b`, `name`) or a symbol, optionally PC-relative
+    /// (`ref - .`) and carrying a constant addend (`func - (. + 4)`, a
+    /// static-call trampoline's `jmp.d32`; `1b - %c2 - .`, the user-pointer
+    /// bound). The emitter resolves a template label to a text offset; an
+    /// unknown name is a symbol reference. `addend` is a constant expression
+    /// (literals and `%cN` operand constants) evaluated at materialize time,
+    /// empty when absent.
     Ref {
         name: alloc::string::String,
         pcrel: bool,
+        addend: alloc::string::String,
     },
     /// `label_a - label_b`: the byte distance between two template-label
     /// definitions. Both resolve to text offsets at materialize time, so the
@@ -1807,38 +1812,152 @@ fn parse_section_value(a: &str) -> Result<AsmSectionValue, alloc::string::String
     if a.contains('%') && eval_const_expr_ops(a, &|_| Some(0)).is_some() {
         return Ok(AsmSectionValue::Expr(alloc::string::String::from(a)));
     }
+    // A relocatable expression: one symbolic base (a label or symbol) plus a
+    // constant addend, optionally `- .` PC-relative; or `label_a - label_b`, a
+    // constant distance.
+    parse_reloc_expr(a)
+}
+
+/// Whether `s` has a `+` or `-` at parenthesis depth zero past its first byte:
+/// a real additive split rather than a leading sign on a single leaf.
+fn has_top_level_addsub(s: &str) -> bool {
+    let mut depth = 0i32;
+    for (i, &c) in s.as_bytes().iter().enumerate() {
+        match c {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            b'+' | b'-' if depth == 0 && i > 0 => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Append one additive term to `out`, distributing a `- ( ... )` sign into a
+/// parenthesised sub-sum; a group wrapping a single leaf (`(1b)`) is unwrapped
+/// and kept whole. Returns false on a malformed (empty) term.
+fn push_reloc_term<'a>(
+    term: &'a str,
+    neg: bool,
+    out: &mut alloc::vec::Vec<(bool, &'a str)>,
+) -> bool {
+    let t = term.trim();
+    if t.is_empty() {
+        return false;
+    }
+    if let Some(inner) = enclosed_by_parens(t)
+        && has_top_level_addsub(inner)
+    {
+        return flatten_addsub_terms(inner, neg, out);
+    }
+    out.push((neg, strip_label_parens(t)));
+    true
+}
+
+/// Flatten `s` into its additive terms, each tagged with whether it is
+/// subtracted from the whole value. `outer_neg` is the sign inherited from an
+/// enclosing `- ( ... )`. Returns false on unbalanced parentheses.
+fn flatten_addsub_terms<'a>(
+    s: &'a str,
+    outer_neg: bool,
+    out: &mut alloc::vec::Vec<(bool, &'a str)>,
+) -> bool {
+    let b = s.as_bytes();
+    let mut i = 0usize;
+    while i < b.len() && b[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    let mut neg = outer_neg ^ (b.get(i) == Some(&b'-'));
+    if matches!(b.get(i), Some(b'+' | b'-')) {
+        i += 1;
+    }
+    let (mut depth, mut start) = (0i32, i);
+    while i < b.len() {
+        match b[i] {
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
+            }
+            b'+' | b'-' if depth == 0 => {
+                if !push_reloc_term(&s[start..i], neg, out) {
+                    return false;
+                }
+                neg = outer_neg ^ (b[i] == b'-');
+                start = i + 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    depth == 0 && push_reloc_term(&s[start..], neg, out)
+}
+
+/// Parse a section data value as a relocatable expression: a single symbolic
+/// base (a label or symbol) plus a constant addend that folds literals and
+/// `%cN` operand constants, optionally `- .` PC-relative. Two bare labels with
+/// no addend are a constant distance ([`AsmSectionValue::LabelDiff`]).
+fn parse_reloc_expr(a: &str) -> Result<AsmSectionValue, alloc::string::String> {
+    let unsupported = || alloc::format!("inline asm: unsupported expression `{a}`");
+    let mut terms = alloc::vec::Vec::new();
+    if !flatten_addsub_terms(a, false, &mut terms) {
+        return Err(unsupported());
+    }
     let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
     let is_name = |s: &str| !s.is_empty() && s.bytes().all(ident);
-    // A single `-` splits `ref - .` (PC-relative against the field's own
-    // position) from `label_a - label_b` (a constant label distance). A label
-    // may be parenthesised (`(1b) - .`).
-    if let Some((l, r)) = a.split_once('-') {
-        let (l, r) = (strip_label_parens(l), strip_label_parens(r));
-        if r == "." {
-            if !is_name(l) {
-                return Err(alloc::format!("inline asm: bad section value `{a}`"));
+    // A term is a constant when it evaluates with the operand resolver treated
+    // as present; a label or symbol reference does not.
+    let is_const = |t: &str| eval_const_expr_ops(t, &|_| Some(0)).is_some();
+    let (mut base, mut neg_name) = (None, None);
+    let (mut names, mut dots) = (0usize, 0usize);
+    let mut addend = alloc::string::String::new();
+    for &(neg, t) in &terms {
+        if t == "." {
+            dots += 1;
+            if !neg {
+                return Err(unsupported());
             }
-            return Ok(AsmSectionValue::Ref {
-                name: alloc::string::String::from(l),
-                pcrel: true,
-            });
+        } else if is_const(t) {
+            addend.push_str(if neg { " - " } else { " + " });
+            addend.push_str(t);
+        } else if is_name(t) {
+            names += 1;
+            if neg {
+                neg_name = Some(t);
+            } else {
+                base = Some(t);
+            }
+        } else {
+            return Err(alloc::format!("inline asm: bad section value `{t}`"));
         }
-        if is_name(l) && is_name(r) {
-            return Ok(AsmSectionValue::LabelDiff {
-                minuend: alloc::string::String::from(l),
-                subtrahend: alloc::string::String::from(r),
-            });
-        }
-        return Err(alloc::format!("inline asm: unsupported expression `{a}`"));
     }
-    let a = strip_label_parens(a);
-    if !is_name(a) {
-        return Err(alloc::format!("inline asm: bad section value `{a}`"));
+    // `label_a - label_b`: a constant distance, no PC-relative term or addend.
+    if names == 2
+        && dots == 0
+        && addend.is_empty()
+        && let (Some(m), Some(s)) = (base, neg_name)
+    {
+        return Ok(AsmSectionValue::LabelDiff {
+            minuend: alloc::string::String::from(m),
+            subtrahend: alloc::string::String::from(s),
+        });
     }
-    Ok(AsmSectionValue::Ref {
-        name: alloc::string::String::from(a),
-        pcrel: false,
-    })
+    // A single relocation base with a folded constant addend. `- .` marks it
+    // PC-relative; the addend is prefixed with `0` so its leading sign parses.
+    match base {
+        Some(name) if names == 1 && dots <= 1 => Ok(AsmSectionValue::Ref {
+            name: alloc::string::String::from(name),
+            pcrel: dots == 1,
+            addend: if addend.is_empty() {
+                addend
+            } else {
+                alloc::format!("0{addend}")
+            },
+        }),
+        _ => Err(unsupported()),
+    }
 }
 
 /// Whether a signed constant fits a data-directive field of `width` bytes,
@@ -2183,7 +2302,11 @@ pub(crate) fn materialize_asm_sections(
                                     &(c as u64).to_le_bytes()[..*width as usize],
                                 );
                             }
-                            AsmSectionValue::Ref { name, pcrel } => {
+                            AsmSectionValue::Ref {
+                                name,
+                                pcrel,
+                                addend,
+                            } => {
                                 if !matches!(width, 4 | 8) {
                                     return Err(alloc::string::String::from(
                                         "inline asm: section reference needs a 4- or 8-byte field",
@@ -2202,12 +2325,23 @@ pub(crate) fn materialize_asm_sections(
                                         None => AsmSectionTarget::Symbol(name.clone()),
                                     },
                                 };
+                                let add = if addend.is_empty() {
+                                    0
+                                } else {
+                                    eval_const_expr_ops(addend, &|i| const_of(i)).ok_or_else(
+                                        || {
+                                            alloc::string::String::from(
+                                                "inline asm: non-constant section reloc addend",
+                                            )
+                                        },
+                                    )?
+                                };
                                 sec.relocs.push(AsmSectionReloc {
                                     offset: sec.bytes.len() as u32,
                                     width: *width,
                                     pcrel: *pcrel,
                                     target,
-                                    addend: 0,
+                                    addend: add,
                                 });
                                 sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
                             }
@@ -3262,6 +3396,7 @@ mod asm_section_tests {
             AsmSectionValue::Ref {
                 name: alloc::string::String::from("661b"),
                 pcrel: true,
+                addend: alloc::string::String::new(),
             }
         );
         assert_eq!(
@@ -3269,10 +3404,50 @@ mod asm_section_tests {
             AsmSectionValue::Ref {
                 name: alloc::string::String::from("sym"),
                 pcrel: false,
+                addend: alloc::string::String::new(),
             }
         );
-        // A three-term expression is still unsupported.
+        // Three bare labels are still unsupported (only one relocation base).
         assert!(parse_section_value("a - b - c").is_err());
+    }
+
+    #[test]
+    fn section_reloc_addend_parses() {
+        // `func - (. + 4)` (a static-call trampoline's `jmp.d32` to an external
+        // symbol): PC-relative against `func`, the inner `+ 4` folding into the
+        // addend as `- 4`.
+        assert_eq!(
+            parse_section_value("func - (. + 4)").unwrap(),
+            AsmSectionValue::Ref {
+                name: alloc::string::String::from("func"),
+                pcrel: true,
+                addend: alloc::string::String::from("0 - 4"),
+            }
+        );
+        // `1b - %c2 - .` (the user-pointer bound): PC-relative against the
+        // template label `1b`, the operand constant `%c2` folding into the
+        // addend.
+        assert_eq!(
+            parse_section_value("1b - %c2 - .").unwrap(),
+            AsmSectionValue::Ref {
+                name: alloc::string::String::from("1b"),
+                pcrel: true,
+                addend: alloc::string::String::from("0 - %c2"),
+            }
+        );
+        // An absolute (non-PC-relative) base plus a constant addend.
+        assert_eq!(
+            parse_section_value("sym + 8").unwrap(),
+            AsmSectionValue::Ref {
+                name: alloc::string::String::from("sym"),
+                pcrel: false,
+                addend: alloc::string::String::from("0 + 8"),
+            }
+        );
+        // Two relocation bases with an addend cannot be a single relocation.
+        assert!(parse_section_value("a - b + 4").is_err());
+        // A `+ .` (positive location counter) is not a supported relocation.
+        assert!(parse_section_value("sym + .").is_err());
     }
 
     #[test]
@@ -3289,6 +3464,7 @@ mod asm_section_tests {
             AsmSectionValue::Ref {
                 name: alloc::string::String::from("1b"),
                 pcrel: true,
+                addend: alloc::string::String::new(),
             }
         );
         assert_eq!(
@@ -3296,6 +3472,7 @@ mod asm_section_tests {
             AsmSectionValue::Ref {
                 name: alloc::string::String::from("sym"),
                 pcrel: false,
+                addend: alloc::string::String::new(),
             }
         );
         // A group closing before the end is not a full enclosure: the two
@@ -3358,6 +3535,7 @@ mod asm_section_tests {
             AsmSectionValue::Ref {
                 name: alloc::string::String::from("1b"),
                 pcrel: true,
+                addend: alloc::string::String::new(),
             },
         );
         assert_eq!(

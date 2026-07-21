@@ -3530,6 +3530,126 @@ fn asm_section_operand_extern_symbol_relocates_to_symbol() {
 }
 
 #[test]
+fn asm_section_pcrel_extern_with_addend_relocates_like_gas() {
+    // A static-call trampoline emits `jmp.d32 func` as section data:
+    // `.byte 0xe9; .long func - (. + 4)`, `func` an external symbol. The
+    // `.long` is a PC-relative relocation against `func` with the inner `+ 4`
+    // folded into the addend, byte-identical to gas: R_X86_64_PC32 against
+    // `func`, addend -4, at the field's own offset (past the 0xe9 opcode).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        extern void extfn(void);\n\
+        int probe(void) {\n\
+            __asm__ volatile(\n\
+                \".pushsection .sctramp,\\\"ax\\\"\\n\"\n\
+                \".globl mytramp\\n\"\n\
+                \"mytramp:\\n\"\n\
+                \".byte 0xe9\\n\"\n\
+                \".long extfn - (. + 4)\\n\"\n\
+                \".popsection\\n\");\n\
+            return 0;\n\
+        }\n\
+        int main(void) { return probe(); }\n";
+    let target = Target::LinuxX64;
+    let program = Compiler::with_target(String::from(src), target)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+    // `extfn` surfaces as an undefined external symbol; the field relocates
+    // against it, not this unit's `.text`.
+    let (shndx, _, _, _, extfn_idx) = elf_symbol(&bytes, "extfn").expect("extfn symbol");
+    assert_eq!(shndx, 0, "extfn is undefined (SHN_UNDEF)");
+    let sections = elf_sections(&bytes);
+    let sec = sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".sctramp")
+        .expect(".sctramp section");
+    assert_eq!(sec.3.len(), 1 + 4, "one opcode byte plus a 4-byte field");
+    let rela = sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".rela.sctramp")
+        .expect(".rela.sctramp");
+    assert_eq!(rela.3.len(), 24, "one reloc");
+    let r_off = u64::from_le_bytes(rela.3[0..8].try_into().unwrap());
+    let r_info = u64::from_le_bytes(rela.3[8..16].try_into().unwrap());
+    let r_add = i64::from_le_bytes(rela.3[16..24].try_into().unwrap());
+    assert_eq!(r_off, 1, "field follows the 0xe9 opcode byte");
+    assert_eq!(r_info & 0xFFFF_FFFF, 2, "R_X86_64_PC32");
+    assert_eq!(r_info >> 32, extfn_idx as u64, "relocates against extfn");
+    assert_eq!(r_add, -4, "gas addend for `- (. + 4)`");
+}
+
+#[test]
+fn asm_section_pcrel_label_minus_operand_const_relocates_like_gas() {
+    // The user-pointer bound emits `.long 1b - %c2 - .` as section data: a
+    // PC-relative relocation against the template text label `1b`, with the
+    // operand constant `%c2` (`sizeof(long)`, 8) folded into the addend.
+    // Contrast a plain `.long 1b - .`: the same PC-relative reloc against the
+    // same text base, its addend lighter by 8 -- exactly as gas folds `- %c2`.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        unsigned long probe(void) {\n\
+            unsigned long r;\n\
+            __asm__ volatile(\n\
+                \"mov %1, %0\\n\"\n\
+                \"1:\\n\"\n\
+                \".pushsection .uptr,\\\"a\\\"\\n\"\n\
+                \".long 1b - .\\n\"\n\
+                \".long 1b - %c2 - .\\n\"\n\
+                \".popsection\\n\"\n\
+                : \"=r\"(r) : \"i\"(0x0123456789abcdefULL), \"i\"(sizeof(long)));\n\
+            return r;\n\
+        }\n\
+        int main(void) { return (int)probe(); }\n";
+    let target = Target::LinuxX64;
+    let program = Compiler::with_target(String::from(src), target)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let sec = sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".uptr")
+        .expect(".uptr section");
+    assert_eq!(sec.3.len(), 4 + 4, "two 4-byte fields");
+    let rela = sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".rela.uptr")
+        .expect(".rela.uptr");
+    assert_eq!(rela.3.len(), 2 * 24, "two relocs");
+    let r_off = |k: usize| u64::from_le_bytes(rela.3[k * 24..k * 24 + 8].try_into().unwrap());
+    let r_info = |k: usize| u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+    let r_add = |k: usize| i64::from_le_bytes(rela.3[k * 24 + 16..k * 24 + 24].try_into().unwrap());
+    // Field 0 is `1b - .` (section offset 0); field 1 is `1b - %c2 - .` (4).
+    let f0 = (0..2).find(|&k| r_off(k) == 0).expect("field at 0");
+    let f1 = (0..2).find(|&k| r_off(k) == 4).expect("field at 4");
+    // Both relocate PC-relative against the `.text` section symbol (`1b` is a
+    // local text label), exactly as gas resolves a local-label difference.
+    let text_sym = elf_section_symbol_index(&bytes, ".text").expect(".text section symbol");
+    for k in [f0, f1] {
+        assert_eq!(r_info(k) & 0xFFFF_FFFF, 2, "R_X86_64_PC32");
+        assert_eq!(
+            r_info(k) >> 32,
+            text_sym as u64,
+            "relocates against the .text section symbol"
+        );
+    }
+    assert_eq!(
+        r_add(f1) - r_add(f0),
+        -8,
+        "`- %c2` folds `sizeof(long)` into the addend"
+    );
+}
+
+#[test]
 fn asm_section_goto_label_relocates_to_block() {
     // `.long %l0 - .` (a static-key jump entry) relocates PC-relative to an
     // `asm goto` label's block. The block's text offset is not known when the
@@ -4780,6 +4900,19 @@ fn elf_symbol(bytes: &[u8], name: &str) -> Option<(u16, u64, u8, u8, usize)> {
         }
     }
     None
+}
+
+/// Index of the STT_SECTION symbol whose `st_shndx` is the section named
+/// `name` -- the symbol a local (section-relative) relocation resolves against.
+fn elf_section_symbol_index(bytes: &[u8], name: &str) -> Option<usize> {
+    let sections = elf_sections(bytes);
+    let shndx = sections.iter().position(|(n, _, _, _)| n == name)? as u16;
+    let symtab = &sections.iter().find(|(n, _, _, _)| n == ".symtab")?.3;
+    (0..symtab.len() / 24).find(|&i| {
+        let s = &symtab[i * 24..i * 24 + 24];
+        s[4] & 0xF == 3 // STT_SECTION
+            && u16::from_le_bytes(s[6..8].try_into().unwrap()) == shndx
+    })
 }
 
 #[test]

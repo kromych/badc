@@ -11,14 +11,9 @@ Disassembly of section .text:
                	ud2
 
 <deposit>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	%rdi, 0x10(%rbp)
                	leaq	-0x8(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
@@ -31,20 +26,16 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rdx
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
-               	movl	0x10(%rbp), %eax
+               	movl	%edi, %eax
                	movl	$0xfffffff0, %r11d      # imm = 0xFFFFFFF0
                	andq	%r11, %rax
                	leaq	-0x8(%rbp), %rcx
                	movl	(%rcx), %ecx
                	andq	$0xf, %rcx
                	orq	%rcx, %rax
-               	movl	%eax, 0x10(%rbp)
-               	movl	0x10(%rbp), %eax
+               	movl	%eax, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
                	retq
 
 <main>:

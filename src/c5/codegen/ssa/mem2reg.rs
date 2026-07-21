@@ -579,6 +579,29 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
 /// load to the stored value would skip that truncate-then-extend, so
 /// sub-width slots stay in memory until the rewrite can materialize
 /// the extension at each use.
+/// Whether every load and store of `slot` uses an integer kind (no
+/// `F32` / `F64`). A mixed-width promotion redirects each load to the
+/// reaching store value; an FP-kind access carries the value through
+/// the FP register file, so such a slot is left to the FP class path.
+fn slot_has_only_int_kinds(func: &FunctionSsa, slot: i64) -> bool {
+    for inst in &func.insts {
+        match inst {
+            Inst::LoadLocal { off, kind, .. } if *off == slot => {
+                if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                    return false;
+                }
+            }
+            Inst::StoreLocal { off, kind, .. } if *off == slot => {
+                if matches!(kind, StoreKind::F32 | StoreKind::F64) {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+    true
+}
+
 fn slot_is_full_width(func: &FunctionSsa, slot: i64) -> bool {
     for inst in &func.insts {
         match inst {
@@ -948,6 +971,15 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
         alloc::collections::BTreeMap::new();
     let mut fp_slot_kind: alloc::collections::BTreeMap<i64, LoadKind> =
         alloc::collections::BTreeMap::new();
+    // Reused frame slots that hold disjoint-lifetime integer values of
+    // different widths (frame packing at -O reuses one slot for a temp
+    // and a later, differently-typed local). The uniform-width narrow
+    // path cannot serve them, but each load still has a single reaching
+    // store when the slot needs no join phi, so promote per load: the
+    // rename extends the reaching value to the load's own width and
+    // bails the slot if a load is wider than its reaching store (a
+    // type-pun reading bytes the narrower store never wrote).
+    let mut mixed_slots: BTreeSet<i64> = BTreeSet::new();
     let slots: BTreeSet<i64> = promotable
         .iter()
         .copied()
@@ -971,11 +1003,23 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                         narrow_load.insert(*s, kind);
                         return true;
                     }
+                    // Mixed-width, no join phi: promote per load, but
+                    // only when every access is an integer kind. An
+                    // `F32` / `F64` load or store on an integer-classed
+                    // slot is the bit-pattern reinterpret path (an `Imm`
+                    // holding a double's bits stored at `F64`); leave it
+                    // frame-resident so the FP consumer keeps reading an
+                    // FP register, as the uniform-width gates already do.
+                    if !phi_blocks.contains_key(s) && slot_has_only_int_kinds(func, *s) {
+                        mixed_slots.insert(*s);
+                        return true;
+                    }
                     false
                 }
             }
         })
         .collect();
+    mixed_slots.retain(|s| slots.contains(s));
     // Drop FP-kind entries for slots that did not survive the filter
     // (a mixed slot returns `None` before reaching the insert, so this
     // only prunes FP slots excluded by an earlier filter such as the
@@ -1056,11 +1100,15 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     let mut store_slot: alloc::collections::BTreeMap<u32, i64> =
         alloc::collections::BTreeMap::new();
 
+    // `current[slot]` is the reaching definition and, for a mixed-width
+    // slot, the byte width of the store that produced it (8 as an unused
+    // sentinel for every other slot); the width serves the mixed-slot
+    // load's wider-than-store safety bail below.
     enum Frame {
         Visit(BlockId),
-        Restore(Vec<(i64, Option<ValueId>)>),
+        Restore(Vec<(i64, Option<(ValueId, u8)>)>),
     }
-    let mut current: alloc::collections::BTreeMap<i64, ValueId> =
+    let mut current: alloc::collections::BTreeMap<i64, (ValueId, u8)> =
         alloc::collections::BTreeMap::new();
     let mut stack: Vec<Frame> = alloc::vec![Frame::Visit(0)];
     while let Some(frame) = stack.pop() {
@@ -1090,7 +1138,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             }
             Frame::Visit(b) => {
                 let range = func.blocks[b as usize].inst_range.clone();
-                let mut saved: Vec<(i64, Option<ValueId>)> = Vec::new();
+                let mut saved: Vec<(i64, Option<(ValueId, u8)>)> = Vec::new();
                 // Phis at this block's head become the reaching
                 // definition for their slot: every later LoadLocal in
                 // the block redirects to the phi value, and every
@@ -1099,20 +1147,39 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                 // overwrites it.
                 for (slot, phi_id) in &phis_at[b as usize] {
                     saved.push((*slot, current.get(slot).copied()));
-                    current.insert(*slot, *phi_id);
+                    // A mixed-width slot never carries a phi, so the phi
+                    // width is the unused sentinel.
+                    current.insert(*slot, (*phi_id, 8));
                 }
                 for id in range.start..range.end {
                     match &func.insts[id as usize] {
-                        Inst::StoreLocal { off, value, .. } if slots.contains(off) => {
+                        Inst::StoreLocal {
+                            off, value, kind, ..
+                        } if slots.contains(off) => {
+                            let w = if mixed_slots.contains(off) {
+                                store_byte_width(*kind).unwrap_or(8)
+                            } else {
+                                8
+                            };
                             saved.push((*off, current.get(off).copied()));
-                            current.insert(*off, *value);
+                            current.insert(*off, (*value, w));
                             redirect[id as usize] = Some(*value);
                             store_ids.push(id);
                             store_slot.insert(id, *off);
                         }
-                        Inst::LoadLocal { off, .. } if slots.contains(off) => {
+                        Inst::LoadLocal { off, kind, .. } if slots.contains(off) => {
                             match current.get(off).copied() {
-                                Some(r) => {
+                                Some((r, sw)) => {
+                                    // A mixed-width slot's load is served
+                                    // from a single reaching store; if it
+                                    // reads wider than that store wrote,
+                                    // the high bytes are indeterminate, so
+                                    // keep the whole slot in memory.
+                                    if mixed_slots.contains(off)
+                                        && load_byte_width(*kind).unwrap_or(8) > sw
+                                    {
+                                        failed.insert(*off);
+                                    }
                                     redirect[id as usize] = Some(r);
                                     load_slot.insert(id, *off);
                                 }
@@ -1133,7 +1200,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                 let term = func.blocks[b as usize].terminator;
                 for succ in successors(&term, &func.computed_goto_targets, &func.jump_tables) {
                     for (slot, phi_id) in &phis_at[succ as usize].clone() {
-                        if let Some(&val) = current.get(slot) {
+                        if let Some(&(val, _)) = current.get(slot) {
                             if let Inst::Phi { incoming, .. } = &mut func.insts[*phi_id as usize] {
                                 incoming.push((b as BlockId, val));
                             }
@@ -1172,9 +1239,26 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // width for the assignment expression. The value operand is left
     // unresolved here; the operand rewrite below threads it through
     // the redirect chain.
-    if !narrow_load.is_empty() {
+    if !narrow_load.is_empty() || !mixed_slots.is_empty() {
         for (&load_id, &slot) in &load_slot {
-            if let Some(&kind) = narrow_load.get(&slot)
+            // The extension kind is the slot's single narrow kind, or --
+            // for a mixed-width slot -- this load's own kind when narrow
+            // (a full-width load of such a slot needs none).
+            let kind = if let Some(&k) = narrow_load.get(&slot) {
+                Some(k)
+            } else if mixed_slots.contains(&slot) {
+                match func.insts[load_id as usize] {
+                    Inst::LoadLocal { kind, .. }
+                        if load_byte_width(kind).map(|w| w < 8).unwrap_or(false) =>
+                    {
+                        Some(kind)
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            if let Some(kind) = kind
                 && let Some(v) = redirect[load_id as usize]
             {
                 // The reaching value is already canonically
@@ -1316,6 +1400,7 @@ mod tests {
             multi_cell_slots: Vec::new(),
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),
@@ -1707,6 +1792,105 @@ mod tests {
             f.insts[2]
         );
         assert!(matches!(f.insts[1], Inst::Imm(0)), "store neutralized");
+    }
+
+    #[test]
+    fn run_promotes_disjoint_mixed_width_reused_slot() {
+        // Slot -1 is reused for two disjoint-lifetime variables of
+        // different widths: an I64 in block 0, then an I32 constant in
+        // block 1. The uniform-width narrow path rejects the slot, but
+        // each load has a single reaching store of matching width, so
+        // both lifetimes promote. This is the frame-packing shape that
+        // left an `"i"` inline-asm constant operand a `LoadLocal`.
+        let insts = alloc::vec![
+            Inst::Imm(7),
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I64,
+                volatile: false,
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+            Inst::Imm(2307),
+            Inst::StoreLocal {
+                off: -1,
+                value: 3,
+                kind: StoreKind::I32,
+                volatile: false,
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I32,
+                volatile: false,
+            },
+        ];
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..3,
+                terminator: Terminator::Jmp(1),
+                exit_acc: 2,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 3..6,
+                terminator: Terminator::Return(5),
+                exit_acc: 5,
+            },
+        ];
+        let mut f = func_with(insts, blocks);
+        let promoted = run(&mut f);
+        assert!(
+            promoted.contains(&-1),
+            "mixed-width reused slot must promote"
+        );
+        // The I32 constant load folds straight to its Imm (fits I32),
+        // so the return reads the constant, not a frame load.
+        assert!(matches!(f.blocks[1].terminator, Terminator::Return(3)));
+        assert!(matches!(f.insts[4], Inst::Imm(0)), "I32 store neutralized");
+        assert!(matches!(f.insts[1], Inst::Imm(0)), "I64 store neutralized");
+    }
+
+    #[test]
+    fn run_keeps_wide_load_of_narrow_store_in_memory() {
+        // Slot -1 is stored as I32 then read as I64 -- a type-pun
+        // reading bytes the narrow store never wrote. Promoting it
+        // would fabricate the high bytes, so the slot stays
+        // frame-resident.
+        let insts = alloc::vec![
+            Inst::Imm(5),
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I32,
+                volatile: false,
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+        ];
+        let blocks = alloc::vec![Block {
+            start_pc: 0,
+            inst_range: 0..3,
+            terminator: Terminator::Return(2),
+            exit_acc: 2,
+        }];
+        let mut f = func_with(insts, blocks);
+        run(&mut f);
+        assert!(
+            matches!(f.insts[1], Inst::StoreLocal { .. }),
+            "narrow store must remain"
+        );
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(2)),
+            "wide load must remain in memory"
+        );
     }
 
     #[test]

@@ -1700,6 +1700,22 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::constfold::run (aarch64)", || {
             crate::c5::codegen::passes::constfold::run(&mut ssa_funcs);
         });
+        // Re-run mem2reg on callers the inliner spliced into; see x86_64.rs's
+        // matching block for the rationale (relocated callee locals expose
+        // address-free slots pre-inline mem2reg never saw).
+        super::ssa::emit_common::time_pass("ssa::mem2reg::run post-inline (aarch64)", || {
+            for f in &mut ssa_funcs {
+                if f.did_inline {
+                    let promoted = super::ssa::mem2reg::run(f);
+                    if !promoted.is_empty() {
+                        promoted_local_slots
+                            .entry(f.ent_pc)
+                            .or_default()
+                            .extend(promoted);
+                    }
+                }
+            }
+        });
         // Split constant-index local arrays that unrolling exposed into
         // per-element slots and re-run mem2reg to promote them to SSA
         // values. Gated to functions the unroll pass expanded so the

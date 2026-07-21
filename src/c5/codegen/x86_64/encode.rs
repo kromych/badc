@@ -1852,6 +1852,26 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::constfold::run (x86_64)", || {
             crate::c5::codegen::passes::constfold::run(&mut ssa_funcs);
         });
+        // Re-run mem2reg on callers the inliner spliced into. A relocated
+        // callee local can land on an address-free, single-width slot that
+        // pre-inline mem2reg never saw (it did not exist then), so its store
+        // and load stay in the frame -- and a constant stored there is not
+        // folded into the `"i"`-constrained inline-asm operand that reads it.
+        // Confined to inlined callers by the did_inline gate; promoted slots
+        // feed the same debug-info location drop as the initial mem2reg.
+        super::ssa::emit_common::time_pass("ssa::mem2reg::run post-inline (x86_64)", || {
+            for f in &mut ssa_funcs {
+                if f.did_inline {
+                    let promoted = super::ssa::mem2reg::run(f);
+                    if !promoted.is_empty() {
+                        promoted_local_slots
+                            .entry(f.ent_pc)
+                            .or_default()
+                            .extend(promoted);
+                    }
+                }
+            }
+        });
         // Split constant-index local arrays that unrolling exposed into
         // per-element slots and re-run mem2reg to promote them to SSA
         // values. Gated to functions the unroll pass expanded so the

@@ -943,6 +943,13 @@ pub(crate) struct FunctionSsa {
     /// whose constant-trip loops turned array subscripts into constant
     /// offsets. False for every function the unroll pass left unchanged.
     pub did_unroll: bool,
+    /// True once `passes::inline` spliced a callee into this function.
+    /// Set by the inliner; read post-inline to gate a mem2reg re-run to
+    /// callers that received an inline. A relocated callee local can land
+    /// on an address-free, single-width slot that pre-inline mem2reg never
+    /// saw (the slot did not exist then), so the re-run promotes it. False
+    /// for every function the inliner left unchanged.
+    pub did_inline: bool,
 }
 
 /// External functions that may return twice into the caller's frame:

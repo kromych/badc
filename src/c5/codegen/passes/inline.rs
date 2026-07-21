@@ -145,9 +145,11 @@ fn is_inline_candidate(
     // inlining only unrolls the call tree one level per candidacy-fixpoint
     // round, unbounded code growth for no call elimination. Matches gcc's
     // -O2 default of not inlining recursive functions.
-    if func.insts.iter().any(
-        |i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == func.ent_pc),
-    ) {
+    if func
+        .insts
+        .iter()
+        .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == func.ent_pc))
+    {
         say(format_args!("self-recursive"));
         return false;
     }

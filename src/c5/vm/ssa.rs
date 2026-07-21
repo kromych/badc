@@ -2044,7 +2044,10 @@ fn run_inline_asm(
         i.operands.iter().any(|o| {
             matches!(
                 o,
-                AsmOpnd::Mem { .. } | AsmOpnd::AbsMem { .. } | AsmOpnd::LabelAddr { .. }
+                AsmOpnd::Mem { .. }
+                    | AsmOpnd::AbsMem { .. }
+                    | AsmOpnd::RipRel { .. }
+                    | AsmOpnd::LabelAddr { .. }
             )
         })
     }) {
@@ -2127,7 +2130,8 @@ fn run_inline_asm(
             | AsmOpnd::LabelAddr { .. }
             | AsmOpnd::GotoLabel(_)
             | AsmOpnd::Mem { .. }
-            | AsmOpnd::AbsMem { .. } => (0, AsmRegSize::Long),
+            | AsmOpnd::AbsMem { .. }
+            | AsmOpnd::RipRel { .. } => (0, AsmRegSize::Long),
         }
     };
     // The model register a destination operand writes into.
@@ -2143,7 +2147,8 @@ fn run_inline_asm(
             | AsmOpnd::LabelAddr { .. }
             | AsmOpnd::GotoLabel(_)
             | AsmOpnd::Mem { .. }
-            | AsmOpnd::AbsMem { .. } => None,
+            | AsmOpnd::AbsMem { .. }
+            | AsmOpnd::RipRel { .. } => None,
         }
     };
 

@@ -1430,6 +1430,64 @@ fn param_operand_asm_goto_inlines_at_opt() {
     );
 }
 
+/// A caller that owns an `asm goto` (so it carries a `jump_table`) must
+/// still absorb a multi-block `always_inline` callee. The callee is itself
+/// an `asm goto` whose `%c0` section operand is a constant argument, so it
+/// only folds to a link-time value when inlined into the caller; left out
+/// of line the operand is a parameter and the section value is
+/// non-constant, so the unit fails to encode. The multi-block splice
+/// shifts the caller's own asm-goto `jump_table` row across the block-id
+/// shift, so entering it for a caller that already holds one is safe.
+#[test]
+fn asm_goto_callee_inlines_into_asm_goto_caller() {
+    let src = r#"
+        static inline __attribute__((always_inline)) int
+        branch(const int key) {
+        #if defined(__x86_64__)
+            __asm__ goto("jmp %l[yes]\n"
+                         ".pushsection .discard.b,\"a\"\n"
+                         ".long %c0\n"
+                         ".popsection\n" : : "i"(key) : : yes);
+        #elif defined(__aarch64__)
+            __asm__ goto("b %l[yes]\n"
+                         ".pushsection .discard.b,\"a\"\n"
+                         ".long %c0\n"
+                         ".popsection\n" : : "i"(key) : : yes);
+        #else
+            goto yes;
+        #endif
+            return 1;
+        yes:
+            return 2;
+        }
+        int caller_owns_asm_goto(int a) {
+            int r = 0;
+        #if defined(__x86_64__)
+            __asm__ goto("test %0,%0\n\t"
+                         "jnz %l[nz]" : : "r"(a) : : nz);
+        #elif defined(__aarch64__)
+            __asm__ goto("cbnz %w0, %l[nz]" : : "r"(a) : : nz);
+        #else
+            if (a) goto nz;
+        #endif
+            r = 10;
+        nz:
+            r += branch(40);
+            return r;
+        }
+        int main(void) {
+            return (caller_owns_asm_goto(0) == 12
+                    && caller_owns_asm_goto(1) == 2) ? 42 : 0;
+        }
+    "#;
+    let opts = NativeOptions::new().with_optimize();
+    let outcome = build_and_run_outcome_with_options(src, "asm_goto_caller", opts);
+    assert!(
+        outcome.matches(42),
+        "asm-goto callee must inline into an asm-goto caller and fold at -O, got {outcome:?}"
+    );
+}
+
 /// End-to-end Mach-O dylib smoke test: compile a c5 source
 /// that exports `answer()` returning 42 via `#pragma export`,
 /// build it as a `.dylib` (MH_DYLIB + LC_ID_DYLIB + symbol-

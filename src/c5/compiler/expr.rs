@@ -2136,6 +2136,12 @@ impl Compiler {
                             | (t & super::types::VOLATILE_BIT);
                     }
                     self.ty = t;
+                    // A cast yields a value of the cast type, not a
+                    // decayed-array rvalue (C99 6.5.4): drop the operand's
+                    // array-decay hint so `sizeof`/`typeof` of the cast read
+                    // the cast type (`typeof((T *)arr)` is `T *`, not `T[]`).
+                    self.pending.last_array_decay_size = 0;
+                    self.pending.last_array_decay_bytes = 0;
                     // Overwrite the AST acc with a canonical Cast
                     // node so any intermediate Binary nodes the
                     // conversion-shaping sequence pushed don't surface

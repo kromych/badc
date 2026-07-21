@@ -1323,7 +1323,73 @@ fn expand_gas_statements(
     Ok(())
 }
 
-/// Collect a `.macro` / `.irp` body up to its matching `close`, nesting-aware.
+/// Expand GNU as `.rept N` / `.endr` (repeat the enclosed lines N times) into
+/// straight-line text. `None` when the text has no `.rept` (the common case).
+/// `N` is a constant expression; a non-constant count, a stray `.endr`, or an
+/// unclosed `.rept` is an error as in GNU as, and `N <= 0` emits the body zero
+/// times. Nested `.rept` expand through the same pass. An AArch64 ALTERNATIVE
+/// replacement uses it to pad (a repeated `nop`) the out-of-line replacement to
+/// the original sequence's length.
+pub(crate) fn expand_asm_rept(
+    text: &str,
+) -> Result<Option<alloc::string::String>, alloc::string::String> {
+    if !text.contains(".rept") {
+        return Ok(None);
+    }
+    let stmts: alloc::vec::Vec<alloc::string::String> = text
+        .split([';', '\n'])
+        .map(|s| alloc::string::String::from(s.trim()))
+        .collect();
+    let mut out = alloc::string::String::with_capacity(text.len());
+    expand_rept_statements(&stmts, &mut out, 0)?;
+    Ok(Some(out))
+}
+
+fn expand_rept_statements(
+    stmts: &[alloc::string::String],
+    out: &mut alloc::string::String,
+    depth: usize,
+) -> Result<(), alloc::string::String> {
+    if depth > GAS_MACRO_DEPTH_LIMIT {
+        return Err(alloc::string::String::from(
+            "inline asm: `.rept` nested too deep",
+        ));
+    }
+    let mut i = 0usize;
+    while i < stmts.len() {
+        let s = stmts[i].as_str();
+        i += 1;
+        let (tok, rest) = match s.find(char::is_whitespace) {
+            Some(p) => (&s[..p], s[p..].trim()),
+            None => (s, ""),
+        };
+        match tok {
+            ".rept" => {
+                let n = eval_asm_expr_with_labels(rest, &|_| None).ok_or_else(|| {
+                    alloc::format!("inline asm: `.rept` count `{rest}` is not constant")
+                })?;
+                let (body, next) = collect_gas_body(stmts, i, ".rept", ".endr")?;
+                i = next;
+                for _ in 0..n.max(0) as usize {
+                    expand_rept_statements(&body, out, depth + 1)?;
+                }
+            }
+            ".endr" => {
+                return Err(alloc::string::String::from(
+                    "inline asm: `.endr` without `.rept`",
+                ));
+            }
+            _ => {
+                out.push_str(s);
+                out.push('\n');
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Collect a `.macro` / `.irp` / `.rept` body up to its matching `close`,
+/// nesting-aware.
 fn collect_gas_body(
     stmts: &[alloc::string::String],
     start: usize,
@@ -4597,6 +4663,52 @@ mod asm_section_tests {
             expand_asm_gas_macros(".inst (0xd5200000 | undefined_sym)\n", 4, &none)
                 .unwrap_err()
                 .contains(".inst")
+        );
+    }
+
+    #[test]
+    fn rept_expands_repeats_and_rejects_malformed() {
+        // No `.rept`: not this pass's business.
+        assert!(expand_asm_rept("nop\nret\n").unwrap().is_none());
+        // `.rept 3` repeats the body three times (the ALTERNATIVE nop
+        // padding); `.rept 0` drops it; nested counts multiply.
+        let out = expand_asm_rept("swpb w0, w1, [x2]\n.rept 3\nnop\n.endr\n")
+            .unwrap()
+            .unwrap();
+        assert_eq!(out.matches("nop").count(), 3, "{out}");
+        assert!(out.contains("swpb"));
+        assert_eq!(
+            expand_asm_rept(".rept 0\nnop\n.endr\n")
+                .unwrap()
+                .unwrap()
+                .matches("nop")
+                .count(),
+            0
+        );
+        assert_eq!(
+            expand_asm_rept(".rept 2\n.rept 3\nnop\n.endr\n.endr\n")
+                .unwrap()
+                .unwrap()
+                .matches("nop")
+                .count(),
+            6
+        );
+        // A non-constant count, a stray `.endr`, and an unclosed `.rept` are
+        // errors rather than a mis-counted expansion.
+        assert!(
+            expand_asm_rept(".rept 1b-2b\nnop\n.endr\n")
+                .unwrap_err()
+                .contains("not constant")
+        );
+        assert!(
+            expand_asm_rept("nop\n.rept 2\nnop\n.endr\n.endr\n")
+                .unwrap_err()
+                .contains(".endr")
+        );
+        assert!(
+            expand_asm_rept(".rept 2\nnop\n")
+                .unwrap_err()
+                .contains(".endr")
         );
     }
 }

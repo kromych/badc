@@ -536,6 +536,16 @@ fn function_type_param() {
 }
 
 #[test]
+fn cast_fn_ptr_named_param_scope() {
+    // C99 6.2.1p4: parameter names in an abstract function-pointer type
+    // (here inside a cast) have no scope, so binding one that matches a
+    // local of the enclosing function must not corrupt the enclosing
+    // scope's shadow. A later function's same-named first local was
+    // wrongly rejected as a "duplicate local definition".
+    assert_eq!(run_fixture("cast_fn_ptr_named_param_scope.c"), 0);
+}
+
+#[test]
 fn bitfield_runtime_init() {
     // A bitfield struct member initialized at block scope by a non-constant
     // value: the walker read-modify-writes the storage unit. Signedness,

@@ -294,16 +294,18 @@ impl Compiler {
             // C99 function-type typedef: `typedef RET NAME(args);`
             // declared at block scope. Same handling as run_compile's
             // file-scope branch -- parse the `(args)` and bind the
-            // typedef as a function-pointer alias. parse_function_params
-            // binds each named parameter as a Loc; with no body to put
-            // them into scope for, we restore the shadowed binding
-            // immediately.
+            // typedef as a function-pointer alias.
             let (typedef_ty, typedef_fpi, typedef_params) = if self.lex.tk == '(' {
                 self.next()?; // consume `(`
+                // C99 6.2.1p4: the parameter names of this function-type
+                // typedef have no scope. Record their types without binding
+                // the names, so one matching an enclosing local is not
+                // shadowed (which would corrupt the single-slot shadow the
+                // enclosing scope restores from at exit).
+                let saved = self.pending.parsing_fn_ptr_proto;
+                self.pending.parsing_fn_ptr_proto = true;
                 let pp = self.parse_function_params()?;
-                for &p in &pp.indices {
-                    Compiler::restore_shadowed_symbol(&mut self.symbols[p]);
-                }
+                self.pending.parsing_fn_ptr_proto = saved;
                 let fty = ty + Ty::Ptr as i64;
                 (fty, 1i64, Some(pp))
             } else {

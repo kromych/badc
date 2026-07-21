@@ -112,6 +112,13 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
 /// is handled conservatively: any function whose address appears
 /// in `Inst::ImmCode` is already marked reachable, so an indirect
 /// dispatch cannot reach a function the marker hasn't seen.
+///
+/// An `always_inline` function is exempt from the `_`-prefix rule: gcc
+/// keeps no out-of-line copy of one inlined at every call site, and such
+/// a body can be uncompilable out of line (a parameter-dependent `"i"`
+/// inline-asm operand is constant only after inlining). It survives when
+/// genuinely referenced -- a non-inlined call or its address taken -- via
+/// `Inst::Call` / `Inst::ImmCode` regardless.
 pub(crate) fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
     use crate::c5::ir::Inst;
     use crate::c5::symbol::Linkage;
@@ -135,7 +142,7 @@ pub(crate) fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &P
 
     for f in funcs.iter() {
         let is_root = f.name == "main"
-            || f.name.starts_with('_')
+            || (f.name.starts_with('_') && !f.is_always_inline)
             || matches!(
                 linkage_by_name.get(f.name.as_str()).copied(),
                 Some(Linkage::External) | Some(Linkage::None)

@@ -176,7 +176,9 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
         let Inst::InlineAsm { asm, args } = inst else {
             continue;
         };
-        let Ok(op_reg) = super::asm::assign_operand_regs(&asm.operands, asm.clobber_fp_regs) else {
+        let Ok(op_reg) =
+            super::asm::assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs)
+        else {
             continue;
         };
         let mut used = asm.clobber_regs;
@@ -6266,13 +6268,15 @@ fn emit_inline_asm(
         bail_msg(&m);
         return false;
     }
-    let op_reg = match super::asm::assign_operand_regs(&asm.operands, asm.clobber_fp_regs) {
-        Ok(r) => r,
-        Err(m) => {
-            bail_msg(&m);
-            return false;
-        }
-    };
+    let op_reg =
+        match super::asm::assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs)
+        {
+            Ok(r) => r,
+            Err(m) => {
+                bail_msg(&m);
+                return false;
+            }
+        };
     // Registers the asm overwrites: the operand registers plus the explicit
     // clobber list. GP registers save to 8-byte scratch slots; `x` (xmm)
     // operands and FP clobbers live in the independent XMM file and take

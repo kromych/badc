@@ -4540,6 +4540,35 @@ fn inline_asm_bswap_matching_constraint() {
 }
 
 #[test]
+fn inline_asm_operand_avoids_clobbered_gp_register() {
+    // A plain `r` operand must not be placed in a register the template
+    // clobbers. The asm writes 0x1234 into the output, then trashes
+    // rax/rbx/rcx/rdx; if the operand shared one of those the value would be
+    // lost. Compiled for x86-64 so the clobber names resolve regardless of the
+    // host arch, then run under the (x86-only) interpreter.
+    use crate::{Compiler, Target, Vm};
+    let src = "
+        int main(void) {
+            int result;
+            __asm__ volatile(\"movl $0x1234, %0\\n\\t\"
+                             \"movl $0, %%eax\\n\\t\"
+                             \"movl $0, %%ebx\\n\\t\"
+                             \"movl $0, %%ecx\\n\\t\"
+                             \"movl $0, %%edx\\n\\t\"
+                             : \"=r\"(result)
+                             :
+                             : \"rax\", \"rbx\", \"rcx\", \"rdx\");
+            return result == 0x1234 ? 42 : 1;
+        }
+    ";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap();
+    let got = Vm::new(program).with_pointer_tracking().run().unwrap();
+    assert_eq!(got, 42, "operand landed in a clobbered register");
+}
+
+#[test]
 fn inline_asm_bswap_size_modifier() {
     // A size-modifier register name: `bswapq` on a 64-bit operand.
     let src = "

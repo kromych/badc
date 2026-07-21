@@ -889,6 +889,76 @@ fn always_inline_immediate_asm_operand_drops_standalone_body() {
 }
 
 #[test]
+fn asm_replacement_mem_operand_resolves_nested_global_offset() {
+    // A replacement instruction in an executable inline-asm section
+    // (`.pushsection ...,"ax"`) whose `%a[N]` memory operand names a
+    // link-time address `&global.member[const]` must lower to a
+    // RIP-relative reference. That address is a chain of constant `Add`s
+    // (the member offset, then the element offset); resolving only the
+    // outermost level left the base unrecognized and rejected the operand
+    // as having no register. `testb $imm8, sym(%rip)` encodes
+    // `F6 05 <disp32> <imm8>` with a PC32 relocation against the symbol,
+    // the addend folding the whole offset chain less the 4-byte PC skew
+    // and the trailing immediate -- byte-identical to gas.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_PC32: u32 = 2;
+    let src = r#"
+        struct s { int a; long b; unsigned int cap[24]; };
+        extern struct s g;
+        static __attribute__((always_inline)) inline void touch(unsigned short n) {
+            __asm__ volatile(".pushsection .altinstr_aux,\"ax\"\n"
+                "1: testb %[bit], %a[addr]\n"
+                ".popsection\n"
+                : : [bit] "i" (1 << (n & 7)),
+                    [addr] "i" (&((const char *)g.cap)[n >> 3]));
+        }
+        int main(void) { touch(117); return 0; }
+    "#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        optimize: true,
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    // The replacement emit rejected the nested-offset operand before the
+    // fix, so a successful emit is itself part of the guard.
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    // `testb $0x20, sym(%rip)` == `F6 05 <disp32=0> 20`; ModRM 0x05 is the
+    // `/0` TEST extension over a RIP-relative base. `1 << (117 & 7) == 0x20`.
+    let field = obj
+        .text
+        .windows(7)
+        .position(|w| w == [0xf6, 0x05, 0x00, 0x00, 0x00, 0x00, 0x20])
+        .expect("RIP-relative `testb $0x20, sym(%rip)` must be encoded");
+    // The disp32 field sits two bytes into the instruction. `g.cap` is at
+    // offset 16 and the `[117 >> 3] == [14]` byte index adds 14; the PC32
+    // addend subtracts the 4-byte PC skew and the 1-byte trailing immediate:
+    // 16 + 14 - 4 - 1 == 25.
+    let disp_off = (field + 2) as u64;
+    let reloc = obj
+        .text_relocs
+        .iter()
+        .find(|r| r.offset == disp_off)
+        .expect("the replacement's disp32 must carry a relocation");
+    assert_eq!(
+        reloc.rtype, R_X86_64_PC32,
+        "the RIP-relative memory operand must relocate as PC32"
+    );
+    assert_eq!(
+        obj.symbols[reloc.sym_idx].name, "g",
+        "the reloc must target the named global"
+    );
+    assert_eq!(
+        reloc.addend, 25,
+        "the addend must fold the member + element offset less PC skew and imm"
+    );
+}
+
+#[test]
 fn thread_local_storage_round_trips_through_et_rel() {
     // `_Thread_local` storage now rides the native ET_REL object:
     // elf_reloc emits `.tdata` (initialised slice) + `.tbss`

@@ -32,30 +32,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x0, #0x3412             // =13330
-               	bl	<addr>
-               	cmp	x0, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0xff00             // =65280
-               	bl	<addr>
-               	cmp	x0, #0x2
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x1234             // =4660
-               	bl	<addr>
-               	cmp	x0, #0x0
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	mov	x0, #0x1                // =1
+               	mov	x0, #0x2                // =2
+               	mov	x0, #0x0                // =0
                	mov	x0, #0x5678             // =22136
                	movk	x0, #0x1234, lsl #16
                	stur	w0, [x29, #-0x8]

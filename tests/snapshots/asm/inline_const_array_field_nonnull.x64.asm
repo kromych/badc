@@ -10,21 +10,15 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<sum_named>:
+<main>:
                	leaq	<rip>, %rax
                	movslq	0x8(%rax), %rcx
                	addq	$0x0, %rcx
+               	leaq	<rip>, %rax
                	movslq	0x28(%rax), %rdx
                	addq	%rdx, %rcx
                	leaq	0x3(%rcx), %rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	callq	<addr>
                	movslq	%eax, %rax
-               	popq	%rbp
                	retq

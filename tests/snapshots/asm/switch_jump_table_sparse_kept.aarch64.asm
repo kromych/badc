@@ -10,6 +10,11 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
+               	mov	x1, #0x0                // =0
+               	b	<addr>
+               	mov	x17, #0xa               // =10
+               	mul	x0, x1, x17
+               	sxtw	x0, w0
                	sxtw	x0, w0
                	cmp	x0, #0x32
                	b.lt	<addr>
@@ -25,27 +30,31 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
-               	ret
+               	add	x3, x1, #0x1
+               	sxtw	x3, w3
+               	cmp	x0, x3
+               	b.eq	<addr>
+               	b	<addr>
                	mov	x0, #0xa                // =10
-               	ret
+               	b	<addr>
                	cmp	x0, #0x50
                	b.ne	<addr>
                	mov	x0, #0x9                // =9
-               	ret
+               	b	<addr>
                	cmp	x0, #0x46
                	b.ne	<addr>
                	mov	x0, #0x8                // =8
-               	ret
+               	b	<addr>
                	cmp	x0, #0x3c
                	b.lt	<addr>
                	cmp	x0, #0x3c
                	b.ne	<addr>
                	mov	x0, #0x7                // =7
-               	ret
+               	b	<addr>
                	cmp	x0, #0x32
                	b.ne	<addr>
                	mov	x0, #0x6                // =6
-               	ret
+               	b	<addr>
                	cmp	x0, #0x14
                	b.lt	<addr>
                	cmp	x0, #0x1e
@@ -55,90 +64,43 @@ Disassembly of section .text:
                	cmp	x0, #0x28
                	b.ne	<addr>
                	mov	x0, #0x5                // =5
-               	ret
+               	b	<addr>
                	cmp	x0, #0x1e
                	b.ne	<addr>
                	mov	x0, #0x4                // =4
-               	ret
+               	b	<addr>
                	cmp	x0, #0x14
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
-               	ret
+               	b	<addr>
                	cmp	x0, #0xa
                	b.lt	<addr>
                	cmp	x0, #0xa
                	b.ne	<addr>
                	mov	x0, #0x2                // =2
-               	ret
+               	b	<addr>
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
-               	ret
-
-<main>:
-               	str	x20, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	mov	x20, #0x0               // =0
                	b	<addr>
-               	mov	x17, #0xa               // =10
-               	mul	x0, x20, x17
-               	bl	<addr>
-               	mov	x1, x0
-               	add	x0, x20, #0x1
-               	sxtw	x0, w0
-               	cmp	x1, x0
-               	b.ne	<addr>
-               	sxtw	x0, w20
-               	add	x20, x0, #0x1
-               	sxtw	x0, w20
-               	cmp	x0, #0xa
+               	add	x1, x2, #0x1
+               	sxtw	x2, w1
+               	cmp	x2, #0xa
                	b.lt	<addr>
-               	mov	x0, #0x5                // =5
-               	bl	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
-               	mov	x0, #0xfff6             // =65526
+               	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
-               	bl	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
-               	mov	x0, #0x64               // =100
-               	bl	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
+               	mov	x0, #0xffff             // =65535
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #0xffff             // =65535
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
                	ret
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
                	ret
                	b	<addr>

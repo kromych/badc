@@ -30,30 +30,9 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movl	$0x3412, %edi           # imm = 0x3412
-               	callq	<addr>
-               	cmpq	$0x1, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0xff00, %edi           # imm = 0xFF00
-               	callq	<addr>
-               	cmpq	$0x2, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x1234, %edi           # imm = 0x1234
-               	callq	<addr>
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
+               	movl	$0x1, %eax
+               	movl	$0x2, %eax
+               	xorq	%rax, %rax
                	movl	$0x12345678, %eax       # imm = 0x12345678
                	movl	%eax, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax

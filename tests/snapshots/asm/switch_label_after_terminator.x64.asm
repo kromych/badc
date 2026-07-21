@@ -35,36 +35,12 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x1, %edi
-               	callq	<addr>
-               	cmpq	$0x65, %rax
-               	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	cmpq	$0x66, %rax
-               	je	<addr>
+               	movl	$0x65, %eax
                	movl	$0x2, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x3, %edi
-               	callq	<addr>
-               	cmpq	$0x67, %rax
-               	je	<addr>
+               	movl	$0x66, %eax
                	movl	$0x3, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x63, %edi
-               	callq	<addr>
-               	cmpq	$-0x1, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	popq	%rbp
-               	retq
+               	movl	$0x67, %eax
+               	movabsq	$-0x1, %rax
                	xorq	%rax, %rax
-               	popq	%rbp
                	retq

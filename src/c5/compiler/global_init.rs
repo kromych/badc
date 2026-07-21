@@ -581,6 +581,12 @@ impl Compiler {
         // (enum / `#define`d constants), the conditional operator
         // (`static int n = A > B ? A : B;`), and the offsetof shape.
         let cv = self.parse_const_expr_cond_val()?;
+        // A bare symbol address cast to this integer slot is not yet a
+        // relocation-bearing integer initializer; reject it rather than
+        // store the addend with no relocation. Pointer-typed slots and the
+        // `&sym` shapes are handled by the address paths above. TODO:
+        // emit the symbol relocation for `(unsigned long)&sym`.
+        let cv = self.require_integer_const(cv)?;
 
         // C99 6.7.8p11 / 6.3.1.4: a constant initializing a floating
         // object takes the floating value. Coerce the ConstVal to f64

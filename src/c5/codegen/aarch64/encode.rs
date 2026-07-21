@@ -2139,6 +2139,10 @@ pub(crate) fn lower(
 
     Ok(Build {
         asm_sections,
+        // The aarch64 ALTERNATIVE replacement is appended to `.text` (a
+        // deferred region), not a separately loaded section, so no
+        // main-stream reference crosses into a pushed section here.
+        asm_section_text_refs: Vec::new(),
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),

@@ -1545,6 +1545,7 @@ pub(crate) fn emit_function(
     tls_total_size: usize,
     fn_unwind: &mut Vec<super::FnUnwind>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -1566,6 +1567,7 @@ pub(crate) fn emit_function(
     let plt_call_fixups_snapshot = plt_call_fixups.len();
     let data_fixups_snapshot = data_fixups.len();
     let user_extern_data_refs_snapshot = user_extern_data_refs.len();
+    let asm_section_text_refs_snapshot = asm_section_text_refs.len();
     let asm_extern_call_sites_snapshot = asm_extern_call_sites.len();
     let asm_sections_snapshot = super::ssa::emit_common::snapshot_asm_sections(asm_sections);
     // A cross-unit `extern _Thread_local` access (`extern_tls_names` maps
@@ -1583,6 +1585,7 @@ pub(crate) fn emit_function(
             plt_call_fixups.truncate(plt_call_fixups_snapshot);
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+            asm_section_text_refs.truncate(asm_section_text_refs_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
             super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
@@ -1760,6 +1763,7 @@ pub(crate) fn emit_function(
     let body_plt = plt_call_fixups.len();
     let body_data = data_fixups.len();
     let body_uext = user_extern_data_refs.len();
+    let body_asm_xsec = asm_section_text_refs.len();
     let body_pending = pending_func_fixups.len();
     let body_tls = tls_index_fixups.len();
     let body_elf_tpoff = elf_tpoff_fixups.len();
@@ -1853,6 +1857,7 @@ pub(crate) fn emit_function(
                         asm_extern_call_sites,
                         data_fixups,
                         user_extern_data_refs,
+                        asm_section_text_refs,
                         Some(AsmGotoCtx {
                             row: &func.jump_tables[table as usize],
                             branch_fixups: &mut branch_fixups,
@@ -1895,7 +1900,7 @@ pub(crate) fn emit_function(
                         param_plan: &param_plan,
                         name2entpc,
                     };
-                    emit_inst(&mut cx, inst, v, place, &fcx, fixups)
+                    emit_inst(&mut cx, inst, v, place, &fcx, fixups, asm_section_text_refs)
                 };
                 if !inst_ok {
                     #[cfg(feature = "codegen_test")]
@@ -2191,6 +2196,7 @@ pub(crate) fn emit_function(
                 plt_call_fixups.truncate(body_plt);
                 data_fixups.truncate(body_data);
                 user_extern_data_refs.truncate(body_uext);
+                asm_section_text_refs.truncate(body_asm_xsec);
                 pending_func_fixups.truncate(body_pending);
                 tls_index_fixups.truncate(body_tls);
                 elf_tpoff_fixups.truncate(body_elf_tpoff);
@@ -2864,6 +2870,7 @@ fn emit_inst(
     dst: Place,
     fcx: &FnCtx,
     fixups: &mut Vec<Fixup>,
+    asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
 ) -> bool {
     // Unpack the read-only per-function context into the per-field names the
     // lowering below uses, so the body is unchanged.
@@ -3233,6 +3240,7 @@ fn emit_inst(
             asm_extern_call_sites,
             data_fixups,
             user_extern_data_refs,
+            asm_section_text_refs,
             None,
         ),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
@@ -6512,6 +6520,7 @@ fn emit_inline_asm(
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     data_fixups: &mut Vec<DataFixup>,
     user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
+    asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
 ) -> bool {
     use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg, Inst};
@@ -7167,6 +7176,9 @@ fn emit_inline_asm(
     // reference; a backward `Nb`, the nearest at or before it (GNU as
     // local-label rule). A named label has exactly one definition, so the
     // direction is ignored. The rel32 is measured from the end of its field.
+    // A reference with no main-stream definition may name a label placed in
+    // one of the template's pushed sections; defer it to the section pass.
+    let mut pending_xsec: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
     for &(at, num, forward) in &label_fixups {
         let target = if num >= super::asm::NAMED_LABEL_BASE {
             label_defs
@@ -7186,11 +7198,13 @@ fn emit_inline_asm(
                 .map(|&(_, off)| off)
                 .max()
         };
-        let Some(target) = target else {
-            return fail("inline asm: undefined local label");
-        };
-        let rel = target as i64 - (at as i64 + 4);
-        code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());
+        match target {
+            Some(target) => {
+                let rel = target as i64 - (at as i64 + 4);
+                code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());
+            }
+            None => pending_xsec.push((at, num, forward)),
+        }
     }
     // Materialize the `.pushsection` blocks now that every label's text
     // offset is known. A reference that names a template label resolves
@@ -7236,7 +7250,7 @@ fn emit_inline_asm(
             let ctx = goto_ctx.as_ref()?;
             ctx.row.get(1 + idx as usize).copied()
         };
-        if let Err(m) = super::ssa::emit_common::materialize_asm_sections(
+        let defined = match super::ssa::emit_common::materialize_asm_sections(
             section_blocks,
             &|idx| const_of(idx),
             &label_off,
@@ -7245,9 +7259,45 @@ fn emit_inline_asm(
             false,
             asm_sections,
         ) {
-            bail_msg(&m);
-            return false;
+            Ok(d) => d,
+            Err(m) => {
+                bail_msg(&m);
+                return false;
+            }
+        };
+        // Bind each deferred main-stream reference to its section definition.
+        // The pushed sections follow the main stream textually, so only a
+        // forward reference reaches one; the two land in different object
+        // sections, so the reference becomes a PC-relative relocation against
+        // the target section's symbol rather than an in-stream displacement.
+        for (at, num, forward) in pending_xsec.drain(..) {
+            let name = if num >= super::asm::NAMED_LABEL_BASE {
+                match code_label_names.get((num - super::asm::NAMED_LABEL_BASE) as usize) {
+                    Some(n) => alloc::string::String::from(*n),
+                    None => return fail("inline asm: undefined local label"),
+                }
+            } else {
+                alloc::format!("{num}")
+            };
+            let hit = if forward {
+                defined.iter().find(|d| d.name == name)
+            } else {
+                None
+            };
+            match hit {
+                Some(d) => asm_section_text_refs.push(super::AsmSectionTextRef {
+                    instr_offset: at,
+                    section_index: d.section_index,
+                    section_offset: d.offset,
+                    addend: -4,
+                }),
+                None => return fail("inline asm: undefined local label"),
+            }
         }
+    }
+    // A deferred reference with no section to resolve against is undefined.
+    if !pending_xsec.is_empty() {
+        return fail("inline asm: undefined local label");
     }
 
     // Flag outputs: the template's condition flags are still live here (the

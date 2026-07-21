@@ -2638,6 +2638,18 @@ pub(crate) fn measure_asm_section_offsets(
     Ok(SectionLabelOffsets { map })
 }
 
+/// A label defined by one `materialize_asm_sections` call, reported so a
+/// main-stream reference to it (`jmp 6f` where `6:` sits in a pushed section)
+/// binds across the section boundary. `name` is the source label name before
+/// the per-instance rename; `section_index` and `offset` locate the definition
+/// in the sink.
+#[derive(Debug, Clone)]
+pub(crate) struct MaterializedLabel {
+    pub name: alloc::string::String,
+    pub section_index: usize,
+    pub offset: u32,
+}
+
 /// Materialize the parsed section blocks: resolve operand constants and
 /// label references, lay out the bytes, and merge into the sink by
 /// `(name, flags, sh_type)`. `const_of` yields an `i`-class operand's
@@ -2646,7 +2658,9 @@ pub(crate) fn measure_asm_section_offsets(
 /// ([`LabelLoc`]); `None` means the name is a symbol. `operand_sym` yields
 /// the relocation target of an `i`-class operand that names a link-time
 /// address (`.long %c0 - .`) rather than a constant; `goto_block` yields
-/// the block index of an `asm goto` label (`.long %l0 - .`).
+/// the block index of an `asm goto` label (`.long %l0 - .`). Returns the
+/// labels defined this call so a main-stream reference resolves against a
+/// definition placed in a section.
 pub(crate) fn materialize_asm_sections(
     blocks: &[AsmSectionBlock],
     const_of: &dyn Fn(u8) -> Option<i64>,
@@ -2655,7 +2669,7 @@ pub(crate) fn materialize_asm_sections(
     goto_block: &dyn Fn(u8) -> Option<u32>,
     align_is_p2: bool,
     sink: &mut alloc::vec::Vec<AsmSection>,
-) -> Result<(), alloc::string::String> {
+) -> Result<alloc::vec::Vec<MaterializedLabel>, alloc::string::String> {
     // GNU as numeric labels (`2:`, `14470:`) are local to one asm instance;
     // the same digits recur across every expansion of a macro like the bug
     // table, so the accumulating sink would collide them. Rename each
@@ -2686,12 +2700,13 @@ pub(crate) fn materialize_asm_sections(
     // later block (the replacement length `775f - 774f`, whose field sits in
     // the earlier `.altinstructions`) folds to a constant.
     let measured = measure_asm_section_offsets(blocks, const_of, align_is_p2)?;
+    let mut defined: alloc::vec::Vec<MaterializedLabel> = alloc::vec::Vec::new();
     for b in blocks {
-        let sec = match sink
-            .iter_mut()
-            .find(|s| s.name == b.name && s.flags == b.flags && s.sh_type == b.sh_type)
+        let sec_idx = match sink
+            .iter()
+            .position(|s| s.name == b.name && s.flags == b.flags && s.sh_type == b.sh_type)
         {
-            Some(s) => s,
+            Some(i) => i,
             None => {
                 sink.push(AsmSection {
                     name: b.name.clone(),
@@ -2702,9 +2717,10 @@ pub(crate) fn materialize_asm_sections(
                     labels: alloc::vec::Vec::new(),
                     align: 1,
                 });
-                sink.last_mut().unwrap()
+                sink.len() - 1
             }
         };
+        let sec = &mut sink[sec_idx];
         for item in &b.items {
             // `.align`'s argument is a byte count on x86 ELF, a
             // power-of-two exponent on AArch64 (GNU as convention).
@@ -2780,6 +2796,7 @@ pub(crate) fn materialize_asm_sections(
                 AsmSectionItem::Bytes(bs) => sec.bytes.extend_from_slice(bs),
                 AsmSectionItem::Label(name) => {
                     // A numeric label carries its per-instance-unique symbol.
+                    let orig = name.clone();
                     let name = num_unique
                         .get(name.as_str())
                         .map(alloc::string::String::as_str)
@@ -2801,6 +2818,11 @@ pub(crate) fn materialize_asm_sections(
                             size: None,
                         }),
                     }
+                    defined.push(MaterializedLabel {
+                        name: orig,
+                        section_index: sec_idx,
+                        offset: at,
+                    });
                 }
                 AsmSectionItem::Global(name) => {
                     match sec.labels.iter_mut().find(|l| l.name == *name) {
@@ -3075,7 +3097,7 @@ pub(crate) fn materialize_asm_sections(
     for s in sink.iter_mut() {
         s.labels.retain(|l| l.offset != PENDING_LABEL);
     }
-    Ok(())
+    Ok(defined)
 }
 
 /// Materialize a unit's file-scope `asm("...")` templates into `sink`.

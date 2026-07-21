@@ -1046,6 +1046,68 @@ fn asm_replacement_mem_operand_resolves_nested_global_offset() {
 }
 
 #[test]
+fn asm_main_stream_reference_binds_label_in_pushed_section() {
+    // A GNU-as local label defined inside a `.pushsection ...,"ax"` block is
+    // in scope for the surrounding asm's main instruction stream: `jmp 6f`
+    // reaches a `6:` placed in that section. The two land in different object
+    // sections, so the branch cannot carry an in-stream displacement; it
+    // becomes a PC-relative relocation against the section symbol, the label's
+    // placed offset folded into the addend less the 4-byte field skew. Here
+    // `6:` sits 3 bytes into the section, so the addend is `3 - 4 == -1`,
+    // byte-identical to gas. Before the fix the reference reported the label
+    // undefined, so the emit succeeding is itself part of the guard.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_PC32: u32 = 2;
+    let src = r#"
+        void f(void) {
+            __asm__ volatile(
+                "jmp 6f\n\t"
+                ".pushsection .altcode,\"ax\"\n"
+                ".byte 0x90, 0x90, 0x90\n"
+                "6:\n"
+                "\tnop\n"
+                ".popsection\n");
+        }
+        int main(void) { f(); return 0; }
+    "#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    // `jmp rel32` is `E9 <disp32>`; a zeroed displacement means the linker
+    // fills it through the relocation rather than the emit patching it in
+    // place, which is what a same-section target would take.
+    let jmp = obj
+        .text
+        .windows(5)
+        .position(|w| w == [0xe9, 0x00, 0x00, 0x00, 0x00])
+        .expect("main-stream `jmp 6f` must encode as `E9 00000000`");
+    let reloc = obj
+        .text_relocs
+        .iter()
+        .find(|r| r.offset == (jmp + 1) as u64)
+        .expect("the cross-section branch's disp32 must carry a relocation");
+    assert_eq!(
+        reloc.rtype, R_X86_64_PC32,
+        "a branch into another section relocates as PC32"
+    );
+    assert_eq!(
+        reloc.addend, -1,
+        "the addend folds the label's in-section offset (3) less the 4-byte PC skew"
+    );
+    assert!(
+        obj.symbols[reloc.sym_idx].name.is_empty(),
+        "the reference binds the pushed section's symbol, not a named symbol"
+    );
+}
+
+#[test]
 fn thread_local_storage_round_trips_through_et_rel() {
     // `_Thread_local` storage now rides the native ET_REL object:
     // elf_reloc emits `.tdata` (initialised slice) + `.tbss`

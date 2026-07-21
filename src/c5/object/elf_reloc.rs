@@ -1789,6 +1789,28 @@ pub(super) fn write_relocatable(
         );
     }
 
+    // Inline-asm main-stream references to labels placed in the template's
+    // pushed sections. The relocated field sits in `.text`; the target is the
+    // named section's symbol, with the label's placed offset folded into the
+    // addend (section-block base + within-section offset + field-end skew).
+    for r in &build.asm_section_text_refs {
+        let (e, base) = asm_placements[r.section_index];
+        let sym = carve.sym_idx[e];
+        let addend = base as i64 + r.section_offset as i64 + r.addend;
+        let rtype = match machine_for_rela {
+            Machine::X86_64 => R_X86_64_PC32,
+            Machine::Aarch64 => R_AARCH64_PREL32,
+        };
+        write_struct(
+            &mut rela_bytes,
+            &Elf64Rela {
+                r_offset: r.instr_offset as u64,
+                r_info: (sym << 32) | rtype as u64,
+                r_addend: addend,
+            },
+        );
+    }
+
     let symtab_bytes: Vec<u8> = symbols
         .iter()
         .flat_map(|s| {
@@ -3068,6 +3090,7 @@ mod tests {
         use super::super::{Abi, OutputKind, ResolvedImports};
         Build {
             asm_sections: Vec::new(),
+            asm_section_text_refs: Vec::new(),
             copy_relocs: Default::default(),
             text: Vec::new(),
             data: Vec::new(),

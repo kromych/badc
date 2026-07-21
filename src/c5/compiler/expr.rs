@@ -3678,13 +3678,16 @@ impl Compiler {
                     // into element distance (skipped for `char*`,
                     // where byte and element counts coincide). Both
                     // operands share the pointer-to-array stride.
+                    // Stamp Int before the emits so the dual-emit tracker
+                    // records the result type (a statement expression ending
+                    // in `p - q` reads this node), not the operand pointer.
+                    self.ty = Ty::Int as i64;
                     self.ast_binop(crate::c5::ir::BinOp::Sub);
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale =
                             self.pointer_to_array_arith_stride(lhs_stride, t, self.pointee_size(t));
                         self.emit_binop_with_imm(crate::c5::ir::BinOp::Div, scale);
                     }
-                    self.ty = Ty::Int as i64;
                 } else if self.is_ptr_scaling_nontrivial(t) {
                     let scale =
                         self.pointer_to_array_arith_stride(lhs_stride, t, self.pointee_size(t));
@@ -3692,8 +3695,13 @@ impl Compiler {
                         carry_stride = scale;
                     }
                     self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
-                    self.ast_binop(crate::c5::ir::BinOp::Sub);
+                    // Set the pointer result type before the emit so the
+                    // dual-emit binop tracker stamps `Expr::Binary { ty }`
+                    // as the pointer (C99 6.5.6p8), not the scaled integer
+                    // index -- mirrors the `+` branch. A statement expression
+                    // ending in `p - i` reads this node as its value type.
                     self.ty = t;
+                    self.ast_binop(crate::c5::ir::BinOp::Sub);
                 } else {
                     let rhs_ty = self.ty;
                     // Pre-set the post-conversion result type so

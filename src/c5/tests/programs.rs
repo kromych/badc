@@ -729,6 +729,14 @@ fn stmt_expr() {
 }
 
 #[test]
+fn stmt_expr_pointer_arith_arrow() {
+    // A statement expression ending in pointer arithmetic keeps the pointer
+    // result type (C99 6.5.6p8), so `({ ...; p - 1; })->field` resolves the
+    // single-level struct pointer -- the `task_pt_regs` macro shape.
+    assert_eq!(run_fixture("stmt_expr_pointer_arith_arrow.c"), 0);
+}
+
+#[test]
 fn generic_selection() {
     // C11 6.5.1.1 `_Generic`: type dispatch, `default`, the
     // unevaluated-non-selected rule, pointer-to-struct dispatch, and use

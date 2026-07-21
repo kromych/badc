@@ -582,6 +582,23 @@ fn is_inline_candidate(
                     return false;
                 }
             }
+            // An intrinsic is a leaf the splice reproduces by an operand
+            // remap (`rewrite_callee_inst`), like a Call. Admit all but the
+            // frame-bound ones, whose result depends on the enclosing
+            // frame / stack and cannot relocate into a caller. This inlines
+            // an always_inline accessor holding `__builtin_unreachable` (an
+            // `Intrinsic::Trap`), so an asm operand that is an integer-
+            // constant-expression (C99 6.6) only after the constant argument
+            // substitutes folds at the call site rather than failing an
+            // out-of-line emit.
+            Inst::Intrinsic { kind, .. } => {
+                let frame_bound =
+                    crate::c5::op::Intrinsic::from_i64(*kind).is_none_or(|i| i.is_frame_bound());
+                if frame_bound {
+                    say(format_args!("frame-bound intrinsic {kind}"));
+                    return false;
+                }
+            }
             _ => {
                 say(format_args!("disallowed inst {:?}", inst));
                 return false;
@@ -762,6 +779,13 @@ fn rewrite_callee_inst(inst: &Inst, args: &[ValueId], callee_remap: &[ValueId]) 
                 // Inline-asm operand args (an asm-goto's `"i"` inputs among
                 // them) route through the callee remap like any operand.
                 Inst::InlineAsm { args, .. } => {
+                    for a in args.iter_mut() {
+                        *a = map_v(*a, callee_remap);
+                    }
+                }
+                // An intrinsic's operand args (values, and any output
+                // addresses among them) route through the callee remap too.
+                Inst::Intrinsic { args, .. } => {
                     for a in args.iter_mut() {
                         *a = map_v(*a, callee_remap);
                     }

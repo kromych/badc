@@ -3446,6 +3446,66 @@ fn asm_section_const_local_folds_with_alloca_present() {
 }
 
 #[test]
+fn always_inline_trap_accessor_folds_section_operand() {
+    // An always_inline accessor whose asm-goto writes a `.hword %[c]`
+    // section datum from an `i` (immediate-only) operand is an
+    // integer-constant-expression (C99 6.6) only once a constant
+    // argument substitutes. Its always_inline caller holds a
+    // `__builtin_unreachable` (an `Intrinsic::Trap`); the inliner once
+    // rejected any intrinsic, so the caller stayed out of line and its
+    // out-of-line emit failed on the non-constant section datum. The
+    // inliner now admits a non-frame-bound intrinsic, so both accessors
+    // inline at the constant call site, the datum folds, and the
+    // out-of-line bodies drop.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        static __attribute__((always_inline)) inline int\n\
+        emit_tag(const unsigned long c) {\n\
+            __asm__ goto(\".pushsection .tag_tab,\\\"a\\\"\\n\"\n\
+                \".hword %[c]\\n\"\n\
+                \".popsection\\n\" : : [c] \"i\"(c) : : hit);\n\
+            return 0;\n\
+        hit:\n\
+            return 1;\n\
+        }\n\
+        static __attribute__((always_inline)) inline int\n\
+        pick_tag(int n, int ready) {\n\
+            if (ready)\n\
+                return emit_tag(n);\n\
+            __builtin_unreachable();\n\
+        }\n\
+        static int probe(int r) { return pick_tag(42, r); }\n\
+        int main(void) { volatile int r = 1; return probe(r); }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        optimize: true,
+        ..Default::default()
+    };
+    // A successful emit is itself the regression guard: the out-of-line
+    // accessor emit failed with `non-constant section data value`.
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts)
+        .unwrap_or_else(|e| panic!("emit -O: {e}"));
+    let sections = elf_sections(&bytes);
+    let sec = sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".tag_tab")
+        .expect(".tag_tab section missing");
+    // The `.hword %[c]` folds to the constant argument 42 (0x002a).
+    assert_eq!(sec.3, 42u16.to_le_bytes(), "folded %[c] value");
+    // Both always_inline accessors inlined at the call site and their
+    // out-of-line bodies dropped from the object -- no residual symbol.
+    for name in [b"emit_tag".as_slice(), b"pick_tag".as_slice()] {
+        assert!(
+            !bytes.windows(name.len()).any(|w| w == name),
+            "inlined accessor kept an out-of-line body"
+        );
+    }
+}
+
+#[test]
 fn inline_asm_numeric_label_defined_twice_binds_nearest() {
     // GNU as permits a numeric label many definitions; a reference `Nf`
     // resolves to the nearest definition at a greater source position, `Nb`

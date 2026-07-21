@@ -3502,6 +3502,56 @@ fn inline_asm_pushsection_lands_in_relocatable_object() {
 }
 
 #[test]
+fn asm_section_align_fill_byte() {
+    // GNU as `.balign n, fill` / `.p2align e, fill` pad with the given fill
+    // byte. In an executable section the padding must carry that byte, not
+    // zero: the compiler once parsed the whole operand as the alignment and
+    // rejected `n, 0x90`. Distinct fills (0x90, 0xcc) confirm the byte is
+    // applied literally rather than hardcoded.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int f(void) {\n\
+            __asm__ volatile(\".pushsection .exec_align_probe,\\\"ax\\\"\\n\"\n\
+                \".byte 0x11\\n\"\n\
+                \".balign 16, 0x90\\n\"\n\
+                \".byte 0x22\\n\"\n\
+                \".p2align 5, 0xcc\\n\"\n\
+                \".byte 0x33\\n\"\n\
+                \".popsection\\n\");\n\
+            return 0;\n\
+        }\n\
+        int main(void) { return f(); }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let sec = sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".exec_align_probe")
+        .expect(".exec_align_probe section missing");
+    assert_eq!(sec.2 & 0x4, 0x4, "SHF_EXECINSTR expected");
+    let body = &sec.3;
+    // 0x11 | pad to 16 with 0x90 | 0x22 | pad to 32 with 0xcc | 0x33.
+    assert_eq!(body.len(), 33, "section size: {body:02x?}");
+    assert_eq!(body[0], 0x11);
+    assert!(
+        body[1..16].iter().all(|&b| b == 0x90),
+        "exec .balign fill must be 0x90: {body:02x?}"
+    );
+    assert_eq!(body[16], 0x22);
+    assert!(
+        body[17..32].iter().all(|&b| b == 0xcc),
+        "exec .p2align fill must be 0xcc: {body:02x?}"
+    );
+    assert_eq!(body[32], 0x33);
+}
+
+#[test]
 fn asm_section_const_local_folds_with_alloca_present() {
     // A `.long %c[..]` section datum fed by an address-free local
     // constant must fold at -O even when the function also uses a VLA

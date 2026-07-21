@@ -4803,6 +4803,66 @@ fn asm_address_constraint_renders_as_a_memory_reference() {
 }
 
 #[test]
+fn asm_prfm_accepts_a_bare_q_operand_reference() {
+    // The AArch64 LL/SC atomics name the `+Q` memory operand with a bare
+    // `%N` reference (`prfm pstl1strm, %2`), not `%aN`. The operand's address
+    // register renders as `[xN]`, the base-register form, and prfm/ldxr/stxr
+    // on the same operand must all address that register.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let src = "typedef struct { int counter; } atomic_t;\n\
+        void a(int i, atomic_t *v) {\n\
+        int result; unsigned long tmp;\n\
+        __asm__ volatile(\n\
+        \"prfm pstl1strm, %2\\n\"\n\
+        \"1: ldxr %w0, %2\\n\"\n\
+        \"add %w0, %w0, %w3\\n\"\n\
+        \"stxr %w1, %w0, %2\\n\"\n\
+        \"cbnz %w1, 1b\\n\"\n\
+        : \"=&r\"(result), \"=&r\"(tmp), \"+Q\"(v->counter)\n\
+        : \"Ir\"(i));\n\
+        }\nint main(void) { return 0; }\n";
+    let program = Compiler::new(String::from(src)).compile().expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let text = elf_sections(&bytes)
+        .into_iter()
+        .find(|(n, _, _, _)| n == ".text")
+        .expect(".text")
+        .3;
+    let words = || {
+        text.chunks_exact(4)
+            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+    };
+    // prfm pstl1strm, [Xn]: base-register form, zero offset, prfop 0x11.
+    let prfm = words()
+        .find(|&w| w & 0xFFC0_0000 == 0xF980_0000)
+        .expect("prfm encoded");
+    assert_eq!(prfm & 0x1F, 0x11, "prfm prfop is pstl1strm");
+    assert_eq!((prfm >> 10) & 0xFFF, 0, "prfm offset is zero");
+    let base = (prfm >> 5) & 0x1F;
+    // ldxr Wt, [Xn] and stxr Ws, Wt, [Xn] on the same operand share the base.
+    let ldxr = words()
+        .find(|&w| w & 0xFFFF_FC00 == 0x885F_7C00)
+        .expect("ldxr encoded");
+    let stxr = words()
+        .find(|&w| w & 0xFFE0_FC00 == 0x8800_7C00)
+        .expect("stxr encoded");
+    assert_eq!(
+        (ldxr >> 5) & 0x1F,
+        base,
+        "ldxr shares the prfm base register"
+    );
+    assert_eq!(
+        (stxr >> 5) & 0x1F,
+        base,
+        "stxr shares the prfm base register"
+    );
+}
+
+#[test]
 fn x86_percpu_seg_a_operand_uses_a_direct_pcrel_reloc() {
     // The x86 percpu read accessors apply the `%a` address modifier to an
     // `i`-class operand naming a percpu global, under a `%%gs:` prefix:

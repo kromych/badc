@@ -1109,10 +1109,18 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     _ => return Err(format!("inline asm: bad prefetch op `{}`", toks[0])),
                 },
             };
-            let mem = parse_operand(toks[1])?;
-            if !matches!(mem, AsmOpndA64::Mem { .. } | AsmOpndA64::MemReg { .. }) {
-                return Err(String::from("inline asm: `prfm` needs a memory operand"));
-            }
+            let mem = match parse_operand(toks[1])? {
+                // A bare `%N` reference names the base-register form `[xN]`,
+                // as `%aN` does: a `Q`/`m` operand holds the object's address
+                // in the register the emitter resolves the reference to.
+                AsmOpndA64::Ref { idx, .. } => AsmOpndA64::Mem {
+                    base: MemBase::Ref(idx),
+                    off: 0,
+                    pre: false,
+                },
+                m @ (AsmOpndA64::Mem { .. } | AsmOpndA64::MemReg { .. }) => m,
+                _ => return Err(String::from("inline asm: `prfm` needs a memory operand")),
+            };
             insns.push(AsmInsnA64 {
                 mnemonic: String::from("prfm"),
                 operands: alloc::vec![AsmOpndA64::Imm(code), mem],
@@ -1589,7 +1597,18 @@ mod tests {
         assert_eq!(insns[0].operands[0], AsmOpndA64::Imm(0));
         assert!(matches!(insns[0].operands[1], AsmOpndA64::Mem { .. }));
         assert_eq!(insns[1].operands[0], AsmOpndA64::Imm(19));
-        // A bad prefetch op and a missing memory operand are rejected.
+        // A bare `%N` reference names the base-register form `[xN]`, as `%aN`
+        // does; the LL/SC atomics spell their `+Q` operand this way.
+        let bare = parse_template(b"prfm pstl1strm, %2").unwrap();
+        assert_eq!(
+            bare[0].operands[1],
+            AsmOpndA64::Mem {
+                base: MemBase::Ref(2),
+                off: 0,
+                pre: false,
+            }
+        );
+        // A bad prefetch op and a register (non-memory) operand are rejected.
         assert!(parse_template(b"prfm bogus, [x0]").is_err());
         assert!(parse_template(b"prfm pldl1keep, x0").is_err());
     }

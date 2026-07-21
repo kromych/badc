@@ -463,4 +463,27 @@ impl Intrinsic {
                 | Intrinsic::Truncf
         )
     }
+
+    /// True for intrinsics whose result depends on the enclosing
+    /// function's own frame, stack pointer, or return / setjmp landing.
+    /// Cloning one into a caller (the inliner splice) would report the
+    /// caller's frame or reclaim the caller's stack, changing behavior,
+    /// so such an intrinsic keeps its function out of line. Every other
+    /// intrinsic is a leaf reproduced by operand remap. `VaStart` reads
+    /// the enclosing variadic save area; a body holding it is variadic
+    /// and already ineligible, but it is listed for completeness.
+    pub fn is_frame_bound(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::Alloca
+                | Intrinsic::SetjmpAArch64
+                | Intrinsic::LongjmpAArch64
+                | Intrinsic::VaStart
+                | Intrinsic::FrameAddress
+                | Intrinsic::AllocaSave
+                | Intrinsic::AllocaRestore
+                | Intrinsic::ReturnAddress
+                | Intrinsic::StackPointer
+        )
+    }
 }

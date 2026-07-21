@@ -796,6 +796,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_labels.c", 42),
     ("inline_asm_a64_acqrel.c", 42),
     ("inline_asm_a64_llsc.c", 42),
+    ("inline_asm_a64_llsc_prfm.c", 42),
     ("inline_asm_goto.c", 42),
     ("inline_asm_reg_var.c", 42),
     ("inline_asm_sp_reg_var.c", 42),

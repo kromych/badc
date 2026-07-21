@@ -2413,38 +2413,54 @@ fn value_fits_width(v: i64, width: u8) -> bool {
 /// its symbol) relocates against that symbol, with any constant offset folded
 /// into the addend the writer applies to the symbol -- a `.data + off`
 /// relocation would name this unit's data image, not the referenced symbol.
+///
+/// A member / element subscript nests one constant `Add` per level
+/// (`&global.field[const]` is `&global +i field_off +i elem_off`), so the base
+/// and its total offset are folded through the whole constant-add chain.
 pub(crate) fn asm_operand_data_target(
     insts: &[crate::c5::ir::Inst],
     arg: u32,
     extern_name: &dyn Fn(u32) -> Option<alloc::string::String>,
 ) -> Option<(AsmSectionTarget, i64)> {
+    let (base, off) = asm_operand_data_base(insts, arg)?;
+    Some(match extern_name(base) {
+        Some(name) => (AsmSectionTarget::Symbol(name), off),
+        None => (AsmSectionTarget::Data(off as u64), 0),
+    })
+}
+
+/// Fold a link-time data-address expression to its base `ImmData` value-id and
+/// the constant byte offset added to it, walking a chain of constant `Add`s
+/// (`&global`, `&global.field`, `&global.field[const]`). Returns `None` for a
+/// non-constant or non-address shape. SSA operands precede their defs, so the
+/// walk strictly decreases the value-id and terminates.
+fn asm_operand_data_base(insts: &[crate::c5::ir::Inst], arg: u32) -> Option<(u32, i64)> {
     use crate::c5::ir::{BinOp, Inst};
-    let target = |data_vid: u32, off: i64| -> (AsmSectionTarget, i64) {
-        match extern_name(data_vid) {
-            Some(name) => (AsmSectionTarget::Symbol(name), off),
-            None => (AsmSectionTarget::Data(off as u64), 0),
+    let (mut vid, mut off) = (arg, 0i64);
+    loop {
+        let (next, add) = match insts.get(vid as usize)? {
+            Inst::ImmData(o) => return Some((vid, off + *o)),
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs,
+                rhs_imm,
+            } => (*lhs, *rhs_imm),
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs,
+                rhs,
+            } => match (insts.get(*lhs as usize), insts.get(*rhs as usize)) {
+                (_, Some(Inst::Imm(c))) => (*lhs, *c),
+                (Some(Inst::Imm(c)), _) => (*rhs, *c),
+                _ => return None,
+            },
+            _ => return None,
+        };
+        if next >= vid {
+            return None;
         }
-    };
-    match insts.get(arg as usize)? {
-        Inst::ImmData(off) => Some(target(arg, *off)),
-        Inst::BinopI {
-            op: BinOp::Add,
-            lhs,
-            rhs_imm,
-        } => match insts.get(*lhs as usize) {
-            Some(Inst::ImmData(off)) => Some(target(*lhs, *off + *rhs_imm)),
-            _ => None,
-        },
-        Inst::Binop {
-            op: BinOp::Add,
-            lhs,
-            rhs,
-        } => match (insts.get(*lhs as usize), insts.get(*rhs as usize)) {
-            (Some(Inst::ImmData(off)), Some(Inst::Imm(c))) => Some(target(*lhs, *off + *c)),
-            (Some(Inst::Imm(c)), Some(Inst::ImmData(off))) => Some(target(*rhs, *off + *c)),
-            _ => None,
-        },
-        _ => None,
+        off += add;
+        vid = next;
     }
 }
 

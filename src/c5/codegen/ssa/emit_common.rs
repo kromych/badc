@@ -1828,6 +1828,135 @@ fn numeric_label_digits(name: &str) -> Option<&str> {
     is_numeric_label(digits).then_some(digits)
 }
 
+/// One GNU as local (numeric) label occurrence in a template: a definition
+/// (`2:`) or a reference (`2f` / `2b`). `start`..`end` spans the token in the
+/// source text -- the digits for a definition (the `:` stays), the digits and
+/// the direction letter for a reference.
+struct LocalLabelTok<'a> {
+    start: usize,
+    end: usize,
+    num: &'a str,
+    /// `Some(forward)` for a reference, `None` for a definition.
+    reference: Option<bool>,
+}
+
+/// Scan a template for GNU as local (numeric) label definitions (`2:`) and
+/// references (`2f` / `2b`). A digit run is a label token only at a token
+/// boundary -- so `0x1f`, `sym1`, and a fractional `0.5f` are skipped -- and,
+/// for a reference, only when the direction letter ends the token (`2foo` is a
+/// symbol, not `2f`).
+fn scan_local_label_tokens(text: &str) -> alloc::vec::Vec<LocalLabelTok<'_>> {
+    let b = text.as_bytes();
+    let n = b.len();
+    let mut out = alloc::vec::Vec::new();
+    let mut i = 0;
+    while i < n {
+        if !b[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let boundary = i == 0 || {
+            let p = b[i - 1];
+            !(p.is_ascii_alphanumeric() || matches!(p, b'_' | b'.'))
+        };
+        let ds = i;
+        while i < n && b[i].is_ascii_digit() {
+            i += 1;
+        }
+        let de = i;
+        if !boundary {
+            continue;
+        }
+        if i < n && (b[i] == b'b' || b[i] == b'f') {
+            let ends = i + 1 >= n || !(b[i + 1].is_ascii_alphanumeric() || b[i + 1] == b'_');
+            if ends {
+                out.push(LocalLabelTok {
+                    start: ds,
+                    end: i + 1,
+                    num: &text[ds..de],
+                    reference: Some(b[i] == b'f'),
+                });
+                i += 1;
+                continue;
+            }
+        }
+        if i < n && b[i] == b':' {
+            out.push(LocalLabelTok {
+                start: ds,
+                end: de,
+                num: &text[ds..de],
+                reference: None,
+            });
+        }
+    }
+    out
+}
+
+/// Rewrite GNU as local (numeric) labels defined more than once in one asm
+/// instance to per-definition unique names, binding each `Nf` / `Nb`
+/// reference to the nearest definition in its direction by source position
+/// (`f` a greater position, `b` a not-greater one). The rest of the pipeline
+/// resolves a label as a single-definition symbol, so this turns the
+/// multiple-definition case -- a template reusing `1:` across nested
+/// replacement blocks -- into the handled named-label case. A number defined
+/// once keeps its numeric form (the common case), so the result is `None` when
+/// no number is defined more than once.
+pub(crate) fn rewrite_multidef_local_labels(text: &str) -> Option<alloc::string::String> {
+    let toks = scan_local_label_tokens(text);
+    let mut def_counts: alloc::collections::BTreeMap<&str, usize> =
+        alloc::collections::BTreeMap::new();
+    for t in &toks {
+        if t.reference.is_none() {
+            *def_counts.entry(t.num).or_default() += 1;
+        }
+    }
+    if def_counts.values().all(|&c| c < 2) {
+        return None;
+    }
+    let uniq = ASM_INSTANCE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    // Each multiply-defined number's definitions in source order, paired with
+    // the unique name assigned to that definition.
+    let mut defs: alloc::collections::BTreeMap<
+        &str,
+        alloc::vec::Vec<(usize, alloc::string::String)>,
+    > = alloc::collections::BTreeMap::new();
+    for t in &toks {
+        if t.reference.is_none() && def_counts[t.num] >= 2 {
+            let v = defs.entry(t.num).or_default();
+            let name = alloc::format!(".Lc5ll_{uniq}_{}_{}", t.num, v.len());
+            v.push((t.start, name));
+        }
+    }
+    let mut out = alloc::string::String::with_capacity(text.len());
+    let mut last = 0;
+    for t in &toks {
+        let Some(list) = defs.get(t.num) else {
+            continue; // defined once: keep the numeric form
+        };
+        let name = match t.reference {
+            None => list.iter().find(|(p, _)| *p == t.start).map(|(_, s)| s),
+            Some(true) => list
+                .iter()
+                .filter(|(p, _)| *p > t.start)
+                .min_by_key(|(p, _)| *p)
+                .map(|(_, s)| s),
+            Some(false) => list
+                .iter()
+                .filter(|(p, _)| *p <= t.start)
+                .max_by_key(|(p, _)| *p)
+                .map(|(_, s)| s),
+        };
+        let Some(name) = name else {
+            continue; // no definition in the reference's direction: leave it
+        };
+        out.push_str(&text[last..t.start]);
+        out.push_str(name);
+        last = t.end;
+    }
+    out.push_str(&text[last..]);
+    Some(out)
+}
+
 /// Parse one directive inside a named section. `exec` marks an
 /// `"ax"`-flagged section, where a non-directive token is a replacement
 /// instruction kept as text; a data section rejects one.

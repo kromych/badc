@@ -3446,6 +3446,129 @@ fn asm_section_const_local_folds_with_alloca_present() {
 }
 
 #[test]
+fn inline_asm_numeric_label_defined_twice_binds_nearest() {
+    // GNU as permits a numeric label many definitions; a reference `Nf`
+    // resolves to the nearest definition at a greater source position, `Nb`
+    // to the nearest at a not-greater one. Label `1` is defined three times;
+    // the two `1f - 1b` differences sit between successive definitions, so
+    // each binds to a different pair -- the first spans definitions 1..2 (4
+    // bytes), the second spans 2..3 (2 bytes). A position-agnostic binding
+    // would give one value for both.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int main(void) {\n\
+            __asm__ volatile(\n\
+                \".pushsection .lt,\\\"a\\\"\\n\"\n\
+                \"1:\\n\"\n\
+                \".byte 1f - 1b\\n\"\n\
+                \".byte 0,0,0\\n\"\n\
+                \"1:\\n\"\n\
+                \".byte 1f - 1b\\n\"\n\
+                \".byte 0\\n\"\n\
+                \"1:\\n\"\n\
+                \".popsection\\n\");\n\
+            return 0;\n\
+        }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        optimize: true,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let sec = sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".lt")
+        .expect(".lt section missing");
+    // The first `1f - 1b` is definitions 1..2 (4 bytes), the second is 2..3
+    // (2 bytes). Both differences fold to constants -- no relocation.
+    assert_eq!(
+        sec.3,
+        [0x04, 0, 0, 0, 0x02, 0],
+        "nearest-in-direction binding"
+    );
+    assert!(
+        !sections.iter().any(|(n, _, _, _)| n == ".rela.lt"),
+        "same-section differences fold to constants"
+    );
+}
+
+#[test]
+fn inline_asm_multidef_numeric_labels_bind_by_position() {
+    // Two nested replacement arms reuse the numeric labels `771`..`775`, so
+    // each is defined twice. A `.skip` sizes the padding of each arm from its
+    // own replacement length, an entry section records each arm's source and
+    // replacement lengths, and cross-section references reach each arm's
+    // replacement. Every reference must bind to its own arm's definitions by
+    // source position, matching GNU as; a position-agnostic binding would use
+    // the last definition for both arms (a silent miscompile).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int main(void) {\n\
+            __asm__ volatile(\n\
+                \"771:\\n771:\\n\"\n\
+                \"nop\\n\"\n\
+                \"772:\\n\"\n\
+                \".skip -(((775f-774f)-(772b-771b)) > 0) * ((775f-774f)-(772b-771b)),0x90\\n\"\n\
+                \"773:\\n\"\n\
+                \".pushsection .alti,\\\"a\\\"\\n\"\n\
+                \".long 771b - .\\n.long 774f - .\\n.byte 773b-771b\\n.byte 775f-774f\\n\"\n\
+                \".popsection\\n\"\n\
+                \".pushsection .altr,\\\"ax\\\"\\n774:\\nnop\\nnop\\n775:\\n.popsection\\n\"\n\
+                \"772:\\n\"\n\
+                \".skip -(((775f-774f)-(772b-771b)) > 0) * ((775f-774f)-(772b-771b)),0x90\\n\"\n\
+                \"773:\\n\"\n\
+                \".pushsection .alti,\\\"a\\\"\\n\"\n\
+                \".long 771b - .\\n.long 774f - .\\n.byte 773b-771b\\n.byte 775f-774f\\n\"\n\
+                \".popsection\\n\"\n\
+                \".pushsection .altr,\\\"ax\\\"\\n774:\\nnop\\nnop\\nnop\\nnop\\nnop\\n775:\\n.popsection\\n\"\n\
+                ::: \"memory\");\n\
+            return 0;\n\
+        }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        optimize: true,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let alti = &sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".alti")
+        .expect(".alti section missing")
+        .3;
+    // Each entry is `.long`(4) + `.long`(4) + `.byte`(1) + `.byte`(1). The two
+    // folded `.byte` differences (source length `773b-771b`, replacement
+    // length `775f-774f`) are the first arm's 2 and the second arm's 5; a
+    // last-definition binding would give 5 for both.
+    assert_eq!(alti.len(), 20, "two 10-byte entries");
+    assert_eq!((alti[8], alti[9]), (2, 2), "first arm lengths");
+    assert_eq!((alti[18], alti[19]), (5, 5), "second arm lengths");
+    // The two `.long 774f - .` cross-section references bind to distinct
+    // replacement definitions, so their relocations name distinct symbols.
+    let rela = &sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".rela.alti")
+        .expect(".rela.alti missing")
+        .3;
+    assert_eq!(rela.len(), 4 * 24, "four relocations");
+    let sym_at = |field: u64| -> u32 {
+        let e = (0..4)
+            .map(|k| k * 24)
+            .find(|&o| u64::from_le_bytes(rela[o..o + 8].try_into().unwrap()) == field)
+            .expect("relocation at field offset");
+        (u64::from_le_bytes(rela[e + 8..e + 16].try_into().unwrap()) >> 32) as u32
+    };
+    assert_ne!(sym_at(0x04), sym_at(0x0e), "774f binds per arm");
+}
+
+#[test]
 fn asm_section_is_not_duplicated_by_branch_relaxation() {
     // A section-emitting inline asm in a function whose body is re-laid-out
     // for branch relaxation must contribute its section content once, not

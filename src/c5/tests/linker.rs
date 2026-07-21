@@ -4420,17 +4420,18 @@ fn x86_alternative_replacement_goto_branch_relocates_to_block() {
 }
 
 #[test]
-fn x86_static_cpu_has_memory_operand_replacement_is_rejected_cleanly() {
+fn x86_static_cpu_has_memory_operand_replacement_encodes_and_relocates() {
     // The full `_static_cpu_has` shape: a permanent `.altinstr_aux` replacement
-    // `testb %[bitnum], %a[cap_byte]` (a data memory operand) followed by
-    // `jnz %l[t_yes]` / `jmp %l[t_no]`. The goto branches now encode (see the
-    // test above); the memory-operand replacement does not -- a RIP-relative
-    // reference whose displacement carries its own relocation is not assembled
-    // here, so it is rejected with a diagnostic naming the instruction rather
-    // than emitted at a wrong address.
+    // `testb %[bitnum], %a[cap_byte]` (a `%a` data memory operand) followed by
+    // `jnz %l[t_yes]` / `jmp %l[t_no]`. The `%a[cap_byte]` operand names a
+    // link-time address (`&cap[2]`) and lowers to a RIP-relative reference:
+    // `F6 05` + a zero disp32 + the imm8, with a `R_X86_64_PC32` relocation at
+    // the disp32 field against `cap` with addend `2 - 5` (the operand offset
+    // less the PC-relative end skew and the trailing imm8) -- byte-for-byte
+    // GNU as. The two goto branches encode as before.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
-        static const char cap[64];\n\
+        extern const char cap[64];\n\
         int probe(void) {\n\
             __asm__ goto(\n\
                 \".pushsection .altinstr_aux,\\\"ax\\\"\\n\"\n\
@@ -4449,11 +4450,109 @@ fn x86_static_cpu_has_memory_operand_replacement_is_rejected_cleanly() {
         output_kind: OutputKind::Relocatable,
         ..Default::default()
     };
-    let err = emit_native_with_options(&program, Target::LinuxX64, opts).unwrap_err();
-    let err = alloc::format!("{err:?}");
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let body = |name: &str| {
+        sections
+            .iter()
+            .find(|(n, _, _, _)| n == name)
+            .unwrap_or_else(|| panic!("{name} missing"))
+            .3
+            .clone()
+    };
+    // `testb $2, cap+2(%rip)` -> `F6 05` + disp32(0) + imm8(2); `jnz %l0` ->
+    // `0F 85` + rel32(0); `jmp %l1` -> `E9` + rel32(0). Byte-for-byte GNU as.
+    assert_eq!(
+        body(".altinstr_aux"),
+        [
+            0xf6, 0x05, 0, 0, 0, 0, 0x02, // testb $2, cap+2(%rip)
+            0x0f, 0x85, 0, 0, 0, 0, // jnz t_yes
+            0xe9, 0, 0, 0, 0, // jmp t_no
+        ]
+    );
+    const R_X86_64_PC32: u64 = 2;
+    let rela = body(".rela.altinstr_aux");
+    // The `testb` disp32 reloc: at byte offset 2, PC32 against `cap`, addend
+    // `2 - 5 = -3` (GNU as: `cap - 3`).
+    let at = |off: u64| -> (u64, i64) {
+        for b in rela.chunks_exact(24) {
+            if u64::from_le_bytes(b[0..8].try_into().unwrap()) == off {
+                return (
+                    u64::from_le_bytes(b[8..16].try_into().unwrap()),
+                    i64::from_le_bytes(b[16..24].try_into().unwrap()),
+                );
+            }
+        }
+        panic!("no reloc at offset {off}");
+    };
+    let (info, addend) = at(2);
+    assert_eq!(info & 0xffff_ffff, R_X86_64_PC32, "testb field is PC32");
+    assert_eq!(
+        addend, -3,
+        "testb addend = cap offset (2) less the 5-byte skew"
+    );
+    // The relocation names `cap`.
+    let symtab = body(".symtab");
+    let strtab = body(".strtab");
+    let sym = (info >> 32) as usize;
+    let name_off = u32::from_le_bytes(symtab[sym * 24..sym * 24 + 4].try_into().unwrap()) as usize;
+    let name_end = strtab[name_off..].iter().position(|&b| b == 0).unwrap() + name_off;
+    assert_eq!(String::from_utf8_lossy(&strtab[name_off..name_end]), "cap");
+}
+
+#[test]
+fn x86_alternative_register_and_memory_replacement_encodes() {
+    // A replacement instruction whose operands are template register
+    // references (`popcntl %1, %0`, both constraint-fixed registers) and one
+    // with a register-indirect memory operand (`movb $0, (%rdi)`) encode
+    // through the table with no relocation -- the paravirt / hweight class.
+    // `popcntl %edi, %eax` = `F3 0F B8 C7`; `movb $0, (%rdi)` = `C6 07 00`,
+    // byte-for-byte GNU as.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        unsigned hw(unsigned w) {\n\
+            unsigned res;\n\
+            __asm__ volatile(\n\
+                \".pushsection .altinstr_replacement, \\\"ax\\\"\\n\"\n\
+                \"popcntl %1, %0\\n\"\n\
+                \".popsection\\n\" : \"=a\" (res) : \"D\" (w));\n\
+            return res;\n\
+        }\n\
+        void unlock(void) {\n\
+            __asm__ volatile(\n\
+                \".pushsection .altinstr_replacement, \\\"ax\\\"\\n\"\n\
+                \"movb $0, (%%rdi)\\n\"\n\
+                \".popsection\\n\" : : : \"memory\");\n\
+        }\n\
+        int main(void) { unlock(); return (int)hw(0); }\n";
+    let program = Compiler::new(String::from(src)).compile().expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let repl = sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".altinstr_replacement")
+        .expect(".altinstr_replacement missing")
+        .3
+        .clone();
+    // Both replacements land in the merged section; order is emission order.
     assert!(
-        err.contains("testb") && err.contains("register or immediate"),
-        "{err}"
+        repl.windows(4).any(|w| w == [0xf3, 0x0f, 0xb8, 0xc7]),
+        "popcntl %edi, %eax = F3 0F B8 C7: {repl:02x?}"
+    );
+    assert!(
+        repl.windows(3).any(|w| w == [0xc6, 0x07, 0x00]),
+        "movb $0, (%rdi) = C6 07 00: {repl:02x?}"
+    );
+    // No data relocation: both are self-contained.
+    assert!(
+        !sections
+            .iter()
+            .any(|(n, _, _, _)| n == ".rela.altinstr_replacement"),
+        "self-contained replacements carry no relocation"
     );
 }
 

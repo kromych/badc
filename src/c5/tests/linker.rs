@@ -4605,6 +4605,103 @@ fn aarch64_alternative_multi_instruction_replacement_defers_and_asserts_length()
 }
 
 #[test]
+fn aarch64_alternative_rept_nop_padding_expands_to_repeated_instructions() {
+    // An LSE ALTERNATIVE pads its replacement to the original length with
+    // `.rept n\nnop\n.endr` (a repeated `nop`). The deferred region must expand
+    // `.rept 3` to three `nop`s so the replacement (`swpb` + 3 nops) matches
+    // the four-instruction LL/SC original, recording both lengths as 16 --
+    // byte-identical to GNU as. A rejected or mis-counted `.rept` would leave
+    // the replacement short and the length byte and `.org` wrong.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        unsigned char f(unsigned char x, volatile void *ptr) {\n\
+            unsigned char ret; unsigned long tmp;\n\
+            __asm__ volatile(\n\
+                \"661:\\n\\tprfm pstl1strm, %2\\n\"\n\
+                \"1:\\tldxrb %w0, %2\\n\\tstxrb %w1, %w3, %2\\n\\tcbnz %w1, 1b\\n662:\\n\"\n\
+                \".pushsection .altinstructions,\\\"a\\\"\\n .word 661b - .\\n .word 663f - .\\n\"\n\
+                \" .hword 37\\n .byte 662b-661b\\n .byte 664f-663f\\n.popsection\\n\"\n\
+                \".subsection 1\\n663:\\n\\t.arch_extension lse\\n\\tswpb %w3, %w0, %2\\n\"\n\
+                \".rept 3\\nnop\\n.endr\\n664:\\n\"\n\
+                \".org . - (664b-663b) + (662b-661b)\\n.org . - (662b-661b) + (664b-663b)\\n.previous\\n\"\n\
+                : \"=&r\" (ret), \"=&r\" (tmp), \"+Q\" (*(unsigned char *)ptr) : \"r\" (x) : \"memory\");\n\
+            return ret;\n\
+        }\n\
+        int main(void) { unsigned char c = 0; return f(1, &c); }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let body = |name: &str| {
+        sections
+            .iter()
+            .find(|(n, _, _, _)| n == name)
+            .unwrap_or_else(|| panic!("{name} missing"))
+            .3
+            .clone()
+    };
+    // Both lengths are 16: the four-instruction original and `swpb` + 3 nops.
+    let alt = body(".altinstructions");
+    assert_eq!(
+        &alt[8..12],
+        &[0x25, 0x00, 0x10, 0x10],
+        "cpucap 37, old=new=16"
+    );
+    // The replacement defers after the body; its first slot is `swpb` and the
+    // three following slots are the `.rept 3` nops.
+    let rela = body(".rela.altinstructions");
+    let addend = |i: usize| i64::from_le_bytes(rela[i * 24 + 16..i * 24 + 24].try_into().unwrap());
+    let (a661, a663) = (addend(0), addend(1));
+    assert!(a663 > a661, "replacement deferred after the body");
+    let text = body(".text");
+    let word = |o: usize| u32::from_le_bytes(text[o..o + 4].try_into().unwrap());
+    assert_eq!(word(a663 as usize) >> 21, 0x1c1, "swpb");
+    for k in 1..4 {
+        assert_eq!(
+            word(a663 as usize + k * 4),
+            0xd503_201f,
+            "rept nop slot {k}"
+        );
+    }
+}
+
+#[test]
+fn aarch64_alternative_rept_nonconstant_count_is_rejected() {
+    // A `.rept` count is an assemble-time constant. A count naming a label
+    // (unknown until layout) cannot be expanded here and is rejected rather
+    // than mis-counted, which would leave the replacement the wrong length.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        unsigned long f(void) {\n\
+            unsigned long off;\n\
+            __asm__(\n\
+                \"661:\\n\\tmrs %0, tpidr_el1\\n662:\\n\"\n\
+                \".pushsection .altinstructions,\\\"a\\\"\\n .word 661b - .\\n .word 663f - .\\n .hword 1\\n .byte 662b-661b\\n .byte 664f-663f\\n.popsection\\n\"\n\
+                \".subsection 1\\n663:\\n\\tmrs %0, tpidr_el2\\n\\t.rept 662b-661b\\nnop\\n.endr\\n664:\\n.org . - (664b-663b) + (662b-661b)\\n.org . - (662b-661b) + (664b-663b)\\n.previous\\n\"\n\
+                : \"=r\" (off));\n\
+            return off;\n\
+        }\n\
+        int main(void) { return (int)f(); }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let err = emit_native_with_options(&program, Target::LinuxAarch64, opts).unwrap_err();
+    assert!(
+        alloc::format!("{err:?}").contains("not constant"),
+        "{err:?}"
+    );
+}
+
+#[test]
 fn aarch64_alternative_length_mismatch_is_rejected() {
     // The ALTERNATIVE `.org` pair asserts the replacement and original are the
     // same length; GNU as fails with "attempt to move .org backwards" when

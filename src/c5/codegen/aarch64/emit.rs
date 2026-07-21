@@ -2452,6 +2452,11 @@ fn encode_deferred_asm_region(
     use super::asm::{AsmOpndA64, parse_template};
     use super::table::{self, Opnd};
     use alloc::string::String;
+    // Expand `.rept N ... .endr` (repeated padding in an ALTERNATIVE
+    // replacement) to straight-line text so the loop encodes and measures the
+    // repeated bytes: `.byte 664f-663f` and the `.org` see the expanded size.
+    let expanded = super::ssa::emit_common::expand_asm_rept(text)?;
+    let text = expanded.as_deref().unwrap_or(text);
     let mut bytes: Vec<u8> = Vec::new();
     let mut labels: Vec<(u32, usize)> = Vec::new();
     for stmt in text.split(['\n', ';']) {

@@ -1484,6 +1484,49 @@ pub(crate) fn emit_function(
         &asm_sections_snapshot,
         &|idx| deferred_bases[idx as usize],
     );
+    // Resolve replacement `%l[...]` asm-goto branches that leave an out-of-line
+    // region: encode each against its target's final offset, now that both the
+    // region base and the block layout are known.
+    for (idx, region) in deferred_regions.iter().enumerate() {
+        let base = deferred_bases[idx];
+        for gb in &region.goto_branches {
+            let target = match gb.target {
+                DeferredGotoTarget::Code(off) => off,
+                DeferredGotoTarget::Block(b) => block_offsets[b as usize],
+            };
+            let site = base + gb.region_off;
+            let delta = target as i64 - site as i64;
+            let word = match gb.kind {
+                LabelBranch::Adr { rd } if (-(1 << 20)..(1 << 20)).contains(&delta) => {
+                    Ok(enc_adr(Reg(rd), delta as i32))
+                }
+                LabelBranch::Adr { .. } => Err(()),
+                ref kind => label_branch_word(kind, delta).map_err(|_| ()),
+            };
+            match word {
+                Ok(w) => code[site..site + 4].copy_from_slice(&w.to_le_bytes()),
+                Err(()) => {
+                    bail_msg("aarch64 inline asm: replacement goto branch target out of range");
+                    code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                    super::ssa::emit_common::restore_asm_sections(
+                        asm_sections,
+                        &asm_sections_snapshot,
+                    );
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
+                    macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                    macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
+                    return false;
+                }
+            }
+        }
+    }
     // Patch each jump table's entries with the target block's offset
     // relative to the table base.
     for (table_start, table) in &jump_table_fixups {
@@ -2355,11 +2398,32 @@ struct AsmGotoCtxA64<'a> {
 struct DeferredAsmRegion {
     bytes: alloc::vec::Vec<u8>,
     labels: alloc::vec::Vec<(u32, usize)>,
+    goto_branches: alloc::vec::Vec<DeferredGotoBranch>,
+}
+
+/// A replacement `%l[...]` asm-goto branch that leaves the out-of-line region
+/// for a target in the enclosing function. `region_off` is the branch's byte
+/// offset within the region; the displacement is resolved once the region base
+/// and block layout are final.
+struct DeferredGotoBranch {
+    region_off: usize,
+    kind: LabelBranch,
+    target: DeferredGotoTarget,
+}
+
+/// Where a `DeferredGotoBranch` lands.
+enum DeferredGotoTarget {
+    /// A fixed code offset in the function body -- the asm's operand-frame
+    /// teardown trampoline (or fall-through exit) -- reached before the label.
+    Code(usize),
+    /// A block, branched to directly when the asm needs no teardown.
+    Block(u32),
 }
 
 /// A template branch to a local (`Nf` / `Nb`) or `asm goto` (`%lK`)
 /// label, recorded as a placeholder word and patched once the target
 /// offset is known.
+#[derive(Clone, Copy)]
 enum LabelBranch {
     B,
     BCond(u8),
@@ -2434,21 +2498,99 @@ fn label_branch_word(kind: &LabelBranch, delta: i64) -> Result<u32, alloc::strin
     })
 }
 
+/// Resolve a label-branch instruction -- `b` / `b.cond` / `cbz` / `cbnz` /
+/// `tbz` / `tbnz` / `adr` with a local label, `.`, or `%l[...]` target -- to
+/// its `LabelBranch` kind. Register and bit-number operands are read through
+/// `conv`, the same converter the table encoder uses, so the main stream and
+/// the out-of-line replacement region admit the same set of forms.
+fn build_label_branch(
+    insn: &super::asm::AsmInsnA64,
+    conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
+) -> Result<LabelBranch, alloc::string::String> {
+    use super::asm::AsmOpndA64;
+    use super::table::Opnd;
+    use alloc::string::String;
+    Ok(match insn.mnemonic.as_str() {
+        "b" if insn.operands.len() == 1 => LabelBranch::B,
+        "cbz" | "cbnz" if insn.operands.len() == 2 => match conv(&insn.operands[0])? {
+            Opnd::Reg { num: rt, is64 } => LabelBranch::Cb {
+                nz: insn.mnemonic == "cbnz",
+                rt,
+                is64,
+            },
+            _ => {
+                return Err(String::from(
+                    "aarch64 inline asm: cbz/cbnz operand must be a register",
+                ));
+            }
+        },
+        "tbz" | "tbnz" if insn.operands.len() == 3 => {
+            let (rt, is64) = match conv(&insn.operands[0])? {
+                Opnd::Reg { num, is64 } => (num, is64),
+                _ => {
+                    return Err(String::from(
+                        "aarch64 inline asm: tbz/tbnz operand must be a register",
+                    ));
+                }
+            };
+            let AsmOpndA64::Imm(bit) = insn.operands[1] else {
+                return Err(String::from(
+                    "aarch64 inline asm: tbz/tbnz bit number must be an immediate",
+                ));
+            };
+            if bit < 0 || bit >= if is64 { 64 } else { 32 } {
+                return Err(String::from(
+                    "aarch64 inline asm: tbz/tbnz bit number out of range",
+                ));
+            }
+            LabelBranch::Tb {
+                nz: insn.mnemonic == "tbnz",
+                rt,
+                bit: bit as u8,
+            }
+        }
+        "adr" if insn.operands.len() == 2 => match conv(&insn.operands[0])? {
+            Opnd::Reg { num, is64: true } => LabelBranch::Adr { rd: num },
+            _ => {
+                return Err(String::from(
+                    "aarch64 inline asm: adr destination must be a 64-bit register",
+                ));
+            }
+        },
+        m => {
+            let cond = m.strip_prefix("b.").and_then(super::asm::cond_code);
+            match cond.filter(|_| insn.operands.len() == 1) {
+                Some(c) => LabelBranch::BCond(c),
+                None => {
+                    return Err(String::from(
+                        "aarch64 inline asm: label branch must be b/b.cond/cbz/cbnz",
+                    ));
+                }
+            }
+        }
+    })
+}
+
 /// Encode an ALTERNATIVE `.subsection` replacement into a deferred region:
-/// the machine bytes plus each local label's byte offset within them. Only
-/// self-contained instructions -- no branch to a label, no symbol target, no
-/// `asm goto` reference -- and the `.org` length assertion are accepted; any
-/// other form is rejected rather than mis-placed, since a replacement whose
-/// bytes need a relocation cannot be resolved at its final out-of-line offset
-/// here. Instructions encode through the same operand converter and table
-/// encoder as the main stream, so the region admits exactly what an inline
-/// instruction does. `main_label` resolves a main-stream label (`661b` /
-/// `662b`) for the `.org` length expression.
+/// the machine bytes plus each local label's byte offset within them. A branch
+/// to a local label (`Nf` / `Nb`) or `.` resolves within the region (the
+/// displacement is target-minus-branch inside the region, invariant of where
+/// the region lands), matching GNU-as local-label practice. A branch to an
+/// `asm goto` label (`%l[...]`) leaves the region for the enclosing function
+/// and is returned for the caller to resolve once the block layout is final. A
+/// symbol target is rejected rather than mis-placed, since its bytes would need
+/// a relocation at the final out-of-line offset. Instructions encode through
+/// the same operand converter and table encoder as the main stream, so the
+/// region admits exactly what an inline instruction does. `main_label` resolves
+/// a main-stream label (`661b` / `662b`) for the `.org` length expression. The
+/// returned goto sites are `(byte offset in the region, branch kind, label
+/// index)`.
+#[allow(clippy::type_complexity)]
 fn encode_deferred_asm_region(
     text: &str,
     conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
     main_label: &dyn Fn(&str) -> Option<usize>,
-) -> Result<DeferredAsmRegion, alloc::string::String> {
+) -> Result<(DeferredAsmRegion, Vec<(usize, LabelBranch, u8)>), alloc::string::String> {
     use super::asm::{AsmOpndA64, parse_template};
     use super::table::{self, Opnd};
     use alloc::string::String;
@@ -2459,6 +2601,10 @@ fn encode_deferred_asm_region(
     let text = expanded.as_deref().unwrap_or(text);
     let mut bytes: Vec<u8> = Vec::new();
     let mut labels: Vec<(u32, usize)> = Vec::new();
+    // Branches to a region-local label, patched after the loop once every
+    // label offset is known: `(byte offset in the region, kind, label, forward)`.
+    let mut label_fixups: Vec<(usize, LabelBranch, u32, bool)> = Vec::new();
+    let mut goto_sites: Vec<(usize, LabelBranch, u8)> = Vec::new();
     for stmt in text.split(['\n', ';']) {
         let mut stmt = stmt.trim();
         // Peel leading `N:` label definitions; a directive may follow one.
@@ -2526,22 +2672,71 @@ fn encode_deferred_asm_region(
                     "inline asm: a replacement branch to a symbol is not placed out of line",
                 ));
             }
-            if matches!(
-                insn.operands.last(),
-                Some(AsmOpndA64::Label { .. } | AsmOpndA64::GotoLabel(_) | AsmOpndA64::Here)
-            ) {
-                return Err(String::from(
-                    "inline asm: a replacement branch to a label or `.` is not placed out of line",
-                ));
+            match insn.operands.last() {
+                Some(AsmOpndA64::Here) => {
+                    // `.` names the branch's own address: displacement zero.
+                    let kind = build_label_branch(insn, conv)?;
+                    let word = match kind {
+                        LabelBranch::Adr { rd } => super::encode::enc_adr(Reg(rd), 0),
+                        _ => label_branch_word(&kind, 0)?,
+                    };
+                    bytes.extend_from_slice(&word.to_le_bytes());
+                }
+                Some(&AsmOpndA64::Label { num, forward }) => {
+                    label_fixups.push((bytes.len(), build_label_branch(insn, conv)?, num, forward));
+                    bytes.extend_from_slice(&0u32.to_le_bytes());
+                }
+                Some(&AsmOpndA64::GotoLabel(k)) => {
+                    goto_sites.push((bytes.len(), build_label_branch(insn, conv)?, k));
+                    bytes.extend_from_slice(&0u32.to_le_bytes());
+                }
+                _ => {
+                    let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
+                    for o in &insn.operands {
+                        ops.push(conv(o)?);
+                    }
+                    bytes.extend_from_slice(&table::encode(&insn.mnemonic, &ops)?.to_le_bytes());
+                }
             }
-            let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
-            for o in &insn.operands {
-                ops.push(conv(o)?);
-            }
-            bytes.extend_from_slice(&table::encode(&insn.mnemonic, &ops)?.to_le_bytes());
         }
     }
-    Ok(DeferredAsmRegion { bytes, labels })
+    // Resolve the region-local label branches: a forward reference binds the
+    // next definition after the branch, a backward one the most recent at or
+    // before it (GNU-as `Nf` / `Nb`). The displacement is region-relative and
+    // holds wherever the region is finally placed.
+    for &(site, ref kind, num, forward) in &label_fixups {
+        let target = if forward {
+            labels.iter().find(|&&(n, off)| n == num && off > site)
+        } else {
+            labels
+                .iter()
+                .rev()
+                .find(|&&(n, off)| n == num && off <= site)
+        };
+        let Some(&(_, target)) = target else {
+            return Err(String::from("aarch64 inline asm: undefined local label"));
+        };
+        let delta = target as i64 - site as i64;
+        let word = if let LabelBranch::Adr { rd } = *kind {
+            if !(-(1i64 << 20)..(1i64 << 20)).contains(&delta) {
+                return Err(String::from(
+                    "aarch64 inline asm: adr target out of +/-1MiB range",
+                ));
+            }
+            super::encode::enc_adr(Reg(rd), delta as i32)
+        } else {
+            label_branch_word(kind, delta)?
+        };
+        bytes[site..site + 4].copy_from_slice(&word.to_le_bytes());
+    }
+    Ok((
+        DeferredAsmRegion {
+            bytes,
+            labels,
+            goto_branches: Vec::new(),
+        },
+        goto_sites,
+    ))
 }
 
 /// Lower an `Inst::InlineAsm` (GCC extended asm) on AArch64. Assigns each
@@ -3004,67 +3199,11 @@ fn emit_inline_asm_aarch64(
             Some(AsmOpndA64::Label { .. } | AsmOpndA64::Here)
         ) || goto_label.is_some()
         {
-            let kind = match insn.mnemonic.as_str() {
-                "b" if insn.operands.len() == 1 => LabelBranch::B,
-                "cbz" | "cbnz" if insn.operands.len() == 2 => match conv(&insn.operands[0]) {
-                    Ok(Opnd::Reg { num: rt, is64 }) => LabelBranch::Cb {
-                        nz: insn.mnemonic == "cbnz",
-                        rt,
-                        is64,
-                    },
-                    Ok(_) => {
-                        bail_msg("aarch64 inline asm: cbz/cbnz operand must be a register");
-                        return false;
-                    }
-                    Err(m) => {
-                        bail_msg(&m);
-                        return false;
-                    }
-                },
-                "tbz" | "tbnz" if insn.operands.len() == 3 => {
-                    let (rt, is64) = match conv(&insn.operands[0]) {
-                        Ok(Opnd::Reg { num, is64 }) => (num, is64),
-                        Ok(_) => {
-                            bail_msg("aarch64 inline asm: tbz/tbnz operand must be a register");
-                            return false;
-                        }
-                        Err(m) => {
-                            bail_msg(&m);
-                            return false;
-                        }
-                    };
-                    let AsmOpndA64::Imm(bit) = insn.operands[1] else {
-                        bail_msg("aarch64 inline asm: tbz/tbnz bit number must be an immediate");
-                        return false;
-                    };
-                    if bit < 0 || bit >= if is64 { 64 } else { 32 } {
-                        bail_msg("aarch64 inline asm: tbz/tbnz bit number out of range");
-                        return false;
-                    }
-                    LabelBranch::Tb {
-                        nz: insn.mnemonic == "tbnz",
-                        rt,
-                        bit: bit as u8,
-                    }
-                }
-                "adr" if insn.operands.len() == 2 => match conv(&insn.operands[0]) {
-                    Ok(Opnd::Reg { num, is64: true }) => LabelBranch::Adr { rd: num },
-                    Ok(_) => {
-                        bail_msg("aarch64 inline asm: adr destination must be a 64-bit register");
-                        return false;
-                    }
-                    Err(m) => {
-                        bail_msg(&m);
-                        return false;
-                    }
-                },
-                m => {
-                    let cond = m.strip_prefix("b.").and_then(super::asm::cond_code);
-                    let Some(c) = cond.filter(|_| insn.operands.len() == 1) else {
-                        bail_msg("aarch64 inline asm: label branch must be b/b.cond/cbz/cbnz");
-                        return false;
-                    };
-                    LabelBranch::BCond(c)
+            let kind = match build_label_branch(insn, &conv) {
+                Ok(k) => k,
+                Err(m) => {
+                    bail_msg(&m);
+                    return false;
                 }
             };
             if let Some(k) = goto_label {
@@ -3182,13 +3321,15 @@ fn emit_inline_asm_aarch64(
     // its `.org` length assertion reads the main labels above. The region is
     // appended after the function body and its labels resolved to text
     // offsets once its base is known (see the caller's placement pass).
+    let mut deferred_goto_sites: Vec<(usize, LabelBranch, u8)> = Vec::new();
     let deferred_idx: Option<u32> = if deferred_text.is_empty() {
         None
     } else {
         match encode_deferred_asm_region(&deferred_text, &conv, &main_label_off) {
-            Ok(region) => {
+            Ok((region, gotos)) => {
                 let idx = deferred_regions.len() as u32;
                 deferred_regions.push(region);
+                deferred_goto_sites = gotos;
                 Some(idx)
             }
             Err(m) => {
@@ -3311,13 +3452,18 @@ fn emit_inline_asm_aarch64(
     // fall-through exit sequence instead.
     if let Some(ctx) = goto_ctx {
         let mut tramp_at: Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
-        if goto_sites
-            .iter()
-            .any(|&(_, _, k)| ctx.row[1 + k] != ctx.row[0])
-        {
+        // Label indices needing a teardown trampoline. An out-of-line
+        // replacement (`.subsection`) `%lK` branch shares these trampolines
+        // when the asm has an operand frame to restore; frameless, it reaches
+        // its block directly (recorded below).
+        let mut tramp_ks: Vec<usize> = goto_sites.iter().map(|&(_, _, k)| k).collect();
+        if size > 0 {
+            tramp_ks.extend(deferred_goto_sites.iter().map(|&(_, _, k)| k as usize));
+        }
+        if tramp_ks.iter().any(|&k| ctx.row[1 + k] != ctx.row[0]) {
             let skip_site = code.len();
             emit(code, 0); // b over the trampolines, patched below
-            for &(_, _, k) in &goto_sites {
+            for &k in &tramp_ks {
                 if ctx.row[1 + k] == ctx.row[0] || tramp_at[k].is_some() {
                     continue;
                 }
@@ -3348,6 +3494,35 @@ fn emit_inline_asm_aarch64(
                 }
             }
         }
+        // Record each out-of-line replacement `%lK` branch for the placement
+        // pass, where the region base is known. With an operand frame it routes
+        // through the teardown trampoline (or the fall-through exit when the
+        // label is the fall-through block); frameless, it targets the block
+        // directly, matching a plain out-of-line branch.
+        if let Some(idx) = deferred_idx {
+            for &(region_off, kind, k) in &deferred_goto_sites {
+                let k = k as usize;
+                let target = if size == 0 {
+                    DeferredGotoTarget::Block(ctx.row[1 + k])
+                } else if ctx.row[1 + k] == ctx.row[0] {
+                    DeferredGotoTarget::Code(exit_start)
+                } else {
+                    DeferredGotoTarget::Code(
+                        tramp_at[k].expect("trampoline built for framed deferred goto"),
+                    )
+                };
+                deferred_regions[idx as usize]
+                    .goto_branches
+                    .push(DeferredGotoBranch {
+                        region_off,
+                        kind,
+                        target,
+                    });
+            }
+        }
+    } else if !deferred_goto_sites.is_empty() {
+        bail_msg("aarch64 inline asm: `%l` label reference outside `asm goto`");
+        return false;
     }
     true
 }

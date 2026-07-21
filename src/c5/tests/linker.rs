@@ -3931,6 +3931,108 @@ fn asm_section_goto_label_relocates_to_block() {
 }
 
 #[test]
+fn aarch64_asm_replacement_branch_resolves_to_in_region_label() {
+    // An ALTERNATIVE `.subsection` replacement whose branch targets a local
+    // label defined inside the same out-of-line region. The displacement is
+    // region-relative (target minus branch within the region), so it holds
+    // wherever the region is placed: `b 1f` two words ahead encodes 0x14000002.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+        void f(void) {
+            __asm__ volatile(
+                "661:\n\tnop\n\tnop\n\tnop\n662:\n"
+                ".subsection 1\n"
+                "663:\n\tb 1f\n\tnop\n1:\n\tnop\n664:\n\t"
+                ".org . - (664b-663b) + (662b-661b)\n\t"
+                ".org . - (662b-661b) + (664b-663b)\n\t"
+                ".previous\n" : : : "memory");
+        }
+        int main(void) { f(); return 0; }
+    "#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let text = elf_sections(&bytes)
+        .into_iter()
+        .find(|(n, ..)| n == ".text")
+        .expect(".text missing")
+        .3;
+    let words: alloc::vec::Vec<u32> = text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // The region is `b 1f; nop; 1: nop`; the branch resolves to +2 words.
+    assert!(
+        words
+            .windows(3)
+            .any(|w| w[0] == 0x1400_0002 && w[1] == 0xd503_201f && w[2] == 0xd503_201f),
+        "replacement branch not resolved to the in-region label: {words:08x?}"
+    );
+}
+
+#[test]
+fn aarch64_asm_replacement_goto_branch_targets_label_block() {
+    // A frameless `asm goto` whose ALTERNATIVE `.subsection` replacement
+    // branches to a C label (`%l[...]`). The branch leaves the out-of-line
+    // region for the label's block; with no operand frame to restore it
+    // targets the block directly, as a plain out-of-line branch would.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+        int f(void) {
+            __asm__ goto(
+                "661:\n\tnop\n662:\n"
+                ".subsection 1\n"
+                "663:\n\tb %l[l_yes]\n664:\n\t"
+                ".org . - (664b-663b) + (662b-661b)\n\t"
+                ".org . - (662b-661b) + (664b-663b)\n\t"
+                ".previous\n" : : : : l_yes);
+            return 0;
+        l_yes:
+            return 1;
+        }
+        int main(void) { return f(); }
+    "#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let text = elf_sections(&bytes)
+        .into_iter()
+        .find(|(n, ..)| n == ".text")
+        .expect(".text missing")
+        .3;
+    let words: alloc::vec::Vec<u32> = text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // `return 1;` lowers the l_yes block to `mov x0, #1`.
+    let lyes = words
+        .iter()
+        .position(|&w| w == 0xd280_0020)
+        .expect("l_yes block");
+    // A `b` in `.text` -- the out-of-line replacement branch -- targets it.
+    let targets_lyes = words.iter().enumerate().any(|(i, &w)| {
+        (w & 0xfc00_0000) == 0x1400_0000 && {
+            let off = ((w & 0x03ff_ffff) << 6) as i32 >> 6; // sign-extend imm26
+            i as i64 + off as i64 == lyes as i64
+        }
+    });
+    assert!(
+        targets_lyes,
+        "replacement `b %l[l_yes]` does not target the label block: {words:08x?}"
+    );
+}
+
+#[test]
 fn asm_goto_section_reloc_survives_branch_relaxation() {
     // An `asm goto` section field in a function that also relaxes a branch:
     // the section sink is restored before each re-emit, so the entry is not

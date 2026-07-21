@@ -3620,6 +3620,12 @@ fn const_unary(b: &[u8], i: &mut usize, op: &dyn Fn(u8) -> Option<i64>) -> Optio
             *i += 1;
             Some(!const_unary(b, i, op)?)
         }
+        // C99 6.5.3.3 prefix logical negation, yielding 1/0 (not GNU as's
+        // -1/0 comparisons); `!=` in operand position is the relational op.
+        Some(b'!') if b.get(*i + 1) != Some(&b'=') => {
+            *i += 1;
+            Some((const_unary(b, i, op)? == 0) as i64)
+        }
         Some(b'(') => {
             *i += 1;
             // A parenthesised group may itself compare (`((rlen-slen) > 0)` in

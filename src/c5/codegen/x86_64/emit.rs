@@ -6058,9 +6058,10 @@ fn asm_riprel_target(
 /// its replacement in a separate section, so there is no fall-through from
 /// the main sequence; the bytes and their relocations lay out like any
 /// other section data. Only a direct `call` / `jmp` to a symbol (a bare
-/// name or a `%c` function operand) and self-contained instructions are
-/// assembled; a replacement referencing a register operand, a memory
-/// location, or a label is rejected rather than mis-encoded.
+/// name or a `%c` function operand), a `jmp` / `jcc` to an `asm goto` label
+/// (`%lK`, via `goto_block`), and self-contained instructions are assembled;
+/// a replacement referencing a register operand or a memory location is
+/// rejected rather than mis-encoded.
 fn encode_x86_asm_section_code(
     blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
     func: &FunctionSsa,
@@ -6068,6 +6069,7 @@ fn encode_x86_asm_section_code(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    goto_block: &dyn Fn(u8) -> Option<u32>,
 ) -> Result<(), alloc::string::String> {
     use super::super::ir::Inst;
     use super::ssa::emit_common::{AsmSectionItem, AsmSectionTarget};
@@ -6098,7 +6100,7 @@ fn encode_x86_asm_section_code(
             let AsmSectionItem::Code(text) = item else {
                 continue;
             };
-            *item = encode_one_x86_section_insn(text, &operand_target)?;
+            *item = encode_one_x86_section_insn(text, &operand_target, goto_block)?;
         }
     }
     Ok(())
@@ -6107,11 +6109,14 @@ fn encode_x86_asm_section_code(
 /// Encode one replacement instruction to a `CodeBytes` item. A direct
 /// `call` / `jmp` to a symbol emits `E8`/`E9` with a zero rel32 and a
 /// `PLT32` branch relocation (addend -4), matching a compiler-emitted
-/// call; a self-contained register/immediate instruction encodes through
-/// the table. Any other form is rejected.
+/// call; a `jmp` / `jcc` to an `asm goto` label (`%lK`) emits the same
+/// `E9` / `0F 8x` rel32 with a `PC32` relocation (addend -4) to the label's
+/// caller block; a self-contained register/immediate instruction encodes
+/// through the table. Any other form is rejected.
 fn encode_one_x86_section_insn(
     text: &str,
     operand_target: &dyn Fn(u8) -> Option<super::ssa::emit_common::AsmSectionTarget>,
+    goto_block: &dyn Fn(u8) -> Option<u32>,
 ) -> Result<super::ssa::emit_common::AsmSectionItem, alloc::string::String> {
     use super::asm::{AsmOpnd, Concrete, Mnemonic};
     use super::ssa::emit_common::{AsmSectionItem, AsmSectionReloc, AsmSectionTarget};
@@ -6126,6 +6131,45 @@ fn encode_one_x86_section_insn(
         Mnemonic::Table(n) => n,
         _ => "",
     };
+    // A `jmp` / `jcc` to an `asm goto` label (`%lK`): the replacement leaves
+    // the alternative for a caller block (`jmp %l[t_no]` in `_static_cpu_has`).
+    // Emit the rel32 form with a zero displacement and a `PC32` relocation to
+    // the label's block, deferred as `TextBlock` and rewritten to the block's
+    // text offset after layout -- the GNU as cross-section branch (addend -4).
+    if let Some(&AsmOpnd::GotoLabel(k)) = insn.operands.first() {
+        let cc = jcc_cond(mnem);
+        if cc.is_none() && !matches!(mnem, "jmp" | "jmpq") {
+            return Err(alloc::format!(
+                "inline asm: replacement `{text}` label operand on a non-jump"
+            ));
+        }
+        let bid = goto_block(k).ok_or_else(|| {
+            alloc::format!("inline asm: replacement `{text}` `%l{k}` names no `asm goto` label")
+        })?;
+        let mut bytes = alloc::vec::Vec::new();
+        let offset = match cc {
+            Some(cc) => {
+                super::encode::emit_jcc_rel32(&mut bytes, cc, 0);
+                2
+            }
+            None => {
+                super::encode::emit_jmp_rel32(&mut bytes, 0);
+                1
+            }
+        };
+        let reloc = AsmSectionReloc {
+            offset,
+            width: 4,
+            pcrel: true,
+            branch: false,
+            target: AsmSectionTarget::TextBlock(bid),
+            addend: -4,
+        };
+        return Ok(AsmSectionItem::CodeBytes {
+            bytes,
+            relocs: alloc::vec![reloc],
+        });
+    }
     let is_call = mnem.starts_with("call");
     let is_jmp = matches!(mnem, "jmp" | "jmpq");
     if is_call || is_jmp {
@@ -6237,7 +6281,12 @@ fn emit_inline_asm(
         }
     };
     // Encode any replacement instructions in an executable section
-    // (`.altinstr_replacement,"ax"`) to bytes and relocations before layout.
+    // (`.altinstr_replacement,"ax"`) to bytes and relocations before layout. A
+    // `%lK` goto branch resolves through the enclosing `asm goto` row to its
+    // target block (index `1 + K`), the same mapping the code stream uses. The
+    // row slice carries its own lifetime, so this holds no borrow of `goto_ctx`.
+    let goto_row: Option<&[super::super::ir::BlockId]> = goto_ctx.as_ref().map(|c| c.row);
+    let goto_block = |k: u8| -> Option<u32> { goto_row?.get(1 + k as usize).copied() };
     if let Some((_, blocks)) = extracted.as_mut()
         && let Err(m) = encode_x86_asm_section_code(
             blocks,
@@ -6246,6 +6295,7 @@ fn emit_inline_asm(
             name2entpc,
             extern_data_names,
             extern_code_names,
+            &goto_block,
         )
     {
         bail_msg(&m);

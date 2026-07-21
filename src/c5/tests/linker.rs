@@ -4318,6 +4318,146 @@ fn x86_alternative_call_replacement_encodes_and_relocates() {
 }
 
 #[test]
+fn x86_alternative_replacement_goto_branch_relocates_to_block() {
+    // The x86 `_static_cpu_has` places a `jnz %l[t_yes]` / `jmp %l[t_no]` in an
+    // executable ALTERNATIVE section. Each `asm goto` branch encodes to the
+    // rel32 form (`0F 85` / `E9` with a zero displacement) and a `R_X86_64_PC32`
+    // relocation to the label's caller block, deferred as `TextBlock` and
+    // rewritten to the block's text offset after layout -- byte-for-byte the GNU
+    // as cross-section branch. The same `.jtab` field (`.long %l - .`, the
+    // known-good data path) targets the same blocks; a rel32 branch's addend is
+    // the field's less 4 (the rel32 is measured from the byte after it).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int probe(int n) {\n\
+            __asm__ goto(\n\
+                \".pushsection .altinstr_replacement, \\\"ax\\\"\\n\"\n\
+                \"774:\\n jnz %l[t_yes]\\n jmp %l[t_no]\\n775:\\n\"\n\
+                \".popsection\\n\"\n\
+                \".pushsection .jtab,\\\"aw\\\"\\n\"\n\
+                \".long %l[t_yes] - ., %l[t_no] - .\\n\"\n\
+                \".popsection\\n\" : : : : t_yes, t_no);\n\
+            return n;\n\
+        t_yes:\n\
+            return 0x11;\n\
+        t_no:\n\
+            return 0x22;\n\
+        }\n\
+        int main(void) { return probe(0); }\n";
+    let program = Compiler::new(String::from(src)).compile().expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let body = |name: &str| {
+        sections
+            .iter()
+            .find(|(n, _, _, _)| n == name)
+            .unwrap_or_else(|| panic!("{name} missing"))
+            .3
+            .clone()
+    };
+    // `jnz %l0` -> `0F 85` + rel32(0); `jmp %l1` -> `E9` + rel32(0). The reloc
+    // fills each displacement -- identical to GNU as.
+    assert_eq!(
+        body(".altinstr_replacement"),
+        [0x0f, 0x85, 0, 0, 0, 0, 0xe9, 0, 0, 0, 0]
+    );
+    const R_X86_64_PC32: u64 = 2;
+    // Find the reloc at byte offset `off` in a `.rela.*` body; return
+    // `(r_info, r_addend)`.
+    let at = |rela: &[u8], off: u64| -> (u64, i64) {
+        for b in rela.chunks_exact(24) {
+            if u64::from_le_bytes(b[0..8].try_into().unwrap()) == off {
+                return (
+                    u64::from_le_bytes(b[8..16].try_into().unwrap()),
+                    i64::from_le_bytes(b[16..24].try_into().unwrap()),
+                );
+            }
+        }
+        panic!("no reloc at offset {off}");
+    };
+    let code = body(".rela.altinstr_replacement");
+    let data = body(".rela.jtab");
+    // Two code branches: `jnz` rel32 at offset 2, `jmp` rel32 at offset 7.
+    let (ci_yes, ca_yes) = at(&code, 2);
+    let (ci_no, ca_no) = at(&code, 7);
+    // Two data fields: `%l0` at offset 0, `%l1` at offset 4.
+    let (di_yes, da_yes) = at(&data, 0);
+    let (di_no, da_no) = at(&data, 4);
+    assert_eq!(ci_yes & 0xffff_ffff, R_X86_64_PC32, "jnz field is PC32");
+    assert_eq!(ci_no & 0xffff_ffff, R_X86_64_PC32, "jmp field is PC32");
+    // Every field targets one symbol -- the `.text` section symbol the data
+    // path already resolves to; the branch is a cross-section reference to it.
+    assert_eq!(
+        ci_yes >> 32,
+        di_yes >> 32,
+        "jnz targets .text like the field"
+    );
+    assert_eq!(ci_no >> 32, di_no >> 32, "jmp targets .text like the field");
+    assert_eq!(di_yes >> 32, di_no >> 32, "both fields target .text");
+    // The branch addend is the field's less 4: `jmp rel32` counts from the byte
+    // after the displacement, `.long %l - .` from the field itself.
+    assert_eq!(ca_yes + 4, da_yes, "jnz addend = t_yes block off - 4");
+    assert_eq!(ca_no + 4, da_no, "jmp addend = t_no block off - 4");
+    assert_ne!(da_yes, da_no, "the two labels are different blocks");
+    // Each addend + 4 indexes the target block in `.text`: `t_yes` returns
+    // 0x11, `t_no` returns 0x22 (`mov $imm32, %eax` = `B8 imm32`).
+    let text = body(".text");
+    let at_block = |a: i64| &text[(a + 4) as usize..(a + 4) as usize + 5];
+    assert_eq!(
+        at_block(ca_yes),
+        [0xb8, 0x11, 0, 0, 0],
+        "t_yes: mov $0x11,%eax"
+    );
+    assert_eq!(
+        at_block(ca_no),
+        [0xb8, 0x22, 0, 0, 0],
+        "t_no: mov $0x22,%eax"
+    );
+}
+
+#[test]
+fn x86_static_cpu_has_memory_operand_replacement_is_rejected_cleanly() {
+    // The full `_static_cpu_has` shape: a permanent `.altinstr_aux` replacement
+    // `testb %[bitnum], %a[cap_byte]` (a data memory operand) followed by
+    // `jnz %l[t_yes]` / `jmp %l[t_no]`. The goto branches now encode (see the
+    // test above); the memory-operand replacement does not -- a RIP-relative
+    // reference whose displacement carries its own relocation is not assembled
+    // here, so it is rejected with a diagnostic naming the instruction rather
+    // than emitted at a wrong address.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        static const char cap[64];\n\
+        int probe(void) {\n\
+            __asm__ goto(\n\
+                \".pushsection .altinstr_aux,\\\"ax\\\"\\n\"\n\
+                \"6:\\n testb %[bitnum], %a[cap_byte]\\n jnz %l[t_yes]\\n jmp %l[t_no]\\n\"\n\
+                \".popsection\\n\"\n\
+                : : [bitnum] \"i\" (2), [cap_byte] \"i\" (&cap[2]) : : t_yes, t_no);\n\
+            return 0;\n\
+        t_yes:\n\
+            return 1;\n\
+        t_no:\n\
+            return 2;\n\
+        }\n\
+        int main(void) { return probe(); }\n";
+    let program = Compiler::new(String::from(src)).compile().expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let err = emit_native_with_options(&program, Target::LinuxX64, opts).unwrap_err();
+    let err = alloc::format!("{err:?}");
+    assert!(
+        err.contains("testb") && err.contains("register or immediate"),
+        "{err}"
+    );
+}
+
+#[test]
 fn aarch64_alternative_subsection_defers_replacement_and_relocates() {
     // The AArch64 ALTERNATIVE places its replacement in a `.subsection`, which
     // GNU as appends to `.text` after the function body -- out of the main

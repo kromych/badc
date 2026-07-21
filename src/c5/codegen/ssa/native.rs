@@ -131,6 +131,8 @@ pub(crate) fn compile_function_to_bytes(
             let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
             let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
                 alloc::collections::BTreeMap::new();
+            let extern_code_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+                alloc::collections::BTreeMap::new();
             let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
                 alloc::collections::BTreeMap::new();
             let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
@@ -166,6 +168,7 @@ pub(crate) fn compile_function_to_bytes(
                     &mut fixups,
                     &mut got_fixups,
                     &extern_data_names,
+                    &extern_code_names,
                     &extern_tls_names,
                     &imports,
                     &variadic_targets,

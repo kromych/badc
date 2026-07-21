@@ -2001,6 +2001,19 @@ pub(crate) fn lower(
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
         .collect();
+    // Every function's entry PC -> its name, defined or extern (an extern
+    // function referenced by address gets an ent_pc placeholder too). A `%c`
+    // function operand a replacement `call` in a section relocates against
+    // resolves its `ImmCode` ent_pc through this.
+    let fn_name_by_pc: alloc::collections::BTreeMap<usize, &str> = {
+        use crate::c5::token::Token;
+        program
+            .symbols
+            .iter()
+            .filter(|s| s.class == Token::Fun as i64 && !s.name.is_empty())
+            .map(|s| (s.val as usize, s.name.as_str()))
+            .collect()
+    };
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
         pc_to_native[ent_pc] = code.len();
@@ -2013,6 +2026,20 @@ pub(crate) fn lower(
             .extern_imm_data_refs
             .iter()
             .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
+            .collect();
+        // Same, for cross-TU function references: a `%c` function operand a
+        // replacement `call` / `jmp` in a section relocates against. Each
+        // `ImmCode` value-id maps to its callee's name via the entry PC.
+        let extern_code_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
+            .insts
+            .iter()
+            .enumerate()
+            .filter_map(|(v, inst)| match inst {
+                super::super::ir::Inst::ImmCode(pc) => fn_name_by_pc
+                    .get(pc)
+                    .map(|n| (v as u32, alloc::string::String::from(*n))),
+                _ => None,
+            })
             .collect();
         let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
             .extern_tls_refs
@@ -2044,6 +2071,7 @@ pub(crate) fn lower(
                 &mut fixups,
                 &mut got_fixups,
                 &extern_data_names,
+                &extern_code_names,
                 &extern_tls_names,
                 imports,
                 &variadic_targets,

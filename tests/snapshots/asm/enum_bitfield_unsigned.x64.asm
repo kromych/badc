@@ -10,33 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<dispatch>:
-               	movslq	%edi, %rdi
-               	cmpq	$0x5, %rdi
-               	jl	<addr>
-               	cmpq	$0x6, %rdi
-               	jl	<addr>
-               	cmpq	$0x6, %rdi
-               	je	<addr>
-               	movabsq	$-0x1, %rax
-               	retq
-               	movl	$0x3c, %eax
-               	retq
-               	cmpq	$0x5, %rdi
-               	jne	<addr>
-               	movl	$0x32, %eax
-               	retq
-               	cmpq	$0x4, %rdi
-               	jl	<addr>
-               	cmpq	$0x4, %rdi
-               	jne	<addr>
-               	movl	$0x28, %eax
-               	retq
-               	testq	%rdi, %rdi
-               	jne	<addr>
-               	xorq	%rax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -101,38 +74,10 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x6, %edi
-               	callq	<addr>
-               	cmpq	$0x3c, %rax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x5, %edi
-               	callq	<addr>
-               	cmpq	$0x32, %rax
-               	je	<addr>
-               	movl	$0x6, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x4, %edi
-               	callq	<addr>
-               	cmpq	$0x28, %rax
-               	je	<addr>
-               	movl	$0x7, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
-               	xorq	%rdi, %rdi
-               	callq	<addr>
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x8, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
+               	movl	$0x3c, %eax
+               	movl	$0x32, %eax
+               	movl	$0x28, %eax
+               	xorq	%rax, %rax
                	xorq	%rax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp

@@ -35,71 +35,17 @@ Disassembly of section .text:
                	movabsq	$0x4028000000000000, %rax # imm = 0x4028000000000000
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movl	$0x10, %edi
-               	callq	<addr>
-               	cmpq	$0x1, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
                	movl	$0x1, %eax
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x18, %edi
-               	callq	<addr>
-               	cmpq	$0x1, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x20, %edi
-               	callq	<addr>
-               	cmpq	$0x1, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x30, %edi
-               	callq	<addr>
-               	cmpq	$0x2, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x40, %edi
-               	callq	<addr>
-               	cmpq	$0x2, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	xorq	%rax, %rax
+               	movl	$0x1, %eax
+               	xorq	%rax, %rax
                	movl	$0x2, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	xorq	%rdi, %rdi
-               	callq	<addr>
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x21, %edi
-               	callq	<addr>
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
+               	movl	$0x2, %eax
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
                	movsd	-0x8(%rbp,%riz), %xmm0
                	movabsq	$0x4028000000000000, %rax # imm = 0x4028000000000000
                	movq	%rax, %xmm15
@@ -119,7 +65,5 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>

@@ -1849,14 +1849,20 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
     // check.
     // `splice_multi_block` shifts caller block ids > the splice point.
     // Surviving caller phis are handled -- their incoming predecessor
-    // block ids are remapped inside the splice. A computed-goto or
-    // jump-table caller is not: the shift would invalidate the block-id
-    // references in `Inst::BlockAddr` / `computed_goto_targets` / the
-    // jump-table clone, which the splice does not remap. Skip those
-    // shapes; the flat single-block path above already ran and keeps
-    // block ids fixed.
-    let block_id_shift_unsafe =
-        !caller.computed_goto_targets.is_empty() || !caller.jump_tables.is_empty();
+    // block ids are remapped inside the splice. Its `merged_jump_tables`
+    // shifts the caller's own asm-goto rows across that shift and
+    // `map_terminator_caller` carries an `AsmGoto` terminator through, so a
+    // caller that already holds asm-goto rows (from a prior fixpoint round
+    // or an earlier step of this loop) is spliceable. A computed-goto or a
+    // `JumpTable` (switch) caller is not: the shift would invalidate the
+    // block-id references in `Inst::BlockAddr` / `computed_goto_targets`,
+    // and `map_terminator_caller` has no `JumpTable` arm. Skip those; the
+    // flat single-block path above already ran and keeps block ids fixed.
+    let block_id_shift_unsafe = !caller.computed_goto_targets.is_empty()
+        || caller
+            .blocks
+            .iter()
+            .any(|b| matches!(b.terminator, Terminator::JumpTable { .. }));
     let mut steps = 0usize;
     while steps < MAX_MULTI_BLOCK_SPLICE_STEPS && !block_id_shift_unsafe {
         let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>)> = None;

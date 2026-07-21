@@ -442,17 +442,19 @@ pub(crate) fn reg_by_name(name: &str) -> Option<(u8, AsmRegSize)> {
     {
         return Some((16 + i, Quad));
     }
-    // Control (cr0..cr15) and debug (dr0..dr7) registers, marked with the
+    // Control (cr0..cr15) and debug (db0..db7) registers, marked with the
     // bases below so they never collide with the GPRs. Only `mov` reads /
     // writes them, masking the mark back to the 0..16 ModRM.reg field. They
-    // are inherently 64-bit in long mode.
+    // are inherently 64-bit in long mode. AT&T syntax spells the debug
+    // registers `db0..db7` (the GAS canonical form) or `dr0..dr7`; both name
+    // DR0..DR7.
     if let Some(rest) = n.strip_prefix("cr")
         && let Ok(i) = rest.parse::<u8>()
         && i < 16
     {
         return Some((CR_BASE + i, Quad));
     }
-    if let Some(rest) = n.strip_prefix("dr")
+    if let Some(rest) = n.strip_prefix("db").or_else(|| n.strip_prefix("dr"))
         && let Ok(i) = rest.parse::<u8>()
         && i < 8
     {

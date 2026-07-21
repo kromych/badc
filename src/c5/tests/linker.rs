@@ -5619,3 +5619,57 @@ fn x86_percpu_seg_a_operand_uses_a_direct_pcrel_reloc() {
     addends.sort_unstable();
     assert_eq!(addends, [-4, 4], "PC32 addend must be field offset - 4");
 }
+
+#[test]
+fn x86_this_ip_rip_relative_lea_has_no_reloc() {
+    // `_THIS_IP_` compiles `lea disp(%%rip), %reg` with a literal
+    // displacement: a self-relative address (`rip + disp`) the CPU forms at
+    // run time. gcc encodes it as `<REX.W> 8d <modrm=..000.101> <disp32>`
+    // (mod=00 rm=101) carrying the literal displacement and NO relocation.
+    // Emitting a relocation here, or a wrong disp32, is a silent miscompile.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let src = "\
+        unsigned long here0(void) { unsigned long p;\n\
+          __asm__(\"lea 0(%%rip), %0\" : \"=r\" (p)); return p; }\n\
+        unsigned long here16(void) { unsigned long p;\n\
+          __asm__(\"lea 16(%%rip), %0\" : \"=r\" (p)); return p; }\n";
+    let program = Compiler::with_options(
+        src.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse");
+
+    // `<REX.W> 8d <modrm>` with mod=00 rm=101 is `lea disp32(%rip), reg` for
+    // any destination register; the disp32 field follows the modrm byte.
+    let sites: alloc::vec::Vec<(u64, i32)> = obj
+        .text
+        .windows(7)
+        .enumerate()
+        .filter(|(_, w)| (w[0] & 0xF8) == 0x48 && w[1] == 0x8D && (w[2] & 0xC7) == 0x05)
+        .map(|(i, w)| {
+            let disp = i32::from_le_bytes([w[3], w[4], w[5], w[6]]);
+            ((i + 3) as u64, disp)
+        })
+        .collect();
+    let mut disps: alloc::vec::Vec<i32> = sites.iter().map(|&(_, d)| d).collect();
+    disps.sort_unstable();
+    assert_eq!(disps, [0, 16], "each lea must carry its literal disp32");
+    // The address is self-relative: no relocation may land on either disp32.
+    for &(off, _) in &sites {
+        assert!(
+            !obj.text_relocs.iter().any(|r| r.offset == off),
+            "a self-relative rip lea must not carry a relocation"
+        );
+    }
+}

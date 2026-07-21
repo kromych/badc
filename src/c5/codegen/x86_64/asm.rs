@@ -241,6 +241,12 @@ pub(crate) enum AsmOpnd {
     /// `seg:disp` with no base register (`%%gs:0x28`): an absolute
     /// displacement, meaningful under the instruction's segment override.
     AbsMem { disp: i32 },
+    /// `disp(%%rip)` with a literal numeric displacement (`lea 0(%%rip), %0`
+    /// in `_THIS_IP_`): the effective address is `rip + disp`, a self-relative
+    /// computation the CPU performs at run time with no relocation. Distinct
+    /// from [`AsmOpnd::LabelAddr`] (a template label) and from a `%a` / `%c`
+    /// symbolic RIP-relative reference (which carries a relocation).
+    RipRel { disp: i32 },
     /// `Nf` / `Nb`: a local-label reference (label number plus direction --
     /// `f` forward, `b` backward), the target of a `jmp` / `jcc` within the
     /// block. The emitter resolves it to a rel32 against the label definition.
@@ -1225,17 +1231,27 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
                 forward: true,
             });
         }
-        let (digits, forward) = prefix
+        if let Some((digits, forward)) = prefix
             .strip_suffix('f')
             .map(|d| (d, true))
-            .or_else(|| prefix.strip_suffix('b').map(|d| (d, false)))?;
-        if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
-            return None;
+            .or_else(|| prefix.strip_suffix('b').map(|d| (d, false)))
+            && !digits.is_empty()
+            && digits.bytes().all(|c| c.is_ascii_digit())
+        {
+            return Some(AsmOpnd::LabelAddr {
+                num: digits.parse().ok()?,
+                forward,
+            });
         }
-        return Some(AsmOpnd::LabelAddr {
-            num: digits.parse().ok()?,
-            forward,
-        });
+        // A literal-displacement RIP-relative reference `disp(%rip)`: the
+        // address is `rip + disp`, computed at run time with no relocation. An
+        // empty displacement is zero.
+        let disp = if prefix.is_empty() {
+            0
+        } else {
+            i32::try_from(parse_int(prefix)?).ok()?
+        };
+        return Some(AsmOpnd::RipRel { disp });
     }
     let disp = if prefix.is_empty() {
         0i32
@@ -2868,6 +2884,25 @@ mod tests {
                 num: 1,
                 forward: false
             }
+        ));
+    }
+
+    #[test]
+    fn rip_relative_numeric_displacement() {
+        // `disp(%%rip)` with a literal displacement is a self-relative address
+        // (`_THIS_IP_`'s `lea 0(%%rip), %0`), distinct from the `LABEL(%%rip)`
+        // label-address form. Zero, decimal, and hex displacements parse; a
+        // bare `Nb`/`Nf` before `(%%rip)` stays a numeric-label address.
+        let insns = parse_template(b"lea 0(%%rip), %0").unwrap();
+        assert_eq!(insns[0].operands[0], AsmOpnd::RipRel { disp: 0 });
+        let insns = parse_template(b"movl 16(%%rip), %%eax").unwrap();
+        assert_eq!(insns[0].operands[0], AsmOpnd::RipRel { disp: 16 });
+        let insns = parse_template(b"lea 0x20(%%rip), %%rax").unwrap();
+        assert_eq!(insns[0].operands[0], AsmOpnd::RipRel { disp: 0x20 });
+        let insns = parse_template(b"1:\n\tlea 1b(%%rip), %%rax").unwrap();
+        assert!(matches!(
+            insns[1].operands[0],
+            AsmOpnd::LabelAddr { num: 1, .. }
         ));
     }
 

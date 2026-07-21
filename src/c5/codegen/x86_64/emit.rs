@@ -6771,6 +6771,16 @@ fn emit_inline_asm(
                         size: size.unwrap_or(AsmRegSize::Quad),
                     }
                 }
+                // A literal-displacement `disp(%rip)`: encode the RIP-relative
+                // form (mod=00 rm=101 + disp32) with no relocation; the address
+                // is `rip + disp`. Access width as for `disp(%reg)`.
+                AsmOpnd::RipRel { disp } => {
+                    let size = asm_mem_size(None, insn, &asm.operands, &op_reg);
+                    Concrete::RipRel {
+                        disp,
+                        size: size.unwrap_or(AsmRegSize::Quad),
+                    }
+                }
                 // Handled above (jmp / jcc / lea referencing a local label); a
                 // label reaching operand resolution rode an unsupported form.
                 AsmOpnd::Label { .. } | AsmOpnd::LabelAddr { .. } | AsmOpnd::GotoLabel(_) => {

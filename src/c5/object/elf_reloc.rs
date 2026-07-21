@@ -1233,22 +1233,40 @@ pub(super) fn write_relocatable(
     for a in &program.function_aliases {
         all_names.push(a.name.as_str());
     }
-    // Labels defined inside inline-asm named sections: `(name, shndx,
-    // value, global)`. The value is the label's offset within the section,
-    // rebased by the block's placement.
-    let asm_labels: Vec<(&str, u16, u64, bool)> = asm_placements
+    // Labels defined inside inline-asm named sections. The value is the
+    // label's offset within the section, rebased by the block's placement;
+    // `.type` / `.size` directives set `st_type` / `st_size`.
+    use crate::c5::codegen::ssa::emit_common::AsmSymType;
+    struct AsmLabelSym<'a> {
+        name: &'a str,
+        shndx: u16,
+        value: u64,
+        global: bool,
+        st_type: u8,
+        st_size: u64,
+    }
+    let asm_labels: Vec<AsmLabelSym> = asm_placements
         .iter()
         .zip(build.asm_sections.iter())
         .flat_map(|(&(e, base), s)| {
             let shndx = carve.shndx[e];
-            s.labels
-                .iter()
-                .map(move |l| (l.name.as_str(), shndx, base + l.offset as u64, l.global))
+            s.labels.iter().map(move |l| AsmLabelSym {
+                name: l.name.as_str(),
+                shndx,
+                value: base + l.offset as u64,
+                global: l.global,
+                st_type: match l.sym_type {
+                    AsmSymType::Func => STT_FUNC,
+                    AsmSymType::Object => STT_OBJECT,
+                    AsmSymType::NoType => STT_NOTYPE,
+                },
+                st_size: l.size.unwrap_or(0),
+            })
         })
         .collect();
     let asm_label_names_start = all_names.len();
-    for &(name, ..) in &asm_labels {
-        all_names.push(name);
+    for l in &asm_labels {
+        all_names.push(l.name);
     }
     let (strtab_bytes, name_offs) = build_strtab(&all_names);
     // Patch the file symbol's name offset against the final
@@ -1325,33 +1343,33 @@ pub(super) fn write_relocatable(
         });
     }
     // Local inline-asm section labels, still inside the LOCAL block.
-    for (j, &(name, shndx, value, global)) in asm_labels.iter().enumerate() {
-        if global {
+    for (j, l) in asm_labels.iter().enumerate() {
+        if l.global {
             continue;
         }
-        asm_label_symidx.insert(name, symbols.len() as u32);
+        asm_label_symidx.insert(l.name, symbols.len() as u32);
         symbols.push(Elf64Sym {
             st_name: name_offs[asm_label_names_start + j],
-            st_info: pack_sym_info(STB_LOCAL, STT_NOTYPE),
-            st_shndx: shndx,
-            st_value: value,
-            st_size: 0,
+            st_info: pack_sym_info(STB_LOCAL, l.st_type),
+            st_shndx: l.shndx,
+            st_value: l.value,
+            st_size: l.st_size,
             ..Default::default()
         });
     }
     let first_global = symbols.len() as u32;
     // Global (`.globl`) inline-asm section labels.
-    for (j, &(name, shndx, value, global)) in asm_labels.iter().enumerate() {
-        if !global {
+    for (j, l) in asm_labels.iter().enumerate() {
+        if !l.global {
             continue;
         }
-        asm_label_symidx.insert(name, symbols.len() as u32);
+        asm_label_symidx.insert(l.name, symbols.len() as u32);
         symbols.push(Elf64Sym {
             st_name: name_offs[asm_label_names_start + j],
-            st_info: pack_sym_info(STB_GLOBAL, STT_NOTYPE),
-            st_shndx: shndx,
-            st_value: value,
-            st_size: 0,
+            st_info: pack_sym_info(STB_GLOBAL, l.st_type),
+            st_shndx: l.shndx,
+            st_value: l.value,
+            st_size: l.st_size,
             ..Default::default()
         });
     }

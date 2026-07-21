@@ -648,6 +648,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("decl_trailing_attribute.c", 0),
     ("winsock_netdb_protoent.c", 0),
     ("slot_coalesce_disjoint_temps.c", 0),
+    ("overaligned_automatic.c", 0),
     ("alloca_alignment.c", 0),
     ("alloca_arena_in_bounds.c", 0),
     ("slot_coalesce_declared.c", 0),

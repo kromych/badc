@@ -84,6 +84,12 @@ fn split_arrays(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, i64)> {
     // so an access is bounds-checked against every occupant.
     let mut cells_of: BTreeMap<i64, i64> = BTreeMap::new();
     for &(base, cells) in &func.multi_cell_slots {
+        // An over-aligned automatic object (C11 6.7.5) lives sp-relative in the
+        // realigned region keyed by its base slot; splitting it would strand
+        // the elements at fp-relative slots off their boundary.
+        if func.over_aligned.iter().any(|&(s, _)| s == base) {
+            continue;
+        }
         if base < 0 && cells >= 1 {
             cells_of
                 .entry(base)

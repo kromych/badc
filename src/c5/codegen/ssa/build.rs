@@ -182,6 +182,9 @@ impl SsaBuilder {
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            over_aligned: Vec::new(),
+            frame_align: 0,
+            realign_region_bytes: 0,
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
@@ -219,6 +222,15 @@ impl SsaBuilder {
     /// counter post-walk.
     pub(crate) fn set_end_pc(&mut self, end_pc: usize) {
         self.func.end_pc = end_pc;
+    }
+
+    /// Record the prologue-realigned region for over-aligned automatic
+    /// objects: the `(slot_off, region_off)` placements, the region alignment,
+    /// and its byte size. Consumed by the per-arch frame layout and the VM.
+    pub(crate) fn set_realign(&mut self, placed: Vec<(i64, i64)>, align: i64, region_bytes: i64) {
+        self.func.over_aligned = placed;
+        self.func.frame_align = align;
+        self.func.realign_region_bytes = region_bytes;
     }
 
     /// Set the source-level function name. Codegen consumers use

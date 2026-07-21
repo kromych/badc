@@ -310,10 +310,11 @@ impl Compiler {
 
             self.shadow_symbol(loc_idx);
 
-            // C11 6.7.5 on block-scope objects: a static local's `.data`
-            // slot honors the requested alignment like a file-scope object;
-            // an automatic object lives in 8-byte frame slots (no stack
-            // realignment), so a larger request there is a diagnostic. The
+            // C11 6.7.5 on block-scope objects: a static local's `.data` slot
+            // honors the requested alignment like a file-scope object. An
+            // automatic object lives in 8-byte frame slots; a request above 16
+            // exceeds the frame pointer's guarantee, so the prologue realigns
+            // sp down to it (recorded once the slot is reserved). The
             // attribute requires a power of two.
             let req_align = core::mem::take(&mut self.pending.attr_align);
             if req_align > 8 && !(req_align as usize).is_power_of_two() {
@@ -326,8 +327,27 @@ impl Compiler {
             // pointee type's alignment; a pointer object holds its own
             // pointer-aligned value, so the request does not apply to it.
             let obj_is_pointer = is_pointer_ty(ty);
-            if (req_align > 8 && !is_static && !obj_is_pointer)
-                || req_align > super::MAX_STATIC_ALIGN as i64
+            // Required alignment of an automatic object: the larger of the
+            // declarator request and the type's own alignment. Above 16 the
+            // frame is realigned; a pointer object is excluded.
+            let auto_align = if is_static || obj_is_pointer {
+                0
+            } else {
+                core::cmp::max(req_align.max(0), self.align_of_type(ty) as i64)
+            };
+            let realign_auto = auto_align > 16;
+            if realign_auto && auto_align > super::MAX_FRAME_ALIGN {
+                return Err(self.compile_err(format!(
+                    "requested alignment {auto_align} exceeds the maximum for an \
+                     automatic object ({}); use static storage",
+                    super::MAX_FRAME_ALIGN
+                )));
+            }
+            // Requests at or below 16 the frame cannot place, and any request
+            // beyond the static ceiling, stay diagnostics.
+            if !realign_auto
+                && ((req_align > 8 && !is_static && !obj_is_pointer)
+                    || req_align > super::MAX_STATIC_ALIGN as i64)
             {
                 return Err(self.compile_err(format!(
                     "requested alignment {req_align} is not supported here \
@@ -379,23 +399,27 @@ impl Compiler {
                 self.pending_local_init_ast = None;
                 self.pending_local_aggregate_ast = None;
                 self.pending_local_runtime_elements.clear();
-                // A type can carry an over-alignment without any attribute
-                // on this declarator: an `aligned(64)` member raises its
-                // whole aggregate. Frame slots are 8 bytes wide and the
-                // prologue does not realign the stack, so the frame cannot
-                // place an object on a boundary wider than the 16 bytes the
-                // frame pointer itself guarantees. Diagnose those rather
-                // than hand back an address that does not meet the type's
-                // alignment. A pointer object holds its own
-                // pointer-aligned value, whatever its pointee asks for.
-                let ty_align = self.align_of_type(ty);
-                if ty_align > 16 && !is_pointer_ty(ty) {
-                    return Err(self.compile_err(format!(
-                        "automatic object of a {ty_align}-byte-aligned type is not \
-                         supported (the frame aligns to at most 16); use static storage"
-                    )));
-                }
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
+                // C11 6.7.5: an automatic object whose alignment exceeds the
+                // frame's 16-byte guarantee (a declarator request or an
+                // `aligned(N)`-raised type) is placed in the prologue's
+                // realigned region. Record its slot, alignment, and byte size
+                // now that the slot is assigned. A variable-length array and
+                // `alloca` both move sp and cannot share the region, so that
+                // combination is rejected (here for the VLA, at function close
+                // for a separate `alloca`).
+                if realign_auto {
+                    if self.symbols[loc_idx].is_vla {
+                        return Err(self.compile_err(
+                            "an over-aligned variable-length array is not supported; \
+                             use static storage or a fixed size",
+                        ));
+                    }
+                    let slot = self.symbols[loc_idx].val;
+                    let asz = self.symbols[loc_idx].array_size;
+                    let size = self.local_storage_slots(ty, asz) * 8;
+                    self.func_over_aligned.push((slot, auto_align, size));
+                }
                 // Dual-emit: push `Decl::Local { sym, slot_off,
                 // init }`. The init flavour comes from whichever
                 // cross-helper carry the inner allocator filled:

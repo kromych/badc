@@ -1243,6 +1243,7 @@ impl Compiler {
                     self.committed_loc_offs = 0;
                     self.max_loc_offs = 0;
                     self.multi_cell_temps.clear();
+                    self.func_over_aligned.clear();
                     self.labels.clear();
                     self.unresolved_gotos.clear();
                     self.local_label_scopes.clear();
@@ -1674,8 +1675,10 @@ impl Compiler {
                     // symbol (struct call results, parameter copies, compound
                     // literals); these never appear in the variable list.
                     multi_cell.extend_from_slice(&self.multi_cell_temps);
+                    let over_aligned = core::mem::take(&mut self.func_over_aligned);
                     if let Some(ff) = self.finished_functions.last_mut() {
                         ff.multi_cell_slots = multi_cell;
+                        ff.over_aligned_slots = over_aligned;
                     }
                     // Collect unused-parameter and unused-local
                     // diagnostics for the function's top-level

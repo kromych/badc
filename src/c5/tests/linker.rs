@@ -69,6 +69,56 @@ fn address_taken_static_survives_dce() {
     );
 }
 
+/// Source with one over-aligned automatic object; its address is taken so the
+/// object stays in the frame (C11 6.7.5).
+#[cfg(test)]
+fn overaligned_source() -> String {
+    "int use(void *);\n\
+     int f(int n) { _Alignas(64) char buf[64]; buf[0] = (char)n; return use(buf); }\n\
+     int main(void) { return f(0); }\n"
+        .to_string()
+}
+
+#[test]
+fn overaligned_automatic_x64_realigns_prologue() {
+    // The x86_64 prologue aligns rsp down to the object's 64-byte boundary:
+    // `and rsp, -64` encodes as 48 83 E4 C0. A function without an over-aligned
+    // object emits no such instruction (verified by the snapshot suite).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(overaligned_source())
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    assert!(
+        bytes.windows(4).any(|w| w == [0x48, 0x83, 0xE4, 0xC0]),
+        "x86_64 realigning prologue `and rsp, -0x40` not emitted"
+    );
+}
+
+#[test]
+fn overaligned_automatic_aarch64_realigns_prologue() {
+    // The aarch64 prologue stages sp through x16 and aligns down:
+    // `and sp, x16, #-64` encodes as the word 0x927AE61F (little-endian bytes
+    // 1F E6 7A 92).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(overaligned_source())
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    assert!(
+        bytes.windows(4).any(|w| w == [0x1F, 0xE6, 0x7A, 0x92]),
+        "aarch64 realigning prologue `and sp, x16, #-64` not emitted"
+    );
+}
+
 #[test]
 fn inline_asm_gas_macro_sysreg_read_encodes_numeric_mrs() {
     // The arm64 read_sysreg_s construct: `__DEFINE_ASM_GPR_NUMS` builds the

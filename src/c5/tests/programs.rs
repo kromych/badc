@@ -612,6 +612,14 @@ fn max_alignment_placement() {
 }
 
 #[test]
+fn overaligned_automatic() {
+    // An automatic object whose alignment exceeds the 16-byte frame guarantee
+    // (C11 6.7.5) lands on its boundary via prologue stack realignment. The VM
+    // run agrees with the native / JIT runs the fixture lists exercise.
+    assert_eq!(run_fixture("overaligned_automatic.c"), 0);
+}
+
+#[test]
 fn packed_enum() {
     // `enum __attribute__((packed))` uses the smallest integer type holding
     // its values, changing the layout of an embedding struct (a real-world

@@ -700,6 +700,7 @@ impl Compiler {
             // `VariableInfo` list is assembled (the declared locals are
             // not yet collected at this point).
             multi_cell_slots: alloc::vec::Vec::new(),
+            over_aligned_slots: alloc::vec::Vec::new(),
         };
         self.pending_is_inline = false;
         self.pending_is_always_inline = false;

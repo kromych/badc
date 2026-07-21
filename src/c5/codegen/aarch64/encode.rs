@@ -418,6 +418,23 @@ pub(crate) fn enc_and_imm_neg16(rd: Reg, rn: Reg) -> u32 {
     0x927C_EC00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `AND SP, <Xn>, #-(1 << log2_align)` -- clear the low `log2_align` bits of a
+/// GPR into SP, aligning it down. The mask `~(align-1)` is a valid 64-bit
+/// logical immediate for any power-of-two alignment (a contiguous run of high
+/// ones): `sf=1`, `N=1`, `imms = 63 - log2_align` (the run length minus one),
+/// `immr = 64 - log2_align` (rotate so the zeros land at the bottom). Rd = 31
+/// encodes SP for the AND-immediate form, not XZR. Used by the over-aligned
+/// automatic-object prologue realignment (C11 6.7.5).
+pub(crate) fn enc_and_sp_pow2(rn: Reg, log2_align: u32) -> u32 {
+    debug_assert!(
+        (5..=12).contains(&log2_align),
+        "over-alignment is 32..=4096"
+    );
+    let immr = 64 - log2_align;
+    let imms = 63 - log2_align;
+    0x9240_0000 | (immr << 16) | (imms << 10) | ((rn.0 as u32) << 5) | 31
+}
+
 /// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.
 pub(crate) fn enc_orr_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0xAA00_0000, rd, rn, rm)

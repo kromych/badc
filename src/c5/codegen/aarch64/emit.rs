@@ -93,10 +93,17 @@ pub(crate) struct Frame {
     pub va_n_params: usize,
     /// ABI carried for the redirect's slot mapping.
     pub va_abi: super::Abi,
-    /// The body moves sp at runtime (`alloca` / C99 6.7.6.2 VLA), so
-    /// spill slots are addressed through fp and the epilogue
-    /// re-establishes sp from fp before tearing the frame down.
+    /// The body moves sp at runtime (`alloca` / C99 6.7.6.2 VLA), or the
+    /// prologue realigns sp for an over-aligned automatic object, so spill
+    /// slots are addressed through fp and the epilogue re-establishes sp from
+    /// fp before tearing the frame down.
     pub dynamic_sp: bool,
+    /// Alignment the prologue forces on sp for over-aligned automatic objects
+    /// (C11 6.7.5), a power of two > 16, or 0 when none. The realigned region
+    /// sits below the static frame; the objects live at `[sp + region_off]`.
+    pub realign_align: u32,
+    /// Byte size of the realigned region, a multiple of `realign_align`.
+    pub realign_region_bytes: u32,
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target: Target) -> Frame {
@@ -149,7 +156,13 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
         va_param_fp_mask: func.param_fp_mask,
         va_n_params: func.n_params,
         va_abi: abi,
-        dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func),
+        // An over-aligned automatic object realigns sp in the prologue and lives
+        // in a region below the static frame, addressed sp-relative; the frame
+        // is dynamic-sp so spills go through fp and the epilogue restores sp
+        // from fp (C11 6.7.5).
+        dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 0,
+        realign_align: func.frame_align.max(0) as u32,
+        realign_region_bytes: func.realign_region_bytes.max(0) as u32,
     }
 }
 
@@ -358,6 +371,11 @@ fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super
 /// caller-supplied lr without saving it.
 fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation) -> bool {
     if frame.frame_bytes != 0 || frame.param_spill_bytes != 0 || frame.uses_x19 {
+        return false;
+    }
+    // A function that realigns sp for an over-aligned automatic object needs
+    // the frame pointer to restore sp on exit; it is never leaf-elided.
+    if frame.realign_align != 0 {
         return false;
     }
     if !alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty() {
@@ -1918,8 +1936,21 @@ fn emit_prologue(
         // AAPCS64 6.9: save the caller-supplied x8 indirect-result
         // pointer into its body local; `return s;` writes the
         // aggregate result through it.
-        emit_local_addr(code, Place::IntReg(16), func.indirect_result_slot, frame);
+        emit_local_addr_fp(code, Place::IntReg(16), func.indirect_result_slot, frame);
         emit(code, enc_str_imm(Reg(8), Reg(16), 0));
+    }
+    // C11 6.7.5: realign sp down to the over-aligned objects' alignment and
+    // reserve their region below the static frame. Done last, after all
+    // fp-relative setup; the objects live at [sp + region_off]. x16 is the
+    // emitter's reserved prologue scratch. AND-immediate cannot read sp, so
+    // stage through x16.
+    if frame.realign_align > 0 {
+        emit(code, enc_add_imm(Reg(16), Reg(31), 0));
+        emit(
+            code,
+            super::encode::enc_and_sp_pow2(Reg(16), frame.realign_align.trailing_zeros()),
+        );
+        emit_sub_sp_imm(code, frame.realign_region_bytes);
     }
 }
 
@@ -2005,7 +2036,7 @@ fn emit_struct_param_scatter(
                 let hfa = super::abi_classify::hfa_member_layout(
                     &func.agg_descs[*agg_idx as usize].fields,
                 );
-                emit_local_addr(code, Place::IntReg(16), slot, frame);
+                emit_local_addr_fp(code, Place::IntReg(16), slot, frame);
                 for (k, cr) in regs.iter().take(*n as usize).enumerate() {
                     if cr.is_fp {
                         let (off, msize) = hfa
@@ -2040,7 +2071,7 @@ fn emit_struct_param_scatter(
                     src + size <= 4096 * 8,
                     "stack-arg offset beyond ldr imm12 reach"
                 );
-                emit_local_addr(code, Place::IntReg(16), slot, frame);
+                emit_local_addr_fp(code, Place::IntReg(16), slot, frame);
                 let mut o = 0u32;
                 while o + 8 <= size {
                     emit(code, enc_ldr_imm(Reg(17), Reg(29), src + o));
@@ -2246,6 +2277,12 @@ fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Fra
 /// bottom save uses the unscaled imm9 (+-255) and folds up to 224.
 /// Both sides compute the fold from the same inputs so they agree.
 fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
+    // A realigning function uses the unfolded shape so the epilogue's
+    // `restore_dynamic_sp` (sub sp, fp, #frame_bytes) cleanly returns sp to the
+    // static frame bottom before the sp-relative restores (C11 6.7.5).
+    if frame.realign_align != 0 {
+        return 0;
+    }
     let n_bottom = if !alloc.fp_used.is_empty() {
         alloc.fp_used.len()
     } else if !alloc.gpr_used.is_empty() {
@@ -3726,7 +3763,7 @@ fn emit_inst(
         // Inst::BlockAddr is handled in emit_function's block loop
         // (it needs the local block_offsets table for its PC-relative
         // fixup), so it never reaches emit_inst.
-        Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, frame),
+        Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, func, frame),
         Inst::Load {
             addr, disp, kind, ..
         } => emit_load(
@@ -3749,12 +3786,19 @@ fn emit_inst(
         } => emit_store(
             code, dst, *addr, *disp, *value, *kind, alloc, frame, scratch,
         ),
-        Inst::LoadLocal { off, kind, .. } => {
-            emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, scratch)
-        }
+        Inst::LoadLocal { off, kind, .. } => emit_load_local(
+            code,
+            dst,
+            *off,
+            *kind,
+            alloc.is_f32(v),
+            func,
+            frame,
+            scratch,
+        ),
         Inst::StoreLocal {
             off, value, kind, ..
-        } => emit_store_local(code, dst, *off, *value, *kind, alloc, frame, scratch),
+        } => emit_store_local(code, dst, *off, *value, *kind, alloc, func, frame, scratch),
         Inst::LoadIndexed {
             base,
             index,
@@ -5618,7 +5662,7 @@ fn setup_indirect_result(
     {
         // An HFA larger than 16 bytes (three or four members) still returns
         // in v-registers, not through x8.
-        emit_local_addr(code, Place::IntReg(8), ret_slot_off, frame);
+        emit_local_addr_fp(code, Place::IntReg(8), ret_slot_off, frame);
     }
 }
 
@@ -5643,7 +5687,7 @@ fn finish_call_result(
         if let Some(members) = super::abi_classify::hfa_member_layout(&desc.fields) {
             // AAPCS64 6.9: an HFA result arrives with member k in v[k].
             // Store each into the result temp at its byte offset.
-            emit_local_addr(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
+            emit_local_addr_fp(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
             for (k, (off, msize)) in members.iter().enumerate() {
                 if *msize == 8 {
                     emit(
@@ -5658,7 +5702,7 @@ fn finish_call_result(
                 }
             }
         } else if size <= 16 {
-            emit_local_addr(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
+            emit_local_addr_fp(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
             emit(code, enc_str_imm(Reg(0), scratch.primary, 0));
             if size > 8 {
                 emit(code, enc_str_imm(Reg(1), scratch.primary, 8));
@@ -6572,7 +6616,60 @@ fn local_slot_off(off: i64, frame: Frame) -> i64 {
     }
 }
 
-fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> bool {
+/// SP-relative byte offset of an over-aligned automatic object's storage in the
+/// frame's realigned region (C11 6.7.5), or None for an ordinary slot.
+fn over_aligned_region_off(off: i64, func: &FunctionSsa, frame: Frame) -> Option<i64> {
+    if off >= 0 || frame.realign_align == 0 {
+        return None;
+    }
+    func.over_aligned
+        .iter()
+        .find(|&&(s, _)| s == off)
+        .map(|&(_, region_off)| region_off)
+}
+
+/// Address of a local slot, redirecting an over-aligned automatic object to its
+/// sp-relative storage in the realigned region (C11 6.7.5). Callers that only
+/// address synthetic / parameter slots (never over-aligned) use
+/// [`emit_local_addr_fp`] directly and need no `func`.
+fn emit_local_addr(
+    code: &mut Vec<u8>,
+    dst: Place,
+    off: i64,
+    func: &FunctionSsa,
+    frame: Frame,
+) -> bool {
+    let Some(region_off) = over_aligned_region_off(off, func, frame) else {
+        return emit_local_addr_fp(code, dst, off, frame);
+    };
+    let rd = match dst {
+        Place::IntReg(r) => Reg(r),
+        Place::Spill(_) => Reg(16),
+        _ => {
+            bail_msg("LocalAddr: dst not int reg / spill");
+            return false;
+        }
+    };
+    // `add rd, sp, #region_off` -- region_off fits the 24-bit add-imm reach.
+    let r = region_off as u64;
+    let hi = r & !0xfff;
+    let lo = r & 0xfff;
+    if hi != 0 {
+        emit(
+            code,
+            super::encode::enc_add_imm_lsl12(rd, Reg(31), (hi >> 12) as u32),
+        );
+        if lo != 0 {
+            emit(code, enc_add_imm(rd, rd, lo as u32));
+        }
+    } else {
+        emit(code, enc_add_imm(rd, Reg(31), lo as u32));
+    }
+    spill_local_addr_to_dst(code, dst, rd, frame);
+    true
+}
+
+fn emit_local_addr_fp(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> bool {
     // Materialise the address through scratch.primary when the
     // allocator chose a spill slot for this LocalAddr, then store
     // the computed value into the spill slot. Register places
@@ -6798,15 +6895,21 @@ fn emit_load(
 /// `ldur` covers the unscaled 9-bit field `[-256, 255]`
 /// directly. Falls back to the general path when the
 /// displacement doesn't fit.
+#[allow(clippy::too_many_arguments)]
 fn emit_load_local(
     code: &mut Vec<u8>,
     dst: Place,
     off: i64,
     kind: LoadKind,
     keep_f32: bool,
+    func: &FunctionSsa,
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
+    // An over-aligned automatic object lives sp-relative in the realigned
+    // region, not fp-relative; route it through `emit_local_addr` and load
+    // through the materialised address (C11 6.7.5).
+    let is_over = over_aligned_region_off(off, func, frame).is_some();
     // F32 reads into the s-view of a v-register. A single-precision
     // value (C99 6.3.1.8) stays f32; the archive-reload path leaves it
     // untagged and widens to f64 via `fcvt Dd, Sn`.
@@ -6824,12 +6927,13 @@ fn emit_load_local(
         };
         let bytes = local_slot_off(off, frame);
         if let Ok(disp) = i32::try_from(bytes)
+            && !is_over
             && disp >= 0
             && (disp as u32).is_multiple_of(4)
             && (disp as u32) <= 16380
         {
             emit(code, super::encode::enc_ldr_s_imm(dd, Reg(29), disp as u32));
-        } else if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, frame) {
+        } else if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, func, frame) {
             return false;
         } else {
             emit(code, super::encode::enc_ldr_s_imm(dd, scratch.primary, 0));
@@ -6855,12 +6959,13 @@ fn emit_load_local(
         };
         let bytes = local_slot_off(off, frame);
         if let Ok(disp) = i32::try_from(bytes)
+            && !is_over
             && disp >= 0
             && (disp as u32).is_multiple_of(8)
             && (disp as u32) < 32760
         {
             emit(code, super::encode::enc_ldr_d_imm(dd, Reg(29), disp as u32));
-        } else if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, frame) {
+        } else if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, func, frame) {
             return false;
         } else {
             emit(code, super::encode::enc_ldr_d_imm(dd, scratch.primary, 0));
@@ -6878,6 +6983,7 @@ fn emit_load_local(
     };
     let bytes = local_slot_off(off, frame);
     if let Ok(disp) = i32::try_from(bytes)
+        && !is_over
         && (-256..256).contains(&disp)
     {
         // Fits the unscaled 9-bit signed field; load directly
@@ -6899,10 +7005,10 @@ fn emit_load_local(
         }
         return true;
     }
-    // Large displacement: materialise the address into a scratch
-    // through the standard `LocalAddr` lowering, then load
-    // through it. Same byte cost as the unfused path.
-    if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, frame) {
+    // Large displacement (or an over-aligned sp-relative object): materialise
+    // the address into a scratch through the standard `LocalAddr` lowering,
+    // then load through it. Same byte cost as the unfused path.
+    if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, func, frame) {
         return false;
     }
     let word = match kind {
@@ -6925,6 +7031,7 @@ fn emit_load_local(
 
 /// Single-instruction fp-relative store for `Inst::StoreLocal`.
 /// Mirrors [`emit_load_local`].
+#[allow(clippy::too_many_arguments)]
 fn emit_store_local(
     code: &mut Vec<u8>,
     dst: Place,
@@ -6932,9 +7039,14 @@ fn emit_store_local(
     value: u32,
     kind: StoreKind,
     alloc: &Allocation,
+    func: &FunctionSsa,
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
+    // An over-aligned automatic object lives sp-relative in the realigned
+    // region; route it through `emit_local_addr` and store through the
+    // materialised address (C11 6.7.5).
+    let is_over = over_aligned_region_off(off, func, frame).is_some();
     if matches!(kind, StoreKind::F32) {
         // `float` local store. A single-precision value (C99 6.3.1.8)
         // is already an f32 in the s-view (`str s`, no narrow); a wider
@@ -6952,13 +7064,14 @@ fn emit_store_local(
         let store_to_slot = |code: &mut Vec<u8>, sn: u8| -> bool {
             let bytes = local_slot_off(off, frame);
             if let Ok(disp) = i32::try_from(bytes)
+                && !is_over
                 && disp >= 0
                 && (disp as u32).is_multiple_of(4)
                 && (disp as u32) < 16380
             {
                 emit(code, super::encode::enc_str_s_imm(sn, Reg(29), disp as u32));
                 true
-            } else if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
+            } else if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, func, frame) {
                 false
             } else {
                 emit(code, super::encode::enc_str_s_imm(sn, scratch.secondary, 0));
@@ -7030,12 +7143,13 @@ fn emit_store_local(
         };
         let bytes = local_slot_off(off, frame);
         if let Ok(disp) = i32::try_from(bytes)
+            && !is_over
             && disp >= 0
             && (disp as u32).is_multiple_of(8)
             && (disp as u32) < 32760
         {
             emit(code, super::encode::enc_str_d_imm(dn, Reg(29), disp as u32));
-        } else if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
+        } else if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, func, frame) {
             return false;
         } else {
             emit(code, super::encode::enc_str_d_imm(dn, scratch.secondary, 0));
@@ -7078,7 +7192,7 @@ fn emit_store_local(
     };
     let bytes = local_slot_off(off, frame);
     if let Ok(disp) = i32::try_from(bytes) {
-        if (-256..256).contains(&disp) {
+        if (-256..256).contains(&disp) && !is_over {
             // Store the low `kind`-width bytes; the accumulator below
             // keeps the full source value, matching the c5 rule that
             // an assignment expression yields the stored value before
@@ -7091,10 +7205,10 @@ fn emit_store_local(
                 StoreKind::F32 | StoreKind::F64 => unreachable!(),
             };
             emit(code, enc);
-        } else if !emit_store_local_large_disp(code, off, rv, kind, scratch, frame) {
+        } else if !emit_store_local_large_disp(code, off, rv, kind, func, scratch, frame) {
             return false;
         }
-    } else if !emit_store_local_large_disp(code, off, rv, kind, scratch, frame) {
+    } else if !emit_store_local_large_disp(code, off, rv, kind, func, scratch, frame) {
         return false;
     }
     // c5 store ops leave the stored value in the accumulator;
@@ -7123,10 +7237,11 @@ fn emit_store_local_large_disp(
     off: i64,
     rv: Reg,
     kind: StoreKind,
+    func: &FunctionSsa,
     scratch: &ScratchPool,
     frame: Frame,
 ) -> bool {
-    if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
+    if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, func, frame) {
         return false;
     }
     let enc = match kind {
@@ -8603,7 +8718,7 @@ fn emit_return(
             emit(code, enc_ldr_imm(Reg(0), base, 0));
         } else {
             let dst = scratch.secondary;
-            emit_local_addr(code, Place::IntReg(dst.0), func.indirect_result_slot, frame);
+            emit_local_addr_fp(code, Place::IntReg(dst.0), func.indirect_result_slot, frame);
             emit(code, enc_ldr_imm(dst, dst, 0));
             let mut copied = 0u32;
             while copied + 8 <= size {

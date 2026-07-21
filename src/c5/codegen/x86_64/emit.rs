@@ -91,10 +91,17 @@ pub(crate) struct Frame {
     /// be resumed later by a longjmp-style one after the memory below rsp
     /// was reused, so nothing the block needs afterwards may live there.
     pub asm_scratch_off: i32,
-    /// The body moves rsp at runtime (`alloca` / C99 6.7.6.2 VLA), so
-    /// spill slots are addressed through rbp and the epilogue
-    /// re-establishes rsp from rbp before tearing the frame down.
+    /// The body moves rsp at runtime (`alloca` / C99 6.7.6.2 VLA), or the
+    /// prologue realigns rsp for an over-aligned automatic object, so spill
+    /// slots are addressed through rbp and the epilogue re-establishes rsp
+    /// from rbp before tearing the frame down.
     pub dynamic_sp: bool,
+    /// Alignment the prologue forces on rsp for over-aligned automatic objects
+    /// (C11 6.7.5), a power of two > 16, or 0 when none. The realigned region
+    /// sits below the static frame; the objects live at `[rsp + region_off]`.
+    pub realign_align: u32,
+    /// Byte size of the realigned region, a multiple of `realign_align`.
+    pub realign_region_bytes: u32,
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
@@ -154,6 +161,12 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
     } else {
         16
     };
+    // An over-aligned automatic object realigns rsp in the prologue and lives
+    // in a region below the static frame, addressed sp-relative; the frame is
+    // dynamic-sp so spills go through rbp and the epilogue restores rsp from
+    // rbp (C11 6.7.5).
+    let realign_align = func.frame_align.max(0) as u32;
+    let realign_region_bytes = func.realign_region_bytes.max(0) as u32;
     Frame {
         frame_bytes,
         alloc_spill_base: locals_bytes,
@@ -162,7 +175,9 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
         va_reg_save_off,
         saved_fpr_bytes,
         asm_scratch_off,
-        dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func),
+        dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func) || realign_align > 0,
+        realign_align,
+        realign_region_bytes,
     }
 }
 
@@ -339,6 +354,11 @@ fn pick_caller_saved_scratch_live_aware(
 /// stack adjustment.
 fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation, abi: super::Abi) -> bool {
     if frame.frame_bytes != 0 || frame.param_spill_bytes != 0 {
+        return false;
+    }
+    // A function that realigns rsp for an over-aligned automatic object needs
+    // the frame pointer to restore rsp on exit; it is never leaf-elided.
+    if frame.realign_align != 0 {
         return false;
     }
     // A Win64 variadic callee must establish rbp so the prologue can
@@ -2665,6 +2685,14 @@ fn emit_prologue(
     save_callee_saved(code, alloc, frame);
     emit_struct_param_scatter(code, func, frame, abi);
     emit_struct_stack_param_copy(code, func, frame, abi);
+    // C11 6.7.5: realign rsp down to the over-aligned objects' alignment and
+    // reserve their region below the static frame. Done last, after the
+    // callee-saved stores (which stay at rbp-frame_bytes, where the epilogue's
+    // restore_dynamic_sp puts rsp back); the objects live at [rsp + region_off].
+    if frame.realign_align > 0 {
+        super::encode::emit_ri(code, Mnem::And, 8, Reg::RSP, -(frame.realign_align as i32));
+        emit_sub_rsp_imm32(code, frame.realign_region_bytes);
+    }
     uw
 }
 
@@ -3009,17 +3037,17 @@ fn emit_inst(
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("LocalAddr: dst not int reg / spill");
             };
-            // c5 cdecl: param i (i >= 2) sits at [rbp + 16*(i-1)];
-            // locals (i < 0) sit at [rbp + 8*i]. A System V variadic
-            // callee redirects named-parameter slots into the register
-            // save area (see `local_slot_off`). Compute the byte offset
-            // and emit `lea rd, [rbp + disp]`. The 32-bit signed `disp`
-            // covers any frame our compiler emits; larger frames bail.
-            let bytes = local_slot_off(*off, func, frame, abi);
+            // c5 cdecl: param i (i >= 2) sits at [rbp + 16*(i-1)]; locals
+            // (i < 0) sit at [rbp + 8*i]. An over-aligned automatic object is
+            // addressed sp-relative in the realigned region; a System V
+            // variadic callee redirects named-parameter slots into the
+            // register save area (see `local_slot_base_disp`). The 32-bit
+            // signed `disp` covers any frame our compiler emits; larger bail.
+            let (base, bytes) = local_slot_base_disp(*off, func, frame, abi);
             let Ok(disp) = i32::try_from(bytes) else {
                 return fail("LocalAddr: offset doesn't fit in disp32");
             };
-            emit_lea_r_mem(code, rd, Reg::RBP, disp);
+            emit_lea_r_mem(code, rd, base, disp);
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }
@@ -3631,6 +3659,20 @@ fn emit_store_fp_mem(
 /// The c5 slot offset folds into the load's ModR/M disp
 /// directly, skipping the `LocalAddr` materialisation the
 /// `LocalAddr` + `Load` pair would have required.
+/// Base register and byte displacement for addressing a local slot. An
+/// over-aligned automatic object lives in the realigned region at
+/// `[rsp + region_off]` (rsp aligned to `frame.realign_align`); every other
+/// slot is `[rbp + local_slot_off]` (C11 6.7.5).
+fn local_slot_base_disp(off: i64, func: &FunctionSsa, frame: Frame, abi: super::Abi) -> (Reg, i64) {
+    if off < 0
+        && let Some(&(_, region_off)) = func.over_aligned.iter().find(|&&(s, _)| s == off)
+    {
+        (Reg::RSP, region_off)
+    } else {
+        (Reg::RBP, local_slot_off(off, func, frame, abi))
+    }
+}
+
 fn emit_load_local(
     code: &mut Vec<u8>,
     dst: Place,
@@ -3641,25 +3683,17 @@ fn emit_load_local(
     func: &FunctionSsa,
     abi: super::Abi,
 ) -> bool {
-    let Ok(disp) = i32::try_from(local_slot_off(off, func, frame, abi)) else {
+    let (base, bytes) = local_slot_base_disp(off, func, frame, abi);
+    let Ok(disp) = i32::try_from(bytes) else {
         return fail("LoadLocal: offset doesn't fit in disp32");
     };
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
-        return emit_load_fp_mem(
-            code,
-            dst,
-            kind,
-            keep_f32,
-            Reg::RBP,
-            disp,
-            frame,
-            "LoadLocal",
-        );
+        return emit_load_fp_mem(code, dst, kind, keep_f32, base, disp, frame, "LoadLocal");
     }
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("LoadLocal: dst not int reg / spill");
     };
-    emit_load_kind_mem(code, kind, rd, Reg::RBP, disp);
+    emit_load_kind_mem(code, kind, rd, base, disp);
     spill_dst_to_slot(code, dst, rd, frame);
     true
 }
@@ -3680,7 +3714,8 @@ fn emit_store_local(
     func: &FunctionSsa,
     abi: super::Abi,
 ) -> bool {
-    let Ok(disp) = i32::try_from(local_slot_off(off, func, frame, abi)) else {
+    let (base, bytes) = local_slot_base_disp(off, func, frame, abi);
+    let Ok(disp) = i32::try_from(bytes) else {
         return fail("StoreLocal: offset doesn't fit in disp32");
     };
     let value_place = place_of(alloc, value);
@@ -3694,7 +3729,7 @@ fn emit_store_local(
             value_place,
             alloc.is_f32(value),
             kind,
-            Reg::RBP,
+            base,
             disp,
             frame,
             "StoreLocal",
@@ -3724,7 +3759,7 @@ fn emit_store_local(
     // the full source value, matching the c5 rule that an
     // assignment expression yields the stored value before any
     // re-narrowing on read-back (C99 6.5.16p3).
-    emit_store_kind_mem(code, kind, Reg::RBP, disp, rv);
+    emit_store_kind_mem(code, kind, base, disp, rv);
     // Mirror the store value into the destination Place.
     mirror_int_dst(code, dst, rv, frame);
     true

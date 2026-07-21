@@ -28,22 +28,43 @@ fn empty_source_has_no_main() {
 }
 
 #[test]
-fn overaligned_automatic_is_rejected() {
-    // Frame slots are 8 bytes and the prologue does not realign the
-    // stack, so an automatic object cannot be placed on a boundary wider
-    // than the 16 bytes the frame pointer guarantees. Rejecting is
-    // preferable to handing back an under-aligned address; static storage
-    // carries any supported alignment. Both an explicit request on the
-    // declarator and one inherited from an over-aligned type are caught.
+fn overaligned_automatic_above_cap_is_rejected() {
+    // An automatic object's alignment above 16 is honored by realigning the
+    // stack in the prologue (C11 6.7.5), up to a one-page cap. A request past
+    // the cap must use static storage rather than a page-sized frame slack.
     expect_compile_error(
-        "int main(void) { int __attribute__((aligned(64))) a; return (int)(long)&a; }",
-        "not supported here",
+        "int main(void) { int __attribute__((aligned(8192))) a; return (int)(long)&a; }",
+        "exceeds the maximum for an automatic object",
     );
+    // A non-power-of-two request is a diagnostic (C11 6.7.5 requires a power
+    // of two).
     expect_compile_error(
+        "int main(void) { int __attribute__((aligned(48))) a; return (int)(long)&a; }",
+        "not a power of two",
+    );
+}
+
+#[test]
+fn overaligned_automatic_is_realigned() {
+    use crate::c5::Target;
+    // An over-aligned automatic object -- an explicit declarator request or
+    // one inherited from an over-aligned type -- is now placed on its
+    // boundary rather than rejected. Both shapes compile.
+    Compiler::with_target(
+        "int main(void) { int __attribute__((aligned(64))) a; a = 1; return (int)((long)&a & 63); }"
+            .to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect("aligned(64) automatic compiles");
+    Compiler::with_target(
         "struct __attribute__((aligned(64))) S { int x; };\n\
-         int main(void) { struct S a; return (int)(long)&a.x; }",
-        "automatic object of a 64-byte-aligned type is not supported",
-    );
+         int main(void) { struct S a; a.x = 1; return (int)((long)&a.x & 63); }"
+            .to_string(),
+        Target::LinuxAarch64,
+    )
+    .compile()
+    .expect("over-aligned struct automatic compiles");
 }
 
 #[test]

@@ -868,21 +868,14 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     if std::env::var("BADC_NO_MEM2REG").is_ok() {
         return Vec::new();
     }
-    // A function with a non-zero `AllocaInit` allocates stack at
-    // runtime and reaches it through computed pointers, so no slot is
-    // promoted there; `AllocaInit(0)` is the unconditional no-alloca
-    // marker and is ignored. Taken addresses of individual locals are
-    // handled per slot in `promotable_slots`: `LoadLocal` /
-    // `StoreLocal` name only scalar locals (aggregate fields are
-    // reached through `LocalAddr(base)` plus an offset, never a
-    // load-local), so a candidate slot is aliased only when its own
-    // address is taken, which that pass already excludes.
-    if func.insts.iter().any(|i| match i {
-        Inst::AllocaInit(s) => *s != 0,
-        _ => false,
-    }) {
-        return Vec::new();
-    }
+    // A non-zero `AllocaInit` moves sp at runtime, but both the fixed
+    // locals and the allocator spills are then frame-pointer-relative
+    // (`Frame::dynamic_sp`); only the alloca storage rides sp, reached
+    // through `Alloca` / `AllocaSave` / `AllocaRestore` SSA values, not
+    // a promotable slot. Address-free slots are therefore disjoint from
+    // the dynamic region and promote safely (`promotable_slots` already
+    // excludes the reserved and address-taken slots), matching gcc's
+    // const-propagation of such locals into an `"i"` asm operand.
     let promotable = promotable_slots(func);
     if promotable.is_empty() {
         return Vec::new();
@@ -1588,6 +1581,49 @@ mod tests {
             "address-taken slot's store must remain"
         );
         assert!(matches!(f.blocks[0].terminator, Terminator::Return(3)));
+    }
+
+    #[test]
+    fn run_promotes_address_free_slot_with_alloca_present() {
+        // A non-zero `AllocaInit` marks a dynamic-sp function. Its
+        // reserved slot rides sp, but the fixed locals and the
+        // allocator spills stay frame-pointer-relative, so an
+        // address-free slot still promotes. Slot -1 is stored then
+        // loaded with `AllocaInit(-8)` present: the store neutralizes
+        // and the load redirects to the stored value.
+        let insts = alloc::vec![
+            Inst::Imm(5),
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I64,
+                volatile: false,
+            },
+            Inst::AllocaInit(-8),
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+        ];
+        let blocks = alloc::vec![Block {
+            start_pc: 0,
+            inst_range: 0..4,
+            terminator: Terminator::Return(3),
+            exit_acc: 3,
+        }];
+        let mut f = func_with(insts, blocks);
+        let promoted = run(&mut f);
+        assert!(
+            promoted.contains(&-1),
+            "address-free slot -1 must promote despite AllocaInit"
+        );
+        assert!(matches!(f.insts[1], Inst::Imm(0)), "store must neutralize");
+        assert!(
+            matches!(f.insts[2], Inst::AllocaInit(-8)),
+            "AllocaInit marker must survive the rewrite"
+        );
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(0)));
     }
 
     #[test]

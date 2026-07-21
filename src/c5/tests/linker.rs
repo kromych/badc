@@ -3292,6 +3292,57 @@ fn inline_asm_pushsection_lands_in_relocatable_object() {
 }
 
 #[test]
+fn asm_section_const_local_folds_with_alloca_present() {
+    // A `.long %c[..]` section datum fed by an address-free local
+    // constant must fold at -O even when the function also uses a VLA
+    // (dynamic sp). The alloca once disabled mem2reg for the whole
+    // function, leaving the local in a frame slot the section-data
+    // emit could not read (`non-constant section data value`). gcc
+    // const-propagates it regardless; badc must match. `flags` is
+    // `(1<<0)|((1<<3)|((9)<<8))` == 2313.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int probe(int *p, int n) {\n\
+            int r;\n\
+            __auto_type flags = (1 << 0) | ((1 << 3) | ((9) << 8));\n\
+            __asm__(\"1: nop\\n\"\n\
+                \".pushsection .bug_tab,\\\"aw\\\"\\n\"\n\
+                \".long 1b - .\\n\"\n\
+                \".long %c[f]\\n\"\n\
+                \".popsection\\n\"\n\
+                \"mov %1, %0\"\n\
+                : \"=r\"(r) : \"r\"(*p), [f] \"i\"(flags));\n\
+            { char buf[n]; buf[0] = 0; r += buf[0]; }\n\
+            return r;\n\
+        }\n\
+        int main(void) { int v = 7; return probe(&v, 4); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_target(String::from(src), target)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("{target:?}: emit -O: {e}"));
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".bug_tab")
+            .unwrap_or_else(|| panic!("{target:?}: .bug_tab section missing"));
+        // 4 (pcrel label ref) + 4 (folded constant 2313).
+        assert_eq!(sec.3.len(), 8, "{target:?}: section size");
+        assert_eq!(
+            &sec.3[4..8],
+            &2313u32.to_le_bytes(),
+            "{target:?}: folded %c[f] value"
+        );
+    }
+}
+
+#[test]
 fn asm_section_is_not_duplicated_by_branch_relaxation() {
     // A section-emitting inline asm in a function whose body is re-laid-out
     // for branch relaxation must contribute its section content once, not

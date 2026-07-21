@@ -38,7 +38,7 @@ use alloc::vec::Vec;
 use crate::c5::codegen::Abi;
 use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
 use crate::c5::ir::{
-    BinOp, Block, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+    BinOp, Block, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
 };
 
 /// Outer candidacy fixpoint cap: re-evaluating candidacy after each
@@ -140,6 +140,17 @@ fn is_inline_candidate(
         say(format_args!("variadic"));
         return false;
     }
+    // A self-recursive callee stays out of line: splicing it does not
+    // remove the recursion -- the recursive calls come along -- so
+    // inlining only unrolls the call tree one level per candidacy-fixpoint
+    // round, unbounded code growth for no call elimination. Matches gcc's
+    // -O2 default of not inlining recursive functions.
+    if func.insts.iter().any(
+        |i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == func.ent_pc),
+    ) {
+        say(format_args!("self-recursive"));
+        return false;
+    }
     // A body calling a returns-twice function (setjmp family / vfork)
     // stays out of line: splicing it would silently drop the caller's
     // no-slot-share discipline (`FunctionSsa::has_returns_twice_call`).
@@ -190,12 +201,16 @@ fn is_inline_candidate(
             }
         }
     }
-    // Multi-block callees are supported when exactly one block
-    // terminates in `Return`. Other terminator shapes (Jmp, Bz, Bnz,
-    // FallThrough) drive intra-callee control flow; the splice
-    // rewrites the single Return to a `Jmp(postfix)`. Multi-Return
-    // shapes would need a postfix phi and are rejected.
-    // TODO: support multi-Return callees via a postfix phi.
+    // A single `Return` block rewrites to `Jmp(postfix)`; multiple route
+    // through a synthetic join block whose phi merges the per-return
+    // values into the call result. Both need the no-aggregate multi-block
+    // splice (`splice_multi_block`); the flat aggregate splice handles one
+    // Return only. `AsmGoto` rides the same path -- the splice clones its
+    // `jump_tables` row with the callee's block ids shifted into the
+    // caller. `JumpTable` / `GotoIndirect` stay out of line: their
+    // block-id references (the switch bounds check / the `BlockAddr`
+    // computed-goto set) are not remapped here.
+    let no_agg = func.agg_descs.is_empty();
     let mut return_blocks = 0usize;
     for blk in &func.blocks {
         match blk.terminator {
@@ -205,24 +220,18 @@ fn is_inline_candidate(
                 return false;
             }
             Terminator::GotoIndirect { .. } => {
-                // A computed goto's successors are the function's
-                // address-taken label blocks; splicing the body into a
-                // caller would shift those block ids. Keep it out of line.
                 say(format_args!("GotoIndirect terminator"));
                 return false;
             }
             Terminator::JumpTable { .. } => {
-                // Splicing shifts the callee's block ids, which the
-                // caller-side jump_tables clone would have to remap; a
-                // table dispatcher is far past the size cap anyway.
                 say(format_args!("JumpTable terminator"));
                 return false;
             }
             Terminator::AsmGoto { .. } => {
-                // Same block-id / jump_tables-row shift problem as
-                // JumpTable; the asm-goto edges stay out of line.
-                say(format_args!("AsmGoto terminator"));
-                return false;
+                if !no_agg {
+                    say(format_args!("AsmGoto terminator"));
+                    return false;
+                }
             }
             // A block sealed after a `_Noreturn` call is not a return:
             // control never reaches its end, so the splice needs no
@@ -235,7 +244,13 @@ fn is_inline_candidate(
             | Terminator::Bnz { .. } => {}
         }
     }
-    if return_blocks != 1 {
+    if return_blocks == 0 {
+        say(format_args!("no Return block"));
+        return false;
+    }
+    // The postfix join phi is built only on the no-aggregate splice path,
+    // and only for an integer return (an FP join phi is out of scope).
+    if return_blocks > 1 && (!no_agg || func.ret_is_fp) {
         say(format_args!("{return_blocks} Return blocks (need 1)"));
         return false;
     }
@@ -534,6 +549,16 @@ fn is_inline_candidate(
             // `callee_remap` and shifts its predecessor block ids into the
             // caller's post-splice numbering (`shift_callee_bid`).
             Inst::Phi { .. } => {}
+            // Input-only inline asm on the reloc path: `rewrite_callee_inst`
+            // remaps the operand args, and an asm-goto's `jump_tables` row
+            // clones into the caller. An output operand would need result /
+            // address handling the splice does not do.
+            Inst::InlineAsm { asm, .. } => {
+                if !reloc || asm.operands.iter().any(|o| o.is_output) {
+                    say(format_args!("inline asm output or non-reloc callee"));
+                    return false;
+                }
+            }
             _ => {
                 say(format_args!("disallowed inst {:?}", inst));
                 return false;
@@ -711,6 +736,13 @@ fn rewrite_callee_inst(inst: &Inst, args: &[ValueId], callee_remap: &[ValueId]) 
                         *a = map_v(*a, callee_remap);
                     }
                 }
+                // Inline-asm operand args (an asm-goto's `"i"` inputs among
+                // them) route through the callee remap like any operand.
+                Inst::InlineAsm { args, .. } => {
+                    for a in args.iter_mut() {
+                        *a = map_v(*a, callee_remap);
+                    }
+                }
                 _ => {}
             }
             Some(copy)
@@ -756,9 +788,14 @@ pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
 /// * caller blocks `splice_block_idx + 1..` (original indices)
 ///   shift up by 1.
 /// * callee blocks appended at the end, terminator block-ids offset
-///   by the new caller block count. The callee's `Return(v)`
+///   by the new caller block count. A single callee `Return(v)`
 ///   becomes `Jmp(postfix)`; `v` (in the post-remap caller space)
-///   feeds the call's old `ValueId` for every later use.
+///   feeds the call's old `ValueId` for every later use. With more than
+///   one `Return`, each becomes `Jmp(join)` where a synthetic join block
+///   holds a phi merging the per-return values; the phi feeds the call's
+///   old `ValueId`, and the join branches to the postfix.
+/// * an `AsmGoto` callee block keeps its terminator; its `jump_tables`
+///   row is cloned into the caller with the successor block ids shifted.
 fn splice_multi_block(
     caller: &mut FunctionSsa,
     callee: &FunctionSsa,
@@ -781,6 +818,21 @@ fn splice_multi_block(
     };
     let callee_block_base = (n_caller + 1) as u32;
     let shift_callee_bid = |b: u32| -> u32 { b + callee_block_base };
+    // Multiple returns route through a synthetic join block appended after
+    // the callee blocks; its phi merges the per-return values. A void
+    // multi-return has no value to merge and needs no join. A single
+    // return keeps the direct `Jmp(postfix)`.
+    let n_returns = callee
+        .blocks
+        .iter()
+        .filter(|b| matches!(b.terminator, Terminator::Return(_)))
+        .count();
+    let non_void_return = callee
+        .blocks
+        .iter()
+        .any(|b| matches!(b.terminator, Terminator::Return(v) if v != NO_VALUE));
+    let use_join = n_returns > 1 && non_void_return;
+    let join_id = callee_block_base + n_callee as u32;
     let map_terminator_caller = |term: Terminator, remap: &[ValueId]| -> Terminator {
         match term {
             Terminator::Jmp(b) => Terminator::Jmp(shift_caller_bid(b)),
@@ -809,10 +861,12 @@ fn splice_multi_block(
             Terminator::GotoIndirect { target } => Terminator::GotoIndirect {
                 target: map_v(target, remap),
             },
-            // Multi-block splicing is skipped for jump-table callers
-            // (block_id_shift_unsafe); the table entries would need the
-            // same shift. TODO: remap via the shared BlockId utility.
-            Terminator::JumpTable { .. } | Terminator::AsmGoto { .. } => {
+            // The caller's own asm-goto row (from a prior splice step) is
+            // shifted in `merged_jump_tables` with the table index kept, so
+            // pass the terminator through. Jump-table callers are skipped
+            // (`block_id_shift_unsafe`).
+            Terminator::AsmGoto { table } => Terminator::AsmGoto { table },
+            Terminator::JumpTable { .. } => {
                 unreachable!("multi-block splice skips jump-table callers")
             }
         }
@@ -820,6 +874,9 @@ fn splice_multi_block(
 
     let mut original = core::mem::take(caller);
     let splice_block = original.blocks[splice_block_idx].clone();
+    // Caller's own asm-goto rows precede the callee's in `merged_jump_tables`;
+    // a spliced callee `AsmGoto { table }` re-indexes to `caller_jt_len + table`.
+    let caller_jt_len = original.jump_tables.len() as u32;
 
     let mut new_insts: Vec<Inst> = Vec::with_capacity(original.insts.len() + callee.insts.len());
     let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(new_insts.capacity());
@@ -924,10 +981,18 @@ fn splice_multi_block(
                 }
             }
         }
-        // Last Return wins, as at emission; the map is complete here.
-        for cblock in &callee.blocks {
-            if let Terminator::Return(v) = cblock.terminator {
-                remap[call_pc as usize] = map_v(v, &callee_remap);
+        // The call result. One return maps directly; multiple feed the
+        // join phi, whose id is one past the spliced callee body -- the
+        // current `at`, since Step 6 emits exactly that many callee insts
+        // and the phi is pushed right after. A void multi-return has no
+        // value.
+        if use_join {
+            remap[call_pc as usize] = at;
+        } else {
+            for cblock in &callee.blocks {
+                if let Terminator::Return(v) = cblock.terminator {
+                    remap[call_pc as usize] = map_v(v, &callee_remap);
+                }
             }
         }
     }
@@ -1047,9 +1112,12 @@ fn splice_multi_block(
         // Step 5: remap the call's args through the caller's now-built remap.
         let remapped_args: Vec<ValueId> = call_args.iter().map(|&a| map_v(a, &remap)).collect();
 
-        // Step 6: splice every callee block.
+        // Step 6: splice every callee block. A multi-return callee
+        // collects each return's (predecessor block, value) for the join
+        // phi emitted after the loop.
         callee_insts_start = new_insts.len() as u32;
-        for cblock in &callee.blocks {
+        let mut phi_incoming: Vec<(BlockId, ValueId)> = Vec::new();
+        for (ci, cblock) in callee.blocks.iter().enumerate() {
             let block_start = new_insts.len() as u32;
             for ce_pc in cblock.inst_range.start..cblock.inst_range.end {
                 let cinst = &callee.insts[ce_pc as usize];
@@ -1190,8 +1258,14 @@ fn splice_multi_block(
                     fall_through: shift_callee_bid(fall_through),
                 },
                 Terminator::Return(v) => {
-                    remap[call_pc as usize] = map_v(v, &callee_remap);
-                    Terminator::Jmp(postfix_id)
+                    let rv = map_v(v, &callee_remap);
+                    if use_join {
+                        phi_incoming.push((shift_callee_bid(ci as u32), rv));
+                        Terminator::Jmp(join_id)
+                    } else {
+                        remap[call_pc as usize] = rv;
+                        Terminator::Jmp(postfix_id)
+                    }
                 }
                 // A block sealed after a noreturn call: no successor, no
                 // value; carry it through unchanged (no block id to shift).
@@ -1203,9 +1277,13 @@ fn splice_multi_block(
                 Terminator::JumpTable { .. } => {
                     unreachable!("filter rejects JumpTable")
                 }
-                Terminator::AsmGoto { .. } => {
-                    unreachable!("filter rejects AsmGoto")
-                }
+                // The callee row is appended after the caller's own rows in
+                // `merged_jump_tables`; the successors it names shift into
+                // caller space there. The template's label refs resolve
+                // through that row at emit.
+                Terminator::AsmGoto { table } => Terminator::AsmGoto {
+                    table: caller_jt_len + table,
+                },
             };
             let exit_acc = if cblock.exit_acc != NO_VALUE {
                 map_v(cblock.exit_acc, &callee_remap)
@@ -1217,6 +1295,27 @@ fn splice_multi_block(
                 inst_range: block_start..new_insts.len() as u32,
                 terminator: new_term,
                 exit_acc,
+            });
+        }
+
+        // Multi-return join: a phi merges each return's value into the call
+        // result, then branches to the postfix. The phi lands one id past
+        // the spliced callee body, matching the pre-pass reservation. The
+        // integer kind is safe -- an FP multi-return callee is rejected.
+        if use_join {
+            let phi_id = new_insts.len() as u32;
+            debug_assert_eq!(phi_id, remap[call_pc as usize]);
+            new_insts.push(Inst::Phi {
+                incoming: phi_incoming,
+                kind: LoadKind::I64,
+            });
+            new_inst_src.push((0, 0));
+            new_f32.push(false);
+            new_blocks.push(Block {
+                start_pc: 0,
+                inst_range: phi_id..new_insts.len() as u32,
+                terminator: Terminator::Jmp(postfix_id),
+                exit_acc: phi_id,
             });
         }
     }
@@ -1277,6 +1376,19 @@ fn splice_multi_block(
         merged_multi_cell.push((slot - original.locals, size));
     }
 
+    // Shift the caller's own asm-goto rows (from a prior splice step)
+    // across the block-id shift, then append the callee's, shifted into the
+    // caller's post-splice block space. The filter rejects JumpTable /
+    // GotoIndirect callees, so every callee row is an asm-goto edge list.
+    let mut merged_jump_tables: Vec<Vec<BlockId>> = original
+        .jump_tables
+        .iter()
+        .map(|row| row.iter().map(|&b| shift_caller_bid(b)).collect())
+        .collect();
+    for row in &callee.jump_tables {
+        merged_jump_tables.push(row.iter().map(|&b| shift_callee_bid(b)).collect());
+    }
+
     *caller = FunctionSsa {
         name: original.name,
         ent_pc: original.ent_pc,
@@ -1312,10 +1424,9 @@ fn splice_multi_block(
         ret_type_tag: original.ret_type_tag,
         indirect_result_slot: original.indirect_result_slot,
         computed_goto_targets: original.computed_goto_targets,
-        // Multi-block splicing is skipped for jump-table callers and
-        // the filter rejects jump-table callees, so both lists are
-        // empty here.
-        jump_tables: original.jump_tables,
+        // The filter rejects JumpTable / GotoIndirect callees; only an
+        // asm-goto callee's rows join the caller's own (`merged_jump_tables`).
+        jump_tables: merged_jump_tables,
         synthetic_base: original.synthetic_base,
         multi_cell_slots: merged_multi_cell,
         // The candidate filter rejects returns-twice callees, so only
@@ -1917,6 +2028,89 @@ fn unhonoured_always_inline(
 mod tests {
     use super::*;
     use crate::c5::codegen::Target;
+
+    /// A self-recursive callee is not a candidate: inlining it does not
+    /// remove the recursion, so it would only unroll the call tree.
+    #[test]
+    fn self_recursive_callee_is_rejected() {
+        let abi = Target::LinuxX64.abi();
+        let call_self = Inst::Call {
+            target_pc: 5,
+            args: Vec::new(),
+            fixed_args: 0,
+            fp_return: false,
+            fp_arg_mask: 0,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        };
+        let f = FunctionSsa {
+            ent_pc: 5,
+            insts: alloc::vec![call_self, Inst::Imm(0)],
+            inst_src: alloc::vec![(0, 0); 2],
+            f32_values: alloc::vec![false; 2],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: Terminator::Return(1),
+                exit_acc: 1,
+            }],
+            ..Default::default()
+        };
+        let mut reason = alloc::string::String::new();
+        assert!(!is_inline_candidate(&f, 32, abi, Some(&mut reason)));
+        assert_eq!(reason, "self-recursive");
+    }
+
+    /// A two-Return callee is a candidate on the no-aggregate integer
+    /// path (its returns route into a postfix join phi) but not when the
+    /// return is FP (an FP join phi is out of scope).
+    #[test]
+    fn multi_return_candidacy_gated_on_integer_no_aggregate() {
+        let abi = Target::LinuxX64.abi();
+        // block 0: Bz(cond) -> b1 / b2; b1: Return(imm); b2: Return(imm).
+        let two_return = |ret_is_fp: bool| FunctionSsa {
+            n_params: 1,
+            ret_is_fp,
+            insts: alloc::vec![Inst::Imm(0), Inst::Imm(1), Inst::Imm(2)],
+            inst_src: alloc::vec![(0, 0); 3],
+            f32_values: alloc::vec![false; 3],
+            blocks: alloc::vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator: Terminator::Bz {
+                        cond: 0,
+                        target: 1,
+                        fall_through: 2,
+                    },
+                    exit_acc: 0,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 1..2,
+                    terminator: Terminator::Return(1),
+                    exit_acc: 1,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 2..3,
+                    terminator: Terminator::Return(2),
+                    exit_acc: 2,
+                },
+            ],
+            ..Default::default()
+        };
+        assert!(is_inline_candidate(&two_return(false), 32, abi, None));
+        let mut reason = alloc::string::String::new();
+        assert!(!is_inline_candidate(
+            &two_return(true),
+            32,
+            abi,
+            Some(&mut reason)
+        ));
+        assert_eq!(reason, "2 Return blocks (need 1)");
+    }
 
     /// A variadic always_inline callee cannot be inlined; the candidate
     /// filter reports the reason through the optional sink.

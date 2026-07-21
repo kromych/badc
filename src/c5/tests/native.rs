@@ -809,6 +809,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_pushsection.c", 42),
     ("file_scope_asm_decls.c", 0),
     ("inline_asm_goto_output.c", 42),
+    ("inline_asm_goto_multiret.c", 42),
     ("inline_asm_constraint_alternatives.c", 42),
     ("compound_assign_int_fp.c", 0),
     ("signal_sig_t.c", 0),
@@ -1384,6 +1385,45 @@ fn fixture_parity_native_optimized() {
         failures.len(),
         NATIVE_FIXTURES.len(),
         failures.join("\n  ")
+    );
+}
+
+/// A `static __always_inline` `asm goto` whose `"i"` operand is a
+/// parameter compiles only once inlined: out of line the operand is not
+/// a link-time constant, so the section-data emit rejects it. -O inlines
+/// it at the constant-argument call site, folding the operand, and routes
+/// the two returns through a join-block phi. This is the kernel
+/// `arch_static_branch` shape; it is verified only at -O since the
+/// out-of-line body is (correctly) unencodable at -O0.
+#[test]
+fn param_operand_asm_goto_inlines_at_opt() {
+    let src = r#"
+        static inline __attribute__((always_inline)) int
+        branch(const int key) {
+        #if defined(__x86_64__)
+            __asm__ goto("jmp %l[yes]\n"
+                         ".pushsection .discard.b,\"a\"\n"
+                         ".long %c0\n"
+                         ".popsection\n" : : "i"(key) : : yes);
+        #elif defined(__aarch64__)
+            __asm__ goto("b %l[yes]\n"
+                         ".pushsection .discard.b,\"a\"\n"
+                         ".long %c0\n"
+                         ".popsection\n" : : "i"(key) : : yes);
+        #else
+            goto yes;
+        #endif
+            return 1;
+        yes:
+            return 2;
+        }
+        int main(void) { return branch(40) == 2 ? 42 : 0; }
+    "#;
+    let opts = NativeOptions::new().with_optimize();
+    let outcome = build_and_run_outcome_with_options(src, "param_asm_goto", opts);
+    assert!(
+        outcome.matches(42),
+        "param-operand asm-goto callee must inline and fold at -O, got {outcome:?}"
     );
 }
 

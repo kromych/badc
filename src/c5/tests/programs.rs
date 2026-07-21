@@ -484,6 +484,15 @@ fn compound_literal_addr_init() {
 }
 
 #[test]
+fn static_local_compound_literal_struct() {
+    // C99 6.5.2.5: a block-scope `static` struct initialized by a compound
+    // literal naming its own type -- `static T s = (T){ ... };` -- drops the
+    // redundant cast, matching the file-scope allocator. Covers the anon-union
+    // nested-designator shape a spinlock static initializer expands to.
+    assert_eq!(run_fixture("static_local_compound_literal_struct.c"), 0);
+}
+
+#[test]
 fn scalar_compound_literal_lvalue() {
     // C99 6.5.2.5p4: a compound literal is an lvalue. Taking the address of a
     // scalar literal `&(int){5}` must work, not only the struct / array forms.

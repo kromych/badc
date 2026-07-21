@@ -150,6 +150,13 @@ fn is_inline_candidate(
         say(format_args!("naked function"));
         return false;
     }
+    // An over-aligned automatic object lives in the callee's prologue-realigned
+    // region; the splice cannot reproduce that region in the caller frame, so
+    // the body stays out of line.
+    if !func.over_aligned.is_empty() {
+        say(format_args!("over-aligned automatic object"));
+        return false;
+    }
     // A self-recursive callee stays out of line: splicing it does not
     // remove the recursion -- the recursive calls come along -- so
     // inlining only unrolls the call tree one level per candidacy-fixpoint
@@ -1476,6 +1483,11 @@ fn splice_multi_block(
         jump_tables: merged_jump_tables,
         synthetic_base: original.synthetic_base,
         multi_cell_slots: merged_multi_cell,
+        // The candidate filter rejects over-aligned callees, so only the
+        // caller's own realigned region carries through.
+        over_aligned: original.over_aligned,
+        frame_align: original.frame_align,
+        realign_region_bytes: original.realign_region_bytes,
         // The candidate filter rejects returns-twice callees, so only
         // the caller's own flag can be set here.
         has_returns_twice_call: original.has_returns_twice_call,

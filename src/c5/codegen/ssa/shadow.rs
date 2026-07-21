@@ -40,6 +40,7 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
             f.return_struct_size,
             f.return_ty,
             f.alloca_top_slot,
+            &f.over_aligned_slots,
         )
         .map_err(|e| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(

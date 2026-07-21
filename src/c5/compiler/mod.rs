@@ -47,6 +47,12 @@ pub(crate) mod types;
 /// `TEXT_VMADDR_BASE`, which fixes the structural ceiling above this.
 pub(crate) const MAX_STATIC_ALIGN: usize = 65536;
 
+/// Maximum alignment an automatic (stack) object may request. The prologue
+/// realigns sp down to the object's alignment (C11 6.7.5 `_Alignas` / GNU
+/// `aligned`); a larger request must use static storage. One page bounds the
+/// per-frame waste the realignment reserves.
+pub(crate) const MAX_FRAME_ALIGN: i64 = 4096;
+
 /// Captured enum tag + constants for DWARF emission. C99 6.7.2.2
 /// enums collapse to `int` in c5 -- the tag carries no semantic
 /// weight at the type level -- but preserving the (name, value)
@@ -933,6 +939,11 @@ pub struct Compiler {
     /// coalescing reserves these interior cells; without a symbol they are
     /// absent from the per-function variable list. Reset per function.
     multi_cell_temps: alloc::vec::Vec<(i64, i64)>,
+    /// `(slot_off, align, size_bytes)` for each automatic object in the current
+    /// function whose required alignment exceeds 16 (C11 6.7.5). Drained at
+    /// function close into `FinishedFunction::over_aligned_slots`. Reset per
+    /// function.
+    func_over_aligned: alloc::vec::Vec<(i64, i64, i64)>,
 
     /// True once the current function has emitted at least one
     /// alloca intrinsic. Drives the function-end backpatch that
@@ -1651,6 +1662,7 @@ impl Compiler {
             committed_loc_offs: 0,
             max_loc_offs: 0,
             multi_cell_temps: alloc::vec::Vec::new(),
+            func_over_aligned: alloc::vec::Vec::new(),
             uses_alloca_in_current_fn: false,
             func_vla_decls: 0,
             stmt_expr_arena_ranges: Vec::new(),

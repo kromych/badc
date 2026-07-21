@@ -928,6 +928,20 @@ pub(crate) struct FunctionSsa {
     /// an interior cell, which is referenced by no instruction. Empty for SSA
     /// built outside the walker.
     pub multi_cell_slots: Vec<(i64, i64)>,
+    /// Automatic objects whose required alignment exceeds the 16-byte frame
+    /// guarantee (C11 6.7.5 `_Alignas` / GNU `aligned`), as `(slot_off,
+    /// region_off)`. The prologue reserves a `frame_align`-aligned region
+    /// below the static frame; every backend resolves these slots to
+    /// `region_base + region_off` rather than the fp-relative slot. Empty for
+    /// the common case.
+    pub over_aligned: Vec<(i64, i64)>,
+    /// Alignment of the realigned region (max over `over_aligned`, a power of
+    /// two > 16), or 0 when no automatic object needs realignment. Non-zero
+    /// forces the dynamic-sp frame model.
+    pub frame_align: i64,
+    /// Byte size of the realigned region, a multiple of `frame_align`; 0 when
+    /// `over_aligned` is empty.
+    pub realign_region_bytes: i64,
     /// True when the body calls a function that may return twice into
     /// this frame: the setjmp family (C99 7.13) or vfork(2). Ordinary
     /// liveness under-approximates storage lifetime here -- a value

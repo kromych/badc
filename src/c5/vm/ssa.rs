@@ -266,6 +266,34 @@ impl Memory {
         Ok(base)
     }
 
+    /// Reserve `bytes` of frame storage whose base offset into `bytes` is a
+    /// multiple of `align` (a power of two). The interpreter's addresses are
+    /// byte offsets, so an aligned base gives the guest an aligned pointer.
+    /// The gap to the aligned base plus the region is reclaimed with the
+    /// enclosing frame by `release_frame`. Backs over-aligned automatic
+    /// objects (C11 6.7.5).
+    fn alloc_aligned_frame(&mut self, align: usize, bytes: usize) -> Result<usize, C5Error> {
+        let base = (self.stack_top + align - 1) & !(align - 1);
+        let next = base.checked_add(bytes).ok_or_else(|| {
+            C5Error::Runtime(format!(
+                "vm_ssa: stack overflow allocating {bytes} aligned bytes from {}",
+                self.stack_top,
+            ))
+        })?;
+        if next > self.heap_base {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: stack overflow: aligned frame region of {bytes} bytes exceeds \
+                 the {}-byte stack region",
+                self.heap_base - self.stack_base,
+            )));
+        }
+        for b in &mut self.bytes[self.stack_top..next] {
+            *b = 0;
+        }
+        self.stack_top = next;
+        Ok(base)
+    }
+
     fn release_frame(&mut self, base: usize) {
         self.stack_top = base;
     }
@@ -405,6 +433,10 @@ struct Frame<'a> {
     frame_bytes: usize,
     /// Number of declared locals (slot offsets `-1..=-locals`).
     locals: usize,
+    /// Base offset of the frame's realigned region (over-aligned automatic
+    /// objects, C11 6.7.5), or 0 when the function has none. Each entry in
+    /// `func.over_aligned` places its object at `realign_base + region_off`.
+    realign_base: usize,
     block_idx: usize,
 }
 
@@ -420,6 +452,15 @@ impl Frame<'_> {
     /// array's footprint overlapped the next-declared local.
     fn slot_addr(&self, off: i64) -> Option<usize> {
         if off < 0 {
+            // An over-aligned automatic object's storage is in the frame's
+            // realigned region, not the fp-relative slot (C11 6.7.5).
+            if self.realign_base != 0 {
+                for &(slot, region_off) in &self.func.over_aligned {
+                    if slot == off {
+                        return Some(self.realign_base + region_off as usize);
+                    }
+                }
+            }
             let slot_n = (-off) as usize;
             (slot_n >= 1 && slot_n <= self.locals)
                 .then_some(self.stack_base + (self.locals - slot_n) * 8)
@@ -658,6 +699,16 @@ fn run_func<H: Host>(
     let n_params = func.n_params.max(args.len());
     let frame_bytes = (locals + n_params) * 8;
     let stack_base = mem.alloc_frame(frame_bytes)?;
+    // C11 6.7.5: reserve the aligned region for over-aligned automatic objects
+    // above this frame; `release_frame(stack_base)` reclaims it on return.
+    let realign_base = if func.over_aligned.is_empty() {
+        0
+    } else {
+        mem.alloc_aligned_frame(
+            func.frame_align as usize,
+            func.realign_region_bytes as usize,
+        )?
+    };
     for (i, &v) in args.iter().enumerate() {
         // Host-ABI register-passed aggregate parameter: `v` is the
         // source struct's address. The callee body reads the aggregate
@@ -680,6 +731,7 @@ fn run_func<H: Host>(
         stack_base,
         frame_bytes,
         locals,
+        realign_base,
         block_idx: 0,
     };
     let result: Result<i64, C5Error> = loop {

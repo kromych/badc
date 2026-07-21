@@ -88,6 +88,14 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
         return BTreeMap::new();
     }
 
+    // Leave a realigning function (an over-aligned automatic object, C11
+    // 6.7.5) uncoalesced: its objects are addressed sp-relative in the
+    // prologue-realigned region keyed by their declared slot, so renumbering
+    // the frame would desynchronise `FunctionSsa::over_aligned`.
+    if f.frame_align > 0 {
+        return BTreeMap::new();
+    }
+
     // Interior cells of every movable multi-cell object: declared aggregates
     // and struct-by-value parameter copies (seeded from the parser) plus
     // synthetic aggregates (`alloc_synthetic_struct`). The cells of one group

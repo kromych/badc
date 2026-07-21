@@ -33,6 +33,7 @@ pub(crate) enum WalkError {
     UnsupportedStmt { id: StmtId, kind: &'static str },
     UnknownSymbolClass { sym: u32, class: i64 },
     UnsupportedSymbolShape { sym: u32, reason: &'static str },
+    Unsupported(&'static str),
 }
 
 impl core::fmt::Display for WalkError {
@@ -50,6 +51,7 @@ impl core::fmt::Display for WalkError {
             WalkError::UnsupportedSymbolShape { sym, reason } => {
                 write!(f, "ast::walk: symbol #{sym}: {reason}")
             }
+            WalkError::Unsupported(reason) => write!(f, "ast::walk: {reason}"),
         }
     }
 }
@@ -84,9 +86,35 @@ pub(crate) fn walk_function(
     return_struct_size: i64,
     return_ty: i64,
     alloca_top_slot: i64,
+    over_aligned_slots: &[(i64, i64, i64)],
 ) -> Result<FunctionSsa, WalkError> {
     let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
     b.set_end_pc(end_pc);
+    // C11 6.7.5: automatic objects whose alignment exceeds the 16-byte frame
+    // guarantee live in a prologue-realigned region. Pack them (widest
+    // alignment first) into that region; every backend addresses these slots
+    // as `region_base + region_off`. The region and `alloca` both move sp, so
+    // the combination is rejected.
+    if !over_aligned_slots.is_empty() {
+        if alloca_top_slot != 0 {
+            return Err(WalkError::Unsupported(
+                "an over-aligned automatic object cannot share a function with alloca/VLA",
+            ));
+        }
+        let mut items: alloc::vec::Vec<(i64, i64, i64)> = over_aligned_slots.to_vec();
+        items.sort_by_key(|&(_, align, _)| core::cmp::Reverse(align));
+        let mut frame_align: i64 = 16;
+        let mut cursor: i64 = 0;
+        let mut placed: alloc::vec::Vec<(i64, i64)> = alloc::vec::Vec::new();
+        for (slot, align, size) in items {
+            frame_align = frame_align.max(align);
+            cursor = (cursor + align - 1) & -align;
+            placed.push((slot, cursor));
+            cursor += size;
+        }
+        let region_bytes = (cursor + frame_align - 1) & -frame_align;
+        b.set_realign(placed, frame_align, region_bytes);
+    }
     // C99 6.8: the frame holds the declared locals; alloca / VLA
     // storage is carved from the stack at runtime (the per-arch
     // emit moves sp), so no extra slots are reserved for it. With
@@ -6211,6 +6239,7 @@ mod tests {
             0,
             Ty::Int as i64,
             0,
+            &[],
         )
         .expect("walk");
         let immediates: alloc::vec::Vec<i64> = func
@@ -6276,6 +6305,7 @@ mod tests {
             0,
             0,
             0,
+            &[],
         )
         .expect("walk");
         let loads: alloc::vec::Vec<_> = func
@@ -6349,6 +6379,7 @@ mod tests {
             0,
             0,
             0,
+            &[],
         )
         .expect("walk");
         let store_kinds: alloc::vec::Vec<_> = func
@@ -6414,6 +6445,7 @@ mod tests {
             0,
             0,
             0,
+            &[],
         )
         .expect("walk");
         let binops: alloc::vec::Vec<BinOp> = func
@@ -6459,6 +6491,7 @@ mod tests {
             0,
             0,
             0,
+            &[],
         )
         .expect_err("Asm must surface as unsupported");
         assert!(matches!(

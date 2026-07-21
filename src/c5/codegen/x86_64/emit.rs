@@ -6315,7 +6315,9 @@ fn emit_inline_asm(
         super::encode::emit_mov_mem_r(code, Reg::RBP, gp_off(k), Reg(r));
     }
     // Capture each operand's value (input) / address (output) into its
-    // slot before any asm register is written (r10 as the load scratch).
+    // slot before any asm register is written. r10 is the sole staging
+    // scratch here and in the load / call / store-back sequences below, so
+    // r11 stays free to carry a `register T v asm("r11")` bound operand.
     for (i, &a) in args.iter().enumerate() {
         let Some(place) = alloc.places.get(a as usize).copied() else {
             return fail("inline asm: operand place missing");
@@ -6336,8 +6338,8 @@ fn emit_inline_asm(
             // assigned xmm. An output-only `=x` is written by the asm, so skip
             // its load; a `+x` needs the current value.
             if !op.is_output || op.is_rw {
-                super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RBP, cap_off(i));
-                super::encode::emit_movups_xmm_mem(code, Reg(r), SCRATCH_R11, 0);
+                super::encode::emit_mov_r_mem(code, SCRATCH_R10, Reg::RBP, cap_off(i));
+                super::encode::emit_movups_xmm_mem(code, Reg(r), SCRATCH_R10, 0);
             }
             continue;
         }
@@ -6351,8 +6353,8 @@ fn emit_inline_asm(
             // loads its value. Both come from the captured slot.
             super::encode::emit_mov_r_mem(code, reg, Reg::RBP, cap_off(i));
         } else if op.is_rw {
-            super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RBP, cap_off(i));
-            emit_asm_load_width(code, reg, SCRATCH_R11, op.width);
+            super::encode::emit_mov_r_mem(code, SCRATCH_R10, Reg::RBP, cap_off(i));
+            emit_asm_load_width(code, reg, SCRATCH_R10, op.width);
         }
     }
     // Local labels: definitions record the code offset they stand at; a
@@ -6485,15 +6487,15 @@ fn emit_inline_asm(
                 "call" | "callq" | "jmp" | "jmpq" if insn.operands.len() == 1 => {
                     super::encode::emit_mov_r_mem(
                         code,
-                        SCRATCH_R11,
+                        SCRATCH_R10,
                         Reg::RBP,
                         cap_off(idx as usize),
                     );
-                    // FF /2 (call) / FF /4 (jmp) through r11.
+                    // FF /2 (call) / FF /4 (jmp) through r10.
                     code.extend_from_slice(&[
                         0x41,
                         0xFF,
-                        if name.starts_with("call") { 0xD3 } else { 0xE3 },
+                        if name.starts_with("call") { 0xD2 } else { 0xE2 },
                     ]);
                 }
                 _ => {
@@ -6948,11 +6950,11 @@ fn emit_inline_asm(
                 continue;
             }
             let Some(r) = op_reg[i] else { continue };
-            super::encode::emit_mov_r_mem(code, SCRATCH_R11, Reg::RBP, cap_off(i));
+            super::encode::emit_mov_r_mem(code, SCRATCH_R10, Reg::RBP, cap_off(i));
             if matches!(op.constraint, AsmConstraint::Fp) {
-                super::encode::emit_movups_mem_xmm(code, SCRATCH_R11, 0, Reg(r));
+                super::encode::emit_movups_mem_xmm(code, SCRATCH_R10, 0, Reg(r));
             } else {
-                emit_asm_store_width(code, SCRATCH_R11, Reg(r), op.width);
+                emit_asm_store_width(code, SCRATCH_R10, Reg(r), op.width);
             }
         }
     };

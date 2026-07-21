@@ -68,8 +68,8 @@ Disassembly of section .text:
                	movq	%rcx, -0x28(%rbp)
                	movq	-0x28(%rbp), %rbx
                	movq	0x8(%rbx), %rax
-               	movq	-0x30(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x30(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x40(%rbp), %rax
                	movq	-0x38(%rbp), %rbx
                	movq	-0x10(%rbp), %rcx

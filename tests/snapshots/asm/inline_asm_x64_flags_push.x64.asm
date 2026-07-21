@@ -27,8 +27,8 @@ Disassembly of section .text:
                	cmpq	%rcx, %rbx
                	pushfq
                	popq	%rax
-               	movq	-0x58(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x58(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x70(%rbp), %rax
                	movq	-0x68(%rbp), %rcx
                	movq	-0x60(%rbp), %rbx
@@ -54,8 +54,8 @@ Disassembly of section .text:
                	cmpq	%rcx, %rbx
                	pushfq
                	popq	%rax
-               	movq	-0x58(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x58(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x70(%rbp), %rax
                	movq	-0x68(%rbp), %rcx
                	movq	-0x60(%rbp), %rbx
@@ -76,8 +76,8 @@ Disassembly of section .text:
                	movq	-0x58(%rbp), %rbx
                	pushw	%bx
                	popw	%ax
-               	movq	-0x60(%rbp), %r11
-               	movw	%ax, (%r11)
+               	movq	-0x60(%rbp), %r10
+               	movw	%ax, (%r10)
                	movq	-0x70(%rbp), %rax
                	movq	-0x68(%rbp), %rbx
                	movzwq	-0x30(%rbp), %rax
@@ -98,8 +98,8 @@ Disassembly of section .text:
                	movq	-0x58(%rbp), %rbx
                	pushw	%bx
                	popw	%ax
-               	movq	-0x60(%rbp), %r11
-               	movw	%ax, (%r11)
+               	movq	-0x60(%rbp), %r10
+               	movw	%ax, (%r10)
                	movq	-0x70(%rbp), %rax
                	movq	-0x68(%rbp), %rbx
                	movzwq	-0x38(%rbp), %rax
@@ -124,8 +124,8 @@ Disassembly of section .text:
                	cmpq	%rcx, %rbx
                	pushfq
                	popq	%rax
-               	movq	-0x58(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x58(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x70(%rbp), %rax
                	movq	-0x68(%rbp), %rcx
                	movq	-0x60(%rbp), %rbx
@@ -140,8 +140,8 @@ Disassembly of section .text:
                	popfq
                	pushfq
                	popq	%rax
-               	movq	-0x60(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x60(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x70(%rbp), %rax
                	movq	-0x68(%rbp), %rbx
                	movq	-0x10(%rbp), %rax

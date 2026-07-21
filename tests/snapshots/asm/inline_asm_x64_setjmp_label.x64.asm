@@ -65,8 +65,8 @@ Disassembly of section .text:
                	movq	%r14, 0x28(%rdx)
                	movq	%r15, 0x30(%rdx)
                	movq	%rcx, 0x38(%rdx)
-               	movq	-0x28(%rbp), %r11
-               	movl	%eax, (%r11)
+               	movq	-0x28(%rbp), %r10
+               	movl	%eax, (%r10)
                	movq	-0x60(%rbp), %rax
                	movq	-0x58(%rbp), %rcx
                	movq	-0x50(%rbp), %rdx

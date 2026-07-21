@@ -34,10 +34,10 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	setb	%bl
                	movzbq	%bl, %rbx
-               	movq	-0x108(%rbp), %r11
-               	movq	%rax, (%r11)
-               	movq	-0x100(%rbp), %r11
-               	movb	%bl, (%r11)
+               	movq	-0x108(%rbp), %r10
+               	movq	%rax, (%r10)
+               	movq	-0x100(%rbp), %r10
+               	movb	%bl, (%r10)
                	movq	-0x120(%rbp), %rax
                	movq	-0x118(%rbp), %rcx
                	movq	-0x110(%rbp), %rbx
@@ -82,10 +82,10 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	setb	%bl
                	movzbq	%bl, %rbx
-               	movq	-0x108(%rbp), %r11
-               	movq	%rax, (%r11)
-               	movq	-0x100(%rbp), %r11
-               	movb	%bl, (%r11)
+               	movq	-0x108(%rbp), %r10
+               	movq	%rax, (%r10)
+               	movq	-0x100(%rbp), %r10
+               	movb	%bl, (%r10)
                	movq	-0x120(%rbp), %rax
                	movq	-0x118(%rbp), %rcx
                	movq	-0x110(%rbp), %rbx
@@ -120,8 +120,8 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	sete	%al
                	movzbq	%al, %rax
-               	movq	-0x110(%rbp), %r11
-               	movb	%al, (%r11)
+               	movq	-0x110(%rbp), %r10
+               	movb	%al, (%r10)
                	movq	-0x120(%rbp), %rax
                	movq	-0x118(%rbp), %rbx
                	movzbq	-0x98(%rbp), %rax
@@ -142,8 +142,8 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	sete	%al
                	movzbq	%al, %rax
-               	movq	-0x110(%rbp), %r11
-               	movb	%al, (%r11)
+               	movq	-0x110(%rbp), %r10
+               	movb	%al, (%r10)
                	movq	-0x120(%rbp), %rax
                	movq	-0x118(%rbp), %rbx
                	movzbq	-0xa0(%rbp), %rax
@@ -167,8 +167,8 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	sets	%al
                	movzbq	%al, %rax
-               	movq	-0x110(%rbp), %r11
-               	movb	%al, (%r11)
+               	movq	-0x110(%rbp), %r10
+               	movb	%al, (%r10)
                	movq	-0x120(%rbp), %rax
                	movq	-0x118(%rbp), %rbx
                	movzbq	-0xa8(%rbp), %rax
@@ -189,8 +189,8 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	sets	%al
                	movzbq	%al, %rax
-               	movq	-0x110(%rbp), %r11
-               	movb	%al, (%r11)
+               	movq	-0x110(%rbp), %r10
+               	movb	%al, (%r10)
                	movq	-0x120(%rbp), %rax
                	movq	-0x118(%rbp), %rbx
                	movzbq	-0xb0(%rbp), %rax
@@ -222,10 +222,10 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	seto	%bl
                	movzbq	%bl, %rbx
-               	movq	-0x108(%rbp), %r11
-               	movq	%rax, (%r11)
-               	movq	-0x100(%rbp), %r11
-               	movb	%bl, (%r11)
+               	movq	-0x108(%rbp), %r10
+               	movq	%rax, (%r10)
+               	movq	-0x100(%rbp), %r10
+               	movb	%bl, (%r10)
                	movq	-0x120(%rbp), %rax
                	movq	-0x118(%rbp), %rcx
                	movq	-0x110(%rbp), %rbx
@@ -254,10 +254,10 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	seto	%bl
                	movzbq	%bl, %rbx
-               	movq	-0x108(%rbp), %r11
-               	movq	%rax, (%r11)
-               	movq	-0x100(%rbp), %r11
-               	movb	%bl, (%r11)
+               	movq	-0x108(%rbp), %r10
+               	movq	%rax, (%r10)
+               	movq	-0x100(%rbp), %r10
+               	movb	%bl, (%r10)
                	movq	-0x120(%rbp), %rax
                	movq	-0x118(%rbp), %rcx
                	movq	-0x110(%rbp), %rbx
@@ -288,8 +288,8 @@ Disassembly of section .text:
                	cmpq	%rcx, %rbx
                	setne	%al
                	movzbq	%al, %rax
-               	movq	-0x108(%rbp), %r11
-               	movl	%eax, (%r11)
+               	movq	-0x108(%rbp), %r10
+               	movl	%eax, (%r10)
                	movq	-0x120(%rbp), %rax
                	movq	-0x118(%rbp), %rcx
                	movq	-0x110(%rbp), %rbx
@@ -314,8 +314,8 @@ Disassembly of section .text:
                	cmpq	%rcx, %rbx
                	setne	%al
                	movzbq	%al, %rax
-               	movq	-0x108(%rbp), %r11
-               	movl	%eax, (%r11)
+               	movq	-0x108(%rbp), %r10
+               	movl	%eax, (%r10)
                	movq	-0x120(%rbp), %rax
                	movq	-0x118(%rbp), %rcx
                	movq	-0x110(%rbp), %rbx

@@ -27,8 +27,8 @@ Disassembly of section .text:
                	movq	-0x28(%rbp), %r12
                	movq	%r9, %rax
                	addq	%r12, %rax
-               	movq	-0x38(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x38(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x50(%rbp), %rax
                	movq	-0x48(%rbp), %r9
                	movq	-0x40(%rbp), %r12
@@ -52,8 +52,8 @@ Disassembly of section .text:
                	movq	-0x18(%rbp), %r9
                	movl	%r9d, %eax
                	addl	%r9d, %eax
-               	movq	-0x20(%rbp), %r11
-               	movl	%eax, (%r11)
+               	movq	-0x20(%rbp), %r10
+               	movl	%eax, (%r10)
                	movq	-0x30(%rbp), %rax
                	movq	-0x28(%rbp), %r9
                	movslq	-0x10(%rbp), %rax
@@ -78,8 +78,8 @@ Disassembly of section .text:
                	movq	-0x38(%rbp), %r12
                	movq	%r9, %rax
                	addq	%r12, %rax
-               	movq	-0x48(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x48(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0x60(%rbp), %rax
                	movq	-0x58(%rbp), %r9
                	movq	-0x50(%rbp), %r12
@@ -101,8 +101,8 @@ Disassembly of section .text:
                	movq	-0x48(%rbp), %r9
                	movl	%r9d, %eax
                	addl	%r9d, %eax
-               	movq	-0x50(%rbp), %r11
-               	movl	%eax, (%r11)
+               	movq	-0x50(%rbp), %r10
+               	movl	%eax, (%r10)
                	movq	-0x60(%rbp), %rax
                	movq	-0x58(%rbp), %r9
                	movslq	-0x28(%rbp), %rax

@@ -32,8 +32,8 @@ Disassembly of section .text:
                	movq	-0x80(%rbp), %rax
                	lock
                	cmpxchgl	%ecx, (%rbx)
-               	movq	-0x98(%rbp), %r11
-               	movl	%eax, (%r11)
+               	movq	-0x98(%rbp), %r10
+               	movl	%eax, (%r10)
                	movq	-0xb0(%rbp), %rax
                	movq	-0xa8(%rbp), %rcx
                	movq	-0xa0(%rbp), %rbx
@@ -73,8 +73,8 @@ Disassembly of section .text:
                	movq	-0x80(%rbp), %rax
                	lock
                	cmpxchgl	%ecx, (%rbx)
-               	movq	-0x98(%rbp), %r11
-               	movl	%eax, (%r11)
+               	movq	-0x98(%rbp), %r10
+               	movl	%eax, (%r10)
                	movq	-0xb0(%rbp), %rax
                	movq	-0xa8(%rbp), %rcx
                	movq	-0xa0(%rbp), %rbx
@@ -108,13 +108,13 @@ Disassembly of section .text:
                	movq	%rbx, -0xa8(%rbp)
                	movq	%rcx, -0xa0(%rbp)
                	movq	%rax, -0x98(%rbp)
-               	movq	-0xa0(%rbp), %r11
-               	movl	(%r11), %eax
+               	movq	-0xa0(%rbp), %r10
+               	movl	(%r10), %eax
                	movq	-0x98(%rbp), %rbx
                	lock
                	xaddl	%eax, (%rbx)
-               	movq	-0xa0(%rbp), %r11
-               	movl	%eax, (%r11)
+               	movq	-0xa0(%rbp), %r10
+               	movl	%eax, (%r10)
                	movq	-0xb0(%rbp), %rax
                	movq	-0xa8(%rbp), %rbx
                	movl	-0x68(%rbp), %eax
@@ -154,8 +154,8 @@ Disassembly of section .text:
                	movq	-0x80(%rbp), %rax
                	lock
                	cmpxchgq	%rcx, (%rbx)
-               	movq	-0x98(%rbp), %r11
-               	movq	%rax, (%r11)
+               	movq	-0x98(%rbp), %r10
+               	movq	%rax, (%r10)
                	movq	-0xb0(%rbp), %rax
                	movq	-0xa8(%rbp), %rcx
                	movq	-0xa0(%rbp), %rbx

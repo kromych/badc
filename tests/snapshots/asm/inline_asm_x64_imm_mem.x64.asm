@@ -181,8 +181,8 @@ Disassembly of section .text:
                	movq	-0x28(%rbp), %rbx
                	testb	$0x1, (%rbx)
                	sete	%al
-               	movq	-0x30(%rbp), %r11
-               	movb	%al, (%r11)
+               	movq	-0x30(%rbp), %r10
+               	movb	%al, (%r10)
                	movq	-0x40(%rbp), %rax
                	movq	-0x38(%rbp), %rbx
                	movzbq	-0x10(%rbp), %rax
@@ -203,8 +203,8 @@ Disassembly of section .text:
                	movq	-0x28(%rbp), %rbx
                	cmpb	$0x2a, (%rbx)
                	sete	%al
-               	movq	-0x30(%rbp), %r11
-               	movb	%al, (%r11)
+               	movq	-0x30(%rbp), %r10
+               	movb	%al, (%r10)
                	movq	-0x40(%rbp), %rax
                	movq	-0x38(%rbp), %rbx
                	movzbq	-0x10(%rbp), %rax

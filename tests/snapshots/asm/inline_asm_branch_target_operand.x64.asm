@@ -44,8 +44,8 @@ Disassembly of section .text:
                	movq	%rax, -0x28(%rbp)
                	movq	%rcx, -0x20(%rbp)
                	callq	<addr>
-               	movq	-0x28(%rbp), %r11
-               	movl	%eax, (%r11)
+               	movq	-0x28(%rbp), %r10
+               	movl	%eax, (%r10)
                	movq	-0x70(%rbp), %rax
                	movq	-0x68(%rbp), %rcx
                	movq	-0x60(%rbp), %rdx
@@ -71,8 +71,8 @@ Disassembly of section .text:
                	movq	%rcx, -0x28(%rbp)
                	movq	%rdx, -0x20(%rbp)
                	callq	<addr>
-               	movq	-0x28(%rbp), %r11
-               	movl	%eax, (%r11)
+               	movq	-0x28(%rbp), %r10
+               	movl	%eax, (%r10)
                	movq	-0x70(%rbp), %rax
                	movq	-0x68(%rbp), %rcx
                	movq	-0x60(%rbp), %rdx
@@ -98,8 +98,8 @@ Disassembly of section .text:
                	movq	%rcx, -0x28(%rbp)
                	movq	%rdx, -0x20(%rbp)
                	callq	<addr>
-               	movq	-0x28(%rbp), %r11
-               	movl	%eax, (%r11)
+               	movq	-0x28(%rbp), %r10
+               	movl	%eax, (%r10)
                	movq	-0x70(%rbp), %rax
                	movq	-0x68(%rbp), %rcx
                	movq	-0x60(%rbp), %rdx
@@ -125,8 +125,8 @@ Disassembly of section .text:
                	movq	%rcx, -0x28(%rbp)
                	movq	%rdx, -0x20(%rbp)
                	callq	<addr>
-               	movq	-0x28(%rbp), %r11
-               	movl	%eax, (%r11)
+               	movq	-0x28(%rbp), %r10
+               	movl	%eax, (%r10)
                	movq	-0x70(%rbp), %rax
                	movq	-0x68(%rbp), %rcx
                	movq	-0x60(%rbp), %rdx

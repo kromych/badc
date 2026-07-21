@@ -1302,6 +1302,43 @@ fn register_asm_binding_constraints() {
 }
 
 #[test]
+fn register_asm_binding_target_specific_registers() {
+    use super::super::codegen::Target;
+    // x86-64: r11 is bindable (a stack-switch idiom pins a scratch to
+    // it); r10 stays the emitter's reserved asm-staging scratch.
+    let bind = |reg: &str| {
+        format!(
+            "int main(void) {{ register long v asm(\"{reg}\") = 1; long o; __asm__(\"movq %1, %0\" : \"=r\"(o) : \"r\"(v)); return (int)o; }}"
+        )
+    };
+    assert!(
+        compile_for_target(&bind("r11"), Target::LinuxX64).is_ok(),
+        "x86-64 `r11` must be bindable"
+    );
+    let e = compile_for_target(&bind("r10"), Target::LinuxX64).unwrap_err();
+    assert!(
+        e.contains("reserved and cannot hold a register variable"),
+        "{e}"
+    );
+
+    // AArch64: GCC's `rN` spelling aliases `xN` (the SMCCC headers spell
+    // hypercall operands `asm("r0")`); x16/x17 stay reserved either way.
+    for reg in ["r0", "r7", "x0"] {
+        assert!(
+            compile_for_target(&bind(reg), Target::LinuxAarch64).is_ok(),
+            "aarch64 `{reg}` must be bindable"
+        );
+    }
+    for reg in ["r16", "x16"] {
+        let e = compile_for_target(&bind(reg), Target::LinuxAarch64).unwrap_err();
+        assert!(
+            e.contains("reserved and cannot hold a register variable"),
+            "{e}"
+        );
+    }
+}
+
+#[test]
 fn register_asm_binding_concatenates_adjacent_literals() {
     // C99 5.1.1.2 phase 6: the register-name operand of a register-asm
     // declarator joins adjacent string literals before resolving the

@@ -267,6 +267,23 @@ impl Compiler {
                 self.next()?; // )
                 return Ok(fty);
             }
+            // `typeof(arr)` where `arr` names a multi-dimensional array: the
+            // specifier is the array's full type (C99 6.7.6.2, no decay). The
+            // expression path recovers only the outer dimension from the
+            // decay markers, so read every dimension from the symbol -- a
+            // redeclaration through the specifier (`extern typeof(a) a;`, the
+            // EXPORT_SYMBOL shape) then keeps the complete type and its
+            // inner-dimension stride instead of losing the inner dimensions.
+            if class == Token::Glo as i64 && self.symbols[idx].inner_array_size != 0 {
+                let ty = self.symbols[idx].type_;
+                self.pending.typedef_base_array_size = self.symbols[idx].array_size;
+                self.pending.typedef_base_array_dims = self.symbols[idx].array_dims.clone();
+                self.pending.typeof_operand_was_array = true;
+                self.symbols[idx].was_referenced = true;
+                self.next()?; // identifier
+                self.next()?; // )
+                return Ok(ty);
+            }
         }
         let ty = if self.lex_is_type_start() {
             let mut inner = self.parse_decl_base_type()?;

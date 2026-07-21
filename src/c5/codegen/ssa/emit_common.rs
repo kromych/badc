@@ -843,6 +843,19 @@ pub(crate) enum AsmSectionItem {
         name: alloc::string::String,
         expr: alloc::string::String,
     },
+    /// A single instruction line inside an executable (`"ax"`) section, as
+    /// source text -- the x86 ALTERNATIVE replacement (`call %c[new]`) that
+    /// lands in `.altinstr_replacement`. The arch backend encodes it to
+    /// `CodeBytes` before layout (`encode_x86_asm_section_code`); one still
+    /// text at layout is a target that does not assemble replacement code.
+    Code(alloc::string::String),
+    /// A replacement instruction encoded to machine bytes, with its
+    /// relocations at offsets within those bytes (the layout rebases them by
+    /// the item's section offset). Produced from `Code` by the arch backend.
+    CodeBytes {
+        bytes: alloc::vec::Vec<u8>,
+        relocs: alloc::vec::Vec<AsmSectionReloc>,
+    },
 }
 
 /// A parsed `.pushsection` / `.section` block of a template.
@@ -865,6 +878,11 @@ pub(crate) struct AsmSectionReloc {
     pub width: u8,
     /// PC-relative (`ref - .`) rather than absolute.
     pub pcrel: bool,
+    /// A branch reloc reaching its symbol through the PLT slot
+    /// (`R_X86_64_PLT32`) rather than a plain PC-relative data reference
+    /// (`R_X86_64_PC32`). Set for a replacement instruction's direct
+    /// `call` / `jmp` to a symbol; a data reference leaves it clear.
+    pub branch: bool,
     pub target: AsmSectionTarget,
     pub addend: i64,
 }
@@ -1542,9 +1560,13 @@ pub(crate) fn extract_asm_sections(
                     rest = r;
                 }
                 if !tok.is_empty() {
+                    // An `"ax"`-flagged section may hold replacement
+                    // instructions (the x86 ALTERNATIVE), kept as text for the
+                    // arch backend to encode; a data section rejects code.
+                    let exec = blocks[idx].flags.contains('x');
                     blocks[idx]
                         .items
-                        .push(parse_section_item(tok, rest, is_aarch64)?);
+                        .push(parse_section_item(tok, rest, is_aarch64, exec)?);
                 }
             }
         }
@@ -1615,11 +1637,14 @@ fn numeric_label_digits(name: &str) -> Option<&str> {
     is_numeric_label(digits).then_some(digits)
 }
 
-/// Parse one directive inside a named section.
+/// Parse one directive inside a named section. `exec` marks an
+/// `"ax"`-flagged section, where a non-directive token is a replacement
+/// instruction kept as text; a data section rejects one.
 fn parse_section_item(
     tok: &str,
     rest: &str,
     is_aarch64: bool,
+    exec: bool,
 ) -> Result<AsmSectionItem, alloc::string::String> {
     if let Some(w) = data_directive_width(tok) {
         // `.word` is target-dependent: 2 bytes on x86 ELF, 4 on AArch64.
@@ -1709,11 +1734,19 @@ fn parse_section_item(
         }
         ".type" => parse_type_directive(rest),
         ".size" => parse_size_directive(rest),
-        // An instruction (not a data directive) inside a named section is the
-        // x86 ALTERNATIVE replacement (`.pushsection .altinstr_replacement`).
-        // TODO assemble replacement instructions into the section with their
-        // relocations; until then reject rather than drop the code, which would
-        // leave the `.altinstructions` entry pointing at absent bytes.
+        // A non-directive token inside an executable section is a replacement
+        // instruction (`.pushsection .altinstr_replacement,"ax"`). Keep it as
+        // text; the arch backend encodes it to bytes and relocations. A data
+        // section rejects code rather than drop it, which would leave the
+        // `.altinstructions` entry pointing at absent bytes.
+        _ if exec && !tok.starts_with('.') => {
+            let line = if rest.is_empty() {
+                alloc::string::String::from(tok)
+            } else {
+                alloc::format!("{tok} {rest}")
+            };
+            Ok(AsmSectionItem::Code(line))
+        }
         _ => Err(alloc::format!(
             "inline asm: unsupported directive `{tok}` in a named section"
         )),
@@ -2154,6 +2187,13 @@ pub(crate) fn measure_asm_section_offsets(
                     at += *width as i64 * values.len() as i64;
                 }
                 AsmSectionItem::Bytes(bs) => at += bs.len() as i64,
+                AsmSectionItem::CodeBytes { bytes, .. } => at += bytes.len() as i64,
+                AsmSectionItem::Code(text) => {
+                    return Err(alloc::format!(
+                        "inline asm: replacement instruction `{text}` in a named section is not \
+                         assembled for this target"
+                    ));
+                }
                 AsmSectionItem::Align(n) => {
                     let mask = *n as i64 - 1;
                     at = (at + mask) & !mask;
@@ -2479,6 +2519,7 @@ pub(crate) fn materialize_asm_sections(
                                     offset: sec.bytes.len() as u32,
                                     width: *width,
                                     pcrel: *pcrel,
+                                    branch: false,
                                     target,
                                     addend: add,
                                 });
@@ -2566,6 +2607,7 @@ pub(crate) fn materialize_asm_sections(
                                     offset: sec.bytes.len() as u32,
                                     width: *width,
                                     pcrel: *pcrel,
+                                    branch: false,
                                     target,
                                     addend: add,
                                 });
@@ -2573,6 +2615,24 @@ pub(crate) fn materialize_asm_sections(
                             }
                         }
                     }
+                }
+                AsmSectionItem::CodeBytes { bytes, relocs } => {
+                    // A replacement instruction's relocs are at offsets within
+                    // its own bytes; rebase each to the section offset the
+                    // instruction lands at, then append the machine bytes.
+                    let base = sec.bytes.len() as u32;
+                    for r in relocs {
+                        let mut r = r.clone();
+                        r.offset += base;
+                        sec.relocs.push(r);
+                    }
+                    sec.bytes.extend_from_slice(bytes);
+                }
+                AsmSectionItem::Code(text) => {
+                    return Err(alloc::format!(
+                        "inline asm: replacement instruction `{text}` in a named section is not \
+                         assembled for this target"
+                    ));
                 }
             }
         }
@@ -3496,6 +3556,7 @@ mod asm_section_tests {
                 offset: 0,
                 width: 8,
                 pcrel: false,
+                branch: false,
                 target: AsmSectionTarget::Text(0x40),
                 addend: 0
             }
@@ -3506,6 +3567,7 @@ mod asm_section_tests {
                 offset: 8,
                 width: 4,
                 pcrel: true,
+                branch: false,
                 target: AsmSectionTarget::Text(0x40),
                 addend: 0
             }
@@ -3705,6 +3767,7 @@ mod asm_section_tests {
                 offset: 0,
                 width: 4,
                 pcrel: true,
+                branch: false,
                 target: AsmSectionTarget::Text(0x40),
                 addend: 0,
             }],
@@ -3938,17 +4001,32 @@ mod asm_section_tests {
     }
 
     #[test]
-    fn replacement_instruction_in_named_section_is_rejected() {
+    fn replacement_instruction_kept_as_code_for_executable_section() {
         // The x86 ALTERNATIVE places its replacement in a `.pushsection
-        // .altinstr_replacement,"ax"`. A raw-byte (`.byte`) replacement is
-        // assembled and its old site padded by `.skip` (see the linker test
-        // `x86_alternative_data_replacement_pads_and_relocates`). Assembling
-        // real instructions into a section is not implemented; a replacement
-        // instruction is rejected rather than dropped, which would leave the
-        // `.altinstructions` entry pointing at absent bytes.
-        let text = "771: nop\n.pushsection .altinstr_replacement,\"ax\"\n\
+        // .altinstr_replacement,"ax"`. An instruction there is kept as a `Code`
+        // item; the arch backend encodes it (a direct call/jmp to a symbol or a
+        // self-contained instruction) or rejects an un-encodable one (see the
+        // linker test `x86_alternative_call_replacement_encodes_and_relocates`).
+        let exec = "771: nop\n.pushsection .altinstr_replacement,\"ax\"\n\
+                    774: call foo\n775:\n.popsection\n";
+        let (_code, blocks) = extract_asm_sections(exec, false).unwrap().unwrap();
+        let repl = blocks
+            .iter()
+            .find(|b| b.name == ".altinstr_replacement")
+            .unwrap();
+        assert!(
+            repl.items
+                .iter()
+                .any(|it| matches!(it, AsmSectionItem::Code(t) if t == "call foo")),
+            "instruction kept as Code: {:?}",
+            repl.items
+        );
+        // A data section is not executable, so an instruction there is rejected
+        // rather than dropped, which would leave a data entry pointing at absent
+        // bytes.
+        let data = "771: nop\n.pushsection .altinstructions,\"a\"\n\
                     774: wrmsr\n775:\n.popsection\n";
-        let err = extract_asm_sections(text, false).unwrap_err();
+        let err = extract_asm_sections(data, false).unwrap_err();
         assert!(
             err.contains("wrmsr") && err.contains("named section"),
             "{err}"

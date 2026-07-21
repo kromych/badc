@@ -1515,6 +1515,7 @@ pub(crate) fn emit_function(
     fixups: &mut Vec<Fixup>,
     _got_fixups: &mut Vec<GotFixup>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
@@ -1825,6 +1826,7 @@ pub(crate) fn emit_function(
                         fixups,
                         name2entpc,
                         extern_data_names,
+                        extern_code_names,
                         asm_sections,
                         asm_extern_call_sites,
                         data_fixups,
@@ -1865,6 +1867,7 @@ pub(crate) fn emit_function(
                         variadic_targets,
                         extern_tls_names,
                         extern_data_names,
+                        extern_code_names,
                         tls_total_size,
                         param_from_home: &param_from_home,
                         param_plan: &param_plan,
@@ -2812,6 +2815,10 @@ struct FnCtx<'a> {
     /// inline-asm operand that names an external address, whether in a section
     /// field or via a `%a` address operand.
     extern_data_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    /// `Inst::ImmCode` value-id -> cross-TU function symbol name, for a `%c`
+    /// function operand a replacement `call` / `jmp` in a section relocates
+    /// against (`call %c[new]` in `.altinstr_replacement`).
+    extern_code_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     tls_total_size: usize,
     param_from_home: &'a [bool],
     param_plan: &'a [super::ArgPlacement],
@@ -2840,6 +2847,7 @@ fn emit_inst(
         variadic_targets,
         extern_tls_names,
         extern_data_names,
+        extern_code_names,
         tls_total_size,
         param_from_home,
         param_plan,
@@ -3190,6 +3198,7 @@ fn emit_inst(
             fixups,
             name2entpc,
             extern_data_names,
+            extern_code_names,
             asm_sections,
             asm_extern_call_sites,
             data_fixups,
@@ -6043,6 +6052,141 @@ fn asm_riprel_target(
     }
 }
 
+/// Encode replacement instructions in an executable inline-asm section
+/// (`.pushsection .altinstr_replacement,"ax"`) to bytes and relocations,
+/// replacing each `Code` item with `CodeBytes`. The x86 ALTERNATIVE puts
+/// its replacement in a separate section, so there is no fall-through from
+/// the main sequence; the bytes and their relocations lay out like any
+/// other section data. Only a direct `call` / `jmp` to a symbol (a bare
+/// name or a `%c` function operand) and self-contained instructions are
+/// assembled; a replacement referencing a register operand, a memory
+/// location, or a label is rejected rather than mis-encoded.
+fn encode_x86_asm_section_code(
+    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+    func: &FunctionSsa,
+    args: &[u32],
+    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+) -> Result<(), alloc::string::String> {
+    use super::super::ir::Inst;
+    use super::ssa::emit_common::{AsmSectionItem, AsmSectionTarget};
+    // A same-TU function operand is an `ImmCode` whose ent_pc reverses to its
+    // name here; a cross-TU one carries its name in `extern_code_names`.
+    let mut entpc2name: alloc::collections::BTreeMap<usize, &str> =
+        alloc::collections::BTreeMap::new();
+    for (n, &pc) in name2entpc {
+        entpc2name.entry(pc).or_insert(n.as_str());
+    }
+    let operand_target = |idx: u8| -> Option<AsmSectionTarget> {
+        let arg = *args.get(idx as usize)?;
+        if let Some(name) = extern_code_names.get(&arg) {
+            return Some(AsmSectionTarget::Symbol(name.clone()));
+        }
+        match func.insts.get(arg as usize) {
+            Some(Inst::ImmCode(pc)) => entpc2name
+                .get(pc)
+                .map(|n| AsmSectionTarget::Symbol(alloc::string::String::from(*n))),
+            _ => super::ssa::emit_common::asm_operand_data_target(&func.insts, arg, &|v| {
+                extern_data_names.get(&v).cloned()
+            })
+            .map(|(t, _)| t),
+        }
+    };
+    for b in blocks.iter_mut() {
+        for item in b.items.iter_mut() {
+            let AsmSectionItem::Code(text) = item else {
+                continue;
+            };
+            *item = encode_one_x86_section_insn(text, &operand_target)?;
+        }
+    }
+    Ok(())
+}
+
+/// Encode one replacement instruction to a `CodeBytes` item. A direct
+/// `call` / `jmp` to a symbol emits `E8`/`E9` with a zero rel32 and a
+/// `PLT32` branch relocation (addend -4), matching a compiler-emitted
+/// call; a self-contained register/immediate instruction encodes through
+/// the table. Any other form is rejected.
+fn encode_one_x86_section_insn(
+    text: &str,
+    operand_target: &dyn Fn(u8) -> Option<super::ssa::emit_common::AsmSectionTarget>,
+) -> Result<super::ssa::emit_common::AsmSectionItem, alloc::string::String> {
+    use super::asm::{AsmOpnd, Concrete, Mnemonic};
+    use super::ssa::emit_common::{AsmSectionItem, AsmSectionReloc, AsmSectionTarget};
+    let insns = super::asm::parse_template(text.as_bytes())
+        .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
+    let [insn] = insns.as_slice() else {
+        return Err(alloc::format!(
+            "inline asm: replacement `{text}` is not a single instruction"
+        ));
+    };
+    let mnem = match insn.mnemonic {
+        Mnemonic::Table(n) => n,
+        _ => "",
+    };
+    let is_call = mnem.starts_with("call");
+    let is_jmp = matches!(mnem, "jmp" | "jmpq");
+    if is_call || is_jmp {
+        let target = if let Some(name) = &insn.sym_target {
+            if name.contains('%') {
+                return Err(alloc::format!(
+                    "inline asm: replacement `{text}` call target embeds an operand"
+                ));
+            }
+            AsmSectionTarget::Symbol(name.clone())
+        } else if let Some(&AsmOpnd::RefConst { idx, .. }) = insn.operands.first() {
+            operand_target(idx).ok_or_else(|| {
+                alloc::format!("inline asm: replacement `{text}` call target is not a symbol")
+            })?
+        } else {
+            return Err(alloc::format!(
+                "inline asm: replacement `{text}` is not a direct call/jmp to a symbol"
+            ));
+        };
+        let bytes = alloc::vec![if is_call { 0xE8u8 } else { 0xE9 }, 0, 0, 0, 0];
+        let reloc = AsmSectionReloc {
+            offset: 1,
+            width: 4,
+            pcrel: true,
+            branch: true,
+            target,
+            addend: -4,
+        };
+        return Ok(AsmSectionItem::CodeBytes {
+            bytes,
+            relocs: alloc::vec![reloc],
+        });
+    }
+    // A self-contained instruction: operands are register or immediate
+    // literals, so it encodes with no relocation. A reference to a template
+    // operand, a memory location, or a label is not a relocatable replacement.
+    let mut concrete = alloc::vec::Vec::new();
+    for o in &insn.operands {
+        match *o {
+            AsmOpnd::Imm(v) => concrete.push(Concrete::Imm(v)),
+            AsmOpnd::Reg { reg, size } => concrete.push(Concrete::Reg { reg, size }),
+            _ => {
+                return Err(alloc::format!(
+                    "inline asm: replacement instruction `{text}` operand is not a \
+                     register or immediate"
+                ));
+            }
+        }
+    }
+    let mut bytes = alloc::vec::Vec::new();
+    if let Some(seg) = insn.seg {
+        bytes.push(seg);
+    }
+    super::asm::encode(&mut bytes, insn.mnemonic, insn.suffix, &concrete)
+        .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
+    Ok(AsmSectionItem::CodeBytes {
+        bytes,
+        relocs: alloc::vec::Vec::new(),
+    })
+}
+
 /// Lower an `Inst::InlineAsm` (GCC extended asm with operands). Assigns
 /// each register operand a machine register per its constraint, saves
 /// the registers it and the clobber list overwrite, loads the inputs,
@@ -6063,6 +6207,7 @@ fn emit_inline_asm(
     fixups: &mut Vec<super::encode::Fixup>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     asm_sections: &mut Vec<super::ssa::emit_common::AsmSection>,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     data_fixups: &mut Vec<DataFixup>,
@@ -6084,13 +6229,28 @@ fn emit_inline_asm(
     let raw_text = stripped.as_deref().unwrap_or(raw_text);
     let expanded = super::ssa::emit_common::expand_template_uniq(raw_text);
     let text = expanded.as_deref().unwrap_or(raw_text);
-    let extracted = match super::ssa::emit_common::extract_asm_sections(text, false) {
+    let mut extracted = match super::ssa::emit_common::extract_asm_sections(text, false) {
         Ok(e) => e,
         Err(m) => {
             bail_msg(&m);
             return false;
         }
     };
+    // Encode any replacement instructions in an executable section
+    // (`.altinstr_replacement,"ax"`) to bytes and relocations before layout.
+    if let Some((_, blocks)) = extracted.as_mut()
+        && let Err(m) = encode_x86_asm_section_code(
+            blocks,
+            func,
+            args,
+            name2entpc,
+            extern_data_names,
+            extern_code_names,
+        )
+    {
+        bail_msg(&m);
+        return false;
+    }
     let (code_text, section_blocks) = match &extracted {
         Some((c, b)) => (c.as_str(), b.as_slice()),
         None => (text, &[][..]),

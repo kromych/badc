@@ -4191,6 +4191,82 @@ fn x86_alternative_data_replacement_pads_and_relocates() {
 }
 
 #[test]
+fn x86_alternative_call_replacement_encodes_and_relocates() {
+    // The x86 ALTERNATIVE with a real-instruction replacement: a `call
+    // %c[new]` naming a function goes to `.altinstr_replacement` as `E8` +
+    // rel32, with a `R_X86_64_PLT32` branch relocation (addend -4) against the
+    // callee -- byte-for-byte identical to GNU as. The empty old site is padded
+    // to the 5-byte replacement length by `.skip`, and `.altinstructions`
+    // records both lengths as 5. Contrast the data-only replacement above.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        extern void repfn(void);\n\
+        void f(void) {\n\
+            __asm__ volatile(\n\
+                \"771:\\n772:\\n\"\n\
+                \".skip -(((775f-774f)-(772b-771b)) > 0) * ((775f-774f)-(772b-771b)),0x90\\n\"\n\
+                \"773:\\n\"\n\
+                \".pushsection .altinstructions,\\\"a\\\"\\n\"\n\
+                \" .long 771b - .\\n .long 774f - .\\n .4byte 7\\n\"\n\
+                \" .byte 773b-771b\\n .byte 775f-774f\\n\"\n\
+                \".popsection\\n\"\n\
+                \".pushsection .altinstr_replacement, \\\"ax\\\"\\n\"\n\
+                \"774:\\n call %c[new]\\n775:\\n\"\n\
+                \".popsection\\n\" : : [new] \"i\" (repfn) : \"memory\");\n\
+        }\n\
+        int main(void) { f(); return 0; }\n";
+    let program = Compiler::new(String::from(src)).compile().expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let body = |name: &str| {
+        sections
+            .iter()
+            .find(|(n, _, _, _)| n == name)
+            .unwrap_or_else(|| panic!("{name} missing"))
+            .3
+            .clone()
+    };
+    // The replacement is `call rel32` with a zero displacement (the reloc fills
+    // it): `E8 00 00 00 00`, identical to GNU as.
+    assert_eq!(body(".altinstr_replacement"), [0xe8, 0, 0, 0, 0]);
+    // `.long 771b-.`(0) `.long 774f-.`(0) `.4byte 7` `.byte 773b-771b`(5)
+    // `.byte 775f-774f`(5): both lengths are the 5-byte call.
+    assert_eq!(
+        body(".altinstructions"),
+        [0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 5, 5]
+    );
+    // The empty old site is padded to 5 with `0x90` nops.
+    assert!(
+        body(".text").windows(5).any(|w| w == [0x90; 5]),
+        "old site padded to the replacement length"
+    );
+    // The single `.altinstr_replacement` relocation is `R_X86_64_PLT32` against
+    // `repfn` at offset 1 (the rel32 field) with addend -4.
+    let rela = body(".rela.altinstr_replacement");
+    assert_eq!(rela.len(), 24, "one replacement relocation");
+    let r_offset = u64::from_le_bytes(rela[0..8].try_into().unwrap());
+    let r_info = u64::from_le_bytes(rela[8..16].try_into().unwrap());
+    let r_addend = i64::from_le_bytes(rela[16..24].try_into().unwrap());
+    assert_eq!(r_offset, 1, "reloc at the rel32 field");
+    assert_eq!(r_info & 0xffff_ffff, 4, "R_X86_64_PLT32");
+    assert_eq!(r_addend, -4, "branch addend");
+    // The relocation names the callee `repfn`.
+    let symtab = body(".symtab");
+    let strtab = body(".strtab");
+    let sym = (r_info >> 32) as usize;
+    let name_off = u32::from_le_bytes(symtab[sym * 24..sym * 24 + 4].try_into().unwrap()) as usize;
+    let name_end = strtab[name_off..].iter().position(|&b| b == 0).unwrap() + name_off;
+    assert_eq!(
+        String::from_utf8_lossy(&strtab[name_off..name_end]),
+        "repfn"
+    );
+}
+
+#[test]
 fn attribute_and_asm_pushsection_merge_into_one_section() {
     // An `__attribute__((section))` object and an inline-asm
     // `.pushsection` block naming the same section share one output

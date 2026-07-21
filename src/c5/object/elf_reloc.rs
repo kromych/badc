@@ -1873,6 +1873,10 @@ pub(super) fn write_relocatable(
                     }
                 };
                 let rtype = match (machine_for_rela, r.pcrel, r.width) {
+                    // A replacement instruction's direct `call` / `jmp` to a
+                    // symbol reaches it through the PLT slot, like a compiler-
+                    // emitted call: `R_X86_64_PLT32`, not a data `PC32`.
+                    (Machine::X86_64, true, 4) if r.branch => R_X86_64_PLT32,
                     (Machine::X86_64, false, 8) => R_X86_64_64,
                     (Machine::X86_64, false, _) => R_X86_64_32,
                     (Machine::X86_64, true, 8) => R_X86_64_PC64,

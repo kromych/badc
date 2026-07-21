@@ -829,6 +829,20 @@ pub(crate) enum AsmSectionItem {
     /// `.globl name` / `.global name`: give the named label external
     /// binding. May precede or follow the label's definition.
     Global(alloc::string::String),
+    /// `.type name, @function|@object`: set the named label's ELF symbol
+    /// type. The label must be defined in this section.
+    Type {
+        name: alloc::string::String,
+        sym_type: AsmSymType,
+    },
+    /// `.size name, expr`: set the named label's `st_size`. `expr` is a
+    /// byte count -- a constant or a difference `. - name` whose terms are
+    /// the current section offset (`.`) or a section label, evaluated at
+    /// materialize time.
+    Size {
+        name: alloc::string::String,
+        expr: alloc::string::String,
+    },
 }
 
 /// A parsed `.pushsection` / `.section` block of a template.
@@ -895,6 +909,15 @@ pub(crate) struct AsmSection {
 /// Offset marking a `.globl` seen before its label definition.
 const PENDING_LABEL: u32 = u32::MAX;
 
+/// ELF symbol type set by a section's `.type name, @function|@object`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum AsmSymType {
+    #[default]
+    NoType,
+    Func,
+    Object,
+}
+
 /// A label defined inside a named section.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AsmSectionLabel {
@@ -903,6 +926,10 @@ pub(crate) struct AsmSectionLabel {
     pub offset: u32,
     /// `.globl`-declared: external rather than local binding.
     pub global: bool,
+    /// Symbol type from a `.type` directive (`STT_NOTYPE` when absent).
+    pub sym_type: AsmSymType,
+    /// `st_size` from a `.size` directive; `None` leaves it zero.
+    pub size: Option<u64>,
 }
 
 /// A snapshot of the accumulated section sink, taken before a function
@@ -1680,6 +1707,8 @@ fn parse_section_item(
             }
             Ok(AsmSectionItem::Global(alloc::string::String::from(name)))
         }
+        ".type" => parse_type_directive(rest),
+        ".size" => parse_size_directive(rest),
         // An instruction (not a data directive) inside a named section is the
         // x86 ALTERNATIVE replacement (`.pushsection .altinstr_replacement`).
         // TODO assemble replacement instructions into the section with their
@@ -1689,6 +1718,52 @@ fn parse_section_item(
             "inline asm: unsupported directive `{tok}` in a named section"
         )),
     }
+}
+
+/// `.type name, @function|@object`. GNU as also spells the type with a
+/// leading `%` on some targets and accepts a bare word; only `function`
+/// and `object` occur in inline asm, any other is rejected.
+fn parse_type_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
+    let (name, ty) = rest
+        .split_once(',')
+        .ok_or_else(|| alloc::format!("inline asm: `.type` expects `name, @type`, got `{rest}`"))?;
+    let name = name.trim();
+    if !is_asm_symbol_name(name) {
+        return Err(alloc::format!("inline asm: bad `.type` symbol `{name}`"));
+    }
+    let ty = ty.trim();
+    let sym_type = match ty.strip_prefix(['@', '%']).unwrap_or(ty) {
+        "function" => AsmSymType::Func,
+        "object" => AsmSymType::Object,
+        _ => return Err(alloc::format!("inline asm: unsupported `.type` `{ty}`")),
+    };
+    Ok(AsmSectionItem::Type {
+        name: alloc::string::String::from(name),
+        sym_type,
+    })
+}
+
+/// `.size name, expr`. The expression is a byte count evaluated at
+/// materialize time; parsing keeps it as text since label offsets are not
+/// yet known.
+fn parse_size_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
+    let (name, expr) = rest
+        .split_once(',')
+        .ok_or_else(|| alloc::format!("inline asm: `.size` expects `name, expr`, got `{rest}`"))?;
+    let name = name.trim();
+    let expr = expr.trim();
+    if !is_asm_symbol_name(name) {
+        return Err(alloc::format!("inline asm: bad `.size` symbol `{name}`"));
+    }
+    if expr.is_empty() {
+        return Err(alloc::string::String::from(
+            "inline asm: empty `.size` expression",
+        ));
+    }
+    Ok(AsmSectionItem::Size {
+        name: alloc::string::String::from(name),
+        expr: alloc::string::String::from(expr),
+    })
 }
 
 /// If `s` is a single parenthesised group (the leading `(` matches the
@@ -2071,7 +2146,10 @@ pub(crate) fn measure_asm_section_offsets(
                     let digits = numeric_label_digits(name).unwrap_or(name);
                     map.insert(alloc::string::String::from(digits), (key.clone(), at));
                 }
-                AsmSectionItem::Global(_) => {}
+                // Symbol attributes, not layout: no bytes.
+                AsmSectionItem::Global(_)
+                | AsmSectionItem::Type { .. }
+                | AsmSectionItem::Size { .. } => {}
                 AsmSectionItem::Data { width, values } => {
                     at += *width as i64 * values.len() as i64;
                 }
@@ -2260,6 +2338,8 @@ pub(crate) fn materialize_asm_sections(
                             name: alloc::string::String::from(name),
                             offset: at,
                             global: false,
+                            sym_type: AsmSymType::NoType,
+                            size: None,
                         }),
                     }
                 }
@@ -2272,8 +2352,67 @@ pub(crate) fn materialize_asm_sections(
                             name: name.clone(),
                             offset: PENDING_LABEL,
                             global: true,
+                            sym_type: AsmSymType::NoType,
+                            size: None,
                         }),
                     }
+                }
+                AsmSectionItem::Type { name, sym_type } => {
+                    let lname = numeric_label_digits(name)
+                        .and_then(|d| num_unique.get(d).map(alloc::string::String::as_str))
+                        .unwrap_or(name);
+                    let l = sec
+                        .labels
+                        .iter_mut()
+                        .find(|l| l.name == *lname && l.offset != PENDING_LABEL)
+                        .ok_or_else(|| {
+                            alloc::format!("inline asm: `.type` names undefined label `{name}`")
+                        })?;
+                    l.sym_type = *sym_type;
+                }
+                AsmSectionItem::Size { name, expr } => {
+                    // `.` is the offset at the directive; a term is that,
+                    // a section label's offset, or a constant. `A - B`
+                    // yields the byte distance the symbol spans.
+                    let cur = sec.bytes.len() as i64;
+                    let term = |t: &str| -> Option<i64> {
+                        let t = t.trim();
+                        if t == "." {
+                            return Some(cur);
+                        }
+                        let ln = numeric_label_digits(t)
+                            .and_then(|d| num_unique.get(d).map(alloc::string::String::as_str))
+                            .unwrap_or(t);
+                        if let Some(l) = sec
+                            .labels
+                            .iter()
+                            .find(|l| l.name == ln && l.offset != PENDING_LABEL)
+                        {
+                            return Some(l.offset as i64);
+                        }
+                        eval_const_expr_ops(t, &|i| const_of(i))
+                    };
+                    let bad = || alloc::format!("inline asm: bad `.size` expression `{expr}`");
+                    let val = match expr.split_once('-') {
+                        Some((a, b)) => term(a).ok_or_else(bad)? - term(b).ok_or_else(bad)?,
+                        None => term(expr).ok_or_else(bad)?,
+                    };
+                    if val < 0 {
+                        return Err(alloc::format!(
+                            "inline asm: `.size` expression `{expr}` is negative"
+                        ));
+                    }
+                    let tname = numeric_label_digits(name)
+                        .and_then(|d| num_unique.get(d).map(alloc::string::String::as_str))
+                        .unwrap_or(name);
+                    let l = sec
+                        .labels
+                        .iter_mut()
+                        .find(|l| l.name == *tname && l.offset != PENDING_LABEL)
+                        .ok_or_else(|| {
+                            alloc::format!("inline asm: `.size` names undefined label `{name}`")
+                        })?;
+                    l.size = Some(val as u64);
                 }
                 AsmSectionItem::Data { width, values } => {
                     for v in values {
@@ -3949,15 +4088,88 @@ mod asm_section_tests {
                     name: alloc::string::String::from("first"),
                     offset: 0,
                     global: false,
+                    sym_type: AsmSymType::NoType,
+                    size: None,
                 },
                 AsmSectionLabel {
                     name: alloc::string::String::from("second"),
                     offset: 8,
                     global: true,
+                    sym_type: AsmSymType::NoType,
+                    size: None,
                 },
             ],
             "a `.globl` naming no label here defines no symbol",
         );
+    }
+
+    #[test]
+    fn section_type_and_size_set_symbol_attributes() {
+        // The static-call trampoline shape: `.type name, @function` sets the
+        // label's ELF type, `.size name, . - name` its byte extent (the
+        // distance from the label to the directive). gas emits STT_FUNC with
+        // st_size = 8 for this body.
+        let text = ".pushsection .static_call.text, \"ax\"\n\
+                    .globl tramp\n\
+                    tramp:\n\
+                    .byte 0xe9, 0x11, 0x22, 0x33, 0x44\n\
+                    .byte 0x0f, 0xb9, 0xcc\n\
+                    .type tramp, @function\n\
+                    .size tramp, . - tramp\n\
+                    .popsection\n";
+        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            false,
+            &mut sink,
+        )
+        .unwrap();
+        let l = &sink[0].labels[0];
+        assert_eq!(l.name, "tramp");
+        assert!(l.global);
+        assert_eq!(l.sym_type, AsmSymType::Func);
+        assert_eq!(l.size, Some(8));
+    }
+
+    #[test]
+    fn section_type_object_and_bad_forms_rejected() {
+        let materialize = |text: &str| {
+            let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+            let mut sink = alloc::vec::Vec::new();
+            materialize_asm_sections(
+                &blocks,
+                &|_| None,
+                &|_| None,
+                &|_| None,
+                &|_| None,
+                false,
+                &mut sink,
+            )
+            .map(|_| sink)
+        };
+        // `@object` is accepted and sets STT_OBJECT.
+        let sink = materialize(
+            ".pushsection .d,\"a\"\nv:\n.quad 0\n.type v, @object\n.size v, . - v\n.popsection\n",
+        )
+        .unwrap();
+        assert_eq!(sink[0].labels[0].sym_type, AsmSymType::Object);
+        assert_eq!(sink[0].labels[0].size, Some(8));
+        // An unknown type name is rejected at parse rather than mis-typed.
+        let err = extract_asm_sections(
+            ".pushsection .t,\"a\"\nv:\n.type v, @weird\n.popsection\n",
+            false,
+        )
+        .expect_err("unknown .type must be rejected");
+        assert!(err.contains("unsupported `.type`"), "{err}");
+        // `.type` / `.size` on a symbol not defined in the section is rejected.
+        let err = materialize(".pushsection .t,\"a\"\n.type ext, @function\n.popsection\n")
+            .expect_err("`.type` on an undefined label must be rejected");
+        assert!(err.contains("undefined label"), "{err}");
     }
 
     #[test]

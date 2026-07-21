@@ -580,6 +580,57 @@ fn file_scope_asm_globl_gives_external_linkage() {
 }
 
 #[test]
+fn file_scope_asm_type_size_set_symbol_type_and_size() {
+    // A static-call trampoline names its symbol with `.type name,
+    // @function` and `.size name, . - name`. badc must emit STT_FUNC with
+    // st_size = the trampoline's byte length, byte-for-byte as gas does
+    // (verified against gas: FUNC / GLOBAL / size 8). Both 64-bit ELF
+    // targets share the symbol path, so both are checked.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const STT_FUNC: u8 = 2;
+    const STB_GLOBAL: u8 = 1;
+    let src = r#"asm(".pushsection .static_call.text, \"ax\"\n"
+    ".globl tramp\n"
+    "tramp:\n"
+    ".byte 0xe9, 0x11, 0x22, 0x33, 0x44\n"
+    ".byte 0x0f, 0xb9, 0xcc\n"
+    ".type tramp, @function\n"
+    ".size tramp, . - tramp\n"
+    ".popsection\n");
+int main(void) { return 0; }
+"#;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let sym = obj
+            .symbols
+            .iter()
+            .find(|s| s.name == "tramp")
+            .unwrap_or_else(|| panic!("{target:?}: `tramp` symbol missing"));
+        assert_eq!(
+            sym.kind, STT_FUNC,
+            "{target:?}: `.type @function` must set STT_FUNC"
+        );
+        assert_eq!(
+            sym.size, 8,
+            "{target:?}: `.size . - tramp` must set st_size = 8"
+        );
+        assert_eq!(
+            sym.binding, STB_GLOBAL,
+            "{target:?}: `.globl` must set STB_GLOBAL"
+        );
+    }
+}
+
+#[test]
 fn libc_address_trampoline_is_per_tu_local() {
     // Two translation units that each take the address of the same
     // libc function in a `.data` function-pointer table both emit a

@@ -4825,7 +4825,11 @@ fn asm_prfm_accepts_a_bare_q_operand_reference() {
         : \"=&r\"(result), \"=&r\"(tmp), \"+Q\"(v->counter)\n\
         : \"Ir\"(i));\n\
         }\nint main(void) { return 0; }\n";
-    let program = Compiler::new(String::from(src)).compile().expect("compile");
+    // Compile for the aarch64 target, not the host: the inline asm is aarch64
+    // (prfm/ldxr/stxr), so a host-target compile rejects it on an x86-64 host.
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
     let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
     let text = elf_sections(&bytes)
         .into_iter()

@@ -2594,9 +2594,22 @@ impl Compiler {
                                     ));
                                 }
                                 let sid = struct_id_of(ty);
+                                // A parenthesized compound literal `((T){...})`
+                                // left grouping parens for the brace list to
+                                // close (C99 6.5.2.5).
+                                let cl_parens =
+                                    core::mem::take(&mut self.pending.compound_lit_close_parens);
                                 self.collect_struct_initializer(sid, var_offset)?;
+                                for _ in 0..cl_parens {
+                                    self.accept(')')?;
+                                }
                             } else {
+                                let cl_parens =
+                                    core::mem::take(&mut self.pending.compound_lit_close_parens);
                                 self.parse_global_initializer(ty, var_offset, thread_local)?;
+                                for _ in 0..cl_parens {
+                                    self.accept(')')?;
+                                }
                             }
                             self.symbols[id_idx].has_initializer = true;
                         }

@@ -56,8 +56,18 @@ use super::types::{
 /// bits for an unsigned 16-byte type.
 #[derive(Copy, Clone, Debug)]
 pub(super) enum ConstVal {
-    Int { val: i128, ty: i64 },
+    Int {
+        val: i128,
+        ty: i64,
+    },
     Float(f64),
+    /// A symbol-relative address constant (C99 6.6p9): a function or
+    /// object designator that has not been reduced to an integer. It
+    /// participates in pointer equality / relational folding and in the
+    /// truthiness a `?:` condition needs; a static initializer that
+    /// consumes it emits the relocation `sym` names. It is not an integer
+    /// constant expression, so the pure-ICE entry points reject it.
+    Addr(ConstAddr),
 }
 
 /// A constant object designation, produced while folding the operand of a
@@ -86,7 +96,7 @@ struct ConstDesig {
 
 /// The folded value of a constant `&` operand: a byte displacement plus, when
 /// the address is symbol-relative, the symbol to relocate against.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub(super) struct ConstAddr {
     pub value: i64,
     pub sym: Option<usize>,
@@ -139,6 +149,7 @@ impl ConstVal {
         match self {
             ConstVal::Int { val, .. } => val,
             ConstVal::Float(v) => v as i128,
+            ConstVal::Addr(a) => a.value as i128,
         }
     }
 
@@ -148,6 +159,7 @@ impl ConstVal {
         match self {
             ConstVal::Int { ty, .. } => ty,
             ConstVal::Float(_) => Ty::Int as i64,
+            ConstVal::Addr(_) => Ty::Ptr as i64,
         }
     }
 
@@ -158,6 +170,7 @@ impl ConstVal {
         match self {
             ConstVal::Int { val, .. } => val as f64,
             ConstVal::Float(v) => v,
+            ConstVal::Addr(a) => a.value as f64,
         }
     }
 
@@ -165,11 +178,24 @@ impl ConstVal {
         matches!(self, ConstVal::Float(_))
     }
 
+    /// True for a symbol-relative address constant (never null) or a
+    /// non-zero sym-less address. Lets a comparison against a null
+    /// pointer constant fold to a known boolean.
+    fn addr(self) -> Option<ConstAddr> {
+        match self {
+            ConstVal::Addr(a) => Some(a),
+            _ => None,
+        }
+    }
+
     /// True if the value is non-zero. Used by `&&`, `||`, `?:`, `!`.
     fn is_truthy(self) -> bool {
         match self {
             ConstVal::Int { val, .. } => val != 0,
             ConstVal::Float(v) => v != 0.0,
+            // A symbol's address is never null; a sym-less address is
+            // truthy iff its byte value is non-zero.
+            ConstVal::Addr(a) => a.sym.is_some() || a.value != 0,
         }
     }
 }
@@ -190,6 +216,15 @@ impl Compiler {
         r: ConstVal,
     ) -> Result<ConstVal, C5Error> {
         use ConstBinOp as B;
+        // Symbol-relative address operands fold structurally: pointer
+        // equality / relational (C99 6.5.9) and pointer arithmetic
+        // (6.5.6). A symbol's address is never null and two designations
+        // are equal only when they name the same symbol at the same offset.
+        if (l.addr().is_some() || r.addr().is_some())
+            && let Some(v) = self.const_addr_binop(op, l, r)
+        {
+            return Ok(v);
+        }
         let (a_ty, b_ty) = (l.int_ty(), r.int_ty());
         let ptr = is_pointer_ty(a_ty) || is_pointer_ty(b_ty);
         if matches!(op, B::Shl | B::Shr) {
@@ -278,6 +313,67 @@ impl Compiler {
         })
     }
 
+    /// Fold a binary operator with at least one symbol-relative address
+    /// operand, or return `None` when the operator does not have a
+    /// constant address result (the integer path then applies). Two
+    /// designations compare equal only when they name the same symbol at
+    /// the same offset; a symbol's address never equals an integer,
+    /// including the null pointer constant.
+    fn const_addr_binop(&self, op: ConstBinOp, l: ConstVal, r: ConstVal) -> Option<ConstVal> {
+        use ConstBinOp as B;
+        let same_sym = |a: &ConstAddr, b: &ConstAddr| a.sym == b.sym && a.sym_code == b.sym_code;
+        // A sym-less address is a plain pointer value; a symbol address is
+        // never equal to a compile-time integer.
+        let addr_eq_int = |a: ConstAddr, n: i128| a.sym.is_none() && a.value as i128 == n;
+        match op {
+            B::Eq | B::Ne => {
+                let eq = match (l.addr(), r.addr()) {
+                    (Some(a), Some(b)) => same_sym(&a, &b) && a.value == b.value,
+                    (Some(a), None) => addr_eq_int(a, r.as_i128()),
+                    (None, Some(b)) => addr_eq_int(b, l.as_i128()),
+                    (None, None) => return None,
+                };
+                Some(ConstVal::int((if op == B::Eq { eq } else { !eq }) as i64))
+            }
+            B::Lt | B::Le | B::Gt | B::Ge => {
+                let (a, b) = (l.addr()?, r.addr()?);
+                if !same_sym(&a, &b) {
+                    return None;
+                }
+                let hold = match op {
+                    B::Lt => a.value < b.value,
+                    B::Le => a.value <= b.value,
+                    B::Gt => a.value > b.value,
+                    _ => a.value >= b.value,
+                };
+                Some(ConstVal::int(hold as i64))
+            }
+            B::Add => match (l.addr(), r.addr()) {
+                (Some(a), None) => Some(ConstVal::Addr(ConstAddr {
+                    value: a.value.wrapping_add(r.as_i128() as i64),
+                    ..a
+                })),
+                (None, Some(b)) => Some(ConstVal::Addr(ConstAddr {
+                    value: b.value.wrapping_add(l.as_i128() as i64),
+                    ..b
+                })),
+                _ => None,
+            },
+            B::Sub => match (l.addr(), r.addr()) {
+                (Some(a), Some(b)) if same_sym(&a, &b) => Some(ConstVal::Int {
+                    val: (a.value - b.value) as i128,
+                    ty: Ty::LongLong as i64,
+                }),
+                (Some(a), None) => Some(ConstVal::Addr(ConstAddr {
+                    value: a.value.wrapping_sub(r.as_i128() as i64),
+                    ..a
+                })),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     /// Parse a constant integer expression at parse time. Used
     /// during declarator parsing where the value has to be known
     /// before any IR-building emit (array dimensions, bitfield
@@ -291,13 +387,31 @@ impl Compiler {
     /// expression" grammar that gcc / clang permit (gcc warns
     /// under `-Wpedantic`).
     pub(super) fn parse_constant_int(&mut self) -> Result<i64, C5Error> {
-        Ok(self.parse_const_expr_cond_val()?.as_int())
+        let v = self.parse_const_expr_cond_val()?;
+        Ok(self.require_integer_const(v)?.as_int())
     }
 
     /// As [`Self::parse_constant_int`], keeping all 128 bits. Used by the
     /// initializer paths, whose destination may be the 16-byte integer.
     pub(super) fn parse_constant_i128(&mut self) -> Result<i128, C5Error> {
-        Ok(self.parse_const_expr_cond_val()?.as_i128())
+        let v = self.parse_const_expr_cond_val()?;
+        Ok(self.require_integer_const(v)?.as_i128())
+    }
+
+    /// Reject a symbol-relative address where an integer constant
+    /// expression is required (array dimensions, enum values, bitfield
+    /// widths, a static-initializer integer slot): C99 6.6p6 admits only
+    /// arithmetic operands. Pointer comparisons and the offsetof form have
+    /// already folded to an integer, so only a bare address reaches here.
+    pub(super) fn require_integer_const(&self, v: ConstVal) -> Result<ConstVal, C5Error> {
+        if let ConstVal::Addr(a) = v
+            && a.sym.is_some()
+        {
+            return Err(self.compile_err(
+                "address of an object or function is not an integer constant expression",
+            ));
+        }
+        Ok(v)
     }
 
     /// Try to fold an array-declarator dimension to an integer
@@ -311,7 +425,8 @@ impl Compiler {
         self.pending.const_expr_nonconst = false;
         match self.parse_const_expr_cond_val() {
             // Folded to a constant; the caller validates the trailing `]`.
-            Ok(v) => Ok(Some(v.as_int())),
+            // A bare symbol address is a genuine error, not a VLA.
+            Ok(v) => Ok(Some(self.require_integer_const(v)?.as_int())),
             // Non-constant operand -> a VLA dimension: rewind for the
             // caller's runtime-expression parse.
             Err(_) if self.pending.const_expr_nonconst => {
@@ -903,8 +1018,8 @@ impl Compiler {
         if self.lex.tk == Token::SubOp {
             self.next()?;
             return Ok(match self.parse_const_expr_unary_val()? {
-                ConstVal::Int { val, ty } => self.const_unary_promoted(val.wrapping_neg(), ty),
                 ConstVal::Float(v) => ConstVal::Float(-v),
+                v => self.const_unary_promoted(v.as_i128().wrapping_neg(), v.int_ty()),
             });
         }
         if self.lex.tk == Token::AddOp {
@@ -923,16 +1038,14 @@ impl Compiler {
         }
         if self.lex.tk == Token::AndOp {
             // Address constant: full-width, no arithmetic conversion. A
-            // symbol-relative address (`&global` / `&func`) is a relocation,
-            // not an integer constant expression -- valid only in a static
-            // initializer, which folds it through `parse_const_address_of`
-            // directly; reject it in an integer-constant context.
+            // symbol-relative address (`&global` / `&func`) yields a
+            // `ConstVal::Addr` -- foldable in pointer comparisons and, in a
+            // static initializer, a relocation; the pure-ICE entry points
+            // reject it. The `&((T *)0)->field` offsetof form has no symbol
+            // and is a plain integer.
             let a = self.parse_const_address_of()?;
             if a.sym.is_some() {
-                return Err(self.compile_err(
-                    "address of an object or function is not an integer \
-                     constant expression",
-                ));
+                return Ok(ConstVal::Addr(a));
             }
             return Ok(ConstVal::Int {
                 val: a.value as i128,
@@ -1199,6 +1312,27 @@ impl Compiler {
                 sym_code: inner.sym_code,
             });
         }
+        if self.lex.tk == Token::MulOp {
+            // `*p` -- dereference a constant pointer value to the lvalue at
+            // the pointer's address, so `&*p` folds back to `p`
+            // (C99 6.5.3.2p3). The operand is a pointer value, matching the
+            // `->` requirement below.
+            self.next()?;
+            let inner = self.parse_const_designation()?;
+            if inner.is_lvalue {
+                return Err(self.compile_err_at(
+                    line,
+                    "`*` in a constant expression requires a pointer value",
+                ));
+            }
+            return Ok(ConstDesig {
+                value: inner.value,
+                ty: inner.ty - Ty::Ptr as i64,
+                is_lvalue: true,
+                sym: inner.sym,
+                sym_code: inner.sym_code,
+            });
+        }
         if self.lex.tk == '(' {
             self.next()?;
             if self.lex_is_type_start() {
@@ -1355,6 +1489,16 @@ impl Compiler {
                 }
                 self.next()?;
                 let v = self.parse_const_expr_unary_val()?;
+                // A cast of a symbol-relative address to an integer or
+                // pointer type keeps the relocation (common practice:
+                // `(unsigned long)&sym` is a link-time constant); only the
+                // type changes, so the folded value stays a `ConstVal::Addr`.
+                if let ConstVal::Addr(a) = v
+                    && a.sym.is_some()
+                    && !is_floating_ty(target_ty)
+                {
+                    return Ok(ConstVal::Addr(a));
+                }
                 return Ok(if is_floating_ty(target_ty) {
                     ConstVal::Float(v.as_float())
                 } else {
@@ -1461,6 +1605,40 @@ impl Compiler {
                     self.symbols[idx].was_referenced = true;
                     self.next()?;
                     return Ok(ConstVal::Int { val: v as i128, ty });
+                }
+            }
+        }
+        // A function designator or an array object decays to its address
+        // (C99 6.3.2.1p3/p4): a non-null symbol-relative address constant.
+        // A bare scalar global is a load, not a constant, so it falls
+        // through. The address folds in a pointer comparison and, in a
+        // static initializer, a relocation; the pure-ICE entry points
+        // reject it. Only in an evaluated context (a not-taken `?:` arm may
+        // hold a non-constant call the skip below consumes) and only for a
+        // bare name: a trailing postfix (`(`/`[`/`.`/`->`) is a call or an
+        // element access, which the enclosing grammar handles.
+        if self.lex.tk == Token::Id && self.const_unevaluated == 0 {
+            let idx = self.lex.curr_id_idx;
+            let class = self.symbols[idx].class;
+            let is_fn = class == Token::Fun as i64 || class == Token::Sys as i64;
+            let is_array = class == Token::Glo as i64 && self.symbols[idx].array_size != 0;
+            if is_fn || is_array {
+                let value = self.symbols[idx].val;
+                let snap = self.lex.snapshot();
+                self.next()?;
+                let postfix = self.lex.tk == '('
+                    || self.lex.tk == Token::Brak
+                    || self.lex.tk == Token::Dot
+                    || self.lex.tk == Token::Arrow;
+                if postfix {
+                    self.lex.restore(snap);
+                } else {
+                    self.symbols[idx].was_referenced = true;
+                    return Ok(ConstVal::Addr(ConstAddr {
+                        value,
+                        sym: Some(idx),
+                        sym_code: is_fn,
+                    }));
                 }
             }
         }

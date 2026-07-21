@@ -4693,3 +4693,138 @@ fn for_post_statement_expression_goto() {
     ";
     assert_eq!(run_str(src), 404);
 }
+
+#[test]
+fn of_declare_fn_pointer_null_compare_selects_arm() {
+    // The Linux `_OF_DECLARE` idiom `(fn == (T)NULL) ? fn : fn` in a
+    // section-placed struct: the pointer comparison folds to 0 (a
+    // function's address is never null), so the `?:` selects `fn`.
+    let src = "
+        typedef int (*fn_t)(void);
+        static int impl(void) { return 7; }
+        struct desc { const char *c; const void *data; };
+        static const struct desc d = {
+            .c = \"x\",
+            .data = (impl == (fn_t)((void *)0)) ? impl : impl,
+        };
+        int main(void) { fn_t f = (fn_t)d.data; return f(); }
+    ";
+    assert_eq!(run_str(src), 7);
+}
+
+#[test]
+fn typeof_of_pointer_cast_of_array_is_pointer() {
+    // `typeof((T *)arr)` is `T *`, not the array type: a cast yields the
+    // cast type regardless of the operand (C99 6.5.4). Subscripting the
+    // cast then indexes correctly, and `sizeof` of the cast is a pointer.
+    let src = "
+        struct b { long long v; };
+        static struct b arr[4] = { {10}, {20}, {30}, {40} };
+        _Static_assert(sizeof((typeof(*(arr)) *)(arr)) == sizeof(void *), \"cast is ptr\");
+        int main(void) {
+            return (int)((typeof((typeof(*(arr)) *)(arr)))(arr))[2].v;
+        }
+    ";
+    assert_eq!(run_str(src), 30);
+}
+
+#[test]
+fn parenthesized_compound_literal_static_init() {
+    // A parenthesized compound literal `((T){ ... })` as a static
+    // initializer (C99 6.5.2.5), the `GUID_INIT` shape.
+    let src = "
+        typedef struct { unsigned char b[4]; } g_t;
+        static const g_t g = ((g_t){ { 1, 2, 3, 4 } });
+        int main(void) { return g.b[0] * 1000 + g.b[3]; }
+    ";
+    assert_eq!(run_str(src), 1004);
+}
+
+#[test]
+fn nested_anonymous_aggregate_fully_braced_init() {
+    // A field flattened from a union nesting an anonymous struct takes a
+    // fully-braced initializer bracing each level (C11 6.7.2.1), the
+    // `QSTR_INIT` shape.
+    let src = "
+        struct qstr {
+            union {
+                struct { unsigned h; unsigned l; };
+                unsigned long long hl;
+            };
+            const char *name;
+        };
+        static const struct qstr q = { { { .l = 9 } }, .name = \"ab\" };
+        int main(void) { return (int)q.l * 10 + (int)q.h; }
+    ";
+    assert_eq!(run_str(src), 90);
+}
+
+#[test]
+fn flexible_array_member_designated_init() {
+    // A flexible array member initialized with a `[index] = value`
+    // designator sizes the member to the highest index and zero-fills the
+    // gaps (GCC/clang extension over C99 6.7.2.1p18).
+    let src = "
+        struct fam { int a; long long bm[]; };
+        static struct fam fm = { .a = 5, .bm = { [2] = 77 } };
+        int main(void) { return fm.a * 100 + (int)fm.bm[2] + (int)fm.bm[0]; }
+    ";
+    assert_eq!(run_str(src), 577);
+}
+
+#[test]
+fn address_of_deref_null_folds_to_null() {
+    // `&*(T *)0` folds to the null pointer (`&*` cancels, C99 6.5.3.2p3),
+    // the `&sysrq_showlocks_op`-via-macro shape.
+    let src = "
+        struct op { int x; };
+        static struct op *const table[2] = { &(*(struct op *)((void *)0)), (void *)0 };
+        int main(void) {
+            return (table[0] == (void *)0 && table[1] == (void *)0) ? 1 : 0;
+        }
+    ";
+    assert_eq!(run_str(src), 1);
+}
+
+#[test]
+fn struct_member_two_dimensional_scalar_array_init() {
+    // A struct's scalar 2D-array member takes a fully-braced initializer
+    // with a brace per row (C99 6.7.8p20), the `DEFINE_PER_CPU(... ) =
+    // {{{0}}}` shape reduced to non-zero values.
+    let src = "
+        struct s { long long a[2][3]; };
+        static struct s x = { .a = { {1, 2, 3}, {4, 5, 6} } };
+        int main(void) { return (int)(x.a[0][0] * 100 + x.a[1][2]); }
+    ";
+    assert_eq!(run_str(src), 106);
+}
+
+#[test]
+fn typeof_multidimensional_array_redeclaration_keeps_inner_dim() {
+    // `extern typeof(a) a;` (the EXPORT_SYMBOL shape) on a multi-dim array
+    // must keep every dimension so a later `a[i][j]` strides by the inner
+    // dimension, not drop to a single dimension.
+    let src = "
+        static const long long t[2][3] = { {10, 11, 12}, {20, 21, 22} };
+        extern typeof(t) t;
+        int main(void) { return (int)(t[1][2] - t[0][0]); }
+    ";
+    assert_eq!(run_str(src), 12);
+}
+
+#[test]
+fn const_expr_dead_ternary_arm_keeps_function_call() {
+    // The address-constant folding must not intercept a function
+    // designator in an unevaluated `?:` arm: `ilog2`'s dead arm holds a
+    // non-constant call the constant evaluator skips. A constant condition
+    // selects the live arm, so the array dimension folds.
+    let src = "
+        extern int probe_u32(unsigned);
+        extern int probe_u64(unsigned long long);
+        #define pick(n) (__builtin_constant_p(n) ? ((n) < 2 ? 0 : 5) \
+                         : (sizeof(n) <= 4) ? probe_u32(n) : probe_u64(n))
+        struct s { long long a[pick(64) + 1]; };
+        int main(void) { return (int)(sizeof(struct s) / sizeof(long long)); }
+    ";
+    assert_eq!(run_str(src), 6);
+}

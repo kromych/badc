@@ -6212,6 +6212,20 @@ fn emit_inline_asm(
             _ => None,
         }
     };
+    // Section-label offsets, so a `.skip` in the main stream can size its
+    // padding against the replacement length (`775f - 774f`, both in a
+    // `.pushsection`) before the sections are materialized below.
+    let section_measure = match super::ssa::emit_common::measure_asm_section_offsets(
+        section_blocks,
+        &const_of,
+        false,
+    ) {
+        Ok(m) => m,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
     // Encode each template instruction with its operands resolved to the
     // assigned registers, explicit registers, and immediates.
     for insn in &insns {
@@ -6223,6 +6237,39 @@ fn emit_inline_asm(
         // A raw-byte piece emits its literal bytes with no operand resolution.
         if insn.mnemonic == super::asm::Mnemonic::RawBytes {
             code.extend_from_slice(&insn.bytes);
+            continue;
+        }
+        // `.skip count, fill`: pad with `count` fill bytes. `count` resolves
+        // against the section replacement length and the template labels
+        // already emitted (the ALTERNATIVE old site is padded to the longer of
+        // the two so a boot-time patch fits).
+        if insn.mnemonic == super::asm::Mnemonic::Skip {
+            let expr = insn.sym_target.as_deref().unwrap_or("0");
+            let resolve = |name: &str| -> Option<i64> {
+                // A bare decimal is an integer literal; a GNU as numeric label is
+                // referenced only as `Nb` / `Nf`. Leave literals for the evaluator.
+                if name.bytes().all(|c| c.is_ascii_digit()) {
+                    return None;
+                }
+                if let Some(off) = section_measure.offset(name) {
+                    return Some(off);
+                }
+                let digits = name.strip_suffix(['b', 'f'])?;
+                let num: u32 = digits.parse().ok()?;
+                label_defs
+                    .iter()
+                    .rfind(|&&(n, _)| n == num)
+                    .map(|&(_, off)| off as i64)
+            };
+            let Some(count) = super::ssa::emit_common::eval_asm_expr_with_labels(expr, &resolve)
+            else {
+                return fail("inline asm: `.skip` count is not a constant");
+            };
+            if count < 0 {
+                return fail("inline asm: `.skip` count is negative");
+            }
+            let fill = insn.bytes.first().copied().unwrap_or(0);
+            code.resize(code.len() + count as usize, fill);
             continue;
         }
         // A data directive with operand references (`.long %c0`): each

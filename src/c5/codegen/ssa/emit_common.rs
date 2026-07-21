@@ -1534,6 +1534,99 @@ pub(crate) fn asm_operand_data_target(
     }
 }
 
+/// Section-relative offsets of the labels one materialize call defines.
+/// A same-section label difference (`775f - 774f`, an alternatives
+/// replacement length) folds to a constant from these even when the field
+/// referencing it sits in another section, and the main stream's `.skip`
+/// padding sizes itself from them. Offsets are measured from zero per call:
+/// only differences within one section are asked of the map, so a section's
+/// pre-existing sink length cancels.
+pub(crate) struct SectionLabelOffsets {
+    map: alloc::collections::BTreeMap<alloc::string::String, (alloc::string::String, i64)>,
+}
+
+impl SectionLabelOffsets {
+    /// The section-relative offset of a label reference (`774f` / a name),
+    /// or `None` when the name is not a label this call defines.
+    pub(crate) fn offset(&self, name: &str) -> Option<i64> {
+        self.map
+            .get(numeric_label_digits(name).unwrap_or(name))
+            .map(|(_, off)| *off)
+    }
+    /// The section key a label reference is defined in; two labels fold to a
+    /// constant difference only when this agrees.
+    pub(crate) fn section(&self, name: &str) -> Option<&str> {
+        self.map
+            .get(numeric_label_digits(name).unwrap_or(name))
+            .map(|(s, _)| s.as_str())
+    }
+}
+
+/// Measure the section-relative offset of every label the blocks define,
+/// before the field values (or the main stream) are laid out. Each item's
+/// byte length is structural -- data width times count, string length,
+/// alignment / `.org` padding -- so a forward label difference and the
+/// `.skip` replacement padding resolve without the values.
+pub(crate) fn measure_asm_section_offsets(
+    blocks: &[AsmSectionBlock],
+    const_of: &dyn Fn(u8) -> Option<i64>,
+    align_is_p2: bool,
+) -> Result<SectionLabelOffsets, alloc::string::String> {
+    let mut map: alloc::collections::BTreeMap<alloc::string::String, (alloc::string::String, i64)> =
+        alloc::collections::BTreeMap::new();
+    let mut lens: alloc::collections::BTreeMap<alloc::string::String, i64> =
+        alloc::collections::BTreeMap::new();
+    for b in blocks {
+        let key = alloc::format!("{}\u{0}{}\u{0}{:?}", b.name, b.flags, b.sh_type);
+        let mut at = *lens.get(&key).unwrap_or(&0);
+        for item in &b.items {
+            match item {
+                AsmSectionItem::Label(name) => {
+                    let digits = numeric_label_digits(name).unwrap_or(name);
+                    map.insert(alloc::string::String::from(digits), (key.clone(), at));
+                }
+                AsmSectionItem::Global(_) => {}
+                AsmSectionItem::Data { width, values } => {
+                    at += *width as i64 * values.len() as i64;
+                }
+                AsmSectionItem::Bytes(bs) => at += bs.len() as i64,
+                AsmSectionItem::Align(n) => {
+                    let mask = *n as i64 - 1;
+                    at = (at + mask) & !mask;
+                }
+                AsmSectionItem::AlignArch(n) => {
+                    let bytes = if align_is_p2 {
+                        1i64 << (*n).min(12)
+                    } else {
+                        *n as i64
+                    };
+                    let mask = bytes - 1;
+                    at = (at + mask) & !mask;
+                }
+                AsmSectionItem::Org(n) => at = at.max(*n as i64),
+                AsmSectionItem::OrgLabel { label, addend } => {
+                    let digits = numeric_label_digits(label).unwrap_or(label);
+                    let base = map
+                        .get(digits)
+                        .filter(|(sk, _)| *sk == key)
+                        .map(|(_, o)| *o)
+                        .ok_or_else(|| {
+                            alloc::format!(
+                                "inline asm: `.org` label `{label}` is not defined above"
+                            )
+                        })?;
+                    let add = eval_const_expr_ops(addend, &|i| const_of(i)).ok_or_else(|| {
+                        alloc::string::String::from("inline asm: non-constant `.org` addend")
+                    })?;
+                    at = (base + add).max(at);
+                }
+            }
+        }
+        lens.insert(key, at);
+    }
+    Ok(SectionLabelOffsets { map })
+}
+
 /// Materialize the parsed section blocks: resolve operand constants and
 /// label references, lay out the bytes, and merge into the sink by
 /// `(name, flags, sh_type)`. `const_of` yields an `i`-class operand's
@@ -1577,6 +1670,10 @@ pub(crate) fn materialize_asm_sections(
             ));
         }
     }
+    // Offsets of every section label, so a difference to a label defined in a
+    // later block (the replacement length `775f - 774f`, whose field sits in
+    // the earlier `.altinstructions`) folds to a constant.
+    let measured = measure_asm_section_offsets(blocks, const_of, align_is_p2)?;
     for b in blocks {
         let sec = match sink
             .iter_mut()
@@ -1752,32 +1849,33 @@ pub(crate) fn materialize_asm_sections(
                                 subtrahend,
                             } => {
                                 // A label difference is a constant when both
-                                // labels resolve, as an emitted-text template
-                                // label (`label_off`) or one defined above in
-                                // this section (numeric ones under `num_unique`).
-                                let resolve = |n: &str,
-                                               labels: &[AsmSectionLabel]|
-                                 -> Result<i64, alloc::string::String> {
+                                // labels resolve and share a section: an
+                                // emitted-text template label (`label_off`,
+                                // main stream) or a section label (`measured`,
+                                // any block of this call). A cross-section
+                                // difference is not a constant.
+                                let resolve = |n: &str| -> Result<
+                                    (Option<&str>, i64),
+                                    alloc::string::String,
+                                > {
                                     if let Some(off) = label_off(n) {
-                                        return Ok(off as i64);
+                                        return Ok((None, off as i64));
                                     }
-                                    let uni = numeric_label_digits(n)
-                                        .and_then(|d| {
-                                            num_unique.get(d).map(alloc::string::String::as_str)
-                                        })
-                                        .unwrap_or(n);
-                                    labels
-                                        .iter()
-                                        .find(|l| l.name == uni && l.offset != PENDING_LABEL)
-                                        .map(|l| l.offset as i64)
-                                        .ok_or_else(|| {
-                                            alloc::format!(
-                                                "inline asm: label difference needs defined labels, `{n}` is not one"
-                                            )
-                                        })
+                                    match (measured.section(n), measured.offset(n)) {
+                                        (Some(s), Some(off)) => Ok((Some(s), off)),
+                                        _ => Err(alloc::format!(
+                                            "inline asm: label difference needs defined labels, `{n}` is not one"
+                                        )),
+                                    }
                                 };
-                                let diff = resolve(minuend, &sec.labels)?
-                                    - resolve(subtrahend, &sec.labels)?;
+                                let (ms, mo) = resolve(minuend)?;
+                                let (ss, so) = resolve(subtrahend)?;
+                                if ms != ss {
+                                    return Err(alloc::format!(
+                                        "inline asm: label difference `{minuend} - {subtrahend}` is not a constant (crosses sections)"
+                                    ));
+                                }
+                                let diff = mo - so;
                                 if !value_fits_width(diff, *width) {
                                     return Err(alloc::format!(
                                         "inline asm: label difference {diff} does not fit a {width}-byte field"
@@ -2198,6 +2296,40 @@ pub(crate) fn eval_asm_if_condition(s: &str) -> Option<i64> {
     (i == b.len()).then_some(v)
 }
 
+/// Evaluate a GNU as constant expression whose leaves may be label
+/// references, resolved through `resolve` (a label name to its value). The
+/// alternatives `.skip` count mixes template-label and section-label
+/// differences (`-(((775f-774f)-(772b-771b)) > 0) * (...)`). Each identifier
+/// the resolver knows is substituted with its value; a numeric literal is
+/// left for the evaluator. `None` when a leaf is unresolved or the result is
+/// not a constant.
+pub(crate) fn eval_asm_expr_with_labels(
+    expr: &str,
+    resolve: &dyn Fn(&str) -> Option<i64>,
+) -> Option<i64> {
+    let b = expr.as_bytes();
+    let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
+    let mut out = alloc::string::String::with_capacity(expr.len());
+    let mut i = 0;
+    while i < b.len() {
+        if ident(b[i]) {
+            let start = i;
+            while i < b.len() && ident(b[i]) {
+                i += 1;
+            }
+            let tok = &expr[start..i];
+            match resolve(tok) {
+                Some(v) => out.push_str(&alloc::format!("{v}")),
+                None => out.push_str(tok),
+            }
+        } else {
+            out.push(b[i] as char);
+            i += 1;
+        }
+    }
+    eval_asm_if_condition(&out)
+}
+
 fn const_relational(b: &[u8], i: &mut usize, op: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
     let mut v = const_bitor(b, i, op)?;
     loop {
@@ -2213,7 +2345,10 @@ fn const_relational(b: &[u8], i: &mut usize, op: &dyn Fn(u8) -> Option<i64>) -> 
         };
         *i += len;
         let rhs = const_bitor(b, i, op)?;
-        v = rel(v, rhs) as i64;
+        // GNU as yields -1 (all bits set) for a true comparison, 0 for false;
+        // the alternatives `.skip` padding `-((rlen-slen) > 0) * (rlen-slen)`
+        // relies on the -1 to recover a positive count.
+        v = if rel(v, rhs) { -1 } else { 0 };
     }
 }
 
@@ -2339,7 +2474,10 @@ fn const_unary(b: &[u8], i: &mut usize, op: &dyn Fn(u8) -> Option<i64>) -> Optio
         }
         Some(b'(') => {
             *i += 1;
-            let v = const_bitor(b, i, op)?;
+            // A parenthesised group may itself compare (`((rlen-slen) > 0)` in
+            // the alternatives `.skip`), so parse the full expression grammar,
+            // relational included, not just the arithmetic below it.
+            let v = const_relational(b, i, op)?;
             skip_ws(b, i);
             (b.get(*i) == Some(&b')')).then(|| {
                 *i += 1;
@@ -2881,11 +3019,12 @@ mod asm_section_tests {
     #[test]
     fn asm_conditionals_keep_the_taken_branch() {
         // `.if <expr>` compares with the relational operators; a non-zero
-        // result keeps the branch. `.else` / `.elseif` select the live arm,
-        // and a dropped branch takes its `.pushsection` with it.
-        assert_eq!(eval_asm_if_condition("1 == 1"), Some(1));
+        // result keeps the branch. A true comparison is -1, as in GNU as.
+        // `.else` / `.elseif` select the live arm, and a dropped branch takes
+        // its `.pushsection` with it.
+        assert_eq!(eval_asm_if_condition("1 == 1"), Some(-1));
         assert_eq!(eval_asm_if_condition("1 != 1"), Some(0));
-        assert_eq!(eval_asm_if_condition("(1 << 2) >= 4"), Some(1));
+        assert_eq!(eval_asm_if_condition("(1 << 2) >= 4"), Some(-1));
         assert_eq!(eval_asm_if_condition("nop"), None);
         let reduce = |t: &str| strip_asm_conditionals(t).unwrap().unwrap();
         assert_eq!(reduce(".if 1 == 1\nnop\n.endif\n"), "nop\n");
@@ -2973,6 +3112,98 @@ mod asm_section_tests {
     }
 
     #[test]
+    fn cross_section_label_difference_folds_to_replacement_length() {
+        // The alternatives entry's `.byte 775f - 774f` measures a distance
+        // between two labels in a later section (`.altinstr_replacement`), while
+        // the field itself sits in `.altinstructions`. GNU as folds it to the
+        // replacement length (3 here). A difference across sections is rejected.
+        let text = ".pushsection .altinstructions,\"a\"\n.byte 775f - 774f\n.popsection\n\
+                    .pushsection .altinstr_replacement,\"ax\"\n\
+                    774:\n.byte 0x0f,0x01,0xca\n775:\n.popsection\n";
+        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            false,
+            &mut sink,
+        )
+        .unwrap();
+        let entry = sink.iter().find(|s| s.name == ".altinstructions").unwrap();
+        assert_eq!(
+            entry.bytes,
+            alloc::vec![3],
+            "775f - 774f is the repl length"
+        );
+        assert!(
+            entry.relocs.is_empty(),
+            "a same-section distance is constant"
+        );
+    }
+
+    #[test]
+    fn cross_section_label_difference_across_sections_is_rejected() {
+        // `774f` and `1b` live in different sections, so their difference is not
+        // a constant; it is rejected rather than folded to a bogus byte.
+        let text = "1: nop\n.pushsection .a,\"a\"\n.byte 774f - 1b\n.popsection\n\
+                    .pushsection .b,\"ax\"\n774:\n.byte 0\n.popsection\n";
+        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let mut sink = alloc::vec::Vec::new();
+        let err = materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|name| (name == "1b").then_some(0),
+            &|_| None,
+            &|_| None,
+            false,
+            &mut sink,
+        )
+        .expect_err("cross-section difference is not a constant");
+        assert!(err.contains("crosses sections"), "{err}");
+    }
+
+    #[test]
+    fn skip_count_expression_matches_gnu_as() {
+        // The ALTERNATIVE `.skip` count `-(((rlen)-(slen)) > 0) * ((rlen)-(slen))`
+        // pads by `max(0, rlen - slen)`: a relational is -1 for true (GNU as),
+        // so a longer replacement yields a positive count and a shorter one
+        // zero. Labels resolve through the passed closure.
+        let expr = "-(((775f-774f)-(772b-771b)) > 0) * ((775f-774f)-(772b-771b))";
+        let pad = |rlen: i64, slen: i64| {
+            eval_asm_expr_with_labels(expr, &|n| match n {
+                "775f" => Some(rlen),
+                "774f" => Some(0),
+                "772b" => Some(slen),
+                "771b" => Some(0),
+                _ => None,
+            })
+        };
+        assert_eq!(pad(3, 0), Some(3), "replacement longer: pad the difference");
+        assert_eq!(pad(1, 4), Some(0), "replacement shorter: no padding");
+        assert_eq!(pad(2, 2), Some(0), "equal length: no padding");
+        // A constant count needs no labels; an unknown label is not a constant.
+        assert_eq!(eval_asm_expr_with_labels("16", &|_| None), Some(16));
+        assert_eq!(eval_asm_expr_with_labels("7f - 6b", &|_| None), None);
+    }
+
+    #[test]
+    fn measure_offsets_locate_section_labels() {
+        // Structural measurement places each label at its byte offset within the
+        // section, so a forward difference resolves before the values are laid
+        // out: `774` at 0, `775` after the 3 replacement bytes.
+        let text = ".pushsection .altinstr_replacement,\"ax\"\n\
+                    774:\n.byte 0x0f,0x01,0xca\n775:\n.popsection\n";
+        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let m = measure_asm_section_offsets(&blocks, &|_| None, false).unwrap();
+        assert_eq!(m.offset("774f"), Some(0));
+        assert_eq!(m.offset("775f"), Some(3));
+        assert_eq!(m.section("774f"), m.section("775f"), "same section");
+    }
+
+    #[test]
     fn section_label_difference_overflow_rejected() {
         // A distance outside the field width is rejected, not truncated.
         let text = "1: nop\n2: nop\n.pushsection .x,\"a\"\n.byte 2b - 1b\n.popsection\n";
@@ -3013,12 +3244,13 @@ mod asm_section_tests {
 
     #[test]
     fn replacement_instruction_in_named_section_is_rejected() {
-        // The x86 ALTERNATIVE places its replacement instructions in a
-        // `.pushsection .altinstr_replacement,"ax"`. Assembling code into a
-        // section is not implemented; a replacement instruction is rejected
-        // rather than dropped, which would leave the `.altinstructions` entry
-        // pointing at absent bytes. Data directives in the same section stay
-        // accepted.
+        // The x86 ALTERNATIVE places its replacement in a `.pushsection
+        // .altinstr_replacement,"ax"`. A raw-byte (`.byte`) replacement is
+        // assembled and its old site padded by `.skip` (see the linker test
+        // `x86_alternative_data_replacement_pads_and_relocates`). Assembling
+        // real instructions into a section is not implemented; a replacement
+        // instruction is rejected rather than dropped, which would leave the
+        // `.altinstructions` entry pointing at absent bytes.
         let text = "771: nop\n.pushsection .altinstr_replacement,\"ax\"\n\
                     774: wrmsr\n775:\n.popsection\n";
         let err = extract_asm_sections(text, false).unwrap_err();

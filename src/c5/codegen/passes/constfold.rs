@@ -253,6 +253,7 @@ mod tests {
             locals: 0,
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
             n_params: 0,
             is_variadic: false,
             is_inline: false,

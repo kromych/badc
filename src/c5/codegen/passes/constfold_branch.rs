@@ -170,6 +170,7 @@ mod tests {
             multi_cell_slots: Vec::new(),
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

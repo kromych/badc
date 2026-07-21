@@ -5,11 +5,11 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
-    v2   StoreLocal { off=2, value=v1, kind=I64 }         -> -
+    v2   Imm(0)                                           -> x0
     v3   LocalAddr(-1)                                    -> x0
     v4   ImmData(8)                                       -> x1
     v5   Mcpy { dst=v3, src=v4, size=4 }                  -> x0
-    v6   LoadLocal { off=2, kind=U32 }                    -> x0
+    v6   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x0
     v7   Imm(-16)                                         -> x1
     v8   Imm(4294967280)                                  -> x1
     v9   BinopI { op=and, lhs=v6, rhs_imm=4294967280 }    -> x0
@@ -17,9 +17,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v11  Load { addr=v10, disp=0, kind=U32 }              -> x1
     v12  BinopI { op=and, lhs=v11, rhs_imm=15 }           -> x1
     v13  Binop { op=or, lhs=v9, rhs=v12 }                 -> x0
-    v14  StoreLocal { off=2, value=v13, kind=I32 }        -> -
-    v15  BinopI { op=and, lhs=v13, rhs_imm=4294967295 }   -> x0
-    v16  LoadLocal { off=2, kind=U32 }                    -> x0
+    v14  Imm(0)                                           -> x1
+    v15  BinopI { op=and, lhs=v13, rhs_imm=4294967295 }   -> x1
+    v16  BinopI { op=and, lhs=v13, rhs_imm=4294967295 }   -> x0
     terminator Return(v16)   (exit_acc=v16)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main

@@ -10,25 +10,23 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	stur	x0, [x29, #0x10]
-               	sub	x0, x29, #0x8
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	sub	x1, x29, #0x8
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x1]
-               	strb	w10, [x0]
-               	ldrb	w10, [x1, #0x1]
-               	strb	w10, [x0, #0x1]
-               	ldrb	w10, [x1, #0x2]
-               	strb	w10, [x0, #0x2]
-               	ldrb	w10, [x1, #0x3]
-               	strb	w10, [x0, #0x3]
+               	ldrb	w10, [x2]
+               	strb	w10, [x1]
+               	ldrb	w10, [x2, #0x1]
+               	strb	w10, [x1, #0x1]
+               	ldrb	w10, [x2, #0x2]
+               	strb	w10, [x1, #0x2]
+               	ldrb	w10, [x2, #0x3]
+               	strb	w10, [x1, #0x3]
                	ldr	x10, [sp], #0x10
-               	ldur	w0, [x29, #0x10]
+               	mov	w0, w0
                	mov	x17, #0xfff0            // =65520
                	movk	x17, #0xffff, lsl #16
                	and	x0, x0, x17
@@ -37,11 +35,9 @@ Disassembly of section .text:
                	mov	x17, #0xf               // =15
                	and	x1, x1, x17
                	orr	x0, x0, x1
-               	stur	w0, [x29, #0x10]
-               	ldur	w0, [x29, #0x10]
+               	mov	w0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <main>:

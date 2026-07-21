@@ -1456,6 +1456,7 @@ fn splice_multi_block(
         // the caller's own flag can be set here.
         has_returns_twice_call: original.has_returns_twice_call,
         did_unroll: original.did_unroll,
+        did_inline: original.did_inline,
     };
 }
 
@@ -2012,6 +2013,10 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             inline_caller(caller, &local);
             if caller.insts.len() != before {
                 changed = true;
+                // The splice relocated the callee's own local slots into
+                // this caller's frame; mark it so the post-inline mem2reg
+                // re-run promotes any now-address-free single-width slot.
+                caller.did_inline = true;
                 // A spliced callee whose loops were unrolled carries
                 // constant-offset array accesses into the caller; mark
                 // the caller so the post-inline scalar promotion scans it.

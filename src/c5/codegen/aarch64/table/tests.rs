@@ -1343,6 +1343,19 @@ fn memory_and_positional_registers() {
     // Atomic memory ops share the Rs@16 / Rt@0 / base layout.
     assert_eq!(enc("swp", &[w(14), w(15), m(16)]), 0xB82E820F);
     assert_eq!(enc("ldadd", &[x(17), x(18), m(19)]), 0xF8310272);
+    // Compare-and-swap-pair: Rs@16, Rt@0, base@5; the 2nd/4th operands are the
+    // implied Rs+1 / Rt+1 (validated, not encoded). Bit 30 is the 64-bit form,
+    // bit 22 acquire, bit 15 release. Byte-identical to GNU as.
+    assert_eq!(enc("casp", &[x(0), x(1), x(2), x(3), m(4)]), 0x48207C82);
+    assert_eq!(enc("caspal", &[x(0), x(1), x(2), x(3), m(4)]), 0x4860FC82);
+    assert_eq!(enc("casp", &[w(0), w(1), w(2), w(3), m(4)]), 0x08207C82);
+    assert_eq!(enc("caspa", &[x(4), x(5), x(6), x(7), m(8)]), 0x48647D06);
+    assert_eq!(enc("caspl", &[w(2), w(3), w(4), w(5), m(6)]), 0x0822FCC4);
+    // A malformed pair -- odd base, non-consecutive, or mismatched width --
+    // cannot be encoded and is rejected, never silently mis-encoded.
+    assert!(encode("casp", &[x(1), x(2), x(3), x(4), m(5)]).is_err()); // odd Rs
+    assert!(encode("casp", &[x(0), x(3), x(2), x(3), m(4)]).is_err()); // gap
+    assert!(encode("casp", &[w(0), x(1), x(2), x(3), m(4)]).is_err()); // width
     // Store-exclusive: the status register is Rd at bit 16 (not bit 0); the
     // stored value may be wider than the status register.
     assert_eq!(enc("stlxr", &[w(20), w(21), m(22)]), 0x8814FED5);

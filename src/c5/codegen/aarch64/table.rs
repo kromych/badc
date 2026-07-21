@@ -395,6 +395,47 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         };
         return Ok(base | ((field as u32) << 5) | (rt as u32 & 31));
     }
+    // `casp{,a,l,al} <Rs>, <R(s+1)>, <Rt>, <R(t+1)>, [<Xn|SP>]` -- the LSE
+    // compare-and-swap-pair. Only Rs (bit 16), Rt (bit 0) and Rn (bit 5) are
+    // encoded; the second and fourth operands are the implied Rs+1 / Rt+1 and
+    // are validated, not stored. Rs and Rt must be even. Byte-identical to GNU
+    // as: `casp x0,x1,x2,x3,[x4]` is 0x4820_7C82.
+    if let "casp" | "caspa" | "caspl" | "caspal" = mnemonic {
+        let [
+            Opnd::Reg { num: rs, is64 },
+            Opnd::Reg { num: rs2, is64: w1 },
+            Opnd::Reg { num: rt, is64: w2 },
+            Opnd::Reg { num: rt2, is64: w3 },
+            Opnd::Mem {
+                base: rn,
+                off: 0,
+                pre: false,
+            },
+        ] = *ops
+        else {
+            return Err(String::from(
+                "inline asm: casp needs <Rs>, <Rs+1>, <Rt>, <Rt+1>, [Xn]",
+            ));
+        };
+        if is64 != w1 || is64 != w2 || is64 != w3 {
+            return Err(String::from("inline asm: casp register widths differ"));
+        }
+        if rs % 2 != 0 || rt % 2 != 0 {
+            return Err(String::from("inline asm: casp Rs and Rt must be even"));
+        }
+        if rs2 != rs + 1 || rt2 != rt + 1 {
+            return Err(String::from(
+                "inline asm: casp second/fourth register must be Rs+1 / Rt+1",
+            ));
+        }
+        let acquire = matches!(mnemonic, "caspa" | "caspal");
+        let release = matches!(mnemonic, "caspl" | "caspal");
+        let base = 0x0820_7C00u32
+            | if is64 { 1 << 30 } else { 0 }
+            | if acquire { 1 << 22 } else { 0 }
+            | if release { 1 << 15 } else { 0 };
+        return Ok(base | ((rs as u32) << 16) | ((rn as u32) << 5) | (rt as u32));
+    }
     // fmov between a SIMD/FP register and a GP register (bridging the two
     // register files), or an FP-to-FP move. The GP<->FP forms require matching
     // widths (Xd<->Dn, Wd<->Sn); Rn/Rd sit at their usual positions.

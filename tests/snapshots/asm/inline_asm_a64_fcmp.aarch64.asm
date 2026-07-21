@@ -12,8 +12,29 @@ Disassembly of section .text:
                	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x0, x29, #0x8
+               	sub	sp, sp, #0x30
+               	mov	x0, #0x4008000000000000 // =4613937818241073152
+               	sub	x1, x29, #0x20
+               	sub	sp, sp, #0x20
+               	str	x0, [sp, #0x10]
+               	str	d0, [sp, #0x18]
+               	str	x1, [sp]
+               	fmov	d16, x0
+               	str	d16, [sp, #0x8]
+               	ldr	d0, [sp, #0x8]
+               	fcmp	d0, #0.0
+               	cset	w0, ge
+               	ldr	x16, [sp]
+               	str	w0, [x16]
+               	ldr	x0, [sp, #0x10]
+               	ldr	d0, [sp, #0x18]
+               	add	sp, sp, #0x20
+               	ldursw	x0, [x29, #-0x20]
+               	cbz	x0, <addr>
+               	mov	x0, #0x4008000000000000 // =4613937818241073152
+               	fmov	d16, x0
+               	fneg	d0, d16
+               	sub	x0, x29, #0x28
                	sub	sp, sp, #0x20
                	str	x0, [sp, #0x10]
                	str	d0, [sp, #0x18]
@@ -27,27 +48,13 @@ Disassembly of section .text:
                	ldr	x0, [sp, #0x10]
                	ldr	d0, [sp, #0x18]
                	add	sp, sp, #0x20
-               	ldursw	x0, [x29, #-0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x0, #0x4008000000000000 // =4613937818241073152
-               	fmov	d0, x0
-               	bl	<addr>
-               	cbz	x0, <addr>
-               	mov	x0, #0x4008000000000000 // =4613937818241073152
-               	fmov	d16, x0
-               	fneg	d0, d16
-               	bl	<addr>
+               	ldursw	x0, [x29, #-0x28]
                	cmp	x0, #0x0
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	x0, #0x2a               // =42
                	sxtw	x0, w0
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0

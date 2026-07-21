@@ -12,9 +12,9 @@ Disassembly of section .text:
                	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sxtw	x0, w0
-               	sub	x1, x29, #0x8
+               	sub	sp, sp, #0x30
+               	mov	x0, #0x15               // =21
+               	sub	x1, x29, #0x28
                	sub	sp, sp, #0x30
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
@@ -31,18 +31,13 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x18]
                	ldr	d0, [sp, #0x20]
                	add	sp, sp, #0x30
-               	ldursw	x0, [x29, #-0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<lane0_max>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sxtw	x0, w0
-               	sxtw	x1, w1
-               	sub	x2, x29, #0x8
+               	ldursw	x0, [x29, #-0x28]
+               	cmp	x0, #0x2a
+               	cset	x0, eq
+               	cbz	x0, <addr>
+               	mov	x0, #0x2a               // =42
+               	mov	x1, #0xa                // =10
+               	sub	x2, x29, #0x30
                	sub	sp, sp, #0x40
                	str	x0, [sp, #0x18]
                	str	x1, [sp, #0x20]
@@ -66,27 +61,13 @@ Disassembly of section .text:
                	ldr	d0, [sp, #0x30]
                	ldr	d1, [sp, #0x38]
                	add	sp, sp, #0x40
-               	ldursw	x0, [x29, #-0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x0, #0x15               // =21
-               	bl	<addr>
-               	cmp	x0, #0x2a
-               	cset	x0, eq
-               	cbz	x0, <addr>
-               	mov	x0, #0x2a               // =42
-               	mov	x1, #0xa                // =10
-               	bl	<addr>
+               	ldursw	x0, [x29, #-0x30]
                	cmp	x0, #0x2a
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	x0, #0x2a               // =42
                	sxtw	x0, w0
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0

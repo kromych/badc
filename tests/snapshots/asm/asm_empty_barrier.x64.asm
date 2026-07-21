@@ -10,37 +10,17 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<barrier_input>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rax, -0x10(%rbp)
-               	movq	%rdi, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	movq	-0x10(%rbp), %rax
-               	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-
-<barrier_memory>:
-               	xorq	%rax, %rax
-               	retq
-
-<barrier_bare>:
-               	xorq	%rax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x20, %rsp
                	movl	$0x29, %eax
                	movl	%eax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rdi
-               	callq	<addr>
-               	callq	<addr>
-               	callq	<addr>
+               	leaq	-0x8(%rbp), %rax
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rax, -0x18(%rbp)
+               	movq	-0x18(%rbp), %rax
+               	movq	-0x20(%rbp), %rax
                	movslq	-0x8(%rbp), %rax
                	incq	%rax
                	movl	%eax, -0x8(%rbp)
@@ -51,6 +31,8 @@ Disassembly of section .text:
                	subq	$0x2a, %rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
-               	addq	$0x10, %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	jmp	<addr>
+               	jmp	<addr>

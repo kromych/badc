@@ -140,6 +140,16 @@ fn is_inline_candidate(
         say(format_args!("variadic"));
         return false;
     }
+    // A naked function's body is raw asm implementing its own calling
+    // convention -- prologue, stack management, and the return / control
+    // transfer (a `ret` or a stack-switching `jmp`). Splicing that asm into
+    // a caller discards the contract: the inlined `ret` transfers control
+    // away from the caller and the stack manipulation corrupts the caller's
+    // frame. A naked function is never an inline candidate.
+    if func.is_naked {
+        say(format_args!("naked function"));
+        return false;
+    }
     // A self-recursive callee stays out of line: splicing it does not
     // remove the recursion -- the recursive calls come along -- so
     // inlining only unrolls the call tree one level per candidacy-fixpoint
@@ -425,14 +435,21 @@ fn is_inline_candidate(
             }
         }
     }
-    // A callee's own local slots are relocated into the caller's frame only
-    // on the multi-block splice path (`splice_multi_block`), which the flat
-    // `inline_caller` delegates every multi-block callee to. A no-aggregate
-    // multi-block callee is therefore the only shape whose address-taken
-    // locals (a `LocalAddr` / `LoadLocal` / `StoreLocal` / `Mcpy` on a
-    // negative slot) the splice reproduces; a single-block or aggregate
-    // callee keeps the strict gates.
-    let reloc = func.agg_descs.is_empty() && func.blocks.len() > 1;
+    // A callee's own local slots are relocated into the caller's frame by
+    // `splice_multi_block`, which `inline_caller` runs for every multi-block
+    // callee and for a single-block callee that holds inline asm. The reloc
+    // path is what lets an asm output write through an own local (the
+    // `get_current` / `__rdmsr` shape: the output's `LocalAddr(<0)` and the
+    // read-back `LoadLocal(<0)` relocate into the caller frame); a
+    // single-block callee without asm keeps the strict flat-path gates, so
+    // broadening does not newly inline unrelated address-taken-local
+    // helpers. A no-aggregate callee is the shape whose relocated locals and
+    // inline asm the splice reproduces; an aggregate callee keeps the gates.
+    let has_asm = func
+        .insts
+        .iter()
+        .any(|i| matches!(i, Inst::InlineAsm { .. }));
+    let reloc = func.agg_descs.is_empty() && (func.blocks.len() > 1 || has_asm);
     for (idx, inst) in func.insts.iter().enumerate() {
         match inst {
             Inst::Imm(_)
@@ -551,13 +568,17 @@ fn is_inline_candidate(
             // `callee_remap` and shifts its predecessor block ids into the
             // caller's post-splice numbering (`shift_callee_bid`).
             Inst::Phi { .. } => {}
-            // Input-only inline asm on the reloc path: `rewrite_callee_inst`
-            // remaps the operand args, and an asm-goto's `jump_tables` row
-            // clones into the caller. An output operand would need result /
-            // address handling the splice does not do.
-            Inst::InlineAsm { asm, .. } => {
-                if !reloc || asm.operands.iter().any(|o| o.is_output) {
-                    say(format_args!("inline asm output or non-reloc callee"));
+            // Inline asm on the reloc path: `rewrite_callee_inst` remaps the
+            // operand args -- an output's destination address among them --
+            // and an asm-goto's `jump_tables` row clones into the caller. On
+            // this path the callee has no aggregate, so every output address
+            // is a relocated own-local (its `LocalAddr(<0)` rides the slot
+            // relocation), a remapped pointer, or a carried global; a
+            // parameter-cell address (`LocalAddr(>=2)`) is already rejected
+            // above, so no output escapes to a slot the splice cannot write.
+            Inst::InlineAsm { .. } => {
+                if !reloc {
+                    say(format_args!("inline asm in a non-reloc callee"));
                     return false;
                 }
             }
@@ -1474,6 +1495,20 @@ fn splice_param_ref(
     }
 }
 
+/// Whether a single-block callee must go through `splice_multi_block`
+/// rather than the flat single-block path. The candidate filter admits a
+/// single-block callee's own-local accesses (negative slots) and inline
+/// asm only when it holds inline asm (`reloc`); the flat path drops every
+/// `LoadLocal` / `StoreLocal` and never relocates an own slot, so such a
+/// callee needs the relocation the multi-block splice performs -- its asm
+/// output writes through a relocated own local. Multi-block callees always
+/// take that path regardless; this only reclassifies single-block ones.
+fn needs_reloc_splice(c: &FunctionSsa) -> bool {
+    c.blocks.len() == 1
+        && c.agg_descs.is_empty()
+        && c.insts.iter().any(|i| matches!(i, Inst::InlineAsm { .. }))
+}
+
 /// Splice eligible call sites in `caller` with the bodies named by
 /// `callees`. Modifies `caller` in place.
 fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSsa>) {
@@ -1543,12 +1578,14 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                         .map(|c| (*c, args, *ret_slot_local)),
                     _ => None,
                 };
-                // Multi-block callees: handled by `splice_multi_block`
-                // after this block-walk pass exits via the early-return
-                // below. Skip the single-block inline path here and let
-                // the call survive the local walk; the multi-block
-                // pass runs once over the whole function.
-                let inlined = inlined.filter(|(c, ..)| c.blocks.len() == 1);
+                // Multi-block callees, and single-block callees whose asm /
+                // own-local accesses need relocation, are handled by
+                // `splice_multi_block` after this block-walk pass exits via
+                // the early-return below. Skip them on the flat path here and
+                // let the call survive the local walk; the multi-block pass
+                // runs once over the whole function.
+                let inlined =
+                    inlined.filter(|(c, ..)| c.blocks.len() == 1 && !needs_reloc_splice(c));
                 if let Some((callee, call_args, ret_slot)) = inlined {
                     any_change = true;
                     let remapped_args: Vec<ValueId> =
@@ -1720,7 +1757,8 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
         (b.inst_range.start..b.inst_range.end).any(|pc| {
             matches!(&caller.insts[pc as usize],
                 Inst::Call { target_pc, args, .. }
-                if callees.get(target_pc).is_some_and(|c| c.blocks.len() > 1
+                if callees.get(target_pc).is_some_and(|c| (c.blocks.len() > 1
+                    || needs_reloc_splice(c))
                     && args.len() >= c.n_params))
         })
     });
@@ -1828,7 +1866,7 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                     target_pc, args, ..
                 } = &caller.insts[pc as usize]
                     && let Some(c) = callees.get(target_pc)
-                    && c.blocks.len() > 1
+                    && (c.blocks.len() > 1 || needs_reloc_splice(c))
                     // Same argument-count guard as the single-block path.
                     && args.len() >= c.n_params
                 {
@@ -2132,7 +2170,9 @@ mod tests {
     /// A volatile access the splice would drop keeps the callee out of
     /// line (C99 5.1.2.3p2 / 6.7.3p6): a dead read of a volatile
     /// parameter cell and a volatile local store both reject; the same
-    /// shapes without `volatile` stay candidates.
+    /// shapes without `volatile` stay candidates. A callee without inline
+    /// asm keeps the strict flat-path gates, so the negative-slot store
+    /// still rejects when volatile.
     #[test]
     fn volatile_access_rejects_inlining() {
         let abi = Target::LinuxX64.abi();
@@ -2183,6 +2223,150 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A single-block helper whose inline asm writes an output through an
+    /// own local (`get_current` / `__rdmsr` shape) is a candidate on the
+    /// reloc path -- the output address is a negative-slot `LocalAddr` the
+    /// multi-block splice relocates -- and `needs_reloc_splice` routes it
+    /// off the flat path. An input-only single-block asm (`__wrmsr` shape)
+    /// is likewise admitted. The same output addressing a parameter cell
+    /// stays rejected: that slot has no caller equivalent.
+    #[test]
+    fn output_asm_to_own_local_inlines() {
+        use crate::c5::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
+        let abi = Target::LinuxX64.abi();
+        let reg_output = || AsmBlock {
+            template: b"mov %0, 1".to_vec(),
+            operands: alloc::vec![AsmOperand {
+                constraint: AsmConstraint::Reg,
+                is_output: true,
+                is_rw: false,
+                width: 8,
+                seg: AsmSeg::None,
+            }],
+            clobber_regs: 0,
+            clobber_fp_regs: 0,
+            clobber_memory: false,
+            volatile: false,
+        };
+        // v0 LocalAddr(slot); v1 asm writes output through v0; v2 reads
+        // the slot; Return(v2).
+        let out_via_local = |slot: i64| FunctionSsa {
+            locals: if slot < 0 { -slot } else { 0 },
+            insts: alloc::vec![
+                Inst::LocalAddr(slot),
+                Inst::InlineAsm {
+                    asm: alloc::boxed::Box::new(reg_output()),
+                    args: alloc::vec![0],
+                },
+                Inst::LoadLocal {
+                    off: slot,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ],
+            inst_src: alloc::vec![(0, 0); 3],
+            f32_values: alloc::vec![false; 3],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..3,
+                terminator: Terminator::Return(2),
+                exit_acc: 2,
+            }],
+            ..Default::default()
+        };
+        let own = out_via_local(-1);
+        assert!(is_inline_candidate(&own, 32, abi, None));
+        assert!(needs_reloc_splice(&own));
+        let param = out_via_local(2);
+        let mut reason = alloc::string::String::new();
+        assert!(!is_inline_candidate(&param, 32, abi, Some(&mut reason)));
+        assert_eq!(reason, "LocalAddr of parameter cell 2");
+
+        // Input-only single-block asm: admitted, routed to the reloc splice.
+        let input_only = FunctionSsa {
+            n_params: 1,
+            insts: alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::InlineAsm {
+                    asm: alloc::boxed::Box::new(AsmBlock {
+                        template: b"nop".to_vec(),
+                        operands: alloc::vec![AsmOperand {
+                            constraint: AsmConstraint::Reg,
+                            is_output: false,
+                            is_rw: false,
+                            width: 8,
+                            seg: AsmSeg::None,
+                        }],
+                        clobber_regs: 0,
+                        clobber_fp_regs: 0,
+                        clobber_memory: true,
+                        volatile: true,
+                    }),
+                    args: alloc::vec![0],
+                },
+                Inst::Imm(0),
+            ],
+            inst_src: alloc::vec![(0, 0); 3],
+            f32_values: alloc::vec![false; 3],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..3,
+                terminator: Terminator::Return(2),
+                exit_acc: 2,
+            }],
+            ..Default::default()
+        };
+        assert!(is_inline_candidate(&input_only, 32, abi, None));
+        assert!(needs_reloc_splice(&input_only));
+    }
+
+    /// A naked function is never inlined: its body is raw asm carrying its
+    /// own calling convention, so splicing it into a caller would transfer
+    /// control through the inlined return and corrupt the frame -- the
+    /// coroutine context-switch hang.
+    #[test]
+    fn naked_function_is_never_inlined() {
+        use crate::c5::ir::AsmBlock;
+        let asm = AsmBlock {
+            template: b"ret".to_vec(),
+            operands: alloc::vec![],
+            clobber_regs: 0,
+            clobber_fp_regs: 0,
+            clobber_memory: false,
+            volatile: false,
+        };
+        let f = FunctionSsa {
+            is_naked: true,
+            insts: alloc::vec![
+                Inst::InlineAsm {
+                    asm: alloc::boxed::Box::new(asm),
+                    args: alloc::vec![],
+                },
+                Inst::Imm(0),
+            ],
+            inst_src: alloc::vec![(0, 0); 2],
+            f32_values: alloc::vec![false; 2],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: Terminator::Return(1),
+                exit_acc: 1,
+            }],
+            ..Default::default()
+        };
+        let mut reason = alloc::string::String::new();
+        assert!(!is_inline_candidate(
+            &f,
+            32,
+            Target::LinuxX64.abi(),
+            Some(&mut reason)
+        ));
+        assert_eq!(reason, "naked function");
     }
 
     /// `unhonoured_always_inline` flags a called-but-uninlinable

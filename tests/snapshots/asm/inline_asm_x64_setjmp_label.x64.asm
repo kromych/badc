@@ -10,31 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<ctx_jump>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rdx, -0x18(%rbp)
-               	movq	%rdi, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
-               	movq	(%rax), %rbx
-               	movq	0x8(%rax), %rbp
-               	movq	0x10(%rax), %r12
-               	movq	0x18(%rax), %rdx
-               	movq	0x20(%rax), %r13
-               	movq	0x28(%rax), %r14
-               	movq	%rdx, %rsp
-               	movq	0x30(%rax), %r15
-               	movq	0x38(%rax), %rdx
-               	jmpq	*%rdx
-               	movq	-0x20(%rbp), %rax
-               	movq	-0x18(%rbp), %rdx
-               	xorq	%rax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
-
 <deep_touch>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -116,8 +91,22 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	movl	$0x4, %edi
                	callq	<addr>
-               	movq	%rbx, %rdi
-               	callq	<addr>
+               	movq	%rax, -0x60(%rbp)
+               	movq	%rdx, -0x58(%rbp)
+               	movq	%rbx, -0x50(%rbp)
+               	movq	-0x50(%rbp), %rax
+               	movq	(%rax), %rbx
+               	movq	0x8(%rax), %rbp
+               	movq	0x10(%rax), %r12
+               	movq	0x18(%rax), %rdx
+               	movq	0x20(%rax), %r13
+               	movq	0x28(%rax), %r14
+               	movq	%rdx, %rsp
+               	movq	0x30(%rax), %r15
+               	movq	0x38(%rax), %rdx
+               	jmpq	*%rdx
+               	movq	-0x60(%rbp), %rax
+               	movq	-0x58(%rbp), %rdx
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
                	addq	$0x70, %rsp

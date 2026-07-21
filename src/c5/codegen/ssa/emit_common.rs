@@ -905,6 +905,37 @@ pub(crate) enum AsmSectionTarget {
     /// [`Self::Text`] once the function's `block_offsets` are final. It never
     /// reaches the object writer.
     TextBlock(u32),
+    /// A label in a deferred replacement region (the AArch64 ALTERNATIVE
+    /// `.subsection`), appended to `.text` after the enclosing function body.
+    /// The region's final text base is not known when the section
+    /// materializes, so the region index and the label's byte offset within
+    /// the region are carried here and rewritten to [`Self::Text`] once the
+    /// region is placed (see [`resolve_asm_deferred_relocs`]). It never
+    /// reaches the object writer.
+    DeferredText { region: u32, off: u32 },
+}
+
+/// Where a template label a section field references is defined. `label_off`
+/// returns this so a `.word 663f - .` in the AArch64 ALTERNATIVE
+/// `.altinstructions` entry relocates against the replacement's eventual
+/// text offset rather than an emitted-stream offset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LabelLoc {
+    /// Final byte offset in the emitted text (the main instruction stream).
+    Text(usize),
+    /// A label in a deferred replacement region: region index plus the
+    /// label's byte offset within it.
+    Deferred { region: u32, off: usize },
+}
+
+/// The address space a label difference's terms live in; a difference is a
+/// compile-time constant only when both terms share one. Distinguishes the
+/// emitted text stream, a deferred replacement region, and a named section.
+#[derive(PartialEq, Eq)]
+enum DiffSpace<'a> {
+    Text,
+    Deferred(u32),
+    Section(&'a str),
 }
 
 /// A materialized named section: bytes plus relocations, accumulated
@@ -1004,6 +1035,29 @@ pub(crate) fn resolve_asm_goto_relocs(
         for r in s.relocs.iter_mut().skip(start) {
             if let AsmSectionTarget::TextBlock(bid) = r.target {
                 r.target = AsmSectionTarget::Text(block_off(bid));
+            }
+        }
+    }
+}
+
+/// Rewrite the `AsmSectionTarget::DeferredText` relocations a function's
+/// ALTERNATIVE `.subsection` fields left behind (relative to `snap`, its
+/// entry snapshot) to concrete text offsets, now that each deferred region
+/// is placed. `region_base` maps a region index to its byte offset in the
+/// text; the label's within-region offset is already in the target.
+pub(crate) fn resolve_asm_deferred_relocs(
+    sink: &mut [AsmSection],
+    snap: &AsmSectionsSnapshot,
+    region_base: &dyn Fn(u32) -> usize,
+) {
+    for (i, s) in sink.iter_mut().enumerate() {
+        let start = snap
+            .per_section
+            .get(i)
+            .map_or(0, |&(_, relocs, _, _)| relocs);
+        for r in s.relocs.iter_mut().skip(start) {
+            if let AsmSectionTarget::DeferredText { region, off } = r.target {
+                r.target = AsmSectionTarget::Text(region_base(region) + off as usize);
             }
         }
     }
@@ -1455,6 +1509,77 @@ fn split_top_commas(s: &str) -> alloc::vec::Vec<&str> {
         parts.push(p);
     }
     parts
+}
+
+/// Split an AArch64 ALTERNATIVE template into its main stream and the
+/// `.subsection` replacement code GNU as appends to the section after the
+/// main content. The kernel `ALTERNATIVE` macro places the replacement in
+/// `.subsection 1` bracketed by `.previous`, out of the main sequence's
+/// fall-through path. Returns `(main, deferred)`; `deferred` is empty (and
+/// `main` is `text` unchanged) when there is no `.subsection` or when its
+/// shape is one this pass does not lift: nested in a `.pushsection`, without
+/// a closing `.previous`, a second region in the same template, or a
+/// non-numeric subsection number. `extract_asm_sections` then rejects the
+/// left-in `.subsection` rather than this dropping it silently.
+pub(crate) fn split_asm_subsections(text: &str) -> (alloc::string::String, alloc::string::String) {
+    let unchanged = || {
+        (
+            alloc::string::String::from(text),
+            alloc::string::String::new(),
+        )
+    };
+    if !text.contains(".subsection") {
+        return unchanged();
+    }
+    let mut main = alloc::string::String::with_capacity(text.len());
+    let mut deferred = alloc::string::String::new();
+    // `.pushsection` / `.popsection` nesting; a `.subsection` is a code-stream
+    // directive only at depth 0. `seen` guards against a second region.
+    let mut push_depth: i32 = 0;
+    let mut in_deferred = false;
+    let mut seen = false;
+    for line in text.split('\n') {
+        let t = line.trim();
+        let tok = t.split(char::is_whitespace).next().unwrap_or("");
+        match tok {
+            ".pushsection" | ".section" if !in_deferred => {
+                push_depth += 1;
+            }
+            ".popsection" if !in_deferred => {
+                push_depth -= 1;
+            }
+            ".subsection" if push_depth == 0 && !in_deferred && !seen => {
+                let n = t[tok.len()..].trim();
+                match n.parse::<u32>() {
+                    Ok(0) => return unchanged(),
+                    Ok(_) => {
+                        in_deferred = true;
+                        seen = true;
+                        continue;
+                    }
+                    Err(_) => return unchanged(),
+                }
+            }
+            ".subsection" => return unchanged(),
+            ".previous" if in_deferred => {
+                in_deferred = false;
+                continue;
+            }
+            _ => {}
+        }
+        if in_deferred {
+            deferred.push_str(line);
+            deferred.push('\n');
+        } else {
+            main.push_str(line);
+            main.push('\n');
+        }
+    }
+    // A region left open (no `.previous`) is a shape this pass does not lift.
+    if in_deferred {
+        return unchanged();
+    }
+    (main, deferred)
 }
 
 /// Split a template into its code text and its section blocks. Returns
@@ -2234,15 +2359,16 @@ pub(crate) fn measure_asm_section_offsets(
 /// Materialize the parsed section blocks: resolve operand constants and
 /// label references, lay out the bytes, and merge into the sink by
 /// `(name, flags, sh_type)`. `const_of` yields an `i`-class operand's
-/// constant; `label_off` resolves a template-label name to its text
-/// offset (`None` means the name is a symbol); `operand_sym` yields the
-/// relocation target of an `i`-class operand that names a link-time
+/// constant; `label_off` resolves a template-label name to its location --
+/// an emitted-stream text offset or a deferred replacement region
+/// ([`LabelLoc`]); `None` means the name is a symbol. `operand_sym` yields
+/// the relocation target of an `i`-class operand that names a link-time
 /// address (`.long %c0 - .`) rather than a constant; `goto_block` yields
 /// the block index of an `asm goto` label (`.long %l0 - .`).
 pub(crate) fn materialize_asm_sections(
     blocks: &[AsmSectionBlock],
     const_of: &dyn Fn(u8) -> Option<i64>,
-    label_off: &dyn Fn(&str) -> Option<usize>,
+    label_off: &dyn Fn(&str) -> Option<LabelLoc>,
     operand_sym: &dyn Fn(u8) -> Option<(AsmSectionTarget, i64)>,
     goto_block: &dyn Fn(u8) -> Option<u32>,
     align_is_p2: bool,
@@ -2492,11 +2618,18 @@ pub(crate) fn materialize_asm_sections(
                                     ));
                                 }
                                 // A template text label resolves to a text
-                                // offset; a numeric section label to its
-                                // per-instance-unique symbol; any other name is
-                                // a plain symbol reference.
+                                // offset; a deferred-region label to a
+                                // rewritten-after-placement target; a numeric
+                                // section label to its per-instance-unique
+                                // symbol; any other name is a plain symbol.
                                 let target = match label_off(name) {
-                                    Some(off) => AsmSectionTarget::Text(off),
+                                    Some(LabelLoc::Text(off)) => AsmSectionTarget::Text(off),
+                                    Some(LabelLoc::Deferred { region, off }) => {
+                                        AsmSectionTarget::DeferredText {
+                                            region,
+                                            off: off as u32,
+                                        }
+                                    }
                                     None => match numeric_label_digits(name)
                                         .and_then(|d| num_unique.get(d))
                                     {
@@ -2530,20 +2663,27 @@ pub(crate) fn materialize_asm_sections(
                                 subtrahend,
                             } => {
                                 // A label difference is a constant when both
-                                // labels resolve and share a section: an
-                                // emitted-text template label (`label_off`,
-                                // main stream) or a section label (`measured`,
-                                // any block of this call). A cross-section
-                                // difference is not a constant.
+                                // labels resolve and share a space: the
+                                // emitted text stream, one deferred replacement
+                                // region (`664f-663f`, the ALTERNATIVE
+                                // replacement length), or a named section
+                                // (`measured`). A cross-space difference is not
+                                // a constant. The space tag distinguishes them.
                                 let resolve = |n: &str| -> Result<
-                                    (Option<&str>, i64),
+                                    (DiffSpace, i64),
                                     alloc::string::String,
                                 > {
-                                    if let Some(off) = label_off(n) {
-                                        return Ok((None, off as i64));
+                                    match label_off(n) {
+                                        Some(LabelLoc::Text(off)) => {
+                                            return Ok((DiffSpace::Text, off as i64));
+                                        }
+                                        Some(LabelLoc::Deferred { region, off }) => {
+                                            return Ok((DiffSpace::Deferred(region), off as i64));
+                                        }
+                                        None => {}
                                     }
                                     match (measured.section(n), measured.offset(n)) {
-                                        (Some(s), Some(off)) => Ok((Some(s), off)),
+                                        (Some(s), Some(off)) => Ok((DiffSpace::Section(s), off)),
                                         _ => Err(alloc::format!(
                                             "inline asm: label difference needs defined labels, `{n}` is not one"
                                         )),
@@ -3534,7 +3674,7 @@ mod asm_section_tests {
         materialize_asm_sections(
             &blocks,
             &|idx| (idx == 0).then_some(42),
-            &|name| (name == "1b").then_some(0x40),
+            &|name| (name == "1b").then_some(LabelLoc::Text(0x40)),
             &|_| None,
             &|_| None,
             false,
@@ -3754,7 +3894,7 @@ mod asm_section_tests {
         materialize_asm_sections(
             &blocks,
             &|_| None,
-            &|n| (n == "1b").then_some(0x40),
+            &|n| (n == "1b").then_some(LabelLoc::Text(0x40)),
             &|_| None,
             &|_| None,
             false,
@@ -3826,7 +3966,7 @@ mod asm_section_tests {
         materialize_asm_sections(
             &blocks,
             &|_| None,
-            &|n| (n == "1b").then_some(0),
+            &|n| (n == "1b").then_some(LabelLoc::Text(0)),
             &|_| None,
             &|_| None,
             true,
@@ -3851,8 +3991,8 @@ mod asm_section_tests {
             &blocks,
             &|_| None,
             &|name| match name {
-                "1b" => Some(0),
-                "2b" => Some(4),
+                "1b" => Some(LabelLoc::Text(0)),
+                "2b" => Some(LabelLoc::Text(4)),
                 _ => None,
             },
             &|_| None,
@@ -3913,7 +4053,7 @@ mod asm_section_tests {
         let err = materialize_asm_sections(
             &blocks,
             &|_| None,
-            &|name| (name == "1b").then_some(0),
+            &|name| (name == "1b").then_some(LabelLoc::Text(0)),
             &|_| None,
             &|_| None,
             false,
@@ -3971,8 +4111,8 @@ mod asm_section_tests {
             &blocks,
             &|_| None,
             &|name| match name {
-                "1b" => Some(0),
-                "2b" => Some(256),
+                "1b" => Some(LabelLoc::Text(0)),
+                "2b" => Some(LabelLoc::Text(256)),
                 _ => None,
             },
             &|_| None,
@@ -3986,11 +4126,11 @@ mod asm_section_tests {
 
     #[test]
     fn subsection_is_rejected() {
-        // `.subsection` defers its code to a region appended to the section
-        // (the cpucap ALTERNATIVE replacement). Emitting it inline would run
-        // both the main and the replacement sequence, so it is rejected with a
-        // clear diagnostic rather than miscompiled. Rejected whether or not a
-        // `.pushsection` precedes it.
+        // The AArch64 emitter lifts the ALTERNATIVE `.subsection` replacement
+        // with `split_asm_subsections` before this; `extract_asm_sections` is
+        // the backstop for any `.subsection` that reaches it (a shape the split
+        // did not lift). Emitting it inline would run both the main and the
+        // replacement sequence, so it is rejected rather than miscompiled.
         let with = "661: nop\n.pushsection .altinstructions,\"a\"\n.byte 0\n\
                     .popsection\n.subsection 1\n663: nop\n.previous\n";
         let err = extract_asm_sections(with, true).unwrap_err();
@@ -3998,6 +4138,65 @@ mod asm_section_tests {
         let bare = "nop\n.subsection 1\nnop\n.previous\n";
         let err = extract_asm_sections(bare, true).unwrap_err();
         assert!(err.contains(".subsection"), "{err}");
+    }
+
+    #[test]
+    fn split_asm_subsections_lifts_supported_shape() {
+        // The clean ALTERNATIVE shape -- a `.subsection N` bracketed by
+        // `.previous` at code-stream level -- is lifted: its lines move to the
+        // deferred stream and leave the main stream free of `.subsection`, so
+        // `extract_asm_sections` then processes it.
+        let text = "661:\nmrs x0, tpidr_el1\n662:\n\
+                    .pushsection .altinstructions,\"a\"\n.byte 0\n.popsection\n\
+                    .subsection 1\n663:\nmrs x0, tpidr_el2\n664:\n.previous\n";
+        let (main, deferred) = split_asm_subsections(text);
+        assert!(!main.contains(".subsection"), "main: {main}");
+        assert!(main.contains("tpidr_el1") && main.contains(".altinstructions"));
+        assert!(deferred.contains("tpidr_el2") && deferred.contains("663:"));
+        assert!(!deferred.contains("tpidr_el1"));
+        // Shapes the split does not lift are left intact for the backstop: an
+        // open region (no `.previous`), a second region, and a `.subsection`
+        // nested in a `.pushsection`.
+        for unlifted in [
+            "nop\n.subsection 1\nnop\n",
+            ".subsection 1\nnop\n.previous\n.subsection 1\nnop\n.previous\n",
+            ".pushsection .x,\"ax\"\n.subsection 1\nnop\n.previous\n.popsection\n",
+        ] {
+            let (main, deferred) = split_asm_subsections(unlifted);
+            assert_eq!(main, unlifted, "left intact");
+            assert!(deferred.is_empty());
+        }
+        // A template without `.subsection` is returned unchanged.
+        let (main, deferred) = split_asm_subsections("nop\nret\n");
+        assert_eq!(main, "nop\nret\n");
+        assert!(deferred.is_empty());
+    }
+
+    #[test]
+    fn deferred_org_length_expression_via_label_evaluator() {
+        // The deferred `.org` target reuses `eval_asm_expr_with_labels` with a
+        // resolver mapping the location counter `.` to the current offset and
+        // each `Nb` label to its offset. `. - (664b-663b) + (662b-661b)` moves
+        // `.` by (old_len - new_len): a no-op when the lengths match, backward
+        // (an error at the call site) when the replacement is longer.
+        let at = |cur: i64, m: &[(&'static str, i64)]| {
+            eval_asm_expr_with_labels(". - (664b-663b) + (662b-661b)", &|n| {
+                if n == "." {
+                    return Some(cur);
+                }
+                m.iter().find(|(k, _)| *k == n).map(|(_, v)| *v)
+            })
+        };
+        // new_len 8, old_len 8: target equals `.`.
+        assert_eq!(
+            at(8, &[("663b", 0), ("664b", 8), ("661b", 0), ("662b", 8)]),
+            Some(8)
+        );
+        // new_len 8, old_len 4: target 8 - 8 + 4 = 4, a backward move.
+        assert_eq!(
+            at(8, &[("663b", 0), ("664b", 8), ("661b", 0), ("662b", 4)]),
+            Some(4)
+        );
     }
 
     #[test]

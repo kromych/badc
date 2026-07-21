@@ -1839,6 +1839,14 @@ pub(super) fn write_relocatable(
                             "elf_reloc: unresolved asm-goto section relocation",
                         )));
                     }
+                    AsmSectionTarget::DeferredText { .. } => {
+                        // Rewritten to `Text` once the region is placed; an
+                        // unresolved one means resolve_asm_deferred_relocs was
+                        // skipped.
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            "elf_reloc: unresolved deferred-replacement section relocation",
+                        )));
+                    }
                     AsmSectionTarget::Symbol(name) => {
                         if let Some(&idx) = asm_label_symidx.get(name.as_str()) {
                             (idx as u64, r.addend)

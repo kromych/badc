@@ -907,6 +907,11 @@ pub(crate) fn emit_function(
     // `Terminator::JumpTable`. Each 32-bit entry is patched to
     // `block_offset - table_start` once every block is laid out.
     let mut jump_table_fixups: Vec<(usize, u32)> = Vec::new();
+    // ALTERNATIVE `.subsection` replacements, appended after the body once it
+    // is laid out; the section relocs that point at their labels are then
+    // rewritten to the region's final text offset. A bailed emit returns
+    // false and drops this, so no snapshot is needed.
+    let mut deferred_regions: Vec<DeferredAsmRegion> = Vec::new();
     for (block_idx, block) in func.blocks.iter().enumerate() {
         block_offsets[block_idx] = code.len();
         super::ssa::emit_common::record_block_start_pc(
@@ -993,6 +998,7 @@ pub(crate) fn emit_function(
                     extern_data_names,
                     asm_sections,
                     asm_extern_call_sites,
+                    &mut deferred_regions,
                     Some(AsmGotoCtxA64 {
                         row: &func.jump_tables[table as usize],
                         branch_fixups: &mut branch_fixups,
@@ -1056,6 +1062,7 @@ pub(crate) fn emit_function(
                     fixups,
                     macho_tlv_fixups,
                     macho_tlv_descriptors,
+                    &mut deferred_regions,
                 )
             };
             if !inst_ok {
@@ -1462,6 +1469,20 @@ pub(crate) fn emit_function(
         asm_sections,
         &asm_sections_snapshot,
         &|bid| block_offsets[bid as usize],
+    );
+    // Append each ALTERNATIVE replacement after the function body, out of the
+    // main sequence's fall-through path (GNU as puts it at the end of the
+    // section), and rewrite the `.altinstructions` fields that point at its
+    // labels to the region's final text offset.
+    let mut deferred_bases: Vec<usize> = Vec::with_capacity(deferred_regions.len());
+    for region in &deferred_regions {
+        deferred_bases.push(code.len());
+        code.extend_from_slice(&region.bytes);
+    }
+    super::ssa::emit_common::resolve_asm_deferred_relocs(
+        asm_sections,
+        &asm_sections_snapshot,
+        &|idx| deferred_bases[idx as usize],
     );
     // Patch each jump table's entries with the target block's offset
     // relative to the table base.
@@ -2325,6 +2346,17 @@ struct AsmGotoCtxA64<'a> {
     branch_fixups: &'a mut Vec<BranchFixup>,
 }
 
+/// A deferred ALTERNATIVE replacement region (`.subsection 1`): the encoded
+/// replacement instructions, appended to `.text` after the function body so
+/// the main sequence does not fall through into it. `labels` records each
+/// local label's byte offset within `bytes` so the `.altinstructions`
+/// entry's `.word 663f - .` resolves to the replacement's final text
+/// offset once the region is placed.
+struct DeferredAsmRegion {
+    bytes: alloc::vec::Vec<u8>,
+    labels: alloc::vec::Vec<(u32, usize)>,
+}
+
 /// A template branch to a local (`Nf` / `Nb`) or `asm goto` (`%lK`)
 /// label, recorded as a placeholder word and patched once the target
 /// offset is known.
@@ -2402,6 +2434,111 @@ fn label_branch_word(kind: &LabelBranch, delta: i64) -> Result<u32, alloc::strin
     })
 }
 
+/// Encode an ALTERNATIVE `.subsection` replacement into a deferred region:
+/// the machine bytes plus each local label's byte offset within them. Only
+/// self-contained instructions -- no branch to a label, no symbol target, no
+/// `asm goto` reference -- and the `.org` length assertion are accepted; any
+/// other form is rejected rather than mis-placed, since a replacement whose
+/// bytes need a relocation cannot be resolved at its final out-of-line offset
+/// here. Instructions encode through the same operand converter and table
+/// encoder as the main stream, so the region admits exactly what an inline
+/// instruction does. `main_label` resolves a main-stream label (`661b` /
+/// `662b`) for the `.org` length expression.
+fn encode_deferred_asm_region(
+    text: &str,
+    conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
+    main_label: &dyn Fn(&str) -> Option<usize>,
+) -> Result<DeferredAsmRegion, alloc::string::String> {
+    use super::asm::{AsmOpndA64, parse_template};
+    use super::table::{self, Opnd};
+    use alloc::string::String;
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut labels: Vec<(u32, usize)> = Vec::new();
+    for stmt in text.split(['\n', ';']) {
+        let mut stmt = stmt.trim();
+        // Peel leading `N:` label definitions; a directive may follow one.
+        while let Some(colon) = stmt.find(':') {
+            let head = &stmt[..colon];
+            if head.is_empty() || !head.bytes().all(|c| c.is_ascii_digit()) {
+                break;
+            }
+            let num: u32 = head
+                .parse()
+                .map_err(|_| alloc::format!("inline asm: bad label `{head}:`"))?;
+            labels.push((num, bytes.len()));
+            stmt = stmt[colon + 1..].trim();
+        }
+        if stmt.is_empty() {
+            continue;
+        }
+        // `.org <expr>`: pad forward to the target; a backward move is the
+        // ALTERNATIVE length-mismatch assertion firing, an error as in GNU as.
+        if let Some(rest) = stmt.strip_prefix(".org")
+            && (rest.is_empty() || rest.starts_with(char::is_whitespace))
+        {
+            let expr = rest.trim();
+            let cur = bytes.len() as i64;
+            // The location counter `.` is the current region offset; a `Nb`
+            // label resolves in the region (a `663b` / `664b` replacement
+            // label) or falls back to the main stream (`661b` / `662b`). The
+            // expression uses only label differences, so the main labels'
+            // absolute offsets cancel.
+            let resolve = |name: &str| -> Option<i64> {
+                if name == "." {
+                    return Some(cur);
+                }
+                let digits = name.strip_suffix(['b', 'f']).unwrap_or(name);
+                if let Ok(n) = digits.parse::<u32>()
+                    && let Some(off) = labels.iter().rev().find(|&&(l, _)| l == n)
+                {
+                    return Some(off.1 as i64);
+                }
+                main_label(name).map(|o| o as i64)
+            };
+            let target = super::ssa::emit_common::eval_asm_expr_with_labels(expr, &resolve)
+                .ok_or_else(|| {
+                    alloc::format!("inline asm: unsupported `.org` expression `{expr}`")
+                })?;
+            if target < cur {
+                return Err(String::from(
+                    "inline asm: ALTERNATIVE replacement and original differ in length",
+                ));
+            }
+            bytes.resize(target as usize, 0);
+            continue;
+        }
+        for insn in &parse_template(stmt.as_bytes())? {
+            if let Some(num) = insn.label_def {
+                labels.push((num, bytes.len()));
+                continue;
+            }
+            if !insn.bytes.is_empty() {
+                bytes.extend_from_slice(&insn.bytes);
+                continue;
+            }
+            if insn.sym_target.is_some() {
+                return Err(String::from(
+                    "inline asm: a replacement branch to a symbol is not placed out of line",
+                ));
+            }
+            if matches!(
+                insn.operands.last(),
+                Some(AsmOpndA64::Label { .. } | AsmOpndA64::GotoLabel(_))
+            ) {
+                return Err(String::from(
+                    "inline asm: a replacement branch to a label is not placed out of line",
+                ));
+            }
+            let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
+            for o in &insn.operands {
+                ops.push(conv(o)?);
+            }
+            bytes.extend_from_slice(&table::encode(&insn.mnemonic, &ops)?.to_le_bytes());
+        }
+    }
+    Ok(DeferredAsmRegion { bytes, labels })
+}
+
 /// Lower an `Inst::InlineAsm` (GCC extended asm) on AArch64. Assigns each
 /// register operand a machine register per its constraint, saves the registers
 /// the block overwrites, captures the operand values / addresses to a stack
@@ -2423,6 +2560,7 @@ fn emit_inline_asm_aarch64(
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     asm_sections: &mut Vec<super::ssa::emit_common::AsmSection>,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
+    deferred_regions: &mut Vec<DeferredAsmRegion>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> bool {
     use super::super::ir::AsmConstraint;
@@ -2502,6 +2640,11 @@ fn emit_inline_asm_aarch64(
         }
     };
     let text = gas.as_deref().unwrap_or(text);
+    // Lift any ALTERNATIVE `.subsection` replacement out of the main stream;
+    // it is encoded into a deferred region appended after the function body
+    // (below), out of the main sequence's fall-through path.
+    let (main_text, deferred_text) = super::ssa::emit_common::split_asm_subsections(text);
+    let text = main_text.as_str();
     let extracted = match super::ssa::emit_common::extract_asm_sections(text, true) {
         Ok(e) => e,
         Err(m) => {
@@ -2990,24 +3133,72 @@ fn emit_inline_asm_aarch64(
             }
         }
     }
+    // Resolve a numeric main-stream template label (`661b` / `662b`) to its
+    // emitted text offset; `Nb` (or bare `N`) binds the last definition, `Nf`
+    // the first.
+    let main_label_off = |name: &str| -> Option<usize> {
+        let digits = name.strip_suffix(['b', 'f']).unwrap_or(name);
+        if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        let num: u32 = digits.parse().ok()?;
+        let mut defs = label_defs.iter().filter(|&&(n, _)| n == num);
+        if name.ends_with('f') {
+            defs.map(|&(_, off)| off).min()
+        } else {
+            defs.next_back().map(|&(_, off)| off)
+        }
+    };
+    // Encode the ALTERNATIVE replacement (if any) into a deferred region;
+    // its `.org` length assertion reads the main labels above. The region is
+    // appended after the function body and its labels resolved to text
+    // offsets once its base is known (see the caller's placement pass).
+    let deferred_idx: Option<u32> = if deferred_text.is_empty() {
+        None
+    } else {
+        match encode_deferred_asm_region(&deferred_text, &conv, &main_label_off) {
+            Ok(region) => {
+                let idx = deferred_regions.len() as u32;
+                deferred_regions.push(region);
+                Some(idx)
+            }
+            Err(m) => {
+                bail_msg(&m);
+                return false;
+            }
+        }
+    };
     // Materialize the `.pushsection` blocks now that every label's text
     // offset is known. A reference that names a numeric template label
     // resolves to its offset; any other name is a symbol relocation.
     if !section_blocks.is_empty() {
-        let label_off = |name: &str| -> Option<usize> {
-            let digits = name.strip_suffix(['b', 'f']).unwrap_or(name);
-            if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
-                return None;
+        let label_off = |name: &str| -> Option<super::ssa::emit_common::LabelLoc> {
+            use super::ssa::emit_common::LabelLoc;
+            // A replacement-region label (`663f` / `664f`) resolves into the
+            // deferred region, rewritten to a text offset once it is placed.
+            if let Some(region) = deferred_idx {
+                let digits = name.strip_suffix(['b', 'f']).unwrap_or(name);
+                if let Ok(num) = digits.parse::<u32>() {
+                    let labels = &deferred_regions[region as usize].labels;
+                    let hit = if name.ends_with('f') {
+                        labels
+                            .iter()
+                            .filter(|&&(n, _)| n == num)
+                            .map(|&(_, o)| o)
+                            .min()
+                    } else {
+                        labels
+                            .iter()
+                            .rev()
+                            .find(|&&(n, _)| n == num)
+                            .map(|&(_, o)| o)
+                    };
+                    if let Some(off) = hit {
+                        return Some(LabelLoc::Deferred { region, off });
+                    }
+                }
             }
-            let num: u32 = digits.parse().ok()?;
-            // Sections follow the code textually; a `Nb` (or bare `N`)
-            // reference binds to the last definition, `Nf` to the first.
-            let mut defs = label_defs.iter().filter(|&&(n, _)| n == num);
-            if name.ends_with('f') {
-                defs.map(|&(_, off)| off).min()
-            } else {
-                defs.next_back().map(|&(_, off)| off)
-            }
+            main_label_off(name).map(LabelLoc::Text)
         };
         // An `i`-class operand naming a link-time data address (`.quad %c0 - .`
         // where `%c0` is `&sym`) relocates against the data image, resolved
@@ -3141,6 +3332,7 @@ fn emit_inst(
     fixups: &mut Vec<Fixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+    deferred_regions: &mut Vec<DeferredAsmRegion>,
 ) -> bool {
     // Unpack the read-only per-function context into the per-field names the
     // lowering below uses, so the body is unchanged.
@@ -3739,6 +3931,7 @@ fn emit_inst(
             extern_data_names,
             asm_sections,
             asm_extern_call_sites,
+            deferred_regions,
             None,
         ),
         _ => false,

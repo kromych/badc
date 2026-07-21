@@ -70,6 +70,73 @@ fn address_taken_static_survives_dce() {
 }
 
 #[test]
+fn inline_asm_gas_macro_sysreg_read_encodes_numeric_mrs() {
+    // The arm64 read_sysreg_s construct: `__DEFINE_ASM_GPR_NUMS` builds the
+    // `.L__gpr_num_*` register-number table with `.irp`/`.equ`, a local
+    // `mrs_s` macro emits the numeric MRS through `.inst`, and `.purgem`
+    // removes it. Two reads in one unit must both encode, each expansion
+    // independent. The sysreg field is byte-identical to GNU as: a read of
+    // sys_reg(3,0,0,0,0) (midr_el1) is 0xd538_0000 | Rt and of
+    // sys_reg(3,0,0,4,0) (id_aa64pfr0_el1) is 0xd538_0400 | Rt.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+#define __stringify_1(x...) #x
+#define __stringify(x...)   __stringify_1(x)
+#define __emit_inst(x)      ".inst " __stringify((x)) "\n\t"
+#define __DEFINE_ASM_GPR_NUMS \
+"\t.irp\tnum,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30\n" \
+"\t.equ\t.L__gpr_num_x\\num, \\num\n" \
+"\t.equ\t.L__gpr_num_w\\num, \\num\n" \
+"\t.endr\n" \
+"\t.equ\t.L__gpr_num_xzr, 31\n" \
+"\t.equ\t.L__gpr_num_wzr, 31\n"
+#define DEFINE_MRS_S \
+	__DEFINE_ASM_GPR_NUMS \
+"\t.macro\tmrs_s, rt, sreg\n" \
+	__emit_inst(0xd5200000|(\\sreg)|(.L__gpr_num_\\rt)) \
+"\t.endm\n"
+#define UNDEFINE_MRS_S "\t.purgem\tmrs_s\n"
+#define __mrs_s(v, r) DEFINE_MRS_S "\tmrs_s " v ", " __stringify(r) "\n" UNDEFINE_MRS_S
+#define sys_reg(op0,op1,crn,crm,op2) (((op0)<<19)|((op1)<<16)|((crn)<<12)|((crm)<<8)|((op2)<<5))
+#define read_sysreg_s(r) ({ unsigned long __val; __asm__ volatile(__mrs_s("%0", r) : "=r"(__val)); __val; })
+unsigned long two_reads(void) {
+	return read_sysreg_s(sys_reg(3,0,0,0,0)) + read_sysreg_s(sys_reg(3,0,0,4,0));
+}
+"#;
+    let copts = CompileOptions {
+        no_entry_point: true,
+        gnu: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(src.to_string(), Target::LinuxAarch64, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let words: alloc::vec::Vec<u32> = obj
+        .text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // Rt (bits 4:0) is allocator-chosen; the sysreg field is fixed.
+    let has_mrs = |base: u32| words.iter().any(|&w| w & 0xFFFF_FFE0 == base);
+    assert!(
+        has_mrs(0xd538_0000),
+        "midr_el1 read must encode as a numeric MRS: {words:08x?}"
+    );
+    assert!(
+        has_mrs(0xd538_0400),
+        "id_aa64pfr0_el1 read must encode as a numeric MRS: {words:08x?}"
+    );
+}
+
+#[test]
 fn block_scope_externs_emit_distinct_undef_symbols() {
     // C99 6.2.2p4: a block-scope `extern` declaration has external
     // linkage and refers to the file-scope object of the same name in

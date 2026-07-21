@@ -1040,6 +1040,373 @@ pub(crate) fn strip_asm_conditionals(
     Ok(Some(out))
 }
 
+/// A local macro defined by `.macro` inside one inline-asm block.
+struct GasMacro {
+    params: alloc::vec::Vec<alloc::string::String>,
+    body: alloc::vec::Vec<alloc::string::String>,
+}
+
+const GAS_MACRO_DEPTH_LIMIT: usize = 64;
+
+/// Expand the GNU as macro directives an inline-asm block uses to generate
+/// instructions: `.irp`/`.endr` (repeat), `.macro`/`.endm`/`.purgem` (local
+/// macro definition, invocation, removal), `.equ`/`.set` (symbol assignment),
+/// and `.inst` (emit an `inst_width`-byte instruction word). `.inst`
+/// expressions fold to a `.byte` run, macro invocations to their expanded
+/// bodies, and `.equ` symbols resolve in every expression. `None` when the
+/// template uses none of these (the common case).
+///
+/// `subst` resolves an operand reference (`%0` / `%w0` / `%c0`) to its
+/// register-name or constant text, applied across the template before the
+/// directives run -- mirroring the compiler substitution that precedes the
+/// assembler, so an operand register is concrete before the `.equ`
+/// register-number table (`.L__gpr_num_x1 = 1`) resolves it. The macro and
+/// symbol tables are call-local, giving two expansions in one unit the
+/// independence GNU as gives a `.purgem`'d macro.
+pub(crate) fn expand_asm_gas_macros(
+    text: &str,
+    inst_width: usize,
+    subst: &dyn Fn(&str) -> Option<alloc::string::String>,
+) -> Result<Option<alloc::string::String>, alloc::string::String> {
+    if !(text.contains(".irp")
+        || text.contains(".macro")
+        || text.contains(".inst")
+        || text.contains(".equ")
+        || text.contains(".set")
+        || text.contains(".purgem"))
+    {
+        return Ok(None);
+    }
+    let substituted = subst_asm_operands(text, subst);
+    let stmts: alloc::vec::Vec<alloc::string::String> = substituted
+        .split([';', '\n'])
+        .map(|s| alloc::string::String::from(s.trim()))
+        .collect();
+    let mut macros: alloc::collections::BTreeMap<alloc::string::String, GasMacro> =
+        alloc::collections::BTreeMap::new();
+    let mut equ: alloc::collections::BTreeMap<alloc::string::String, i64> =
+        alloc::collections::BTreeMap::new();
+    let mut out = alloc::string::String::with_capacity(text.len());
+    expand_gas_statements(&stmts, &mut macros, &mut equ, &mut out, inst_width, 0)?;
+    Ok(Some(out))
+}
+
+fn expand_gas_statements(
+    stmts: &[alloc::string::String],
+    macros: &mut alloc::collections::BTreeMap<alloc::string::String, GasMacro>,
+    equ: &mut alloc::collections::BTreeMap<alloc::string::String, i64>,
+    out: &mut alloc::string::String,
+    inst_width: usize,
+    depth: usize,
+) -> Result<(), alloc::string::String> {
+    if depth > GAS_MACRO_DEPTH_LIMIT {
+        return Err(alloc::string::String::from(
+            "inline asm: macro expansion nested too deep",
+        ));
+    }
+    let mut i = 0usize;
+    while i < stmts.len() {
+        let s = stmts[i].as_str();
+        i += 1;
+        if s.is_empty() {
+            continue;
+        }
+        let (tok, rest) = match s.find(char::is_whitespace) {
+            Some(p) => (&s[..p], s[p..].trim()),
+            None => (s, ""),
+        };
+        match tok {
+            ".macro" => {
+                let (name, params) = parse_gas_macro_header(rest)?;
+                let (body, next) = collect_gas_body(stmts, i, ".macro", ".endm")?;
+                macros.insert(name, GasMacro { params, body });
+                i = next;
+            }
+            ".endm" => {
+                return Err(alloc::string::String::from(
+                    "inline asm: `.endm` without `.macro`",
+                ));
+            }
+            ".purgem" => {
+                let name = rest.trim();
+                if macros.remove(name).is_none() {
+                    return Err(alloc::format!(
+                        "inline asm: `.purgem` of undefined macro `{name}`"
+                    ));
+                }
+            }
+            ".irp" => {
+                let (var, values) = parse_gas_irp_header(rest)?;
+                let (body, next) = collect_gas_body(stmts, i, ".irp", ".endr")?;
+                i = next;
+                for val in &values {
+                    let mut map = alloc::collections::BTreeMap::new();
+                    map.insert(var.clone(), val.clone());
+                    let expanded: alloc::vec::Vec<alloc::string::String> =
+                        body.iter().map(|l| subst_gas_params(l, &map)).collect();
+                    expand_gas_statements(&expanded, macros, equ, out, inst_width, depth + 1)?;
+                }
+            }
+            ".endr" => {
+                return Err(alloc::string::String::from(
+                    "inline asm: `.endr` without `.irp`",
+                ));
+            }
+            ".equ" | ".set" | ".equiv" => {
+                // A single-argument `.set` (`.set noreorder`) is not a symbol
+                // assignment; pass it through unchanged.
+                let Some((sym, expr)) = rest.split_once(',') else {
+                    out.push_str(s);
+                    out.push('\n');
+                    continue;
+                };
+                let table = &*equ;
+                let v = eval_asm_expr_with_labels(expr.trim(), &|t| table.get(t).copied())
+                    .ok_or_else(|| {
+                        alloc::format!("inline asm: `{tok} {}` value is not constant", sym.trim())
+                    })?;
+                equ.insert(alloc::string::String::from(sym.trim()), v);
+            }
+            ".inst" | ".inst.n" | ".inst.w" => {
+                for arg in split_top_commas(rest) {
+                    let table = &*equ;
+                    let v = eval_asm_expr_with_labels(arg, &|t| table.get(t).copied()).ok_or_else(
+                        || alloc::format!("inline asm: `.inst` operand `{arg}` is not constant"),
+                    )?;
+                    let bytes = (v as u64).to_le_bytes();
+                    out.push_str(".byte ");
+                    for (k, b) in bytes.iter().take(inst_width).enumerate() {
+                        if k > 0 {
+                            out.push_str(", ");
+                        }
+                        out.push_str(&alloc::format!("0x{b:02x}"));
+                    }
+                    out.push('\n');
+                }
+            }
+            _ => {
+                if macros.contains_key(tok) {
+                    // Bind arguments to parameters, then expand and re-process
+                    // the body (which may define, invoke, or purge macros).
+                    let def = &macros[tok];
+                    let params = def.params.clone();
+                    let body = def.body.clone();
+                    let args = split_top_commas(rest);
+                    let mut map = alloc::collections::BTreeMap::new();
+                    for (p, a) in params.iter().zip(args.iter()) {
+                        map.insert(p.clone(), alloc::string::String::from(*a));
+                    }
+                    for p in params.iter().skip(args.len()) {
+                        map.insert(p.clone(), alloc::string::String::new());
+                    }
+                    let expanded: alloc::vec::Vec<alloc::string::String> =
+                        body.iter().map(|l| subst_gas_params(l, &map)).collect();
+                    expand_gas_statements(&expanded, macros, equ, out, inst_width, depth + 1)?;
+                } else {
+                    // A pass-through line. Resolve any `.equ` symbol so a
+                    // `.short`/`.long` value (the exception-table register
+                    // field) is constant when the section pass reads it.
+                    if equ.is_empty() {
+                        out.push_str(s);
+                    } else {
+                        out.push_str(&subst_asm_idents(s, &|t| equ.get(t).copied()));
+                    }
+                    out.push('\n');
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Collect a `.macro` / `.irp` body up to its matching `close`, nesting-aware.
+fn collect_gas_body(
+    stmts: &[alloc::string::String],
+    start: usize,
+    open: &str,
+    close: &str,
+) -> Result<(alloc::vec::Vec<alloc::string::String>, usize), alloc::string::String> {
+    let mut depth = 1i32;
+    let mut body = alloc::vec::Vec::new();
+    let mut i = start;
+    while i < stmts.len() {
+        let first = stmts[i]
+            .split(char::is_whitespace)
+            .next()
+            .unwrap_or(stmts[i].as_str());
+        if first == open {
+            depth += 1;
+        } else if first == close {
+            depth -= 1;
+            if depth == 0 {
+                return Ok((body, i + 1));
+            }
+        }
+        body.push(stmts[i].clone());
+        i += 1;
+    }
+    Err(alloc::format!("inline asm: `{open}` without `{close}`"))
+}
+
+/// Parse a `.macro` header `NAME[,] p1[, p2 ...]`; a `=default` / `:qualifier`
+/// on a parameter is dropped (parameters bind positionally).
+fn parse_gas_macro_header(
+    rest: &str,
+) -> Result<
+    (
+        alloc::string::String,
+        alloc::vec::Vec<alloc::string::String>,
+    ),
+    alloc::string::String,
+> {
+    let mut it = rest
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .filter(|t| !t.is_empty());
+    let name = it.next().ok_or("inline asm: `.macro` without a name")?;
+    let params = it
+        .map(|p| alloc::string::String::from(p.split(['=', ':']).next().unwrap_or(p)))
+        .collect();
+    Ok((alloc::string::String::from(name), params))
+}
+
+/// Parse a `.irp` header `VAR,v1,v2,...`; with no values the body expands once
+/// with the symbol empty (GNU as convention).
+fn parse_gas_irp_header(
+    rest: &str,
+) -> Result<
+    (
+        alloc::string::String,
+        alloc::vec::Vec<alloc::string::String>,
+    ),
+    alloc::string::String,
+> {
+    let rest = rest.trim();
+    let end = rest
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .unwrap_or(rest.len());
+    if end == 0 {
+        return Err(alloc::string::String::from(
+            "inline asm: `.irp` without a symbol",
+        ));
+    }
+    let var = alloc::string::String::from(&rest[..end]);
+    let mut values: alloc::vec::Vec<alloc::string::String> = rest[end..]
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .filter(|t| !t.is_empty())
+        .map(alloc::string::String::from)
+        .collect();
+    if values.is_empty() {
+        values.push(alloc::string::String::new());
+    }
+    Ok((var, values))
+}
+
+/// Substitute `\param` in a macro / `.irp` body with its bound value. `\()`
+/// is an empty name separator; an unbound `\name` stays verbatim.
+fn subst_gas_params(
+    line: &str,
+    map: &alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
+) -> alloc::string::String {
+    if !line.contains('\\') {
+        return alloc::string::String::from(line);
+    }
+    let mut out = alloc::string::String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(pos) = rest.find('\\') {
+        out.push_str(&rest[..pos]);
+        let after = &rest[pos + 1..];
+        if let Some(tail) = after.strip_prefix("()") {
+            rest = tail;
+            continue;
+        }
+        let end = after
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .unwrap_or(after.len());
+        let name = &after[..end];
+        match map.get(name) {
+            Some(v) => {
+                out.push_str(v);
+                rest = &after[end..];
+            }
+            None => {
+                out.push('\\');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Substitute operand references (`%0` / `%w0` / `%c0`) with the text `subst`
+/// yields; `%%` is a literal percent. An unresolved reference stays a bare `%`,
+/// which the downstream parser rejects rather than mis-encodes.
+fn subst_asm_operands(
+    text: &str,
+    subst: &dyn Fn(&str) -> Option<alloc::string::String>,
+) -> alloc::string::String {
+    let mut out = alloc::string::String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(pos) = rest.find('%') {
+        out.push_str(&rest[..pos]);
+        let after = &rest[pos + 1..];
+        let ab = after.as_bytes();
+        if ab.first() == Some(&b'%') {
+            out.push('%');
+            rest = &after[1..];
+            continue;
+        }
+        // `%` + optional modifier letter + digits.
+        let mut j = 0;
+        if ab.first().is_some_and(u8::is_ascii_alphabetic) {
+            j += 1;
+        }
+        let dig = j;
+        while j < ab.len() && ab[j].is_ascii_digit() {
+            j += 1;
+        }
+        if j > dig
+            && let Some(r) = subst(&rest[pos..pos + 1 + j])
+        {
+            out.push_str(&r);
+            rest = &after[j..];
+            continue;
+        }
+        out.push('%');
+        rest = after;
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Split a directive argument list on top-level commas, ignoring commas nested
+/// in `()` / `[]` / `{}`. Empty pieces are dropped.
+fn split_top_commas(s: &str) -> alloc::vec::Vec<&str> {
+    let mut parts = alloc::vec::Vec::new();
+    let b = s.as_bytes();
+    let mut depth = 0i32;
+    let mut start = 0usize;
+    for (i, &c) in b.iter().enumerate() {
+        match c {
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => depth -= 1,
+            b',' if depth == 0 => {
+                let p = s[start..i].trim();
+                if !p.is_empty() {
+                    parts.push(p);
+                }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let p = s[start..].trim();
+    if !p.is_empty() {
+        parts.push(p);
+    }
+    parts
+}
+
 /// Split a template into its code text and its section blocks. Returns
 /// `None` when the template has no section directives (the common case).
 /// The section stack starts at the code stream; `.pushsection` pushes a
@@ -2307,9 +2674,20 @@ pub(crate) fn eval_asm_expr_with_labels(
     expr: &str,
     resolve: &dyn Fn(&str) -> Option<i64>,
 ) -> Option<i64> {
-    let b = expr.as_bytes();
+    eval_asm_if_condition(&subst_asm_idents(expr, resolve))
+}
+
+/// Substitute each identifier `resolve` knows with its value, leaving other
+/// tokens -- numeric literals, unknown symbols, the location counter `.` --
+/// as written. Identifier characters are the assembler's: alphanumeric plus
+/// `_` / `.` / `$`.
+pub(crate) fn subst_asm_idents(
+    text: &str,
+    resolve: &dyn Fn(&str) -> Option<i64>,
+) -> alloc::string::String {
+    let b = text.as_bytes();
     let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
-    let mut out = alloc::string::String::with_capacity(expr.len());
+    let mut out = alloc::string::String::with_capacity(text.len());
     let mut i = 0;
     while i < b.len() {
         if ident(b[i]) {
@@ -2317,7 +2695,7 @@ pub(crate) fn eval_asm_expr_with_labels(
             while i < b.len() && ident(b[i]) {
                 i += 1;
             }
-            let tok = &expr[start..i];
+            let tok = &text[start..i];
             match resolve(tok) {
                 Some(v) => out.push_str(&alloc::format!("{v}")),
                 None => out.push_str(tok),
@@ -2327,7 +2705,7 @@ pub(crate) fn eval_asm_expr_with_labels(
             i += 1;
         }
     }
-    eval_asm_if_condition(&out)
+    out
 }
 
 fn const_relational(b: &[u8], i: &mut usize, op: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
@@ -3448,6 +3826,111 @@ mod asm_section_tests {
         assert_eq!(s.labels[0].offset, 0);
         assert!(!s.labels[0].global);
         assert_eq!(s.relocs.len(), 1, "the pc-relative reference survives");
+    }
+
+    #[test]
+    fn gas_macro_sysreg_read_folds_to_inst_word() {
+        // The read_sysreg_s construct: an `.irp`-generated `.L__gpr_num_*`
+        // table, a local `mrs_s` macro, its invocation, and `.purgem`. `%0`
+        // stands for the destination register x1.
+        let text = concat!(
+            "\t.irp\tnum,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30\n",
+            "\t.equ\t.L__gpr_num_x\\num, \\num\n",
+            "\t.equ\t.L__gpr_num_w\\num, \\num\n",
+            "\t.endr\n",
+            "\t.equ\t.L__gpr_num_xzr, 31\n",
+            "\t.equ\t.L__gpr_num_wzr, 31\n",
+            "\t.macro\tmrs_s, rt, sreg\n",
+            "\t.inst (0xd5200000|(\\sreg)|(.L__gpr_num_\\rt))\n",
+            "\t.endm\n",
+            "\tmrs_s %0, (((3) << 19) | ((0) << 16) | ((0) << 12) | ((0) << 8) | ((0) << 5))\n",
+            "\t.purgem\tmrs_s\n",
+        );
+        let subst = |t: &str| (t == "%0").then(|| alloc::string::String::from("x1"));
+        let out = expand_asm_gas_macros(text, 4, &subst).unwrap().unwrap();
+        // sys_reg(3,0,0,0,0) is 0x180000, mrs base 0xd5200000, Rt=1: 0xd5380001.
+        assert_eq!(out.trim(), ".byte 0x01, 0x00, 0x38, 0xd5", "{out}");
+    }
+
+    #[test]
+    fn gas_macro_expansions_are_independent_per_call() {
+        // A second expansion redefines the macro and equates cleanly: the
+        // per-call tables are what makes two read_sysreg_s in one unit work.
+        let block = |sreg: &str, reg: &str| {
+            let text = alloc::format!(
+                concat!(
+                    "\t.irp\tnum,0,1,2\n",
+                    "\t.equ\t.L__gpr_num_x\\num, \\num\n",
+                    "\t.endr\n",
+                    "\t.macro\tmrs_s, rt, sreg\n",
+                    "\t.inst (0xd5200000|(\\sreg)|(.L__gpr_num_\\rt))\n",
+                    "\t.endm\n",
+                    "\tmrs_s %0, {sreg}\n",
+                    "\t.purgem\tmrs_s\n"
+                ),
+                sreg = sreg
+            );
+            let subst = move |t: &str| (t == "%0").then(|| alloc::string::String::from(reg));
+            expand_asm_gas_macros(&text, 4, &subst)
+                .unwrap()
+                .unwrap()
+                .trim()
+                .to_string()
+        };
+        assert_eq!(block("(3 << 19)", "x1"), ".byte 0x01, 0x00, 0x38, 0xd5");
+        assert_eq!(
+            block("((3 << 19) | (4 << 8))", "x0"),
+            ".byte 0x00, 0x04, 0x38, 0xd5"
+        );
+    }
+
+    #[test]
+    fn gas_macro_extable_short_resolves_register_field() {
+        // The exception-table register field: a `.short` inside a section
+        // whose value references the `.L__gpr_num_*` table with a `%w0`
+        // operand. The operand substitutes to w2, then the table resolves it.
+        let text = concat!(
+            "\t.irp\tnum,0,1,2\n",
+            "\t.equ\t.L__gpr_num_w\\num, \\num\n",
+            "\t.endr\n",
+            "\t.equ\t.L__gpr_num_wzr, 31\n",
+            "\t.pushsection __ex_table, \"a\"\n",
+            "\t.short (((.L__gpr_num_%w0) << 0) | ((.L__gpr_num_wzr) << 5))\n",
+            "\t.popsection\n",
+        );
+        let subst = |t: &str| (t == "%w0").then(|| alloc::string::String::from("w2"));
+        let out = expand_asm_gas_macros(text, 4, &subst).unwrap().unwrap();
+        assert!(out.contains(".short (((2) << 0) | ((31) << 5))"), "{out}");
+        assert!(out.contains(".pushsection __ex_table"), "{out}");
+    }
+
+    #[test]
+    fn gas_macro_malformed_forms_are_rejected() {
+        let none = |_: &str| None;
+        // No directives at all: not this pass's business.
+        assert!(
+            expand_asm_gas_macros("add x0, x0, x1\n", 4, &none)
+                .unwrap()
+                .is_none()
+        );
+        // `.purgem` of a macro that was never defined.
+        assert!(
+            expand_asm_gas_macros(".purgem foo\n", 4, &none)
+                .unwrap_err()
+                .contains("purgem")
+        );
+        // `.macro` with no closing `.endm`.
+        assert!(
+            expand_asm_gas_macros(".macro foo\nnop\n", 4, &none)
+                .unwrap_err()
+                .contains(".endm")
+        );
+        // A non-constant `.inst` value is rejected, never mis-encoded.
+        assert!(
+            expand_asm_gas_macros(".inst (0xd5200000 | undefined_sym)\n", 4, &none)
+                .unwrap_err()
+                .contains(".inst")
+        );
     }
 }
 

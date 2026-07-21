@@ -2453,6 +2453,55 @@ fn emit_inline_asm_aarch64(
         }
     };
     let text = reduced.as_deref().unwrap_or(text);
+    // Assign operand registers before the GNU-as macro pass so it can
+    // substitute each reference to its register name -- the same register the
+    // operand capture and write-back below use.
+    let op_reg = match assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs) {
+        Ok(r) => r,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    // The constant value of an `i`-class operand reference, if any.
+    let const_of = |idx: u8| -> Option<i64> {
+        match func.insts.get(*args.get(idx as usize)? as usize) {
+            Some(super::super::ir::Inst::Imm(v)) => Some(*v),
+            _ => None,
+        }
+    };
+    let gas_subst = |tok: &str| -> Option<String> {
+        let body = tok.strip_prefix('%')?;
+        let (force, digits) = match body.as_bytes().first()? {
+            b'w' => (Some(false), &body[1..]),
+            b'x' => (Some(true), &body[1..]),
+            b'c' | b'P' => {
+                let idx: u8 = body[1..].parse().ok()?;
+                return const_of(idx).map(|v| alloc::format!("{v}"));
+            }
+            _ => (None, body),
+        };
+        let idx: u8 = digits.parse().ok()?;
+        let r = op_reg.get(idx as usize).copied().flatten()?;
+        let wide = asm
+            .operands
+            .get(idx as usize)
+            .map(|o| o.width >= 8)
+            .unwrap_or(true);
+        Some(alloc::format!(
+            "{}{}",
+            if force.unwrap_or(wide) { 'x' } else { 'w' },
+            r
+        ))
+    };
+    let gas = match super::ssa::emit_common::expand_asm_gas_macros(text, 4, &gas_subst) {
+        Ok(e) => e,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    let text = gas.as_deref().unwrap_or(text);
     let extracted = match super::ssa::emit_common::extract_asm_sections(text, true) {
         Ok(e) => e,
         Err(m) => {
@@ -2466,13 +2515,6 @@ fn emit_inline_asm_aarch64(
     };
     let insns = match parse_template(code_text.as_bytes()) {
         Ok(i) => i,
-        Err(m) => {
-            bail_msg(&m);
-            return false;
-        }
-    };
-    let op_reg = match assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs) {
-        Ok(r) => r,
         Err(m) => {
             bail_msg(&m);
             return false;
@@ -2592,13 +2634,6 @@ fn emit_inline_asm_aarch64(
             }
         }
     }
-    // The constant value of an `i`-class operand reference, if any.
-    let const_of = |idx: u8| -> Option<i64> {
-        match func.insts.get(*args.get(idx as usize)? as usize) {
-            Some(super::super::ir::Inst::Imm(v)) => Some(*v),
-            _ => None,
-        }
-    };
     // Resolve one symbolic operand to a table operand; label references have
     // no table form and are handled by the branch path below.
     let conv = |o: &AsmOpndA64| -> Result<Opnd, String> {

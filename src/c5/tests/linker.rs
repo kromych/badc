@@ -836,6 +836,59 @@ fn unreferenced_static_function_is_dropped_from_object() {
 }
 
 #[test]
+fn always_inline_immediate_asm_operand_drops_standalone_body() {
+    // An always_inline accessor whose inline asm has an `i`
+    // (immediate-only) operand built from a parameter -- `1 << (bit & 7)`
+    // -- is an integer-constant-expression (C99 6.6) only once inlining
+    // substitutes a constant argument, so it is uncompilable out of line.
+    // The `_`-prefix static-DCE retention kept such a body even after the
+    // caller inlined it, and its out-of-line emit then failed on the
+    // non-constant immediate. It must drop; the caller keeps the folded imm.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        extern unsigned char cap[64];\n\
+        static __attribute__((always_inline)) inline void _touch_bit(unsigned short bit) {\n\
+            __asm__ volatile(\"testb %0, %1\\n\\t\" : : \"i\"(1 << (bit & 7)), \"m\"(cap[bit >> 3]));\n\
+        }\n\
+        void probe(void) { _touch_bit(15); }\n";
+    let copts = CompileOptions {
+        no_entry_point: true,
+        gnu: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(String::from(src), Target::LinuxX64, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        optimize: true,
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    // The out-of-line emit of `_touch_bit` failed before the fix, so a
+    // successful emit is itself part of the regression guard.
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let has_standalone = bytes.windows(10).any(|w| w == b"_touch_bit");
+    assert!(
+        !has_standalone,
+        "the inlined always_inline accessor must not keep an out-of-line body"
+    );
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    // `testb $imm8, r/m8` is `F6 /0 ib`; the caller carries the folded
+    // immediate `1 << (15 & 7) == 0x80`. `w[1] & 0x38 == 0` pins the ModRM
+    // reg field to the `/0` TEST extension (not NOT / NEG / MUL / ...).
+    let has_folded_imm = obj
+        .text
+        .windows(3)
+        .any(|w| w[0] == 0xf6 && (w[1] & 0x38) == 0 && w[2] == 0x80);
+    assert!(
+        has_folded_imm,
+        "the folded `1 << (bit & 7)` immediate must materialize at the call site"
+    );
+}
+
+#[test]
 fn thread_local_storage_round_trips_through_et_rel() {
     // `_Thread_local` storage now rides the native ET_REL object:
     // elf_reloc emits `.tdata` (initialised slice) + `.tbss`

@@ -2076,6 +2076,23 @@ pub(crate) fn lower_for(
     Ok(build)
 }
 
+/// Assemble a file-scope inline-asm named section's instructions to bytes for
+/// `target`, replacing each `Code` item with `CodeBytes`. The compile-time
+/// validation and the object emission both run this so an instruction is
+/// diagnosed and encoded the same way. AArch64 has no such encoder yet, so a
+/// named-section instruction there stays a `Code` item and is rejected later.
+pub(crate) fn encode_file_asm_section_code(
+    blocks: &mut [ssa::emit_common::AsmSectionBlock],
+    target: Target,
+) -> Result<(), alloc::string::String> {
+    match target {
+        Target::LinuxX64 | Target::WindowsX64 => {
+            x86_64::emit::encode_x86_file_asm_section_code(blocks)
+        }
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => Ok(()),
+    }
+}
+
 /// Decides which direct-branch fixups must become by-name call
 /// relocations because the callee is resolved at link time rather than
 /// at emit time. Two reasons:

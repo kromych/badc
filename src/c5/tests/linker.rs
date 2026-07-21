@@ -4762,6 +4762,42 @@ fn x86_alternative_register_and_memory_replacement_encodes() {
 }
 
 #[test]
+fn x86_file_scope_asm_section_near_return_encodes() {
+    // A file-scope basic `asm` that pushes a named executable section and emits
+    // a near return assembles the `ret` to 0xC3, byte-for-byte GNU as. The
+    // section-instruction encoder runs at file scope with an empty operand
+    // context, so a self-contained instruction like `ret` still assembles.
+    // `with_target` selects the x86-64 encoder for the compile-time check.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        __asm__(\".pushsection .text.f, \\\"ax\\\"\\n\"\n\
+                \"ret\\n\"\n\
+                \".popsection\\n\");\n\
+        int main(void) { return 0; }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let sec = sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".text.f")
+        .expect(".text.f missing")
+        .3
+        .clone();
+    assert!(sec.contains(&0xC3), "near return `ret` = C3: {sec:02x?}");
+    assert_eq!(
+        sec,
+        alloc::vec![0xC3],
+        "bare `ret` assembles to a single C3"
+    );
+}
+
+#[test]
 fn aarch64_alternative_subsection_defers_replacement_and_relocates() {
     // The AArch64 ALTERNATIVE places its replacement in a `.subsection`, which
     // GNU as appends to `.text` after the function body -- out of the main

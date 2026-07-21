@@ -6131,6 +6131,36 @@ fn encode_x86_asm_section_code(
     Ok(())
 }
 
+/// Encode a file-scope inline-asm named section's instructions to bytes,
+/// reusing the function-body per-instruction encoder with an empty operand
+/// context: file-scope asm has no numbered operands, `asm goto` labels, or
+/// register assignments, so only self-contained instructions and a direct
+/// `call` / `jmp` to a bare symbol assemble.
+pub(crate) fn encode_x86_file_asm_section_code(
+    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+) -> Result<(), alloc::string::String> {
+    use super::ssa::emit_common::{AsmSectionItem, AsmSectionTarget};
+    let operand_target = |_: u8| -> Option<AsmSectionTarget> { None };
+    let goto_block = |_: u8| -> Option<u32> { None };
+    let imm_of = |_: u8| -> Option<i64> { None };
+    let addr_of = |_: u8| -> Option<(AsmSectionTarget, i64)> { None };
+    let refs = SectionOperandRefs {
+        op_reg: &[],
+        operands: &[],
+        imm_of: &imm_of,
+        addr_of: &addr_of,
+    };
+    for b in blocks.iter_mut() {
+        for item in b.items.iter_mut() {
+            let AsmSectionItem::Code(text) = item else {
+                continue;
+            };
+            *item = encode_one_x86_section_insn(text, &operand_target, &goto_block, &refs)?;
+        }
+    }
+    Ok(())
+}
+
 /// Template-operand resolution for a replacement instruction: the register
 /// assignments, `i`-class constant immediates, and link-time data addresses
 /// (`%a`) its operand references resolve through. Built by

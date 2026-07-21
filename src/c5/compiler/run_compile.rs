@@ -133,7 +133,7 @@ impl Compiler {
         self.consume(b';', "`;` expected after file-scope `asm`")?;
         let text = core::str::from_utf8(&template)
             .map_err(|_| self.compile_err("file-scope asm template is not valid UTF-8"))?;
-        let blocks =
+        let mut blocks =
             match engine::extract_asm_sections(text, self.target.is_aarch64()) {
                 Err(m) => return Err(self.compile_err(m)),
                 Ok(Some((code, blocks))) => {
@@ -164,9 +164,12 @@ impl Compiler {
                 }
             }
         }
-        // Materialize into a scratch sink now so directive errors are
-        // diagnosed at the source line; the codegen re-materializes into
-        // the object's sections under the emit target's conventions.
+        // Assemble the section's instructions and materialize into a scratch
+        // sink now so directive and encoding errors are diagnosed at the source
+        // line; the codegen re-materializes into the object's sections under
+        // the emit target's conventions.
+        crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target)
+            .map_err(|m| self.compile_err(m))?;
         let mut scratch: alloc::vec::Vec<engine::AsmSection> = alloc::vec::Vec::new();
         let aarch64 = matches!(
             self.target,

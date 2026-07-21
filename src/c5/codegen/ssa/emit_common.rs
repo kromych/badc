@@ -2859,12 +2859,16 @@ pub(crate) fn materialize_file_asm(
     templates: &[alloc::string::String],
     align_is_p2: bool,
     comments: AsmComments,
+    encode_code: &dyn Fn(&mut [AsmSectionBlock]) -> Result<(), alloc::string::String>,
     sink: &mut alloc::vec::Vec<AsmSection>,
 ) -> Result<(), alloc::string::String> {
     for text in templates {
         let stripped = strip_asm_comments(text, comments);
         let text = stripped.as_deref().unwrap_or(text);
-        if let Some((_code, blocks)) = extract_asm_sections(text, align_is_p2)? {
+        if let Some((_code, mut blocks)) = extract_asm_sections(text, align_is_p2)? {
+            // Assemble the section's instructions to bytes before layout; the
+            // file-scope path has no operand context to resolve against.
+            encode_code(&mut blocks)?;
             materialize_asm_sections(
                 &blocks,
                 &|_| None,

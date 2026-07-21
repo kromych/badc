@@ -137,6 +137,65 @@ unsigned long two_reads(void) {
 }
 
 #[test]
+fn inline_asm_lse_arch_extension_directive_is_accepted() {
+    // The arm64 LSE atomics prepend `.arch_extension lse` to every atomic asm
+    // block to enable the LSE instruction set for the assembler. badc's encoder
+    // holds the LSE forms unconditionally, so the directive carries no code and
+    // must be accepted, not parsed as an operand. Both the store form (`stadd`,
+    // two operands) and the load-return form (`ldaddal`, three) must still
+    // encode: `stadd Ws, [Xn]` is 0xB820_001F and `ldaddal Ws, Wt, [Xn]` is
+    // 0xB8E0_0000, register fields aside (byte-identical to GNU as).
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+typedef struct { int counter; } atomic_t;
+void lse_add(int i, atomic_t *v) {
+    __asm__ volatile(".arch_extension lse\n\tstadd\t%w[i], %[v]\n"
+        : [v] "+Q" (v->counter) : [i] "r" (i));
+}
+int lse_fetch(int i, atomic_t *v) {
+    int old;
+    __asm__ volatile(".arch_extension lse\n\tldaddal\t%w[i], %w[old], %[v]"
+        : [v] "+Q" (v->counter), [old] "=r" (old) : [i] "r" (i) : "memory");
+    return old;
+}
+"#;
+    let copts = CompileOptions {
+        no_entry_point: true,
+        gnu: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(src.to_string(), Target::LinuxAarch64, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let words: alloc::vec::Vec<u32> = obj
+        .text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // Rs (bits 20:16), Rt (bits 4:0) and Rn (bits 9:5) are allocator-chosen.
+    let stadd_mask = !((0x1Fu32 << 16) | (0x1F << 5));
+    let ldadd_mask = !((0x1Fu32 << 16) | (0x1F << 5) | 0x1F);
+    assert!(
+        words
+            .iter()
+            .any(|&w| w & stadd_mask == 0xB820_001F & stadd_mask),
+        "stadd must encode after `.arch_extension lse`: {words:08x?}"
+    );
+    assert!(
+        words.iter().any(|&w| w & ldadd_mask == 0xB8E0_0000),
+        "ldaddal must encode after `.arch_extension lse`: {words:08x?}"
+    );
+}
+
+#[test]
 fn block_scope_externs_emit_distinct_undef_symbols() {
     // C99 6.2.2p4: a block-scope `extern` declaration has external
     // linkage and refers to the file-scope object of the same name in

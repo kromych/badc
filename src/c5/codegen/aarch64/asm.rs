@@ -906,6 +906,14 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 continue;
             }
         }
+        // `.arch` / `.arch_extension` / `.cpu` select the assembler's target
+        // architecture or an ISA extension. The encoder admits every form its
+        // table holds regardless, so these carry no code and are ignored.
+        if let Some(tok) = piece.split_whitespace().next()
+            && matches!(tok, ".arch" | ".arch_extension" | ".cpu")
+        {
+            continue;
+        }
         // A `.byte`-family directive whose arguments reference operands
         // (`.long %c0`) resolves its values at emit time; the directive
         // keyword rides the mnemonic field.

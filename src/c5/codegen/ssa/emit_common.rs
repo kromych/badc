@@ -1100,8 +1100,9 @@ pub(crate) fn extract_asm_sections(
             // `.subsection N` defers its code to a region appended to the
             // section (the cpucap ALTERNATIVE replacement). Emitting it
             // inline would fall through from the main sequence into the
-            // replacement -- both would execute. Deferred code emission is
-            // not implemented, so reject rather than miscompile.
+            // replacement -- both would execute. TODO assemble the replacement
+            // into the appended region with its relocations; until then reject
+            // rather than miscompile.
             ".subsection" => {
                 return Err(alloc::string::String::from(
                     "inline asm: `.subsection` is not supported (deferred replacement code)",
@@ -1307,6 +1308,11 @@ fn parse_section_item(
             }
             Ok(AsmSectionItem::Global(alloc::string::String::from(name)))
         }
+        // An instruction (not a data directive) inside a named section is the
+        // x86 ALTERNATIVE replacement (`.pushsection .altinstr_replacement`).
+        // TODO assemble replacement instructions into the section with their
+        // relocations; until then reject rather than drop the code, which would
+        // leave the `.altinstructions` entry pointing at absent bytes.
         _ => Err(alloc::format!(
             "inline asm: unsupported directive `{tok}` in a named section"
         )),
@@ -1745,14 +1751,33 @@ pub(crate) fn materialize_asm_sections(
                                 minuend,
                                 subtrahend,
                             } => {
-                                let resolve = |n: &str| {
-                                    label_off(n).ok_or_else(|| {
-                                        alloc::format!(
-                                            "inline asm: label difference needs template labels, `{n}` is not one"
-                                        )
-                                    })
+                                // A label difference is a constant when both
+                                // labels resolve, as an emitted-text template
+                                // label (`label_off`) or one defined above in
+                                // this section (numeric ones under `num_unique`).
+                                let resolve = |n: &str,
+                                               labels: &[AsmSectionLabel]|
+                                 -> Result<i64, alloc::string::String> {
+                                    if let Some(off) = label_off(n) {
+                                        return Ok(off as i64);
+                                    }
+                                    let uni = numeric_label_digits(n)
+                                        .and_then(|d| {
+                                            num_unique.get(d).map(alloc::string::String::as_str)
+                                        })
+                                        .unwrap_or(n);
+                                    labels
+                                        .iter()
+                                        .find(|l| l.name == uni && l.offset != PENDING_LABEL)
+                                        .map(|l| l.offset as i64)
+                                        .ok_or_else(|| {
+                                            alloc::format!(
+                                                "inline asm: label difference needs defined labels, `{n}` is not one"
+                                            )
+                                        })
                                 };
-                                let diff = resolve(minuend)? as i64 - resolve(subtrahend)? as i64;
+                                let diff = resolve(minuend, &sec.labels)?
+                                    - resolve(subtrahend, &sec.labels)?;
                                 if !value_fits_width(diff, *width) {
                                     return Err(alloc::format!(
                                         "inline asm: label difference {diff} does not fit a {width}-byte field"
@@ -2984,6 +3009,23 @@ mod asm_section_tests {
         let bare = "nop\n.subsection 1\nnop\n.previous\n";
         let err = extract_asm_sections(bare, true).unwrap_err();
         assert!(err.contains(".subsection"), "{err}");
+    }
+
+    #[test]
+    fn replacement_instruction_in_named_section_is_rejected() {
+        // The x86 ALTERNATIVE places its replacement instructions in a
+        // `.pushsection .altinstr_replacement,"ax"`. Assembling code into a
+        // section is not implemented; a replacement instruction is rejected
+        // rather than dropped, which would leave the `.altinstructions` entry
+        // pointing at absent bytes. Data directives in the same section stay
+        // accepted.
+        let text = "771: nop\n.pushsection .altinstr_replacement,\"ax\"\n\
+                    774: wrmsr\n775:\n.popsection\n";
+        let err = extract_asm_sections(text, false).unwrap_err();
+        assert!(
+            err.contains("wrmsr") && err.contains("named section"),
+            "{err}"
+        );
     }
 
     #[test]

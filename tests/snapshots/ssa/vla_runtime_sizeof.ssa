@@ -5,44 +5,35 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
   block 0  start_pc=0
     v0   AllocaInit(5)                                    -> -
     v1   Imm(7)                                           -> x0
-    v2   StoreLocal { off=-1, value=v1, kind=I32 }        -> -
+    v2   Imm(0)                                           -> x0
     v3   LoadLocal { off=-1, kind=I32 }                   -> x0
-    v4   BinopI { op=shl, lhs=v3, rhs_imm=3 }             -> x0
-    v5   StoreLocal { off=-3, value=v4, kind=I64 }        -> -
+    v4   Imm(56)                                          -> x0
+    v5   Imm(0)                                           -> x1
     v6   Intrinsic { kind=1, args=[v4] }                  -> x0
-    v7   StoreLocal { off=-2, value=v6, kind=I64 }        -> -
+    v7   Imm(0)                                           -> x0
     v8   LoadLocal { off=-3, kind=I64 }                   -> x0
-    v9   StoreLocal { off=-4, value=v8, kind=I64 }        -> -
+    v9   Imm(0)                                           -> x0
     v10  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v11  LoadLocal { off=-1, kind=I32 }                   -> x1
-    v12  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x1
-    v13  Binop { op=ne, lhs=v10, rhs=v12 }                -> x0
-    terminator Bz { cond=v13, target=b2, fall=b1 }   (exit_acc=v13)
+    v11  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v12  Imm(56)                                          -> x0
+    v13  Imm(0)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v13)
   block 1  start_pc=0
-    v14  Imm(1)                                           -> x0
-    terminator Return(v14)   (exit_acc=v14)
-  block 2  start_pc=0
     v15  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v16  Imm(8)                                           -> x1
-    v17  BinopI { op=shru, lhs=v15, rhs_imm=3 }           -> x0
-    v18  LoadLocal { off=-1, kind=I32 }                   -> x1
-    v19  Binop { op=ne, lhs=v17, rhs=v18 }                -> x0
-    terminator Bz { cond=v19, target=b4, fall=b3 }   (exit_acc=v19)
-  block 3  start_pc=0
-    v20  Imm(2)                                           -> x0
-    terminator Return(v20)   (exit_acc=v20)
-  block 4  start_pc=0
+    v16  Imm(8)                                           -> x0
+    v17  Imm(7)                                           -> x0
+    v18  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v19  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v19)
+  block 2  start_pc=0
     v21  Imm(100)                                         -> x0
-    v22  StoreLocal { off=-1, value=v21, kind=I32 }       -> -
+    v22  Imm(0)                                           -> x0
     v23  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v24  Imm(56)                                          -> x1
-    v25  Imm(240518168576)                                -> x1
-    v26  BinopI { op=ne, lhs=v23, rhs_imm=56 }            -> x0
-    terminator Bz { cond=v26, target=b6, fall=b5 }   (exit_acc=v26)
-  block 5  start_pc=0
-    v27  Imm(3)                                           -> x0
-    terminator Return(v27)   (exit_acc=v27)
-  block 6  start_pc=0
+    v24  Imm(56)                                          -> x0
+    v25  Imm(240518168576)                                -> x0
+    v26  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v26)
+  block 3  start_pc=0
     v28  Imm(0)                                           -> x0
     terminator Return(v28)   (exit_acc=v28)
 ; --- SSA dump (ok=true) ent_pc=0 ---

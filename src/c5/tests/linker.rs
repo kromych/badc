@@ -3833,6 +3833,67 @@ fn asm_section_local_label_difference_is_a_constant() {
 }
 
 #[test]
+fn x86_alternative_data_replacement_pads_and_relocates() {
+    // The x86 ALTERNATIVE with a raw-byte replacement: `.skip` pads the old
+    // site to the replacement length with `0x90` nops, the replacement bytes go
+    // to `.altinstr_replacement`, and `.altinstructions` records the entry.
+    // Byte-for-byte identical to GNU as: a 3-byte replacement (`clac`), an empty
+    // old site padded to 3, and the entry's `.byte 773b-771b` / `.byte
+    // 775f-774f` both folding to 3. Two PC-relative relocations aim the entry at
+    // the old site and at the replacement. x86-only: `.skip` sizing against the
+    // replacement length is an x86 main-stream directive.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        void clac(void) {\n\
+            __asm__ volatile(\n\
+                \"771:\\n772:\\n\"\n\
+                \".skip -(((775f-774f)-(772b-771b)) > 0) * ((775f-774f)-(772b-771b)),0x90\\n\"\n\
+                \"773:\\n\"\n\
+                \".pushsection .altinstructions,\\\"a\\\"\\n\"\n\
+                \" .long 771b - .\\n .long 774f - .\\n .4byte 7\\n\"\n\
+                \" .byte 773b-771b\\n .byte 775f-774f\\n\"\n\
+                \".popsection\\n\"\n\
+                \".pushsection .altinstr_replacement, \\\"ax\\\"\\n\"\n\
+                \"774:\\n .byte 0x0f,0x01,0xca\\n775:\\n\"\n\
+                \".popsection\\n\" ::: \"memory\");\n\
+        }\n\
+        int main(void) { clac(); return 0; }\n";
+    let program = Compiler::new(String::from(src)).compile().expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let body = |name: &str| {
+        sections
+            .iter()
+            .find(|(n, _, _, _)| n == name)
+            .unwrap_or_else(|| panic!("{name} missing"))
+            .3
+            .clone()
+    };
+    let text = body(".text");
+    // The `.skip` fill is `0x90`; three of them pad the empty old site.
+    assert!(
+        text.windows(3).any(|w| w == [0x90, 0x90, 0x90]),
+        "old site padded with nops"
+    );
+    assert_eq!(body(".altinstr_replacement"), [0x0f, 0x01, 0xca]);
+    // `.long 771b-.`(0) `.long 774f-.`(0) `.4byte 7` `.byte 773b-771b`(3)
+    // `.byte 775f-774f`(3); the two 3s prove the padding and replacement length.
+    assert_eq!(
+        body(".altinstructions"),
+        [0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 3, 3]
+    );
+    let reloc_count = sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".rela.altinstructions")
+        .map_or(0, |r| r.3.len() / 24);
+    assert_eq!(reloc_count, 2, "PC32 to old site and to replacement");
+}
+
+#[test]
 fn attribute_and_asm_pushsection_merge_into_one_section() {
     // An `__attribute__((section))` object and an inline-asm
     // `.pushsection` block naming the same section share one output

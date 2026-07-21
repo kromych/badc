@@ -198,6 +198,12 @@ pub(crate) enum Mnemonic {
     /// (`.long %c0`), so the values resolve at emit time. The payload is the
     /// element width in bytes; the operands are the directive arguments.
     Data(u8),
+    /// `.skip count, fill`: emit `count` bytes of `fill`. `count` is a
+    /// constant expression over template and section labels, resolved at emit
+    /// time (an ALTERNATIVE pads its old site to the replacement length). The
+    /// expression text is carried in [`AsmInsn::sym_target`] and the fill byte
+    /// in [`AsmInsn::bytes`].
+    Skip,
     /// A general-purpose / system mnemonic recognized straight from the
     /// catalogue, not one of the bespoke forms above. The string is the
     /// catalogue mnemonic; [`encode`] routes it through the table encoder with
@@ -1435,6 +1441,28 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 operands: Vec::new(),
                 bytes: bytes?,
                 sym_target: None,
+                label_def: None,
+            });
+            continue;
+        }
+        // `.skip count, fill`: emit `count` fill bytes. `count` is a constant
+        // expression over labels resolved at emit time (an ALTERNATIVE pads its
+        // old site to the replacement length); the fill defaults to zero.
+        if let Some(rest) = piece.strip_prefix(".skip")
+            && (rest.is_empty() || rest.starts_with(char::is_whitespace))
+        {
+            let rest = rest.trim();
+            let (count_expr, fill) = match rest.rsplit_once(',') {
+                Some((c, f)) => (c.trim(), parse_int(f.trim()).unwrap_or(0)),
+                None => (rest, 0),
+            };
+            insns.push(AsmInsn {
+                mnemonic: Mnemonic::Skip,
+                suffix: None,
+                seg: None,
+                operands: Vec::new(),
+                bytes: alloc::vec![fill as u8],
+                sym_target: Some(String::from(count_expr)),
                 label_def: None,
             });
             continue;
@@ -3786,5 +3814,27 @@ mod string_and_prefix_tests {
             [0xDB, 0xE3, 0xDD, 0x38, 0xD9, 0x3B]
         );
         assert_eq!(asm_bytes(b"stosw \n\t rep;stosl"), [0x66, 0xAB, 0xF3, 0xAB]);
+    }
+
+    #[test]
+    fn skip_directive_carries_count_and_fill() {
+        // `.skip count, fill` parses to a `Skip` mnemonic; the count expression
+        // is kept verbatim (its labels resolve at emit time) and the fill byte
+        // is separated out. A missing fill defaults to zero.
+        let insns = parse_template(
+            b".skip -(((775f-774f)-(772b-771b)) > 0) * ((775f-774f)-(772b-771b)),0x90",
+        )
+        .unwrap();
+        assert_eq!(insns.len(), 1);
+        assert!(matches!(insns[0].mnemonic, Mnemonic::Skip));
+        assert_eq!(insns[0].bytes, [0x90]);
+        assert_eq!(
+            insns[0].sym_target.as_deref(),
+            Some("-(((775f-774f)-(772b-771b)) > 0) * ((775f-774f)-(772b-771b))")
+        );
+        let plain = parse_template(b".skip 8").unwrap();
+        assert!(matches!(plain[0].mnemonic, Mnemonic::Skip));
+        assert_eq!(plain[0].bytes, [0]);
+        assert_eq!(plain[0].sym_target.as_deref(), Some("8"));
     }
 }

@@ -1117,6 +1117,13 @@ pub(super) fn write_relocatable(
             .map(|s| (s.name.as_str(), s.val))
             .collect()
     };
+    // Labels defined inside inline-asm named sections; a reloc against one
+    // binds to that local definition, not an undefined symbol.
+    let asm_defined_labels: alloc::collections::BTreeSet<&str> = build
+        .asm_sections
+        .iter()
+        .flat_map(|s| s.labels.iter().map(|l| l.name.as_str()))
+        .collect();
     // Inline-asm section reloc names with neither a definition in this
     // unit nor an existing UNDEF entry get their own undefined symbols.
     let mut asm_extern_names: Vec<&str> = Vec::new();
@@ -1130,6 +1137,7 @@ pub(super) fn write_relocatable(
             if !defined_fn_names.contains(n)
                 && !program.function_aliases.iter().any(|a| a.name == n)
                 && !defined_data_by_name.contains_key(n)
+                && !asm_defined_labels.contains(n)
                 && !user_extern_names.contains(&n)
                 && !user_extern_data_names.contains(&n)
                 && !asm_extern_names.contains(&n)

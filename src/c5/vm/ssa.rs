@@ -2150,10 +2150,10 @@ fn run_inline_asm(
     for insn in &insns {
         let ops = &insn.operands;
         match insn.mnemonic {
-            // Literal machine bytes and emit-time data directives are opaque
-            // to the register model, like the privileged / port ops below:
-            // no modelled effect under the VM.
-            Mnemonic::RawBytes | Mnemonic::Data(_) => {}
+            // Literal machine bytes, emit-time data directives, and `.skip`
+            // padding are opaque to the register model, like the privileged /
+            // port ops below: no modelled effect under the VM.
+            Mnemonic::RawBytes | Mnemonic::Data(_) | Mnemonic::Skip => {}
             // The interpreter is not a CPU emulator: a mnemonic reached through
             // the catalogue is refused rather than modelled. Such inline asm is
             // an ahead-of-time / JIT construct, executed natively there.

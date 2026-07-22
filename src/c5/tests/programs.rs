@@ -1323,6 +1323,193 @@ fn flex_array_member_static_init() {
 }
 
 #[test]
+fn flex_array_member_multidim_static_init() {
+    // A multi-dimensional flexible array member (`T v[][M]`) initialized
+    // at file scope: each element of the flexible outer dimension is a
+    // sub-array of the inner dimensions, so a nested brace list fills it
+    // and the object's tail is sized to the scalar-leaf count. Read back
+    // through a flat pointer so the check does not depend on multi-dim
+    // subscripting of the member.
+    let src = "
+        struct db { unsigned mask; int map[][4]; };
+        static const struct db d = {
+            .mask = 7,
+            .map = { { 1, 2, 3, 4 }, { 5, 6, 7, 8 } },
+        };
+        int main(void) {
+            const int *p = (const int *)d.map;
+            if (d.mask != 7) return 1;
+            for (int i = 0; i < 8; i++)
+                if (p[i] != i + 1) return 10 + i;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn local_struct_array_compound_literal_elements() {
+    // C99 6.5.2.5: a local array-of-struct may list its elements as
+    // compound literals `(T){ ... }` whose type names the element's own
+    // struct. The redundant cast is stripped so the brace list fills the
+    // element in place. A `(U){ ... }` of a different type is instead the
+    // first field's value under brace elision (6.7.8p20), so the two must
+    // not be confused.
+    let src = "
+        struct pe { const char *name; int v; };
+        struct inner { int a, b; };
+        struct outer { struct inner in; int x; };
+        int main(void) {
+            struct pe p[] = {
+                (struct pe){ \"x\", 11 },
+                (struct pe){ \"y\", 22 },
+                {},
+            };
+            if (p[0].v != 11 || p[1].v != 22 || p[2].v != 0) return 1;
+            if (p[0].name[0] != 'x' || p[1].name[0] != 'y') return 2;
+            /* Brace-elided element whose first field is a compound literal
+               of a different type: fills `in` then `x`, not the whole
+               element. */
+            struct outer o[] = { (struct inner){ 1, 2 }, 5 };
+            if (o[0].in.a != 1 || o[0].in.b != 2 || o[0].x != 5) return 3;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn alignof_unparenthesized_expression_operand() {
+    // GCC's `__alignof__` (which shares the token with `_Alignof`) accepts
+    // an unparenthesized expression operand, whose alignment is that of its
+    // type; it binds tighter than a following binary operator, like
+    // `sizeof`. The parenthesized type-name and expression forms still work.
+    let src = "
+        struct big { long long a; };
+        int main(void) {
+            int i; long l; double d; struct big b; char c;
+            if (__alignof__ i != 4) return 1;
+            if (__alignof__ l != 8) return 2;
+            if (__alignof__ d != 8) return 3;
+            if (__alignof__ c != 1) return 4;
+            if (__alignof__ b != 8) return 5;
+            if (__alignof__ i + 1 != 5) return 6;
+            if (_Alignof(int) != 4 || __alignof__(double) != 8) return 7;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn positional_after_designated_in_anonymous_union_struct() {
+    // C99 6.7.8p17: after a designator into a member of an anonymous
+    // struct that is an anonymous union's alternative, a positional
+    // initializer continues at the next member of that struct, not past
+    // the whole union. `.name` then `0` must fill `size`, and `.align`
+    // then `0` must fill `is_signed`, not overflow the object.
+    let src = "
+        struct tef {
+            const char *type;
+            union {
+                struct {
+                    const char *name; const int size; const int align;
+                    const unsigned int is_signed : 1; unsigned int needs_test : 1;
+                    const int filter_type; const int len;
+                };
+                int (*define_fields)(void *);
+            };
+        };
+        static struct tef a = { .type = \"int\", .name = \"x\", .size = 4, 5 };
+        static struct tef b = { .type = \"int\", .name = \"y\", .size = 4, .align = 8, 0, .filter_type = 3 };
+        int main(void) {
+            if (a.size != 4 || a.align != 5) return 1;
+            if (b.size != 4 || b.align != 8 || b.is_signed != 0 || b.filter_type != 3) return 2;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn address_of_multidim_array_is_pointer_to_array() {
+    // C99 6.5.3.2p3: `&arr` on a multi-dimensional array has type pointer
+    // to the whole array `T[D0][D1]...`, so `(*p)[i][j][k]` and
+    // `typeof(&arr)` see the multi-dim shape rather than the decayed
+    // element pointer. Covers a direct deref, a `typeof(&arr)` variable,
+    // and a statement-expression yielding the pointer, read and written.
+    let src = "
+        typedef unsigned long long u64;
+        static u64 hw[4][6][8];
+        int main(void) {
+            u64 c = 0;
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 6; j++)
+                    for (int k = 0; k < 8; k++) hw[i][j][k] = c++;
+            if ((*(&hw))[1][2][3] != (u64)(1 * 48 + 2 * 8 + 3)) return 1;
+            typeof(&hw) p = &hw;
+            if ((*p)[3][5][7] != (u64)(3 * 48 + 5 * 8 + 7)) return 2;
+            (*({ typeof(&hw) fp = &hw; fp; }))[0][0][0] = 999;
+            if (hw[0][0][0] != 999) return 3;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn parameter_array_multidim_subscript() {
+    // C99 6.7.5.3p7: a parameter declared `T name[][M...]` is adjusted to
+    // a pointer to `T[M...]`. Subscripting `name[i][j]...` must stride by
+    // the inner dimensions at each level and decay to the element at the
+    // innermost, for both a 2-D and a 3-D parameter.
+    let src = "
+        unsigned char g(unsigned char otp[][4]) { return otp[1][2]; }
+        int h(int a[][2][4]) { return a[1][0][2]; }
+        int main(void) {
+            unsigned char m[3][4];
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 4; j++) m[i][j] = i * 10 + j;
+            if (g(m) != 12) return 1;
+            int n[3][2][4];
+            int c = 0;
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 2; j++)
+                    for (int k = 0; k < 4; k++) n[i][j][k] = c++;
+            if (h(n) != 1 * 8 + 0 * 4 + 2) return 2;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn address_of_parenthesized_compound_literal_static_init() {
+    // C99 6.5.2.5 / 6.6: a file-scope object may be initialized with the
+    // address of a compound literal, which has static storage duration.
+    // The literal may sit behind grouping parens (`&((T){...})`); the
+    // address constant is the same. Exercised through a pointer field and
+    // a scalar pointer, with an offsetof inside the literal.
+    let src = "
+        struct fields { int x; int y; };
+        struct sa { int a; unsigned long off; };
+        struct wrap { void *var; };
+        static struct wrap w = {
+            .var = &((struct sa){ -1, __builtin_offsetof(struct fields, y) }),
+        };
+        static void *s = &((struct sa){ 7, 3 });
+        int main(void) {
+            struct sa *p = w.var;
+            if (p->a != -1 || p->off != 4) return 1;
+            struct sa *q = s;
+            if (q->a != 7 || q->off != 3) return 2;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn attribute_section_placement() {
     // `section("name")` placements: the interpreter ignores them; the
     // native object writer places the bytes (locked by the object-level

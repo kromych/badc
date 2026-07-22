@@ -985,7 +985,18 @@ impl Compiler {
             let snap = self.lex.snapshot();
             self.next()?; // `&`
             if self.lex.tk == '(' {
-                self.next()?; // `(`
+                // `&(T){...}` -- address of a compound literal (C99
+                // 6.5.2.5). The literal may sit behind grouping parens
+                // (`&((T){...})`, a common macro-body shape); skip them and
+                // balance the matching `)` after the literal's brace list.
+                let mut grouping: i64 = 0;
+                loop {
+                    self.next()?; // consume `(`
+                    if self.lex_is_type_start() || self.lex.tk != '(' {
+                        break;
+                    }
+                    grouping += 1;
+                }
                 if self.lex_is_type_start() {
                     let mut cl_ty = self.parse_decl_base_type()?;
                     while self.lex.tk == Token::MulOp {
@@ -996,6 +1007,9 @@ impl Compiler {
                         self.next()?;
                         if self.lex.tk == '{' && is_struct_ty(cl_ty) {
                             let (off, sym_idx) = self.emit_compound_literal_body(cl_ty)?;
+                            for _ in 0..grouping {
+                                self.accept(')')?;
+                            }
                             return Ok((off as i128, InitElemReloc::Data(Some(sym_idx))));
                         }
                     }
@@ -2016,6 +2030,74 @@ impl Compiler {
         Ok(())
     }
 
+    /// Non-destructive: the struct id named by a compound-literal cast
+    /// `(T){ ... }` at the current position (possibly behind grouping
+    /// parens), when `T` is a struct/union value type. `None` otherwise.
+    /// The lexer is restored before returning.
+    fn peek_element_compound_literal_sid(&mut self) -> Result<Option<usize>, C5Error> {
+        if self.lex.tk != '(' {
+            return Ok(None);
+        }
+        let snap = self.lex.snapshot();
+        loop {
+            self.next()?; // consume `(`
+            if self.lex.tk != '(' {
+                break;
+            }
+        }
+        let sid = if self.lex.tk == Token::Struct as i64 || self.lex.tk == Token::Union as i64 {
+            self.next()?;
+            if self.lex.tk == Token::Id {
+                let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.find_struct_id(&name)
+            } else {
+                None
+            }
+        } else if self.is_lex_typedef_name() {
+            let ty = self.symbols[self.lex.curr_id_idx].type_;
+            if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                Some(struct_id_of(ty))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        self.lex.restore(snap);
+        Ok(sid)
+    }
+
+    /// Initialize one struct array element at `here` from the current
+    /// brace-list position. The element may be a braced initializer
+    /// (`{ ... }`), a brace-elided flat run of field values (C99
+    /// 6.7.8p20), or a whole-element compound literal `(T){ ... }` (C99
+    /// 6.5.2.5) whose type names the element's own struct. A `(U){ ... }`
+    /// naming a different type is the initializer of the element's first
+    /// field under brace elision, so it is left for `fill_struct_fields`.
+    /// (A by-value field cannot have the element's own struct type, so
+    /// the type match is unambiguous.)
+    pub(super) fn init_struct_array_element(
+        &mut self,
+        struct_id: usize,
+        here: i64,
+    ) -> Result<(), C5Error> {
+        if self.peek_element_compound_literal_sid()? == Some(struct_id) {
+            self.skip_opt_compound_literal_cast()?;
+            let close_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+            self.collect_struct_initializer(struct_id, here)?;
+            for _ in 0..close_parens {
+                self.accept(')')?;
+            }
+            return Ok(());
+        }
+        if self.lex.tk == '{' {
+            self.collect_struct_initializer(struct_id, here)?;
+        } else {
+            self.fill_struct_fields(struct_id, here, false)?;
+        }
+        Ok(())
+    }
+
     /// C99 6.5.2.5: an initializer element may be written as a compound
     /// literal `(Type){ ... }`. When it appears as an aggregate member's
     /// value the cast type names the member's own type, so the `(Type)`
@@ -2127,6 +2209,7 @@ impl Compiler {
         &mut self,
         field_base: usize,
         elem_ty: i64,
+        inner_dims: &[i64],
     ) -> Result<(), C5Error> {
         let elem_size = self.size_of_type(elem_ty);
         let grow_to = |data: &mut alloc::vec::Vec<u8>, end: usize| {
@@ -2134,6 +2217,23 @@ impl Compiler {
                 data.resize(end, 0);
             }
         };
+        // Multi-dimensional flexible array member (`T v[][M]`): each
+        // element of the flexible outer dimension is itself a sub-array.
+        // The general array collector fills a brace list of arbitrary rank,
+        // zero-padding short rows (C99 6.7.8p21); write its flat leaves into
+        // the member and record the scalar-leaf count the enclosing object
+        // uses to size its tail (bytes = count * sizeof(base element)).
+        if !inner_dims.is_empty()
+            && self.lex.tk == '{'
+            && !(is_struct_ty(elem_ty) && struct_ptr_depth(elem_ty) == 0)
+        {
+            self.pending.init_inner_dims = inner_dims.to_vec();
+            let elems = self.collect_array_initializer(elem_ty)?;
+            grow_to(&mut self.data, field_base + elems.len() * elem_size);
+            self.write_array_init_into_data(field_base as i64, elem_ty, &elems);
+            self.flex_array_measured_count = Some(elems.len());
+            return Ok(());
+        }
         if self.lex.tk == '"' && (elem_ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64 {
             let start_addr = self.take_concat_string_literal()?;
             self.data.push(0); // ensure NUL terminator in the literal's bytes
@@ -2508,7 +2608,12 @@ impl Compiler {
                         "non-constant flexible array member initializer not yet supported",
                     ));
                 }
-                self.fill_flexible_array_member(field_base, field.ty)?;
+                let inner_dims: Vec<i64> = field
+                    .array_dims
+                    .get(1..)
+                    .map(|s| s.to_vec())
+                    .unwrap_or_default();
+                self.fill_flexible_array_member(field_base, field.ty, &inner_dims)?;
                 pos = field_idx + 1;
                 self.accept(',')?;
                 continue;
@@ -2530,13 +2635,22 @@ impl Compiler {
             // A positional initializer fills the first member of an
             // anonymous union (C99 6.7.8); the remaining members share
             // its storage, so advance past the whole group rather than
-            // landing on the next alternative.
+            // landing on the next alternative. When the member instead
+            // belongs to an anonymous struct that is the union's
+            // alternative, its sibling members continue positionally
+            // (6.7.8p17), so only skip the union once the struct is left.
             pos = field_idx + 1;
             let group = field.anon_union_group;
             if group != 0 {
+                let sstruct = field.anon_struct_group;
                 let fields = &self.structs[struct_id].fields;
-                while pos < fields.len() && fields[pos].anon_union_group == group {
-                    pos += 1;
+                let next_in_same_struct = sstruct != 0
+                    && pos < fields.len()
+                    && fields[pos].anon_struct_group == sstruct;
+                if !next_in_same_struct {
+                    while pos < fields.len() && fields[pos].anon_union_group == group {
+                        pos += 1;
+                    }
                 }
             }
             self.accept(',')?;

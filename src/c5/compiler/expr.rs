@@ -1816,6 +1816,9 @@ impl Compiler {
                     let elem_ty = self.symbols[id_idx].type_;
                     let elem_size = self.size_of_type(elem_ty) as i64;
                     let dims = self.symbols[id_idx].array_dims.clone();
+                    // Record the full dimension list so a wrapping `&arr`
+                    // can rebuild the multi-dim pointer-to-array aggregate.
+                    self.pending.last_array_decay_dims = dims.clone();
                     self.seed_multi_dim_strides(&dims, elem_size);
                     // A function-pointer array element keeps the element's
                     // parameter types so a following `arr[i](args)` narrows
@@ -1910,20 +1913,14 @@ impl Compiler {
                     let dims = self.symbols[id_idx].array_dims.clone();
                     if !dims.is_empty() && is_pointer_ty(self.ty) {
                         if dims[0] == 0 {
-                            // Pointer-to-array variable
-                            // (`T (*p)[M1][Mn]`): the declarator
-                            // baked one Ptr per `Mi` into the
-                            // symbol's type. Collapse those Ptrs so
-                            // the surviving level is the single
-                            // decayed-array pointer to the scalar
-                            // element. Element size comes from the
-                            // type at the bottom of the array Ptrs;
-                            // the n-1 trailing Ptrs (one per Mi
-                            // after the `*` itself) get peeled.
-                            let array_ptrs = (dims.len() as i64) - 1;
-                            let scalar_ty =
-                                self.symbols[id_idx].type_ - (dims.len() as i64) * (Ty::Ptr as i64);
-                            self.ty -= array_ptrs * (Ty::Ptr as i64);
+                            // Array-sugar parameter (`T name[][M...]`, C99
+                            // 6.7.5.3p7): the outermost dimension decayed to a
+                            // single pointer, so `type_` carries one Ptr above
+                            // the scalar base. Keep that pointer as the running
+                            // type and seed the inner-dimension strides from the
+                            // scalar element size; each subscript peels one
+                            // level, the innermost decaying to the element.
+                            let scalar_ty = self.symbols[id_idx].type_ - (Ty::Ptr as i64);
                             let elem_size = self.size_of_type(scalar_ty) as i64;
                             self.seed_multi_dim_strides(&dims, elem_size);
                         } else {
@@ -2457,7 +2454,20 @@ impl Compiler {
                 // `sizeof(&arr)`, and `typeof(&arr)` see a real
                 // pointer-to-array rather than the element type.
                 let n = self.pending.last_array_decay_size;
-                if n > 0 && self.pending.index_stride == 0 {
+                let decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
+                if decay_dims.len() >= 2 {
+                    // `&arr` on a multi-dimensional array yields a pointer to
+                    // the whole array aggregate `T[D0][D1]...`, so `(*p)[i]
+                    // [j]...` and `typeof(&arr)` see the multi-dim shape. The
+                    // seeded per-level strides belong to the decayed operand,
+                    // not to the pointer-to-array result; clear them so a
+                    // following subscript uses the aggregate's own decay.
+                    let elem_ty = pre_addr_ty - Ty::Ptr as i64;
+                    let agg = self.array_agg_type(elem_ty, &decay_dims);
+                    self.ty = agg + Ty::Ptr as i64;
+                    self.pending.index_stride = 0;
+                    self.pending.index_strides_tail.clear();
+                } else if n > 0 && self.pending.index_stride == 0 {
                     let elem_ty = pre_addr_ty - Ty::Ptr as i64;
                     let agg = self.array_agg_type(elem_ty, &[n]);
                     self.ty = agg + Ty::Ptr as i64;
@@ -2686,6 +2696,7 @@ impl Compiler {
             // leak into a sizeof of an unrelated subexpression.
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
+            self.pending.last_array_decay_dims.clear();
             // C99 6.5: a struct / union value is not a valid operand of an
             // arithmetic / bitwise / shift / relational / equality / logical
             // operator (the contiguous token range `Lor..=ModOp`). Reject the
@@ -3952,6 +3963,9 @@ impl Compiler {
                 self.next()?;
             } else if self.lex.tk == Token::Brak {
                 self.next()?;
+                // A subscript consumes the array decay, so the pre-subscript
+                // dimension list no longer describes an address-of operand.
+                self.pending.last_array_decay_dims.clear();
                 // GCC vector extension: `v[i]` indexes lane `i` as an
                 // element-typed lvalue. The vector value carries its address on
                 // the accumulator like a decayed array, so reinterpret the base

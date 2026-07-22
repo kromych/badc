@@ -346,7 +346,17 @@ impl Compiler {
             // data reloc from this global's slot to the synthetic
             // symbol's offset.
             if self.lex.tk == '(' {
-                self.next()?;
+                // The literal may sit behind grouping parens
+                // (`&((T){...})`, a common macro-body shape); skip them
+                // and balance the matching `)` after the brace list.
+                let mut grouping: i64 = 0;
+                loop {
+                    self.next()?; // consume `(`
+                    if self.lex_is_type_start() || self.lex.tk != '(' {
+                        break;
+                    }
+                    grouping += 1;
+                }
                 if !self.lex_is_type_start() {
                     return Err(self.compile_err_at(
                         line,
@@ -377,6 +387,9 @@ impl Compiler {
                     ));
                 }
                 let (off, new_idx) = self.emit_compound_literal_body(cl_ty)?;
+                for _ in 0..grouping {
+                    self.accept(')')?;
+                }
                 let bytes = (off as u64).to_le_bytes();
                 self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                 self.data_relocs.push(crate::c5::program::DataReloc {

@@ -1717,6 +1717,14 @@ fn base_section_shorthand(tok: &str) -> bool {
     )
 }
 
+/// Split off the first whitespace-delimited token and the trimmed remainder.
+fn split_first_token(s: &str) -> (&str, &str) {
+    match s.find(char::is_whitespace) {
+        Some(p) => (&s[..p], s[p..].trim()),
+        None => (s, ""),
+    }
+}
+
 fn extract_asm_sections_impl(
     text: &str,
     is_aarch64: bool,
@@ -1742,10 +1750,38 @@ fn extract_asm_sections_impl(
     };
     for piece in text.split([';', '\n']) {
         let piece = piece.trim();
-        let (tok, rest) = match piece.find(char::is_whitespace) {
-            Some(p) => (&piece[..p], piece[p..].trim()),
-            None => (piece, ""),
-        };
+        if piece.is_empty() {
+            continue;
+        }
+        // Peel any leading `name:` labels: GNU as treats them as statements
+        // preceding the rest of the line, so a section directive or an
+        // instruction may follow a label on the same line (`1:\t.pushsection
+        // ...`). A label goes to the current stream; a token ending in `:` that
+        // is not a valid label is left in place as the statement.
+        let mut stmt = piece;
+        loop {
+            let (tok, rest) = split_first_token(stmt);
+            let Some(name) = tok.strip_suffix(':') else {
+                break;
+            };
+            if !is_asm_symbol_name(name) && !is_numeric_label(name) {
+                break;
+            }
+            match *stack.last().unwrap() {
+                None => {
+                    code.push_str(tok);
+                    code.push('\n');
+                }
+                Some(idx) => blocks[idx]
+                    .items
+                    .push(AsmSectionItem::Label(alloc::string::String::from(name))),
+            }
+            stmt = rest;
+        }
+        if stmt.is_empty() {
+            continue;
+        }
+        let (tok, rest) = split_first_token(stmt);
         match tok {
             ".pushsection" | ".section" => {
                 let block = parse_section_args(rest)?;
@@ -1805,50 +1841,20 @@ fn extract_asm_sections_impl(
             }
             _ => {}
         }
-        if piece.is_empty() {
-            continue;
-        }
         match *stack.last().unwrap() {
+            // The remaining statement is an instruction, kept verbatim for the
+            // arch backend to encode.
             None => {
-                code.push_str(piece);
+                code.push_str(stmt);
                 code.push('\n');
             }
-            Some(idx) => {
-                // Peel any leading `name:` labels; GNU as allows a directive
-                // to follow a label on the same line.
-                let (mut tok, mut rest) = (tok, rest);
-                while let Some(name) = tok.strip_suffix(':') {
-                    // A numeric label (`2:`, `14470:`) is a GNU as local label;
-                    // the materializer gives each a per-instance-unique symbol.
-                    if !is_asm_symbol_name(name) && !is_numeric_label(name) {
-                        return Err(alloc::format!("inline asm: bad label `{tok}:`"));
-                    }
-                    blocks[idx]
-                        .items
-                        .push(AsmSectionItem::Label(alloc::string::String::from(name)));
-                    let (t, r) = match rest.find(char::is_whitespace) {
-                        Some(p) => (&rest[..p], rest[p..].trim()),
-                        None => (rest, ""),
-                    };
-                    if t.is_empty() {
-                        tok = t;
-                        break;
-                    }
-                    tok = t;
-                    rest = r;
-                }
-                if !tok.is_empty() {
-                    // A non-directive token is an instruction, kept as text for
-                    // the arch backend to encode. GNU as assembles instructions
-                    // in any section (the x86 ALTERNATIVE replacement in an
-                    // `"ax"` section, a trampoline body in `.rodata`); the
-                    // section flags set the object section's attributes, not
-                    // whether code is admitted.
-                    blocks[idx]
-                        .items
-                        .push(parse_section_item(tok, rest, is_aarch64)?);
-                }
-            }
+            // GNU as assembles instructions in any section (the x86 ALTERNATIVE
+            // replacement in an `"ax"` section, a trampoline body in
+            // `.rodata`); the section flags set the object section's
+            // attributes, not whether code is admitted.
+            Some(idx) => blocks[idx]
+                .items
+                .push(parse_section_item(tok, rest, is_aarch64)?),
         }
     }
     Ok(Some((code, blocks)))
@@ -4118,7 +4124,8 @@ mod asm_section_tests {
     fn extract_and_materialize() {
         let text = "1: nop\n.pushsection .discard.t,\"aw\",@progbits\n.balign 8\n.quad 1b\n.long 1b - .\n.long %c0, 7\n.asciz \"hi\"\n.popsection\nnop\n";
         let (code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        assert_eq!(code, "1: nop\nnop\n");
+        // The `1:` label is peeled onto its own line ahead of the `nop`.
+        assert_eq!(code, "1:\nnop\nnop\n");
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].name, ".discard.t");
         assert_eq!(blocks[0].flags, "aw");

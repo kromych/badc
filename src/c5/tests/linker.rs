@@ -4429,6 +4429,26 @@ fn asm_section_org_pads_to_label_plus_operand() {
 }
 
 #[test]
+fn inline_asm_label_glued_section_directive_balances() {
+    // A section directive may follow a label on the same line in the code
+    // stream (`1:\t.pushsection ...`): GNU as treats the label and the
+    // directive as two statements. The section-stack tracker must recognize
+    // the directive after the label; otherwise the matching `.popsection`
+    // underflows and is wrongly rejected as unbalanced.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+int f(int *p) {
+    int r;
+    __asm__ volatile("1:\t"
+        ".pushsection .lktab,\"a\"\n"
+        ".balign 4\n"
+        ".long 9f - .\n"
+        ".popsection\n"
+        "9:\n\tmovl %1, %0\n"
+        : "=r" (r) : "m" (*p));
+    return r;
+}
+#[test]
 fn asm_string_operand_data_is_emitted() {
     // A string-literal `i`-class operand is interned into the data buffer
     // while lexing the operand list, and the walk lowers its `Expr::StrLit`

@@ -19,7 +19,8 @@
 
 #define MASK_INPUT_CHECK(h, l) \
     (BUILD_BUG_ON_ZERO(__builtin_choose_expr(is_constexpr((l) > (h)), (l) > (h), 0)))
-#define __MASK(h, l) (((~0UL) - (1UL << (l)) + 1) & (~0UL >> (64 - 1 - (h))))
+#define __MASK(h, l) \
+    (((~0ULL) - (1ULL << (l)) + 1) & (~0ULL >> (64 - 1 - (h))))
 #define MASK(h, l) (MASK_INPUT_CHECK(h, l) + __MASK(h, l))
 
 struct obj {
@@ -31,7 +32,7 @@ static int g;
 
 /* Runtime arguments: the check must fold to 0 without demanding that
  * `(l) > (h)` be a constant expression. */
-static unsigned long mask_dyn(int h, int l) {
+static unsigned long long mask_dyn(int h, int l) {
     return MASK(h, l);
 }
 
@@ -76,11 +77,11 @@ int main(void) {
         return 14;
 
     /* Constant and runtime argument forms agree on the value. */
-    if (MASK(39, 21) != 0xffffe00000UL)
+    if (MASK(39, 21) != 0xffffe00000ULL)
         return 15;
-    if (mask_dyn(39, 21) != 0xffffe00000UL)
+    if (mask_dyn(39, 21) != 0xffffe00000ULL)
         return 16;
-    if (mask_dyn(7, 0) != 0xffUL)
+    if (mask_dyn(7, 0) != 0xffULL)
         return 17;
 
     return 0;

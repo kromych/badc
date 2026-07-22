@@ -1435,9 +1435,9 @@ fn alignof_unparenthesized_expression_operand() {
     let src = "
         struct big { long long a; };
         int main(void) {
-            int i; long l; double d; struct big b; char c;
+            int i; long long ll; double d; struct big b; char c;
             if (__alignof__ i != 4) return 1;
-            if (__alignof__ l != 8) return 2;
+            if (__alignof__ ll != 8) return 2;
             if (__alignof__ d != 8) return 3;
             if (__alignof__ c != 1) return 4;
             if (__alignof__ b != 8) return 5;

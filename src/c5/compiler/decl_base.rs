@@ -525,6 +525,23 @@ impl Compiler {
         Ok(name)
     }
 
+    /// A GNU asm-label (`decl asm("name")`) sets the declared object's or
+    /// function's assembler symbol name. When the label restates the
+    /// identifier the rename is a no-op and is accepted; a differing name
+    /// would have to rename the emitted symbol across every backend's symbol
+    /// and relocation tables, which is not yet wired.
+    /// TODO: honor an assembler name that differs from the identifier.
+    pub(super) fn parse_declarator_asm_label(&mut self, id_idx: usize) -> Result<(), C5Error> {
+        let label = self.parse_asm_register_suffix()?;
+        if label != self.symbols[id_idx].name {
+            return Err(self.compile_err(format!(
+                "assembler name `{label}` differing from `{}` is not yet supported",
+                self.symbols[id_idx].name
+            )));
+        }
+        Ok(())
+    }
+
     /// Consume an optional `asm("reg")` explicit-register suffix on a
     /// block-scope declarator. The binding requires the `register`
     /// storage class and automatic duration.

@@ -140,6 +140,21 @@ fn runtime_anon_struct_init() {
 }
 
 #[test]
+fn global_member_array_decay_pointer_init() {
+    // C99 6.3.2.1p3 / 6.6: `T *p = g.member;` where the member is an array
+    // decays to an address constant; union offset 0 and struct offset != 0.
+    assert_eq!(run_fixture("global_member_array_decay_pointer_init.c"), 0);
+}
+
+#[test]
+fn nested_block_shadow_restore() {
+    // C99 6.2.1: a nested-block declaration that shadows an outer name must
+    // restore the outer binding's full array / VLA shape at block exit, in
+    // both shadow directions, across nesting levels, and for a `for`-init.
+    assert_eq!(run_fixture("nested_block_shadow_restore.c"), 0);
+}
+
+#[test]
 fn runtime_array_designator() {
     // C99 6.7.8p6 `[N] =` array designators interleaved with positional
     // entries in a runtime (non-constant) array initializer, at parity with
@@ -153,6 +168,39 @@ fn anon_struct_designated_init() {
     // anonymous-struct region, out of order, in both the constant and the
     // runtime store paths.
     assert_eq!(run_fixture("anon_struct_designated_init.c"), 0);
+}
+
+#[test]
+fn anon_group_designator_chain() {
+    // C99 6.7.8p7: a `.member[i]` / `.member.inner` designator chain inside
+    // the brace of a flattened anonymous union/struct member, constant and
+    // runtime store paths.
+    assert_eq!(run_fixture("anon_group_designator_chain.c"), 0);
+}
+
+#[test]
+fn local_struct_array_compound_literal_runtime() {
+    // C99 6.5.2.5: a whole-element compound literal `(T){ ... }` as a local
+    // struct-array element, with non-constant field values on the per-element
+    // runtime store path (deferred and fixed size).
+    assert_eq!(
+        run_fixture("local_struct_array_compound_literal_runtime.c"),
+        0
+    );
+}
+
+#[test]
+fn declarator_asm_label_noop_rename() {
+    // A GNU asm-label (`decl asm("name")`) restating the identifier is a
+    // no-op rename, accepted on both a function declarator and an object,
+    // which then behave as ordinary declarations.
+    let src = "
+        int add(int a, int b) asm(\"add\");
+        int add(int a, int b) { return a + b; }
+        int counter asm(\"counter\") = 40;
+        int main(void) { counter += add(1, 1); return counter; }
+    ";
+    assert_eq!(run_str(src), 42);
 }
 
 #[test]
@@ -1507,6 +1555,14 @@ fn address_of_parenthesized_compound_literal_static_init() {
         }
     ";
     assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn array_compound_literal_address_const() {
+    // C99 6.5.2.5 / 6.6: `&(T[]){ ... }[i].member` as an address constant in a
+    // static initializer -- an anonymous static array whose designated member
+    // address is stored (a sysfs attribute-table shape).
+    assert_eq!(run_fixture("array_compound_literal_address_const.c"), 0);
 }
 
 #[test]

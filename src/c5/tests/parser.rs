@@ -1273,11 +1273,14 @@ fn asm_goto_accepts_forward_and_backward_labels() {
 }
 
 #[test]
-fn declarator_asm_rejected_at_file_scope() {
-    // TODO: file-scope renames and global register variables.
+fn declarator_asm_label_rename_rejected_at_file_scope() {
+    // A GNU asm-label restating the identifier is a no-op and accepted; a
+    // differing assembler name would rename the emitted symbol, which is not
+    // yet wired. TODO: honor a differing assembler name.
+    super::compile_str_bare("int g asm(\"g\"); int main(void) { return g; }");
     expect_compile_error(
         "int g asm(\"r9\"); int main(void) { return g; }",
-        "not supported at file scope",
+        "differing from `g` is not yet supported",
     );
 }
 
@@ -1467,11 +1470,11 @@ fn file_scope_register_asm_binding() {
         &format!("int x; register long x asm(\"{sp}\"); int main(void) {{ return 0; }}"),
         "conflicts with a prior declaration",
     );
-    // Without `register` the declarator asm suffix stays rejected
-    // (linkage-name rename is TODO).
+    // Without `register` the declarator asm suffix is a GNU asm-label: a
+    // no-op rename is accepted, a differing one is not yet supported.
     expect_compile_error(
         "long x asm(\"renamed\"); int main(void) { return 0; }",
-        "not supported at file scope",
+        "differing from `x` is not yet supported",
     );
 }
 

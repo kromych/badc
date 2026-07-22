@@ -29,7 +29,77 @@ use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
 use super::types::{is_struct_ty, struct_ptr_depth};
 
+/// The outer binding a nested block saved before rebinding a name, restored
+/// at the block's exit. A block nests arbitrarily, so unlike the single
+/// `h_*` shadow slot used at function-body top level this is a per-entry
+/// snapshot; it carries every field that a block-local declarator can retype
+/// on the reused symbol slot (C99 6.2.1 nested scopes).
+pub(super) struct BlockShadow {
+    idx: usize,
+    class: i64,
+    type_: i64,
+    val: i64,
+    fn_ptr_indirection: i64,
+    params: Vec<i64>,
+    is_variadic: bool,
+    array_size: i64,
+    inner_array_size: i64,
+    array_dims: Vec<i64>,
+    is_vla: bool,
+    vla_ptr_slot: i64,
+    vla_size_slot: i64,
+    is_zero_len_array: bool,
+    asm_register: Option<crate::c5::symbol::AsmRegister>,
+    is_global_register: bool,
+}
+
 impl Compiler {
+    /// Snapshot the current binding of `idx` for restore at block exit.
+    pub(super) fn capture_block_shadow(&self, idx: usize) -> BlockShadow {
+        let s = &self.symbols[idx];
+        BlockShadow {
+            idx,
+            class: s.class,
+            type_: s.type_,
+            val: s.val,
+            fn_ptr_indirection: s.fn_ptr_indirection,
+            params: s.params.clone(),
+            is_variadic: s.is_variadic,
+            array_size: s.array_size,
+            inner_array_size: s.inner_array_size,
+            array_dims: s.array_dims.clone(),
+            is_vla: s.is_vla,
+            vla_ptr_slot: s.vla_ptr_slot,
+            vla_size_slot: s.vla_size_slot,
+            is_zero_len_array: s.is_zero_len_array,
+            asm_register: s.asm_register,
+            is_global_register: s.is_global_register,
+        }
+    }
+
+    /// Restore a binding saved by [`Self::capture_block_shadow`], reverting
+    /// the whole retyped slot (type and array / VLA shape included) and
+    /// clearing the block-`extern` mark.
+    pub(super) fn restore_block_shadow(&mut self, b: BlockShadow) {
+        let s = &mut self.symbols[b.idx];
+        s.class = b.class;
+        s.type_ = b.type_;
+        s.val = b.val;
+        s.fn_ptr_indirection = b.fn_ptr_indirection;
+        s.params = b.params;
+        s.is_variadic = b.is_variadic;
+        s.array_size = b.array_size;
+        s.inner_array_size = b.inner_array_size;
+        s.array_dims = b.array_dims;
+        s.is_vla = b.is_vla;
+        s.vla_ptr_slot = b.vla_ptr_slot;
+        s.vla_size_slot = b.vla_size_slot;
+        s.is_zero_len_array = b.is_zero_len_array;
+        s.asm_register = b.asm_register;
+        s.is_global_register = b.is_global_register;
+        s.block_extern_active = false;
+    }
+
     /// `for (init; cond; step) body`. The body is emitted between the
     /// condition (which falls through to it) and the step (which the
     /// body's tail jumps back to). `continue` patches into the step
@@ -81,7 +151,7 @@ impl Compiler {
         // as `parse_block_stmt`. `parse_block_local_decl`
         // consumes its own trailing `;`; the expression branch
         // does it explicitly.
-        let mut for_init_symbols: Vec<(usize, i64, i64, i64)> = Vec::new();
+        let mut for_init_symbols: Vec<BlockShadow> = Vec::new();
         let mut init_ast: Option<super::super::ast::BlockItem> = None;
         if self.lex.tk == ';' {
             self.next()?;
@@ -217,10 +287,8 @@ impl Compiler {
         // the binding's scope ends with the for statement
         // (C99 6.8.5.3 / 6.8p3). Restore in reverse order to
         // unwind multiple shadows in declaration order.
-        for (idx, class, ty, val) in for_init_symbols.into_iter().rev() {
-            self.symbols[idx].class = class;
-            self.symbols[idx].type_ = ty;
-            self.symbols[idx].val = val;
+        for b in for_init_symbols.into_iter().rev() {
+            self.restore_block_shadow(b);
         }
         Ok(())
     }
@@ -273,7 +341,7 @@ impl Compiler {
     /// cleanup restores it.
     pub(super) fn parse_block_typedef(
         &mut self,
-        mut block_symbols: Option<&mut Vec<(usize, i64, i64, i64)>>,
+        mut block_symbols: Option<&mut Vec<BlockShadow>>,
     ) -> Result<(), C5Error> {
         self.next()?; // consume `typedef`
         let lbt = self.parse_decl_base_type()?;
@@ -311,13 +379,9 @@ impl Compiler {
             } else {
                 (ty, fn_ptr_indirection, None)
             };
-            if let Some(bs) = block_symbols.as_deref_mut() {
-                bs.push((
-                    id_idx,
-                    self.symbols[id_idx].class,
-                    self.symbols[id_idx].type_,
-                    self.symbols[id_idx].val,
-                ));
+            if block_symbols.is_some() {
+                let snap = self.capture_block_shadow(id_idx);
+                block_symbols.as_deref_mut().unwrap().push(snap);
             } else {
                 self.shadow_symbol(id_idx);
                 self.symbols[id_idx].is_scope_typedef = true;
@@ -369,7 +433,7 @@ impl Compiler {
     /// matching store sequence via `emit_local_init_store`.
     fn parse_block_local_decl(
         &mut self,
-        block_symbols: &mut Vec<(usize, i64, i64, i64)>,
+        block_symbols: &mut Vec<BlockShadow>,
     ) -> Result<(), C5Error> {
         // Storage-class prefixes. `static` at function scope promotes
         // the declarator to a Glo symbol with persistent data-segment
@@ -512,12 +576,8 @@ impl Compiler {
                 is_extern && prior_class != Token::Glo as i64 && prior_class != Token::Fun as i64;
             let extern_shadows_binding = convert_extern && prior_class != Token::Id as i64;
             if !convert_extern || extern_shadows_binding {
-                block_symbols.push((
-                    loc_idx,
-                    self.symbols[loc_idx].class,
-                    self.symbols[loc_idx].type_,
-                    self.symbols[loc_idx].val,
-                ));
+                let snap = self.capture_block_shadow(loc_idx);
+                block_symbols.push(snap);
             }
 
             if is_extern {
@@ -876,8 +936,8 @@ impl Compiler {
                     // C23 6.7.13.5: `[[maybe_unused]]` on a declaration
                     // suppresses the unused diagnostics for the names it
                     // introduces.
-                    for &(idx, _, _, _) in &block_symbols[sym_before..] {
-                        self.symbols[idx].maybe_unused = true;
+                    for b in &block_symbols[sym_before..] {
+                        self.symbols[b.idx].maybe_unused = true;
                     }
                 }
                 let item_after = self.ast.stmts.len();
@@ -970,8 +1030,8 @@ impl Compiler {
         // `{ ... }` block; their diagnostic is emitted at function
         // exit. Names starting with `_` are suppressed (gcc /
         // clang `-Wunused` convention).
-        for (idx, _, _, _) in &block_symbols {
-            let sym = &self.symbols[*idx];
+        for b in &block_symbols {
+            let sym = &self.symbols[b.idx];
             if sym.class != Token::Loc as i64
                 || sym.val >= 0
                 || !sym.decl_in_main_source
@@ -1005,8 +1065,8 @@ impl Compiler {
         // nested block or a `for` initializer. function_bc_pc is filled
         // in at function close (see run_compile.rs). Slots 0 and 1 are
         // the saved-frame area, not user names.
-        for (idx, _, _, _) in &block_symbols {
-            let sym = &self.symbols[*idx];
+        for b in &block_symbols {
+            let sym = &self.symbols[b.idx];
             if sym.class == Token::Loc as i64
                 && sym.val != 0
                 && sym.val != 1
@@ -1031,11 +1091,8 @@ impl Compiler {
         // and drops its `block_extern_active` mark; the marked references
         // already resolve through `Ast::block_extern_refs` independent of
         // this restored class.
-        for (idx, class, ty, val) in block_symbols.into_iter().rev() {
-            self.symbols[idx].class = class;
-            self.symbols[idx].type_ = ty;
-            self.symbols[idx].val = val;
-            self.symbols[idx].block_extern_active = false;
+        for b in block_symbols.into_iter().rev() {
+            self.restore_block_shadow(b);
         }
         // Pop this block's tag bindings; the StructDef storage in
         // `self.structs` stays reachable by id for any reference the

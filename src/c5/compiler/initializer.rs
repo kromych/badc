@@ -742,7 +742,7 @@ impl Compiler {
     ///
     /// The leading `&` / `(` and a balancing `)` are skipped; the byte
     /// offset accumulates the array-index strides and field offsets.
-    fn parse_const_address(&mut self) -> Result<Option<(i64, usize)>, C5Error> {
+    pub(super) fn parse_const_address(&mut self) -> Result<Option<(i64, usize, bool)>, C5Error> {
         let snap = self.lex.snapshot();
         // The speculative scan may lex a string literal (whose bytes are
         // appended to the data segment) before deciding this is not an
@@ -837,6 +837,10 @@ impl Compiler {
         // 6.5.2.1p2). An empty `array_dims` is the 1D case. A `.field`
         // selection resets the dimension ladder to the field's own type.
         let mut cur_dims = self.symbols[sym_idx].array_dims.clone();
+        // Element count of the current sub-object's array (a 1D array records
+        // it here with an empty `array_dims`), used to report whether the
+        // final sub-object still has an unsubscripted dimension.
+        let mut cur_array_size = self.symbols[sym_idx].array_size;
         let mut level = 0usize;
         let elem_stride_at = |cur_ty: i64, cur_dims: &[i64], level: usize, this: &Self| -> i64 {
             let elem = this.size_of_type(cur_ty) as i64;
@@ -883,6 +887,7 @@ impl Compiler {
                 off += field.offset as i64;
                 cur_ty = field.ty;
                 cur_dims = field.array_dims.clone();
+                cur_array_size = field.array_size;
                 level = 0;
                 self.next()?;
             } else if self.lex.tk == Token::AddOp || self.lex.tk == Token::SubOp {
@@ -903,7 +908,18 @@ impl Compiler {
                 break;
             }
         }
-        Ok(Some((off, sym_idx)))
+        // C99 6.3.2.1p3: the designation is an array object (an unsubscripted
+        // dimension remains) that decays to the address of its first element.
+        // The caller uses this to accept a bare `g.arr` pointer initializer.
+        // A 1D array records its extent in `cur_array_size` with empty
+        // `cur_dims`; a multi-dim one lists every dimension in `cur_dims`.
+        let rank = if cur_dims.is_empty() {
+            (cur_array_size > 0) as usize
+        } else {
+            cur_dims.len()
+        };
+        let final_is_array = level < rank;
+        Ok(Some((off, sym_idx, final_is_array)))
     }
 
     /// Try to parse `cond ? A : B )` as a constant-init value, with the
@@ -1026,7 +1042,7 @@ impl Compiler {
             // A `:` or `)` terminator appears when this value is a
             // conditional arm (`cond ? &a : &b`) or a parenthesised leaf;
             // `,` / `}` terminate a brace-list element.
-            if let Some((off, sym_idx)) = self.parse_const_address()?
+            if let Some((off, sym_idx, _)) = self.parse_const_address()?
                 && (self.lex.tk == ','
                     || self.lex.tk == '}'
                     || self.lex.tk == ':'
@@ -1626,6 +1642,19 @@ impl Compiler {
         Ok((off as i128, InitElemReloc::Data(Some(sym_idx))))
     }
 
+    /// Stage an array-typed compound literal `(T[]){...}` in the data segment
+    /// (cursor on the leading `[` of the array declarator) and return its byte
+    /// offset and interned symbol, for the constant-expression address path.
+    pub(super) fn emit_array_compound_literal_body(
+        &mut self,
+        elem_ty: i64,
+    ) -> Result<(i64, usize), C5Error> {
+        match self.parse_array_compound_literal(elem_ty)? {
+            (off, InitElemReloc::Data(Some(sym))) => Ok((off as i64, sym)),
+            _ => Err(self.compile_err("array compound literal did not intern a symbol")),
+        }
+    }
+
     /// Create a synthetic internal `__compound.N` symbol anchored at
     /// data offset `off`, used as the relocation target for an
     /// anonymous compound literal stored in the data segment. Returns
@@ -1764,6 +1793,47 @@ impl Compiler {
         let field =
             last.ok_or_else(|| self.compile_err("empty designator chain after `.field`"))?;
         Ok((cur_offset, field))
+    }
+
+    /// Continue a designator chain (`[i]`, `.inner`) from an already-selected
+    /// member `entry` based at `entry_base`, consume the trailing `=`, and
+    /// write the value through the shared member dispatch. The cursor is on
+    /// the first `[`/`.` of the continuation. Shared by the top-level struct
+    /// path and the flattened anonymous struct/union brace handlers so
+    /// `.member[i]` / `.member.inner` designators (C99 6.7.8p7) resolve the
+    /// same way in every initializer context.
+    fn fill_member_designator_chain_t(
+        &mut self,
+        struct_id: usize,
+        entry: &super::StructField,
+        entry_base: usize,
+        target: InitTarget,
+    ) -> Result<(), C5Error> {
+        let (final_offset, final_field) =
+            self.resolve_nested_designator_chain(entry_base as i64, entry.ty, Some(entry.clone()))?;
+        if self.lex.tk != Token::Assign {
+            return Err(self.compile_err("`=` expected after nested-designator chain"));
+        }
+        self.next()?;
+        // A pointer final member stores the address of a compound literal, so
+        // keep the cast for the scalar leaf; a value member drops it.
+        if is_pointer_ty(final_field.ty) || struct_ptr_depth(final_field.ty) > 0 {
+            self.pending.compound_lit_close_parens = 0;
+        } else {
+            self.skip_opt_compound_literal_cast()?;
+        }
+        let chain_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+        self.fill_member_value_t(
+            struct_id,
+            &final_field,
+            target,
+            final_offset as usize,
+            false,
+        )?;
+        for _ in 0..chain_parens {
+            self.accept(')')?;
+        }
+        Ok(())
     }
 
     /// A compound array-element designator `[N].field... = v` in a const
@@ -2034,7 +2104,7 @@ impl Compiler {
     /// `(T){ ... }` at the current position (possibly behind grouping
     /// parens), when `T` is a struct/union value type. `None` otherwise.
     /// The lexer is restored before returning.
-    fn peek_element_compound_literal_sid(&mut self) -> Result<Option<usize>, C5Error> {
+    pub(super) fn peek_element_compound_literal_sid(&mut self) -> Result<Option<usize>, C5Error> {
         if self.lex.tk != '(' {
             return Ok(None);
         }
@@ -2094,6 +2164,31 @@ impl Compiler {
             self.collect_struct_initializer(struct_id, here)?;
         } else {
             self.fill_struct_fields(struct_id, here, false)?;
+        }
+        Ok(())
+    }
+
+    /// The runtime twin of `init_struct_array_element`: fill one struct array
+    /// element with non-constant values at `off` from the current brace-list
+    /// position. Accepts a whole-element compound literal `(T){ ... }` (C99
+    /// 6.5.2.5) naming the element's own type, a braced initializer, or a
+    /// brace-elided flat run (6.7.8p20).
+    pub(super) fn emit_struct_array_element_runtime(
+        &mut self,
+        local_val: i64,
+        off: i64,
+        sid: usize,
+    ) -> Result<(), C5Error> {
+        if self.peek_element_compound_literal_sid()? == Some(sid) {
+            self.skip_opt_compound_literal_cast()?;
+            let close_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+            self.emit_struct_runtime_at(local_val, off, sid, true)?;
+            for _ in 0..close_parens {
+                self.accept(')')?;
+            }
+        } else {
+            let braced = self.lex.tk == '{';
+            self.emit_struct_runtime_at(local_val, off, sid, braced)?;
         }
         Ok(())
     }
@@ -2380,33 +2475,7 @@ impl Compiler {
                 if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
                     let outer = self.structs[struct_id].fields[outer_idx].clone();
                     let chain_base = (var_offset as usize) + outer.offset;
-                    let (final_offset, final_field) = self.resolve_nested_designator_chain(
-                        chain_base as i64,
-                        outer.ty,
-                        Some(outer.clone()),
-                    )?;
-                    if self.lex.tk != Token::Assign {
-                        return Err(self.compile_err("`=` expected after nested-designator chain"));
-                    }
-                    self.next()?;
-                    // See the single-level path below: keep the cast for a
-                    // pointer final member (address-of a compound literal).
-                    if is_pointer_ty(final_field.ty) || struct_ptr_depth(final_field.ty) > 0 {
-                        self.pending.compound_lit_close_parens = 0;
-                    } else {
-                        self.skip_opt_compound_literal_cast()?;
-                    }
-                    let chain_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
-                    self.fill_member_value_t(
-                        struct_id,
-                        &final_field,
-                        target,
-                        final_offset as usize,
-                        false,
-                    )?;
-                    for _ in 0..chain_parens {
-                        self.accept(')')?;
-                    }
+                    self.fill_member_designator_chain_t(struct_id, &outer, chain_base, target)?;
                     pos = outer_idx + 1;
                     self.accept(',')?;
                     continue;
@@ -2483,19 +2552,30 @@ impl Compiler {
                         }
                         let nm = self.symbols[self.lex.curr_id_idx].name.clone();
                         self.next()?;
+                        let sel = self.structs[struct_id]
+                            .fields
+                            .iter()
+                            .position(|f| f.anon_struct_group == group && f.name == nm)
+                            .ok_or_else(|| {
+                                self.compile_err(format!("anonymous member {nm} not found"))
+                            })?;
+                        // C99 6.7.8p7: the designator may continue as
+                        // `.member[i]` / `.member.inner` before `=`.
+                        if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+                            let mem = self.structs[struct_id].fields[sel].clone();
+                            let mem_base = (var_offset as usize) + mem.offset;
+                            self.fill_member_designator_chain_t(struct_id, &mem, mem_base, target)?;
+                            mem_pos = sel + 1;
+                            self.accept(',')?;
+                            continue;
+                        }
                         if self.lex.tk != Token::Assign {
                             return Err(
                                 self.compile_err(format!("`=` expected after `.{nm}` designator"))
                             );
                         }
                         self.next()?;
-                        self.structs[struct_id]
-                            .fields
-                            .iter()
-                            .position(|f| f.anon_struct_group == group && f.name == nm)
-                            .ok_or_else(|| {
-                                self.compile_err(format!("anonymous member {nm} not found"))
-                            })?
+                        sel
                     } else {
                         while mem_pos < self.structs[struct_id].fields.len()
                             && self.structs[struct_id].fields[mem_pos].anon_struct_group != group
@@ -2553,19 +2633,29 @@ impl Compiler {
                         }
                         let nm = self.symbols[self.lex.curr_id_idx].name.clone();
                         self.next()?;
+                        let sel = self.structs[struct_id]
+                            .fields
+                            .iter()
+                            .position(|f| f.anon_union_group == group && f.name == nm)
+                            .ok_or_else(|| {
+                                self.compile_err(format!("anonymous member {nm} not found"))
+                            })?;
+                        // C99 6.7.8p7: the designator may continue as
+                        // `.member[i]` / `.member.inner` before `=`.
+                        if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+                            let mem = self.structs[struct_id].fields[sel].clone();
+                            let mem_base = (var_offset as usize) + mem.offset;
+                            self.fill_member_designator_chain_t(struct_id, &mem, mem_base, target)?;
+                            self.accept(',')?;
+                            continue;
+                        }
                         if self.lex.tk != Token::Assign {
                             return Err(
                                 self.compile_err(format!("`=` expected after `.{nm}` designator"))
                             );
                         }
                         self.next()?;
-                        self.structs[struct_id]
-                            .fields
-                            .iter()
-                            .position(|f| f.anon_union_group == group && f.name == nm)
-                            .ok_or_else(|| {
-                                self.compile_err(format!("anonymous member {nm} not found"))
-                            })?
+                        sel
                     } else {
                         field_idx
                     };

@@ -2779,6 +2779,36 @@ fn cpuid_matching_constraint_x86_64() {
 }
 
 #[test]
+fn cpuid_read_write_a_constraint_supplies_leaf_x86_64() {
+    // A read-write output `"+a"(level)` passes the leaf in eax and reads the
+    // result back into the same variable (the kernel's cpucheck probe). The
+    // `+` modifier makes the operand an input as well; without recognizing it
+    // the leaf input was reported missing. Lowers to the same cpuid (0F A2).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_target(
+        "unsigned d_of_leaf(unsigned level) {\n\
+         unsigned d;\n\
+         __asm__(\"cpuid\" : \"+a\"(level), \"=d\"(d) : : \"ecx\", \"ebx\");\n\
+         return d;\n\
+         }\n\
+         int main(void){ return (int)d_of_leaf(1); }\n"
+            .to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    assert!(
+        bytes.windows(2).any(|w| w == [0x0F, 0xA2]),
+        "cpuid opcode (0F A2) must be emitted for the `\"+a\"` read-write leaf input"
+    );
+}
+
+#[test]
 fn cpuid_partial_outputs_with_clobbers_x86_64() {
     // A `cpuid` with one output operand and the other implicit outputs
     // listed as clobbers (a common max-leaf probe) lowers to the same

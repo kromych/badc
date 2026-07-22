@@ -2376,7 +2376,7 @@ impl Compiler {
                 self.data.truncate(cstart);
                 continue;
             }
-            let (letter, match_digit) = {
+            let (letter, match_digit, read_write) = {
                 let cbytes = &self.data[cstart..];
                 let letter = cbytes
                     .iter()
@@ -2394,7 +2394,9 @@ impl Compiler {
                 } else {
                     None
                 };
-                (letter, digit)
+                // `+` marks a read-write output: the operand supplies the
+                // implicit register's input value as well (`"+a"(leaf)`).
+                (letter, digit, cbytes.contains(&b'+'))
             };
             self.next()?; // consume the constraint string
             self.data.truncate(cstart);
@@ -2421,6 +2423,11 @@ impl Compiler {
             self.next()?; // consume `(`
             self.expr(Token::Assign as i64)?;
             if section == 1 {
+                // A read-write (`+`) output is also an input: read the
+                // lvalue's value before it is overwritten with the address.
+                if read_write {
+                    inp[slot] = self.ast_acc;
+                }
                 // Output: take the destination's address.
                 self.ty += Ty::Ptr as i64;
                 self.ast_apply_unary(UnOp::AddrOf);

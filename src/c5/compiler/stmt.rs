@@ -3023,6 +3023,19 @@ impl Compiler {
             let label = self.ast_label_by_name(&name);
             self.next()?; // consume Id
             self.next()?; // consume ':'
+            // C23 6.9 / GNU: an attribute-specifier may decorate a label
+            // (`L: __attribute__((unused)) stmt;`). It appertains to the
+            // label, and c5 acts on none such, so discard the tokens by
+            // paren balance -- without `skip_attribute_specifiers`, whose
+            // `pending` writes would leak into the following statement.
+            while self.lex.tk == Token::Attribute {
+                self.next()?; // the attribute keyword
+                if self.lex.tk != '(' {
+                    return Err(self.compile_err("`(` expected after attribute specifier"));
+                }
+                self.next()?; // the opening `(`
+                self.skip_balanced_parens_after_open()?;
+            }
             let body_before = self.ast_stmts_snapshot();
             self.stmt()?;
             let body_s = self.ast_wrap_stmts_since(body_before);

@@ -2179,3 +2179,110 @@ fn atexit_handlers_run_on_libc_exit() {
     let _ = std::fs::remove_file(&marker);
     assert_eq!(contents, "ran");
 }
+
+/// A file-scope address constant cast to a pointer-width integer slot is a
+/// link-time relocation, not a compile-time integer (C99 6.6 / 6.3.2.3):
+/// an object address, a bare array name, a `&arr[i]` element designator, and
+/// a function name must each resolve to the same value the runtime `&` /
+/// array decay yields.
+#[test]
+fn addr_constant_cast_to_integer_slot() {
+    let src = "static int obj;\n\
+               static int arr[4];\n\
+               static int callee(void) { return 7; }\n\
+               unsigned long p_obj = (unsigned long)&obj;\n\
+               unsigned long p_arr = (unsigned long)arr;\n\
+               unsigned long p_elt = (unsigned long)&arr[2];\n\
+               unsigned long p_fn = (unsigned long)callee;\n\
+               int main(void) {\n\
+                   if (p_obj != (unsigned long)&obj) return 1;\n\
+                   if (p_arr != (unsigned long)arr) return 2;\n\
+                   if (p_elt != (unsigned long)&arr[2]) return 3;\n\
+                   if (p_fn != (unsigned long)callee) return 4;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-addr-const"]), 0);
+}
+
+/// A string literal is a static-storage array whose address is a link-time
+/// constant (C99 6.4.5p6 / 6.6p9), so `&"..."` and `&"..."[i]` are valid
+/// static initializers. Each must resolve to the string's runtime address
+/// with its bytes intact -- as a struct member (via a constant `?:`), as an
+/// array element, and cast to a pointer-width integer.
+#[test]
+fn addr_of_string_literal_static_init() {
+    let src = "typedef unsigned long uptr;\n\
+               struct e { int a; uptr d; };\n\
+               static struct e t = { 5, (0 ? 0 : (uptr)&\"example\") };\n\
+               static const char *arr[] = { &\"abc\"[1], \"xy\" };\n\
+               static int eq(const char *a, const char *b) {\n\
+                   while (*a && *a == *b) { a++; b++; }\n\
+                   return *a == *b;\n\
+               }\n\
+               int main(void) {\n\
+                   if (t.a != 5) return 1;\n\
+                   if (!eq((const char *)t.d, \"example\")) return 2;\n\
+                   if (!eq(arr[0], \"bc\")) return 3;\n\
+                   if (!eq(arr[1], \"xy\")) return 4;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-addr-str"]), 0);
+}
+
+/// A label may carry an attribute-specifier (C23 6.9 / GNU:
+/// `L: __attribute__((unused)) stmt;`). The attribute appertains to the
+/// label and must be discarded without disturbing the labeled statement,
+/// which still runs when reached by fallthrough or `goto`.
+#[test]
+fn attribute_specifier_on_label() {
+    let src = "int main(void) {\n\
+                   int x = 0;\n\
+                   goto skip;\n\
+                   x = 100;\n\
+               skip: __attribute__((__unused__)) x += 7;\n\
+               done: __attribute__((unused)) __attribute__((cold)) x += 35;\n\
+                   return x;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-label-attr"]), 42);
+}
+
+/// C99 6.7.8p6: a designator list may chain a `[i]` / `.sub` step onto a
+/// `.member` designator (`.extent[0] = { ... }`), including when the member
+/// lives in an anonymous struct nested in an anonymous union. Each addressed
+/// sub-object must receive its value.
+#[test]
+fn member_then_index_designator_in_anon_group() {
+    let src = "struct ext { int first; unsigned count; };\n\
+               struct map { union { struct { struct ext extent[4]; unsigned nr; }; \
+                                     struct { void *f; void *r; }; }; };\n\
+               static struct map m = { { .extent[0] = { .first = 7, .count = 4294967295U }, \
+                                         .nr = 1, }, };\n\
+               int main(void) {\n\
+                   if (m.extent[0].first != 7) return 1;\n\
+                   if (m.extent[0].count != 4294967295U) return 2;\n\
+                   if (m.nr != 1) return 3;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-desig-chain"]), 0);
+}
+
+/// C99 6.5.2.5: an array-of-struct member may take compound-literal
+/// elements (`.hook = { (struct call){...}, (struct call){...} }`), the same
+/// as a top-level array of struct. Each element's fields land at its stride,
+/// and an omitted field zero-fills.
+#[test]
+fn struct_array_member_compound_literal_elements() {
+    let src = "struct call { int key; int tramp; };\n\
+               struct table { struct call hook[2]; int n; };\n\
+               static struct table t = { .hook = { (struct call){ .key = 11, .tramp = 22 }, \
+                                                   (struct call){ .key = 33 } }, .n = 5 };\n\
+               int main(void) {\n\
+                   if (t.hook[0].key != 11) return 1;\n\
+                   if (t.hook[0].tramp != 22) return 2;\n\
+                   if (t.hook[1].key != 33) return 3;\n\
+                   if (t.hook[1].tramp != 0) return 4;\n\
+                   if (t.n != 5) return 5;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-cl-array-member"]), 0);
+}

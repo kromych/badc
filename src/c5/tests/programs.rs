@@ -1379,6 +1379,29 @@ fn local_struct_array_compound_literal_elements() {
 }
 
 #[test]
+fn alignof_unparenthesized_expression_operand() {
+    // GCC's `__alignof__` (which shares the token with `_Alignof`) accepts
+    // an unparenthesized expression operand, whose alignment is that of its
+    // type; it binds tighter than a following binary operator, like
+    // `sizeof`. The parenthesized type-name and expression forms still work.
+    let src = "
+        struct big { long long a; };
+        int main(void) {
+            int i; long l; double d; struct big b; char c;
+            if (__alignof__ i != 4) return 1;
+            if (__alignof__ l != 8) return 2;
+            if (__alignof__ d != 8) return 3;
+            if (__alignof__ c != 1) return 4;
+            if (__alignof__ b != 8) return 5;
+            if (__alignof__ i + 1 != 5) return 6;
+            if (_Alignof(int) != 4 || __alignof__(double) != 8) return 7;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn positional_after_designated_in_anonymous_union_struct() {
     // C99 6.7.8p17: after a designator into a member of an anonymous
     // struct that is an anonymous union's alternative, a positional

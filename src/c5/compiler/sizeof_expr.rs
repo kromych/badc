@@ -384,8 +384,22 @@ impl Compiler {
     /// declarator suffixes are consumed but do not change the result
     /// beyond the pointer decoration.
     pub(super) fn alignof_operand_bytes(&mut self) -> Result<i64, C5Error> {
+        // C11 6.5.3.4 requires `_Alignof ( type-name )`; GCC's `__alignof__`
+        // (both spellings share the token) also accepts an unparenthesized
+        // expression operand, whose alignment is that of its type. Parse it
+        // unevaluated at unary precedence, like `sizeof`, and discard the
+        // emit.
         if self.lex.tk != '(' {
-            return Err(self.compile_err("`(` expected after `_Alignof`"));
+            let saved_ty = self.ty;
+            let saved_text_len = self.next_ent_pc;
+            let saved_reloc = self.code_reloc_sym_idx.len();
+            self.expr(Token::Inc as i64)?;
+            let expr_ty = self.ty;
+            self.next_ent_pc = saved_text_len;
+            self.clear_recent_emits();
+            self.code_reloc_sym_idx.truncate(saved_reloc);
+            self.ty = saved_ty;
+            return Ok(self.align_of_type(expr_ty) as i64);
         }
         self.next()?;
         // C11 6.5.3.4 takes a type-name; GCC's `__alignof__` also accepts a

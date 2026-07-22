@@ -3112,11 +3112,11 @@ impl Compiler {
                             "range designator on a struct-array element is not supported",
                         ));
                     }
-                    if self.lex.tk == '{' {
-                        self.collect_struct_initializer(sid, here as i64)?;
-                    } else {
-                        self.fill_struct_fields(sid, here as i64, false)?;
-                    }
+                    // C99 6.5.2.5: an element may be a `(T){ ... }` compound
+                    // literal naming the element type, besides the braced and
+                    // brace-elided forms. Route through the shared element
+                    // initializer so all three are handled.
+                    self.init_struct_array_element(sid, here as i64)?;
                 } else {
                     let (value, reloc) = self.parse_constant_init_value()?;
                     for j in idx..=range_hi {

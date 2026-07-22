@@ -2265,3 +2265,24 @@ fn member_then_index_designator_in_anon_group() {
                }\n";
     assert_eq!(jit_exit(src, &["jit-desig-chain"]), 0);
 }
+
+/// C99 6.5.2.5: an array-of-struct member may take compound-literal
+/// elements (`.hook = { (struct call){...}, (struct call){...} }`), the same
+/// as a top-level array of struct. Each element's fields land at its stride,
+/// and an omitted field zero-fills.
+#[test]
+fn struct_array_member_compound_literal_elements() {
+    let src = "struct call { int key; int tramp; };\n\
+               struct table { struct call hook[2]; int n; };\n\
+               static struct table t = { .hook = { (struct call){ .key = 11, .tramp = 22 }, \
+                                                   (struct call){ .key = 33 } }, .n = 5 };\n\
+               int main(void) {\n\
+                   if (t.hook[0].key != 11) return 1;\n\
+                   if (t.hook[0].tramp != 22) return 2;\n\
+                   if (t.hook[1].key != 33) return 3;\n\
+                   if (t.hook[1].tramp != 0) return 4;\n\
+                   if (t.n != 5) return 5;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-cl-array-member"]), 0);
+}

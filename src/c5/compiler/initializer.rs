@@ -2644,9 +2644,8 @@ impl Compiler {
             if group != 0 {
                 let sstruct = field.anon_struct_group;
                 let fields = &self.structs[struct_id].fields;
-                let next_in_same_struct = sstruct != 0
-                    && pos < fields.len()
-                    && fields[pos].anon_struct_group == sstruct;
+                let next_in_same_struct =
+                    sstruct != 0 && pos < fields.len() && fields[pos].anon_struct_group == sstruct;
                 if !next_in_same_struct {
                     while pos < fields.len() && fields[pos].anon_union_group == group {
                         pos += 1;

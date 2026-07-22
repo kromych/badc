@@ -1202,7 +1202,8 @@ fn elf_section_flags(bytes: &[u8], want: &[u8]) -> u64 {
     let u16a = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
     let u32a = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
     let u64a = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
-    let (shoff, shentsize, shnum, shstrndx) = (u64a(0x28) as usize, u16a(0x3a), u16a(0x3c), u16a(0x3e));
+    let (shoff, shentsize, shnum, shstrndx) =
+        (u64a(0x28) as usize, u16a(0x3a), u16a(0x3c), u16a(0x3e));
     let stroff = u64a(shoff + shstrndx * shentsize + 0x18) as usize;
     (0..shnum)
         .map(|i| shoff + i * shentsize)

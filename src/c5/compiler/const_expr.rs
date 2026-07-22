@@ -1374,6 +1374,30 @@ impl Compiler {
             self.next()?;
             return Ok(inner);
         }
+        // A string literal is an unnamed array lvalue of static storage
+        // duration (C99 6.4.5p6), so `&"..."` and `"..."[i]` are address
+        // constants. The lexer appended the bytes to the data segment
+        // (`ival` is their start; adjacent literals concatenate, no
+        // terminator yet), so add the single trailing NUL and intern a
+        // synthetic internal symbol at the data so the address folds through
+        // the same relocation machinery a named array uses. `ty` is the
+        // element type (`char`), so an `[i]` suffix strides by one byte.
+        if self.lex.tk == '"' {
+            let off = self.lex.ival;
+            self.next()?;
+            while self.lex.tk == '"' {
+                self.next()?;
+            }
+            self.data.push(0);
+            let sym = self.intern_compound_literal_symbol(off, Ty::Char as i64);
+            return Ok(ConstDesig {
+                value: off,
+                ty: Ty::Char as i64,
+                is_lvalue: true,
+                sym: Some(sym),
+                sym_code: false,
+            });
+        }
         // A named object -- a global, a function, or a libc-bound stub -- is an
         // lvalue whose address is a relocation against that symbol, not an
         // integer (C99 6.3.2.1p4: a function designator decays to its address).

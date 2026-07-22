@@ -2203,3 +2203,28 @@ fn addr_constant_cast_to_integer_slot() {
                }\n";
     assert_eq!(jit_exit(src, &["jit-addr-const"]), 0);
 }
+
+/// A string literal is a static-storage array whose address is a link-time
+/// constant (C99 6.4.5p6 / 6.6p9), so `&"..."` and `&"..."[i]` are valid
+/// static initializers. Each must resolve to the string's runtime address
+/// with its bytes intact -- as a struct member (via a constant `?:`), as an
+/// array element, and cast to a pointer-width integer.
+#[test]
+fn addr_of_string_literal_static_init() {
+    let src = "typedef unsigned long uptr;\n\
+               struct e { int a; uptr d; };\n\
+               static struct e t = { 5, (0 ? 0 : (uptr)&\"example\") };\n\
+               static const char *arr[] = { &\"abc\"[1], \"xy\" };\n\
+               static int eq(const char *a, const char *b) {\n\
+                   while (*a && *a == *b) { a++; b++; }\n\
+                   return *a == *b;\n\
+               }\n\
+               int main(void) {\n\
+                   if (t.a != 5) return 1;\n\
+                   if (!eq((const char *)t.d, \"example\")) return 2;\n\
+                   if (!eq(arr[0], \"bc\")) return 3;\n\
+                   if (!eq(arr[1], \"xy\")) return 4;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-addr-str"]), 0);
+}

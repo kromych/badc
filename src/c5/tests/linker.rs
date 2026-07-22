@@ -406,8 +406,14 @@ int main(void){ return (int)(lar_ss(3) + lsl_ss(3)); }
             text[i - 1] == 0x0F && text[i] == op && text[i + 1] >= 0xC0 && text[i - 2] != 0x66
         })
     };
-    assert!(has(0x02), "lar must encode 0F 02 /r, no 66 prefix: {text:02x?}");
-    assert!(has(0x03), "lsl must encode 0F 03 /r, no 66 prefix: {text:02x?}");
+    assert!(
+        has(0x02),
+        "lar must encode 0F 02 /r, no 66 prefix: {text:02x?}"
+    );
+    assert!(
+        has(0x03),
+        "lsl must encode 0F 03 /r, no 66 prefix: {text:02x?}"
+    );
 }
 
 #[test]
@@ -441,6 +447,49 @@ int main(void){ do_vmsave(0); do_vmload(0); return 0; }
     assert!(
         has([0x0F, 0x01, 0xDA]),
         "vmload must encode 0F 01 DA: {text:02x?}"
+    );
+}
+
+#[test]
+fn parenthesized_bitfield_lvalue_assigns_as_a_store() {
+    // C99 6.5.1p5: a parenthesized lvalue is an lvalue. The member parser
+    // selects a bitfield read vs write from the token after the member, so
+    // parentheses (a macro wrapping `(...->f)`) hid the following `=` and the
+    // assignment was rejected as a bad lvalue. `(p->f) = v` must emit the
+    // read-clear-shift-or-store sequence, byte-identical to `p->f = v`.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let text_of = |src: &str| -> alloc::vec::Vec<u8> {
+        let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL").text
+    };
+    // Field `c:8` at bit offset 8: the store clears with ~(0xff << 8) =
+    // 0xFFFF00FF (imm32 `ff 00 ff ff`), a mask a bitfield read never forms.
+    let clear_mask = [0xffu8, 0x00, 0xff, 0xff];
+    let paren = text_of(
+        "struct s { unsigned int a:4, b:4, c:8; };\n\
+         void set_c(struct s *p, unsigned v){ (p->c) = v; }\n\
+         int main(void){ return 0; }\n",
+    );
+    let plain = text_of(
+        "struct s { unsigned int a:4, b:4, c:8; };\n\
+         void set_c(struct s *p, unsigned v){ p->c = v; }\n\
+         int main(void){ return 0; }\n",
+    );
+    assert!(
+        paren.windows(4).any(|w| w == clear_mask),
+        "a parenthesized bitfield assignment must emit the clear-mask store: {paren:02x?}"
+    );
+    assert_eq!(
+        paren, plain,
+        "`(p->c) = v` must emit the same object as `p->c = v`"
     );
 }
 

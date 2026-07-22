@@ -1625,6 +1625,25 @@ fn bitfield_assign_value() {
 }
 
 #[test]
+fn parenthesized_bitfield_chained_assign() {
+    // C99 6.5.1p5: a parenthesized lvalue is an lvalue. A macro wrapping a
+    // cast-pointer bitfield member (`(((T*)&f)->field)`) and chaining the
+    // assignment (`SPACE(f) = HAS_LINK(f) = 1`) must store to both fields.
+    // has_link is bit 4 (16) and space is bits 8-11 (1 << 8 = 256): 272.
+    let src = "struct tf { unsigned int link_space:4, has_link:1, mfc_fn:3, space:4; };\n\
+               int main(void){\n\
+               unsigned int flags = 0;\n\
+               (((struct tf *)(&(flags)))->space) = (((struct tf *)(&(flags)))->has_link) = 1;\n\
+               struct tf *p = (struct tf *)&flags;\n\
+               if (flags != 272u) return 1;\n\
+               if (p->has_link != 1u) return 2;\n\
+               if (p->space != 1u) return 3;\n\
+               return 0;\n\
+               }\n";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn struct_arg_indirect_subscript() {
     // A by-value aggregate argument is placed in the platform-ABI
     // registers (System V AMD64 3.2.3 / AAPCS64 6.4.2) through a function

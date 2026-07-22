@@ -2913,8 +2913,32 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::Assign {
                 self.next()?;
+                // A parenthesized bitfield lvalue reaches the assignment
+                // operator as an already-built read node (`(s.f) = v`): the
+                // member parser picks read vs write from the token following
+                // the member, which parentheses hide, so it committed to a
+                // read. Redo it as a bitfield store. C99 6.5.1p5: a
+                // parenthesized lvalue is an lvalue.
+                let bf_lvalue = self
+                    .ast_acc
+                    .and_then(|id| match &self.ast.exprs[id as usize] {
+                        super::super::ast::Expr::Member {
+                            obj,
+                            field_off,
+                            bitfield: Some(desc),
+                            ..
+                        } => Some((*obj, *field_off, *desc)),
+                        _ => None,
+                    });
                 let lhs_is_struct_value = is_struct_ty(t) && struct_ptr_depth(t) == 0;
-                if lhs_is_struct_value {
+                if let Some((obj, field_off, desc)) = bf_lvalue {
+                    self.expr(Token::Assign as i64)?;
+                    if let Some(rhs) = self.ast_acc {
+                        self.ty = Ty::Int as i64;
+                        let res_ty = self.ty;
+                        self.ast_emit_bitfield_assign(obj, field_off, desc, rhs, res_ty);
+                    }
+                } else if lhs_is_struct_value {
                     // Struct-to-struct copy. The destination lvalue is
                     // captured in `struct_lhs_ast`; the walker emits
                     // `Inst::Mcpy { dst, src, size }` from the AST node

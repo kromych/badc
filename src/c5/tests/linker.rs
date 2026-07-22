@@ -428,6 +428,36 @@ int main(void) { unsigned t = 0, f[2] = {1, 2}; store2(&t, f); return 0; }
 }
 
 #[test]
+fn inline_asm_rept_in_main_stream_expands_nop_padding() {
+    // A `.rept N ... .endr` in the main asm stream must expand to straight-line
+    // text, as the deferred ALTERNATIVE-replacement path already does. The
+    // arm64 Cavium errata read emits a standalone `.rept 8; nop; .endr` padding
+    // block; unexpanded, `.rept` reaches the instruction parse and has no
+    // encoding. Each `nop` is 0xd503201f, byte-identical to GNU as.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+void nop_pad(void) { __asm__ volatile(".rept 8\nnop\n.endr\n"); }
+int main(void) { nop_pad(); return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let nops = obj
+        .text
+        .chunks_exact(4)
+        .filter(|c| u32::from_le_bytes((*c).try_into().unwrap()) == 0xd503_201f)
+        .count();
+    assert!(nops >= 8, "`.rept 8` must expand to 8 nops: found {nops}");
+}
+
+#[test]
 fn inline_asm_dot_branch_target_encodes_zero_displacement() {
     // The device-load ordering barrier (`__io_ar`) branches to the location
     // counter `.`: `cbnz %0, .` is a never-taken control dependency whose

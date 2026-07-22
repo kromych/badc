@@ -2902,6 +2902,17 @@ fn emit_inline_asm_aarch64(
         Some((c, b)) => (c.as_str(), b.as_slice()),
         None => (text, &[][..]),
     };
+    // Expand `.rept N ... .endr` in the main stream to straight-line text, as
+    // the deferred-region path does: a standalone padding block (`.rept 8;
+    // nop; .endr`) otherwise reaches the instruction parse unexpanded.
+    let rept = match super::ssa::emit_common::expand_asm_rept(code_text) {
+        Ok(r) => r,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    let code_text = rept.as_deref().unwrap_or(code_text);
     let insns = match parse_template(code_text.as_bytes()) {
         Ok(i) => i,
         Err(m) => {

@@ -389,6 +389,45 @@ int main(void) { unsigned long v = 0; return (int)load_zeropad(&v); }
 }
 
 #[test]
+fn inline_asm_memory_offset_folds_constant_expression() {
+    // A memory-operand offset is a GNU as constant expression, not just a
+    // literal: the arm64 `__const_memcpy_toio` blocks write `str %w, [%r, #4 *
+    // N]`. Fold the `#4 * N` offset -- `#4 * 3` scales to 12 in `str Wt, [Xn,
+    // #12]`, encoded 0xb9000c00 (Rn/Rt aside), byte-identical to GNU as.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+void store2(volatile unsigned *to, const unsigned *from) {
+    __asm__ volatile(
+"str %w0, [%2, #4 * 0]\n"
+"str %w1, [%2, #4 * 3]\n"
+        : : "rZ"(from[0]), "rZ"(from[1]), "r"(to));
+}
+int main(void) { unsigned t = 0, f[2] = {1, 2}; store2(&t, f); return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let words: alloc::vec::Vec<u32> = obj
+        .text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // Rn (bits 9:5) and Rt (bits 4:0) are allocator-chosen.
+    let str_mask = !((0x1Fu32 << 5) | 0x1F);
+    assert!(
+        words.iter().any(|&w| w & str_mask == 0xb900_0c00),
+        "`#4 * 3` must fold to the scaled imm 3 (offset 12): {words:08x?}"
+    );
+}
+
+#[test]
 fn inline_asm_dot_branch_target_encodes_zero_displacement() {
     // The device-load ordering barrier (`__io_ar`) branches to the location
     // counter `.`: `cbnz %0, .` is a never-taken control dependency whose

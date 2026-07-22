@@ -528,8 +528,8 @@ impl Compiler {
                 if self.lex.tk == Token::Asm {
                     // `register T name asm("reg")` at file scope is a GNU
                     // global register variable; anything else is the
-                    // linkage-name rename. TODO: file-scope declarator
-                    // `asm("name")` linkage-name rename.
+                    // assembler-name label, which continues the ordinary
+                    // object declaration (initializer, attributes, `;`/`,`).
                     if self.pending.saw_register_storage {
                         self.parse_file_scope_register_binding(
                             id_idx,
@@ -540,7 +540,7 @@ impl Compiler {
                         self.accept_declarator_separator()?;
                         continue;
                     }
-                    return Err(self.compile_err("declarator `asm` is not supported at file scope"));
+                    self.parse_declarator_asm_label(id_idx)?;
                 }
                 // `__declspec(dllexport)` on the declarator exports the name,
                 // the equivalent of `#pragma export(name)`. resolve_exports
@@ -961,6 +961,13 @@ impl Compiler {
                     // before the prototype's `;` or the body's `{`
                     // (`RET name(args) __attribute__((noreturn));`).
                     self.skip_attribute_specifiers()?;
+                    // A GNU asm-label rename (`RET name(args) asm("name");`)
+                    // may sit between the declarator and the terminator, on
+                    // either side of the attributes.
+                    if self.lex.tk == Token::Asm {
+                        self.parse_declarator_asm_label(id_idx)?;
+                        self.skip_attribute_specifiers()?;
+                    }
 
                     // Stash the signature on the function symbol so
                     // call sites can type-check arguments later. For

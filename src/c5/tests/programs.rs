@@ -175,6 +175,20 @@ fn local_struct_array_compound_literal_runtime() {
 }
 
 #[test]
+fn declarator_asm_label_noop_rename() {
+    // A GNU asm-label (`decl asm("name")`) restating the identifier is a
+    // no-op rename, accepted on both a function declarator and an object,
+    // which then behave as ordinary declarations.
+    let src = "
+        int add(int a, int b) asm(\"add\");
+        int add(int a, int b) { return a + b; }
+        int counter asm(\"counter\") = 40;
+        int main(void) { counter += add(1, 1); return counter; }
+    ";
+    assert_eq!(run_str(src), 42);
+}
+
+#[test]
 fn wide_string_struct_member() {
     // C99 6.7.8p15: a wide string literal initializes a wchar_t-width array
     // member; constant (file-scope + local) and runtime store paths, with

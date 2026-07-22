@@ -985,7 +985,18 @@ impl Compiler {
             let snap = self.lex.snapshot();
             self.next()?; // `&`
             if self.lex.tk == '(' {
-                self.next()?; // `(`
+                // `&(T){...}` -- address of a compound literal (C99
+                // 6.5.2.5). The literal may sit behind grouping parens
+                // (`&((T){...})`, a common macro-body shape); skip them and
+                // balance the matching `)` after the literal's brace list.
+                let mut grouping: i64 = 0;
+                loop {
+                    self.next()?; // consume `(`
+                    if self.lex_is_type_start() || self.lex.tk != '(' {
+                        break;
+                    }
+                    grouping += 1;
+                }
                 if self.lex_is_type_start() {
                     let mut cl_ty = self.parse_decl_base_type()?;
                     while self.lex.tk == Token::MulOp {
@@ -996,6 +1007,9 @@ impl Compiler {
                         self.next()?;
                         if self.lex.tk == '{' && is_struct_ty(cl_ty) {
                             let (off, sym_idx) = self.emit_compound_literal_body(cl_ty)?;
+                            for _ in 0..grouping {
+                                self.accept(')')?;
+                            }
                             return Ok((off as i128, InitElemReloc::Data(Some(sym_idx))));
                         }
                     }

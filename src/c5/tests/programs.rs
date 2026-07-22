@@ -1379,6 +1379,32 @@ fn local_struct_array_compound_literal_elements() {
 }
 
 #[test]
+fn address_of_parenthesized_compound_literal_static_init() {
+    // C99 6.5.2.5 / 6.6: a file-scope object may be initialized with the
+    // address of a compound literal, which has static storage duration.
+    // The literal may sit behind grouping parens (`&((T){...})`); the
+    // address constant is the same. Exercised through a pointer field and
+    // a scalar pointer, with an offsetof inside the literal.
+    let src = "
+        struct fields { int x; int y; };
+        struct sa { int a; unsigned long off; };
+        struct wrap { void *var; };
+        static struct wrap w = {
+            .var = &((struct sa){ -1, __builtin_offsetof(struct fields, y) }),
+        };
+        static void *s = &((struct sa){ 7, 3 });
+        int main(void) {
+            struct sa *p = w.var;
+            if (p->a != -1 || p->off != 4) return 1;
+            struct sa *q = s;
+            if (q->a != 7 || q->off != 3) return 2;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn attribute_section_placement() {
     // `section("name")` placements: the interpreter ignores them; the
     // native object writer places the bytes (locked by the object-level

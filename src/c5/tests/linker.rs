@@ -451,6 +451,36 @@ int main(void){ do_vmsave(0); do_vmload(0); return 0; }
 }
 
 #[test]
+fn inline_asm_svm_invlpga_takes_implicit_rax_ecx_operands() {
+    // `invlpga` addresses through an implicit `rax` (address) and `ecx`
+    // (ASID); the kernel spells both out (`invlpga %1, %0` with `"a"(addr)`,
+    // `"c"(asid)`). GNU as encodes `invlpga %rax, %ecx` as `0F 01 DF`, both
+    // registers unnamed in the opcode.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+void do_invlpga(unsigned long addr, unsigned int asid){
+    __asm__ volatile("invlpga %1, %0" : : "c"(asid), "a"(addr) : "memory");
+}
+int main(void){ do_invlpga(0, 0); return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let text = &obj.text;
+    assert!(
+        text.windows(3).any(|w| w == [0x0F, 0x01, 0xDF]),
+        "invlpga must encode 0F 01 DF: {text:02x?}"
+    );
+}
+
+#[test]
 fn parenthesized_bitfield_lvalue_assigns_as_a_store() {
     // C99 6.5.1p5: a parenthesized lvalue is an lvalue. The member parser
     // selects a bitfield read vs write from the token after the member, so

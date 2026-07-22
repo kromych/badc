@@ -288,6 +288,63 @@ int lse_fetch(int i, atomic_t *v) {
 }
 
 #[test]
+fn inline_asm_prfm_q_operand_in_gas_block_encodes_memory_form() {
+    // A `Q` (`+Q`) operand's `%N` reference is the whole memory reference
+    // `[xN]` through its address register. When the block carries a GNU-as
+    // directive (`.equ` here, as the arm64 uaccess/futex blocks do via their
+    // `.irp`/`.equ` register-number tables), the macro pass substitutes each
+    // `%N` before the instruction parse, so it must render a `Q` operand as
+    // `[xN]` -- otherwise `prfm` (and `ldxr`/`stlxr`) see a bare register and
+    // reject it. `prfm pstl1strm, [xN]` is 0xf9800011 (Rn aside), the prefetch
+    // op 17 in the Rt slot; byte-identical to GNU as.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+int futex_op(int oparg, unsigned int *uaddr) {
+    unsigned int loops = 128;
+    int ret, oldval, tmp;
+    __asm__ volatile(
+"	prfm	pstl1strm, %2\n"
+"1:	ldxr	%w1, %2\n"
+"	add	%w3, %w1, %w5\n"
+"2:	stlxr	%w0, %w3, %2\n"
+"	cbnz	%w0, 1b\n"
+"	.equ	.Lz, 0\n"
+        : "=&r" (ret), "=&r" (oldval), "+Q" (*uaddr), "=&r" (tmp), "+r" (loops)
+        : "r" (oparg), "Ir" (-11) : "memory");
+    return ret;
+}
+int main(void) { unsigned int u = 0; return futex_op(1, &u); }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let words: alloc::vec::Vec<u32> = obj
+        .text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // Rn (bits 9:5) is the allocator-chosen address register.
+    let rn_mask = !(0x1Fu32 << 5);
+    assert!(
+        words.iter().any(|&w| w & rn_mask == 0xf980_0011),
+        "prfm must take the `Q` operand as a memory reference `[xN]`: {words:08x?}"
+    );
+    // The same `Q` operand feeds `ldxr Wt, [xN]` (0x885f7c00, Rn/Rt aside).
+    let ldxr_mask = !((0x1Fu32 << 5) | 0x1F);
+    assert!(
+        words.iter().any(|&w| w & ldxr_mask == 0x885f_7c00),
+        "ldxr must take the `Q` operand as a memory reference `[xN]`: {words:08x?}"
+    );
+}
+
+#[test]
 fn inline_asm_dot_branch_target_encodes_zero_displacement() {
     // The device-load ordering barrier (`__io_ar`) branches to the location
     // counter `.`: `cbnz %0, .` is a never-taken control dependency whose

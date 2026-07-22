@@ -2858,6 +2858,15 @@ fn emit_inline_asm_aarch64(
         };
         let idx: u8 = digits.parse().ok()?;
         let r = op_reg.get(idx as usize).copied().flatten()?;
+        // A `Q` operand substitutes as the whole memory reference `[xN]`
+        // through its address register, matching the operand converter's
+        // rule for the un-expanded `%N` form.
+        if matches!(
+            asm.operands.get(idx as usize).map(|o| o.constraint),
+            Some(AsmConstraint::MemBase)
+        ) {
+            return Some(alloc::format!("[x{r}]"));
+        }
         let wide = asm
             .operands
             .get(idx as usize)

@@ -128,6 +128,7 @@ const R_X86_64_64: u32 = 1;
 const R_X86_64_PC32: u32 = 2;
 const R_X86_64_PLT32: u32 = 4;
 const R_X86_64_32: u32 = 10;
+const R_X86_64_32S: u32 = 11;
 const R_X86_64_PC64: u32 = 24;
 // Relaxable GOT load (psABI B.2): marks a `REX mov reg, [rip+disp32]`
 // whose disp32 is the GOT-entry offset. A linker resolving the symbol
@@ -1811,6 +1812,20 @@ pub(super) fn write_relocatable(
         );
     }
 
+    // Inline-asm `$LABEL` address immediates (`pushq $1f`): the 4-byte field
+    // takes an absolute `R_X86_64_32S` against the `.text` symbol with the
+    // label's text offset as addend. x86_64 only; no aarch64 form emits one.
+    for r in &build.asm_text_abs_refs {
+        write_struct(
+            &mut rela_bytes,
+            &Elf64Rela {
+                r_offset: r.field_offset as u64,
+                r_info: (text_sym_idx << 32) | R_X86_64_32S as u64,
+                r_addend: r.target_offset as i64,
+            },
+        );
+    }
+
     let symtab_bytes: Vec<u8> = symbols
         .iter()
         .flat_map(|s| {
@@ -3091,6 +3106,7 @@ mod tests {
         Build {
             asm_sections: Vec::new(),
             asm_section_text_refs: Vec::new(),
+            asm_text_abs_refs: Vec::new(),
             copy_relocs: Default::default(),
             text: Vec::new(),
             data: Vec::new(),

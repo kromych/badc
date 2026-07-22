@@ -1150,6 +1150,70 @@ fn asm_main_stream_reference_binds_label_in_pushed_section() {
 }
 
 #[test]
+fn asm_label_address_immediate_relocates_absolute() {
+    // `pushq $1f` pushes the address of a template-local label as an absolute
+    // immediate: gas encodes it as `68 <imm32>` (push imm32, never the imm8
+    // form, which has no room for the address) and relocates the field as
+    // `R_X86_64_32S` against `.text` with the label's offset as addend. Both
+    // the encoding and the reloc are byte-identical to `gcc -O2 -c`.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_32S: u32 = 11;
+    let src = r#"
+        void f(void) {
+            __asm__ volatile(
+                "pushq %%rsp\n\t"
+                "pushfq\n\t"
+                "pushq $1f\n\t"
+                "iretq\n\t"
+                "1:\n\t"
+                ::: "memory");
+        }
+        int main(void) { f(); return 0; }
+    "#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    // `push imm32` is `68` then a zeroed field the relocation fills; the imm8
+    // form (`6A`) could not carry the address.
+    let push = obj
+        .text
+        .windows(5)
+        .position(|w| w == [0x68, 0x00, 0x00, 0x00, 0x00])
+        .expect("`pushq $1f` must encode as `68 00000000`");
+    // `1:` sits right after `iretq` (`48 CF`), which follows the push.
+    let iretq = obj.text[push + 5..]
+        .windows(2)
+        .position(|w| w == [0x48, 0xcf])
+        .map(|p| push + 5 + p)
+        .expect("`iretq` must follow the push");
+    let label_off = iretq + 2;
+    let reloc = obj
+        .text_relocs
+        .iter()
+        .find(|r| r.offset == (push + 1) as u64)
+        .expect("the imm32 field must carry a relocation");
+    assert_eq!(
+        reloc.rtype, R_X86_64_32S,
+        "a label-address immediate relocates as absolute 32S, not PC-relative"
+    );
+    assert!(
+        obj.symbols[reloc.sym_idx].name.is_empty(),
+        "the reference binds the `.text` section symbol"
+    );
+    assert_eq!(
+        reloc.addend, label_off as i64,
+        "the addend is the label's text offset (right after `iretq`)"
+    );
+}
+
+#[test]
 fn file_scope_asm_assembles_instructions_in_rodata() {
     // A file-scope asm whose `.pushsection .rodata` holds a trampoline body:
     // GNU as assembles instructions into any section, the flags only setting

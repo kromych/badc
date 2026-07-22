@@ -345,6 +345,7 @@ fn synth_program_and_build(
     let build = Build {
         asm_sections: Vec::new(),
         asm_section_text_refs: Vec::new(),
+        asm_text_abs_refs: Vec::new(),
         copy_relocs,
         dynamic_exports,
         text: merged.text.clone(),

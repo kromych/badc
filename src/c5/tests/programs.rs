@@ -147,6 +147,14 @@ fn global_member_array_decay_pointer_init() {
 }
 
 #[test]
+fn nested_block_shadow_restore() {
+    // C99 6.2.1: a nested-block declaration that shadows an outer name must
+    // restore the outer binding's full array / VLA shape at block exit, in
+    // both shadow directions, across nesting levels, and for a `for`-init.
+    assert_eq!(run_fixture("nested_block_shadow_restore.c"), 0);
+}
+
+#[test]
 fn runtime_array_designator() {
     // C99 6.7.8p6 `[N] =` array designators interleaved with positional
     // entries in a runtime (non-constant) array initializer, at parity with

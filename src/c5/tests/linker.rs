@@ -1210,6 +1210,70 @@ fn asm_main_stream_reference_binds_label_in_pushed_section() {
 }
 
 #[test]
+fn asm_label_address_immediate_relocates_absolute() {
+    // `pushq $1f` pushes the address of a template-local label as an absolute
+    // immediate: gas encodes it as `68 <imm32>` (push imm32, never the imm8
+    // form, which has no room for the address) and relocates the field as
+    // `R_X86_64_32S` against `.text` with the label's offset as addend. Both
+    // the encoding and the reloc are byte-identical to `gcc -O2 -c`.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_32S: u32 = 11;
+    let src = r#"
+        void f(void) {
+            __asm__ volatile(
+                "pushq %%rsp\n\t"
+                "pushfq\n\t"
+                "pushq $1f\n\t"
+                "iretq\n\t"
+                "1:\n\t"
+                ::: "memory");
+        }
+        int main(void) { f(); return 0; }
+    "#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    // `push imm32` is `68` then a zeroed field the relocation fills; the imm8
+    // form (`6A`) could not carry the address.
+    let push = obj
+        .text
+        .windows(5)
+        .position(|w| w == [0x68, 0x00, 0x00, 0x00, 0x00])
+        .expect("`pushq $1f` must encode as `68 00000000`");
+    // `1:` sits right after `iretq` (`48 CF`), which follows the push.
+    let iretq = obj.text[push + 5..]
+        .windows(2)
+        .position(|w| w == [0x48, 0xcf])
+        .map(|p| push + 5 + p)
+        .expect("`iretq` must follow the push");
+    let label_off = iretq + 2;
+    let reloc = obj
+        .text_relocs
+        .iter()
+        .find(|r| r.offset == (push + 1) as u64)
+        .expect("the imm32 field must carry a relocation");
+    assert_eq!(
+        reloc.rtype, R_X86_64_32S,
+        "a label-address immediate relocates as absolute 32S, not PC-relative"
+    );
+    assert!(
+        obj.symbols[reloc.sym_idx].name.is_empty(),
+        "the reference binds the `.text` section symbol"
+    );
+    assert_eq!(
+        reloc.addend, label_off as i64,
+        "the addend is the label's text offset (right after `iretq`)"
+    );
+}
+
+#[test]
 fn file_scope_asm_assembles_instructions_in_rodata() {
     // A file-scope asm whose `.pushsection .rodata` holds a trampoline body:
     // GNU as assembles instructions into any section, the flags only setting
@@ -1255,6 +1319,95 @@ fn file_scope_asm_assembles_instructions_in_rodata() {
         SHF_ALLOC,
         "`.rodata` given without flags is allocatable, as gas knows the name"
     );
+}
+
+#[test]
+fn file_scope_asm_assembles_a_trampoline_body() {
+    // A file-scope asm that defines a whole function in the default section --
+    // `.global`/`.type` (a forward reference, before the label) then a label,
+    // instructions, and `.size` -- is assembled as a `.text` section, not
+    // rejected as linkage-only. The symbol carries STT_FUNC / STB_GLOBAL and
+    // the `.size` byte span, matching `gcc -O2 -c`.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const STB_GLOBAL: u8 = 1;
+    const STT_FUNC: u8 = 2;
+    let src = r#"
+        asm(".global handler\n\t"
+            ".type handler, @function\n\t"
+            "handler:\n\t"
+            "ret; int3\n\t"
+            ".size handler, . - handler\n\t");
+        int main(void) { return 0; }
+    "#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let handler = obj
+        .symbols
+        .iter()
+        .find(|s| s.name == "handler")
+        .expect("`handler` must be defined by the asm");
+    assert_eq!(handler.kind, STT_FUNC, "`.type @function` sets STT_FUNC");
+    assert_eq!(handler.binding, STB_GLOBAL, "`.global` sets STB_GLOBAL");
+    assert_eq!(handler.size, 2, "`.size handler, .-handler` is `ret; int3`");
+}
+
+#[test]
+fn file_scope_asm_push_symbol_address_relocates_32s() {
+    // `pushq $symbol` in a file-scope trampoline pushes the symbol's address as
+    // an absolute immediate: `68 <imm32>` with an `R_X86_64_32S` relocation
+    // against the symbol, byte-identical to gcc. The `.text` shorthand opens the
+    // section and `call sym` relocates as `PLT32`.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_32S: u32 = 11;
+    let src = r#"
+        extern void cb(void);
+        asm(".text\n"
+            ".global tramp\n"
+            ".type tramp, @function\n"
+            "tramp:\n"
+            "\tpushq $tramp\n"
+            "\tcall cb\n"
+            "\tret\n"
+            ".size tramp, .-tramp\n");
+        int main(void) { return 0; }
+    "#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let push = obj
+        .text
+        .windows(5)
+        .position(|w| w == [0x68, 0x00, 0x00, 0x00, 0x00])
+        .expect("`pushq $tramp` must encode as `68 00000000`");
+    let reloc = obj
+        .text_relocs
+        .iter()
+        .find(|r| r.offset == (push + 1) as u64)
+        .expect("the imm32 field must carry a relocation");
+    assert_eq!(
+        reloc.rtype, R_X86_64_32S,
+        "a symbol-address immediate relocates as absolute 32S"
+    );
+    assert_eq!(
+        obj.symbols[reloc.sym_idx].name, "tramp",
+        "the reloc targets the named symbol"
+    );
+    assert_eq!(reloc.addend, 0, "gcc folds no addend into a `$symbol` push");
 }
 
 /// `sh_flags` of the first section named `want` in an ELF64 object, or 0.

@@ -2105,6 +2105,8 @@ fn run_inline_asm(
                     | AsmOpnd::AbsMem { .. }
                     | AsmOpnd::RipRel { .. }
                     | AsmOpnd::LabelAddr { .. }
+                    | AsmOpnd::ImmLabel { .. }
+                    | AsmOpnd::ImmSym
             )
         })
     }) {
@@ -2188,6 +2190,8 @@ fn run_inline_asm(
             // Label / memory references are refused before this loop.
             AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
+            | AsmOpnd::ImmLabel { .. }
+            | AsmOpnd::ImmSym
             | AsmOpnd::GotoLabel(_)
             | AsmOpnd::Mem { .. }
             | AsmOpnd::AbsMem { .. }
@@ -2205,6 +2209,8 @@ fn run_inline_asm(
             | AsmOpnd::RefConst { .. }
             | AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
+            | AsmOpnd::ImmLabel { .. }
+            | AsmOpnd::ImmSym
             | AsmOpnd::GotoLabel(_)
             | AsmOpnd::Mem { .. }
             | AsmOpnd::AbsMem { .. }

@@ -1527,6 +1527,10 @@ pub(crate) struct Build {
     /// pushed sections. The relocatable ELF writer emits one PC-relative
     /// reloc per entry against the target section's symbol.
     pub asm_section_text_refs: Vec<AsmSectionTextRef>,
+    /// Inline-asm instructions taking a template-local label's address as an
+    /// absolute immediate (`pushq $1f`). The relocatable ELF writer emits one
+    /// `R_X86_64_32S` per entry against the `.text` symbol.
+    pub asm_text_abs_refs: Vec<AsmTextAbsRef>,
 }
 
 /// x86_64 Win64 prologue unwind descriptor for one function.
@@ -1664,6 +1668,19 @@ pub(crate) struct AsmSectionTextRef {
     /// Addend applied on top of the label's placed offset; -4 for a 4-byte
     /// PC-relative field, whose displacement is measured from its own end.
     pub addend: i64,
+}
+
+/// Relocation for an inline-asm instruction taking a template-local label's
+/// address as an absolute immediate (`pushq $1f`). The label and the
+/// referencing instruction share `.text`, but the address is a link-time
+/// value, so the 32-bit immediate carries an `R_X86_64_32S` reloc against the
+/// `.text` symbol with the label's text offset as addend.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct AsmTextAbsRef {
+    /// Byte offset within `Build::text` of the relocated 4-byte immediate.
+    pub field_offset: usize,
+    /// Byte offset within `Build::text` of the referenced label.
+    pub target_offset: usize,
 }
 
 // TLS relocations don't need a writer-time fixup type for Linux:

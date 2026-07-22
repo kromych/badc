@@ -1548,6 +1548,7 @@ pub(crate) fn emit_function(
     fn_unwind: &mut Vec<super::FnUnwind>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
+    asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -1860,6 +1861,7 @@ pub(crate) fn emit_function(
                         data_fixups,
                         user_extern_data_refs,
                         asm_section_text_refs,
+                        asm_text_abs_refs,
                         Some(AsmGotoCtx {
                             row: &func.jump_tables[table as usize],
                             branch_fixups: &mut branch_fixups,
@@ -1902,7 +1904,16 @@ pub(crate) fn emit_function(
                         param_plan: &param_plan,
                         name2entpc,
                     };
-                    emit_inst(&mut cx, inst, v, place, &fcx, fixups, asm_section_text_refs)
+                    emit_inst(
+                        &mut cx,
+                        inst,
+                        v,
+                        place,
+                        &fcx,
+                        fixups,
+                        asm_section_text_refs,
+                        asm_text_abs_refs,
+                    )
                 };
                 if !inst_ok {
                     #[cfg(feature = "codegen_test")]
@@ -2873,6 +2884,7 @@ fn emit_inst(
     fcx: &FnCtx,
     fixups: &mut Vec<Fixup>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
+    asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
 ) -> bool {
     // Unpack the read-only per-function context into the per-field names the
     // lowering below uses, so the body is unchanged.
@@ -3277,6 +3289,7 @@ fn emit_inst(
             data_fixups,
             user_extern_data_refs,
             asm_section_text_refs,
+            asm_text_abs_refs,
             None,
         ),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
@@ -6376,6 +6389,7 @@ fn encode_one_x86_section_insn(
             width: 4,
             pcrel: true,
             branch: false,
+            signed: false,
             target: AsmSectionTarget::TextBlock(bid),
             addend: -4,
         };
@@ -6409,11 +6423,38 @@ fn encode_one_x86_section_insn(
             width: 4,
             pcrel: true,
             branch: true,
+            signed: false,
             target,
             addend: -4,
         };
         return Ok(AsmSectionItem::CodeBytes {
             bytes,
+            relocs: alloc::vec![reloc],
+        });
+    }
+    // `pushq $symbol`: the symbol's address as an absolute immediate. `68`
+    // pushes a sign-extended imm32; the field takes an `R_X86_64_32S` reloc
+    // against the symbol (addend 0), like the compiler-emitted form.
+    if matches!(insn.operands.first(), Some(AsmOpnd::ImmSym)) {
+        if mnem != "push" {
+            return Err(alloc::format!(
+                "inline asm: replacement `{text}` symbol immediate requires `push`"
+            ));
+        }
+        let name = insn.sym_target.clone().ok_or_else(|| {
+            alloc::format!("inline asm: replacement `{text}` symbol immediate has no symbol")
+        })?;
+        let reloc = AsmSectionReloc {
+            offset: 1,
+            width: 4,
+            pcrel: false,
+            branch: false,
+            signed: true,
+            target: AsmSectionTarget::Symbol(name),
+            addend: 0,
+        };
+        return Ok(AsmSectionItem::CodeBytes {
+            bytes: alloc::vec![0x68, 0, 0, 0, 0],
             relocs: alloc::vec![reloc],
         });
     }
@@ -6563,6 +6604,7 @@ fn encode_one_x86_section_insn(
             width: 4,
             pcrel: true,
             branch: false,
+            signed: false,
             target,
             addend: off - 4 - trailing as i64,
         });
@@ -6620,6 +6662,7 @@ fn emit_inline_asm(
     data_fixups: &mut Vec<DataFixup>,
     user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
+    asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
 ) -> bool {
     use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg, Inst};
@@ -6791,6 +6834,10 @@ fn emit_inline_asm(
     // field, patched once every definition's offset is known.
     let mut label_defs: alloc::vec::Vec<(u32, usize)> = alloc::vec::Vec::new();
     let mut label_fixups: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
+    // `$LABEL` address immediates: `(imm32_field, label_number, forward)`,
+    // resolved to an absolute `.text` relocation once every definition's
+    // offset is known.
+    let mut abs_label_fixups: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
     // `asm goto` label branches: `(rel32_site, opcode_len, label_index)`
     // per `%lK` reference, patched to the label's restore trampoline
     // (or to the shared fall-through restore when the label target is
@@ -6957,6 +7004,18 @@ fn emit_inline_asm(
                 None => super::encode::emit_jmp_rel32(code, 0),
             }
             label_fixups.push((code.len() - 4, num, forward));
+            continue;
+        }
+        // `pushq $LABEL`: push the label's address as an absolute immediate.
+        // `68` pushes a sign-extended imm32; the field carries an `R_X86_64_32S`
+        // relocation against the label's text offset, recorded once the
+        // definition is known. The imm8 form (`6A`) has no room for the reloc.
+        if let Some(&AsmOpnd::ImmLabel { num, forward }) = insn.operands.first() {
+            if !matches!(insn.mnemonic, super::asm::Mnemonic::Table("push")) {
+                return fail("inline asm: a label address immediate requires `push`");
+            }
+            code.extend_from_slice(&[0x68, 0, 0, 0, 0]);
+            abs_label_fixups.push((code.len() - 4, num, forward));
             continue;
         }
         // `lea LABEL(%rip), %reg`: materialize a template-local label's
@@ -7221,9 +7280,20 @@ fn emit_inline_asm(
                         size: size.unwrap_or(AsmRegSize::Quad),
                     }
                 }
+                // A `$symbol` absolute-address immediate needs a symbol
+                // relocation the function-body stream does not carry; it is
+                // assembled only in file-scope section code.
+                AsmOpnd::ImmSym => {
+                    return fail(
+                        "inline asm: `$symbol` address immediate is only supported in file-scope asm",
+                    );
+                }
                 // Handled above (jmp / jcc / lea referencing a local label); a
                 // label reaching operand resolution rode an unsupported form.
-                AsmOpnd::Label { .. } | AsmOpnd::LabelAddr { .. } | AsmOpnd::GotoLabel(_) => {
+                AsmOpnd::Label { .. }
+                | AsmOpnd::LabelAddr { .. }
+                | AsmOpnd::ImmLabel { .. }
+                | AsmOpnd::GotoLabel(_) => {
                     return fail("inline asm: misplaced label reference");
                 }
             };
@@ -7278,12 +7348,12 @@ fn emit_inline_asm(
     // A reference with no main-stream definition may name a label placed in
     // one of the template's pushed sections; defer it to the section pass.
     let mut pending_xsec: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
-    for &(at, num, forward) in &label_fixups {
-        let target = if num >= super::asm::NAMED_LABEL_BASE {
-            label_defs
-                .iter()
-                .find(|&&(n, _)| n == num)
-                .map(|&(_, off)| off)
+    // The main-stream definition a label reference at `at` binds to: a named
+    // label has one definition; a forward `Nf` the nearest after `at`, a
+    // backward `Nb` the nearest at or before it.
+    let resolve_label = |at: usize, num: u32, forward: bool| -> Option<usize> {
+        if num >= super::asm::NAMED_LABEL_BASE {
+            label_defs.iter().find(|&&(n, _)| n == num).map(|&(_, o)| o)
         } else if forward {
             label_defs
                 .iter()
@@ -7296,13 +7366,27 @@ fn emit_inline_asm(
                 .filter(|&&(n, off)| n == num && off <= at)
                 .map(|&(_, off)| off)
                 .max()
-        };
-        match target {
+        }
+    };
+    for &(at, num, forward) in &label_fixups {
+        match resolve_label(at, num, forward) {
             Some(target) => {
                 let rel = target as i64 - (at as i64 + 4);
                 code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());
             }
             None => pending_xsec.push((at, num, forward)),
+        }
+    }
+    // A `$LABEL` immediate binds to the same main-stream definition, but the
+    // field carries an absolute `.text` relocation rather than an in-stream
+    // displacement. A cross-section target is out of scope here.
+    for &(at, num, forward) in &abs_label_fixups {
+        match resolve_label(at, num, forward) {
+            Some(target) => asm_text_abs_refs.push(super::AsmTextAbsRef {
+                field_offset: at,
+                target_offset: target,
+            }),
+            None => return fail("inline asm: `$LABEL` address immediate names no local label"),
         }
     }
     // Materialize the `.pushsection` blocks now that every label's text

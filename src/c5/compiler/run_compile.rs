@@ -133,24 +133,29 @@ impl Compiler {
         self.consume(b';', "`;` expected after file-scope `asm`")?;
         let text = core::str::from_utf8(&template)
             .map_err(|_| self.compile_err("file-scope asm template is not valid UTF-8"))?;
-        let mut blocks =
-            match engine::extract_asm_sections(text, self.target.is_aarch64()) {
-                Err(m) => return Err(self.compile_err(m)),
-                Ok(Some((code, blocks))) => {
-                    if !self.take_file_scope_asm_globl(&code) {
-                        return Err(self
-                            .compile_err("file-scope asm supports section data directives only"));
-                    }
+        // The stream outside pushed sections is either linkage directives only
+        // (`.globl name`, applied to a C symbol) or a trampoline body (labels +
+        // instructions in the default `.text` section). The first routes through
+        // `.globl` collection; the second is assembled as a `.text` section.
+        let aarch64 = self.target.is_aarch64();
+        let mut blocks = match engine::extract_asm_sections(text, aarch64) {
+            Err(m) => return Err(self.compile_err(m)),
+            Ok(Some((code, blocks))) => {
+                if self.take_file_scope_asm_globl(&code) {
                     blocks
+                } else {
+                    engine::extract_file_scope_asm_sections(text, aarch64)
+                        .map_err(|m| self.compile_err(m))?
                 }
-                Ok(None) => {
-                    if !self.take_file_scope_asm_globl(text) {
-                        return Err(self
-                            .compile_err("file-scope asm supports section data directives only"));
-                    }
+            }
+            Ok(None) => {
+                if self.take_file_scope_asm_globl(text) {
                     return Ok(());
                 }
-            };
+                engine::extract_file_scope_asm_sections(text, aarch64)
+                    .map_err(|m| self.compile_err(m))?
+            }
+        };
         for b in &blocks {
             for item in &b.items {
                 if let engine::AsmSectionItem::Data { values, .. } = item
@@ -2635,20 +2640,19 @@ impl Compiler {
     /// outside any section block, and report whether the text held nothing
     /// else. A directive naming no symbol of this unit is accepted and has no
     /// effect, as it does when the assembler sees it.
+    /// Collect the `.globl` / `.global` names of a file-scope asm whose stream
+    /// is nothing but those directives (the linkage-only form). Returns false
+    /// without side effects when any other directive appears, so it doubles as
+    /// the discriminator against the trampoline-body form.
     fn take_file_scope_asm_globl(&mut self, text: &str) -> bool {
+        if !crate::c5::codegen::ssa::emit_common::asm_stream_is_globl_only(text) {
+            return false;
+        }
         for piece in text.split([';', '\n']) {
             let piece = piece.trim();
-            if piece.is_empty() {
-                continue;
+            if let Some(p) = piece.find(char::is_whitespace) {
+                self.pending_asm_globl.push(piece[p..].trim().into());
             }
-            let (tok, rest) = match piece.find(char::is_whitespace) {
-                Some(p) => (&piece[..p], piece[p..].trim()),
-                None => (piece, ""),
-            };
-            if !matches!(tok, ".globl" | ".global") || rest.is_empty() {
-                return false;
-            }
-            self.pending_asm_globl.push(rest.into());
         }
         true
     }

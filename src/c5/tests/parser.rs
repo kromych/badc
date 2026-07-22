@@ -1685,14 +1685,13 @@ fn file_scope_asm_constraints() {
     ok("static int f(void) { return 0; }\n\
          asm(\".pushsection .a,\\\"a\\\"\\n.quad 1\\n.popsection\\n.globl f\");\n\
          int main(void) { return f(); }");
-    expect_compile_error(
-        "asm(\"nop\"); int main(void) { return 0; }",
-        "section data directives only",
-    );
+    // A bare instruction at file scope assembles into `.text`, as GNU as does
+    // (`asm("nop")` emits a nop into the current section).
+    ok("asm(\"nop\"); int main(void) { return 0; }");
     // `.globl` with no operand is not a directive this accepts.
     expect_compile_error(
         "asm(\".globl\"); int main(void) { return 0; }",
-        "section data directives only",
+        "bad `.globl` operand",
     );
     expect_compile_error(
         "asm(\".pushsection .a,\\\"a\\\"\\n.quad 1\\n.popsection\" : : \"r\"(1));\n\

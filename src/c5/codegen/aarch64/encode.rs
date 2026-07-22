@@ -2143,6 +2143,8 @@ pub(crate) fn lower(
         // deferred region), not a separately loaded section, so no
         // main-stream reference crosses into a pushed section here.
         asm_section_text_refs: Vec::new(),
+        // No aarch64 form takes a label address as an absolute immediate.
+        asm_text_abs_refs: Vec::new(),
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),

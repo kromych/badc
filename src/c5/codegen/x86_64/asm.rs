@@ -256,6 +256,17 @@ pub(crate) enum AsmOpnd {
     /// `LABEL(%%rip)`: the address of a template-local label, the source of a
     /// `lea`. Resolved to a RIP-relative rel32 against the label definition.
     LabelAddr { num: u32, forward: bool },
+    /// `$LABEL`: the address of a template-local label as an absolute
+    /// immediate (`pushq $1f`). The value is a link-time address even though
+    /// the label shares `.text` with the reference, so the emitter zeroes the
+    /// imm32 field and records an absolute relocation against the label's
+    /// text offset. `num` / `forward` follow [`AsmOpnd::Label`].
+    ImmLabel { num: u32, forward: bool },
+    /// `$symbol`: the address of a named symbol as an absolute immediate
+    /// (`pushq $arch_rethook_trampoline`). The name rides in the instruction's
+    /// `sym_target`; the emitter zeroes the imm32 field and records an
+    /// `R_X86_64_32S` relocation against the symbol.
+    ImmSym,
     /// `%lK`: an `asm goto` label reference by label-list index (the
     /// frontend canonicalizes `%l[name]` and operand-relative `%lN` to
     /// this form). The emitter branches to the label's target block.
@@ -1004,6 +1015,26 @@ fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     table_mnemonic(base).map(|name| (Mnemonic::Table(name), suffix))
 }
 
+/// A GNU-as label reference: a numeric local `Nf` / `Nb` (digits then a single
+/// direction letter) or a named label from `labels`. Returns the label number
+/// and direction (a name has one definition, so its direction is forward).
+fn parse_label_ref(tok: &str, labels: &[&str]) -> Option<(u32, bool)> {
+    if let Some((digits, dir)) = tok
+        .strip_suffix('f')
+        .map(|d| (d, true))
+        .or_else(|| tok.strip_suffix('b').map(|d| (d, false)))
+        && !digits.is_empty()
+        && digits.bytes().all(|c| c.is_ascii_digit())
+        && let Ok(num) = digits.parse::<u32>()
+    {
+        return Some((num, dir));
+    }
+    labels
+        .iter()
+        .position(|&n| n == tok)
+        .map(|idx| (NAMED_LABEL_BASE + idx as u32, true))
+}
+
 /// Parse one operand token (already trimmed). `labels` is the template's
 /// named-label intern table (from the definition pre-scan); a bare token
 /// matching an entry is a local-label reference, not a symbol.
@@ -1013,8 +1044,14 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
     let tok = tok.strip_prefix('*').unwrap_or(tok);
     let bytes = tok.as_bytes();
     if let Some(rest) = tok.strip_prefix('$') {
-        let v = parse_int(rest).ok_or_else(|| format!("inline asm: bad immediate `{tok}`"))?;
-        return Ok(AsmOpnd::Imm(v));
+        if let Some(v) = parse_int(rest) {
+            return Ok(AsmOpnd::Imm(v));
+        }
+        // `$LABEL`: the label's address as an absolute immediate (`pushq $1f`).
+        if let Some((num, forward)) = parse_label_ref(rest, labels) {
+            return Ok(AsmOpnd::ImmLabel { num, forward });
+        }
+        return Err(format!("inline asm: bad immediate `{tok}`"));
     }
     // `prefix(inner)`: a memory reference (displacement off a base register)
     // or, with an `(%rip)` base, the address of a template-local label.
@@ -1024,24 +1061,9 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
         return parse_mem_operand(&tok[..open], &tok[open + 1..tok.len() - 1], labels)
             .ok_or_else(|| format!("inline asm: unsupported operand `{tok}`"));
     }
-    // A local-label reference `Nf` / `Nb` (jmp / jcc target). Digits then a
-    // single direction letter; a bare register or `%N` reference never has
-    // this shape.
-    if let Some((digits, dir)) = tok
-        .strip_suffix('f')
-        .map(|d| (d, true))
-        .or_else(|| tok.strip_suffix('b').map(|d| (d, false)))
-        && !digits.is_empty()
-        && digits.bytes().all(|c| c.is_ascii_digit())
-        && let Ok(num) = digits.parse::<u32>()
-    {
-        return Ok(AsmOpnd::Label { num, forward: dir });
-    }
-    if let Some(idx) = labels.iter().position(|&n| n == tok) {
-        return Ok(AsmOpnd::Label {
-            num: NAMED_LABEL_BASE + idx as u32,
-            forward: true,
-        });
+    // A local-label reference `Nf` / `Nb` (jmp / jcc target) or a named label.
+    if let Some((num, forward)) = parse_label_ref(tok, labels) {
+        return Ok(AsmOpnd::Label { num, forward });
     }
     if let Some(rest) = tok.strip_prefix("%%") {
         let (reg, size) =
@@ -1548,6 +1570,9 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         }
         let mut operands = Vec::new();
         let mut seg: Option<u8> = None;
+        // The address of a named symbol as an absolute immediate (`pushq
+        // $symbol`): the name rides here, the operand is an `ImmSym` marker.
+        let mut sym_target: Option<String> = None;
         if !rest.is_empty() {
             for op in split_asm_operands(rest) {
                 // A `%%fs:` / `%%gs:` segment override rides the instruction
@@ -1570,6 +1595,23 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                     }
                     None => op,
                 };
+                // `$symbol`: a symbol address the instruction takes as an
+                // absolute immediate, distinct from a `$int` / `$Nf` label.
+                if let Some(sym) = tok.strip_prefix('$')
+                    && parse_int(sym).is_none()
+                    && parse_label_ref(sym, &names).is_none()
+                    && super::super::ssa::emit_common::is_asm_symbol_template(sym)
+                    && reg_by_name(sym).is_none()
+                {
+                    if sym_target.is_some() {
+                        return Err(String::from(
+                            "inline asm: more than one symbol immediate per instruction",
+                        ));
+                    }
+                    sym_target = Some(String::from(sym));
+                    operands.push(AsmOpnd::ImmSym);
+                    continue;
+                }
                 operands.push(parse_operand(tok, &names)?);
             }
         }
@@ -1579,7 +1621,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             seg,
             operands,
             bytes: Vec::new(),
-            sym_target: None,
+            sym_target,
             label_def: None,
         });
     }

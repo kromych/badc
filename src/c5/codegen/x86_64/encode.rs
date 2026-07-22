@@ -1742,6 +1742,7 @@ pub(crate) fn lower(
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
     let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
+    let mut asm_text_abs_refs: Vec<super::AsmTextAbsRef> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     // Each `JsrExt` / `TailExt` site records a `CALL rel32`
     // / `JMP rel32` placeholder; displacements get backfilled once
@@ -2102,6 +2103,7 @@ pub(crate) fn lower(
                 &mut fn_unwind,
                 &name2entpc,
                 &mut asm_section_text_refs,
+                &mut asm_text_abs_refs,
             )
         };
         #[cfg(feature = "std")]
@@ -2312,6 +2314,7 @@ pub(crate) fn lower(
     Ok(Build {
         asm_sections,
         asm_section_text_refs,
+        asm_text_abs_refs,
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),

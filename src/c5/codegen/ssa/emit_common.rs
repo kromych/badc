@@ -895,6 +895,11 @@ pub(crate) struct AsmSectionReloc {
     /// (`R_X86_64_PC32`). Set for a replacement instruction's direct
     /// `call` / `jmp` to a symbol; a data reference leaves it clear.
     pub branch: bool,
+    /// A sign-extended absolute 32-bit field (`R_X86_64_32S`) rather than the
+    /// zero-extended `R_X86_64_32` a data directive takes. Set for a `push
+    /// $symbol` immediate, whose imm32 the CPU sign-extends. Only meaningful
+    /// for an absolute 4-byte x86_64 field.
+    pub signed: bool,
     pub target: AsmSectionTarget,
     pub addend: i64,
 }
@@ -1664,21 +1669,77 @@ pub(crate) fn split_asm_subsections(text: &str) -> (alloc::string::String, alloc
 /// `None` when the template has no section directives (the common case).
 /// The section stack starts at the code stream; `.pushsection` pushes a
 /// named section, `.popsection` pops, `.section` replaces the top, and
-/// `.previous` swaps the top two. Only data directives are accepted
-/// inside a named section (code in sections is TODO).
+/// `.previous` swaps the top two.
 pub(crate) fn extract_asm_sections(
     text: &str,
     is_aarch64: bool,
 ) -> Result<Option<(alloc::string::String, alloc::vec::Vec<AsmSectionBlock>)>, alloc::string::String>
 {
-    if !text.contains(".pushsection") && !text.contains(".section") && !text.contains(".subsection")
+    extract_asm_sections_impl(text, is_aarch64, false)
+}
+
+/// File-scope variant: the whole template is section-scoped, starting in
+/// `.text`, so a trampoline body (labels + instructions in the default
+/// section) is assembled into a `.text` block rather than left in the code
+/// stream. `.text`/`.data`/`.rodata`/`.bss` switch the base section.
+pub(crate) fn extract_file_scope_asm_sections(
+    text: &str,
+    is_aarch64: bool,
+) -> Result<alloc::vec::Vec<AsmSectionBlock>, alloc::string::String> {
+    Ok(extract_asm_sections_impl(text, is_aarch64, true)?
+        .expect("file-scope extraction always yields sections")
+        .1)
+}
+
+/// True when a file-scope asm stream (outside pushed sections) is nothing but
+/// `.globl` / `.global` directives -- the linkage-only form, which names a C
+/// symbol rather than defining a trampoline body that must be assembled.
+pub(crate) fn asm_stream_is_globl_only(text: &str) -> bool {
+    text.split([';', '\n'])
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .all(|piece| {
+            let (tok, rest) = match piece.find(char::is_whitespace) {
+                Some(p) => (&piece[..p], piece[p..].trim()),
+                None => (piece, ""),
+            };
+            matches!(tok, ".globl" | ".global") && !rest.is_empty()
+        })
+}
+
+/// A bare section directive naming a well-known section (`.text` == `.section
+/// .text`). GNU as accepts these shorthands; file-scope asm uses them to place
+/// a trampoline body. The dotted-suffix form is not a shorthand.
+fn base_section_shorthand(tok: &str) -> bool {
+    matches!(
+        tok,
+        ".text" | ".data" | ".data1" | ".sdata" | ".rodata" | ".bss" | ".sbss"
+    )
+}
+
+fn extract_asm_sections_impl(
+    text: &str,
+    is_aarch64: bool,
+    file_scope: bool,
+) -> Result<Option<(alloc::string::String, alloc::vec::Vec<AsmSectionBlock>)>, alloc::string::String>
+{
+    if !file_scope
+        && !text.contains(".pushsection")
+        && !text.contains(".section")
+        && !text.contains(".subsection")
     {
         return Ok(None);
     }
     let mut code = alloc::string::String::with_capacity(text.len());
     let mut blocks: alloc::vec::Vec<AsmSectionBlock> = alloc::vec::Vec::new();
-    // Stack of indices into `blocks`; `None` is the code stream.
-    let mut stack: alloc::vec::Vec<Option<usize>> = alloc::vec![None];
+    // Stack of indices into `blocks`; `None` is the code stream. File-scope asm
+    // has no code stream: the base is a `.text` section from the start.
+    let mut stack: alloc::vec::Vec<Option<usize>> = if file_scope {
+        blocks.push(parse_section_args(".text")?);
+        alloc::vec![Some(0)]
+    } else {
+        alloc::vec![None]
+    };
     for piece in text.split([';', '\n']) {
         let piece = piece.trim();
         let (tok, rest) = match piece.find(char::is_whitespace) {
@@ -1710,11 +1771,25 @@ pub(crate) fn extract_asm_sections(
                 if stack.len() >= 2 {
                     let n = stack.len();
                     stack.swap(n - 1, n - 2);
-                } else {
+                } else if !file_scope {
                     // A `.section` at stack bottom returns to the code
-                    // stream.
+                    // stream; file-scope asm has no code stream to return to.
                     stack[0] = None;
                 }
+                continue;
+            }
+            // File-scope base-section shorthands (`.text`, `.data`, ...): switch
+            // the current base to that section, reusing an existing block of the
+            // same name so repeated switches accumulate into one section.
+            _ if file_scope && base_section_shorthand(tok) => {
+                let idx = match blocks.iter().position(|b| b.name == tok) {
+                    Some(i) => i,
+                    None => {
+                        blocks.push(parse_section_args(tok)?);
+                        blocks.len() - 1
+                    }
+                };
+                *stack.last_mut().unwrap() = Some(idx);
                 continue;
             }
             // `.subsection N` defers its code to a region appended to the
@@ -2866,14 +2941,18 @@ pub(crate) fn materialize_asm_sections(
                     let lname = numeric_label_digits(name)
                         .and_then(|d| num_unique.get(d).map(alloc::string::String::as_str))
                         .unwrap_or(name);
-                    let l = sec
-                        .labels
-                        .iter_mut()
-                        .find(|l| l.name == *lname && l.offset != PENDING_LABEL)
-                        .ok_or_else(|| {
-                            alloc::format!("inline asm: `.type` names undefined label `{name}`")
-                        })?;
-                    l.sym_type = *sym_type;
+                    match sec.labels.iter_mut().find(|l| l.name == *lname) {
+                        // `.type` may precede its label (as `.globl` may): record
+                        // it on a pending forward entry the definition fills in.
+                        Some(l) => l.sym_type = *sym_type,
+                        None => sec.labels.push(AsmSectionLabel {
+                            name: alloc::string::String::from(lname),
+                            offset: PENDING_LABEL,
+                            global: false,
+                            sym_type: *sym_type,
+                            size: None,
+                        }),
+                    }
                 }
                 AsmSectionItem::Size { name, expr } => {
                     // `.` is the offset at the directive; a term is that,
@@ -2992,6 +3071,7 @@ pub(crate) fn materialize_asm_sections(
                                     width: *width,
                                     pcrel: *pcrel,
                                     branch: false,
+                                    signed: false,
                                     target,
                                     addend: add,
                                 });
@@ -3087,6 +3167,7 @@ pub(crate) fn materialize_asm_sections(
                                     width: *width,
                                     pcrel: *pcrel,
                                     branch: false,
+                                    signed: false,
                                     target,
                                     addend: add,
                                 });
@@ -3117,8 +3198,20 @@ pub(crate) fn materialize_asm_sections(
         }
     }
     // A `.globl` naming no label in the section declares an external symbol,
-    // not a definition here; it defines no section symbol.
+    // not a definition here; it defines no section symbol. A `.type` / `.size`
+    // that stays pending named a label the section never defines -- rejected
+    // (a forward `.type` before its label was filled in by the definition).
     for s in sink.iter_mut() {
+        if let Some(l) = s
+            .labels
+            .iter()
+            .find(|l| l.offset == PENDING_LABEL && (l.sym_type != AsmSymType::NoType || l.size.is_some()))
+        {
+            return Err(alloc::format!(
+                "inline asm: `.type`/`.size` names undefined label `{}`",
+                l.name
+            ));
+        }
         s.labels.retain(|l| l.offset != PENDING_LABEL);
     }
     Ok(defined)
@@ -3138,20 +3231,33 @@ pub(crate) fn materialize_file_asm(
     for text in templates {
         let stripped = strip_asm_comments(text, comments);
         let text = stripped.as_deref().unwrap_or(text);
-        if let Some((_code, mut blocks)) = extract_asm_sections(text, align_is_p2)? {
-            // Assemble the section's instructions to bytes before layout; the
-            // file-scope path has no operand context to resolve against.
-            encode_code(&mut blocks)?;
-            materialize_asm_sections(
-                &blocks,
-                &|_| None,
-                &|_| None,
-                &|_| None,
-                &|_| None,
-                align_is_p2,
-                sink,
-            )?;
-        }
+        // The stream outside pushed sections is either linkage-only (`.globl`,
+        // no bytes to emit here) or a trampoline body assembled as `.text`.
+        let extracted = extract_asm_sections(text, align_is_p2)?;
+        let globl_only = match &extracted {
+            None => asm_stream_is_globl_only(text),
+            Some((code, _)) => asm_stream_is_globl_only(code),
+        };
+        let mut blocks = if globl_only {
+            match extracted {
+                Some((_code, blocks)) => blocks,
+                None => continue,
+            }
+        } else {
+            extract_file_scope_asm_sections(text, align_is_p2)?
+        };
+        // Assemble the section's instructions to bytes before layout; the
+        // file-scope path has no operand context to resolve against.
+        encode_code(&mut blocks)?;
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            align_is_p2,
+            sink,
+        )?;
     }
     Ok(())
 }
@@ -4046,6 +4152,7 @@ mod asm_section_tests {
                 width: 8,
                 pcrel: false,
                 branch: false,
+                signed: false,
                 target: AsmSectionTarget::Text(0x40),
                 addend: 0
             }
@@ -4057,6 +4164,7 @@ mod asm_section_tests {
                 width: 4,
                 pcrel: true,
                 branch: false,
+                signed: false,
                 target: AsmSectionTarget::Text(0x40),
                 addend: 0
             }
@@ -4309,6 +4417,7 @@ mod asm_section_tests {
                 width: 4,
                 pcrel: true,
                 branch: false,
+                signed: false,
                 target: AsmSectionTarget::Text(0x40),
                 addend: 0,
             }],

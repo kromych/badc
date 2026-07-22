@@ -1295,11 +1295,14 @@ impl Compiler {
                                 count
                             )));
                         }
-                        // C99 6.7.8p20: an element's braces may be elided;
-                        // the runtime path fills the struct's fields from
-                        // the flat list.
-                        let braced = self.lex.tk == '{';
-                        self.emit_struct_runtime_at(local_val, i * elem_size as i64, sid, braced)?;
+                        // C99 6.7.8p20: an element's braces may be elided,
+                        // and 6.5.2.5 lets it be a whole-element compound
+                        // literal; the runtime element fill handles both.
+                        self.emit_struct_array_element_runtime(
+                            local_val,
+                            i * elem_size as i64,
+                            sid,
+                        )?;
                         i += 1;
                         self.accept(',')?;
                     }
@@ -1457,14 +1460,13 @@ impl Compiler {
                                 )));
                             }
                             // C99 6.7.8p20: an element's braces may be
-                            // elided; the runtime path fills the struct's
-                            // fields from the flat list.
-                            let braced = self.lex.tk == '{';
-                            self.emit_struct_runtime_at(
+                            // elided, and 6.5.2.5 lets it be a whole-element
+                            // compound literal; the runtime element fill
+                            // handles both.
+                            self.emit_struct_array_element_runtime(
                                 local_val,
                                 i * elem_size as i64,
                                 sid,
-                                braced,
                             )?;
                             i += 1;
                             self.accept(',')?;
@@ -2156,8 +2158,7 @@ impl Compiler {
                 // Reached when a struct-array MEMBER is forced onto the
                 // runtime path by a non-constant element value (e.g.
                 // `&mms->field[0]`); braces may be elided (6.7.8p20).
-                let braced = self.lex.tk == '{';
-                self.emit_struct_runtime_at(local_val, off, struct_id_of(ty), braced)?;
+                self.emit_struct_array_element_runtime(local_val, off, struct_id_of(ty))?;
             } else {
                 self.emit_array_leaf_runtime(local_val, off, ty)?;
             }

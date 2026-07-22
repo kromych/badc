@@ -2075,7 +2075,7 @@ impl Compiler {
     /// `(T){ ... }` at the current position (possibly behind grouping
     /// parens), when `T` is a struct/union value type. `None` otherwise.
     /// The lexer is restored before returning.
-    fn peek_element_compound_literal_sid(&mut self) -> Result<Option<usize>, C5Error> {
+    pub(super) fn peek_element_compound_literal_sid(&mut self) -> Result<Option<usize>, C5Error> {
         if self.lex.tk != '(' {
             return Ok(None);
         }
@@ -2135,6 +2135,31 @@ impl Compiler {
             self.collect_struct_initializer(struct_id, here)?;
         } else {
             self.fill_struct_fields(struct_id, here, false)?;
+        }
+        Ok(())
+    }
+
+    /// The runtime twin of `init_struct_array_element`: fill one struct array
+    /// element with non-constant values at `off` from the current brace-list
+    /// position. Accepts a whole-element compound literal `(T){ ... }` (C99
+    /// 6.5.2.5) naming the element's own type, a braced initializer, or a
+    /// brace-elided flat run (6.7.8p20).
+    pub(super) fn emit_struct_array_element_runtime(
+        &mut self,
+        local_val: i64,
+        off: i64,
+        sid: usize,
+    ) -> Result<(), C5Error> {
+        if self.peek_element_compound_literal_sid()? == Some(sid) {
+            self.skip_opt_compound_literal_cast()?;
+            let close_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+            self.emit_struct_runtime_at(local_val, off, sid, true)?;
+            for _ in 0..close_parens {
+                self.accept(')')?;
+            }
+        } else {
+            let braced = self.lex.tk == '{';
+            self.emit_struct_runtime_at(local_val, off, sid, braced)?;
         }
         Ok(())
     }

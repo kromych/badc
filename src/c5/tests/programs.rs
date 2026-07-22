@@ -164,6 +164,17 @@ fn anon_group_designator_chain() {
 }
 
 #[test]
+fn local_struct_array_compound_literal_runtime() {
+    // C99 6.5.2.5: a whole-element compound literal `(T){ ... }` as a local
+    // struct-array element, with non-constant field values on the per-element
+    // runtime store path (deferred and fixed size).
+    assert_eq!(
+        run_fixture("local_struct_array_compound_literal_runtime.c"),
+        0
+    );
+}
+
+#[test]
 fn wide_string_struct_member() {
     // C99 6.7.8p15: a wide string literal initializes a wchar_t-width array
     // member; constant (file-scope + local) and runtime store paths, with

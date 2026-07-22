@@ -2228,3 +2228,20 @@ fn addr_of_string_literal_static_init() {
                }\n";
     assert_eq!(jit_exit(src, &["jit-addr-str"]), 0);
 }
+
+/// A label may carry an attribute-specifier (C23 6.9 / GNU:
+/// `L: __attribute__((unused)) stmt;`). The attribute appertains to the
+/// label and must be discarded without disturbing the labeled statement,
+/// which still runs when reached by fallthrough or `goto`.
+#[test]
+fn attribute_specifier_on_label() {
+    let src = "int main(void) {\n\
+                   int x = 0;\n\
+                   goto skip;\n\
+                   x = 100;\n\
+               skip: __attribute__((__unused__)) x += 7;\n\
+               done: __attribute__((unused)) __attribute__((cold)) x += 35;\n\
+                   return x;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-label-attr"]), 42);
+}

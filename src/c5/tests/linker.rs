@@ -481,6 +481,47 @@ int main(void){ do_invlpga(0, 0); return 0; }
 }
 
 #[test]
+fn inline_asm_section_operand_constant_survives_unpromoted_function() {
+    // C99 6.5p6: an `"i"` operand is an integer constant expression. A computed
+    // goto opts the function out of slot promotion, so the constant reaches the
+    // section-data operand as a store + load of a local rather than an
+    // immediate; GNU as folds it. badc must recover the constant by the load's
+    // reaching definition and emit it, as the kernel's `WARN_ON` bug table
+    // (`.word %c<flags>`) requires. The `do {} while (0)` mirrors that macro's
+    // dead back edge, which the recovery follows through.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    // A distinctive constant, unlikely to occur by chance in the object.
+    let src = r#"
+int f(int x){
+    static void *tab[] = { &&a, &&b };
+    do {
+        __auto_type flags = 0x5AB3C1D2;
+        __asm__ volatile(".pushsection .test_bugs,\"a\"\n\t.long %c0\n\t.popsection\n"
+                         : : "i"(flags));
+    } while (0);
+    goto *tab[x];
+    a: return 1;
+    b: return 2;
+}
+int main(void){ return f(0); }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts)
+        .expect("emit must recover the constant `\"i\"` operand");
+    // The section holds `.long 0x5AB3C1D2`, little-endian.
+    assert!(
+        bytes.windows(4).any(|w| w == [0xD2, 0xC1, 0xB3, 0x5A]),
+        "the section-data `\"i\"` operand constant must be emitted"
+    );
+}
+
+#[test]
 fn parenthesized_bitfield_lvalue_assigns_as_a_store() {
     // C99 6.5.1p5: a parenthesized lvalue is an lvalue. The member parser
     // selects a bitfield read vs write from the token after the member, so

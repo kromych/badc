@@ -1150,6 +1150,46 @@ fn asm_main_stream_reference_binds_label_in_pushed_section() {
 }
 
 #[test]
+fn asm_lsl_encodes_32bit_destination_form() {
+    // `lsl` loads a segment limit into a register: the source is a 16-bit
+    // selector but the destination may be 32-bit, so the operands are written
+    // as 32-bit registers (`lsl %edx, %eax`). The instruction database's
+    // uniform-width `r/m` model omits that `r32/m16` form, so the encoder
+    // reported no encoding; the 32-bit form is `0F 03 /r` (no operand-size
+    // prefix, no REX.W), byte-identical to gas.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+        unsigned f(unsigned sel) {
+            unsigned lim;
+            __asm__("lsl %1, %0" : "=r"(lim) : "r"(sel));
+            return lim;
+        }
+        int main(void) { return (int)f(0); }
+    "#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    // `0F 03 /r` with a register r/m: modrm is `11 reg rm`, so `w[2] & 0xC0`
+    // pins the register-direct form. No `66` and no `48` REX.W precede it.
+    let lsl = obj
+        .text
+        .windows(3)
+        .position(|w| w[0] == 0x0f && w[1] == 0x03 && (w[2] & 0xc0) == 0xc0)
+        .expect("`lsl` must encode as the 32-bit `0F 03 /r` form");
+    assert!(
+        lsl == 0 || obj.text[lsl - 1] != 0x66,
+        "the 32-bit form takes no operand-size prefix"
+    );
+}
+
+#[test]
 fn thread_local_storage_round_trips_through_et_rel() {
     // `_Thread_local` storage now rides the native ET_REL object:
     // elf_reloc emits `.tdata` (initialised slice) + `.tbss`

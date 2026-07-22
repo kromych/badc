@@ -147,6 +147,29 @@ pub(crate) enum Inst {
         value: ValueId,
         kind: StoreKind,
     },
+    /// Load through an x86 named-address-space pointer (`__seg_gs` /
+    /// `__seg_fs`): the memory reference rides a segment-override prefix
+    /// (`%gs:` / `%fs:`). Width / signedness follow `kind` as for
+    /// [`Self::Load`]. `addr` holds the full effective address; kept
+    /// opaque to the addressing-mode passes so a segment access is never
+    /// merged with a plain access at the same numeric address (they name
+    /// different memory). x86-only; `seg` is `Gs` or `Fs`.
+    SegLoad {
+        addr: ValueId,
+        kind: LoadKind,
+        volatile: bool,
+        seg: AsmSeg,
+    },
+    /// Store through an x86 named-address-space pointer. Companion to
+    /// [`Self::SegLoad`]; leaves the stored value in the accumulator like
+    /// [`Self::Store`].
+    SegStore {
+        addr: ValueId,
+        value: ValueId,
+        kind: StoreKind,
+        volatile: bool,
+        seg: AsmSeg,
+    },
     /// Binary arithmetic / comparison / shift. `lhs` is the value
     /// that was on top of the c5 stack at the op; `rhs` is the
     /// current accumulator (matches `a = pop() <op> a` semantics).
@@ -565,6 +588,13 @@ pub(crate) enum AsmConstraint {
     /// `b`->rbx, `c`->rcx, `d`->rdx, `S`->rsi, `D`->rdi); the value is
     /// the architectural register number.
     Fixed(u8),
+    /// An operand naming a `register T v asm("reg")` variable: the
+    /// operand IS that register. `%N` resolves to it, and no value moves
+    /// in or out -- the variable has no storage behind it, so there is
+    /// nothing to load from or store back to. The register is also left
+    /// out of the save / restore set, since the binding's purpose is for
+    /// the asm to see and affect that exact register.
+    Bound(u8),
     /// Matching constraint (`"0".."9"`): shares the register assigned to
     /// the operand at that index (an earlier output).
     Match(u8),
@@ -579,6 +609,27 @@ pub(crate) enum AsmConstraint {
     /// through it (not a register). Assigned a register to hold the
     /// address; the instruction dereferences that register.
     Mem,
+    /// A flag output (`=@cc<cond>`): the asm block's condition flags are
+    /// the operand's value. The payload is the x86_64 condition-code
+    /// nibble; after the template runs, `set<cond>` materializes 0 or 1
+    /// into the destination, zero-extended to the operand width.
+    Flags(u8),
+    /// AArch64 `Q` (`Q`, `=Q`, `+Q`): a memory operand whose address is a
+    /// single base register with no offset, the addressing mode the
+    /// acquire/release and exclusive instructions take. Assigned a
+    /// register to hold the address; a template `%N` substitutes as `[xN]`.
+    MemBase,
+}
+
+/// x86 named-address-space qualifier on a memory operand's object
+/// (`__seg_gs` / `__seg_fs`): the memory reference rides a segment
+/// override prefix. `None` for an unqualified operand and on every
+/// target without segment registers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AsmSeg {
+    None,
+    Gs,
+    Fs,
 }
 
 /// One operand of a GCC extended-asm statement.
@@ -594,6 +645,9 @@ pub(crate) struct AsmOperand {
     /// the default register-name size of a `%N` reference and the width
     /// of the load / store through an output address.
     pub width: u8,
+    /// Segment override for a memory operand whose object is
+    /// `__seg_gs` / `__seg_fs`-qualified (x86 only).
+    pub seg: AsmSeg,
 }
 
 /// A parsed GCC extended-asm statement (`asm(template : outputs :
@@ -897,6 +951,20 @@ pub(crate) struct FunctionSsa {
     /// an interior cell, which is referenced by no instruction. Empty for SSA
     /// built outside the walker.
     pub multi_cell_slots: Vec<(i64, i64)>,
+    /// Automatic objects whose required alignment exceeds the 16-byte frame
+    /// guarantee (C11 6.7.5 `_Alignas` / GNU `aligned`), as `(slot_off,
+    /// region_off)`. The prologue reserves a `frame_align`-aligned region
+    /// below the static frame; every backend resolves these slots to
+    /// `region_base + region_off` rather than the fp-relative slot. Empty for
+    /// the common case.
+    pub over_aligned: Vec<(i64, i64)>,
+    /// Alignment of the realigned region (max over `over_aligned`, a power of
+    /// two > 16), or 0 when no automatic object needs realignment. Non-zero
+    /// forces the dynamic-sp frame model.
+    pub frame_align: i64,
+    /// Byte size of the realigned region, a multiple of `frame_align`; 0 when
+    /// `over_aligned` is empty.
+    pub realign_region_bytes: i64,
     /// True when the body calls a function that may return twice into
     /// this frame: the setjmp family (C99 7.13) or vfork(2). Ordinary
     /// liveness under-approximates storage lifetime here -- a value
@@ -912,6 +980,13 @@ pub(crate) struct FunctionSsa {
     /// whose constant-trip loops turned array subscripts into constant
     /// offsets. False for every function the unroll pass left unchanged.
     pub did_unroll: bool,
+    /// True once `passes::inline` spliced a callee into this function.
+    /// Set by the inliner; read post-inline to gate a mem2reg re-run to
+    /// callers that received an inline. A relocated callee local can land
+    /// on an address-free, single-width slot that pre-inline mem2reg never
+    /// saw (the slot did not exist then), so the re-run promotes it. False
+    /// for every function the inliner left unchanged.
+    pub did_inline: bool,
 }
 
 /// External functions that may return twice into the caller's frame:

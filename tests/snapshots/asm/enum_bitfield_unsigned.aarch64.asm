@@ -10,36 +10,6 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	sxtw	x0, w0
-               	cmp	x0, #0x5
-               	b.lt	<addr>
-               	cmp	x0, #0x6
-               	b.lt	<addr>
-               	cmp	x0, #0x6
-               	b.eq	<addr>
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
-               	ret
-               	mov	x0, #0x3c               // =60
-               	ret
-               	cmp	x0, #0x5
-               	b.ne	<addr>
-               	mov	x0, #0x32               // =50
-               	ret
-               	cmp	x0, #0x4
-               	b.lt	<addr>
-               	cmp	x0, #0x4
-               	b.ne	<addr>
-               	mov	x0, #0x28               // =40
-               	ret
-               	cmp	x0, #0x0
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
-               	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -127,38 +97,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x6                // =6
-               	bl	<addr>
-               	cmp	x0, #0x3c
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x5                // =5
-               	bl	<addr>
-               	cmp	x0, #0x32
-               	b.eq	<addr>
-               	mov	x0, #0x6                // =6
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x4                // =4
-               	bl	<addr>
-               	cmp	x0, #0x28
-               	b.eq	<addr>
-               	mov	x0, #0x7                // =7
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	mov	x0, #0x3c               // =60
+               	mov	x0, #0x32               // =50
+               	mov	x0, #0x28               // =40
                	mov	x0, #0x0                // =0
-               	bl	<addr>
-               	cmp	x0, #0x0
-               	b.eq	<addr>
-               	mov	x0, #0x8                // =8
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

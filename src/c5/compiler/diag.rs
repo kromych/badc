@@ -8,8 +8,10 @@
 //! Warnings are accumulated on `Compiler::warnings` and never fail
 //! the compile.
 
-use super::super::ast::{BlockItem, Expr, ExprId, Stmt, StmtId};
+use super::super::ast::walk::{fold_int_binop, imm_safe_binop};
+use super::super::ast::{BlockItem, Expr, ExprId, Stmt, StmtId, UnOp};
 use super::super::error::C5Error;
+use super::super::ir::BinOp;
 use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
@@ -143,6 +145,52 @@ impl Compiler {
             Expr::IntLit { val, .. } => *val != 0,
             Expr::Cast { child, .. } => self.expr_is_nonzero_const(*child),
             _ => false,
+        }
+    }
+
+    /// C99 6.3.2.3p3: an integer constant expression with the value 0,
+    /// or such an expression cast to `void *`, is a null pointer
+    /// constant. Only literal-rooted operands fold, so an operand
+    /// naming an object -- `(void *)((long)x * 0l)` -- is correctly not
+    /// a null pointer constant even though it evaluates to zero.
+    pub(super) fn expr_is_null_pointer_constant(&self, e: ExprId) -> bool {
+        self.expr_const_int(e) == Some(0)
+    }
+
+    /// Fold a literal-rooted integer constant expression. Casts are
+    /// looked through without applying their conversion: the callers
+    /// only compare against zero, and a cast that truncates a non-zero
+    /// constant to zero is not a null pointer constant in practice.
+    pub(super) fn expr_const_int(&self, e: ExprId) -> Option<i64> {
+        match self.ast.expr(e) {
+            Expr::IntLit { val, .. } => Some(*val),
+            Expr::Cast { child, .. } => self.expr_const_int(*child),
+            Expr::Unary { op, child, .. } => {
+                let v = self.expr_const_int(*child)?;
+                match op {
+                    UnOp::Neg => Some(v.wrapping_neg()),
+                    UnOp::BitNot => Some(!v),
+                    UnOp::LogNot => Some((v == 0) as i64),
+                    UnOp::AddrOf | UnOp::Deref => None,
+                }
+            }
+            Expr::Binary { op, lhs, rhs, .. } => {
+                // `/` and `%` are integer constant expressions (C99 6.6)
+                // but are not immediate-foldable, so they are admitted
+                // alongside the imm-safe set. A zero divisor is undefined
+                // and thus not a constant.
+                let divmod = matches!(*op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu);
+                if !imm_safe_binop(*op) && !divmod {
+                    return None;
+                }
+                let l = self.expr_const_int(*lhs)?;
+                let r = self.expr_const_int(*rhs)?;
+                if divmod && r == 0 {
+                    return None;
+                }
+                Some(fold_int_binop(*op, l, r))
+            }
+            _ => None,
         }
     }
 
@@ -445,6 +493,19 @@ impl Compiler {
             return None;
         }
         if is_array_agg_ptr(actual) && decl_is_ptr {
+            return None;
+        }
+
+        // The GCC 128-bit integer against an integer or pointer is a
+        // value conversion (C99 6.3.1.3), not a struct mismatch.
+        let is_int128 = |ty: i64| {
+            is_struct_ty(ty)
+                && struct_ptr_depth(ty) == 0
+                && structs
+                    .get(super::types::struct_id_of(ty))
+                    .is_some_and(|s| s.name == "__int128")
+        };
+        if is_int128(declared) != is_int128(actual) && !(decl_is_struct && act_is_struct) {
             return None;
         }
 

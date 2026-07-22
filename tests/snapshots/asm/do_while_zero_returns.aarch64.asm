@@ -44,53 +44,18 @@ Disassembly of section .text:
                	b	<addr>
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x0, #0x29               // =41
-               	bl	<addr>
-               	cmp	x0, #0x2a
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0xfffb             // =65531
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
-               	bl	<addr>
-               	cmp	x0, #0x5
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x0                // =0
-               	bl	<addr>
-               	cmp	x0, #0x0
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x9                // =9
-               	bl	<addr>
-               	cmp	x0, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0xfff7             // =65527
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
-               	bl	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
-               	b.eq	<addr>
+               	mov	x0, #0x2a               // =42
                	mov	x0, #0x5                // =5
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x1                // =1
+               	mov	x0, #0x1                // =1
+               	mov	x0, #0xffff             // =65535
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #0xffff             // =65535
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	mov	x0, #0x0                // =0
                	ret

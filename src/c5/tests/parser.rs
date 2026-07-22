@@ -28,6 +28,46 @@ fn empty_source_has_no_main() {
 }
 
 #[test]
+fn overaligned_automatic_above_cap_is_rejected() {
+    // An automatic object's alignment above 16 is honored by realigning the
+    // stack in the prologue (C11 6.7.5), up to a one-page cap. A request past
+    // the cap must use static storage rather than a page-sized frame slack.
+    expect_compile_error(
+        "int main(void) { int __attribute__((aligned(8192))) a; return (int)(long)&a; }",
+        "exceeds the maximum for an automatic object",
+    );
+    // A non-power-of-two request is a diagnostic (C11 6.7.5 requires a power
+    // of two).
+    expect_compile_error(
+        "int main(void) { int __attribute__((aligned(48))) a; return (int)(long)&a; }",
+        "not a power of two",
+    );
+}
+
+#[test]
+fn overaligned_automatic_is_realigned() {
+    use crate::c5::Target;
+    // An over-aligned automatic object -- an explicit declarator request or
+    // one inherited from an over-aligned type -- is now placed on its
+    // boundary rather than rejected. Both shapes compile.
+    Compiler::with_target(
+        "int main(void) { int __attribute__((aligned(64))) a; a = 1; return (int)((long)&a & 63); }"
+            .to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect("aligned(64) automatic compiles");
+    Compiler::with_target(
+        "struct __attribute__((aligned(64))) S { int x; };\n\
+         int main(void) { struct S a; a.x = 1; return (int)((long)&a.x & 63); }"
+            .to_string(),
+        Target::LinuxAarch64,
+    )
+    .compile()
+    .expect("over-aligned struct automatic compiles");
+}
+
+#[test]
 fn source_with_only_a_global_has_no_main() {
     expect_compile_error("int x;", "main() not defined");
 }
@@ -362,6 +402,148 @@ fn continue_outside_loop() {
 #[test]
 fn unresolved_goto_label() {
     expect_compile_error("int main() { goto nowhere; return 0; }", "unresolved label");
+}
+
+// GCC local labels (`__label__`). The accept/reject split below matches
+// gcc; clang differs on one case, noted at that test.
+
+#[test]
+fn local_label_binds_within_its_block() {
+    expect_compiles(
+        "int main() { __label__ done; if (1) goto done; done: return 0; }",
+        "a `__label__` defined in the declaring block",
+    );
+}
+
+#[test]
+fn local_label_same_name_in_sibling_blocks() {
+    // The point of the extension: each block's `l` is a separate label,
+    // so this is not a redefinition.
+    expect_compiles(
+        "int main() { { __label__ l; goto l; l: ; } { __label__ l; goto l; l: ; } return 0; }",
+        "one name declared `__label__` by two sibling blocks",
+    );
+}
+
+#[test]
+fn local_label_declaration_shadows_outer_one() {
+    expect_compiles(
+        "int main() { __label__ l; { __label__ l; goto l; l: ; } goto l; l: return 0; }",
+        "an inner `__label__` shadowing an outer one",
+    );
+}
+
+#[test]
+fn local_label_declaration_lists_several_names() {
+    expect_compiles(
+        "int main() { __label__ a, b; if (1) goto a; goto b; a: ; b: return 0; }",
+        "several names in one `__label__` declaration",
+    );
+}
+
+#[test]
+fn consecutive_local_label_declarations() {
+    expect_compiles(
+        "int main() { __label__ a; __label__ b; goto a; a: ; goto b; b: return 0; }",
+        "two `__label__` declarations leading one block",
+    );
+}
+
+#[test]
+fn local_label_reachable_from_nested_block() {
+    expect_compiles(
+        "int main() { __label__ l; { { goto l; } } l: return 0; }",
+        "a `goto` in a nested block targeting an enclosing local label",
+    );
+}
+
+#[test]
+fn address_of_local_label() {
+    expect_compiles(
+        "int main() { __label__ l; void *p = &&l; if (p) goto *p; l: return 0; }",
+        "`&&label` naming a local label",
+    );
+}
+
+#[test]
+fn local_label_declared_but_unused() {
+    // gcc accepts a local label that is never referenced; clang rejects
+    // it. Follow gcc: the declaration alone constrains nothing.
+    expect_compiles(
+        "int main() { __label__ l; return 0; }",
+        "an unreferenced `__label__` declaration",
+    );
+}
+
+#[test]
+fn local_label_in_a_statement_expression() {
+    // The motivating case: two expansions of one macro in a function,
+    // each defining the label its own body declares.
+    expect_compiles(
+        "int main(void) { int a = ({ __label__ o; int r = 0; goto o; o: ; r; }); \
+         int b = ({ __label__ o; int r = 1; goto o; o: ; r; }); return a + b - 1; }",
+        "a `__label__` in each of two statement expressions",
+    );
+}
+
+#[test]
+fn local_label_declared_but_not_defined() {
+    expect_compile_error(
+        "int main() { __label__ done; if (1) goto done; return 0; }",
+        "unresolved label: done",
+    );
+}
+
+#[test]
+fn goto_local_label_from_outside_its_block() {
+    // The declaration's scope ended with the block, so the `goto` names
+    // a function-scoped label that no statement defines.
+    expect_compile_error(
+        "int main() { { __label__ l; l: ; } goto l; return 0; }",
+        "unresolved label: l",
+    );
+}
+
+#[test]
+fn local_label_defined_twice_within_its_scope() {
+    expect_compile_error(
+        "int main() { __label__ l; { l: ; } l: return 0; }",
+        "redefinition of label `l`",
+    );
+}
+
+#[test]
+fn duplicate_local_label_declaration() {
+    expect_compile_error(
+        "int main() { __label__ l; __label__ l; goto l; l: return 0; }",
+        "duplicate local label declaration `l`",
+    );
+}
+
+#[test]
+fn local_label_declaration_after_a_statement() {
+    expect_compile_error(
+        "int main() { int x = 0; __label__ l; goto l; l: return x; }",
+        "`__label__` must appear at the start of its block",
+    );
+}
+
+#[test]
+fn local_label_declaration_after_a_nested_statement() {
+    expect_compile_error(
+        "int main() { { ; __label__ l; goto l; l: ; } return 0; }",
+        "`__label__` must appear at the start of its block",
+    );
+}
+
+#[test]
+fn address_of_undefined_label() {
+    // gcc and clang both reject taking the address of a label that no
+    // statement defines.
+    expect_compile_error(
+        "int main() { void *p = &&nowhere; return p != 0; }",
+        "unresolved label: nowhere",
+    );
 }
 
 #[test]
@@ -982,15 +1164,18 @@ fn constructor_is_not_reported_unused() {
 }
 
 #[test]
-fn asm_goto_rejects_output_operands() {
-    // TODO: asm-goto outputs (GCC 11) need label-path store-back.
-    expect_compile_error(
+fn asm_goto_accepts_output_operands() {
+    // GCC 11 `asm goto` outputs: valid on every exit path (the emitters
+    // store outputs on the fall-through and each label trampoline).
+    Compiler::new(
         "int f(int x) { int o; \
              __asm__ goto(\"nop\" : \"=r\"(o) : \"r\"(x) : : out); \
              return 1; out: return 2; } \
-         int main(void) { return f(0); }",
-        "inline asm goto: output operands are not supported",
-    );
+         int main(void) { return f(0); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("asm goto with an output operand must compile");
 }
 
 #[test]
@@ -1026,6 +1211,28 @@ fn asm_goto_rejects_label_number_below_operand_count() {
              return 1; out: return 2; } \
          int main(void) { return f(0); }",
         "`%l0` is out of range",
+    );
+}
+
+#[test]
+fn auto_type_constraints() {
+    // GNU `__auto_type` requires a single plain-identifier declarator
+    // with an expression initializer.
+    expect_compile_error(
+        "int main(void) { __auto_type x = 1, y = 2; return x + y; }",
+        "single declarator",
+    );
+    expect_compile_error(
+        "int main(void) { __auto_type *p = 0; return 0; }",
+        "plain identifier declarator",
+    );
+    expect_compile_error(
+        "int main(void) { __auto_type z; return 0; }",
+        "requires an initializer",
+    );
+    expect_compile_error(
+        "int main(void) { __auto_type b = { 1 }; return b; }",
+        "single expression",
     );
 }
 
@@ -1066,38 +1273,670 @@ fn asm_goto_accepts_forward_and_backward_labels() {
 }
 
 #[test]
-fn register_asm_variable_rejects_unknown_register() {
-    expect_compile_error(
-        "int main(void) { register int v asm(\"zz9\") = 1; return v; }",
-        "is not a supported register",
-    );
-}
-
-#[test]
-fn register_asm_variable_rejects_reserved_register() {
-    // rsp / rbp and the emit scratch r10 / r11 cannot carry an operand.
-    expect_compile_error(
-        "int main(void) { register long v asm(\"rsp\") = 1; \
-             __asm__(\"nop\" : : \"r\"(v)); return 0; }",
-        "is not a supported register",
-    );
-}
-
-#[test]
-fn declarator_asm_requires_register_class() {
-    // TODO: the rename form (`int v asm(\"name\")`) on non-register
-    // declarators.
-    expect_compile_error(
-        "int main(void) { int v asm(\"r9\") = 1; return v; }",
-        "only supported on `register` locals",
-    );
-}
-
-#[test]
-fn declarator_asm_rejected_at_file_scope() {
-    // TODO: file-scope renames and global register variables.
+fn declarator_asm_label_rename_rejected_at_file_scope() {
+    // A GNU asm-label restating the identifier is a no-op and accepted; a
+    // differing assembler name would rename the emitted symbol, which is not
+    // yet wired. TODO: honor a differing assembler name.
+    super::compile_str_bare("int g asm(\"g\"); int main(void) { return g; }");
     expect_compile_error(
         "int g asm(\"r9\"); int main(void) { return g; }",
-        "not supported at file scope",
+        "differing from `g` is not yet supported",
+    );
+}
+
+#[test]
+fn register_asm_binding_constraints() {
+    // `register T name asm("reg")` requires the `register` storage
+    // class, a bindable register for the target, automatic storage,
+    // and (for the stack / frame pointer) read-only use.
+    expect_compile_error(
+        "int main(void) { long x asm(\"rax\"); return 0; }",
+        "requires the `register` storage class",
+    );
+    expect_compile_error(
+        "int main(void) { register long x asm(\"nosuch\"); return (int)x; }",
+        "is not a bindable register",
+    );
+    expect_compile_error(
+        "int main(void) { static register long x asm(\"rax\"); return 0; }",
+        "cannot be `static` or `extern`",
+    );
+    #[cfg(target_arch = "x86_64")]
+    {
+        expect_compile_error(
+            "int main(void) { register long x asm(\"rsp\"); x = 5; return 0; }",
+            "cannot write register variable",
+        );
+        expect_compile_error(
+            "int main(void) { register long x asm(\"r10\"); return 0; }",
+            "reserved and cannot hold a register variable",
+        );
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        expect_compile_error(
+            "int main(void) { register long x asm(\"sp\"); x = 5; return 0; }",
+            "cannot write register variable",
+        );
+        expect_compile_error(
+            "int main(void) { register long x asm(\"x16\"); return 0; }",
+            "reserved and cannot hold a register variable",
+        );
+    }
+}
+
+#[test]
+fn register_asm_binding_target_specific_registers() {
+    use super::super::codegen::Target;
+    // x86-64: r11 is bindable (a stack-switch idiom pins a scratch to
+    // it); r10 stays the emitter's reserved asm-staging scratch.
+    let bind = |reg: &str| {
+        format!(
+            "int main(void) {{ register long v asm(\"{reg}\") = 1; long o; __asm__(\"movq %1, %0\" : \"=r\"(o) : \"r\"(v)); return (int)o; }}"
+        )
+    };
+    assert!(
+        compile_for_target(&bind("r11"), Target::LinuxX64).is_ok(),
+        "x86-64 `r11` must be bindable"
+    );
+    let e = compile_for_target(&bind("r10"), Target::LinuxX64).unwrap_err();
+    assert!(
+        e.contains("reserved and cannot hold a register variable"),
+        "{e}"
+    );
+
+    // AArch64: GCC's `rN` spelling aliases `xN` (the SMCCC headers spell
+    // hypercall operands `asm("r0")`); x16/x17 stay reserved either way.
+    for reg in ["r0", "r7", "x0"] {
+        assert!(
+            compile_for_target(&bind(reg), Target::LinuxAarch64).is_ok(),
+            "aarch64 `{reg}` must be bindable"
+        );
+    }
+    for reg in ["r16", "x16"] {
+        let e = compile_for_target(&bind(reg), Target::LinuxAarch64).unwrap_err();
+        assert!(
+            e.contains("reserved and cannot hold a register variable"),
+            "{e}"
+        );
+    }
+}
+
+#[test]
+fn register_asm_binding_concatenates_adjacent_literals() {
+    // C99 5.1.1.2 phase 6: the register-name operand of a register-asm
+    // declarator joins adjacent string literals before resolving the
+    // register, matching gcc and clang. Macro-pasted headers spell the
+    // name in pieces, e.g. `asm("%" "rdx")`.
+    use super::super::codegen::Target;
+    let x64 = Target::LinuxX64;
+    let a64 = Target::LinuxAarch64;
+    // Block-scope binding: `%`-prefixed and unprefixed splits, two and
+    // three pieces, all equivalent to the single-literal spelling.
+    for (form, target) in [
+        ("\"%\" \"rdx\"", x64),
+        ("\"r\" \"dx\"", x64),
+        ("\"%\" \"r\" \"dx\"", x64),
+        ("\"rd\" \"x\"", x64),
+        ("\"x\" \"9\"", a64),
+        ("\"x\" \"1\" \"9\"", a64),
+    ] {
+        let src =
+            alloc::format!("int main(void){{ register long v asm({form}); return (int)v; }}\n");
+        assert!(
+            compile_for_target(&src, target).is_ok(),
+            "split register name {form} should compile: {:?}",
+            compile_for_target(&src, target).err()
+        );
+    }
+    // File-scope stack-pointer binding uses the same suffix parser.
+    assert!(
+        compile_for_target(
+            "register unsigned long sp asm(\"r\" \"sp\");\n\
+             unsigned long f(void) { return sp; }\n\
+             int main(void) { return 0; }\n",
+            x64
+        )
+        .is_ok(),
+        "file-scope split stack-pointer binding should compile"
+    );
+    // A split that joins to an unknown register is rejected, and the
+    // diagnostic names the joined text rather than a partial piece.
+    let err = compile_for_target(
+        "int main(void) { register long v asm(\"no\" \"such\"); return (int)v; }\n",
+        x64,
+    )
+    .expect_err("unknown joined register must be rejected");
+    assert!(
+        err.contains("nosuch") && err.contains("not a bindable register"),
+        "diagnostic must name the joined register text: {err}"
+    );
+}
+
+#[test]
+fn file_scope_register_asm_binding() {
+    // `register T name asm("reg")` at file scope: stack- / frame-pointer
+    // bindings are accepted, repeatable, shadowable, and read-only; a
+    // general-purpose register or a storage-class conflict is rejected.
+    #[cfg(target_arch = "x86_64")]
+    let (sp, fp, gp) = ("rsp", "rbp", "r12");
+    #[cfg(target_arch = "aarch64")]
+    let (sp, fp, gp) = ("sp", "x29", "x9");
+    let ok = |src: &str| {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("expected accept, got {e}"))
+    };
+    // Repeat declaration (header re-inclusion), reads from several
+    // functions, shadowing by a local and by a parameter.
+    let prog = ok(&format!(
+        "register unsigned long sp_reg asm(\"{sp}\");\n\
+         register unsigned long sp_reg asm(\"{sp}\");\n\
+         unsigned long f(void) {{ return sp_reg; }}\n\
+         unsigned long g(int sp_reg) {{ return (unsigned long)sp_reg; }}\n\
+         int main(void) {{ unsigned long v = sp_reg; {{ long sp_reg = 3; v += (unsigned long)sp_reg; }} return (int)(v == 0); }}\n"
+    ));
+    // No storage and no symbol: the binding is not a data global.
+    assert!(
+        !prog
+            .symbols
+            .iter()
+            .any(|s| s.name == "sp_reg" && s.class == crate::c5::token::Token::Glo as i64),
+        "file-scope register variable must not become a data global"
+    );
+    expect_compile_error(
+        &format!("register long x asm(\"{gp}\"); int main(void) {{ return (int)x; }}"),
+        "supported for the stack and frame pointer only",
+    );
+    expect_compile_error(
+        &format!("static register long x asm(\"{sp}\"); int main(void) {{ return 0; }}"),
+        "cannot be `static` or `extern`",
+    );
+    expect_compile_error(
+        &format!("register long x asm(\"{sp}\") = 1; int main(void) {{ return 0; }}"),
+        "cannot be initialized",
+    );
+    expect_compile_error(
+        &format!("register long x asm(\"{sp}\"); int main(void) {{ x = 1; return 0; }}"),
+        "cannot write register variable",
+    );
+    expect_compile_error(
+        &format!(
+            "register long x asm(\"{sp}\"); register long x asm(\"{fp}\"); int main(void) {{ return 0; }}"
+        ),
+        "conflicts with a prior declaration",
+    );
+    expect_compile_error(
+        &format!("int x; register long x asm(\"{sp}\"); int main(void) {{ return 0; }}"),
+        "conflicts with a prior declaration",
+    );
+    // Without `register` the declarator asm suffix is a GNU asm-label: a
+    // no-op rename is accepted, a differing one is not yet supported.
+    expect_compile_error(
+        "long x asm(\"renamed\"); int main(void) { return 0; }",
+        "differing from `x` is not yet supported",
+    );
+}
+
+#[test]
+fn two_identifiers_in_declarator_position_are_rejected() {
+    // C99 6.7p1: the declarators of one declaration are comma-separated
+    // and the list ends at `;`. A second identifier after a declarator is
+    // a syntax error at both file and block scope; a bare identifier that
+    // is not a recognized type qualifier must not be read as one.
+    for src in [
+        "int foo bar; int main(void) { return 0; }",
+        "int a b c; int main(void) { return 0; }",
+        "extern int foo bar; int main(void) { return 0; }",
+        "static int foo bar; int main(void) { return 0; }",
+        "int *p q; int main(void) { return 0; }",
+        "int a = 1 b; int main(void) { return 0; }",
+        "int main(void) { int foo bar; return 0; }",
+        "int main(void) { int a = 1 b; return 0; }",
+    ] {
+        expect_compile_error(src, "expected `,` or `;` after declarator");
+    }
+}
+
+#[test]
+fn seg_address_space_qualifiers_parse_as_qualifiers() {
+    // `__seg_gs` / `__seg_fs` are x86 named-address-space qualifiers, valid
+    // wherever `const` / `volatile` are: on a base type, in a cast, and
+    // trailing a `typeof` operand. None of these shapes access the segment
+    // (address computation only), so they lower on any target.
+    for src in [
+        "int __seg_gs g; int main(void){ return 0; }",
+        "int __seg_fs f; int main(void){ return 0; }",
+        "void f(unsigned long *p){ unsigned long __seg_gs *q = \
+         (unsigned long __seg_gs *)p; (void)q; } int main(void){ return 0; }",
+        "extern unsigned long v; void g(void){ unsigned long __seg_gs *q = \
+         (typeof(v) __seg_gs *)(__UINTPTR_TYPE__)&v; (void)q; } int main(void){ return 0; }",
+    ] {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("expected `{src}` to compile, got {e}"));
+    }
+}
+
+// Reaches the SSA walk (via native emit), so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn direct_seg_access_lowers_on_x86_and_is_rejected_elsewhere() {
+    use crate::{NativeOptions, Target};
+    // A direct read / write through a `__seg_gs` / `__seg_fs` pointer lowers to
+    // a segment-prefixed access on x86 (the encoding is asserted in the linker
+    // tests). A target without segment registers has no lowering and rejects
+    // rather than dropping the qualifier (a silent wrong-address access).
+    let emit = |src: &str, target: Target| {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("parse");
+        crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+    };
+    let read = "extern unsigned long v; unsigned long r(void){ \
+         return *(unsigned long __seg_gs *)(__UINTPTR_TYPE__)&v; } int main(void){ return 0; }";
+    let write = "extern unsigned long v; void w(unsigned long x){ \
+         *(unsigned long __seg_gs *)(__UINTPTR_TYPE__)&v = x; } int main(void){ return 0; }";
+    emit(read, Target::LinuxX64).expect("x86 seg read lowers");
+    emit(write, Target::LinuxX64).expect("x86 seg write lowers");
+    let read_err = emit(read, Target::LinuxAarch64)
+        .expect_err("aarch64 rejects a direct seg read")
+        .to_string();
+    let write_err = emit(write, Target::LinuxAarch64)
+        .expect_err("aarch64 rejects a direct seg write")
+        .to_string();
+    assert!(read_err.contains("__seg_gs/__seg_fs read (x86 only)"));
+    assert!(write_err.contains("__seg_gs/__seg_fs write (x86 only)"));
+}
+
+#[test]
+fn declaration_lists_still_parse() {
+    // The separator check must not disturb the legitimate shapes: multiple
+    // declarators, initializers, pointers, arrays and their designators,
+    // prototypes, typedef and tag names, attributes and old-style
+    // parameter declarations.
+    let ok = |src: &str| {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("expected accept for {src:?}, got {e}"))
+    };
+    ok("int a, b; int main(void) { return a + b; }");
+    ok("int *p, q = 3; int main(void) { return q; }");
+    ok("int a[3] = {1, 2, 3}, b = 4; int main(void) { return a[0] + b; }");
+    ok("int m[2][2] = {[0][1] = 3, [1][0] = 4}; int main(void) { return m[0][1]; }");
+    ok(
+        "struct P { int x, y; }; struct P a[2] = {{1, 2}, {3, 4}}, b = {5, 6}; \
+        int main(void) { return a[0].x + b.x; }",
+    );
+    ok("int f(int), g(void); int main(void) { return g(); }");
+    ok("typedef int mi; mi v; int main(void) { return v; }");
+    ok("typedef int A, B; int main(void) { A a = 1; B b = 2; return a + b; }");
+    ok("typedef int (*F)(int); F a, b; int main(void) { return a == b; }");
+    ok("struct S { int m; }; struct S s; int main(void) { return s.m; }");
+    ok("enum E { A, B }; enum E e; int main(void) { return e; }");
+    ok("int x __attribute__((unused)); int main(void) { return 0; }");
+    ok("extern int e; int main(void) { return e; }");
+    ok("char *s = \"a\", *t = \"b\"; int main(void) { return s[0] + t[0]; }");
+    // Old-style definition: the parameter declarations are their own
+    // declarations, each ending at its `;`.
+    ok("int f(a, b) int a; int b; { return a + b; } int main(void) { return f(1, 2); }");
+    ok("int main(void) { int a = 1, *p = &a, c[2] = {1, 2}; return a + *p + c[0]; }");
+    ok("int main(void) { typedef int T; T v = 1; return v; }");
+    ok("int main(void) { static int s = 5; return s; }");
+}
+
+#[test]
+fn asm_output_operand_lvalue_matrix() {
+    // A stack- / frame-pointer register variable names a register, not an
+    // object: it is a valid output operand even though it has no address.
+    // Everything else keeps the lvalue requirement, including
+    // `__builtin_frame_address`, which reads back as the same intrinsic a
+    // frame-pointer register variable does but is not an lvalue.
+    #[cfg(target_arch = "x86_64")]
+    let (sp, fp, gp) = ("rsp", "rbp", "r12");
+    #[cfg(target_arch = "aarch64")]
+    let (sp, fp, gp) = ("sp", "x29", "x9");
+    let ok = |src: &str| {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("expected accept for {src:?}, got {e}"))
+    };
+    // A stack- / frame-pointer operand binds on x86_64. AArch64's asm
+    // surface is pattern-matched rather than constraint-driven, so it
+    // diagnoses the operand instead of binding it.
+    #[cfg(target_arch = "x86_64")]
+    let sp_fp_operand = ok;
+    #[cfg(target_arch = "aarch64")]
+    let sp_fp_operand = |src: &str| {
+        expect_compile_error(src, "register variable operand is not supported");
+    };
+    // File-scope binding used as a read-write output: a template that
+    // perturbs the stack pointer declares it this way.
+    sp_fp_operand(&format!(
+        "register unsigned long sp_reg asm(\"{sp}\");\n\
+         int main(void) {{ return 0; }} void f(void) {{ __asm__ __volatile__(\"\" : \"+r\"(sp_reg) : : \"memory\"); }}"
+    ));
+    // Block-scope bindings, write-only and read-write, stack and frame.
+    sp_fp_operand(&format!(
+        "int main(void) {{ return 0; }} void f(void) {{ register unsigned long s asm(\"{sp}\"); \
+         __asm__ __volatile__(\"\" : \"=r\"(s) : : \"memory\"); }}"
+    ));
+    sp_fp_operand(&format!(
+        "int main(void) {{ return 0; }} void f(void) {{ register unsigned long b asm(\"{fp}\"); \
+         __asm__ __volatile__(\"\" : \"+r\"(b) : : \"memory\"); }}"
+    ));
+    // A general-purpose register variable and the ordinary lvalue forms
+    // keep working as outputs.
+    ok(&format!(
+        "int main(void) {{ return 0; }} void f(void) {{ register long r asm(\"{gp}\"); \
+         __asm__ __volatile__(\"\" : \"=r\"(r)); }}"
+    ));
+    ok("struct S { int m; }; \
+        int main(void) { return 0; } void f(struct S *p, int *q, int a[2]) { int v; \
+        __asm__(\"\" : \"=r\"(v)); __asm__(\"\" : \"=r\"(p->m)); \
+        __asm__(\"\" : \"=r\"(*q)); __asm__(\"\" : \"=r\"(a[1])); }");
+    // Genuine rvalues stay rejected: a call result, a cast, and the
+    // frame-address intrinsic.
+    expect_compile_error(
+        "int g(void); int main(void) { return 0; } void f(void) { __asm__(\"\" : \"=r\"(g())); }",
+        "output operand must be an lvalue",
+    );
+    expect_compile_error(
+        "int main(void) { return 0; } void f(long a) { __asm__(\"\" : \"=r\"((int)a)); }",
+        "output operand must be an lvalue",
+    );
+    expect_compile_error(
+        "int main(void) { return 0; } void f(void) { __asm__(\"\" : \"=r\"(__builtin_frame_address(0))); }",
+        "output operand must be an lvalue",
+    );
+    // A memory operand still needs an address.
+    expect_compile_error(
+        "int g(void); int main(void) { return 0; } void f(void) { int r; __asm__(\"\" : \"=r\"(r) : \"m\"(g())); }",
+        "not directly addressable",
+    );
+}
+
+#[test]
+fn file_scope_asm_constraints() {
+    // `asm("...")` between declarations accepts section data
+    // directives (and an empty template); instructions, operands,
+    // `goto`, and malformed section stacks are rejected.
+    let ok = |src: &str| {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("expected accept, got {e}"));
+    };
+    ok("asm(\"\"); int main(void) { return 0; }");
+    ok(
+        "__asm__(\".pushsection .note.x,\\\"a\\\"\\n.long 1\\n.popsection\");\n\
+        int main(void) { return 0; }",
+    );
+    ok(
+        "asm volatile(\".section .modinfo,\\\"a\\\"\\n.asciz \\\"v=1\\\"\\n.previous\");\n\
+        int main(void) { return 0; }",
+    );
+    // `.globl` / `.global` outside a section gives the named symbol
+    // external linkage; a name this unit does not define has no effect.
+    ok("static int f(void) { return 0; } asm(\".globl f\"); int main(void) { return f(); }");
+    ok("static int v = 1; __asm__(\".global v\"); int main(void) { return v - 1; }");
+    ok("asm(\".globl f\"); static int f(void) { return 0; } int main(void) { return f(); }");
+    ok("asm(\".globl nosuchsymbol\"); int main(void) { return 0; }");
+    ok("static int f(void) { return 0; }\n\
+         asm(\".pushsection .a,\\\"a\\\"\\n.quad 1\\n.popsection\\n.globl f\");\n\
+         int main(void) { return f(); }");
+    // A bare instruction at file scope assembles into `.text`, as GNU as does
+    // (`asm("nop")` emits a nop into the current section). File-scope
+    // instruction assembly is x86-only, so pin the target rather than the host.
+    Compiler::with_target(
+        "asm(\"nop\"); int main(void) { return 0; }".to_string(),
+        crate::c5::Target::LinuxX64,
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("expected accept, got {e}"));
+    // `.globl` with no operand is not a directive this accepts.
+    expect_compile_error(
+        "asm(\".globl\"); int main(void) { return 0; }",
+        "bad `.globl` operand",
+    );
+    expect_compile_error(
+        "asm(\".pushsection .a,\\\"a\\\"\\n.quad 1\\n.popsection\" : : \"r\"(1));\n\
+         int main(void) { return 0; }",
+        "operands are not supported at file scope",
+    );
+    expect_compile_error(
+        "asm goto(\"x\"); int main(void) { return 0; }",
+        "`asm goto` is not supported at file scope",
+    );
+    expect_compile_error(
+        "asm(\".pushsection .a,\\\"a\\\"\\n.long %0\\n.popsection\");\n\
+         int main(void) { return 0; }",
+        "no operands at file scope",
+    );
+    expect_compile_error(
+        "asm(\".pushsection .a,\\\"a\\\"\\n.popsection\\n.popsection\");\n\
+         int main(void) { return 0; }",
+        "`.popsection` without `.pushsection`",
+    );
+    expect_compile_error(
+        "asm(\".pushsection .a,\\\"a\\\"\\n.unknowndir 1\\n.popsection\");\n\
+         int main(void) { return 0; }",
+        "unsupported directive",
+    );
+}
+
+#[test]
+fn section_and_alias_operand_constraints() {
+    // `section` / `alias` take a string-literal operand; an alias
+    // target must be defined somewhere in the unit (the definition may
+    // follow the alias declarator).
+    expect_compile_error(
+        "__attribute__((section(data))) int x; int main(void) { return x; }",
+        "must be a string literal",
+    );
+    expect_compile_error(
+        "int aka(void) __attribute__((alias(\"missing\")));\n\
+         int main(void) { return aka(); }",
+        "not a function defined in this unit",
+    );
+    expect_compile_error(
+        "int aka __attribute__((alias(\"missing_obj\")));\n\
+         int main(void) { return aka; }",
+        "not an object defined in this unit",
+    );
+}
+
+fn expect_compiles(src: &str, what: &str) {
+    assert!(
+        Compiler::new(src.to_string()).compile().is_ok(),
+        "{} should compile, got {:?}",
+        what,
+        Compiler::new(src.to_string()).compile().err(),
+    );
+}
+
+#[test]
+fn empty_declaration_accepted_where_gcc_accepts_it() {
+    // A stray `;` declares nothing. gcc and clang accept an empty
+    // declaration in a struct/union member list and at file scope
+    // (diagnosed only under `-pedantic`).
+    expect_compiles(
+        "struct S { void *lock;; };\n\
+         int main(void) { struct S s; s.lock = 0; return s.lock != 0; }",
+        "a trailing `;` in a member list",
+    );
+    expect_compiles(
+        "struct S { ; int x; };\n\
+         int main(void) { struct S s; s.x = 0; return s.x; }",
+        "a leading `;` in a member list",
+    );
+    expect_compiles(
+        "struct S { ; };\n\
+         int main(void) { struct S s; (void)s; return 0; }",
+        "a member list holding only `;`",
+    );
+    expect_compiles(
+        "union U { int a;;; long b; };\n\
+         int main(void) { union U u; u.a = 0; return u.a; }",
+        "repeated `;` in a union member list",
+    );
+    expect_compiles(
+        "int a;;\n; int b;\n\
+         int main(void) { a = 0; b = 0; return a + b; }",
+        "an empty declaration at file scope",
+    );
+}
+
+#[test]
+fn empty_declaration_in_enum_list_rejected() {
+    // gcc and clang both reject a `;` in an enumerator list ("expected
+    // ',' or '}'"), so the member-list extension does not extend here.
+    expect_compile_error(
+        "enum E { A;, B };\n\
+         int main(void) { return A; }",
+        "bad enum identifier",
+    );
+}
+
+#[test]
+fn conditional_pointer_arm_result_type() {
+    // C99 6.5.15p6, checked through `sizeof` of the dereferenced
+    // result. A null pointer constant is a value, not a spelling:
+    // `(void *)0` yields the other arm's type but `(void *)(x * 0)`
+    // does not. Contrasted against gcc and clang.
+    let cases: &[(&str, &str)] = &[
+        (
+            "void* vs int* yields void*",
+            "sizeof(*(8 ? ((void *)((long)(g) * 0l)) : (int *)8)) == 1",
+        ),
+        (
+            "arm order does not matter",
+            "sizeof(*(8 ? (int *)8 : ((void *)((long)(g) * 0l)))) == 1",
+        ),
+        (
+            "(void*)0 is a null pointer constant",
+            "sizeof(*(8 ? (void *)0 : (int *)8)) == sizeof(int)",
+        ),
+        (
+            "folded zero is a null pointer constant",
+            "sizeof(*(8 ? (void *)((long)0 * 0l) : (int *)8)) == sizeof(int)",
+        ),
+        (
+            "struct* survives a null pointer constant",
+            "sizeof(*(g ? (struct s *)&g : (void *)0)) == 2 * sizeof(int)",
+        ),
+        (
+            "struct* survives a plain 0",
+            "sizeof(*(g ? (struct s *)&g : 0)) == 2 * sizeof(int)",
+        ),
+        (
+            "void* beats struct*",
+            "sizeof(*(g ? (void *)&g : (struct s *)&g)) == 1",
+        ),
+    ];
+    for (what, cond) in cases {
+        let src = alloc::format!(
+            "struct s {{ int a; int b; }};\n\
+             int g;\n\
+             int main(void) {{ return !({cond}); }}\n"
+        );
+        expect_compiles(&src, what);
+    }
+}
+
+#[test]
+fn aggregate_with_no_named_member_is_zero_sized() {
+    // gcc and clang give a struct with no named member size 0 in C
+    // (C++ floors it at 1). The compile-time assertion idiom
+    // `sizeof(struct { int:-!!(e); })` depends on the 0.
+    expect_compiles(
+        "int main(void) { return sizeof(struct {}) + sizeof(struct { int : 0; }); }",
+        "a struct with no named member",
+    );
+}
+
+#[test]
+fn member_of_incomplete_aggregate_type_rejected() {
+    // C99 6.7.2.1: a member must have complete type, and an array of an
+    // incomplete type is itself incomplete. gcc and clang reject both.
+    expect_compile_error(
+        "struct fwd; struct s { struct fwd f; }; int main(void) { return 0; }",
+        "incomplete type",
+    );
+    expect_compile_error(
+        "struct fwd; struct s { struct fwd f[2]; }; int main(void) { return 0; }",
+        "incomplete type",
+    );
+    // A complete but zero-sized member stays accepted.
+    expect_compiles(
+        "struct s { struct {} e; int x; };\n\
+         int main(void) { struct s v; v.x = 0; return v.x; }",
+        "an empty struct member",
+    );
+}
+
+/// Compile `src` for `target`, returning the error text on failure.
+fn compile_for_target(
+    src: &str,
+    target: super::super::codegen::Target,
+) -> Result<(), alloc::string::String> {
+    super::Compiler::with_target(alloc::string::String::from(src), target)
+        .compile()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[test]
+fn stack_pointer_register_variable_as_asm_operand() {
+    // GCC binds an `r` operand naming a register variable to that
+    // register. The stack and frame pointers have no storage behind
+    // them, so such an operand transfers no value: `"+r"` marks the
+    // block as reading and disturbing the register rather than
+    // requesting a new one be installed.
+    let x64 = super::super::codegen::Target::LinuxX64;
+    let decl = "register unsigned long csp asm(\"rsp\");\n\
+                register unsigned long cfp asm(\"rbp\");\n\
+                void ext(void);\n";
+    for (what, body) in [
+        (
+            "a read-write stack-pointer marker",
+            "asm volatile(\"call ext\" : \"+r\"(csp) :: \"memory\");",
+        ),
+        (
+            "a stack-pointer input",
+            "unsigned long o; asm(\"movq %1, %0\" : \"=r\"(o) : \"r\"(csp)); (void)o;",
+        ),
+        (
+            "a stack-pointer output",
+            "asm volatile(\"nop\" : \"=r\"(csp));",
+        ),
+        (
+            "a frame-pointer input",
+            "unsigned long o; asm(\"movq %1, %0\" : \"=r\"(o) : \"r\"(cfp)); (void)o;",
+        ),
+        (
+            "a non-bare stack-pointer expression",
+            "unsigned long o; asm(\"movq %1, %0\" : \"=r\"(o) : \"r\"(csp + 8)); (void)o;",
+        ),
+    ] {
+        let src = alloc::format!("{decl}int main(void) {{ {body} return 0; }}\n");
+        assert!(
+            compile_for_target(&src, x64).is_ok(),
+            "{what} should compile: {:?}",
+            compile_for_target(&src, x64).err(),
+        );
+    }
+
+    // Assigning to a storage-less register variable stays rejected:
+    // the frame layout owns the stack pointer, so badc will not emit a
+    // write it cannot honor.
+    let src = alloc::format!("{decl}int main(void) {{ csp = 0; return 0; }}\n");
+    let err = compile_for_target(&src, x64).expect_err("assignment must be rejected");
+    assert!(
+        err.contains("cannot write register variable"),
+        "unexpected error: {err}"
     );
 }

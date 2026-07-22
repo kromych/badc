@@ -132,7 +132,7 @@ impl Compiler {
     /// operand parser and the `sizeof` type-name parser.
     pub(super) fn parse_abstract_ptr_declarator_levels(&mut self) -> Result<i64, C5Error> {
         self.parse_abstract_ptr_declarator(false)
-            .map(|(levels, _)| levels)
+            .map(|(levels, _, _)| levels)
     }
 
     /// As [`Self::parse_abstract_ptr_declarator_levels`], but with
@@ -143,7 +143,14 @@ impl Compiler {
     pub(super) fn parse_abstract_ptr_declarator(
         &mut self,
         capture_proto: bool,
-    ) -> Result<(i64, Option<super::function::ParsedParams>), C5Error> {
+    ) -> Result<
+        (
+            i64,
+            Option<super::function::ParsedParams>,
+            alloc::vec::Vec<i64>,
+        ),
+        C5Error,
+    > {
         debug_assert!(self.lex.tk == '(');
         let mut depth: i64 = 1;
         self.next()?;
@@ -177,25 +184,35 @@ impl Compiler {
         if self.lex.tk == '(' {
             self.next()?;
             if capture_proto && plain && nested_ptrs > 0 {
+                // C99 6.2.1p4: the parameter names of a function declarator
+                // that is not part of a function definition have no scope.
+                // Record the pointee prototype's types without binding the
+                // names -- binding one that matches an enclosing local would
+                // overwrite the single-slot shadow the enclosing scope
+                // restores from at block / function exit.
+                let saved = self.pending.parsing_fn_ptr_proto;
+                self.pending.parsing_fn_ptr_proto = true;
                 let pp = self.parse_function_params()?;
-                for &p in &pp.indices {
-                    Self::restore_shadowed_symbol(&mut self.symbols[p]);
-                }
+                self.pending.parsing_fn_ptr_proto = saved;
                 proto = Some(pp);
             } else {
                 self.skip_balanced_parens_after_open()?;
             }
         }
+        // The pointee dimensions of `T (*)[M1]...[Mn]`: the caller folds
+        // them into an aggregate-backed tag so the pointee keeps its size.
+        // An unspecified `[]` contributes no dimension.
+        let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
         while self.lex.tk == Token::Brak {
             self.next()?;
             if self.lex.tk == ']' {
                 self.next()?;
             } else {
-                let _ = self.parse_constant_int()?;
+                dims.push(self.parse_constant_int()?);
                 self.accept(']')?;
             }
         }
-        Ok((nested_ptrs, proto))
+        Ok((nested_ptrs, proto, dims))
     }
 
     /// Parse a single declarator: zero-or-more `*` (pointer levels)
@@ -229,7 +246,7 @@ impl Compiler {
         // Consume either here so neither stands in for the declarator name.
         loop {
             if self.lex.tk == Token::TypeQual {
-                ty |= self.lex_volatile_bit();
+                ty |= self.lex_qualifier_bits();
                 self.next()?;
             } else if self.at_attribute_specifier() {
                 self.skip_attribute_specifiers()?;
@@ -249,7 +266,7 @@ impl Compiler {
             // (`void * __attribute__((malloc)) p`).
             loop {
                 if self.lex.tk == Token::TypeQual {
-                    ty |= self.lex_volatile_bit();
+                    ty |= self.lex_qualifier_bits();
                     self.next()?;
                 } else if self.at_attribute_specifier() {
                     self.skip_attribute_specifiers()?;

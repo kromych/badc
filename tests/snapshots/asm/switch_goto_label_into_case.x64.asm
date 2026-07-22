@@ -51,71 +51,29 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x1, %edi
-               	callq	<addr>
-               	cmpq	$0xa, %rax
-               	je	<addr>
+               	movl	$0xa, %eax
+               	movl	$0x14, %eax
+               	movl	$0x1e, %eax
+               	movl	$0x1e, %eax
                	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	cmpq	$0x14, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x3, %edi
-               	callq	<addr>
-               	cmpq	$0x1e, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x4, %edi
-               	callq	<addr>
-               	cmpq	$0x1e, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x5, %edi
-               	callq	<addr>
-               	cmpq	$0x1e, %rax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x7, %edi
-               	callq	<addr>
-               	cmpq	$0x1e, %rax
-               	je	<addr>
-               	movl	$0x6, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x8, %edi
-               	callq	<addr>
-               	cmpq	$0x1e, %rax
-               	je	<addr>
-               	movl	$0x7, %eax
-               	popq	%rbp
-               	retq
-               	xorq	%rdi, %rdi
-               	callq	<addr>
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x8, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x9, %edi
-               	callq	<addr>
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x9, %eax
-               	popq	%rbp
-               	retq
+               	movl	$0x1e, %eax
+               	movl	$0x1, %eax
+               	movl	$0x1e, %eax
+               	movl	$0x1, %eax
+               	movl	$0x1e, %eax
                	xorq	%rax, %rax
-               	popq	%rbp
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
                	retq
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>

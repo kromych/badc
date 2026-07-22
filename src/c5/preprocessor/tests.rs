@@ -89,6 +89,19 @@ fn predefined_macros_expand() {
 }
 
 #[test]
+fn sizeof_int128_is_predefined() {
+    // Headers gate their own 128-bit typedefs on `__SIZEOF_INT128__`
+    // rather than probing for the type, so it is predefined
+    // unconditionally (not behind `--gnu`) and reads 16.
+    let probe = "#ifdef __SIZEOF_INT128__\nyes __SIZEOF_INT128__\n#else\nno\n#endif\n";
+    let out = process(probe);
+    assert!(
+        out.contains("yes 16"),
+        "expected __SIZEOF_INT128__ predefined as 16, got: {out}"
+    );
+}
+
+#[test]
 fn gnu_identity_macros_are_opt_in() {
     // `__GNUC__` and `__STRICT_ANSI__` are undefined by default.
     let probe = "#ifdef __GNUC__\nG yes\n#else\nG no\n#endif\n\
@@ -135,6 +148,36 @@ fn vendor_and_stdc_pragmas_are_silent() {
     pp2.process("#pragma frobnicate widgets\nint y;\n")
         .expect("preprocessor failed");
     assert!(!pp2.warnings.is_empty(), "unknown pragma should warn");
+}
+
+#[test]
+fn builtin_expect_is_predefined() {
+    // `__builtin_expect(exp, c)` is available with no header and no
+    // auto-include; the expansion is the first operand.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process("int f(int v) { return __builtin_expect(v > 1, 1); }\n")
+        .expect("preprocessor failed");
+    assert!(
+        out.contains("(v > 1)") && !out.contains("__builtin_expect"),
+        "expected the predefined expansion, got: {out}"
+    );
+}
+
+#[test]
+fn va_builtins_are_preregistered() {
+    // The __builtin_va_* intrinsics are registered with no header, so
+    // freestanding code reaches them directly; <stdarg.h>'s
+    // `#pragma intrinsic` re-registration maps to the same ids.
+    let pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    for name in [
+        "__builtin_va_start",
+        "__builtin_va_arg",
+        "__builtin_va_end",
+        "__builtin_va_copy",
+    ] {
+        assert!(pp.intrinsics.contains_key(name), "{name} not preregistered");
+    }
 }
 
 #[test]
@@ -1218,6 +1261,60 @@ fn macro_args_split_across_an_enclosing_conditional() {
     let src = "#define m(a,b) a+b\n#if 0\nint x = m(1,\n#else\nint x = m(2,\n#endif\n3);\n";
     let out = process(src);
     assert!(out.contains("2+3"), "{out}");
+}
+
+#[test]
+fn conditional_inside_macro_argument_list() {
+    // C99 6.10.3p11 leaves directives inside an argument list
+    // undefined; gcc and clang evaluate them and keep the surviving
+    // tokens as argument text. Output checked against gcc -E.
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#if 1\n2\n#else\n3\n#endif\n); }\n";
+    let out = process(src);
+    assert!(out.contains("f(1,2)") || out.contains("f(1, 2)"), "{out}");
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#if 0\n2\n#else\n3\n#endif\n); }\n";
+    let out = process(src);
+    assert!(out.contains("f(1,3)") || out.contains("f(1, 3)"), "{out}");
+}
+
+#[test]
+fn define_inside_macro_argument_list() {
+    // gcc processes a `#define` between macro arguments; the new name
+    // expands in the argument text. Output checked against gcc -E.
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#define TWO 2\nTWO\n); }\n";
+    let out = process(src);
+    assert!(out.contains("f(1,2)") || out.contains("f(1, 2)"), "{out}");
+    // The definition persists past the invocation.
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#define TWO 2\nTWO\n); }\nint t = TWO;\n";
+    let out = process(src);
+    assert!(out.contains("int t = 2;"), "{out}");
+}
+
+#[test]
+fn nested_conditionals_inside_macro_argument_list() {
+    // Output checked against gcc -E.
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(CALL(1,\n#if 1\n9\n#endif\n),\n#if 1\n#if 0\n5\n#else\n2\n#endif\n#else\n3\n#endif\n); }\n";
+    let out = process(src);
+    assert!(
+        out.contains("f(f(1,9),2)") || out.contains("f(f(1, 9), 2)"),
+        "{out}"
+    );
+}
+
+#[test]
+fn macro_argument_list_closed_inside_conditional_arm() {
+    // The call's `)` sits inside a conditional arm, so argument
+    // collection ends while the `#if` is still open and the `#endif`
+    // arrives after the invocation. The conditional stack is shared
+    // with the top level, matching gcc; a private per-invocation
+    // stack loses the open frame and misreports the trailing
+    // `#endif` as unmatched. Output checked against gcc -E.
+    for (cond, picked) in [("#ifdef ZZZ", "3"), ("#ifndef ZZZ", "2")] {
+        let src = format!(
+            "#define M(a) f(a)\nint g(int c) {{ return M(c ? 1 :\n{cond}\n2);\n#else\n3);\n#endif\n}}\n"
+        );
+        let out = process(&src);
+        assert!(out.contains(&format!("f(c ? 1 : {picked})")), "{out}");
+    }
 }
 
 #[test]

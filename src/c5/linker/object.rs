@@ -719,21 +719,38 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             rela_debug_line_idx = Some(i);
             continue;
         }
-        match classify_section_family(name) {
+        let family = match classify_section_family(name) {
+            // A name the fixed table does not know classifies by its
+            // header flags so named-section placements fold in.
+            SectionFamily::Other if sh.sh_type != SHT_RELA => {
+                classify_by_flags(sh.sh_type, sh.sh_flags)
+            }
+            f => f,
+        };
+        match family {
             SectionFamily::Text => text_section_indices.push(i),
             SectionFamily::Data => data_section_indices.push(i),
             SectionFamily::Bss => bss_section_indices.push(i),
             SectionFamily::Tdata => tdata_section_indices.push(i),
             SectionFamily::Tbss => tbss_section_indices.push(i),
             SectionFamily::Other => {
-                if let Some(target) = name.strip_prefix(".rela")
-                    && !matches!(classify_section_family(target), SectionFamily::Other)
-                {
+                if sh.sh_type == SHT_RELA && name.starts_with(".rela") {
+                    // Kept when its target section joined a family;
+                    // filtered below once every index is classified.
                     rela_section_indices.push(i);
                 }
             }
         }
     }
+    // Keep only relocation sections whose target (sh_info) joined a
+    // merged family; `.rela.debug_*` and `.rela.init_array*` were
+    // routed above / are handled by their own channels.
+    rela_section_indices.retain(|&i| {
+        let target = shdrs[i].sh_info as usize;
+        text_section_indices.contains(&target)
+            || data_section_indices.contains(&target)
+            || bss_section_indices.contains(&target)
+    });
     let symtab_sh_i = symtab_idx.ok_or_else(|| err("ELF object has no `.symtab` section"))?;
     let symtab_sh = &shdrs[symtab_sh_i];
 
@@ -752,6 +769,13 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                 "text-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
             )));
         }
+        // Pad to the section's alignment (at least instruction
+        // alignment): the `.text` tail carries an odd-length version
+        // marker, so a following named text section would otherwise
+        // land misaligned.
+        let align = (sh.sh_addralign.max(4)) as usize;
+        let padded = text_bytes.len().div_ceil(align) * align;
+        text_bytes.resize(padded, 0);
         let base = text_bytes.len() as u64;
         text_base_per_shndx.push((sh_i, base));
         text_bytes.extend_from_slice(section_slice(bytes, sh)?);
@@ -1443,6 +1467,27 @@ fn classify_section_family(name: &str) -> SectionFamily {
         SectionFamily::Tbss
     } else {
         SectionFamily::Other
+    }
+}
+
+/// Family for a section the name table does not recognise, from its
+/// header: an allocatable custom section (an
+/// `__attribute__((section("name")))` placement or an assembler
+/// `.pushsection` payload) folds into the merged blob by its flags.
+/// Non-allocatable and TLS-flagged strangers stay `Other`.
+fn classify_by_flags(sh_type: u32, sh_flags: u64) -> SectionFamily {
+    const SHF_WRITE: u64 = 0x1;
+    const SHF_ALLOC: u64 = 0x2;
+    const SHF_EXECINSTR: u64 = 0x4;
+    const SHF_TLS: u64 = 0x400;
+    if sh_flags & SHF_ALLOC == 0 || sh_flags & SHF_TLS != 0 {
+        return SectionFamily::Other;
+    }
+    match sh_type {
+        SHT_PROGBITS if sh_flags & SHF_EXECINSTR != 0 => SectionFamily::Text,
+        SHT_PROGBITS if sh_flags & (SHF_WRITE | SHF_ALLOC) != 0 => SectionFamily::Data,
+        SHT_NOBITS => SectionFamily::Bss,
+        _ => SectionFamily::Other,
     }
 }
 

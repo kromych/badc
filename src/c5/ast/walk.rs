@@ -11,14 +11,18 @@
 use alloc::string::String;
 
 use super::super::codegen::Target;
+use super::super::codegen::ssa::build::SsaBuilder;
 use super::super::compiler::types::{
-    STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty,
-    is_vector_ty, is_volatile_ty, load_kind, strip_unsigned, struct_ptr_depth,
+    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty,
+    is_vector_ty, is_volatile_ty, load_kind, segment_of_ty, strip_unsigned, struct_ptr_depth,
 };
-use super::super::ir::{AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind};
+use super::super::ir::{AsmSeg, AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind, ValueId};
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::{AtomicKind, Expr, ExprId, Stmt, StmtId, UnOp};
+
+/// The low and high 64-bit halves of a 128-bit value, in that order.
+type Halves = (ValueId, ValueId);
 
 /// Diagnostic for a shape the walker can't lower yet. Carries
 /// enough context to point at the offending AST node so the
@@ -29,6 +33,7 @@ pub(crate) enum WalkError {
     UnsupportedStmt { id: StmtId, kind: &'static str },
     UnknownSymbolClass { sym: u32, class: i64 },
     UnsupportedSymbolShape { sym: u32, reason: &'static str },
+    Unsupported(&'static str),
 }
 
 impl core::fmt::Display for WalkError {
@@ -46,6 +51,7 @@ impl core::fmt::Display for WalkError {
             WalkError::UnsupportedSymbolShape { sym, reason } => {
                 write!(f, "ast::walk: symbol #{sym}: {reason}")
             }
+            WalkError::Unsupported(reason) => write!(f, "ast::walk: {reason}"),
         }
     }
 }
@@ -80,9 +86,35 @@ pub(crate) fn walk_function(
     return_struct_size: i64,
     return_ty: i64,
     alloca_top_slot: i64,
+    over_aligned_slots: &[(i64, i64, i64)],
 ) -> Result<FunctionSsa, WalkError> {
     let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
     b.set_end_pc(end_pc);
+    // C11 6.7.5: automatic objects whose alignment exceeds the 16-byte frame
+    // guarantee live in a prologue-realigned region. Pack them (widest
+    // alignment first) into that region; every backend addresses these slots
+    // as `region_base + region_off`. The region and `alloca` both move sp, so
+    // the combination is rejected.
+    if !over_aligned_slots.is_empty() {
+        if alloca_top_slot != 0 {
+            return Err(WalkError::Unsupported(
+                "an over-aligned automatic object cannot share a function with alloca/VLA",
+            ));
+        }
+        let mut items: alloc::vec::Vec<(i64, i64, i64)> = over_aligned_slots.to_vec();
+        items.sort_by_key(|&(_, align, _)| core::cmp::Reverse(align));
+        let mut frame_align: i64 = 16;
+        let mut cursor: i64 = 0;
+        let mut placed: alloc::vec::Vec<(i64, i64)> = alloc::vec::Vec::new();
+        for (slot, align, size) in items {
+            frame_align = frame_align.max(align);
+            cursor = (cursor + align - 1) & -align;
+            placed.push((slot, cursor));
+            cursor += size;
+        }
+        let region_bytes = (cursor + frame_align - 1) & -frame_align;
+        b.set_realign(placed, frame_align, region_bytes);
+    }
     // C99 6.8: the frame holds the declared locals; alloca / VLA
     // storage is carved from the stack at runtime (the per-arch
     // emit moves sp), so no extra slots are reserved for it. With
@@ -793,6 +825,759 @@ impl<'a> Walker<'a> {
         Ok(dst)
     }
 
+    /// Load the two 64-bit halves of the 128-bit object at `addr`
+    /// (little-endian: low half first).
+    fn int128_load(&mut self, b: &mut SsaBuilder, addr: ValueId) -> Halves {
+        let lo = b.load(addr, LoadKind::I64);
+        let hi_addr = b.binop_imm(BinOp::Add, addr, 8);
+        let hi = b.load(hi_addr, LoadKind::I64);
+        (lo, hi)
+    }
+
+    /// Store a lo/hi half pair into the 128-bit object at `addr`.
+    fn int128_store(&mut self, b: &mut SsaBuilder, addr: ValueId, (lo, hi): Halves) {
+        b.store(addr, lo, StoreKind::I64);
+        let hi_addr = b.binop_imm(BinOp::Add, addr, 8);
+        b.store(hi_addr, hi, StoreKind::I64);
+    }
+
+    /// Materialise a half pair as a fresh 16-byte object and return its
+    /// address (the struct-rvalue address-as-value rule).
+    fn int128_materialize(&mut self, b: &mut SsaBuilder, pair: Halves) -> ValueId {
+        let slot = b.alloc_synthetic_struct(16);
+        let addr = b.local_addr(slot);
+        self.int128_store(b, addr, pair);
+        addr
+    }
+
+    /// Walk one operand of a 128-bit operation into a half pair. An
+    /// int128-typed operand is an address to load through; a scalar
+    /// converts per C99 6.3.1.3 (widen to 64 bits, then sign- or
+    /// zero-fill the high half, mirroring `store_scalar_as_int128`).
+    fn int128_operand(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<Halves, WalkError> {
+        let ty = expr_ty(self.ast.expr(id)).unwrap_or(Ty::Int as i64);
+        let is128 = self.expr_is_int128_value(id);
+        let v = self.walk_expr_rvalue(b, id)?;
+        if is128 {
+            return Ok(self.int128_load(b, v));
+        }
+        let ty = if self.is_int128_value_ty(ty) {
+            Ty::Int as i64
+        } else {
+            ty
+        };
+        let low_ty = Ty::LongLong as i64 | (ty & UNSIGNED_BIT);
+        let lo = self.convert_scalar_value(b, v, ty, low_ty);
+        let hi = if (ty & UNSIGNED_BIT) != 0 || is_pointer_ty(ty) {
+            b.imm(0)
+        } else {
+            b.binop_imm(BinOp::Shr, lo, 63)
+        };
+        Ok((lo, hi))
+    }
+
+    /// 128-bit addition: 64-bit halves with the carry recovered from
+    /// the unsigned low-half compare (`lo < a.lo` iff the add wrapped).
+    fn int128_add(b: &mut SsaBuilder, a: Halves, c: Halves) -> Halves {
+        let lo = b.binop(BinOp::Add, a.0, c.0);
+        let carry = b.binop(BinOp::Ult, lo, a.0);
+        let hi = b.binop(BinOp::Add, a.1, c.1);
+        let hi = b.binop(BinOp::Add, hi, carry);
+        (lo, hi)
+    }
+
+    /// 128-bit subtraction with the borrow from the unsigned low-half
+    /// compare.
+    fn int128_sub(b: &mut SsaBuilder, a: Halves, c: Halves) -> Halves {
+        let borrow = b.binop(BinOp::Ult, a.0, c.0);
+        let lo = b.binop(BinOp::Sub, a.0, c.0);
+        let hi = b.binop(BinOp::Sub, a.1, c.1);
+        let hi = b.binop(BinOp::Sub, hi, borrow);
+        (lo, hi)
+    }
+
+    /// 128-bit two's-complement negation (`0 - a`).
+    fn int128_neg(b: &mut SsaBuilder, a: Halves) -> Halves {
+        let zero = b.imm(0);
+        Self::int128_sub(b, (zero, zero), a)
+    }
+
+    /// `(a ^ m) - m` where `m` is 0 or all-ones in both halves: the
+    /// branchless conditional negation used by the signed divide.
+    fn int128_xor_sub(b: &mut SsaBuilder, a: Halves, m: ValueId) -> Halves {
+        let lo = b.binop(BinOp::Xor, a.0, m);
+        let hi = b.binop(BinOp::Xor, a.1, m);
+        Self::int128_sub(b, (lo, hi), (m, m))
+    }
+
+    /// 128-bit shift by a runtime count. `op` is `Shl`, `Shru`, or
+    /// `Shr` (arithmetic). The count is reduced mod 128 (matching the
+    /// per-arch 64-bit shifter's mod-64 rule one level up); the two
+    /// count ranges ([0,63] and [64,127]) are computed branchlessly and
+    /// selected by mask. Sub-shifts stay in [0,63] so every 64-bit
+    /// shift below is defined on all backends: `x >> (64-t)` is written
+    /// `(x >> (63-t)) >> 1`, which is 0 at `t = 0` as required.
+    fn int128_shift(b: &mut SsaBuilder, op: BinOp, a: Halves, count: ValueId) -> Halves {
+        let s = b.binop_imm(BinOp::And, count, 127);
+        let t = b.binop_imm(BinOp::And, s, 63);
+        let inv = {
+            let k = b.imm(63);
+            b.binop(BinOp::Sub, k, t)
+        };
+        // big = 1 when the count is in [64,127]; mask = all-ones then.
+        let big = b.binop_imm(BinOp::Shru, s, 6);
+        let mask = {
+            let zero = b.imm(0);
+            b.binop(BinOp::Sub, zero, big)
+        };
+        let nmask = b.binop_imm(BinOp::Xor, mask, -1);
+        let sel = |b: &mut SsaBuilder, small: ValueId, large: ValueId| {
+            let x = b.binop(BinOp::And, small, nmask);
+            let y = b.binop(BinOp::And, large, mask);
+            b.binop(BinOp::Or, x, y)
+        };
+        match op {
+            BinOp::Shl => {
+                let l1 = b.binop(BinOp::Shl, a.0, t);
+                let c = b.binop(BinOp::Shru, a.0, inv);
+                let c = b.binop_imm(BinOp::Shru, c, 1);
+                let h = b.binop(BinOp::Shl, a.1, t);
+                let h1 = b.binop(BinOp::Or, h, c);
+                let zero = b.imm(0);
+                (sel(b, l1, zero), sel(b, h1, l1))
+            }
+            BinOp::Shru => {
+                let h1 = b.binop(BinOp::Shru, a.1, t);
+                let c = b.binop(BinOp::Shl, a.1, inv);
+                let c = b.binop_imm(BinOp::Shl, c, 1);
+                let l = b.binop(BinOp::Shru, a.0, t);
+                let l1 = b.binop(BinOp::Or, l, c);
+                let zero = b.imm(0);
+                (sel(b, l1, h1), sel(b, h1, zero))
+            }
+            _ => {
+                // Arithmetic: the emptied high half fills with the sign.
+                let h1 = b.binop(BinOp::Shr, a.1, t);
+                let c = b.binop(BinOp::Shl, a.1, inv);
+                let c = b.binop_imm(BinOp::Shl, c, 1);
+                let l = b.binop(BinOp::Shru, a.0, t);
+                let l1 = b.binop(BinOp::Or, l, c);
+                let sign = b.binop_imm(BinOp::Shr, a.1, 63);
+                (sel(b, l1, h1), sel(b, h1, sign))
+            }
+        }
+    }
+
+    /// 128-bit shift by a constant count (folded form of
+    /// [`Self::int128_shift`]).
+    fn int128_shift_const(b: &mut SsaBuilder, op: BinOp, a: Halves, count: i64) -> Halves {
+        let k = count & 127;
+        if k == 0 {
+            return a;
+        }
+        match op {
+            BinOp::Shl => {
+                if k < 64 {
+                    let lo = b.binop_imm(BinOp::Shl, a.0, k);
+                    let h = b.binop_imm(BinOp::Shl, a.1, k);
+                    let c = b.binop_imm(BinOp::Shru, a.0, 64 - k);
+                    (lo, b.binop(BinOp::Or, h, c))
+                } else {
+                    let zero = b.imm(0);
+                    (zero, b.binop_imm(BinOp::Shl, a.0, k - 64))
+                }
+            }
+            BinOp::Shru => {
+                if k < 64 {
+                    let hi = b.binop_imm(BinOp::Shru, a.1, k);
+                    let l = b.binop_imm(BinOp::Shru, a.0, k);
+                    let c = b.binop_imm(BinOp::Shl, a.1, 64 - k);
+                    (b.binop(BinOp::Or, l, c), hi)
+                } else {
+                    let lo = b.binop_imm(BinOp::Shru, a.1, k - 64);
+                    (lo, b.imm(0))
+                }
+            }
+            _ => {
+                if k < 64 {
+                    let hi = b.binop_imm(BinOp::Shr, a.1, k);
+                    let l = b.binop_imm(BinOp::Shru, a.0, k);
+                    let c = b.binop_imm(BinOp::Shl, a.1, 64 - k);
+                    (b.binop(BinOp::Or, l, c), hi)
+                } else {
+                    let lo = b.binop_imm(BinOp::Shr, a.1, k - 64);
+                    (lo, b.binop_imm(BinOp::Shr, a.1, 63))
+                }
+            }
+        }
+    }
+
+    /// High 64 bits of the unsigned 64x64 product, composed from the
+    /// four 32-bit partial products. Built from ops every backend
+    /// already has, so the VM, the JIT and both native targets agree by
+    /// construction.
+    // TODO: a widening-multiply opcode would fold this to one
+    // instruction (x86_64 `mul`, aarch64 `umulh`).
+    fn int128_mulhi_u(b: &mut SsaBuilder, x: ValueId, y: ValueId) -> ValueId {
+        const LOW32: i64 = 0xffff_ffff;
+        let x0 = b.binop_imm(BinOp::And, x, LOW32);
+        let x1 = b.binop_imm(BinOp::Shru, x, 32);
+        let y0 = b.binop_imm(BinOp::And, y, LOW32);
+        let y1 = b.binop_imm(BinOp::Shru, y, 32);
+        let carry = {
+            let p = b.binop(BinOp::Mul, x0, y0);
+            b.binop_imm(BinOp::Shru, p, 32)
+        };
+        let mid = {
+            let p = b.binop(BinOp::Mul, x1, y0);
+            b.binop(BinOp::Add, p, carry)
+        };
+        let mid_lo = b.binop_imm(BinOp::And, mid, LOW32);
+        let mid_hi = b.binop_imm(BinOp::Shru, mid, 32);
+        let mid2_hi = {
+            let p = b.binop(BinOp::Mul, x0, y1);
+            let s = b.binop(BinOp::Add, p, mid_lo);
+            b.binop_imm(BinOp::Shru, s, 32)
+        };
+        let hi = b.binop(BinOp::Mul, x1, y1);
+        let hi = b.binop(BinOp::Add, hi, mid_hi);
+        b.binop(BinOp::Add, hi, mid2_hi)
+    }
+
+    /// 128-bit multiply. The low half is the 64-bit product of the low
+    /// halves; the high half adds that product's carry-out to the two
+    /// cross terms. The `a.hi * c.hi` term only reaches bit 128 and up,
+    /// so it is dropped (C99 6.2.5p9: the result wraps mod 2^128).
+    fn int128_mul(b: &mut SsaBuilder, a: Halves, c: Halves) -> Halves {
+        let lo = b.binop(BinOp::Mul, a.0, c.0);
+        let hi = Self::int128_mulhi_u(b, a.0, c.0);
+        let cross0 = b.binop(BinOp::Mul, a.0, c.1);
+        let cross1 = b.binop(BinOp::Mul, a.1, c.0);
+        let hi = b.binop(BinOp::Add, hi, cross0);
+        let hi = b.binop(BinOp::Add, hi, cross1);
+        (lo, hi)
+    }
+
+    /// Unsigned 128-bit divide, returning `(quotient, remainder)`.
+    ///
+    /// Operands that both fit in 64 bits take the hardware divide. The
+    /// general case is a restoring shift-subtract over the 128 bits:
+    /// the dividend shifts left out of `n` into the running remainder
+    /// while the quotient bits shift into `n` from below, so both
+    /// results share one register pair. The body is branchless (the
+    /// compare feeds a 0/-1 mask), leaving one loop-carried branch.
+    ///
+    /// This is lowered inline rather than as a call to a runtime helper
+    /// because the same lowering then serves the VM, the JIT and both
+    /// native targets, with no helper to link into freestanding images.
+    ///
+    /// A zero divisor is undefined (C99 6.5.5p5), as for the 64-bit
+    /// operators: the hardware path traps and the loop yields all-ones.
+    fn int128_udivmod(&mut self, b: &mut SsaBuilder, a: Halves, c: Halves) -> (Halves, Halves) {
+        let q_lo = b.alloc_synthetic_local();
+        let q_hi = b.alloc_synthetic_local();
+        let r_lo = b.alloc_synthetic_local();
+        let r_hi = b.alloc_synthetic_local();
+        let sk = StoreKind::I64;
+        let lk = LoadKind::I64;
+
+        let wide = b.binop(BinOp::Or, a.1, c.1);
+        let narrow_blk = b.new_block();
+        let wide_blk = b.new_block();
+        let done_blk = b.new_block();
+        b.branch_zero(wide, narrow_blk, wide_blk);
+
+        b.switch_to(narrow_blk);
+        let q = b.binop(BinOp::Divu, a.0, c.0);
+        let r = b.binop(BinOp::Modu, a.0, c.0);
+        let zero = b.imm(0);
+        b.store_local(q_lo, q, sk);
+        b.store_local(q_hi, zero, sk);
+        b.store_local(r_lo, r, sk);
+        b.store_local(r_hi, zero, sk);
+        b.jmp(done_blk);
+
+        b.switch_to(wide_blk);
+        let zero = b.imm(0);
+        b.store_local(q_lo, a.0, sk);
+        b.store_local(q_hi, a.1, sk);
+        b.store_local(r_lo, zero, sk);
+        b.store_local(r_hi, zero, sk);
+        let counter = b.alloc_synthetic_local();
+        let n = b.imm(128);
+        b.store_local(counter, n, sk);
+        let head_blk = b.new_block();
+        let body_blk = b.new_block();
+        b.jmp(head_blk);
+
+        b.switch_to(head_blk);
+        let i = b.load_local(counter, lk);
+        b.branch_zero(i, done_blk, body_blk);
+
+        b.switch_to(body_blk);
+        let nl = b.load_local(q_lo, lk);
+        let nh = b.load_local(q_hi, lk);
+        let rl = b.load_local(r_lo, lk);
+        let rh = b.load_local(r_hi, lk);
+        let top = b.binop_imm(BinOp::Shru, nh, 63);
+        let rem = Self::int128_shift_const(b, BinOp::Shl, (rl, rh), 1);
+        let rem = (b.binop(BinOp::Or, rem.0, top), rem.1);
+        let num = Self::int128_shift_const(b, BinOp::Shl, (nl, nh), 1);
+        let fits = Self::int128_cmp(b, BinOp::Uge, rem, c);
+        let mask = {
+            let zero = b.imm(0);
+            b.binop(BinOp::Sub, zero, fits)
+        };
+        let sub = (
+            b.binop(BinOp::And, c.0, mask),
+            b.binop(BinOp::And, c.1, mask),
+        );
+        let rem = Self::int128_sub(b, rem, sub);
+        let num_lo = b.binop(BinOp::Or, num.0, fits);
+        b.store_local(q_lo, num_lo, sk);
+        b.store_local(q_hi, num.1, sk);
+        b.store_local(r_lo, rem.0, sk);
+        b.store_local(r_hi, rem.1, sk);
+        let next = b.binop_imm(BinOp::Sub, i, 1);
+        b.store_local(counter, next, sk);
+        b.jmp(head_blk);
+
+        b.switch_to(done_blk);
+        let q = (b.load_local(q_lo, lk), b.load_local(q_hi, lk));
+        let r = (b.load_local(r_lo, lk), b.load_local(r_hi, lk));
+        (q, r)
+    }
+
+    /// Signed 128-bit divide, returning `(quotient, remainder)`.
+    /// Divides the magnitudes and restores the signs: the quotient is
+    /// negative when the operand signs differ and the remainder takes
+    /// the dividend's sign (C99 6.5.5p6, truncation toward zero).
+    fn int128_sdivmod(&mut self, b: &mut SsaBuilder, a: Halves, c: Halves) -> (Halves, Halves) {
+        let sa = b.binop_imm(BinOp::Shr, a.1, 63);
+        let sc = b.binop_imm(BinOp::Shr, c.1, 63);
+        let ua = Self::int128_xor_sub(b, a, sa);
+        let uc = Self::int128_xor_sub(b, c, sc);
+        let (q, r) = self.int128_udivmod(b, ua, uc);
+        let qs = b.binop(BinOp::Xor, sa, sc);
+        let q = Self::int128_xor_sub(b, q, qs);
+        let r = Self::int128_xor_sub(b, r, sa);
+        (q, r)
+    }
+
+    /// 128-bit comparison, yielding 0/1. Equality folds the XOR of
+    /// both halves; orderings decide on the high half and fall back to
+    /// the unsigned low half on a tie (C99 6.5.8). The high-half
+    /// compare is signed or unsigned per `op`.
+    fn int128_cmp(b: &mut SsaBuilder, op: BinOp, a: Halves, c: Halves) -> ValueId {
+        match op {
+            BinOp::Eq | BinOp::Ne => {
+                let xl = b.binop(BinOp::Xor, a.0, c.0);
+                let xh = b.binop(BinOp::Xor, a.1, c.1);
+                let x = b.binop(BinOp::Or, xl, xh);
+                b.binop_imm(op, x, 0)
+            }
+            _ => {
+                // Reduce to `<`: swap operands for Gt/Ugt, invert the
+                // result for Ge/Le (a <= b iff !(b < a)).
+                let (x, y, invert, hi_op) = match op {
+                    BinOp::Lt => (a, c, false, BinOp::Lt),
+                    BinOp::Gt => (c, a, false, BinOp::Lt),
+                    BinOp::Ge => (a, c, true, BinOp::Lt),
+                    BinOp::Le => (c, a, true, BinOp::Lt),
+                    BinOp::Ult => (a, c, false, BinOp::Ult),
+                    BinOp::Ugt => (c, a, false, BinOp::Ult),
+                    BinOp::Uge => (a, c, true, BinOp::Ult),
+                    _ => (c, a, true, BinOp::Ult), // Ule
+                };
+                let hi_lt = b.binop(hi_op, x.1, y.1);
+                let hi_eq = b.binop(BinOp::Eq, x.1, y.1);
+                let lo_lt = b.binop(BinOp::Ult, x.0, y.0);
+                let tie = b.binop(BinOp::And, hi_eq, lo_lt);
+                let lt = b.binop(BinOp::Or, hi_lt, tie);
+                if invert {
+                    b.binop_imm(BinOp::Xor, lt, 1)
+                } else {
+                    lt
+                }
+            }
+        }
+    }
+
+    /// Reinterpret a value's bits across the integer / FP register
+    /// banks through an 8-byte stack slot. The `F64` load and store
+    /// kinds are defined as single moves with no widen or narrow, so
+    /// the round trip is bit-exact on every backend. Used by the
+    /// 128-bit / floating conversions, which assemble and dissect an
+    /// IEEE-754 double with integer arithmetic.
+    fn fp_bitcast(
+        &mut self,
+        b: &mut SsaBuilder,
+        v: ValueId,
+        store: StoreKind,
+        load: LoadKind,
+    ) -> ValueId {
+        let slot = b.alloc_synthetic_struct(8);
+        let addr = b.local_addr(slot);
+        b.store(addr, v, store);
+        b.load(addr, load)
+    }
+
+    /// One-based index of the most significant set bit of `x`, and 1
+    /// for `x == 0`. Branchless binary search: the IR has no
+    /// count-leading-zeros opcode, and every step shifts by a value
+    /// in [0,63] so the per-arch shifter's mod-64 rule never applies.
+    fn bit_length_64(b: &mut SsaBuilder, x: ValueId) -> ValueId {
+        let mut len = b.imm(1);
+        let mut cur = x;
+        for k in [32, 16, 8, 4, 2, 1] {
+            let y = b.binop_imm(BinOp::Shru, cur, k);
+            let c = b.binop_imm(BinOp::Ne, y, 0);
+            let s = b.binop_imm(BinOp::Mul, c, k);
+            len = b.binop(BinOp::Add, len, s);
+            cur = b.binop(BinOp::Shru, cur, s);
+        }
+        len
+    }
+
+    /// Convert the 128-bit integer `a` to `double`, or to `float` when
+    /// `to_float`, with the single round-to-nearest-even C99 6.3.1.4
+    /// requires (the result is the representable value nearest the
+    /// operand).
+    ///
+    /// The magnitude is pre-reduced to its top 64 significant bits with
+    /// the discarded bits collapsed into a sticky bit at position 0,
+    /// then converted once by the hardware unsigned converter and
+    /// scaled by the exact power of two that was shifted out. Position
+    /// 0 sits below the converter's own rounding position, and the
+    /// sticky bit preserves whether anything below the round bit was
+    /// set, so the pre-reduction cannot change which way the single
+    /// rounding goes. Scaling by a power of two is exact, so no second
+    /// rounding occurs.
+    fn int128_to_fp(
+        &mut self,
+        b: &mut SsaBuilder,
+        a: Halves,
+        signed: bool,
+        to_float: bool,
+    ) -> ValueId {
+        // A signed operand converts its magnitude and carries the sign
+        // into the scale factor; round-to-nearest-even is symmetric
+        // about zero, so the result matches converting the operand.
+        let (mag, sign_bit) = if signed {
+            let sgn = b.binop_imm(BinOp::Shr, a.1, 63);
+            let m = Self::int128_xor_sub(b, a, sgn);
+            let s = b.binop_imm(BinOp::And, sgn, i64::MIN);
+            (m, s)
+        } else {
+            (a, b.imm(0))
+        };
+        // Shift count that leaves exactly 64 significant bits, and 0
+        // when the magnitude already fits in 64 (the high half is then
+        // zero and no bits are discarded).
+        let hnz = b.binop_imm(BinOp::Ne, mag.1, 0);
+        let bl = Self::bit_length_64(b, mag.1);
+        let sh = b.binop(BinOp::Mul, bl, hnz);
+        // Sticky bit over the `sh` discarded low bits. The mask is
+        // built by shifting right rather than by `(1 << sh) - 1` so the
+        // count stays in [0,63]; it is forced to zero at `sh == 0`,
+        // where nothing is discarded.
+        let inv = {
+            let k = b.imm(64);
+            let d = b.binop(BinOp::Sub, k, sh);
+            b.binop_imm(BinOp::And, d, 63)
+        };
+        let mask = {
+            let ones = b.imm(-1);
+            let m = b.binop(BinOp::Shru, ones, inv);
+            let nz = b.binop_imm(BinOp::Ne, sh, 0);
+            b.binop(BinOp::Mul, m, nz)
+        };
+        let sticky = {
+            let dropped = b.binop(BinOp::And, mag.0, mask);
+            b.binop_imm(BinOp::Ne, dropped, 0)
+        };
+        let top = Self::int128_shift(b, BinOp::Shru, mag, sh).0;
+        let t = b.binop(BinOp::Or, top, sticky);
+        // The single rounding. A `float` result rounds to single
+        // precision here; the scaling below is exact, so narrowing the
+        // scaled product back to `float` does not round again.
+        let d = if to_float {
+            let f = b.fp_cast_to_f32(super::super::ir::FpCastKind::UIntToFp, t);
+            b.fp_widen_to_f64(f)
+        } else {
+            b.fp_cast(super::super::ir::FpCastKind::UIntToFp, t)
+        };
+        // Scale by +/- 2^sh, assembled as an IEEE-754 double: `sh` is
+        // at most 64, so the biased exponent stays in range.
+        let scale = {
+            let e = b.binop_imm(BinOp::Add, sh, 1023);
+            let bits = b.binop_imm(BinOp::Shl, e, 52);
+            let signed_bits = b.binop(BinOp::Or, bits, sign_bit);
+            self.fp_bitcast(b, signed_bits, StoreKind::I64, LoadKind::F64)
+        };
+        let r = b.binop(BinOp::Fmul, d, scale);
+        if to_float { b.fp_narrow_to_f32(r) } else { r }
+    }
+
+    /// Convert the floating value `v` to a 128-bit integer, truncating
+    /// toward zero (C99 6.3.1.4). The operand is dissected into its
+    /// IEEE-754 exponent and significand and the significand is shifted
+    /// into place, which discards the fraction exactly.
+    ///
+    /// C99 leaves an operand whose truncated value is out of range --
+    /// including an infinity or a NaN, and any negative operand
+    /// converted to the unsigned type -- undefined, and gcc and clang
+    /// differ from each other and between targets there. This lowering
+    /// saturates instead: a negative operand converted to the unsigned
+    /// type yields 0, and anything else out of range yields the target
+    /// type's minimum or maximum by the operand's sign. That is total,
+    /// deterministic, and identical across every backend and target,
+    /// and it matches the runtime routines both compilers call when
+    /// they do not expand the conversion inline.
+    fn fp_to_int128(&mut self, b: &mut SsaBuilder, v: ValueId, signed: bool) -> Halves {
+        // A `float` operand widens to double exactly, so one dissection
+        // serves both source types.
+        let d = b.fp_widen_to_f64(v);
+        let bits = self.fp_bitcast(b, d, StoreKind::F64, LoadKind::I64);
+        let sign = b.binop_imm(BinOp::Shr, bits, 63);
+        let abs = b.binop_imm(BinOp::And, bits, i64::MAX);
+        let exp = {
+            let e = b.binop_imm(BinOp::Shru, abs, 52);
+            b.binop_imm(BinOp::Sub, e, 1023)
+        };
+        let sig = {
+            let frac = b.binop_imm(BinOp::And, abs, (1i64 << 52) - 1);
+            b.binop_imm(BinOp::Or, frac, 1i64 << 52)
+        };
+        // The significand carries a factor of 2^52, so the value is
+        // `sig << (exp - 52)`; a negative count shifts right, which
+        // drops the fraction bits and truncates toward zero.
+        let k = b.binop_imm(BinOp::Sub, exp, 52);
+        let kneg = b.binop_imm(BinOp::Shr, k, 63);
+        let kabs = {
+            let x = b.binop(BinOp::Xor, k, kneg);
+            b.binop(BinOp::Sub, x, kneg)
+        };
+        let zero = b.imm(0);
+        let left = Self::int128_shift(b, BinOp::Shl, (sig, zero), kabs);
+        let right = Self::int128_shift(b, BinOp::Shru, (sig, zero), kabs);
+        let sel = |b: &mut SsaBuilder, small: ValueId, large: ValueId, m: ValueId| {
+            let nm = b.binop_imm(BinOp::Xor, m, -1);
+            let x = b.binop(BinOp::And, small, nm);
+            let y = b.binop(BinOp::And, large, m);
+            b.binop(BinOp::Or, x, y)
+        };
+        let mag = (sel(b, left.0, right.0, kneg), sel(b, left.1, right.1, kneg));
+        // `|v| < 1` truncates to zero. This also covers zero, the
+        // subnormals, and the out-of-range shift counts the dissection
+        // produces for them.
+        let keep = {
+            let neg_exp = b.binop_imm(BinOp::Shr, exp, 63);
+            b.binop_imm(BinOp::Xor, neg_exp, -1)
+        };
+        let mag = (
+            b.binop(BinOp::And, mag.0, keep),
+            b.binop(BinOp::And, mag.1, keep),
+        );
+        // Out of range once the magnitude reaches 2^128. An infinity
+        // and a NaN both land here, their exponent field being the
+        // maximum. The signed conversion uses the same limit so a
+        // magnitude in [2^127, 2^128) wraps to a negative result rather
+        // than saturating; that keeps -2^127 exact and matches gcc and
+        // clang, which agree on this case across targets.
+        let over = {
+            let o = b.binop_imm(BinOp::Ge, exp, 128);
+            let z = b.imm(0);
+            b.binop(BinOp::Sub, z, o)
+        };
+        if signed {
+            let mag = Self::int128_xor_sub(b, mag, sign);
+            let sat_lo = {
+                let ones = b.imm(-1);
+                b.binop(BinOp::Xor, ones, sign)
+            };
+            let sat_hi = {
+                let max = b.imm(i64::MAX);
+                b.binop(BinOp::Xor, max, sign)
+            };
+            (sel(b, mag.0, sat_lo, over), sel(b, mag.1, sat_hi, over))
+        } else {
+            let ones = b.imm(-1);
+            let r = (sel(b, mag.0, ones, over), sel(b, mag.1, ones, over));
+            // A negative operand yields 0 rather than the wrapped
+            // magnitude.
+            let keep_pos = b.binop_imm(BinOp::Xor, sign, -1);
+            (
+                b.binop(BinOp::And, r.0, keep_pos),
+                b.binop(BinOp::And, r.1, keep_pos),
+            )
+        }
+    }
+
+    /// True when the expression's *value* is a 128-bit integer.
+    fn expr_is_int128_value(&self, id: ExprId) -> bool {
+        expr_ty(self.ast.expr(id)).is_some_and(|t| self.is_int128_value_ty(t))
+    }
+
+    /// True when either operand of a binary node is a 128-bit value, so
+    /// the node lowers through [`Self::walk_int128_binary`].
+    fn is_int128_binary(&self, lhs: ExprId, rhs: ExprId) -> bool {
+        self.expr_is_int128_value(lhs) || self.expr_is_int128_value(rhs)
+    }
+
+    /// Lower `Expr::Binary` with a 128-bit operand. Comparisons yield a
+    /// scalar 0/1; every other operator yields the address of a fresh
+    /// 16-byte result object, matching how a struct rvalue is produced.
+    /// The shift count stays scalar (C99 6.5.7 applies the integer
+    /// promotions to each operand separately, not the usual arithmetic
+    /// conversions across them); an int128-typed count contributes its
+    /// low half.
+    fn walk_int128_binary(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: BinOp,
+        lhs: ExprId,
+        rhs: ExprId,
+    ) -> Result<ValueId, WalkError> {
+        match op {
+            BinOp::Eq
+            | BinOp::Ne
+            | BinOp::Lt
+            | BinOp::Gt
+            | BinOp::Le
+            | BinOp::Ge
+            | BinOp::Ult
+            | BinOp::Ugt
+            | BinOp::Ule
+            | BinOp::Uge => {
+                let a = self.int128_operand(b, lhs)?;
+                let c = self.int128_operand(b, rhs)?;
+                Ok(Self::int128_cmp(b, op, a, c))
+            }
+            _ => {
+                let a = self.int128_operand(b, lhs)?;
+                let pair = self.int128_binary_pair(b, op, a, lhs, rhs)?;
+                Ok(self.int128_materialize(b, pair))
+            }
+        }
+    }
+
+    /// Apply a value-producing 128-bit operator to an already-loaded
+    /// left operand. Shared by `Expr::Binary` and the compound
+    /// assignment, which differ only in where the left operand and the
+    /// result live. `lhs` is carried for diagnostics only.
+    fn int128_binary_pair(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: BinOp,
+        a: Halves,
+        lhs: ExprId,
+        rhs: ExprId,
+    ) -> Result<Halves, WalkError> {
+        match op {
+            BinOp::Shl | BinOp::Shr | BinOp::Shru => {
+                let cnt = self.int128_shift_count(b, rhs)?;
+                Ok(match b.peek_imm(cnt) {
+                    Some(k) => Self::int128_shift_const(b, op, a, k),
+                    None => Self::int128_shift(b, op, a, cnt),
+                })
+            }
+            BinOp::Add | BinOp::Sub => {
+                let c = self.int128_operand(b, rhs)?;
+                Ok(if matches!(op, BinOp::Add) {
+                    Self::int128_add(b, a, c)
+                } else {
+                    Self::int128_sub(b, a, c)
+                })
+            }
+            BinOp::And | BinOp::Or | BinOp::Xor => {
+                let c = self.int128_operand(b, rhs)?;
+                let lo = b.binop(op, a.0, c.0);
+                let hi = b.binop(op, a.1, c.1);
+                Ok((lo, hi))
+            }
+            BinOp::Mul => {
+                // The parser spells unary minus as `x * -1`; negation
+                // is three ops where the full product is seventeen.
+                if let Expr::IntLit { val: -1, .. } = self.ast.expr(rhs) {
+                    return Ok(Self::int128_neg(b, a));
+                }
+                let c = self.int128_operand(b, rhs)?;
+                Ok(Self::int128_mul(b, a, c))
+            }
+            BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu => {
+                let c = self.int128_operand(b, rhs)?;
+                let (q, r) = if matches!(op, BinOp::Div | BinOp::Mod) {
+                    self.int128_sdivmod(b, a, c)
+                } else {
+                    self.int128_udivmod(b, a, c)
+                };
+                Ok(if matches!(op, BinOp::Div | BinOp::Divu) {
+                    q
+                } else {
+                    r
+                })
+            }
+            _ => Err(WalkError::UnsupportedExpr {
+                id: lhs,
+                kind: "128-bit operator",
+            }),
+        }
+    }
+
+    /// Lower `++E` / `--E` (and their postfix forms) on a 128-bit
+    /// object. `by` carries the direction's sign, so both spellings are
+    /// one 128-bit add. C99 6.5.2.4p2 / 6.5.3.1p2: the postfix form's
+    /// value is the object's prior value, which is copied out before the
+    /// update since a 128-bit value is carried as an address.
+    fn walk_int128_inc(
+        &mut self,
+        b: &mut SsaBuilder,
+        lvalue: ExprId,
+        by: i64,
+        postfix: bool,
+    ) -> Result<ValueId, WalkError> {
+        let addr = self.walk_expr_lvalue(b, lvalue)?;
+        let old = self.int128_load(b, addr);
+        let saved = postfix.then(|| self.int128_materialize(b, old));
+        let step = {
+            let lo = b.imm(by);
+            (lo, b.imm(by >> 63))
+        };
+        let new = Self::int128_add(b, old, step);
+        self.int128_store(b, addr, new);
+        Ok(saved.unwrap_or(addr))
+    }
+
+    /// Lower `E1 op= E2` where `E1` is a 128-bit object: evaluate the
+    /// lvalue once (C99 6.5.16.2p3), apply the operator to its value,
+    /// and store back. The expression's value is the object's address,
+    /// the same shape a 128-bit rvalue takes everywhere else.
+    fn walk_int128_compound_assign(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: BinOp,
+        lhs: ExprId,
+        rhs: ExprId,
+    ) -> Result<ValueId, WalkError> {
+        let addr = self.walk_expr_lvalue(b, lhs)?;
+        let a = self.int128_load(b, addr);
+        let pair = self.int128_binary_pair(b, op, a, lhs, rhs)?;
+        self.int128_store(b, addr, pair);
+        Ok(addr)
+    }
+
+    /// Shift count for a 128-bit shift: a scalar rvalue, or the low
+    /// half of an int128-typed count.
+    fn int128_shift_count(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<ValueId, WalkError> {
+        let is128 = self.expr_is_int128_value(id);
+        let v = self.walk_expr_rvalue(b, id)?;
+        if is128 {
+            return Ok(b.load(v, LoadKind::I64));
+        }
+        Ok(v)
+    }
+
     /// Walk a statement. Returns `true` when the statement
     /// terminates the current block (an unconditional return /
     /// jmp), letting the caller stop iterating siblings that
@@ -1431,14 +2216,21 @@ impl<'a> Walker<'a> {
     /// low half and its sign fills the high half (C99 6.3.1.3/6.3.1.8
     /// widening). Shared by the cast, initializer, and assignment paths,
     /// which otherwise treat the scalar as a struct-rvalue address and
-    /// copy 16 bytes from it.
+    /// copy 16 bytes from it. A floating source converts through
+    /// [`Self::fp_to_int128`], which fills both halves.
     fn store_scalar_as_int128(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         dst_addr: super::super::ir::ValueId,
         v: super::super::ir::ValueId,
         src_ty: i64,
+        dst_ty: i64,
     ) {
+        if is_floating_scalar(src_ty) {
+            let pair = self.fp_to_int128(b, v, (dst_ty & UNSIGNED_BIT) == 0);
+            self.int128_store(b, dst_addr, pair);
+            return;
+        }
         let low_ty = Ty::LongLong as i64 | (src_ty & UNSIGNED_BIT);
         let low = self.convert_scalar_value(b, v, src_ty, low_ty);
         let store_kind = store_kind_for(low_ty, self.target);
@@ -1474,7 +2266,7 @@ impl<'a> Walker<'a> {
                     let dst = b.local_addr(slot);
                     let src_ty = expr_ty(self.ast.expr(*init_id)).unwrap_or(ty);
                     if self.is_int128_value_ty(ty) && !is_struct_ty(src_ty) {
-                        self.store_scalar_as_int128(b, dst, v, src_ty);
+                        self.store_scalar_as_int128(b, dst, v, src_ty, ty);
                         return Ok(());
                     }
                     let size = self.struct_size(ty);
@@ -1910,6 +2702,17 @@ impl<'a> Walker<'a> {
                 }
             }
         }
+        // A GNU statement expression whose final statement transfers
+        // control out of it (a `goto` or `return`, or a noreturn call)
+        // closes the block; its value is then unreachable. Open a fresh
+        // block and yield a placeholder so callers, which assume an rvalue
+        // leaves an open block, keep building well-formed SSA that the
+        // unreachable-block prune drops.
+        if !b.is_block_open() {
+            let dead = b.new_block();
+            b.switch_to(dead);
+            return Ok(b.imm(0));
+        }
         match result {
             Some(v) => Ok(v),
             None => Ok(b.imm(0)),
@@ -1966,6 +2769,13 @@ impl<'a> Walker<'a> {
                 // into a result temporary (no inter-lane carry for bitwise ops).
                 if is_vector_ty(self.structs, *ty) {
                     return self.walk_vector_bitwise(b, *op, *lhs, *rhs, *ty);
+                }
+                // A 128-bit operand makes the node a 128-bit operation,
+                // whatever the node's own type: a comparison's result is
+                // `int`, and the parser spells the unary operators as a
+                // binop against a literal.
+                if self.is_int128_binary(*lhs, *rhs) {
+                    return self.walk_int128_binary(b, *op, *lhs, *rhs);
                 }
                 // A comparison whose operand is a floating-point value must
                 // use the FP comparison. The parser tags the op from the
@@ -2308,6 +3118,26 @@ impl<'a> Walker<'a> {
                 // the store so the assignment yields the f32 value.
                 let kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lhs);
+                // A write through a `__seg_gs` / `__seg_fs` pointer rides a
+                // segment-override prefix (GCC named address spaces), mirroring
+                // the load guard in `walk_unary`; x86 only. The lvalue of the
+                // qualified deref yields the pointer's address value.
+                if let Some(seg) = segment_of_ty(*ty) {
+                    if !self.target.is_x86_64() {
+                        return Err(WalkError::UnsupportedExpr {
+                            id: *lhs,
+                            kind: "direct __seg_gs/__seg_fs write (x86 only)",
+                        });
+                    }
+                    let addr = self.walk_expr_lvalue(b, *lhs)?;
+                    let mut value = self.walk_expr_rvalue(b, *rhs)?;
+                    if matches!(kind, StoreKind::F32) {
+                        value = b.fp_narrow_to_f32(value);
+                    }
+                    b.seg_store(addr, value, kind, asm_seg_of(seg), vol);
+                    let rhs_ty = expr_ty(self.ast.expr(*rhs)).unwrap_or(*ty);
+                    return Ok(self.narrow_int_to_ty(b, value, rhs_ty, *ty));
+                }
                 if let Expr::Ident {
                     class,
                     val,
@@ -3463,11 +4293,15 @@ impl<'a> Walker<'a> {
                 // (the struct-rvalue address-as-value rule). A cast to an
                 // integer or pointer loads the object's low 8 bytes (its
                 // value mod 2^64); the convert then narrows to `to_ty`.
-                // Without the load the address is used as the value.
-                if self.is_int128_value_ty(src_ty)
-                    && !is_struct_ty(*to_ty)
-                    && !is_floating_scalar(*to_ty)
-                {
+                // Without the load the address is used as the value. A
+                // floating target instead converts the whole 128-bit
+                // value (C99 6.3.1.4) through `int128_to_fp`.
+                if self.is_int128_value_ty(src_ty) && !is_struct_ty(*to_ty) {
+                    if is_floating_scalar(*to_ty) {
+                        let pair = self.int128_load(b, v);
+                        let signed = (src_ty & UNSIGNED_BIT) == 0;
+                        return Ok(self.int128_to_fp(b, pair, signed, is_float_ty(*to_ty)));
+                    }
                     let low_ty = Ty::LongLong as i64 | UNSIGNED_BIT;
                     let low = b.load(v, load_kind_for(low_ty, self.target));
                     return Ok(self.convert_scalar_value(b, low, low_ty, *to_ty));
@@ -3479,7 +4313,7 @@ impl<'a> Walker<'a> {
                 if !is_struct_ty(src_ty) && self.is_int128_value_ty(*to_ty) {
                     let slot = b.alloc_synthetic_struct(16);
                     let addr = b.local_addr(slot);
-                    self.store_scalar_as_int128(b, addr, v, src_ty);
+                    self.store_scalar_as_int128(b, addr, v, src_ty, *to_ty);
                     return Ok(addr);
                 }
                 Ok(self.convert_scalar_value(b, v, src_ty, *to_ty))
@@ -3490,6 +4324,9 @@ impl<'a> Walker<'a> {
                 // load through it, apply the binop with rhs,
                 // store back. The expression's value is the new
                 // (post-op) value per the same clause.
+                if self.is_int128_value_ty(*ty) {
+                    return self.walk_int128_compound_assign(b, *op, *lhs, *rhs);
+                }
                 let load_kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lhs);
@@ -3609,6 +4446,9 @@ impl<'a> Walker<'a> {
                 })
             }
             Expr::PreInc { lvalue, by, ty } => {
+                if self.is_int128_value_ty(*ty) {
+                    return self.walk_int128_inc(b, *lvalue, *by, false);
+                }
                 let kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lvalue);
@@ -3636,6 +4476,9 @@ impl<'a> Walker<'a> {
                 )
             }
             Expr::PostInc { lvalue, by, ty } => {
+                if self.is_int128_value_ty(*ty) {
+                    return self.walk_int128_inc(b, *lvalue, *by, true);
+                }
                 let kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lvalue);
@@ -4429,10 +5272,16 @@ impl<'a> Walker<'a> {
         if self.cond_is_float(cond) {
             let d = b.fp_widen_to_f64(val);
             let zero = b.imm(0);
-            b.binop(BinOp::Fne, d, zero)
-        } else {
-            val
+            return b.binop(BinOp::Fne, d, zero);
         }
+        // A 128-bit operand is carried as its object's address; testing
+        // that address would read every value as true. Test the value:
+        // it is non-zero when either half is.
+        if self.expr_is_int128_value(cond) {
+            let (lo, hi) = self.int128_load(b, val);
+            return b.binop(BinOp::Or, lo, hi);
+        }
+        val
     }
 
     fn walk_short_circuit(
@@ -4552,7 +5401,21 @@ impl<'a> Walker<'a> {
                 if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                     return Ok(addr);
                 }
+                // A read through a `__seg_gs` / `__seg_fs` pointer rides a
+                // segment-override prefix (GCC named address spaces). Only the
+                // x86 encoder emits it; on a target without segment registers
+                // reject rather than drop the qualifier (a silent wrong-address
+                // access).
                 let kind = load_kind_for(ty, self.target);
+                if let Some(seg) = segment_of_ty(ty) {
+                    if !self.target.is_x86_64() {
+                        return Err(WalkError::UnsupportedExpr {
+                            id: child,
+                            kind: "direct __seg_gs/__seg_fs read (x86 only)",
+                        });
+                    }
+                    return Ok(b.seg_load(addr, kind, asm_seg_of(seg), is_volatile_ty(ty)));
+                }
                 Ok(b.load_vol(addr, kind, is_volatile_ty(ty)))
             }
         }
@@ -4857,9 +5720,20 @@ fn load_kind_for(ty: i64, target: Target) -> LoadKind {
     load_kind(ty, target, LoadKind::F64)
 }
 
+/// Map the type-system segment qualifier onto the IR's segment tag.
+fn asm_seg_of(seg: Segment) -> AsmSeg {
+    match seg {
+        Segment::Gs => AsmSeg::Gs,
+        Segment::Fs => AsmSeg::Fs,
+    }
+}
+
 /// Mirror of [`load_kind_for`] for stores.
 fn store_kind_for(ty: i64, target: Target) -> StoreKind {
-    let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+    // A store width carries no signedness, so the bare band type is enough;
+    // `strip_unsigned` also clears the segment bits so a `__seg_gs` /
+    // `__seg_fs`-qualified type classifies by its underlying width.
+    let stripped = strip_unsigned(ty);
     if is_pointer_ty(ty) {
         return StoreKind::I64;
     }
@@ -4883,7 +5757,7 @@ fn store_kind_for(ty: i64, target: Target) -> StoreKind {
 /// True for a relational or equality operator (integer or
 /// floating-point). The result is `int` (C99 6.5.8 / 6.5.9) regardless
 /// of operand type.
-fn is_comparison_op(op: BinOp) -> bool {
+pub(crate) fn is_comparison_op(op: BinOp) -> bool {
     matches!(
         op,
         BinOp::Eq
@@ -5201,7 +6075,7 @@ fn unsigned_narrow_mask(ty: i64) -> i64 {
 /// integer comparison. Excludes Div / Divu / Mod / Modu (which
 /// `fold_int_binop` evaluates but the immediate path does not
 /// cover) and every FP op.
-fn imm_safe_binop(op: BinOp) -> bool {
+pub(crate) fn imm_safe_binop(op: BinOp) -> bool {
     matches!(
         op,
         BinOp::Add
@@ -5268,7 +6142,7 @@ fn narrow_const_to_ty(v: i64, ty: i64, target: Target) -> i64 {
 /// non-negative operand likewise saturates to 0, and on a
 /// negative operand to -1, so the model picks the closer of the
 /// two for the rhs's sign).
-fn fold_int_binop(op: BinOp, lhs: i64, rhs: i64) -> i64 {
+pub(crate) fn fold_int_binop(op: BinOp, lhs: i64, rhs: i64) -> i64 {
     match op {
         BinOp::Add => lhs.wrapping_add(rhs),
         BinOp::Sub => lhs.wrapping_sub(rhs),
@@ -5390,6 +6264,7 @@ mod tests {
             0,
             Ty::Int as i64,
             0,
+            &[],
         )
         .expect("walk");
         let immediates: alloc::vec::Vec<i64> = func
@@ -5455,6 +6330,7 @@ mod tests {
             0,
             0,
             0,
+            &[],
         )
         .expect("walk");
         let loads: alloc::vec::Vec<_> = func
@@ -5528,6 +6404,7 @@ mod tests {
             0,
             0,
             0,
+            &[],
         )
         .expect("walk");
         let store_kinds: alloc::vec::Vec<_> = func
@@ -5593,6 +6470,7 @@ mod tests {
             0,
             0,
             0,
+            &[],
         )
         .expect("walk");
         let binops: alloc::vec::Vec<BinOp> = func
@@ -5638,6 +6516,7 @@ mod tests {
             0,
             0,
             0,
+            &[],
         )
         .expect_err("Asm must surface as unsupported");
         assert!(matches!(

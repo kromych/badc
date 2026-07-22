@@ -21,6 +21,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::const_expr::ConstVal;
 use super::types::{
     UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth,
 };
@@ -87,6 +88,41 @@ impl Compiler {
         self.lex.restore(snap);
         self.data.truncate(data_snap);
         Ok(reloc)
+    }
+
+    /// Emit the link-time relocation for a data object's address stored
+    /// into the 8-byte slot at `var_offset`. `target_offset` is the
+    /// object's byte address plus any constant addend. An undefined extern
+    /// is resolved by name (`ExternDataReloc`); a defined object writes its
+    /// data-segment offset and a `DataReloc` the native writer / linker
+    /// patches to the runtime address (ELF resolves the VA; Mach-O / PE
+    /// emit a rebase / .reloc entry for the load slide).
+    fn emit_data_addr_reloc(&mut self, var_offset: i64, target_idx: usize, target_offset: i64) {
+        self.symbols[target_idx].was_referenced = true;
+        let t = &self.symbols[target_idx];
+        let is_extern_data = t.is_extern_decl
+            && t.linkage == crate::c5::symbol::Linkage::External
+            && !t.has_initializer;
+        if is_extern_data {
+            let name = self.symbols[target_idx].name.clone();
+            self.extern_data_relocs
+                .push(crate::c5::program::ExternDataReloc {
+                    data_offset: var_offset as u64,
+                    symbol_name: name,
+                    // The symbol's own `val` is a parse-time tentative slot
+                    // cleared at finalize; the addend is the byte offset alone.
+                    addend: target_offset - self.symbols[target_idx].val,
+                });
+            return;
+        }
+        let bytes = (target_offset as u64).to_le_bytes();
+        self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+        self.data_relocs.push(crate::c5::program::DataReloc {
+            data_offset: var_offset as u64,
+            target_offset: target_offset as u64,
+            target_anchor: self.symbols[target_idx].val as u64,
+        });
+        self.data_reloc_sym_idx.push(target_idx);
     }
 
     /// Parse a global / TLS initializer's right-hand side and
@@ -300,6 +336,30 @@ impl Compiler {
             self.data_reloc_sym_idx.push(target_idx);
             return Ok(());
         }
+        // `T *p = g.arr;` / `T *p = g.member.arr[i];` -- a bare designation of
+        // a global's array sub-object decays to the address of its first
+        // element (C99 6.3.2.1p3), an address constant. The whole-array case
+        // above and the `&`-forms below cover their shapes; here the base is
+        // any global (a union or a struct) reached through a `.`/`[` chain. A
+        // chain ending in a non-array sub-object is a non-constant load and
+        // falls through to the diagnostic below.
+        if self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].class == Token::Glo as i64
+            && is_pointer_ty(var_ty)
+            && !is_thread_local
+        {
+            let snap = self.lex.snapshot();
+            let data_snap = self.data.len();
+            if let Some((off, sym_idx, is_array)) = self.parse_const_address()?
+                && is_array
+                && (self.lex.tk == ';' || self.lex.tk == ',')
+            {
+                self.emit_data_addr_reloc(var_offset, sym_idx, off);
+                return Ok(());
+            }
+            self.lex.restore(snap);
+            self.data.truncate(data_snap);
+        }
         // String literal in a `char *p` global initializer.
         if self.lex.tk == '"' && is_pointer_ty(var_ty) {
             if is_thread_local {
@@ -346,7 +406,17 @@ impl Compiler {
             // data reloc from this global's slot to the synthetic
             // symbol's offset.
             if self.lex.tk == '(' {
-                self.next()?;
+                // The literal may sit behind grouping parens
+                // (`&((T){...})`, a common macro-body shape); skip them
+                // and balance the matching `)` after the brace list.
+                let mut grouping: i64 = 0;
+                loop {
+                    self.next()?; // consume `(`
+                    if self.lex_is_type_start() || self.lex.tk != '(' {
+                        break;
+                    }
+                    grouping += 1;
+                }
                 if !self.lex_is_type_start() {
                     return Err(self.compile_err_at(
                         line,
@@ -377,6 +447,9 @@ impl Compiler {
                     ));
                 }
                 let (off, new_idx) = self.emit_compound_literal_body(cl_ty)?;
+                for _ in 0..grouping {
+                    self.accept(')')?;
+                }
                 let bytes = (off as u64).to_le_bytes();
                 self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                 self.data_relocs.push(crate::c5::program::DataReloc {
@@ -517,50 +590,10 @@ impl Compiler {
                     break;
                 }
             }
-            // A target defined in another translation unit (`extern T g;`
-            // with no definition here) is resolved by name at link time;
-            // `target_offset` is the byte offset added to its address
-            // (the symbol's own `val` is 0 for an extern). The slot stays
-            // zero until the link resolves it.
-            {
-                let t = &self.symbols[target_idx];
-                let is_extern_data = t.is_extern_decl
-                    && t.linkage == crate::c5::symbol::Linkage::External
-                    && !t.has_initializer;
-                if is_extern_data {
-                    self.symbols[target_idx].was_referenced = true;
-                    let name = self.symbols[target_idx].name.clone();
-                    self.extern_data_relocs
-                        .push(crate::c5::program::ExternDataReloc {
-                            data_offset: var_offset as u64,
-                            symbol_name: name,
-                            // `target_offset` started at the symbol's own
-                            // `val` (a parse-time tentative slot that is
-                            // cleared at finalize); the addend is the
-                            // index/byte offset alone.
-                            addend: target_offset - self.symbols[target_idx].val,
-                        });
-                    return Ok(());
-                }
-            }
-            // Write the target's data-segment offset into the
-            // slot. The VM reads this directly because its
-            // pointers are small data offsets (no image-base
-            // arithmetic). The native writers overwrite this
-            // with the target's absolute VA at write time --
-            // ELF (ET_EXEC) writes a fully-resolved VA; Mach-O
-            // and PE write the preferred VA and emit a
-            // dynamic relocation (rebase opcode / .reloc DIR64
-            // entry) so the loader can patch in the slide
-            // delta.
-            let bytes = (target_offset as u64).to_le_bytes();
-            self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
-            self.data_relocs.push(crate::c5::program::DataReloc {
-                data_offset: var_offset as u64,
-                target_offset: target_offset as u64,
-                target_anchor: self.symbols[target_idx].val as u64,
-            });
-            self.data_reloc_sym_idx.push(target_idx);
+            // `&<object>` with an optional designator suffix: emit the
+            // link-time relocation for the object's address plus the folded
+            // byte offset (an undefined extern resolves by name).
+            self.emit_data_addr_reloc(var_offset, target_idx, target_offset);
             return Ok(());
         }
 
@@ -581,6 +614,48 @@ impl Compiler {
         // (enum / `#define`d constants), the conditional operator
         // (`static int n = A > B ? A : B;`), and the offsetof shape.
         let cv = self.parse_const_expr_cond_val()?;
+        // C99 6.6 / 6.3.2.3: an address constant cast to a pointer-width
+        // integer slot (`unsigned long x = (unsigned long)&obj;`, an object,
+        // array, or function name) is a link-time relocation, not a
+        // compile-time integer -- gcc / clang accept it and the linker
+        // resolves the address. Emit the same relocation the pointer-typed
+        // slot would. Restricted to a bare designator (offset equal to the
+        // symbol's own address): a symbol-relative addend from a const-expr
+        // `+`/`-` is not scaled by the pointee size here, so it stays rejected
+        // rather than stored with a wrong offset. A `&sym[i]` / `&sym.field`
+        // suffix, and any narrower or `_Thread_local` slot, are handled by
+        // the paths above; the rest falls through to the reject below, which
+        // gcc / clang also apply to a sub-pointer-width slot.
+        if let ConstVal::Addr(a) = cv
+            && let Some(sym_idx) = a.sym
+            && a.value == self.symbols[sym_idx].val
+            && !is_thread_local
+            && !var_is_float
+            && self.size_of_type(var_ty) == 8
+        {
+            if a.sym_code {
+                let mut sym = sym_idx;
+                if self.symbols[sym].class == Token::Sys as i64 {
+                    sym = self.ensure_sys_trampoline_sym(sym);
+                }
+                self.symbols[sym].was_referenced = true;
+                let ent_pc = self.symbols[sym].val;
+                self.data[var_offset as usize..var_offset as usize + 8]
+                    .copy_from_slice(&(ent_pc as u64).to_le_bytes());
+                self.code_relocs.push(crate::c5::program::CodeReloc {
+                    data_offset: var_offset as u64,
+                    target_ent_pc: ent_pc as u64,
+                });
+                self.code_reloc_sym_idx.push(sym);
+            } else {
+                self.emit_data_addr_reloc(var_offset, sym_idx, a.value);
+            }
+            return Ok(());
+        }
+        // A bare symbol address in a narrower-than-pointer integer slot is
+        // not a relocation-bearing initializer; reject it rather than store
+        // the addend with no relocation.
+        let cv = self.require_integer_const(cv)?;
 
         // C99 6.7.8p11 / 6.3.1.4: a constant initializing a floating
         // object takes the floating value. Coerce the ConstVal to f64
@@ -590,14 +665,16 @@ impl Compiler {
         // for `float`, f64 for `double`).
         let value = if var_is_float {
             self.to_storage_bits(
-                cv.as_float().to_bits() as i64,
+                cv.as_float().to_bits() as i128,
                 super::initializer::InitElemReloc::Float64Bits,
                 var_ty,
             )
         } else {
-            cv.as_int()
+            cv.as_i128()
         };
-        let write_size = if var_is_float {
+        // Integer slots are preallocated 8 bytes wide; the 16-byte
+        // integer needs both halves written.
+        let write_size = if var_is_float || self.is_int128_ty(var_ty) {
             self.size_of_type(var_ty)
         } else {
             8

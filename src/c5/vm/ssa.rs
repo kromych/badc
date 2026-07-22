@@ -266,6 +266,34 @@ impl Memory {
         Ok(base)
     }
 
+    /// Reserve `bytes` of frame storage whose base offset into `bytes` is a
+    /// multiple of `align` (a power of two). The interpreter's addresses are
+    /// byte offsets, so an aligned base gives the guest an aligned pointer.
+    /// The gap to the aligned base plus the region is reclaimed with the
+    /// enclosing frame by `release_frame`. Backs over-aligned automatic
+    /// objects (C11 6.7.5).
+    fn alloc_aligned_frame(&mut self, align: usize, bytes: usize) -> Result<usize, C5Error> {
+        let base = (self.stack_top + align - 1) & !(align - 1);
+        let next = base.checked_add(bytes).ok_or_else(|| {
+            C5Error::Runtime(format!(
+                "vm_ssa: stack overflow allocating {bytes} aligned bytes from {}",
+                self.stack_top,
+            ))
+        })?;
+        if next > self.heap_base {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: stack overflow: aligned frame region of {bytes} bytes exceeds \
+                 the {}-byte stack region",
+                self.heap_base - self.stack_base,
+            )));
+        }
+        for b in &mut self.bytes[self.stack_top..next] {
+            *b = 0;
+        }
+        self.stack_top = next;
+        Ok(base)
+    }
+
     fn release_frame(&mut self, base: usize) {
         self.stack_top = base;
     }
@@ -405,6 +433,10 @@ struct Frame<'a> {
     frame_bytes: usize,
     /// Number of declared locals (slot offsets `-1..=-locals`).
     locals: usize,
+    /// Base offset of the frame's realigned region (over-aligned automatic
+    /// objects, C11 6.7.5), or 0 when the function has none. Each entry in
+    /// `func.over_aligned` places its object at `realign_base + region_off`.
+    realign_base: usize,
     block_idx: usize,
 }
 
@@ -420,6 +452,15 @@ impl Frame<'_> {
     /// array's footprint overlapped the next-declared local.
     fn slot_addr(&self, off: i64) -> Option<usize> {
         if off < 0 {
+            // An over-aligned automatic object's storage is in the frame's
+            // realigned region, not the fp-relative slot (C11 6.7.5).
+            if self.realign_base != 0 {
+                for &(slot, region_off) in &self.func.over_aligned {
+                    if slot == off {
+                        return Some(self.realign_base + region_off as usize);
+                    }
+                }
+            }
             let slot_n = (-off) as usize;
             (slot_n >= 1 && slot_n <= self.locals)
                 .then_some(self.stack_base + (self.locals - slot_n) * 8)
@@ -658,6 +699,16 @@ fn run_func<H: Host>(
     let n_params = func.n_params.max(args.len());
     let frame_bytes = (locals + n_params) * 8;
     let stack_base = mem.alloc_frame(frame_bytes)?;
+    // C11 6.7.5: reserve the aligned region for over-aligned automatic objects
+    // above this frame; `release_frame(stack_base)` reclaims it on return.
+    let realign_base = if func.over_aligned.is_empty() {
+        0
+    } else {
+        mem.alloc_aligned_frame(
+            func.frame_align as usize,
+            func.realign_region_bytes as usize,
+        )?
+    };
     for (i, &v) in args.iter().enumerate() {
         // Host-ABI register-passed aggregate parameter: `v` is the
         // source struct's address. The callee body reads the aggregate
@@ -680,6 +731,7 @@ fn run_func<H: Host>(
         stack_base,
         frame_bytes,
         locals,
+        realign_base,
         block_idx: 0,
     };
     let result: Result<i64, C5Error> = loop {
@@ -1231,6 +1283,11 @@ fn run_inst<H: Host>(
             };
             return Ok(());
         }
+        // The interpreter has no segment base to model an x86 named
+        // address space; a direct segment access reports unimplemented
+        // rather than reading the generic address space.
+        Inst::SegLoad { .. } => "SegLoad",
+        Inst::SegStore { .. } => "SegStore",
         Inst::Phi { .. } => "Phi",
     };
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))
@@ -2041,17 +2098,30 @@ fn run_inline_asm(
     // Explicit `disp(%reg)` references and label addresses touch machine
     // memory / code layout the register model does not carry.
     if insns.iter().any(|i| {
-        i.operands
-            .iter()
-            .any(|o| matches!(o, AsmOpnd::Mem { .. } | AsmOpnd::LabelAddr { .. }))
+        i.operands.iter().any(|o| {
+            matches!(
+                o,
+                AsmOpnd::Mem { .. }
+                    | AsmOpnd::AbsMem { .. }
+                    | AsmOpnd::RipRel { .. }
+                    | AsmOpnd::LabelAddr { .. }
+                    | AsmOpnd::ImmLabel { .. }
+                    | AsmOpnd::ImmSym
+            )
+        })
     }) {
         return Err(C5Error::Runtime(alloc::string::String::from(
             "inline asm: explicit memory operands are not supported under --interp",
         )));
     }
-    let op_reg =
-        crate::c5::codegen::x86_64::asm::assign_operand_regs(&asm.operands, asm.clobber_fp_regs)
-            .map_err(C5Error::Runtime)?;
+    crate::c5::codegen::x86_64::asm::check_operand_refs(&insns, asm.operands.len())
+        .map_err(C5Error::Runtime)?;
+    let op_reg = crate::c5::codegen::x86_64::asm::assign_operand_regs(
+        &asm.operands,
+        asm.clobber_regs,
+        asm.clobber_fp_regs,
+    )
+    .map_err(C5Error::Runtime)?;
     // The interpreter models only the 16 GPRs; an `x` (xmm) operand carries a
     // 128-bit SSE value that has no modelled slot. Such asm also uses SSE
     // instructions, refused below -- reject the operand up front with a clear
@@ -2065,12 +2135,30 @@ fn run_inline_asm(
             "inline asm: `x` (xmm) register operands are not supported under --interp",
         )));
     }
+    // The interpreter carries no condition-flag state across template
+    // instructions, so a flag output has nothing to read.
+    if asm
+        .operands
+        .iter()
+        .any(|op| matches!(op.constraint, crate::c5::ir::AsmConstraint::Flags(_)))
+    {
+        return Err(C5Error::Runtime(alloc::string::String::from(
+            "inline asm: `=@cc` flag outputs are not supported under --interp",
+        )));
+    }
     // Model register file; operand `%N` reads / writes its assigned slot.
     let mut xregs = [0i64; 16];
     // Seed input registers, and the current value of a `+` (read-write)
     // output loaded from its destination address.
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
+        // A bound operand is the register itself: seed the modelled slot
+        // with the register variable's value and never treat that value
+        // as a destination address.
+        if matches!(op.constraint, crate::c5::ir::AsmConstraint::Bound(_)) {
+            xregs[r as usize] = frame.regs[args[i] as usize];
+            continue;
+        }
         if !op.is_output {
             xregs[r as usize] = frame.regs[args[i] as usize];
         } else if op.is_rw {
@@ -2094,11 +2182,20 @@ fn run_inline_asm(
                     None => (frame.regs[args[idx as usize] as usize], sz),
                 }
             }
+            // `%cN` / `%PN`: the operand's value, as an immediate.
+            AsmOpnd::RefConst { idx, .. } => (
+                frame.regs[args[idx as usize] as usize],
+                AsmRegSize::from_width(asm.operands[idx as usize].width),
+            ),
             // Label / memory references are refused before this loop.
             AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
+            | AsmOpnd::ImmLabel { .. }
+            | AsmOpnd::ImmSym
             | AsmOpnd::GotoLabel(_)
-            | AsmOpnd::Mem { .. } => (0, AsmRegSize::Long),
+            | AsmOpnd::Mem { .. }
+            | AsmOpnd::AbsMem { .. }
+            | AsmOpnd::RipRel { .. } => (0, AsmRegSize::Long),
         }
     };
     // The model register a destination operand writes into.
@@ -2109,19 +2206,25 @@ fn run_inline_asm(
             AsmOpnd::Reg { reg, .. } => (reg < 16).then_some(reg as usize),
             AsmOpnd::Ref { idx, .. } => op_reg[idx as usize].map(|r| r as usize),
             AsmOpnd::Imm(_)
+            | AsmOpnd::RefConst { .. }
             | AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
+            | AsmOpnd::ImmLabel { .. }
+            | AsmOpnd::ImmSym
             | AsmOpnd::GotoLabel(_)
-            | AsmOpnd::Mem { .. } => None,
+            | AsmOpnd::Mem { .. }
+            | AsmOpnd::AbsMem { .. }
+            | AsmOpnd::RipRel { .. } => None,
         }
     };
 
     for insn in &insns {
         let ops = &insn.operands;
         match insn.mnemonic {
-            // Literal machine bytes are opaque to the register model, like the
-            // privileged / port ops below: no modelled effect under the VM.
-            Mnemonic::RawBytes => {}
+            // Literal machine bytes, emit-time data directives, and `.skip`
+            // padding are opaque to the register model, like the privileged /
+            // port ops below: no modelled effect under the VM.
+            Mnemonic::RawBytes | Mnemonic::Data(_) | Mnemonic::Skip => {}
             // The interpreter is not a CPU emulator: a mnemonic reached through
             // the catalogue is refused rather than modelled. Such inline asm is
             // an ahead-of-time / JIT construct, executed natively there.
@@ -2176,9 +2279,6 @@ fn run_inline_asm(
                 // Spin-hint / flags-push / breakpoint: no observable effect
                 // on the VM's register model (a debugger is not attached).
             }
-            Mnemonic::Pop => {
-                // No modelled machine stack; leave the destination as-is.
-            }
             Mnemonic::Movd => {
                 // No modelled MMX register file. A read into a GPR (the AT&T
                 // destination is a GPR: reg < 16) yields zero; a write into an
@@ -2203,10 +2303,19 @@ fn run_inline_asm(
             | Mnemonic::Monitor
             | Mnemonic::Mwait
             | Mnemonic::Hlt
-            | Mnemonic::Lock => {
+            | Mnemonic::Prefix(_) => {
                 // Interrupt-flag / cache / MSR-write / monitor-wait / halt
-                // control and the lock prefix: no observable effect on the
-                // VM's register model.
+                // control and the legacy prefixes: no observable effect on
+                // the VM's register model.
+            }
+            // The string primitives step %rsi / %rdi and access guest memory,
+            // and the x87 / far-call memory forms have no register-model
+            // equivalent. Rejecting keeps the VM from silently skipping a
+            // memory effect the caller depends on.
+            Mnemonic::Fixed(_) | Mnemonic::StringOp { .. } | Mnemonic::MemExt { .. } => {
+                return Err(C5Error::Runtime(alloc::string::String::from(
+                    "inline asm: string / x87 / far-call instruction is not supported under the VM",
+                )));
             }
             Mnemonic::Inc | Mnemonic::Dec => {
                 let (v, sz) = value_of(&ops[0], &xregs);
@@ -2217,7 +2326,7 @@ fn run_inline_asm(
                     v.wrapping_sub(1)
                 };
                 if let Some(r) = dst_reg(&ops[0]) {
-                    xregs[r] = mask_width(res, w);
+                    xregs[r] = merge_width(xregs[r], res, w);
                 }
             }
             Mnemonic::Xadd => {
@@ -2225,12 +2334,12 @@ fn run_inline_asm(
                 let (src, ssz) = value_of(&ops[0], &xregs);
                 let (dst, dsz) = value_of(&ops[1], &xregs);
                 let w = insn.suffix.unwrap_or(dsz);
-                let sum = mask_width(dst.wrapping_add(src), w);
+                let sum = dst.wrapping_add(src);
                 if let Some(r) = dst_reg(&ops[1]) {
-                    xregs[r] = sum;
+                    xregs[r] = merge_width(xregs[r], sum, w);
                 }
                 if let Some(r) = dst_reg(&ops[0]) {
-                    xregs[r] = mask_width(dst, insn.suffix.unwrap_or(ssz));
+                    xregs[r] = merge_width(xregs[r], dst, insn.suffix.unwrap_or(ssz));
                 }
             }
             Mnemonic::Cmpxchg => {
@@ -2241,10 +2350,10 @@ fn run_inline_asm(
                 let w = insn.suffix.unwrap_or(dsz);
                 if mask_width(xregs[0], w) == mask_width(dst, w) {
                     if let Some(r) = dst_reg(&ops[1]) {
-                        xregs[r] = mask_width(src, w);
+                        xregs[r] = merge_width(xregs[r], src, w);
                     }
                 } else {
-                    xregs[0] = mask_width(dst, w);
+                    xregs[0] = merge_width(xregs[0], dst, w);
                 }
             }
             Mnemonic::Shld | Mnemonic::Shrd => {
@@ -2254,7 +2363,7 @@ fn run_inline_asm(
                 let w = insn.suffix.unwrap_or(dsz);
                 let res = double_shift(insn.mnemonic == Mnemonic::Shld, dst, src, count, w);
                 if let Some(r) = dst_reg(&ops[2]) {
-                    xregs[r] = res;
+                    xregs[r] = merge_width(xregs[r], res, w);
                 }
             }
             Mnemonic::Shl | Mnemonic::Shr | Mnemonic::Sar => {
@@ -2267,7 +2376,7 @@ fn run_inline_asm(
                 };
                 let res = single_shift(insn.mnemonic, dst, count, w);
                 if let Some(r) = dst_reg(ops.last().unwrap()) {
-                    xregs[r] = mask_width(res, w);
+                    xregs[r] = merge_width(xregs[r], res, w);
                 }
             }
             Mnemonic::Or
@@ -2288,7 +2397,7 @@ fn run_inline_asm(
                     _ => src,
                 };
                 if let Some(r) = dst_reg(&ops[1]) {
-                    xregs[r] = mask_width(res, w);
+                    xregs[r] = merge_width(xregs[r], res, w);
                 }
             }
         }
@@ -2297,6 +2406,7 @@ fn run_inline_asm(
     // Store the outputs back through their destination addresses.
     for (i, op) in asm.operands.iter().enumerate() {
         if op.is_output
+            && !matches!(op.constraint, crate::c5::ir::AsmConstraint::Bound(_))
             && let Some(r) = op_reg[i]
         {
             let addr = frame.regs[args[i] as usize] as usize;
@@ -2314,6 +2424,17 @@ fn mask_width(v: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
         2 => v & 0xFFFF,
         4 => v & 0xFFFF_FFFF,
         _ => v,
+    }
+}
+
+/// Write a result into a model register with x86 destination semantics: a
+/// byte or word operation leaves the upper bits of the destination intact,
+/// a 32-bit operation zero-extends to 64.
+fn merge_width(prev: i64, res: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
+    match w.bytes() {
+        1 => (prev & !0xFFi64) | (res & 0xFF),
+        2 => (prev & !0xFFFFi64) | (res & 0xFFFF),
+        _ => mask_width(res, w),
     }
 }
 
@@ -2707,6 +2828,14 @@ fn run_intrinsic(
             // within a frame, and distinct across nested calls -- enough
             // for a stack-depth comparison. (The arena grows up, so a
             // deeper frame has a larger address than on a native stack.)
+            frame.regs[v as usize] = frame.stack_base as i64;
+            Ok(())
+        }
+        Intrinsic::StackPointer => {
+            // No native stack pointer in the interpreter; return this
+            // frame's arena base, the same proxy `FrameAddress` uses. It
+            // is non-zero and stable within a frame, enough for callers
+            // that store or compare it.
             frame.regs[v as usize] = frame.stack_base as i64;
             Ok(())
         }

@@ -32,7 +32,7 @@
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE,
+    AsmSeg, AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE,
     StoreKind, Terminator, ValueId,
 };
 
@@ -182,8 +182,12 @@ impl SsaBuilder {
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            over_aligned: Vec::new(),
+            frame_align: 0,
+            realign_region_bytes: 0,
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
         };
         let mut b = Self {
             func,
@@ -218,6 +222,15 @@ impl SsaBuilder {
     /// counter post-walk.
     pub(crate) fn set_end_pc(&mut self, end_pc: usize) {
         self.func.end_pc = end_pc;
+    }
+
+    /// Record the prologue-realigned region for over-aligned automatic
+    /// objects: the `(slot_off, region_off)` placements, the region alignment,
+    /// and its byte size. Consumed by the per-arch frame layout and the VM.
+    pub(crate) fn set_realign(&mut self, placed: Vec<(i64, i64)>, align: i64, region_bytes: i64) {
+        self.func.over_aligned = placed;
+        self.func.frame_align = align;
+        self.func.realign_region_bytes = region_bytes;
     }
 
     /// Set the source-level function name. Codegen consumers use
@@ -627,6 +640,48 @@ impl SsaBuilder {
             value,
             kind,
             volatile,
+        })
+    }
+
+    /// `Inst::SegLoad` -- a load through an x86 `__seg_gs` / `__seg_fs`
+    /// pointer, riding a segment-override prefix. `seg` is `Gs` or `Fs`.
+    pub(crate) fn seg_load(
+        &mut self,
+        addr: ValueId,
+        kind: LoadKind,
+        seg: AsmSeg,
+        volatile: bool,
+    ) -> ValueId {
+        let v = self.push(Inst::SegLoad {
+            addr,
+            kind,
+            volatile,
+            seg,
+        });
+        if matches!(kind, LoadKind::F32) {
+            self.mark_f32(v);
+        }
+        v
+    }
+
+    /// `Inst::SegStore` -- the store companion to [`Self::seg_load`]. A
+    /// segment store names memory disjoint from any local slot, but the
+    /// local-load cache is cleared conservatively as for [`Self::store_vol`].
+    pub(crate) fn seg_store(
+        &mut self,
+        addr: ValueId,
+        value: ValueId,
+        kind: StoreKind,
+        seg: AsmSeg,
+        volatile: bool,
+    ) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::SegStore {
+            addr,
+            value,
+            kind,
+            volatile,
+            seg,
         })
     }
 

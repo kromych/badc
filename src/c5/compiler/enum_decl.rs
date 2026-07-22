@@ -3,10 +3,11 @@
 //! `enum [Tag] [{ A, B = 5, C, ... }]` registers each constant as a
 //! `Token::Num` symbol so subsequent references (in expressions, in
 //! array dimensions via `parse_constant_int`, etc.) resolve to the
-//! enumerated value. The enum's tag itself is consumed without
-//! registration -- in c5 every enum collapses to plain `int`, so the
-//! tag carries no semantic weight; the implicit "shared scope" of
-//! the constants stands in for it.
+//! enumerated value. A tagged definition also records an `EnumDef`
+//! carrying the underlying integer type -- `int` normally, a narrower
+//! type for `__attribute__((packed))` -- so a later bare `enum Tag`
+//! reference resolves the same size. Anonymous enums skip registration;
+//! their constants stay reachable as int-typed `Token::Num` symbols.
 //!
 //! Lives next to `compiler/mod.rs` because the cluster is
 //! self-contained and the pair (`parse_enum_decl` -> `parse_enum_body`)
@@ -19,6 +20,11 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::types::UNSIGNED_BIT;
 use super::{Compiler, EnumDef};
+
+/// `(min, max, constants)` from a parsed enum body: the enumerator value
+/// range that drives the packed underlying-type choice, plus the captured
+/// name/value pairs the caller records for DWARF.
+type EnumBody = (i64, i64, alloc::vec::Vec<(String, i64)>);
 
 impl Compiler {
     /// Parse an `enum` type reference / definition and return its underlying
@@ -46,13 +52,32 @@ impl Compiler {
         };
         packed = self.skip_attribute_specifiers()? || packed;
         if self.lex.tk == '{' {
-            let (min, max) = self.parse_enum_body(&tag_name)?;
-            if packed {
-                return Ok(Self::packed_enum_underlying_ty(min, max));
+            let (min, max, captured) = self.parse_enum_body()?;
+            // An attribute after the closing brace binds to the enum type
+            // (`enum E { ... } __attribute__((packed))`), the position GCC
+            // and Clang accept most often.
+            packed = self.skip_attribute_specifiers()? || packed;
+            let underlying = if packed {
+                Self::packed_enum_underlying_ty(min, max)
+            } else {
+                Ty::Int as i64
+            };
+            if !tag_name.is_empty() && !captured.is_empty() {
+                self.enums.push(EnumDef {
+                    name: tag_name.to_string(),
+                    constants: captured,
+                    underlying_ty: underlying,
+                });
             }
+            return Ok(underlying);
         }
-        // A bare `enum Tag` reference to a packed enum defined elsewhere
-        // falls back to int (its underlying size is not tracked on the tag).
+        // A bare `enum Tag` reference reuses the underlying type recorded at
+        // the tag's definition, so a packed enum keeps its sub-int width for
+        // sizeof / _Alignof and struct-field layout. Only tagged definitions
+        // are recorded, so an empty tag never matches.
+        if let Some(def) = self.enums.iter().rev().find(|e| e.name == tag_name) {
+            return Ok(def.underlying_ty);
+        }
         Ok(Ty::Int as i64)
     }
 
@@ -87,7 +112,7 @@ impl Compiler {
     /// `Token::Num`-class symbol with `val` set to its enumerated
     /// value, so subsequent uses (including in array dimensions
     /// via `parse_constant_int`) resolve correctly.
-    pub(super) fn parse_enum_body(&mut self, tag_name: &str) -> Result<(i64, i64), C5Error> {
+    pub(super) fn parse_enum_body(&mut self) -> Result<EnumBody, C5Error> {
         self.next()?; // consume `{`
         let mut i: i64 = 0;
         let mut captured: alloc::vec::Vec<(String, i64)> = alloc::vec::Vec::new();
@@ -115,15 +140,10 @@ impl Compiler {
             self.accept(',')?;
         }
         self.next()?; // consume `}`
-        // Value range drives the packed-enum underlying-type choice.
+        // Value range drives the packed-enum underlying-type choice; the
+        // caller records the resulting EnumDef once packedness is known.
         let min = captured.iter().map(|&(_, v)| v).min().unwrap_or(0);
         let max = captured.iter().map(|&(_, v)| v).max().unwrap_or(0);
-        if !tag_name.is_empty() && !captured.is_empty() {
-            self.enums.push(EnumDef {
-                name: tag_name.to_string(),
-                constants: captured,
-            });
-        }
-        Ok((min, max))
+        Ok((min, max, captured))
     }
 }

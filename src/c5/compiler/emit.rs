@@ -389,6 +389,35 @@ impl Compiler {
         true
     }
 
+    /// Reduce the just-parsed va_* intrinsic operand to the address of
+    /// the `va_list` storage it names (the GCC builtins take the
+    /// `va_list` by reference). The record-form `va_list` (System V
+    /// x86_64 / AAPCS64) reaches here already decayed to the record
+    /// address; the cursor-form lvalue (a plain pointer object) drops
+    /// its trailing load; anything else (an explicit `&ap`) already
+    /// carries the address and passes through.
+    pub(super) fn va_list_operand_address(&mut self) {
+        if is_struct_ty(self.ty) {
+            return;
+        }
+        self.va_operand_take_address();
+    }
+
+    /// Drop the operand's trailing scalar load so its address stays in
+    /// the accumulator, bumping the type one pointer level first so the
+    /// `AddrOf` wrap records the address type (the same ordering the
+    /// unary-`&` parse uses). An operand with no trailing load keeps its
+    /// value and type, so an explicit-address spelling passes through.
+    /// Also serves `va_start`'s second operand, which names the
+    /// rightmost fixed parameter and is passed by address (C99 7.15.1.4).
+    pub(super) fn va_operand_take_address(&mut self) {
+        let ty = self.ty;
+        self.ty += Ty::Ptr as i64;
+        if !self.pop_trailing_scalar_load() {
+            self.ty = ty;
+        }
+    }
+
     /// Emit code for accessing a bitfield. On entry `a` holds the
     /// address of the bitfield's 8-byte storage unit. The dispatch
     /// peeks at the next token: if it's `=`, an assignment follows
@@ -570,6 +599,12 @@ impl Compiler {
         s.h_vla_ptr_slot = s.vla_ptr_slot;
         s.h_vla_size_slot = s.vla_size_slot;
         s.h_is_zero_len_array = s.is_zero_len_array;
+        // The inner binding starts unpinned; a `register ... asm("reg")`
+        // declarator sets its own binding after this shadow.
+        s.h_asm_register = s.asm_register;
+        s.asm_register = None;
+        s.h_is_global_register = s.is_global_register;
+        s.is_global_register = false;
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -591,11 +626,12 @@ impl Compiler {
         sym.vla_ptr_slot = sym.h_vla_ptr_slot;
         sym.vla_size_slot = sym.h_vla_size_slot;
         sym.is_zero_len_array = sym.h_is_zero_len_array;
+        sym.asm_register = sym.h_asm_register;
+        sym.is_global_register = sym.h_is_global_register;
         sym.is_scope_static = false;
         sym.is_scope_typedef = false;
         // The register-asm binding belongs to the block-scope local
         // being unbound, never to the restored outer symbol.
-        sym.asm_reg = None;
     }
 
     // ---- AST helpers ----
@@ -664,6 +700,7 @@ impl Compiler {
             // `VariableInfo` list is assembled (the declared locals are
             // not yet collected at this point).
             multi_cell_slots: alloc::vec::Vec::new(),
+            over_aligned_slots: alloc::vec::Vec::new(),
         };
         self.pending_is_inline = false;
         self.pending_is_always_inline = false;
@@ -1305,6 +1342,23 @@ impl Compiler {
             .push_stmt(super::super::ast::Stmt::Default { body }, pos)
     }
 
+    /// Map a label name as written to the key it interns under. A name
+    /// declared `__label__` by an open block resolves to that block's
+    /// unique key, innermost first; any other name is function-scoped
+    /// and keys under itself. Every label consumer (`label:`, `goto`,
+    /// `&&label`, the `asm goto` label list) resolves through here, so
+    /// the block-scoped and function-scoped name spaces stay disjoint.
+    pub(super) fn resolve_label_name(&self, name: &str) -> alloc::string::String {
+        for scope in self.local_label_scopes.iter().rev() {
+            for (declared, key) in scope.iter().rev() {
+                if declared == name {
+                    return key.clone();
+                }
+            }
+        }
+        alloc::string::String::from(name)
+    }
+
     /// Allocate a fresh AST label slot. `self.labels` /
     /// `self.unresolved_gotos` track names for the goto-vs-label
     /// diagnostics; the AST mirror keeps a flat per-function id
@@ -1364,7 +1418,16 @@ impl Compiler {
             return;
         };
         let pos = self.ast_src_pos();
-        let ty = self.ty;
+        // C99 6.5.8p6 / 6.5.9p3: a relational or equality operator yields
+        // `int` whatever the operands are. The parser still holds an
+        // operand type here (it retags after the emit, since the flavour
+        // pick reads both operand types), so stamp the result type here
+        // rather than leaving consumers to infer it from the operands.
+        let ty = if crate::c5::ast::walk::is_comparison_op(op) {
+            super::super::token::Ty::Int as i64
+        } else {
+            self.ty
+        };
         let id = self
             .ast
             .push_expr(super::super::ast::Expr::Binary { op, lhs, rhs, ty }, pos);
@@ -1430,6 +1493,16 @@ impl Compiler {
             .ast
             .push_expr(super::super::ast::Expr::Assign { lhs, rhs, ty }, pos);
         self.ast_acc = Some(id);
+    }
+}
+
+/// Recover the name as written from a label key. Keys minted for
+/// `__label__` declarations carry a `#<seq>` suffix that must not reach
+/// a diagnostic; function-scoped keys are the name itself.
+pub(super) fn label_display_name(key: &str) -> &str {
+    match key.find('#') {
+        Some(cut) => &key[..cut],
+        None => key,
     }
 }
 

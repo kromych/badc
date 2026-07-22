@@ -2813,6 +2813,7 @@ mod tests {
     fn tiny_program() -> Program {
         Program {
             data: Vec::new(),
+            file_asm: Vec::new(),
             data_object_starts: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
@@ -2840,6 +2841,7 @@ mod tests {
             user_ssa_funcs: alloc::vec::Vec::new(),
             extern_function_imports: alloc::vec::Vec::new(),
             init_funcs: alloc::vec::Vec::new(),
+            function_aliases: alloc::vec::Vec::new(),
         }
     }
 
@@ -2847,6 +2849,9 @@ mod tests {
         use super::super::{ResolvedImport, ResolvedImports};
         use crate::c5::codegen::ResolvedDylib;
         Build {
+            asm_sections: Vec::new(),
+            asm_section_text_refs: Vec::new(),
+            asm_text_abs_refs: Vec::new(),
             copy_relocs: Default::default(),
             // movz x0, #42 ; ret
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],

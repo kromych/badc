@@ -137,6 +137,7 @@ fn synth_program_and_build(
 
     let program = Program {
         data: Vec::new(),
+        file_asm: Vec::new(),
         data_align: 8,
         data_object_starts: Vec::new(),
         entry_pc: 0,
@@ -164,6 +165,7 @@ fn synth_program_and_build(
         user_ssa_funcs: Vec::new(),
         extern_function_imports: Vec::new(),
         init_funcs: Vec::new(),
+        function_aliases: Vec::new(),
     };
 
     // Surface every Text-section defined symbol as a "function"
@@ -341,6 +343,9 @@ fn synth_program_and_build(
     };
 
     let build = Build {
+        asm_sections: Vec::new(),
+        asm_section_text_refs: Vec::new(),
+        asm_text_abs_refs: Vec::new(),
         copy_relocs,
         dynamic_exports,
         text: merged.text.clone(),

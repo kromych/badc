@@ -117,6 +117,27 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
         }
     }
 
+    // A dispatch block (jump table / asm goto) that is itself unreachable
+    // leaves its target row unreferenced -- the terminator is gone after
+    // compaction. Clear the row: its targets may also be doomed, and a
+    // removed-block id left in it would make the block-id remap here (and
+    // later passes') index out of range, the same hazard the phi cleanup
+    // above avoids. A reachable dispatch keeps its row: its targets were
+    // seeded reachable above, so none is doomed.
+    let dead_tables: Vec<u32> = func
+        .blocks
+        .iter()
+        .enumerate()
+        .filter(|(b, _)| !reachable[*b])
+        .filter_map(|(_, blk)| match blk.terminator {
+            Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } => Some(table),
+            _ => None,
+        })
+        .collect();
+    for t in dead_tables {
+        func.jump_tables[t as usize].clear();
+    }
+
     // Compact the survivors (original order preserved) and renumber.
     let mut order = Vec::new();
     let mut new_id = alloc::vec![BlockId::MAX; n];
@@ -234,6 +255,40 @@ mod tests {
         };
         assert_eq!(incoming.len(), 1, "the b2 incoming is dropped");
         assert_eq!(incoming[0].0, 0, "b0 survives as block 0");
+    }
+
+    #[test]
+    fn clears_the_row_of_a_pruned_asm_goto_dispatch() {
+        // A folded branch (b0 -> b1) orphans an asm-goto dispatch (b2)
+        // whose row names two now-doomed targets (b3, b4). Pruning must
+        // clear the row -- leaving the doomed ids in it would make a later
+        // block-id remap index out of range (the bug an inlined asm-goto in
+        // a constant-dead branch exposes).
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0), // v0 (b0)
+                Inst::Imm(0), // v1 (b1)
+                Inst::Imm(0), // v2 (b2, dead dispatch)
+                Inst::Imm(3), // v3 (b3, dead)
+                Inst::Imm(4), // v4 (b4, dead)
+            ],
+            vec![
+                block(0..1, Terminator::Jmp(1)),
+                block(1..2, Terminator::Return(1)),
+                block(2..3, Terminator::AsmGoto { table: 0 }),
+                block(3..4, Terminator::Return(3)),
+                block(4..5, Terminator::Return(4)),
+            ],
+        );
+        f.jump_tables = vec![vec![3, 4]];
+        run_one(&mut f);
+        assert_eq!(f.blocks.len(), 2, "the dead dispatch and its targets go");
+        assert!(
+            f.jump_tables[0].is_empty(),
+            "the pruned dispatch's row is cleared, not left with stale ids"
+        );
+        // Idempotent: a second prune must not index a stale row entry.
+        run_one(&mut f);
     }
 
     #[test]

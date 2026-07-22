@@ -47,18 +47,13 @@ int vsnprintf(char *buf, int size, char *fmt, void *ap) {
 }
 
 // Windows `va_list` is a byte cursor over the home area / stack
-// (see `<stdarg.h>`); the intrinsics take the cursor's address.
-#pragma intrinsic("__builtin_va_start")
-#pragma intrinsic("__builtin_va_end")
-void __builtin_va_start(void **ap, void *last_addr);
-void __builtin_va_end(void **ap);
-
+// (see `<stdarg.h>`); the builtins are available with no header.
 int snprintf(char *buf, int size, char *fmt, ...) {
     void *ap;
     int len;
-    __builtin_va_start(&ap, (void *)&fmt);
+    __builtin_va_start(ap, fmt);
     len = vsnprintf(buf, size, fmt, ap);
-    __builtin_va_end(&ap);
+    __builtin_va_end(ap);
     return len;
 }
 

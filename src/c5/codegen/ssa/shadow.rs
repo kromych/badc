@@ -40,6 +40,7 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
             f.return_struct_size,
             f.return_ty,
             f.alloca_top_slot,
+            &f.over_aligned_slots,
         )
         .map_err(|e| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
@@ -112,6 +113,13 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
 /// is handled conservatively: any function whose address appears
 /// in `Inst::ImmCode` is already marked reachable, so an indirect
 /// dispatch cannot reach a function the marker hasn't seen.
+///
+/// An `always_inline` function is exempt from the `_`-prefix rule: gcc
+/// keeps no out-of-line copy of one inlined at every call site, and such
+/// a body can be uncompilable out of line (a parameter-dependent `"i"`
+/// inline-asm operand is constant only after inlining). It survives when
+/// genuinely referenced -- a non-inlined call or its address taken -- via
+/// `Inst::Call` / `Inst::ImmCode` regardless.
 pub(crate) fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
     use crate::c5::ir::Inst;
     use crate::c5::symbol::Linkage;
@@ -135,7 +143,7 @@ pub(crate) fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &P
 
     for f in funcs.iter() {
         let is_root = f.name == "main"
-            || f.name.starts_with('_')
+            || (f.name.starts_with('_') && !f.is_always_inline)
             || matches!(
                 linkage_by_name.get(f.name.as_str()).copied(),
                 Some(Linkage::External) | Some(Linkage::None)
@@ -163,6 +171,14 @@ pub(crate) fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &P
     // `static` and never called in-image.
     for f in &program.init_funcs {
         queue.push(f.ent_pc);
+    }
+    // `__attribute__((used))` keeps a definition alive without an
+    // in-image reference; an alias symbol's `val` is its target's
+    // entry, referenced through the alias name at link time.
+    for s in &program.symbols {
+        if s.class == Token::Fun as i64 && (s.is_used || s.is_alias || s.section_name.is_some()) {
+            queue.push(s.val as usize);
+        }
     }
 
     while let Some(pc) = queue.pop() {
@@ -221,7 +237,7 @@ pub(crate) fn produce_ssa_funcs(
         funcs.retain(|f| live.contains(&f.ent_pc));
         #[cfg(feature = "std")]
         measure_dead_data(&funcs, program);
-        return Ok(funcs);
+        return Ok(order_by_section(funcs, program));
     }
     if !program.user_ssa_funcs.is_empty() || !program.synthetic_ssa_funcs.is_empty() {
         let mut covered: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
@@ -238,9 +254,35 @@ pub(crate) fn produce_ssa_funcs(
             }
         }
         out.sort_by_key(|f| f.ent_pc);
-        return Ok(out);
+        return Ok(order_by_section(out, program));
     }
     Ok(Vec::new())
+}
+
+/// Stable-partition the emission order so functions placed in a named
+/// section (`__attribute__((section("name")))`) come last, grouped by
+/// section name. The relocatable writer carves each group off the tail
+/// of `.text` into its section; grouping keeps intra-section direct
+/// branches at a fixed relative distance, so only cross-section
+/// references need relocations.
+fn order_by_section(mut funcs: Vec<FunctionSsa>, program: &Program) -> Vec<FunctionSsa> {
+    use crate::c5::token::Token;
+    let section_of: alloc::collections::BTreeMap<&str, &str> = program
+        .symbols
+        .iter()
+        .filter(|s| s.class == Token::Fun as i64 && s.defined_here && s.section_name.is_some())
+        .map(|s| (s.name.as_str(), s.section_name.as_deref().unwrap_or("")))
+        .collect();
+    if section_of.is_empty() {
+        return funcs;
+    }
+    // `None` (default `.text`) sorts before every named group.
+    funcs.sort_by(|a, b| {
+        section_of
+            .get(a.name.as_str())
+            .cmp(&section_of.get(b.name.as_str()))
+    });
+    funcs
 }
 
 /// Reachable user functions: the set of `ent_pc`s the program can reach.
@@ -286,6 +328,18 @@ pub(crate) fn compute_live_functions(
     for f in &program.init_funcs {
         if by_ent.contains_key(&f.ent_pc) && live.insert(f.ent_pc) {
             work.push(f.ent_pc);
+        }
+    }
+    // `used`-attributed definitions and alias targets survive without
+    // an in-image reference (see the equivalent roots above).
+    for s in &program.symbols {
+        let ent = s.val as usize;
+        if s.class == Token::Fun as i64
+            && (s.is_used || s.is_alias || s.section_name.is_some())
+            && by_ent.contains_key(&ent)
+            && live.insert(ent)
+        {
+            work.push(ent);
         }
     }
     while let Some(ent) = work.pop() {
@@ -388,10 +442,15 @@ fn live_data_intervals(
         }
     }
     for sym in &program.symbols {
+        // External-linkage objects are reachable from sibling units;
+        // `used` and named-section objects are kept by declared intent
+        // (their consumers live outside this unit's reference graph).
         if sym.class == Token::Glo as i64
             && sym.defined_here
             && !sym.is_thread_local
-            && matches!(sym.linkage, Linkage::External)
+            && (matches!(sym.linkage, Linkage::External)
+                || sym.is_used
+                || sym.section_name.is_some())
             && (0..data_len).contains(&sym.val)
         {
             live[interval_of(sym.val)] = true;
@@ -494,9 +553,10 @@ pub(crate) fn compact_program_data(
     // whose start the parser did not record glues onto its predecessor):
     // the relative layout inside the copied span is preserved, and a
     // congruent base preserves the absolute alignment of every object in
-    // it. badc lays `.data` out at 8-byte alignment; 16 covers any
-    // wider scalar without measurable padding cost.
-    const ALIGN: i64 = 16;
+    // it. `ALIGN` is the section's own alignment, which the writers place
+    // `.data` and `.bss` at, so preserving residues modulo it preserves
+    // each object's absolute alignment up to that of the whole section.
+    let align: i64 = (program.data_align.max(16)).next_power_of_two() as i64;
     let obj_end = |i: usize| -> i64 { if i + 1 < n { starts[i + 1] } else { data_len } };
     // A relocation writes a (generally non-zero) value into its slot at
     // link/write time, so the slot's object is initialised data even when
@@ -551,8 +611,8 @@ pub(crate) fn compact_program_data(
     let mut new_data: Vec<u8> = Vec::with_capacity(program.data.len());
     for i in 0..n {
         if live[i] && !is_bss(i) {
-            let want = starts[i].rem_euclid(ALIGN);
-            while (new_data.len() as i64).rem_euclid(ALIGN) != want {
+            let want = starts[i].rem_euclid(align);
+            while (new_data.len() as i64).rem_euclid(align) != want {
                 new_data.push(0);
             }
             new_base[i] = new_data.len() as i64;
@@ -567,7 +627,7 @@ pub(crate) fn compact_program_data(
     // object's bss-relative offset must carry the same alignment residue
     // as its `.data` offset, which only holds when the base is aligned.
     if (0..n).any(&is_bss) {
-        while (new_data.len() as i64).rem_euclid(ALIGN) != 0 {
+        while (new_data.len() as i64).rem_euclid(align) != 0 {
             new_data.push(0);
         }
     }
@@ -575,8 +635,8 @@ pub(crate) fn compact_program_data(
     let mut bss_cursor = bss_base;
     for i in 0..n {
         if is_bss(i) {
-            let want = starts[i].rem_euclid(ALIGN);
-            while bss_cursor.rem_euclid(ALIGN) != want {
+            let want = starts[i].rem_euclid(align);
+            while bss_cursor.rem_euclid(align) != want {
                 bss_cursor += 1;
             }
             new_base[i] = bss_cursor;

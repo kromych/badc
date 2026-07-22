@@ -424,6 +424,9 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
 /// that exercise those paths run end-to-end.
 const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    ("overaligned_data_placement.c", 0),
+    ("overaligned_type_placement.c", 0),
+    ("page_multiple_alignment.c", 0),
     ("vla_basic_sum.c", 0),
     ("vla_runtime_sizeof.c", 0),
     ("vla_size_from_arg.c", 0),
@@ -439,6 +442,11 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("phi_class_nested_loops.c", 49),
     ("phi_class_diamond_join.c", 30),
     ("arithmetic.c", 60),
+    ("auto_type_inference.c", 0),
+    ("attribute_hot_cold.c", 0),
+    ("attribute_weak_alias.c", 0),
+    ("attribute_section_placement.c", 0),
+    ("register_var_stack_pointer.c", 0),
     ("compound_literal_struct_field.c", 0),
     ("goto.c", 5),
     ("switch_statement.c", 25),
@@ -538,6 +546,8 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("ssa_fp_routing.c", 0),
     ("ssa_callee_saved_x19.c", 0),
     ("ssa_va_arg_loop.c", 0),
+    ("builtin_va_list_typedef.c", 0),
+    ("builtin_expect_no_header.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
     ("sysv_variadic_host_abi.c", 0),
     ("aapcs64_variadic_host_abi.c", 0),
@@ -625,6 +635,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("gcc_vector_subscript.c", 0),
     ("ioctl_request_encoding.c", 0),
     ("computed_goto.c", 0),
+    ("local_label.c", 0),
     ("label_addr_array_init.c", 0),
     ("static_init_once_guard.c", 0),
     ("computed_goto_static_table.c", 0),
@@ -780,11 +791,30 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_pmull.c", 42),
     ("inline_asm_a64_fp_immediate.c", 42),
     ("inline_asm_a64_clobber.c", 42),
+    ("inline_asm_clobber_probe.c", 42),
     ("inline_asm_a64_fp_modifier.c", 42),
     ("inline_asm_a64_dp.c", 42),
     ("inline_asm_a64_labels.c", 42),
+    ("inline_asm_a64_acqrel.c", 42),
+    ("inline_asm_a64_llsc.c", 42),
+    ("inline_asm_a64_llsc_prfm.c", 42),
     ("inline_asm_goto.c", 42),
     ("inline_asm_reg_var.c", 42),
+    ("inline_asm_sp_reg_var.c", 42),
+    ("declarator_list_forms.c", 42),
+    ("inline_asm_named_operands.c", 42),
+    ("inline_asm_const_modifier.c", 42),
+    ("inline_asm_branch_target_operand.c", 42),
+    ("inline_asm_x64_segment.c", 42),
+    ("inline_asm_a64_barriers.c", 42),
+    ("inline_asm_a64_comments.c", 42),
+    ("inline_asm_pushsection.c", 42),
+    ("file_scope_asm_decls.c", 0),
+    ("inline_asm_goto_output.c", 42),
+    ("inline_asm_goto_multiret.c", 42),
+    ("inline_asm_output_reg.c", 42),
+    ("inline_naked_not_inlined.c", 0),
+    ("inline_asm_constraint_alternatives.c", 42),
     ("compound_assign_int_fp.c", 0),
     ("signal_sig_t.c", 0),
     ("math_classify.c", 0),
@@ -897,6 +927,19 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // GCC 128-bit integer as a 16-byte type: sizeof, struct/array layout
     // (asm/sigcontext.h shape), by-value copy.
     ("int128_type_layout.c", 0),
+    // GCC 128-bit integer arithmetic, expanded over the two 64-bit
+    // halves: add / sub / neg / bitwise / increment with carry and
+    // borrow, shifts across the halfway point, the widening 64x64
+    // product, signed and unsigned comparison edges, and division /
+    // remainder with the C99 6.5.5 truncation-toward-zero sign rules.
+    ("int128_arith.c", 0),
+    ("int128_shift.c", 0),
+    ("int128_mul.c", 0),
+    ("int128_cmp.c", 0),
+    ("int128_divmod.c", 0),
+    ("int128_unary.c", 0),
+    ("int128_scalar_result.c", 0),
+    ("int128_struct_member.c", 0),
     // C99 7.13.2.1p3 / 6.7.3p6 / 5.1.2.3p2: volatile objects keep
     // their post-longjmp value, are re-read through aliases, and
     // unused volatile reads still execute.
@@ -1346,6 +1389,103 @@ fn fixture_parity_native_optimized() {
         failures.len(),
         NATIVE_FIXTURES.len(),
         failures.join("\n  ")
+    );
+}
+
+/// A `static __always_inline` `asm goto` whose `"i"` operand is a
+/// parameter compiles only once inlined: out of line the operand is not
+/// a link-time constant, so the section-data emit rejects it. -O inlines
+/// it at the constant-argument call site, folding the operand, and routes
+/// the two returns through a join-block phi. This is the kernel
+/// `arch_static_branch` shape; it is verified only at -O since the
+/// out-of-line body is (correctly) unencodable at -O0.
+#[test]
+fn param_operand_asm_goto_inlines_at_opt() {
+    let src = r#"
+        static inline __attribute__((always_inline)) int
+        branch(const int key) {
+        #if defined(__x86_64__)
+            __asm__ goto("jmp %l[yes]\n"
+                         ".pushsection .discard.b,\"a\"\n"
+                         ".long %c0\n"
+                         ".popsection\n" : : "i"(key) : : yes);
+        #elif defined(__aarch64__)
+            __asm__ goto("b %l[yes]\n"
+                         ".pushsection .discard.b,\"a\"\n"
+                         ".long %c0\n"
+                         ".popsection\n" : : "i"(key) : : yes);
+        #else
+            goto yes;
+        #endif
+            return 1;
+        yes:
+            return 2;
+        }
+        int main(void) { return branch(40) == 2 ? 42 : 0; }
+    "#;
+    let opts = NativeOptions::new().with_optimize();
+    let outcome = build_and_run_outcome_with_options(src, "param_asm_goto", opts);
+    assert!(
+        outcome.matches(42),
+        "param-operand asm-goto callee must inline and fold at -O, got {outcome:?}"
+    );
+}
+
+/// A caller that owns an `asm goto` (so it carries a `jump_table`) must
+/// still absorb a multi-block `always_inline` callee. The callee is itself
+/// an `asm goto` whose `%c0` section operand is a constant argument, so it
+/// only folds to a link-time value when inlined into the caller; left out
+/// of line the operand is a parameter and the section value is
+/// non-constant, so the unit fails to encode. The multi-block splice
+/// shifts the caller's own asm-goto `jump_table` row across the block-id
+/// shift, so entering it for a caller that already holds one is safe.
+#[test]
+fn asm_goto_callee_inlines_into_asm_goto_caller() {
+    let src = r#"
+        static inline __attribute__((always_inline)) int
+        branch(const int key) {
+        #if defined(__x86_64__)
+            __asm__ goto("jmp %l[yes]\n"
+                         ".pushsection .discard.b,\"a\"\n"
+                         ".long %c0\n"
+                         ".popsection\n" : : "i"(key) : : yes);
+        #elif defined(__aarch64__)
+            __asm__ goto("b %l[yes]\n"
+                         ".pushsection .discard.b,\"a\"\n"
+                         ".long %c0\n"
+                         ".popsection\n" : : "i"(key) : : yes);
+        #else
+            goto yes;
+        #endif
+            return 1;
+        yes:
+            return 2;
+        }
+        int caller_owns_asm_goto(int a) {
+            int r = 0;
+        #if defined(__x86_64__)
+            __asm__ goto("test %0,%0\n\t"
+                         "jnz %l[nz]" : : "r"(a) : : nz);
+        #elif defined(__aarch64__)
+            __asm__ goto("cbnz %w0, %l[nz]" : : "r"(a) : : nz);
+        #else
+            if (a) goto nz;
+        #endif
+            r = 10;
+        nz:
+            r += branch(40);
+            return r;
+        }
+        int main(void) {
+            return (caller_owns_asm_goto(0) == 12
+                    && caller_owns_asm_goto(1) == 2) ? 42 : 0;
+        }
+    "#;
+    let opts = NativeOptions::new().with_optimize();
+    let outcome = build_and_run_outcome_with_options(src, "asm_goto_caller", opts);
+    assert!(
+        outcome.matches(42),
+        "asm-goto callee must inline into an asm-goto caller and fold at -O, got {outcome:?}"
     );
 }
 

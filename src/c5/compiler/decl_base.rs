@@ -31,7 +31,9 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{UNSIGNED_BIT, VOLATILE_BIT, is_decl_modifier, struct_ty_for};
+use super::types::{
+    SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, is_decl_modifier, struct_ty_for,
+};
 
 /// Accumulator for the int-modifier soup that prefixes a C base
 /// type. `signed` / `unsigned` / `short` / `long` (any count) /
@@ -173,11 +175,9 @@ impl Compiler {
         };
         let id = if self.lex.tk == '{' {
             let id = self.parse_aggregate_body(&name, is_union, packed)?;
-            // `struct name { ... } __attribute__((packed))`: the attribute
-            // follows the body. Re-pack the already-laid-out fields.
-            if self.skip_attribute_specifiers()? {
-                self.repack_struct(id);
-            }
+            // `struct name { ... } __attribute__((...))`: the attributes
+            // follow the body and apply to the aggregate just laid out.
+            self.apply_post_body_attributes(id)?;
             id
         } else {
             // A trailing attribute on a tag use without a body
@@ -232,22 +232,61 @@ impl Compiler {
 
     /// `typeof ( type-name )` / `typeof ( expression )` (C23 6.7.2.5,
     /// the GCC `__typeof__` extension). The result is the operand's
-    /// type. A type-name operand parses as a base type plus any
-    /// abstract pointer decoration; an expression operand is parsed
+    /// type. A type-name operand parses as a base type plus any abstract
+    /// pointer and array decoration; an expression operand is parsed
     /// unevaluated and its type recovered, mirroring `sizeof`'s
-    /// expression branch. Only the flat scalar / pointer / aggregate
-    /// type the rest of the parser carries is recovered; an array
-    /// operand's element type is returned (the dimension is dropped,
-    /// matching the decay the value contexts already apply).
+    /// expression branch. The flat scalar / pointer / aggregate tag is
+    /// returned; an array operand (a `T [N]` type name or an array-typed
+    /// expression) leaves its element count on the array carrier so a
+    /// declarator through the specifier is an array, while a decayed
+    /// value-context expression keeps only the element type.
     pub(super) fn parse_typeof_specifier(&mut self) -> Result<i64, C5Error> {
         self.next()?; // typeof
         if self.lex.tk != '(' {
             return Err(self.compile_err("`(` expected after `typeof`"));
         }
         self.next()?; // (
+        // `typeof(f)` where `f` names a function: the specifier is `f`'s
+        // function type. Route the same pending carriers a function-type
+        // typedef base uses so a declarator through the specifier is a
+        // function declaration and a redeclaration of a defined function
+        // merges (C99 6.2.7) instead of colliding as a duplicate.
+        if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b')') {
+            let idx = self.lex.curr_id_idx;
+            let class = self.symbols[idx].class;
+            if class == Token::Fun as i64 || class == Token::Sys as i64 {
+                let fty = self.symbols[idx].type_ + Ty::Ptr as i64;
+                self.pending.fn_ptr_indirection = Some(1);
+                self.pending.base_is_function_type = true;
+                self.pending.typedef_fn_proto = Some((
+                    self.symbols[idx].params.len(),
+                    self.symbols[idx].is_variadic,
+                ));
+                self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
+                self.next()?; // identifier
+                self.next()?; // )
+                return Ok(fty);
+            }
+            // `typeof(arr)` where `arr` names a multi-dimensional array: the
+            // specifier is the array's full type (C99 6.7.6.2, no decay). The
+            // expression path recovers only the outer dimension from the
+            // decay markers, so read every dimension from the symbol -- a
+            // redeclaration through the specifier (`extern typeof(a) a;`, the
+            // EXPORT_SYMBOL shape) then keeps the complete type and its
+            // inner-dimension stride instead of losing the inner dimensions.
+            if class == Token::Glo as i64 && self.symbols[idx].inner_array_size != 0 {
+                let ty = self.symbols[idx].type_;
+                self.pending.typedef_base_array_size = self.symbols[idx].array_size;
+                self.pending.typedef_base_array_dims = self.symbols[idx].array_dims.clone();
+                self.pending.typeof_operand_was_array = true;
+                self.symbols[idx].was_referenced = true;
+                self.next()?; // identifier
+                self.next()?; // )
+                return Ok(ty);
+            }
+        }
         let ty = if self.lex_is_type_start() {
             let mut inner = self.parse_decl_base_type()?;
-            let base_arr = core::mem::take(&mut self.pending.typedef_base_array_size);
             let mut had_ptr = false;
             while self.lex.tk == Token::MulOp {
                 self.next()?;
@@ -257,61 +296,469 @@ impl Compiler {
                     self.next()?;
                 }
             }
-            // `typeof(T[N])` is an array type; `typeof(T *)` is not.
-            self.pending.typeof_operand_was_array = base_arr != 0 && !had_ptr;
+            // An array typedef operand keeps its dimension on the carrier
+            // so a declarator through the specifier is an array, exactly
+            // as if the typedef itself were the base type. `typeof(T *)`
+            // names a pointer; the dimension belongs to the pointee.
+            if had_ptr {
+                self.pending.typedef_base_array_size = 0;
+                self.pending.typedef_base_array_dims.clear();
+            }
+            // Abstract array declarator in the type name: `typeof(T [N])`,
+            // `typeof(T [])`, `typeof(T [N][M])` (C99 6.7.6). The bracketed
+            // dimensions are outer; an array-typedef base supplies the inner.
+            if self.lex.tk == Token::Brak {
+                let base_extent = core::mem::take(&mut self.pending.typedef_base_array_size);
+                let base_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
+                let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+                while self.lex.tk == Token::Brak {
+                    self.next()?;
+                    // An omitted bound (`T []`) is an incomplete array (-1).
+                    let n = if self.lex.tk == ']' {
+                        -1
+                    } else {
+                        let n = self.parse_constant_int()?;
+                        if n < 0 {
+                            return Err(self.compile_err(
+                                "array dimension in a type name must not be negative",
+                            ));
+                        }
+                        n
+                    };
+                    if self.lex.tk != ']' {
+                        return Err(
+                            self.compile_err("close bracket expected in an array type name")
+                        );
+                    }
+                    self.next()?;
+                    dims.push(n);
+                }
+                // Fold in an array-typedef base's dimensions, gated on its
+                // size carrier: the dims list alone can be a prior parse's
+                // stale value.
+                if base_extent != 0 {
+                    if base_dims.is_empty() {
+                        dims.push(base_extent);
+                    } else {
+                        dims.extend(base_dims);
+                    }
+                }
+                // The carrier holds the total element count; a two-plus dim
+                // list rides alongside for per-row strides.
+                self.pending.typedef_base_array_size = if dims.iter().all(|&d| d > 0) {
+                    dims.iter().product::<i64>()
+                } else {
+                    -1
+                };
+                self.pending.typedef_base_array_dims = if dims.len() >= 2 {
+                    dims
+                } else {
+                    alloc::vec::Vec::new()
+                };
+            }
+            self.pending.typeof_operand_was_array = self.pending.typedef_base_array_size != 0;
             inner
         } else {
-            // Unevaluated expression operand: parse it to learn the
-            // type, then discard everything the parse pushed so no
-            // live code, AST node, or PC reservation survives.
-            let saved_text_len = self.next_ent_pc;
-            let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
-            let saved_ast_acc = self.ast_acc;
-            let saved_vstack = self.ast_vstack.len();
-            // Array-decay hints record that the operand's value came
-            // from an array: `last_array_decay_size` (element count) for
-            // a 1D bare array, `last_array_decay_bytes` (byte width) for
-            // a multi-dim subscript row, a `*p` pointer-to-array row
-            // deref, or a string literal. Capture both so an array
-            // operand types distinctly from a pointer, then restore them
-            // so they do not leak into a surrounding `sizeof`.
-            let saved_decay = self.pending.last_array_decay_size;
-            let saved_decay_bytes = self.pending.last_array_decay_bytes;
-            self.pending.last_array_decay_size = 0;
-            self.pending.last_array_decay_bytes = 0;
-            // The operand is a full expression (C99 6.7.6.2 / the GCC
-            // extension): parse at assignment precedence so binary,
-            // conditional, and assignment operators are consumed, then a
-            // trailing comma operator whose last term gives the type.
-            self.expr(Token::Assign as i64)?;
+            let mut inner = self.parse_unevaluated_expr_ty(true)?;
+            // A 1D array expression operand decayed to a pointer to its
+            // element; recover the element type and put the element count
+            // on the carrier like an array typedef base, so a declarator
+            // through the specifier is an array. TODO: multi-dim
+            // expression operands (the dims chain is not recoverable from
+            // the decay markers).
+            let n = core::mem::take(&mut self.pending.typeof_operand_array_size);
+            let bytes = core::mem::take(&mut self.pending.typeof_operand_array_bytes);
+            if n != 0 && inner >= Ty::Ptr as i64 {
+                inner -= Ty::Ptr as i64;
+                self.pending.typedef_base_array_size = n;
+            } else if bytes > 0 && inner >= Ty::Ptr as i64 {
+                // Row size known by byte width: a pointer-to-array deref
+                // (`typeof(*p)`), a string literal, or a 1D row. Recover
+                // the element type and count so the specifier is the array,
+                // not the decayed element pointer.
+                let elem = inner - Ty::Ptr as i64;
+                let esize = (self.size_of_type(elem) as i64).max(1);
+                inner = elem;
+                self.pending.typedef_base_array_size = bytes / esize;
+            }
+            inner
+        };
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected after `typeof` operand"));
+        }
+        self.next()?; // )
+        Ok(ty)
+    }
+
+    /// Parse an unevaluated expression to learn its type, then discard
+    /// everything the parse pushed so no live code, AST node, or PC
+    /// reservation survives. `comma_operands` extends the parse across
+    /// a trailing comma operator whose last term gives the type
+    /// (`typeof`'s operand grammar); a declarator initializer stops at
+    /// the comma. Sets `pending.typeof_operand_was_array` when the
+    /// operand's value decayed from an array.
+    /// The symbol index of the function whose address the accumulated
+    /// expression takes (`&f`), if that is its whole shape.
+    fn addressed_function_symbol(&self) -> Option<usize> {
+        use super::super::ast::{Expr, UnOp};
+        // A function designator already denotes its address, so `&f` may
+        // reach here either wrapped in the operator or collapsed to the
+        // identifier.
+        let e = self.ast.expr(self.ast_acc?);
+        let e = match e {
+            Expr::Unary {
+                op: UnOp::AddrOf,
+                child,
+                ..
+            } => self.ast.expr(*child),
+            _ => e,
+        };
+        let Expr::Ident { sym, class, .. } = e else {
+            return None;
+        };
+        (*class == Token::Fun as i64 || *class == Token::Sys as i64).then_some(*sym as usize)
+    }
+
+    fn parse_unevaluated_expr_ty(&mut self, comma_operands: bool) -> Result<i64, C5Error> {
+        let saved_text_len = self.next_ent_pc;
+        let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
+        let saved_ast_acc = self.ast_acc;
+        let saved_vstack = self.ast_vstack.len();
+        // Array-decay hints record that the operand's value came
+        // from an array: `last_array_decay_size` (element count) for
+        // a 1D bare array, `last_array_decay_bytes` (byte width) for
+        // a multi-dim subscript row, a `*p` pointer-to-array row
+        // deref, or a string literal. Capture both so an array
+        // operand types distinctly from a pointer, then restore them
+        // so they do not leak into a surrounding `sizeof`.
+        let saved_decay = self.pending.last_array_decay_size;
+        let saved_decay_bytes = self.pending.last_array_decay_bytes;
+        self.pending.last_array_decay_size = 0;
+        self.pending.last_array_decay_bytes = 0;
+        // Parse at assignment precedence so binary, conditional, and
+        // assignment operators are consumed.
+        self.expr(Token::Assign as i64)?;
+        if comma_operands {
             while self.lex.tk == ',' {
                 self.next()?;
                 self.pending.last_array_decay_size = 0;
                 self.pending.last_array_decay_bytes = 0;
                 self.expr(Token::Assign as i64)?;
             }
-            let expr_ty = self.ty;
-            // Either marker firing means the operand decayed from an
-            // array, so `typeof(x)` is an array type and
-            // `__builtin_types_compatible_p(typeof(x), typeof(&(x)[0]))`
-            // must report it as distinct from a pointer -- including a
-            // subscripted row of a multi-dim array (`arr2d[i]`), which
-            // sets only the byte marker.
-            self.pending.typeof_operand_was_array =
-                self.pending.last_array_decay_size != 0 || self.pending.last_array_decay_bytes > 0;
-            self.pending.last_array_decay_size = saved_decay;
-            self.pending.last_array_decay_bytes = saved_decay_bytes;
-            self.next_ent_pc = saved_text_len;
-            self.clear_recent_emits();
-            self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
-            self.ast_acc = saved_ast_acc;
-            self.ast_vstack.truncate(saved_vstack);
-            expr_ty
-        };
-        if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected after `typeof` operand"));
         }
-        self.next()?; // )
+        // `&f` where `f` names a function: the operand is a pointer to
+        // `f`'s function type. Route the same pending carriers the
+        // function-typedef and `typeof(f)` bases use, so the prototype
+        // reaches a type-name reader; without them the specifier keeps
+        // only the return type and an opaque pointer level.
+        let expr_ty = match self.addressed_function_symbol() {
+            Some(idx) => {
+                self.pending.fn_ptr_indirection = Some(1);
+                self.pending.base_is_function_type = false;
+                self.pending.typedef_fn_proto = Some((
+                    self.symbols[idx].params.len(),
+                    self.symbols[idx].is_variadic,
+                ));
+                self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
+                self.symbols[idx].type_ + Ty::Ptr as i64
+            }
+            None => self.ty,
+        };
+        // Either marker firing means the operand decayed from an
+        // array, so `typeof(x)` is an array type and
+        // `__builtin_types_compatible_p(typeof(x), typeof(&(x)[0]))`
+        // must report it as distinct from a pointer -- including a
+        // subscripted row of a multi-dim array (`arr2d[i]`), which
+        // sets only the byte marker.
+        self.pending.typeof_operand_was_array =
+            self.pending.last_array_decay_size != 0 || self.pending.last_array_decay_bytes > 0;
+        self.pending.typeof_operand_array_size = self.pending.last_array_decay_size;
+        // Capture the byte-width marker only for a 1D-reducible row: a
+        // pending multi-dim stride means the row is itself multi-dim and
+        // not expressible as a single element count.
+        self.pending.typeof_operand_array_bytes =
+            if self.pending.index_stride == 0 && self.pending.index_strides_tail.is_empty() {
+                self.pending.last_array_decay_bytes
+            } else {
+                0
+            };
+        self.pending.last_array_decay_size = saved_decay;
+        self.pending.last_array_decay_bytes = saved_decay_bytes;
+        self.next_ent_pc = saved_text_len;
+        self.clear_recent_emits();
+        self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
+        self.ast_acc = saved_ast_acc;
+        self.ast_vstack.truncate(saved_vstack);
+        Ok(expr_ty)
+    }
+
+    /// `asm ( "reg" )` after a block-scope declarator: a GNU
+    /// explicit-register binding. The current token is `asm`; on
+    /// return the cursor is past the closing `)`. Returns the quoted
+    /// register name.
+    pub(super) fn parse_asm_register_suffix(&mut self) -> Result<alloc::string::String, C5Error> {
+        self.next()?; // asm
+        self.consume(b'(', "`(` expected after `asm`")?;
+        if self.lex.tk != '"' {
+            return Err(self.compile_err("register name string expected in `asm(...)`"));
+        }
+        // The lexer appended the literal's bytes to the data section;
+        // read them back and drop them.
+        let start = self.lex.ival as usize;
+        self.next()?; // consume the string
+        // C99 5.1.1.2 phase 6: adjacent string literals concatenate, as on
+        // the constraint path. A register name may be spelled `"%" "rdx"`,
+        // so it is complete only once the following `"` tokens are consumed.
+        while self.lex.tk == '"' {
+            self.next()?;
+        }
+        let mut bytes = self.data[start..].to_vec();
+        self.data.truncate(start);
+        while bytes.last() == Some(&0) {
+            bytes.pop();
+        }
+        let name = alloc::string::String::from_utf8_lossy(&bytes).into_owned();
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected after register name"));
+        }
+        self.next()?;
+        Ok(name)
+    }
+
+    /// A GNU asm-label (`decl asm("name")`) sets the declared object's or
+    /// function's assembler symbol name. When the label restates the
+    /// identifier the rename is a no-op and is accepted; a differing name
+    /// would have to rename the emitted symbol across every backend's symbol
+    /// and relocation tables, which is not yet wired.
+    /// TODO: honor an assembler name that differs from the identifier.
+    pub(super) fn parse_declarator_asm_label(&mut self, id_idx: usize) -> Result<(), C5Error> {
+        let label = self.parse_asm_register_suffix()?;
+        if label != self.symbols[id_idx].name {
+            return Err(self.compile_err(format!(
+                "assembler name `{label}` differing from `{}` is not yet supported",
+                self.symbols[id_idx].name
+            )));
+        }
+        Ok(())
+    }
+
+    /// Consume an optional `asm("reg")` explicit-register suffix on a
+    /// block-scope declarator. The binding requires the `register`
+    /// storage class and automatic duration.
+    pub(super) fn parse_register_asm_binding(
+        &mut self,
+        is_static: bool,
+        is_extern: bool,
+    ) -> Result<Option<crate::c5::symbol::AsmRegister>, C5Error> {
+        if self.lex.tk != Token::Asm {
+            return Ok(None);
+        }
+        let name = self.parse_asm_register_suffix()?;
+        if !self.pending.saw_register_storage {
+            return Err(self.compile_err(
+                "an explicit-register binding requires the `register` storage class",
+            ));
+        }
+        if is_static || is_extern {
+            return Err(
+                self.compile_err("an explicit-register variable cannot be `static` or `extern`")
+            );
+        }
+        Ok(Some(self.resolve_asm_register(&name)?))
+    }
+
+    /// A stack- or frame-pointer register variable compiles reads into
+    /// direct register moves and holds no writable storage; reject an
+    /// initializer before the declaration parse consumes it.
+    pub(super) fn check_register_asm_init(
+        &self,
+        reg: Option<crate::c5::symbol::AsmRegister>,
+    ) -> Result<(), C5Error> {
+        use crate::c5::symbol::AsmRegister as R;
+        if matches!(reg, Some(R::StackPointer | R::FramePointer)) && self.lex.tk == Token::Assign {
+            return Err(self
+                .compile_err("a stack- or frame-pointer register variable cannot be initialized"));
+        }
+        Ok(())
+    }
+
+    /// `register T name asm("reg")` at file scope: a GNU global register
+    /// variable. Stack- and frame-pointer bindings are supported; reads
+    /// anywhere in the unit compile into direct register moves, the name
+    /// holds no storage and emits no symbol. The declaration may repeat
+    /// across the unit (headers re-include it) as long as the register
+    /// matches. TODO: general-purpose global register variables (the
+    /// register must be reserved in every function's allocation).
+    pub(super) fn parse_file_scope_register_binding(
+        &mut self,
+        id_idx: usize,
+        ty: i64,
+        is_static: bool,
+        is_extern: bool,
+    ) -> Result<(), C5Error> {
+        use crate::c5::symbol::AsmRegister as R;
+        let name = self.parse_asm_register_suffix()?;
+        if is_static || is_extern {
+            return Err(
+                self.compile_err("an explicit-register variable cannot be `static` or `extern`")
+            );
+        }
+        let reg = self.resolve_asm_register(&name)?;
+        if !matches!(reg, R::StackPointer | R::FramePointer) {
+            return Err(self.compile_err(
+                "file-scope register variables are supported for the stack and frame pointer only",
+            ));
+        }
+        let prior_class = self.symbols[id_idx].class;
+        if prior_class != 0 {
+            let same =
+                prior_class == Token::Loc as i64 && self.symbols[id_idx].asm_register == Some(reg);
+            if !same {
+                return Err(self.compile_err(format!(
+                    "`{}` conflicts with a prior declaration",
+                    self.symbols[id_idx].name
+                )));
+            }
+        }
+        self.check_register_asm_init(Some(reg))?;
+        let sym = &mut self.symbols[id_idx];
+        sym.class = Token::Loc as i64;
+        sym.type_ = ty;
+        sym.val = 0;
+        sym.array_size = 0;
+        sym.asm_register = Some(reg);
+        sym.is_global_register = true;
+        sym.decl_line = self.lex.line;
+        // The binding is the outermost scope: make the shadow slots hold
+        // the binding itself so the per-function `Loc` cleanup restore
+        // (and any block-scope shadowing) round-trips back to it.
+        sym.h_class = sym.class;
+        sym.h_type = sym.type_;
+        sym.h_val = sym.val;
+        sym.h_array_size = 0;
+        sym.h_asm_register = sym.asm_register;
+        sym.h_is_global_register = true;
+        Ok(())
+    }
+
+    /// Resolve a `register T name asm("reg")` register name against the
+    /// compile target. The `%`-prefixed spelling is accepted, as is the
+    /// AArch64 `rN` spelling GCC accepts for `xN` (register-ABI operands
+    /// spell the binding `asm("r0")`). Registers the emitters reserve as
+    /// scratch (r10 on x86-64, x16 / x17 on aarch64) and non-general-
+    /// purpose registers are rejected: a binding through them cannot be
+    /// honored.
+    pub(super) fn resolve_asm_register(
+        &self,
+        name: &str,
+    ) -> Result<crate::c5::symbol::AsmRegister, C5Error> {
+        use crate::c5::symbol::AsmRegister as R;
+        let n = name.trim_start_matches('%');
+        let aarch64 = matches!(
+            self.target,
+            crate::Target::MacOSAarch64
+                | crate::Target::LinuxAarch64
+                | crate::Target::WindowsAarch64
+        );
+        let resolved = if aarch64 {
+            // GCC accepts `rN` as an alias for `xN` on AArch64; normalize to
+            // the `x` spelling so one path resolves both (`r29`->frame
+            // pointer, `r16`..`r18` reserved, like their `x` forms).
+            let mut norm = alloc::string::String::new();
+            let m = match n.strip_prefix('r') {
+                Some(rest) if !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()) => {
+                    norm.push('x');
+                    norm.push_str(rest);
+                    norm.as_str()
+                }
+                _ => n,
+            };
+            match m {
+                "sp" | "wsp" => Some(R::StackPointer),
+                "fp" | "x29" | "w29" => Some(R::FramePointer),
+                "lr" => Some(R::Gp(30)),
+                _ => {
+                    let (prefix, rest) = m.split_at(1.min(m.len()));
+                    if (prefix == "x" || prefix == "w")
+                        && let Ok(i) = rest.parse::<u8>()
+                        && i <= 30
+                    {
+                        // x16 / x17 are the emitters' scratch pair; x18
+                        // is the platform register on the supported
+                        // OS ABIs.
+                        if (16..=18).contains(&i) {
+                            return Err(self.compile_err(format!(
+                                "register `{n}` is reserved and cannot hold a register variable"
+                            )));
+                        }
+                        Some(R::Gp(i))
+                    } else {
+                        None
+                    }
+                }
+            }
+        } else {
+            match n {
+                "rsp" | "esp" => Some(R::StackPointer),
+                "rbp" | "ebp" => Some(R::FramePointer),
+                "rax" | "eax" => Some(R::Gp(0)),
+                "rcx" | "ecx" => Some(R::Gp(1)),
+                "rdx" | "edx" => Some(R::Gp(2)),
+                "rbx" | "ebx" => Some(R::Gp(3)),
+                "rsi" | "esi" => Some(R::Gp(6)),
+                "rdi" | "edi" => Some(R::Gp(7)),
+                "r8" | "r8d" => Some(R::Gp(8)),
+                "r9" | "r9d" => Some(R::Gp(9)),
+                "r10" | "r10d" => {
+                    // r10 is the emitter's reserved asm-staging scratch
+                    // (SCRATCH_R10); a binding there cannot be honored.
+                    return Err(self.compile_err(format!(
+                        "register `{n}` is reserved and cannot hold a register variable"
+                    )));
+                }
+                "r11" | "r11d" => Some(R::Gp(11)),
+                "r12" | "r12d" => Some(R::Gp(12)),
+                "r13" | "r13d" => Some(R::Gp(13)),
+                "r14" | "r14d" => Some(R::Gp(14)),
+                "r15" | "r15d" => Some(R::Gp(15)),
+                _ => None,
+            }
+        };
+        resolved.ok_or_else(|| {
+            self.compile_err(format!(
+                "`{n}` is not a bindable register for target {}",
+                self.target.id_str()
+            ))
+        })
+    }
+
+    /// `__auto_type` (GCC): the declared variable takes its
+    /// initializer's type. The declaration must be a single plain
+    /// identifier declarator with an initializer. The initializer is
+    /// pre-scanned unevaluated to recover its type, the lexer rewinds
+    /// to the identifier, and the declaration then parses normally
+    /// under the recovered base type. Array initializers decay to a
+    /// pointer, matching the value-context decay `typeof` applies.
+    pub(super) fn parse_auto_type_specifier(&mut self) -> Result<i64, C5Error> {
+        self.next()?; // __auto_type
+        if self.lex.tk != Token::Id {
+            return Err(self.compile_err("`__auto_type` requires a plain identifier declarator"));
+        }
+        let snap = self.lex.snapshot();
+        self.next()?; // identifier
+        if self.lex.tk != Token::Assign {
+            return Err(self.compile_err("`__auto_type` declaration requires an initializer"));
+        }
+        self.next()?; // =
+        if self.lex.tk == '{' {
+            return Err(self.compile_err("`__auto_type` initializer must be a single expression"));
+        }
+        let ty = self.parse_unevaluated_expr_ty(false)?;
+        // The initializer decayed any array to a pointer; the declared
+        // variable is that pointer, never an array.
+        self.pending.typeof_operand_was_array = false;
+        self.pending.auto_type_single_declarator = true;
+        self.lex.restore(snap);
         Ok(ty)
     }
 
@@ -332,6 +779,8 @@ impl Compiler {
         destructor: &mut bool,
         always_inline: &mut bool,
         naked: &mut bool,
+        weak: &mut bool,
+        used: &mut bool,
     ) {
         // The bare `noreturn` spelling lexes as the <stdnoreturn.h>
         // keyword token, not an identifier; both name this attribute.
@@ -374,6 +823,14 @@ impl Compiler {
                 // function's entire machine code (inline asm). Used for
                 // interrupt service routines that return via `iretq`/`eret`.
                 *naked = true;
+            } else if n == "weak" || n == "__weak__" {
+                // GNU `weak`: the defined (or declared) symbol binds
+                // STB_WEAK in the object's symbol table.
+                *weak = true;
+            } else if n == "used" || n == "__used__" {
+                // GNU `used`: keep the definition in the object even when
+                // nothing in the unit references it.
+                *used = true;
             }
         }
     }
@@ -409,6 +866,8 @@ impl Compiler {
         let mut destructor = false;
         let mut always_inline = false;
         let mut naked = false;
+        let mut weak = false;
+        let mut used = false;
         let mut init_priority: Option<u32> = None;
         loop {
             if self.lex.tk == Token::Attribute {
@@ -420,9 +879,9 @@ impl Compiler {
                 if self.lex.tk != '(' {
                     return Err(self.compile_err("`(` expected after attribute specifier"));
                 }
-                // C11 6.7.5 `_Alignas(constant-expression)`. The
-                // type-name form's alignment never exceeds 8 in this
-                // dialect and stays advisory.
+                // C11 6.7.5 `_Alignas(constant-expression)` and
+                // `_Alignas(type-name)`, the latter equivalent to
+                // `_Alignas(_Alignof(type-name))`.
                 if is_alignas {
                     self.next()?; // (
                     if self.lex.tk == Token::Num {
@@ -430,6 +889,20 @@ impl Compiler {
                         align = align.max(n);
                         if self.lex.tk != ')' {
                             return Err(self.compile_err("`)` expected after `_Alignas` operand"));
+                        }
+                        self.next()?;
+                    } else if self.lex_is_type_start() {
+                        let mut ty = self.parse_decl_base_type()?;
+                        while self.lex.tk == Token::MulOp {
+                            self.next()?;
+                            ty += Ty::Ptr as i64;
+                            while self.lex.tk == Token::TypeQual {
+                                self.next()?;
+                            }
+                        }
+                        align = align.max(self.align_of_type(ty) as i64);
+                        if self.lex.tk != ')' {
+                            return Err(self.compile_err("`)` expected after `_Alignas` type"));
                         }
                         self.next()?;
                     } else {
@@ -473,6 +946,16 @@ impl Compiler {
                                 self.symbols[self.lex.curr_id_idx].name.as_str(),
                                 "cleanup" | "__cleanup__"
                             );
+                        let is_section = self.lex.tk == Token::Id
+                            && matches!(
+                                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                                "section" | "__section__"
+                            );
+                        let is_alias = self.lex.tk == Token::Id
+                            && matches!(
+                                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                                "alias" | "__alias__"
+                            );
                         let mut saw_aligned = false;
                         let mut saw_constructor = false;
                         let mut saw_destructor = false;
@@ -487,6 +970,8 @@ impl Compiler {
                             &mut saw_destructor,
                             &mut always_inline,
                             &mut naked,
+                            &mut weak,
+                            &mut used,
                         );
                         self.next()?;
                         if saw_aligned {
@@ -520,6 +1005,29 @@ impl Compiler {
                                 return Err(
                                     self.compile_err("`)` expected after `vector_size` operand")
                                 );
+                            }
+                            self.next()?;
+                        } else if is_section && self.lex.tk == '(' {
+                            // GCC `section("name")`: place the declared
+                            // symbol's bytes in the named object section.
+                            self.next()?; // `(`
+                            let name = self.parse_attribute_string_operand("section")?;
+                            self.pending.attr_section = Some(name);
+                            if self.lex.tk != ')' {
+                                return Err(
+                                    self.compile_err("`)` expected after `section` operand")
+                                );
+                            }
+                            self.next()?;
+                        } else if is_alias && self.lex.tk == '(' {
+                            // GCC `alias("target")`: the declared name is an
+                            // additional symbol for `target`, which must be
+                            // defined in this unit.
+                            self.next()?; // `(`
+                            let name = self.parse_attribute_string_operand("alias")?;
+                            self.pending.attr_alias = Some(name);
+                            if self.lex.tk != ')' {
+                                return Err(self.compile_err("`)` expected after `alias` operand"));
                             }
                             self.next()?;
                         } else if is_cleanup && self.lex.tk == '(' {
@@ -585,6 +1093,8 @@ impl Compiler {
                             &mut saw_destructor,
                             &mut always_inline,
                             &mut naked,
+                            &mut weak,
+                            &mut used,
                         );
                         self.next()?;
                         if saw_aligned && self.lex.tk == '(' {
@@ -646,7 +1156,37 @@ impl Compiler {
         if let Some(p) = init_priority {
             self.pending.attr_init_priority = Some(p);
         }
+        if weak {
+            self.pending.attr_weak = true;
+        }
+        if used {
+            self.pending.attr_used = true;
+        }
         Ok(packed)
+    }
+
+    /// Parse the string-literal operand of an attribute whose payload
+    /// is `("...")`. The current token is the opening `"`; on return
+    /// the cursor is at the token after the literal. Adjacent literals
+    /// concatenate (C99 5.1.1.2 phase 6).
+    fn parse_attribute_string_operand(
+        &mut self,
+        attr: &str,
+    ) -> Result<alloc::string::String, C5Error> {
+        if self.lex.tk != '"' {
+            return Err(self.compile_err(format!("`{attr}` operand must be a string literal")));
+        }
+        let start = self.lex.ival as usize;
+        self.next()?;
+        while self.lex.tk == '"' {
+            self.next()?;
+        }
+        let mut bytes = self.data[start..].to_vec();
+        self.data.truncate(start);
+        while bytes.last() == Some(&0) {
+            bytes.pop();
+        }
+        Ok(alloc::string::String::from_utf8_lossy(&bytes).into_owned())
     }
 
     /// Parse the optional `(N)` priority argument of a
@@ -714,19 +1254,27 @@ impl Compiler {
         Ok(Some(bt))
     }
 
-    /// `VOLATILE_BIT` when the current token is the `volatile` type
-    /// qualifier (C99 6.7.3), 0 for any other spelling mapped to
-    /// `Token::TypeQual` (`const`, `restrict`, calling-convention
-    /// decorations). Qualifier identity lives on the interned keyword
-    /// symbol; the caller consumes the token.
-    pub(super) fn lex_volatile_bit(&self) -> i64 {
+    /// The type-tag qualifier bits contributed by the current
+    /// `Token::TypeQual`: `VOLATILE_BIT` for `volatile` (C99 6.7.3), a
+    /// segment bit for the x86 named-address-space qualifiers
+    /// `__seg_gs` / `__seg_fs`, 0 for any other spelling (`const`,
+    /// `restrict`, calling-convention decorations). Qualifier identity
+    /// lives on the interned keyword symbol; the caller consumes the token.
+    pub(super) fn lex_qualifier_bits(&self) -> i64 {
         if self.lex.tk != Token::TypeQual {
             return 0;
         }
         match self.symbols[self.lex.curr_id_idx].name.as_str() {
             "volatile" | "__volatile" | "__volatile__" => VOLATILE_BIT,
+            "__seg_gs" => SEG_GS_BIT,
+            "__seg_fs" => SEG_FS_BIT,
             _ => 0,
         }
+    }
+
+    /// True when the current token is the `register` storage class.
+    pub(super) fn lex_is_register_storage(&self) -> bool {
+        self.lex.tk == Token::FuncSpec && self.symbols[self.lex.curr_id_idx].name == "register"
     }
 
     /// True when the current token is the `const` type qualifier.
@@ -807,11 +1355,14 @@ impl Compiler {
             if self.lex.tk == Token::Noreturn {
                 self.pending_noreturn = true;
             }
+            if self.lex_is_register_storage() {
+                self.pending.saw_register_storage = true;
+            }
             if !self.try_consume_int_modifier(&mut m)? {
                 // `volatile` sets the tag's qualifier bit (C99 6.7.3);
                 // `const` is recorded out-of-band for value folding;
                 // restrict / _Atomic / etc. are no-ops.
-                qual_bits |= self.lex_volatile_bit();
+                qual_bits |= self.lex_qualifier_bits();
                 self.pending.base_is_const |= self.lex_is_const_qual();
                 self.next()?;
             }
@@ -822,7 +1373,17 @@ impl Compiler {
         // The operand supplies the complete type, so the int-modifier
         // soup collected above does not apply.
         if self.lex.tk == Token::Typeof {
-            return self.parse_typeof_specifier();
+            let mut ty = self.parse_typeof_specifier()?;
+            // A qualifier may trail the specifier, as after any base type
+            // (`typeof(x) __seg_gs *`, `typeof(x) const`); fold it in.
+            while self.lex.tk == Token::TypeQual {
+                ty |= self.lex_qualifier_bits();
+                self.next()?;
+            }
+            return Ok(ty);
+        }
+        if self.lex.tk == Token::AutoType {
+            return self.parse_auto_type_specifier();
         }
 
         let base_tok = self.lex.tk;
@@ -839,8 +1400,14 @@ impl Compiler {
             // GCC `__int128` / `__int128_t` / `__uint128_t` (and, via the
             // modifier soup, `unsigned __int128`): a 16-byte integer type,
             // modeled as a 16-byte aggregate for layout / sizeof / copy.
+            let tag = self.lex_int128_tag(m.saw_unsigned);
             self.next()?;
-            self.builtin_int128_tag()
+            tag
+        } else if self.is_lex_va_list_spelling() {
+            // GCC `__builtin_va_list`: the target's `va_list`
+            // representation, usable with no header.
+            self.next()?;
+            self.builtin_va_list_tag()
         } else if !m.saw_int_mod && self.is_lex_typedef_name() {
             // Typedef-name as base type. Resolve to the aliased
             // type and consume the identifier. Guarded by
@@ -915,6 +1482,9 @@ impl Compiler {
                 bt = m.char_tag(self.target.plain_char_signed());
             } else if base_tok == Token::Double && m.saw_long() {
                 self.pending.base_was_long_double = true;
+            } else if m.saw_unsigned && self.is_int128_ty(bt) {
+                // Trailing modifier form `__int128 unsigned`.
+                bt |= UNSIGNED_BIT;
             }
         }
 
@@ -954,11 +1524,14 @@ impl Compiler {
             if self.lex.tk == Token::Noreturn {
                 self.pending_noreturn = true;
             }
+            if self.lex_is_register_storage() {
+                self.pending.saw_register_storage = true;
+            }
             if self.try_consume_int_modifier(m)? {
                 saw_int_mod = true;
                 continue;
             }
-            qual_bits |= self.lex_volatile_bit();
+            qual_bits |= self.lex_qualifier_bits();
             self.next()?;
         }
         Ok((saw_int_mod, qual_bits))

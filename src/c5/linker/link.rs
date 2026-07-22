@@ -32,6 +32,9 @@ use super::object::{
 const R_X86_64_PC32: u32 = 2;
 const R_X86_64_PLT32: u32 = 4;
 const R_X86_64_GOTPCREL: u32 = 9;
+// Relaxable variant of GOTPCREL marking a `REX mov reg, [rip+disp32]`
+// GOT load (psABI B.2); emitted by c5's writer and other toolchains.
+const R_X86_64_REX_GOTPCRELX: u32 = 42;
 const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
 const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
@@ -438,10 +441,11 @@ pub fn link_native_objects_with_shared_libs(
         data_align = data_align.max(obj.data_align);
         data_bases.push(data.len());
         data.extend_from_slice(&obj.data);
-        // Each unit's bss offsets carry an alignment residue modulo 16
-        // (the `.bss` sh_addralign the per-unit writer claims); a
-        // 16-aligned unit base preserves it.
-        bss_size = align_usize(bss_size, 16);
+        // Each unit's bss offsets carry an alignment residue modulo the
+        // `.bss` sh_addralign the per-unit writer claims, which tracks
+        // the unit's widest object alignment; a unit base aligned to the
+        // same value preserves it.
+        bss_size = align_usize(bss_size, obj.data_align.max(16));
         bss_bases.push(bss_size);
         bss_size += obj.bss_size;
     }
@@ -785,7 +789,7 @@ pub fn link_native_objects_with_shared_libs(
                     ..*reloc
                 };
                 &relaxed_reloc
-            } else if reloc.rtype == R_X86_64_GOTPCREL {
+            } else if reloc.rtype == R_X86_64_GOTPCREL || reloc.rtype == R_X86_64_REX_GOTPCRELX {
                 // x86_64 flavor of the same relaxation: turn the
                 // `mov reg, [rip+disp32]` GOT load back into the `lea`
                 // it came from (opcode 0x8b -> 0x8d, two bytes before
@@ -801,7 +805,16 @@ pub fn link_native_objects_with_shared_libs(
             } else {
                 reloc
             };
-            match sym.section {
+            // An STB_WEAK definition is overridable: a strong definition
+            // of the same name in a sibling unit wins (ELF/SysV). Resolve
+            // it through the merged table instead of this unit's copy,
+            // which is what the UNDEF arm already does.
+            let sym_section = if sym.binding == 2 {
+                NativeSymSection::Undef
+            } else {
+                sym.section
+            };
+            match sym_section {
                 NativeSymSection::Text => {
                     let target = text_bases[i] as i64 + sym.value as i64 + reloc.addend;
                     if is_aarch64_text_pageref(machine, reloc.rtype) {
@@ -2037,64 +2050,30 @@ fn resolve_weak_undef_to_zero(
             text.len(),
         )));
     }
-    const AARCH64_NOP: u32 = 0xd503_201f;
-    match (machine, reloc.rtype) {
+    use crate::c5::object::weak_undef as wu;
+    let ok = match (machine, reloc.rtype) {
         (NativeMachine::Aarch64, R_AARCH64_CALL26) | (NativeMachine::Aarch64, R_AARCH64_JUMP26) => {
-            text[patch_offset..patch_offset + 4].copy_from_slice(&AARCH64_NOP.to_le_bytes());
-            Ok(())
+            wu::aarch64_branch_to_nop(text, patch_offset)
         }
         (NativeMachine::Aarch64, R_AARCH64_ADR_PREL_PG_HI21) => {
-            // `adrp xd, <page>` -> `movz xd, #0`.
-            let instr =
-                u32::from_le_bytes(text[patch_offset..patch_offset + 4].try_into().unwrap());
-            let rd = instr & 0x1f;
-            let movz = 0xd280_0000 | rd;
-            text[patch_offset..patch_offset + 4].copy_from_slice(&movz.to_le_bytes());
-            Ok(())
+            wu::aarch64_adrp_to_zero(text, patch_offset)
         }
         (NativeMachine::Aarch64, R_AARCH64_ADD_ABS_LO12_NC) => {
-            // The pair's ADRP already produced 0 in `xn`; keep the
-            // destination 0 whether or not it aliases the source.
-            let instr =
-                u32::from_le_bytes(text[patch_offset..patch_offset + 4].try_into().unwrap());
-            let rd = instr & 0x1f;
-            let rn = (instr >> 5) & 0x1f;
-            let repl = if rd == rn {
-                AARCH64_NOP
-            } else {
-                0xd280_0000 | rd
-            };
-            text[patch_offset..patch_offset + 4].copy_from_slice(&repl.to_le_bytes());
-            Ok(())
+            wu::aarch64_add_lo12_to_zero(text, patch_offset)
         }
         (NativeMachine::X86_64, R_X86_64_PLT32) | (NativeMachine::X86_64, R_X86_64_PC32) => {
-            // `r_offset` names the disp32 field; classify by the
-            // instruction bytes ahead of it.
-            if patch_offset >= 1 && text[patch_offset - 1] == 0xE8 {
-                // `call rel32` -> 5-byte NOP (0F 1F 44 00 00).
-                text[patch_offset - 1..patch_offset + 4]
-                    .copy_from_slice(&[0x0F, 0x1F, 0x44, 0x00, 0x00]);
-                return Ok(());
-            }
-            if patch_offset >= 3
-                && (0x40..=0x4f).contains(&text[patch_offset - 3])
-                && text[patch_offset - 2] == 0x8D
-                && text[patch_offset - 1] & 0xC7 == 0x05
-            {
-                // `lea reg, [rip+disp32]` -> `mov reg, 0` (C7 /0
-                // imm32). The modrm reg field moves to rm, so the
-                // REX.R bit becomes REX.B; REX.W carries over.
-                let rex = text[patch_offset - 3];
-                let reg = (text[patch_offset - 1] >> 3) & 0x7;
-                text[patch_offset - 3] = 0x40 | (rex & 0x08) | ((rex & 0x04) >> 2);
-                text[patch_offset - 2] = 0xC7;
-                text[patch_offset - 1] = 0xC0 | reg;
-                text[patch_offset..patch_offset + 4].copy_from_slice(&[0, 0, 0, 0]);
-                return Ok(());
-            }
-            Err(unsupported("the referencing instruction"))
+            // `r_offset` names the disp32 field; the instruction starts
+            // one byte ahead for `call rel32`, three for a rip-relative
+            // `lea`.
+            (patch_offset >= 1 && wu::x86_64_branch_to_nop(text, patch_offset - 1))
+                || (patch_offset >= 3 && wu::x86_64_lea_to_zero(text, patch_offset - 3))
         }
-        _ => Err(unsupported(&format!("reloc type {}", reloc.rtype))),
+        _ => return Err(unsupported(&format!("reloc type {}", reloc.rtype))),
+    };
+    if ok {
+        Ok(())
+    } else {
+        Err(unsupported("the referencing instruction"))
     }
 }
 

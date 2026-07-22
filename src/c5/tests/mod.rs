@@ -25,6 +25,7 @@ mod codegen;
 mod deferred;
 #[cfg(feature = "full")]
 mod dwarf;
+mod inline_asm;
 mod intrinsics;
 mod jit;
 mod lexer;

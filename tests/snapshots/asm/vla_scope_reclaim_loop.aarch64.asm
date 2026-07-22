@@ -13,84 +13,53 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x80]!
                	stp	x29, x30, [sp, #0x70]
                	add	x29, sp, #0x70
-               	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x8]
-               	stur	w0, [x29, #-0x10]
+               	mov	x4, #0x0                // =0
+               	mov	x6, x4
                	b	<addr>
-               	mov	x0, sp
-               	stur	x0, [x29, #-0x38]
-               	mov	x0, #0x40               // =64
-               	stur	w0, [x29, #-0x18]
-               	ldursw	x0, [x29, #-0x18]
-               	lsl	x0, x0, #2
-               	stur	x0, [x29, #-0x28]
+               	mov	x7, sp
+               	mov	x0, #0x100              // =256
                	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	mov	x0, sp
-               	sub	x0, x0, x17
-               	mov	sp, x0
-               	stur	x0, [x29, #-0x20]
+               	mov	x2, sp
+               	sub	x2, x2, x17
+               	mov	sp, x2
                	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x30]
                	b	<addr>
-               	ldur	x1, [x29, #-0x20]
-               	ldursw	x0, [x29, #-0x30]
-               	str	w0, [x1, x0, lsl #2]
-               	ldursw	x0, [x29, #-0x30]
-               	add	x0, x0, #0x1
-               	stur	w0, [x29, #-0x30]
-               	ldursw	x0, [x29, #-0x30]
-               	ldursw	x1, [x29, #-0x18]
-               	cmp	x0, x1
+               	str	w0, [x2, x1, lsl #2]
+               	add	x0, x1, #0x1
+               	sxtw	x1, w0
+               	cmp	x1, #0x40
                	b.lt	<addr>
-               	ldur	x2, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x20]
-               	ldursw	x1, [x29, #-0x10]
                	mov	x17, #0x3f              // =63
-               	and	x1, x1, x17
-               	ldrsw	x0, [x0, x1, lsl #2]
-               	add	x0, x2, x0
-               	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x38]
-               	mov	sp, x0
-               	ldursw	x0, [x29, #-0x10]
-               	add	x0, x0, #0x1
-               	stur	w0, [x29, #-0x10]
-               	ldursw	x0, [x29, #-0x10]
+               	and	x0, x5, x17
+               	ldrsw	x0, [x2, x0, lsl #2]
+               	add	x6, x6, x0
+               	mov	sp, x7
+               	add	x4, x5, #0x1
+               	sxtw	x5, w4
                	mov	x17, #0x86a0            // =34464
                	movk	x17, #0x1, lsl #16
-               	cmp	x0, x17
+               	cmp	x5, x17
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x40]
-               	stur	w0, [x29, #-0x48]
+               	mov	x2, x0
                	b	<addr>
-               	ldur	x0, [x29, #-0x40]
-               	ldursw	x1, [x29, #-0x48]
                	mov	x17, #0x3f              // =63
-               	and	x1, x1, x17
-               	add	x0, x0, x1
-               	stur	x0, [x29, #-0x40]
-               	ldursw	x0, [x29, #-0x48]
-               	add	x0, x0, #0x1
-               	stur	w0, [x29, #-0x48]
-               	ldursw	x0, [x29, #-0x48]
+               	and	x3, x1, x17
+               	add	x2, x2, x3
+               	add	x0, x1, #0x1
+               	sxtw	x1, w0
                	mov	x17, #0x86a0            // =34464
                	movk	x17, #0x1, lsl #16
-               	cmp	x0, x17
+               	cmp	x1, x17
                	b.lt	<addr>
-               	ldur	x0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x40]
-               	cmp	x0, x1
+               	cmp	x6, x2
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x58]
-               	ldur	x0, [x29, #-0x58]
                	sxtw	x0, w0
                	sub	sp, x29, #0x70
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x19, [sp], #0x80
                	ret
                	mov	x0, #0x1                // =1
-               	stur	x0, [x29, #-0x58]
                	b	<addr>

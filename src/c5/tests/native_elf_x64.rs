@@ -340,6 +340,10 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 }
 
 const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
+    ("overaligned_data_placement.c", 0),
+    ("overaligned_type_placement.c", 0),
+    ("page_multiple_alignment.c", 0),
+    ("max_alignment_placement.c", 0),
     ("vla_basic_sum.c", 0),
     ("vla_runtime_sizeof.c", 0),
     ("vla_size_from_arg.c", 0),
@@ -352,6 +356,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("vla_param_decay.c", 0),
     ("arithmetic.c", 60),
     ("inline_asm_x64_catalogue.c", 42),
+    ("inline_asm_clobber_probe.c", 42),
     ("inline_asm_x64_sse.c", 42),
     ("inline_asm_x64_setcc.c", 42),
     ("inline_asm_x64_cmov.c", 42),
@@ -360,8 +365,39 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_clflush.c", 42),
     ("inline_asm_x64_setjmp_label.c", 42),
     ("inline_asm_x64_mem_disp.c", 42),
+    ("cpuid_partial_outputs.c", 0),
+    ("get_cpuid_leaf_checks.c", 0),
+    ("inline_asm_x64_imm_mem.c", 42),
+    ("inline_asm_x64_flags_push.c", 0),
+    ("inline_asm_m_operand_array_cast.c", 0),
+    ("inline_asm_x64_const_expr.c", 0),
+    ("inline_asm_x64_constraint_a.c", 0),
+    ("inline_asm_x64_string_ops.c", 42),
     ("inline_asm_goto.c", 42),
     ("inline_asm_reg_var.c", 42),
+    ("inline_asm_sp_reg_var.c", 42),
+    ("declarator_list_forms.c", 42),
+    ("register_var_stack_pointer.c", 0),
+    ("register_var_asm_operand.c", 0),
+    ("register_var_asm_operand_sp.c", 0),
+    ("register_var_asm_operand_split.c", 0),
+    ("register_var_asm_operand_r11.c", 0),
+    ("attribute_weak_alias.c", 0),
+    ("attribute_alias_target_later.c", 0),
+    ("attribute_section_placement.c", 0),
+    ("inline_asm_named_operands.c", 42),
+    ("inline_asm_const_modifier.c", 42),
+    ("inline_asm_branch_target_operand.c", 42),
+    ("inline_asm_x64_segment.c", 42),
+    ("inline_asm_x64_sib.c", 42),
+    ("inline_asm_pushsection.c", 42),
+    ("file_scope_asm_decls.c", 0),
+    ("inline_asm_goto_output.c", 42),
+    ("inline_asm_goto_multiret.c", 42),
+    ("inline_asm_output_reg.c", 42),
+    ("inline_naked_not_inlined.c", 0),
+    ("inline_asm_x64_flag_outputs.c", 42),
+    ("inline_asm_constraint_alternatives.c", 42),
     ("compound_literal_struct_field.c", 0),
     ("goto.c", 5),
     ("switch_statement.c", 25),
@@ -435,6 +471,8 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("ssa_fp_routing.c", 0),
     ("ssa_callee_saved_x19.c", 0),
     ("ssa_va_arg_loop.c", 0),
+    ("builtin_va_list_typedef.c", 0),
+    ("builtin_expect_no_header.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
     ("sysv_variadic_host_abi.c", 0),
     ("aapcs64_variadic_host_abi.c", 0),
@@ -590,6 +628,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("local_aggregate_runtime_init.c", 0),
     ("aggregate_init_struct_member_copy.c", 0),
     ("computed_goto.c", 0),
+    ("local_label.c", 0),
     ("label_addr_array_init.c", 0),
     ("static_init_once_guard.c", 0),
     ("computed_goto_static_table.c", 0),
@@ -609,6 +648,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("decl_trailing_attribute.c", 0),
     ("winsock_netdb_protoent.c", 0),
     ("slot_coalesce_disjoint_temps.c", 0),
+    ("overaligned_automatic.c", 0),
     ("alloca_alignment.c", 0),
     ("alloca_arena_in_bounds.c", 0),
     ("slot_coalesce_declared.c", 0),
@@ -1418,4 +1458,67 @@ fn badc_caller_oversize_struct_return_from_foreign() {
         Some(0),
         "badc mis-returned a > 16-byte aggregate from a foreign callee (System V sret ABI)"
     );
+}
+
+/// A weak function definition is overridden by a strong definition in
+/// a sibling unit (ELF STB_WEAK semantics), with no
+/// multiple-definition error; calls resolve to the strong body.
+#[test]
+fn weak_definition_overridden_by_strong_at_runtime() {
+    use crate::{CompileOptions, Program};
+
+    const WEAK_UNIT: &str = "\
+int pick(void) __attribute__((weak));\n\
+int pick(void) { return 1; }\n\
+int main(void) { return pick(); }\n";
+    const STRONG_UNIT: &str = "int pick(void) { return 2; }\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_main = compile(WEAK_UNIT);
+    let prog_strong = compile(STRONG_UNIT);
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_main, &prog_strong],
+        Target::LinuxX64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf64-weak", "weak_override");
+    {
+        use std::io::Write;
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "the strong definition must win over the weak one"
+    );
+}
+
+/// An undefined weak function reference resolves to address 0; the
+/// `if (fn) fn();` guard therefore skips the call.
+#[test]
+fn undefined_weak_function_guard() {
+    let code = build_and_run(
+        "extern void optional_hook(void) __attribute__((weak));\n\
+         int main(void) {\n\
+             if (optional_hook) {\n\
+                 optional_hook();\n\
+                 return 1;\n\
+             }\n\
+             return 0;\n\
+         }\n",
+        "undef_weak_guard",
+    );
+    assert_eq!(code, 0, "undefined weak must read as a null pointer");
 }

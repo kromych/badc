@@ -35,12 +35,9 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x5, %edi
-               	callq	<addr>
-               	subq	$0xde, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	popq	%rbp
+               	leaq	<rip>, %rax
+               	movl	$0xd3, %ecx
+               	movl	%ecx, (%rax)
+               	movl	$0xde, %eax
+               	xorq	%rax, %rax
                	retq

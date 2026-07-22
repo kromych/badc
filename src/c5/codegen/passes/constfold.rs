@@ -253,6 +253,7 @@ mod tests {
             locals: 0,
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
             n_params: 0,
             is_variadic: false,
             is_inline: false,
@@ -272,6 +273,9 @@ mod tests {
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            over_aligned: Default::default(),
+            frame_align: 0,
+            realign_region_bytes: 0,
             insts,
             blocks: vec![Block {
                 start_pc: 0,

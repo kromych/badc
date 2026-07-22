@@ -162,6 +162,11 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
             f(addr);
             f(value);
         }
+        Inst::SegLoad { addr, .. } => f(addr),
+        Inst::SegStore { addr, value, .. } => {
+            f(addr);
+            f(value);
+        }
         Inst::StoreLocal { value, .. } => f(value),
         Inst::LoadIndexed { base, index, .. } => {
             f(base);
@@ -258,8 +263,12 @@ mod tests {
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            over_aligned: Default::default(),
+            frame_align: 0,
+            realign_region_bytes: 0,
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

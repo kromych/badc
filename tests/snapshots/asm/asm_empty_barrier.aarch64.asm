@@ -15,6 +15,13 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x29               // =41
                	stur	w0, [x29, #-0x8]
+               	sub	x0, x29, #0x8
+               	sub	sp, sp, #0x10
+               	str	x0, [sp, #0x8]
+               	str	x0, [sp]
+               	ldr	x0, [sp]
+               	ldr	x0, [sp, #0x8]
+               	add	sp, sp, #0x10
                	ldursw	x0, [x29, #-0x8]
                	add	x0, x0, #0x1
                	stur	w0, [x29, #-0x8]
@@ -29,3 +36,5 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	b	<addr>
+               	b	<addr>

@@ -418,6 +418,23 @@ pub(crate) fn enc_and_imm_neg16(rd: Reg, rn: Reg) -> u32 {
     0x927C_EC00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `AND SP, <Xn>, #-(1 << log2_align)` -- clear the low `log2_align` bits of a
+/// GPR into SP, aligning it down. The mask `~(align-1)` is a valid 64-bit
+/// logical immediate for any power-of-two alignment (a contiguous run of high
+/// ones): `sf=1`, `N=1`, `imms = 63 - log2_align` (the run length minus one),
+/// `immr = 64 - log2_align` (rotate so the zeros land at the bottom). Rd = 31
+/// encodes SP for the AND-immediate form, not XZR. Used by the over-aligned
+/// automatic-object prologue realignment (C11 6.7.5).
+pub(crate) fn enc_and_sp_pow2(rn: Reg, log2_align: u32) -> u32 {
+    debug_assert!(
+        (5..=12).contains(&log2_align),
+        "over-alignment is 32..=4096"
+    );
+    let immr = 64 - log2_align;
+    let imms = 63 - log2_align;
+    0x9240_0000 | (immr << 16) | (imms << 10) | ((rn.0 as u32) << 5) | 31
+}
+
 /// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.
 pub(crate) fn enc_orr_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0xAA00_0000, rd, rn, rm)
@@ -1574,6 +1591,17 @@ pub(crate) fn lower(
     let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
+    let mut asm_sections: Vec<super::ssa::emit_common::AsmSection> = Vec::new();
+    // File-scope asm section blocks precede the per-function ones
+    // (`.align` takes a power-of-two exponent on aarch64).
+    super::ssa::emit_common::materialize_file_asm(
+        &program.file_asm,
+        true,
+        super::ssa::emit_common::AsmComments::A64,
+        &|blocks| crate::c5::codegen::encode_file_asm_section_code(blocks, target),
+        &mut asm_sections,
+    )
+    .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     // Each `JsrExt` / `TailExt` site emits a placeholder
@@ -1689,6 +1717,22 @@ pub(crate) fn lower(
         // matching block for the rationale.
         super::ssa::emit_common::time_pass("passes::constfold::run (aarch64)", || {
             crate::c5::codegen::passes::constfold::run(&mut ssa_funcs);
+        });
+        // Re-run mem2reg on callers the inliner spliced into; see x86_64.rs's
+        // matching block for the rationale (relocated callee locals expose
+        // address-free slots pre-inline mem2reg never saw).
+        super::ssa::emit_common::time_pass("ssa::mem2reg::run post-inline (aarch64)", || {
+            for f in &mut ssa_funcs {
+                if f.did_inline {
+                    let promoted = super::ssa::mem2reg::run(f);
+                    if !promoted.is_empty() {
+                        promoted_local_slots
+                            .entry(f.ent_pc)
+                            .or_default()
+                            .extend(promoted);
+                    }
+                }
+            }
         });
         // Split constant-index local arrays that unrolling exposed into
         // per-element slots and re-run mem2reg to promote them to SSA
@@ -1839,6 +1883,7 @@ pub(crate) fn lower(
     let _ssa_emit_pass_start = std::time::Instant::now();
     // Function name -> entry PC, so an inline-asm `bl` / `b` to a bare
     // identifier resolves to the target's fixup like a compiler-emitted call.
+    let mut asm_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
@@ -1875,6 +1920,8 @@ pub(crate) fn lower(
                 ssa_line_rows: &mut ssa_line_rows,
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut func_prologue_native,
+                asm_sections: &mut asm_sections,
+                asm_extern_call_sites: &mut asm_extern_call_sites,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -1899,9 +1946,8 @@ pub(crate) fn lower(
             // stands only for a shape that failed without recording one.
             #[cfg(feature = "std")]
             if let Some(reason) = super::ssa::emit_common::take_bail() {
-                return Err(C5Error::Compile(alloc::format!(
-                    "{reason} (aarch64, function `{}`)",
-                    func_ssa.name,
+                return Err(C5Error::Compile(crate::c5::error::fmt_codegen_err(
+                    &alloc::format!("{reason} (aarch64, function `{}`)", func_ssa.name),
                 )));
             }
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -1932,17 +1978,27 @@ pub(crate) fn lower(
         .iter()
         .map(|(pc, name)| (*pc, name.as_str()))
         .collect();
-    let mut user_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
-    let resolved_fixups: Vec<Fixup> = if extern_pc_lookup.is_empty() {
-        fixups
-    } else {
+    // Seeded with the inline-asm branch sites whose target this unit does
+    // not define; they take the same by-name relocation.
+    let mut user_extern_call_sites: Vec<super::UserExternCallSite> = asm_extern_call_sites;
+    // A direct branch whose callee the linker resolves -- across a
+    // named-section boundary, or to a weak definition a sibling unit
+    // may override -- likewise becomes a by-name call relocation.
+    let reloc_ctx = super::reloc_callee_ctx(program, &ssa_funcs, &pc_to_native, native.output_kind);
+    let resolved_fixups: Vec<Fixup> = {
         let mut out = Vec::with_capacity(fixups.len());
         for f in fixups {
+            let is_tail = matches!(f.kind, BranchKind::B);
             if let Some(name) = extern_pc_lookup.get(&f.target_ent_pc) {
-                let is_tail = matches!(f.kind, BranchKind::B);
                 user_extern_call_sites.push(super::UserExternCallSite {
                     instr_offset: f.native_offset,
                     symbol_name: (*name).into(),
+                    is_tail,
+                });
+            } else if let Some(name) = reloc_ctx.reloc_callee(f.native_offset, f.target_ent_pc) {
+                user_extern_call_sites.push(super::UserExternCallSite {
+                    instr_offset: f.native_offset,
+                    symbol_name: name.into(),
                     is_tail,
                 });
             } else {
@@ -2010,6 +2066,7 @@ pub(crate) fn lower(
             user_extern_data_refs.push(super::UserExternDataRef {
                 instr_offset: adrp_offset,
                 symbol_name: (*name).into(),
+                direct_pcrel: None,
             });
             continue;
         }
@@ -2081,6 +2138,13 @@ pub(crate) fn lower(
     };
 
     Ok(Build {
+        asm_sections,
+        // The aarch64 ALTERNATIVE replacement is appended to `.text` (a
+        // deferred region), not a separately loaded section, so no
+        // main-stream reference crosses into a pushed section here.
+        asm_section_text_refs: Vec::new(),
+        // No aarch64 form takes a label address as an absolute immediate.
+        asm_text_abs_refs: Vec::new(),
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),

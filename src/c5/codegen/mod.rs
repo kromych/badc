@@ -119,6 +119,13 @@ impl Target {
         )
     }
 
+    /// Whether the target is x86_64 (any OS). Gates the x86 named
+    /// address spaces (`__seg_gs` / `__seg_fs`), whose accesses ride a
+    /// segment-override prefix that only the x86 encoder emits.
+    pub fn is_x86_64(self) -> bool {
+        matches!(self, Target::LinuxX64 | Target::WindowsX64)
+    }
+
     /// Whether plain `char` is signed. C99 6.2.5p15 leaves the
     /// signedness of unqualified `char` implementation-defined; to
     /// interoperate with the host toolchain and match the platform
@@ -1493,6 +1500,11 @@ pub(crate) struct Build {
     /// longer holds the value (a stale `DW_OP_fbreg` would make the
     /// debugger read uninitialised frame memory).
     pub promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    /// Named sections accumulated from inline-asm `.pushsection` data
+    /// directives. The relocatable ELF writer appends one section per
+    /// entry; the executable writers do not map them (TODO: alloc
+    /// sections in direct executables).
+    pub asm_sections: Vec<ssa::emit_common::AsmSection>,
     /// Per-function map from a declared local's original frame slot to the
     /// new slot it was coalesced onto, keyed by `ent_pc`. The slot-coalescing
     /// pass compacts the frame regardless of debug info; the debug-info
@@ -1511,6 +1523,14 @@ pub(crate) struct Build {
     /// the PE writer then falls back to the coarse whole-`.text`
     /// entry.
     pub fn_unwind: Vec<FnUnwind>,
+    /// Inline-asm main-stream references to labels defined in the template's
+    /// pushed sections. The relocatable ELF writer emits one PC-relative
+    /// reloc per entry against the target section's symbol.
+    pub asm_section_text_refs: Vec<AsmSectionTextRef>,
+    /// Inline-asm instructions taking a template-local label's address as an
+    /// absolute immediate (`pushq $1f`). The relocatable ELF writer emits one
+    /// `R_X86_64_32S` per entry against the `.text` symbol.
+    pub asm_text_abs_refs: Vec<AsmTextAbsRef>,
 }
 
 /// x86_64 Win64 prologue unwind descriptor for one function.
@@ -1628,6 +1648,39 @@ pub(crate) struct DataFixup {
     pub adrp_offset: usize,
     /// Offset into `Build::data`.
     pub data_offset: u64,
+}
+
+/// Relocation for an inline-asm main-stream instruction that references a
+/// label defined in one of the template's pushed sections (`jmp 6f` where
+/// `6:` sits in a `.pushsection` block). The two land in different object
+/// sections, so the reference is a relocation against the target section's
+/// symbol, not an in-stream displacement. The writer resolves `section_index`
+/// to that section's placement and emits one PC-relative reloc.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct AsmSectionTextRef {
+    /// Byte offset within `Build::text` of the relocated field (the branch
+    /// displacement); the reloc's `r_offset`.
+    pub instr_offset: usize,
+    /// Index into `Build::asm_sections` of the section holding the label.
+    pub section_index: usize,
+    /// Byte offset of the label within that section's own bytes.
+    pub section_offset: u32,
+    /// Addend applied on top of the label's placed offset; -4 for a 4-byte
+    /// PC-relative field, whose displacement is measured from its own end.
+    pub addend: i64,
+}
+
+/// Relocation for an inline-asm instruction taking a template-local label's
+/// address as an absolute immediate (`pushq $1f`). The label and the
+/// referencing instruction share `.text`, but the address is a link-time
+/// value, so the 32-bit immediate carries an `R_X86_64_32S` reloc against the
+/// `.text` symbol with the label's text offset as addend.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct AsmTextAbsRef {
+    /// Byte offset within `Build::text` of the relocated 4-byte immediate.
+    pub field_offset: usize,
+    /// Byte offset within `Build::text` of the referenced label.
+    pub target_offset: usize,
 }
 
 // TLS relocations don't need a writer-time fixup type for Linux:
@@ -1812,10 +1865,18 @@ pub(crate) struct UserExternDataRef {
     /// Byte offset within `Build::text` of the `adrp` /
     /// `lea`-prefix instruction. The writer pairs it with the
     /// follow-up `add` on aarch64 to emit both halves of the
-    /// page-relative load.
+    /// page-relative load. For a `direct_pcrel` entry the disp32
+    /// starts at `instr_offset + 3` as for the GOT form.
     pub instr_offset: usize,
     /// Symbol name of the cross-TU data global.
     pub symbol_name: alloc::string::String,
+    /// `None` for the default GOT-relaxable load. `Some(addend)` for a
+    /// direct `R_X86_64_PC32` against the symbol (x86_64 only), the shape a
+    /// segment-qualified inline-asm `%a` operand takes (`%%gs:sym(%rip)`):
+    /// the access rides the symbol's link-time value, so a GOT indirection
+    /// would be wrong. `addend` is the operand's constant offset less the
+    /// 4-byte PC-relative end skew.
+    pub direct_pcrel: Option<i64>,
 }
 
 /// Relocation for a function-pointer literal (`Inst::ImmCode`).
@@ -2061,6 +2122,127 @@ pub(crate) fn lower_for(
     build.debug_info = options.debug_info;
     append_build_info(&mut build);
     Ok(build)
+}
+
+/// Assemble a file-scope inline-asm named section's instructions to bytes for
+/// `target`, replacing each `Code` item with `CodeBytes`. The compile-time
+/// validation and the object emission both run this so an instruction is
+/// diagnosed and encoded the same way. AArch64 has no such encoder yet, so a
+/// named-section instruction there stays a `Code` item and is rejected later.
+pub(crate) fn encode_file_asm_section_code(
+    blocks: &mut [ssa::emit_common::AsmSectionBlock],
+    target: Target,
+) -> Result<(), alloc::string::String> {
+    match target {
+        Target::LinuxX64 | Target::WindowsX64 => {
+            x86_64::emit::encode_x86_file_asm_section_code(blocks)
+        }
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => Ok(()),
+    }
+}
+
+/// Decides which direct-branch fixups must become by-name call
+/// relocations because the callee is resolved at link time rather than
+/// at emit time. Two reasons:
+///
+/// * The call site and the callee live in different object sections
+///   (`__attribute__((section("name")))`). Sections are placed
+///   independently at link time, so a relocatable object cannot bake a
+///   relative displacement across them.
+/// * The callee is `__attribute__((weak))`. A strong definition in a
+///   sibling unit overrides it (ELF STB_WEAK), so the call must name
+///   the symbol and let the linker pick the winner.
+///
+/// Empty (never matches) for non-relocatable output, which has no link
+/// step to defer to.
+pub(crate) struct RelocCalleeCtx {
+    /// (native start offset, per-func section id), ascending by start.
+    starts: alloc::vec::Vec<(usize, u32)>,
+    /// Function `ent_pc` -> (section id, name index).
+    by_pc: alloc::collections::BTreeMap<usize, (u32, usize)>,
+    /// Function names, indexed by the map above.
+    names: alloc::vec::Vec<String>,
+    /// `ent_pc` of every function defined here with weak linkage.
+    weak: alloc::collections::BTreeSet<usize>,
+}
+
+impl RelocCalleeCtx {
+    /// The callee's name when the branch at `site_off` targeting
+    /// function `target_pc` must go through a relocation; `None` when
+    /// the branch resolves in place.
+    pub(crate) fn reloc_callee(&self, site_off: usize, target_pc: usize) -> Option<&str> {
+        let &(callee_sec, name_idx) = self.by_pc.get(&target_pc)?;
+        if !self.weak.contains(&target_pc) {
+            let i = self.starts.partition_point(|&(s, _)| s <= site_off);
+            let site_sec = if i == 0 { 0 } else { self.starts[i - 1].1 };
+            if site_sec == callee_sec {
+                return None;
+            }
+        }
+        Some(self.names[name_idx].as_str())
+    }
+}
+
+/// Build the [`RelocCalleeCtx`] for the just-emitted function layout.
+/// `funcs` is the emission order; `pc_to_native` maps each `ent_pc` to
+/// its native start offset.
+pub(crate) fn reloc_callee_ctx(
+    program: &Program,
+    funcs: &[crate::c5::ir::FunctionSsa],
+    pc_to_native: &[usize],
+    output_kind: OutputKind,
+) -> RelocCalleeCtx {
+    use crate::c5::token::Token;
+    let empty = RelocCalleeCtx {
+        starts: alloc::vec::Vec::new(),
+        by_pc: alloc::collections::BTreeMap::new(),
+        names: alloc::vec::Vec::new(),
+        weak: alloc::collections::BTreeSet::new(),
+    };
+    if output_kind != OutputKind::Relocatable {
+        return empty;
+    }
+    let defined_funcs = || {
+        program
+            .symbols
+            .iter()
+            .filter(|s| s.class == Token::Fun as i64 && s.defined_here)
+    };
+    let section_of: alloc::collections::BTreeMap<&str, &str> = defined_funcs()
+        .filter(|s| s.section_name.is_some())
+        .map(|s| (s.name.as_str(), s.section_name.as_deref().unwrap_or("")))
+        .collect();
+    let weak_names: alloc::collections::BTreeSet<&str> = defined_funcs()
+        .filter(|s| s.is_weak)
+        .map(|s| s.name.as_str())
+        .collect();
+    if section_of.is_empty() && weak_names.is_empty() {
+        return empty;
+    }
+    // Intern the section names; id 0 is the default section.
+    let mut sec_ids: alloc::collections::BTreeMap<&str, u32> = alloc::collections::BTreeMap::new();
+    let mut ctx = empty;
+    for f in funcs {
+        let sec = match section_of.get(f.name.as_str()) {
+            Some(name) => {
+                let next = sec_ids.len() as u32 + 1;
+                *sec_ids.entry(name).or_insert(next)
+            }
+            None => 0,
+        };
+        let Some(&start) = pc_to_native.get(f.ent_pc) else {
+            continue;
+        };
+        let name_idx = ctx.names.len();
+        if weak_names.contains(f.name.as_str()) {
+            ctx.weak.insert(f.ent_pc);
+        }
+        ctx.names.push(f.name.clone());
+        ctx.by_pc.insert(f.ent_pc, (sec, name_idx));
+        ctx.starts.push((start, sec));
+    }
+    ctx.starts.sort_unstable();
+    ctx
 }
 
 /// Append the [`crate::OUTPUT_MARKER`] to the tail of

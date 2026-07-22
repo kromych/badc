@@ -284,6 +284,11 @@ pub enum Intrinsic {
     /// operand (0F 00 /2). The op takes the operand's address; the
     /// interpreter treats it as a no-op (no modelled LDTR).
     X86Lldt = 80,
+    /// Read of a `register T name asm("rsp"/"sp")` variable -- the
+    /// current stack pointer, as a `void *`-shaped value. No arguments.
+    /// The interpreter returns the frame's arena base (the same proxy
+    /// `FrameAddress` uses); native code reads rsp / sp directly.
+    StackPointer = 81,
 }
 
 impl Intrinsic {
@@ -369,6 +374,7 @@ impl Intrinsic {
             78 => Some(Intrinsic::X86Lidt),
             79 => Some(Intrinsic::X86Clflush),
             80 => Some(Intrinsic::X86Lldt),
+            81 => Some(Intrinsic::StackPointer),
             _ => None,
         }
     }
@@ -455,6 +461,29 @@ impl Intrinsic {
                 | Intrinsic::Floorf
                 | Intrinsic::Ceilf
                 | Intrinsic::Truncf
+        )
+    }
+
+    /// True for intrinsics whose result depends on the enclosing
+    /// function's own frame, stack pointer, or return / setjmp landing.
+    /// Cloning one into a caller (the inliner splice) would report the
+    /// caller's frame or reclaim the caller's stack, changing behavior,
+    /// so such an intrinsic keeps its function out of line. Every other
+    /// intrinsic is a leaf reproduced by operand remap. `VaStart` reads
+    /// the enclosing variadic save area; a body holding it is variadic
+    /// and already ineligible, but it is listed for completeness.
+    pub fn is_frame_bound(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::Alloca
+                | Intrinsic::SetjmpAArch64
+                | Intrinsic::LongjmpAArch64
+                | Intrinsic::VaStart
+                | Intrinsic::FrameAddress
+                | Intrinsic::AllocaSave
+                | Intrinsic::AllocaRestore
+                | Intrinsic::ReturnAddress
+                | Intrinsic::StackPointer
         )
     }
 }

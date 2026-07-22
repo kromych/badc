@@ -29,7 +29,77 @@ use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
 use super::types::{is_struct_ty, struct_ptr_depth};
 
+/// The outer binding a nested block saved before rebinding a name, restored
+/// at the block's exit. A block nests arbitrarily, so unlike the single
+/// `h_*` shadow slot used at function-body top level this is a per-entry
+/// snapshot; it carries every field that a block-local declarator can retype
+/// on the reused symbol slot (C99 6.2.1 nested scopes).
+pub(super) struct BlockShadow {
+    idx: usize,
+    class: i64,
+    type_: i64,
+    val: i64,
+    fn_ptr_indirection: i64,
+    params: Vec<i64>,
+    is_variadic: bool,
+    array_size: i64,
+    inner_array_size: i64,
+    array_dims: Vec<i64>,
+    is_vla: bool,
+    vla_ptr_slot: i64,
+    vla_size_slot: i64,
+    is_zero_len_array: bool,
+    asm_register: Option<crate::c5::symbol::AsmRegister>,
+    is_global_register: bool,
+}
+
 impl Compiler {
+    /// Snapshot the current binding of `idx` for restore at block exit.
+    pub(super) fn capture_block_shadow(&self, idx: usize) -> BlockShadow {
+        let s = &self.symbols[idx];
+        BlockShadow {
+            idx,
+            class: s.class,
+            type_: s.type_,
+            val: s.val,
+            fn_ptr_indirection: s.fn_ptr_indirection,
+            params: s.params.clone(),
+            is_variadic: s.is_variadic,
+            array_size: s.array_size,
+            inner_array_size: s.inner_array_size,
+            array_dims: s.array_dims.clone(),
+            is_vla: s.is_vla,
+            vla_ptr_slot: s.vla_ptr_slot,
+            vla_size_slot: s.vla_size_slot,
+            is_zero_len_array: s.is_zero_len_array,
+            asm_register: s.asm_register,
+            is_global_register: s.is_global_register,
+        }
+    }
+
+    /// Restore a binding saved by [`Self::capture_block_shadow`], reverting
+    /// the whole retyped slot (type and array / VLA shape included) and
+    /// clearing the block-`extern` mark.
+    pub(super) fn restore_block_shadow(&mut self, b: BlockShadow) {
+        let s = &mut self.symbols[b.idx];
+        s.class = b.class;
+        s.type_ = b.type_;
+        s.val = b.val;
+        s.fn_ptr_indirection = b.fn_ptr_indirection;
+        s.params = b.params;
+        s.is_variadic = b.is_variadic;
+        s.array_size = b.array_size;
+        s.inner_array_size = b.inner_array_size;
+        s.array_dims = b.array_dims;
+        s.is_vla = b.is_vla;
+        s.vla_ptr_slot = b.vla_ptr_slot;
+        s.vla_size_slot = b.vla_size_slot;
+        s.is_zero_len_array = b.is_zero_len_array;
+        s.asm_register = b.asm_register;
+        s.is_global_register = b.is_global_register;
+        s.block_extern_active = false;
+    }
+
     /// `for (init; cond; step) body`. The body is emitted between the
     /// condition (which falls through to it) and the step (which the
     /// body's tail jumps back to). `continue` patches into the step
@@ -81,7 +151,7 @@ impl Compiler {
         // as `parse_block_stmt`. `parse_block_local_decl`
         // consumes its own trailing `;`; the expression branch
         // does it explicitly.
-        let mut for_init_symbols: Vec<(usize, i64, i64, i64)> = Vec::new();
+        let mut for_init_symbols: Vec<BlockShadow> = Vec::new();
         let mut init_ast: Option<super::super::ast::BlockItem> = None;
         if self.lex.tk == ';' {
             self.next()?;
@@ -217,10 +287,8 @@ impl Compiler {
         // the binding's scope ends with the for statement
         // (C99 6.8.5.3 / 6.8p3). Restore in reverse order to
         // unwind multiple shadows in declaration order.
-        for (idx, class, ty, val) in for_init_symbols.into_iter().rev() {
-            self.symbols[idx].class = class;
-            self.symbols[idx].type_ = ty;
-            self.symbols[idx].val = val;
+        for b in for_init_symbols.into_iter().rev() {
+            self.restore_block_shadow(b);
         }
         Ok(())
     }
@@ -273,7 +341,7 @@ impl Compiler {
     /// cleanup restores it.
     pub(super) fn parse_block_typedef(
         &mut self,
-        mut block_symbols: Option<&mut Vec<(usize, i64, i64, i64)>>,
+        mut block_symbols: Option<&mut Vec<BlockShadow>>,
     ) -> Result<(), C5Error> {
         self.next()?; // consume `typedef`
         let lbt = self.parse_decl_base_type()?;
@@ -294,28 +362,26 @@ impl Compiler {
             // C99 function-type typedef: `typedef RET NAME(args);`
             // declared at block scope. Same handling as run_compile's
             // file-scope branch -- parse the `(args)` and bind the
-            // typedef as a function-pointer alias. parse_function_params
-            // binds each named parameter as a Loc; with no body to put
-            // them into scope for, we restore the shadowed binding
-            // immediately.
+            // typedef as a function-pointer alias.
             let (typedef_ty, typedef_fpi, typedef_params) = if self.lex.tk == '(' {
                 self.next()?; // consume `(`
+                // C99 6.2.1p4: the parameter names of this function-type
+                // typedef have no scope. Record their types without binding
+                // the names, so one matching an enclosing local is not
+                // shadowed (which would corrupt the single-slot shadow the
+                // enclosing scope restores from at exit).
+                let saved = self.pending.parsing_fn_ptr_proto;
+                self.pending.parsing_fn_ptr_proto = true;
                 let pp = self.parse_function_params()?;
-                for &p in &pp.indices {
-                    Compiler::restore_shadowed_symbol(&mut self.symbols[p]);
-                }
+                self.pending.parsing_fn_ptr_proto = saved;
                 let fty = ty + Ty::Ptr as i64;
                 (fty, 1i64, Some(pp))
             } else {
                 (ty, fn_ptr_indirection, None)
             };
-            if let Some(bs) = block_symbols.as_deref_mut() {
-                bs.push((
-                    id_idx,
-                    self.symbols[id_idx].class,
-                    self.symbols[id_idx].type_,
-                    self.symbols[id_idx].val,
-                ));
+            if block_symbols.is_some() {
+                let snap = self.capture_block_shadow(id_idx);
+                block_symbols.as_deref_mut().unwrap().push(snap);
             } else {
                 self.shadow_symbol(id_idx);
                 self.symbols[id_idx].is_scope_typedef = true;
@@ -367,7 +433,7 @@ impl Compiler {
     /// matching store sequence via `emit_local_init_store`.
     fn parse_block_local_decl(
         &mut self,
-        block_symbols: &mut Vec<(usize, i64, i64, i64)>,
+        block_symbols: &mut Vec<BlockShadow>,
     ) -> Result<(), C5Error> {
         // Storage-class prefixes. `static` at function scope promotes
         // the declarator to a Glo symbol with persistent data-segment
@@ -383,6 +449,7 @@ impl Compiler {
         // Reset the const carrier for this declaration; `parse_decl_base_type`
         // below records `const` as it consumes the base specifiers.
         self.pending.base_is_const = false;
+        self.pending.saw_register_storage = false;
         while self.lex.tk == Token::Extern
             || self.lex.tk == Token::Static
             || self.lex.tk == Token::ThreadLocal
@@ -448,6 +515,7 @@ impl Compiler {
             self.pending.vla_allowed = true;
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = false;
+            let asm_reg = self.parse_register_asm_binding(is_static, is_extern)?;
             // Trailing cleanup wins for this declarator; otherwise the
             // leading one (if any) applies.
             let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
@@ -508,12 +576,8 @@ impl Compiler {
                 is_extern && prior_class != Token::Glo as i64 && prior_class != Token::Fun as i64;
             let extern_shadows_binding = convert_extern && prior_class != Token::Id as i64;
             if !convert_extern || extern_shadows_binding {
-                block_symbols.push((
-                    loc_idx,
-                    self.symbols[loc_idx].class,
-                    self.symbols[loc_idx].type_,
-                    self.symbols[loc_idx].val,
-                ));
+                let snap = self.capture_block_shadow(loc_idx);
+                block_symbols.push(snap);
             }
 
             if is_extern {
@@ -563,6 +627,10 @@ impl Compiler {
                 let decl_file = self.intern_source_file() as u32;
                 self.symbols[loc_idx].decl_file = decl_file;
                 self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
+                // Unconditional write so a reused symbol slot does not
+                // leak a stale binding from an outer name.
+                self.symbols[loc_idx].asm_register = asm_reg;
+                self.check_register_asm_init(asm_reg)?;
                 // Save any enclosing aggregate's in-progress initializer
                 // carriers -- this declaration can be nested inside one when
                 // an aggregate element is a statement expression that
@@ -617,9 +685,13 @@ impl Compiler {
                 self.register_cleanup_var(loc_idx, fn_sym);
             }
 
+            if self.pending.auto_type_single_declarator && self.lex.tk == ',' {
+                return Err(self.compile_err("`__auto_type` declaration takes a single declarator"));
+            }
             self.accept(',')?;
         }
         self.next()?;
+        self.pending.auto_type_single_declarator = false;
         Ok(())
     }
 
@@ -764,6 +836,42 @@ impl Compiler {
     /// statement may. Each declaration's bindings shadow outer
     /// symbols for the duration of the block and are restored on
     /// exit.
+    /// Parse `__label__ name, ... ;` and bind each name in the block
+    /// whose scope is currently innermost. GCC requires the declaration
+    /// to lead its block, before any other declaration or statement;
+    /// the callers enforce that by only dispatching here while no other
+    /// item has been parsed.
+    pub(super) fn parse_local_label_decl(&mut self) -> Result<(), C5Error> {
+        self.next()?; // consume `__label__`
+        loop {
+            if self.lex.tk != Token::Id {
+                return Err(self.compile_err("label name expected in `__label__` declaration"));
+            }
+            let name = self.symbols[self.lex.curr_id_idx].name.clone();
+            self.next()?;
+            let scope = self
+                .local_label_scopes
+                .last()
+                .expect("a block scope is open while parsing its `__label__` declaration");
+            if scope.iter().any(|(declared, _)| declared == &name) {
+                return Err(self.compile_err(format!("duplicate local label declaration `{name}`")));
+            }
+            let key = format!("{name}#{}", self.local_label_seq);
+            self.local_label_seq += 1;
+            self.local_label_scopes
+                .last_mut()
+                .expect("a block scope is open while parsing its `__label__` declaration")
+                .push((name, key));
+            if self.lex.tk == ',' {
+                self.next()?;
+                continue;
+            }
+            break;
+        }
+        self.consume(b';', "semicolon expected after `__label__` declaration")?;
+        Ok(())
+    }
+
     fn parse_block_stmt(&mut self) -> Result<super::super::ast::StmtId, C5Error> {
         self.next()?;
         self.cleanup_scopes.push(alloc::vec::Vec::new());
@@ -772,6 +880,9 @@ impl Compiler {
         // shadow same-named tags in any enclosing scope and go out of
         // scope when the block exits.
         self.tag_scopes.push(alloc::vec::Vec::new());
+        // GCC local labels declared by this block; see
+        // `Compiler::resolve_label_name`.
+        self.local_label_scopes.push(alloc::vec::Vec::new());
         let mut block_symbols = Vec::new();
 
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
@@ -779,7 +890,18 @@ impl Compiler {
         // storage reclaimed on block exit. Track whether any appears so
         // the block is bracketed with the stack save / restore.
         let mut block_has_vla = false;
+        let mut at_block_start = true;
         while self.lex.tk != '}' {
+            if self.lex.tk == Token::LocalLabel {
+                if !at_block_start {
+                    return Err(
+                        self.compile_err("`__label__` must appear at the start of its block")
+                    );
+                }
+                self.parse_local_label_decl()?;
+                continue;
+            }
+            at_block_start = false;
             // C23 6.7.13 / 6.8: an attribute-specifier-sequence may
             // lead either a declaration or a statement at block scope.
             // Consume it, then dispatch on the following token.
@@ -814,8 +936,8 @@ impl Compiler {
                     // C23 6.7.13.5: `[[maybe_unused]]` on a declaration
                     // suppresses the unused diagnostics for the names it
                     // introduces.
-                    for &(idx, _, _, _) in &block_symbols[sym_before..] {
-                        self.symbols[idx].maybe_unused = true;
+                    for b in &block_symbols[sym_before..] {
+                        self.symbols[b.idx].maybe_unused = true;
                     }
                 }
                 let item_after = self.ast.stmts.len();
@@ -908,8 +1030,8 @@ impl Compiler {
         // `{ ... }` block; their diagnostic is emitted at function
         // exit. Names starting with `_` are suppressed (gcc /
         // clang `-Wunused` convention).
-        for (idx, _, _, _) in &block_symbols {
-            let sym = &self.symbols[*idx];
+        for b in &block_symbols {
+            let sym = &self.symbols[b.idx];
             if sym.class != Token::Loc as i64
                 || sym.val >= 0
                 || !sym.decl_in_main_source
@@ -943,8 +1065,8 @@ impl Compiler {
         // nested block or a `for` initializer. function_bc_pc is filled
         // in at function close (see run_compile.rs). Slots 0 and 1 are
         // the saved-frame area, not user names.
-        for (idx, _, _, _) in &block_symbols {
-            let sym = &self.symbols[*idx];
+        for b in &block_symbols {
+            let sym = &self.symbols[b.idx];
             if sym.class == Token::Loc as i64
                 && sym.val != 0
                 && sym.val != 1
@@ -969,16 +1091,14 @@ impl Compiler {
         // and drops its `block_extern_active` mark; the marked references
         // already resolve through `Ast::block_extern_refs` independent of
         // this restored class.
-        for (idx, class, ty, val) in block_symbols.into_iter().rev() {
-            self.symbols[idx].class = class;
-            self.symbols[idx].type_ = ty;
-            self.symbols[idx].val = val;
-            self.symbols[idx].block_extern_active = false;
+        for b in block_symbols.into_iter().rev() {
+            self.restore_block_shadow(b);
         }
         // Pop this block's tag bindings; the StructDef storage in
         // `self.structs` stays reachable by id for any reference the
         // outer scope already holds.
         self.tag_scopes.pop();
+        self.local_label_scopes.pop();
         Ok(block_id)
     }
 
@@ -1049,12 +1169,14 @@ impl Compiler {
             .any(|&(s, e)| id >= s && id < e)
     }
 
-    /// Parse a GCC inline-asm statement. c5 supports the operand-free
-    /// forms: an empty template (a compiler barrier, no instruction
-    /// emitted) and a single known operand-free hint instruction
-    /// (`pause` / `yield`, lowered to the target spin-loop hint).
-    /// Operand constraints and other instructions are rejected.
-    fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
+    /// Shared head of an `asm` statement or a file-scope `asm`
+    /// declaration: qualifiers, `(`, and the (concatenated) template
+    /// string. Returns the template bytes, their start offset in the
+    /// data section (the caller truncates once done), and the
+    /// `volatile` / `goto` qualifier flags.
+    pub(super) fn parse_asm_head(
+        &mut self,
+    ) -> Result<(alloc::vec::Vec<u8>, usize, bool, bool), C5Error> {
         self.next()?; // asm / __asm__ / __asm
         // Optional qualifiers (`volatile` / `__volatile__`, `inline`,
         // `goto`). `volatile` must not be elided and rides the parsed
@@ -1093,6 +1215,16 @@ impl Compiler {
             self.next()?;
         }
         let template: alloc::vec::Vec<u8> = self.data[tstart..].to_vec();
+        Ok((template, tstart, is_volatile, is_goto))
+    }
+
+    /// Parse a GCC inline-asm statement. c5 supports the operand-free
+    /// forms: an empty template (a compiler barrier, no instruction
+    /// emitted) and a single known operand-free hint instruction
+    /// (`pause` / `yield`, lowered to the target spin-loop hint).
+    /// Operand constraints and other instructions are rejected.
+    fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
+        let (template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
         // `asm goto` takes the general extended-asm path directly: the
         // operand-free template shortcuts below have no label grammar.
         if is_goto {
@@ -1263,26 +1395,12 @@ impl Compiler {
             }
         }
         // An empty template is a compiler barrier: `__asm__("")`, or the
-        // no-unroll / clobber idiom `__asm__("" :: "r"(p))`. It emits no
-        // instruction, so its operands carry no machine effect; consume
-        // the whole `: outputs : inputs : clobbers` region (operand
-        // expressions included) and emit nothing. c5 does not reorder
-        // memory accesses across the statement.
-        if tmpl_lc.is_empty() {
-            let mut depth = 0i32;
-            while !(self.lex.tk == ')' && depth == 0) {
-                if self.lex.tk == '(' {
-                    depth += 1;
-                } else if self.lex.tk == ')' {
-                    depth -= 1;
-                }
-                self.next()?;
-            }
-            self.next()?; // consume ')'
-            self.consume(b';', "`;` expected after `asm(...)`")?;
-            self.data.truncate(tstart);
-            return Ok(());
-        }
+        // no-unroll / clobber idiom `__asm__("" :: "r"(p))`. It encodes
+        // no machine instruction, but it must still reach the IR as an
+        // `Inst::InlineAsm` so the SSA passes and the builder's CSE
+        // cache treat it as an ordering barrier: no load / store may be
+        // forwarded or merged across it. The general parser below
+        // handles it; the empty template emits zero bytes.
         // The spin-loop hint appears as `pause` / `yield` (x86 / arm) or
         // the `rep; nop` byte encoding of PAUSE on x86; normalize away the
         // whitespace and `;` so every spelling maps to the relax hint. It
@@ -1353,8 +1471,11 @@ impl Compiler {
         is_goto: bool,
     ) -> Result<(), C5Error> {
         use super::super::ast::{AsmBlockAst, Expr, UnOp};
-        use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand};
+        use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
+        use super::types::{Segment, segment_of_ty};
         let mut operands: alloc::vec::Vec<AsmOperand> = alloc::vec::Vec::new();
+        let mut operand_names: alloc::vec::Vec<Option<alloc::string::String>> =
+            alloc::vec::Vec::new();
         let mut operand_exprs: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
         let mut clobber_regs: u32 = 0;
         let mut clobber_fp_regs: u32 = 0;
@@ -1389,12 +1510,29 @@ impl Compiler {
                 }
                 let name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
-                if !self.labels.iter().any(|n| n == &name) {
-                    self.unresolved_gotos.push(name.clone());
+                // `label_names` stays the name as written: the template
+                // references it as `%l[name]`. Only the binding resolves
+                // through the local-label scopes.
+                let key = self.resolve_label_name(&name);
+                if !self.labels.iter().any(|n| n == &key) {
+                    self.unresolved_gotos.push(key.clone());
                 }
-                label_ids.push(self.ast_label_by_name(&name));
+                label_ids.push(self.ast_label_by_name(&key));
                 label_names.push(name);
                 continue;
+            }
+            // GCC named operand: `[name]` before the constraint string.
+            // The name is addressable in the template as `%[name]`.
+            let mut op_name: Option<alloc::string::String> = None;
+            if self.lex.tk == Token::Brak && section <= 2 {
+                self.next()?; // `[`
+                if self.lex.tk != Token::Id {
+                    self.data.truncate(data_base);
+                    return Err(self.compile_err("inline asm: operand name expected after `[`"));
+                }
+                op_name = Some(self.symbols[self.lex.curr_id_idx].name.clone());
+                self.next()?; // name
+                self.consume(b']', "`]` expected after asm operand name")?;
             }
             if self.lex.tk != '"' {
                 self.data.truncate(data_base);
@@ -1403,8 +1541,15 @@ impl Compiler {
             // The lexer appended the constraint bytes to the data
             // section; copy them out and drop them.
             let cstart = self.lex.ival as usize;
-            let cbytes: alloc::vec::Vec<u8> = self.data[cstart..].to_vec();
             self.next()?; // consume the constraint string
+            // C99 5.1.1.2 phase 6: adjacent string literals concatenate, as
+            // for the template above. Condition-code output macros are
+            // commonly spelled `"=@cc" "c"`, so the constraint is only
+            // complete once the following `"` tokens are consumed.
+            while self.lex.tk == '"' {
+                self.next()?;
+            }
+            let cbytes: alloc::vec::Vec<u8> = self.data[cstart..].to_vec();
             self.data.truncate(cstart);
             let cstr = core::str::from_utf8(&cbytes).unwrap_or("");
             if section >= 3 {
@@ -1446,44 +1591,56 @@ impl Compiler {
                 continue;
             }
             let is_output = section == 1;
-            // TODO: support `asm goto` output operands (GCC 11 added
-            // them; the label paths would need output store-back).
-            if is_goto && is_output {
-                self.data.truncate(data_base);
-                return Err(self.compile_err("inline asm goto: output operands are not supported"));
-            }
-            let (constraint, is_rw) = match Self::parse_asm_constraint(cstr, is_output, n_outputs) {
-                Some(c) => c,
-                None => {
-                    self.data.truncate(data_base);
-                    return Err(self.compile_err(alloc::format!(
-                        "inline asm: unsupported constraint `{cstr}`"
-                    )));
-                }
-            };
+            let is_x86 = !self.target.is_aarch64();
+            let (constraint, is_rw) =
+                match Self::parse_asm_constraint(cstr, is_output, n_outputs, is_x86) {
+                    Some(c) => c,
+                    None => {
+                        self.data.truncate(data_base);
+                        return Err(self.compile_err(alloc::format!(
+                            "inline asm: unsupported constraint `{cstr}`"
+                        )));
+                    }
+                };
             if self.lex.tk != '(' {
                 self.data.truncate(data_base);
                 return Err(self.compile_err("inline asm: `(` expected after constraint"));
             }
             self.next()?; // consume `(`
+            // A storage-less register variable (the stack / frame pointer)
+            // named alone as the operand binds to that register; detected
+            // before the parse, since its expression is indistinguishable
+            // from `__builtin_frame_address(0)` afterwards.
+            let bound_reg = self.asm_operand_bound_register()?;
+            // `*(T (*)[N])p` reaches the array itself, which decays to the
+            // element pointer (C99 6.3.2.1p3): the deref emits no node and the
+            // accumulator already holds the object's address. The decay marker
+            // distinguishes that from an ordinary rvalue.
+            let saved_decay_bytes = core::mem::take(&mut self.pending.last_array_decay_bytes);
             self.expr(Token::Assign as i64)?;
-            // A `register T v asm("reg")` local used as an `r`-class
-            // operand binds to its named register (the one placement
-            // GCC guarantees for asm-declared register variables).
-            let constraint = match constraint {
-                AsmConstraint::Reg => {
-                    let pinned = self.ast_acc.and_then(|id| match self.ast.expr(id) {
-                        Expr::Ident { sym, .. } => self.symbols[*sym as usize].asm_reg,
-                        _ => None,
-                    });
-                    match pinned {
-                        Some(r) => AsmConstraint::Fixed(r),
-                        None => constraint,
-                    }
-                }
-                c => c,
-            };
+            let decayed_array =
+                core::mem::replace(&mut self.pending.last_array_decay_bytes, saved_decay_bytes) > 0;
             let width = self.size_of_type(self.ty).min(8) as u8;
+            // A `__seg_gs` / `__seg_fs`-qualified operand object is reached
+            // through a segment override. Read the segment off the operand's
+            // element type now, before the address-of below retypes `self.ty`
+            // to a pointer. x86-only: no other target has segment registers.
+            let operand_seg = match (is_x86, segment_of_ty(self.ty)) {
+                (true, Some(Segment::Gs)) => AsmSeg::Gs,
+                (true, Some(Segment::Fs)) => AsmSeg::Fs,
+                _ => AsmSeg::None,
+            };
+            // `A` on a value too wide for one register would need the
+            // `rdx:rax` pair, which this constraint does not model; rejecting
+            // keeps it from silently using the low half.
+            if cstr.trim_start_matches(['=', '+', '&', '%']) == "A"
+                && !self.target.is_aarch64()
+                && self.size_of_type(self.ty) > 8
+            {
+                self.data.truncate(data_base);
+                return Err(self
+                    .compile_err("inline asm: `A` operand wider than a register is unsupported"));
+            }
             // The x86 `x` operand path moves a full 128-bit value (movups), so
             // it requires a 16-byte operand (a __m128i / vector). A scalar
             // float / double `x` operand is not yet supported and is rejected
@@ -1497,6 +1654,38 @@ impl Compiler {
                 return Err(self
                     .compile_err("inline asm: only 16-byte (__m128i) `x` operands are supported"));
             }
+            // A `register T v asm("reg")` variable used as a plain
+            // register operand pins the operand to its named register --
+            // the GNU-documented purpose of a local register variable.
+            // TODO: the aarch64 asm surface is pattern-matched, not
+            // constraint-based; pinning applies there once it is.
+            let constraint = if let AsmConstraint::Reg = constraint
+                && let Some(Expr::Ident { sym, .. }) = self.ast_acc.map(|a| self.ast.expr(a))
+                && self.symbols[*sym as usize].class == Token::Loc as i64
+                && let Some(crate::c5::symbol::AsmRegister::Gp(r)) =
+                    self.symbols[*sym as usize].asm_register
+            {
+                // A register variable with storage keeps its slot; the
+                // operand is pinned to the named register and the value
+                // round-trips through the slot like any other operand.
+                AsmConstraint::Fixed(r)
+            } else if let (AsmConstraint::Reg, Some(r)) = (constraint, bound_reg) {
+                // The stack / frame pointer has no storage behind it, so
+                // the operand IS the register: nothing is loaded into it
+                // and nothing is written back out of it.
+                AsmConstraint::Bound(r)
+            } else {
+                constraint
+            };
+            // A bound operand names a register, which is its own storage:
+            // there is no object to address and nothing to store back. Its
+            // current value is carried in as a plain input so the operand
+            // still occupies its `%N` slot. Writing such a variable is
+            // rejected in the expression path, so an asm that leaves the
+            // register changed is equally unsupported.
+            let is_bound = matches!(constraint, AsmConstraint::Bound(_));
+            let stores_back = is_output && !is_bound;
+            let is_rw = is_rw && !is_bound;
             // Outputs pass the destination address; a memory operand (input or
             // output) is likewise reached through its address, so it must be an
             // lvalue. A non-lvalue (a call / cast / arithmetic result) is not
@@ -1507,35 +1696,42 @@ impl Compiler {
             // addressable" / an output operand must be an lvalue). An empty
             // accumulator falls through to the "operand expression expected"
             // check below.
-            if is_output || matches!(constraint, AsmConstraint::Mem) {
-                let addressable = match self.ast_acc {
-                    Some(id) => {
-                        use super::super::ast::Expr;
-                        matches!(
-                            self.ast.expr(id),
-                            Expr::Ident { .. }
-                                | Expr::Index { .. }
-                                | Expr::Member { .. }
-                                | Expr::CompoundLiteral { .. }
-                                | Expr::Binary { .. }
-                                | Expr::Unary {
-                                    op: UnOp::Deref,
-                                    ..
-                                }
-                        )
-                    }
-                    None => true,
-                };
+            if (is_output || matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase))
+                && !is_bound
+            {
+                let addressable = decayed_array
+                    || match self.ast_acc {
+                        Some(id) => {
+                            use super::super::ast::Expr;
+                            matches!(
+                                self.ast.expr(id),
+                                Expr::Ident { .. }
+                                    | Expr::Index { .. }
+                                    | Expr::Member { .. }
+                                    | Expr::CompoundLiteral { .. }
+                                    | Expr::Binary { .. }
+                                    | Expr::Unary {
+                                        op: UnOp::Deref,
+                                        ..
+                                    }
+                            )
+                        }
+                        None => true,
+                    };
                 if !addressable {
                     self.data.truncate(data_base);
-                    return Err(self.compile_err(if is_output {
+                    return Err(self.compile_err(if stores_back {
                         "inline asm: output operand must be an lvalue"
                     } else {
                         "inline asm: memory operand is not directly addressable (must be an lvalue)"
                     }));
                 }
-                self.ty += Ty::Ptr as i64;
-                self.ast_apply_unary(UnOp::AddrOf);
+                // A decayed array operand is already an address; taking it
+                // again would yield the address of the pointer value.
+                if !decayed_array {
+                    self.ty += Ty::Ptr as i64;
+                    self.ast_apply_unary(UnOp::AddrOf);
+                }
             }
             let e = match self.ast_acc.take() {
                 Some(e) => e,
@@ -1544,12 +1740,55 @@ impl Compiler {
                     return Err(self.compile_err("inline asm: operand expression expected"));
                 }
             };
+            // A range-restricted immediate constraint admits only an integer
+            // constant within its range (GCC machine constraints). The
+            // constraint resolved to a pure immediate, so there is no
+            // register alternative to fall back on: a non-constant or
+            // out-of-range operand cannot be satisfied. The letters and their
+            // ranges are target-specific.
+            if matches!(constraint, AsmConstraint::Imm) {
+                let ibody = cstr.trim_start_matches(['=', '+', '&', '%']);
+                let letter = if is_x86 {
+                    Self::x86_imm_constraint_letter(ibody)
+                } else {
+                    Self::aarch64_imm_constraint_letter(ibody)
+                };
+                if let Some(letter) = letter {
+                    let v = self.expr_const_int(e);
+                    let accepts = |v| {
+                        if is_x86 {
+                            Self::x86_imm_constraint_accepts(letter, v)
+                        } else {
+                            Self::aarch64_imm_constraint_accepts(letter, v)
+                        }
+                    };
+                    if !v.is_some_and(accepts) {
+                        let range = if is_x86 {
+                            Self::x86_imm_constraint_range_text(letter)
+                        } else {
+                            Self::aarch64_imm_constraint_range_text(letter)
+                        };
+                        return Err(self.compile_err(match v {
+                            Some(v) => alloc::format!(
+                                "inline asm: value {v} out of range for constraint \
+                                 `{letter}` (expected {range})"
+                            ),
+                            None => alloc::format!(
+                                "inline asm: constraint `{letter}` requires an \
+                                 integer constant (expected {range})"
+                            ),
+                        }));
+                    }
+                }
+            }
             operand_exprs.push(e);
+            operand_names.push(op_name);
             operands.push(AsmOperand {
                 constraint,
-                is_output,
+                is_output: stores_back,
                 is_rw,
                 width,
+                seg: operand_seg,
             });
             if is_output {
                 n_outputs += 1;
@@ -1562,14 +1801,32 @@ impl Compiler {
         }
         self.next()?; // consume the outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
-        self.data.truncate(data_base);
+        // Keep any operand data emitted above: a string-literal operand
+        // (`"i"(__FILE__)`) is interned into `self.data` while lexing and its
+        // offset is baked into the `Expr::StrLit` the walk lowers to an
+        // `ImmData`; truncating here would leave that reference dangling. Only
+        // the error paths roll the data back.
 
         // Every register operand is preserved across the statement.
         for (op, _) in operands.iter().zip(operand_exprs.iter()) {
+            // A `Bound` operand is deliberately excluded: preserving the
+            // register the asm was asked to see and affect would defeat
+            // the binding.
             if let AsmConstraint::Fixed(r) | AsmConstraint::RegOrImm(r) = op.constraint {
                 clobber_regs |= 1 << r;
             }
         }
+        // Canonicalize `%[name]` / `%<modifier>[name]` operand references
+        // to their positional `%N` / `%<modifier>N` forms while the names
+        // are at hand, so the per-arch template parsers see one spelling.
+        let template = if operand_names.iter().any(Option::is_some) {
+            match Self::rewrite_named_operand_refs(&template, &operand_names) {
+                Ok(t) => t,
+                Err(m) => return Err(self.compile_err(m)),
+            }
+        } else {
+            template
+        };
         // `asm goto` requires a label list; canonicalize the template's
         // `%l[name]` / `%lN` references to label-list indices while the
         // names and operand count are at hand.
@@ -1690,20 +1947,305 @@ impl Compiler {
         Ok(out)
     }
 
+    /// Canonicalize named operand references: `%[name]` and
+    /// `%<modifier>[name]` (one modifier letter, e.g. `%c[x]` / `%w[x]`)
+    /// become `%N` / `%<modifier>N` with `N` the operand's position.
+    /// `%l[label]` is the `asm goto` label reference and is left for
+    /// [`Self::rewrite_goto_label_refs`]. Unknown names are rejected here,
+    /// where the source position is known.
+    fn rewrite_named_operand_refs(
+        template: &[u8],
+        names: &[Option<alloc::string::String>],
+    ) -> Result<alloc::vec::Vec<u8>, alloc::string::String> {
+        let mut out: alloc::vec::Vec<u8> = alloc::vec::Vec::with_capacity(template.len());
+        let mut i = 0usize;
+        while i < template.len() {
+            if template[i] != b'%' {
+                out.push(template[i]);
+                i += 1;
+                continue;
+            }
+            if template.get(i + 1) == Some(&b'%') {
+                out.extend_from_slice(&template[i..i + 2]);
+                i += 2;
+                continue;
+            }
+            // `%[name]` or `%<modifier>[name]`; `%l[` is a goto label.
+            let (modifier, bstart) = match template.get(i + 1) {
+                Some(&b'[') => (None, i + 2),
+                Some(&m)
+                    if m.is_ascii_alphabetic()
+                        && m != b'l'
+                        && template.get(i + 2) == Some(&b'[') =>
+                {
+                    (Some(m), i + 3)
+                }
+                _ => {
+                    out.push(template[i]);
+                    i += 1;
+                    continue;
+                }
+            };
+            let Some(len) = template[bstart..].iter().position(|&c| c == b']') else {
+                return Err(alloc::string::String::from(
+                    "inline asm: unterminated `%[` operand reference",
+                ));
+            };
+            let name = core::str::from_utf8(&template[bstart..bstart + len]).unwrap_or("");
+            let Some(n) = names.iter().position(|o| o.as_deref() == Some(name)) else {
+                return Err(alloc::format!("inline asm: `%[{name}]` names no operand"));
+            };
+            out.push(b'%');
+            if let Some(m) = modifier {
+                out.push(m);
+            }
+            out.extend_from_slice(alloc::format!("{n}").as_bytes());
+            i = bstart + len + 1;
+        }
+        Ok(out)
+    }
+
     /// Classify a GCC operand constraint string into an
     /// [`ir::AsmConstraint`] and whether it is a read-write (`+`)
     /// output. `is_output` selects the output vs input grammar;
     /// `n_outputs` is the count of outputs already parsed, so a digit
-    /// (matching) constraint resolves to an earlier output. Returns
-    /// `None` for a constraint the codegen does not model.
-    fn parse_asm_constraint(
+    /// (matching) constraint resolves to an earlier output. `is_x86`
+    /// selects the target-specific letters: the flag-output form on
+    /// x86_64, `Q` on AArch64. Returns `None` for a constraint the
+    /// codegen does not model.
+    ///
+    /// A constraint naming several alternatives (`rm`, `=qm`, `ri`) is
+    /// satisfied by the register alternative whenever the constraint
+    /// admits one, in both input and output position: a register
+    /// operand is always a legal choice for such a constraint and needs
+    /// no addressing-mode analysis to place. Only a constraint with no
+    /// register alternative at all (`m`, `=m`) takes the memory path.
+    /// The architectural register an asm operand binds to when the
+    /// operand is exactly one identifier naming a storage-less
+    /// `register T v asm("reg")` variable -- the stack or frame
+    /// pointer. GCC guarantees such an operand is that register.
+    ///
+    /// On entry the operand's `(` is consumed. The lexer is left where
+    /// it was: the operand is parsed normally afterwards, and only the
+    /// constraint changes.
+    ///
+    /// A register variable with storage is not reported here; it keeps
+    /// its slot and is pinned through `AsmConstraint::Fixed`.
+    fn asm_operand_bound_register(&mut self) -> Result<Option<u8>, C5Error> {
+        use crate::c5::symbol::AsmRegister as R;
+        if self.lex.tk != Token::Id {
+            return Ok(None);
+        }
+        let sym = self.lex.curr_id_idx;
+        let reg = match self.symbols[sym].asm_register {
+            Some(R::StackPointer) | Some(R::FramePointer)
+                if self.symbols[sym].class == Token::Loc as i64 =>
+            {
+                self.symbols[sym].asm_register
+            }
+            _ => return Ok(None),
+        };
+        // Only a bare `(v)` binds; any larger expression is an ordinary
+        // rvalue computed from the register's value.
+        let snap = self.lex.snapshot();
+        self.next()?;
+        let bare = self.lex.tk == ')';
+        self.lex.restore(snap);
+        if !bare {
+            return Ok(None);
+        }
+        if self.target.is_aarch64() {
+            // TODO: the aarch64 asm surface is pattern-matched rather
+            // than constraint-based, so a bound operand cannot be
+            // resolved there yet. Reject instead of mis-encoding.
+            return Err(self.compile_err(
+                "inline asm: a stack- or frame-pointer register variable \
+                 operand is not supported on this target",
+            ));
+        }
+        let name = match reg {
+            Some(R::StackPointer) => "rsp",
+            Some(R::FramePointer) => "rbp",
+            _ => return Ok(None),
+        };
+        Ok(super::super::codegen::x86_64::asm::reg_by_name(name).map(|(r, _)| r))
+    }
+
+    /// The x86 range-restricted immediate constraint letters (GCC "Machine
+    /// Constraints", i386 family). Each admits only an integer constant in
+    /// the stated range; `text` is the range as it appears in a diagnostic.
+    /// `L` admits a three-value set rather than an interval, so it carries
+    /// no bounds and is tested against [`X86_IMM_L_VALUES`]. The band
+    /// `I`..`P` is reserved for machine-dependent immediates; x86 leaves
+    /// `P` undefined, so it stays unrecognized here.
+    const X86_IMM_CONSTRAINTS: &'static [(char, i64, i64, &'static str)] = &[
+        // 32-bit shift counts.
+        ('I', 0, 31, "0..31"),
+        // 64-bit shift counts.
+        ('J', 0, 63, "0..63"),
+        // A signed 8-bit value.
+        ('K', -128, 127, "-128..127"),
+        // `lea` scale-factor shift counts.
+        ('M', 0, 3, "0..3"),
+        // An unsigned 8-bit value (`in` / `out` port numbers).
+        ('N', 0, 255, "0..255"),
+        // 128-bit shift counts.
+        ('O', 0, 127, "0..127"),
+    ];
+
+    /// The values GCC's x86 `L` constraint admits: the and-masks that turn
+    /// a masking `and` into a zero-extending move.
+    const X86_IMM_L_VALUES: [i64; 3] = [0xFF, 0xFFFF, 0xFFFF_FFFF];
+
+    /// The x86 range-restricted immediate letter `body` selects, if any.
+    /// Only meaningful once the constraint has resolved to a pure
+    /// immediate: a register or memory alternative alongside the letter
+    /// (`"Ir"`) lets the operand be loaded, which lifts the restriction.
+    fn x86_imm_constraint_letter(body: &str) -> Option<char> {
+        body.chars()
+            .find(|&c| c == 'L' || Self::X86_IMM_CONSTRAINTS.iter().any(|&(l, ..)| l == c))
+    }
+
+    /// True when `v` satisfies the x86 immediate constraint `letter`.
+    pub(crate) fn x86_imm_constraint_accepts(letter: char, v: i64) -> bool {
+        if letter == 'L' {
+            return Self::X86_IMM_L_VALUES.contains(&v);
+        }
+        Self::X86_IMM_CONSTRAINTS
+            .iter()
+            .find(|&&(l, ..)| l == letter)
+            .is_some_and(|&(_, lo, hi, _)| (lo..=hi).contains(&v))
+    }
+
+    /// The admissible values of the x86 immediate constraint `letter`,
+    /// spelled for a diagnostic.
+    fn x86_imm_constraint_range_text(letter: char) -> &'static str {
+        if letter == 'L' {
+            return "0xff, 0xffff or 0xffffffff";
+        }
+        Self::X86_IMM_CONSTRAINTS
+            .iter()
+            .find(|&&(l, ..)| l == letter)
+            .map_or("", |&(.., text)| text)
+    }
+
+    /// The AArch64 range-restricted immediate letter `body` selects, if any
+    /// (GCC machine constraints I, J, K, L, M, N). Only meaningful once the
+    /// constraint has resolved to a pure immediate: a register or memory
+    /// alternative alongside the letter (`"rI"`) lets the operand be loaded,
+    /// which lifts the restriction. A multi-letter `U` / `D` / `v` class
+    /// (`UsM`, `vsN`, `DL`) embeds these letters without being an immediate,
+    /// so such bodies are excluded.
+    fn aarch64_imm_constraint_letter(body: &str) -> Option<char> {
+        if body.contains(['U', 'D', 'v']) {
+            return None;
+        }
+        body.chars()
+            .find(|c| matches!(c, 'I' | 'J' | 'K' | 'L' | 'M' | 'N'))
+    }
+
+    /// A 12-bit unsigned `add` / `sub` operand: the value fits the low 12
+    /// bits, or the next 12 bits with a left shift of 12.
+    fn aarch64_uimm12_shift(x: u64) -> bool {
+        (x & !0xFFF) == 0 || (x & !0xFF_F000) == 0
+    }
+
+    /// A single-`movz` immediate: one non-zero 16-bit lane, the lane count
+    /// being 2 for a 32-bit and 4 for a 64-bit move.
+    fn aarch64_movz_imm(x: u64, is64: bool) -> bool {
+        let lanes: u32 = if is64 { 4 } else { 2 };
+        (0..lanes).any(|i| (x & !(0xFFFFu64 << (16 * i))) == 0)
+    }
+
+    /// A single-instruction `mov` immediate: `movz`, `movn` (the complement
+    /// as a `movz`), or a logical bitmask (`orr` with the zero register).
+    fn aarch64_mov_imm(x: u64, is64: bool) -> bool {
+        let mask = if is64 { u64::MAX } else { 0xFFFF_FFFF };
+        Self::aarch64_movz_imm(x, is64)
+            || Self::aarch64_movz_imm(!x & mask, is64)
+            || super::super::codegen::aarch64::table::encode_logical_imm(x, is64).is_some()
+    }
+
+    /// True when `v` satisfies the AArch64 immediate constraint `letter`
+    /// (GCC machine constraints; validated against gcc 16 and clang 22).
+    pub(crate) fn aarch64_imm_constraint_accepts(letter: char, v: i64) -> bool {
+        use super::super::codegen::aarch64::table::encode_logical_imm;
+        let u = v as u64;
+        match letter {
+            'I' => Self::aarch64_uimm12_shift(u),
+            'J' => Self::aarch64_uimm12_shift(u.wrapping_neg()),
+            'K' => encode_logical_imm(u & 0xFFFF_FFFF, false).is_some(),
+            'L' => encode_logical_imm(u, true).is_some(),
+            'M' => Self::aarch64_mov_imm(u & 0xFFFF_FFFF, false),
+            'N' => Self::aarch64_mov_imm(u, true),
+            _ => false,
+        }
+    }
+
+    /// The admissible values of the AArch64 immediate constraint `letter`,
+    /// spelled for a diagnostic.
+    fn aarch64_imm_constraint_range_text(letter: char) -> &'static str {
+        match letter {
+            'I' => "a 12-bit unsigned value, optionally shifted left by 12 (add/sub)",
+            'J' => "the negation of an `I` value (sub)",
+            'K' => "a 32-bit logical-instruction bitmask",
+            'L' => "a 64-bit logical-instruction bitmask",
+            'M' => "a 32-bit move immediate",
+            'N' => "a 64-bit move immediate",
+            _ => "",
+        }
+    }
+
+    pub(crate) fn parse_asm_constraint(
         cstr: &str,
         is_output: bool,
         n_outputs: usize,
+        is_x86: bool,
     ) -> Option<(super::super::ir::AsmConstraint, bool)> {
         use super::super::ir::AsmConstraint;
         let is_rw = cstr.starts_with('+');
         let body = cstr.trim_start_matches(['=', '+', '&', '%']);
+        // Flag output (`=@cc<cond>`): the block's condition flags are the
+        // operand. Outputs only, and x86_64 only -- the condition names and
+        // the `setcc` materialization are that target's.
+        if let Some(cond) = body.strip_prefix("@cc") {
+            // Write-only: the flags are produced by the template, so there is
+            // no prior value to load, and `+` has no meaning here.
+            if !is_output || !is_x86 || is_rw {
+                return None;
+            }
+            let cc = super::super::codegen::x86_64::asm::flag_cond_code(cond)?;
+            return Some((AsmConstraint::Flags(cc), is_rw));
+        }
+        // No other `@` form is modelled; without this the letters after it
+        // would be read as ordinary class letters.
+        if body.contains('@') {
+            return None;
+        }
+        // AArch64 `Q`: a base-register-only memory operand. `Qo` / `Qm`
+        // broaden it with the offsettable / any-memory classes; the operand's
+        // address is captured into the base register and rendered `[xN]` for
+        // every form, so all map alike. The x86 `Q` (the legacy high-byte
+        // register class) is not modeled.
+        if !is_x86 && body.contains('Q') && body.bytes().all(|c| matches!(c, b'Q' | b'o' | b'm')) {
+            return Some((AsmConstraint::MemBase, is_rw));
+        }
+        // `p`: an address operand. The operand expression is a valid address
+        // taken by value into a general register, so unlike `m` it accepts any
+        // pointer-valued rvalue and forces no addressing mode. The `%a`
+        // modifier renders that register as an address reference. Matched
+        // exactly: the aarch64 `U`-prefixed memory classes spell their own
+        // multi-letter names and must keep reaching the `m` path below.
+        if body == "p" {
+            return Some((AsmConstraint::Reg, is_rw));
+        }
+        // x86 `A`. On i386 this names the `edx:eax` pair; on x86-64 it is the
+        // `a` or `d` register (a value wider than a register has no pair form
+        // here and is rejected at the operand). GCC and clang both allocate
+        // `rax` for it, which `Fixed(0)` spells.
+        if is_x86 && body == "A" {
+            return Some((AsmConstraint::Fixed(0), is_rw));
+        }
         // A matching constraint ties an input to an earlier output.
         if let Some(d) = body.chars().find(|c| c.is_ascii_digit()) {
             let idx = d as u8 - b'0';
@@ -1724,7 +2266,13 @@ impl Compiler {
                 _ => return None,
             })
         };
-        let has_imm = body.contains(['i', 'n']);
+        // `i` / `n` take any integer constant; the range-restricted letters
+        // additionally bound its value, which the operand site checks once
+        // the constant is in hand. The letters are target-specific: x86 and
+        // aarch64 each give `I`..`N` their own ranges.
+        let has_imm = body.contains(['i', 'n'])
+            || (is_x86 && Self::x86_imm_constraint_letter(body).is_some())
+            || (!is_x86 && Self::aarch64_imm_constraint_letter(body).is_some());
         // A memory-only constraint (`m`, `=m`, `+m`): the operand is accessed
         // through a memory reference. `g` / `rm` also permit memory but prefer
         // a register, which the register path below handles.
@@ -1829,13 +2377,27 @@ impl Compiler {
     /// (`=`) contributes the destination's address, an input contributes its
     /// value. Operands are mapped by their constraint letter so the order
     /// they appear does not matter; the intrinsic args are then built in the
-    /// fixed order the codegen expects. On entry the template is consumed and
-    /// the cursor is at the first `:`.
+    /// fixed order the codegen expects. Each implicitly written register must
+    /// be an output operand or a clobber; a clobbered register with no output
+    /// operand stores to a synthesized scratch slot, and a cpuid with no `c`
+    /// input runs with subleaf 0. On entry the template is consumed and the
+    /// cursor is at the first `:`.
     fn parse_cpuid_xgetbv_asm(&mut self, is_cpuid: bool) -> Result<(), C5Error> {
         use super::super::ast::{Expr, UnOp};
+        // Register slot covered by a clobber name, indexed like `out`.
+        fn clobber_reg_slot(name: &[u8]) -> Option<usize> {
+            match name {
+                b"rax" | b"eax" | b"ax" => Some(0),
+                b"rbx" | b"ebx" | b"bx" => Some(1),
+                b"rcx" | b"ecx" | b"cx" => Some(2),
+                b"rdx" | b"edx" | b"dx" => Some(3),
+                _ => None,
+            }
+        }
         // Indexed by register letter: a=0, b=1, c=2, d=3.
         let mut out: [Option<super::super::ast::ExprId>; 4] = [None; 4];
         let mut inp: [Option<super::super::ast::ExprId>; 4] = [None; 4];
+        let mut clobbered = [false; 4];
         // Register slot of each output operand in declaration order, so a
         // matching constraint (`"0"` -> output operand 0's register) resolves.
         let mut out_order: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
@@ -1861,7 +2423,17 @@ impl Compiler {
             // letter (`=a` -> a). The lexer appended its bytes to the data
             // segment; read the letter, then drop them.
             let cstart = self.lex.ival as usize;
-            let (letter, match_digit) = {
+            // A clobber (the fourth section on) is a bare string with no
+            // operand; record which implicit register it covers.
+            if section >= 3 {
+                if let Some(slot) = clobber_reg_slot(&self.data[cstart..]) {
+                    clobbered[slot] = true;
+                }
+                self.next()?;
+                self.data.truncate(cstart);
+                continue;
+            }
+            let (letter, match_digit, read_write) = {
                 let cbytes = &self.data[cstart..];
                 let letter = cbytes
                     .iter()
@@ -1879,15 +2451,12 @@ impl Compiler {
                 } else {
                     None
                 };
-                (letter, digit)
+                // `+` marks a read-write output: the operand supplies the
+                // implicit register's input value as well (`"+a"(leaf)`).
+                (letter, digit, cbytes.contains(&b'+'))
             };
             self.next()?; // consume the constraint string
             self.data.truncate(cstart);
-            // A clobber (the fourth section on) is a bare string with no
-            // operand; skip it.
-            if section >= 3 {
-                continue;
-            }
             let slot = match letter {
                 Some(b'a') => 0usize,
                 Some(b'b') => 1,
@@ -1911,6 +2480,11 @@ impl Compiler {
             self.next()?; // consume `(`
             self.expr(Token::Assign as i64)?;
             if section == 1 {
+                // A read-write (`+`) output is also an input: read the
+                // lvalue's value before it is overwritten with the address.
+                if read_write {
+                    inp[slot] = self.ast_acc;
+                }
                 // Output: take the destination's address.
                 self.ty += Ty::Ptr as i64;
                 self.ast_apply_unary(UnOp::AddrOf);
@@ -1927,6 +2501,35 @@ impl Compiler {
         self.next()?; // consume the outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
         self.data.truncate(data_base);
+
+        // Each implicitly written register must be captured by an output
+        // operand or listed as a clobber; a clobber's value is discarded
+        // into a synthesized scratch slot.
+        let out_slots: &[usize] = if is_cpuid { &[0, 1, 2, 3] } else { &[0, 3] };
+        for &slot in out_slots {
+            if out[slot].is_none() {
+                if !clobbered[slot] {
+                    return Err(self.compile_err(
+                        "cpuid / xgetbv: each implicitly written register \
+                         (cpuid a,b,c,d; xgetbv a,d) must be an output \
+                         operand or a clobber",
+                    ));
+                }
+                out[slot] = Some(self.synth_scratch_addr());
+            }
+        }
+        // A cpuid with no `c` operand runs the leaf's base form: every
+        // leaf that reads ecx defines subleaf 0, so default the input.
+        if is_cpuid && inp[2].is_none() {
+            let pos = self.ast_src_pos();
+            inp[2] = Some(self.ast.push_expr(
+                Expr::IntLit {
+                    val: 0,
+                    ty: Ty::Int as i64,
+                },
+                pos,
+            ));
+        }
 
         // Build the args in the order the codegen reads them.
         let (kind, parts): (
@@ -1950,8 +2553,8 @@ impl Compiler {
                 Some(id) => args.push(*id),
                 None => {
                     return Err(self.compile_err(
-                        "cpuid requires =a,=b,=c,=d outputs with a,c inputs; \
-                         xgetbv requires =a,=d outputs with a c input",
+                        "cpuid requires an `a` (leaf) input; \
+                         xgetbv requires a `c` input",
                     ));
                 }
             }
@@ -1971,6 +2574,33 @@ impl Compiler {
         self.ast_acc = Some(id);
         let _ = self.ast_emit_expr_stmt();
         Ok(())
+    }
+
+    /// Reserve a frame slot and yield its address, shaped as the address
+    /// of an uninitialized `int` compound literal: the store target for an
+    /// implicit asm output the source discards through a clobber.
+    fn synth_scratch_addr(&mut self) -> super::super::ast::ExprId {
+        use super::super::ast::{Expr, LocalInit, UnOp};
+        let slot = self.reserve_slots(1);
+        self.commit_block_slot(slot);
+        let pos = self.ast_src_pos();
+        let cl = self.ast.push_expr(
+            Expr::CompoundLiteral {
+                slot_off: slot,
+                ty: Ty::Int as i64,
+                array_size: 0,
+                init: LocalInit::None,
+            },
+            pos,
+        );
+        self.ast.push_expr(
+            Expr::Unary {
+                op: UnOp::AddrOf,
+                child: cl,
+                ty: Ty::Int as i64 + Ty::Ptr as i64,
+            },
+            pos,
+        )
     }
 
     /// Parse `asm("divq %4" : "=a"(q), "=d"(*r) : "0"(n0), "1"(n1),
@@ -2441,18 +3071,35 @@ impl Compiler {
         // load an assignment lvalue needs.
         self.pending.fn_ptr_chain_depth = -1;
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b':') {
-            let name = self.symbols[self.lex.curr_id_idx].name.clone();
+            let name = self.resolve_label_name(&self.symbols[self.lex.curr_id_idx].name.clone());
             // C99 6.8.1p3: a label name must be unique within its
-            // function (constraint). Two labeled statements with the same
-            // name would intern one SSA block and re-terminate it in the
-            // walker.
+            // function (constraint), and a `__label__` name within the
+            // block that declares it. Two labeled statements with the
+            // same name would intern one SSA block and re-terminate it
+            // in the walker.
             if self.labels.iter().any(|n| n == &name) {
-                return Err(self.compile_err(format!("redefinition of label `{name}`")));
+                return Err(self.compile_err(format!(
+                    "redefinition of label `{}`",
+                    super::emit::label_display_name(&name)
+                )));
             }
             self.labels.push(name.clone());
             let label = self.ast_label_by_name(&name);
             self.next()?; // consume Id
             self.next()?; // consume ':'
+            // C23 6.9 / GNU: an attribute-specifier may decorate a label
+            // (`L: __attribute__((unused)) stmt;`). It appertains to the
+            // label, and c5 acts on none such, so discard the tokens by
+            // paren balance -- without `skip_attribute_specifiers`, whose
+            // `pending` writes would leak into the following statement.
+            while self.lex.tk == Token::Attribute {
+                self.next()?; // the attribute keyword
+                if self.lex.tk != '(' {
+                    return Err(self.compile_err("`(` expected after attribute specifier"));
+                }
+                self.next()?; // the opening `(`
+                self.skip_balanced_parens_after_open()?;
+            }
             let body_before = self.ast_stmts_snapshot();
             self.stmt()?;
             let body_s = self.ast_wrap_stmts_since(body_before);
@@ -2644,7 +3291,8 @@ impl Compiler {
                 if self.lex.tk != Token::Id {
                     return Err(self.compile_err("expected identifier after goto"));
                 }
-                let target_name = self.symbols[self.lex.curr_id_idx].name.clone();
+                let target_name =
+                    self.resolve_label_name(&self.symbols[self.lex.curr_id_idx].name.clone());
                 self.next()?;
 
                 self.flush_pending_stores();
@@ -2838,6 +3486,24 @@ impl Compiler {
         } else {
             Ok(false)
         }
+    }
+
+    /// Consume the separator between declarators of one declaration.
+    /// C99 6.7p1: an init-declarator-list is comma-separated and the
+    /// declaration ends at `;`. A declarator followed by anything else --
+    /// typically a second identifier, which is how an unrecognized type
+    /// qualifier reads -- is a syntax error, not the start of another
+    /// declarator.
+    pub(super) fn accept_declarator_separator(&mut self) -> Result<(), C5Error> {
+        if self.lex.tk == ',' {
+            self.next()?;
+        } else if self.lex.tk != ';' && self.lex.tk != '}' && self.lex.tk != 0 {
+            return Err(self.compile_err(alloc::format!(
+                "expected `,` or `;` after declarator (got {})",
+                super::super::token::describe(self.lex.tk)
+            )));
+        }
+        Ok(())
     }
 
     /// Capture the data-segment offset of the current string literal,

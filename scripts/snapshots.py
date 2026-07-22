@@ -40,14 +40,17 @@ def repo_root() -> Path:
 
 
 def ensure_badc(root: Path) -> Path:
+    # Always rebuild: a stale binary compiles a fixture it does not
+    # understand as a skip, and a skip unlinks that fixture's snapshots,
+    # so the run reports no drift while removing content. The CLI needs
+    # `full`; without it the build leaves whatever binary was there.
     badc = root / "target" / "release" / "badc"
-    if not badc.is_file():
-        print("[snapshots] building badc release...", flush=True)
-        subprocess.run(
-            ["cargo", "build", "--release", "--quiet"],
-            cwd=root,
-            check=True,
-        )
+    print("[snapshots] building badc release...", flush=True)
+    subprocess.run(
+        ["cargo", "build", "--release", "--quiet", "--features", "full"],
+        cwd=root,
+        check=True,
+    )
     return badc
 
 
@@ -259,16 +262,26 @@ def regenerate(root: Path, only: list[str] | None) -> int:
 
     written = 0
     skipped: list[str] = []
+    regressed: list[str] = []
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td) / "bin"
         for src in sources:
             name = src.stem
             ssa_path = snap_root / "ssa" / f"{name}.ssa"
+            asm_paths = [snap_root / "asm" / f"{name}.{suffix}.asm" for suffix, _ in TARGETS]
+            had_snapshots = ssa_path.exists() or any(p.exists() for p in asm_paths)
             ok = emit_ssa(badc, src, ssa_path, tmp, root)
             if not ok:
+                # A fixture that never had snapshots cannot build here --
+                # a negative test, or asm for another architecture. One
+                # that HAD them and now fails is a regression, and
+                # unlinking would report it as no drift at all.
+                if had_snapshots:
+                    regressed.append(name)
+                    continue
                 ssa_path.unlink(missing_ok=True)
-                for suffix, _ in TARGETS:
-                    (snap_root / "asm" / f"{name}.{suffix}.asm").unlink(missing_ok=True)
+                for p in asm_paths:
+                    p.unlink(missing_ok=True)
                 skipped.append(name)
                 continue
             for suffix, target in TARGETS:
@@ -281,6 +294,10 @@ def regenerate(root: Path, only: list[str] | None) -> int:
     if skipped:
         for s in skipped:
             print(f"[snapshots] skip {s}")
+    if regressed:
+        for r in regressed:
+            print(f"[snapshots] ERROR {r}: had snapshots and no longer compiles")
+        raise SystemExit(1)
     return 0
 
 

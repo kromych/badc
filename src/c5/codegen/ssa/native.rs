@@ -72,6 +72,8 @@ pub(crate) fn compile_function_to_bytes(
             // Single-unit in-memory emit: TLS accesses keep the baked
             // offset, so the recorded fixups are unused here.
             let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
+            let mut asm_sections: Vec<super::emit_common::AsmSection> = Vec::new();
+            let mut asm_extern_call_sites = Vec::new();
             let ok = {
                 let mut cx = super::emit_common::EmitCtx {
                     code: &mut code,
@@ -84,6 +86,8 @@ pub(crate) fn compile_function_to_bytes(
                     ssa_line_rows: &mut ssa_line_rows,
                     pc_to_native: &mut pc_to_native,
                     prologue_native: &mut prologue_native,
+                    asm_sections: &mut asm_sections,
+                    asm_extern_call_sites: &mut asm_extern_call_sites,
                 };
                 super::aarch64::emit::emit_function(
                     func,
@@ -127,6 +131,8 @@ pub(crate) fn compile_function_to_bytes(
             let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
             let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
                 alloc::collections::BTreeMap::new();
+            let extern_code_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+                alloc::collections::BTreeMap::new();
             let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
                 alloc::collections::BTreeMap::new();
             let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
@@ -134,6 +140,10 @@ pub(crate) fn compile_function_to_bytes(
             // Single-unit in-memory emit: TLS accesses keep the baked
             // offset, so the recorded fixups are unused here.
             let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
+            let mut asm_sections: Vec<super::emit_common::AsmSection> = Vec::new();
+            let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
+            let mut asm_text_abs_refs: Vec<super::AsmTextAbsRef> = Vec::new();
+            let mut asm_extern_call_sites = Vec::new();
             // The JIT single-function path builds no PE; the unwind
             // descriptor is discarded.
             let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
@@ -149,6 +159,8 @@ pub(crate) fn compile_function_to_bytes(
                     ssa_line_rows: &mut ssa_line_rows,
                     pc_to_native: &mut pc_to_native,
                     prologue_native: &mut prologue_native,
+                    asm_sections: &mut asm_sections,
+                    asm_extern_call_sites: &mut asm_extern_call_sites,
                 };
                 super::x86_64::emit::emit_function(
                     func,
@@ -158,6 +170,7 @@ pub(crate) fn compile_function_to_bytes(
                     &mut fixups,
                     &mut got_fixups,
                     &extern_data_names,
+                    &extern_code_names,
                     &extern_tls_names,
                     &imports,
                     &variadic_targets,
@@ -167,6 +180,8 @@ pub(crate) fn compile_function_to_bytes(
                     // The ssa_native path is single-function; a cross-function
                     // inline-asm call has no target here (rejected downstream).
                     &alloc::collections::BTreeMap::new(),
+                    &mut asm_section_text_refs,
+                    &mut asm_text_abs_refs,
                 )
             };
             if !ok {
@@ -177,6 +192,8 @@ pub(crate) fn compile_function_to_bytes(
                 + plt_call_fixups.len()
                 + got_fixups.len()
                 + data_fixups.len()
+                + asm_section_text_refs.len()
+                + asm_text_abs_refs.len()
                 + pending_func_fixups.len()
                 + tls_index_fixups.len();
             if outer != 0 {

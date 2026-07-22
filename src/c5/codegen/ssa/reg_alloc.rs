@@ -555,7 +555,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             | Inst::LoadIndexed { .. }
             | Inst::Store { .. }
             | Inst::StoreLocal { .. }
-            | Inst::StoreIndexed { .. } => true,
+            | Inst::StoreIndexed { .. }
+            | Inst::SegLoad { .. }
+            | Inst::SegStore { .. } => true,
             Inst::BinopI { op, .. } => {
                 !matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu)
             }
@@ -674,7 +676,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         if use_counts[v] == 0
             && matches!(
                 inst,
-                Inst::Store { .. } | Inst::StoreLocal { .. } | Inst::StoreIndexed { .. }
+                Inst::Store { .. }
+                    | Inst::StoreLocal { .. }
+                    | Inst::StoreIndexed { .. }
+                    | Inst::SegStore { .. }
             )
         {
             places[v] = Place::None;
@@ -1320,6 +1325,10 @@ fn is_pure_inst(inst: &Inst) -> bool {
                 volatile: false,
                 ..
             }
+            | Inst::SegLoad {
+                volatile: false,
+                ..
+            }
             | Inst::LoadIndexed { .. }
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
@@ -1359,6 +1368,11 @@ pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
         | Inst::LoadLocal { .. } => {}
         Inst::Load { addr, .. } => f(*addr),
         Inst::Store { addr, value, .. } => {
+            f(*addr);
+            f(*value);
+        }
+        Inst::SegLoad { addr, .. } => f(*addr),
+        Inst::SegStore { addr, value, .. } => {
             f(*addr);
             f(*value);
         }
@@ -1481,7 +1495,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
             LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
-        Load { kind, .. } | LoadLocal { kind, .. } => match kind {
+        Load { kind, .. } | LoadLocal { kind, .. } | SegLoad { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
@@ -1492,8 +1506,12 @@ fn result_kind(inst: &Inst) -> ResultKind {
         | StoreLocal {
             kind: StoreKind::F32 | StoreKind::F64,
             ..
+        }
+        | SegStore {
+            kind: StoreKind::F32 | StoreKind::F64,
+            ..
         } => ResultKind::Fp,
-        Store { .. } | StoreLocal { .. } | StoreIndexed { .. } => ResultKind::Int,
+        Store { .. } | StoreLocal { .. } | StoreIndexed { .. } | SegStore { .. } => ResultKind::Int,
         LoadIndexed { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
             _ => ResultKind::Int,
@@ -3131,8 +3149,12 @@ int main(void) { return 0; }
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            over_aligned: Default::default(),
+            frame_align: 0,
+            realign_region_bytes: 0,
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

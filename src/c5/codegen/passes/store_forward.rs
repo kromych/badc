@@ -385,8 +385,13 @@ fn run_one(func: &mut FunctionSsa) {
                     }
                 }
                 // Reads and pure computes the pass does not model: no
-                // clobber, no entry.
-                Inst::LoadIndexed { .. }
+                // clobber, no entry. A `__seg_gs` / `__seg_fs` access names a
+                // distinct address space that does not alias the generic-space
+                // pointer table or any tracked slot, so it neither forwards nor
+                // invalidates an entry here.
+                Inst::SegLoad { .. }
+                | Inst::SegStore { .. }
+                | Inst::LoadIndexed { .. }
                 | Inst::Imm(_)
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
@@ -498,6 +503,11 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
             f(addr);
             f(value);
         }
+        Inst::SegLoad { addr, .. } => f(addr),
+        Inst::SegStore { addr, value, .. } => {
+            f(addr);
+            f(value);
+        }
         Inst::StoreLocal { value, .. } => f(value),
         Inst::LoadIndexed { base, index, .. } => {
             f(base);
@@ -595,8 +605,12 @@ mod tests {
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            over_aligned: Default::default(),
+            frame_align: 0,
+            realign_region_bytes: 0,
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
             insts,
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -784,6 +798,57 @@ mod tests {
             "the load past a block copy must not forward",
         );
         assert!(matches!(f.insts[4], Inst::Load { .. }));
+    }
+
+    /// An `Inst::InlineAsm` is an ordering barrier (`asm
+    /// volatile("" ::: "memory")`): a store before it may not satisfy
+    /// a load after it.
+    #[test]
+    fn inline_asm_barrier_blocks_forwarding() {
+        let asm = alloc::boxed::Box::new(crate::c5::ir::AsmBlock {
+            template: Vec::new(),
+            operands: Vec::new(),
+            clobber_regs: 0,
+            clobber_fp_regs: 0,
+            clobber_memory: true,
+            volatile: true,
+        });
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64
+                },
+                Inst::Store {
+                    addr: 0,
+                    disp: 0,
+                    value: 1,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+                Inst::InlineAsm {
+                    asm,
+                    args: Vec::new()
+                },
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ],
+            Terminator::Return(4),
+            4,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(4)),
+            "a load must not forward across an asm barrier",
+        );
     }
 
     /// A volatile store seeds no forwarding entry: the reload after it

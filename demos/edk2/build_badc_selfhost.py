@@ -85,17 +85,17 @@ def patch_fv_layout(src: Path) -> None:
         ("Size          = 0xF80000", "Size          = 0x1A80000"),
         ("NumBlocks     = 0xF8\n", "NumBlocks     = 0x1A8\n"),
     ])
-    # Flash (active 4 MB variant): SECFV 0x34000->0x40000; FVMAIN unchanged;
+    # Flash (active 4 MB variant): SECFV 0x34000->0x48000; FVMAIN unchanged;
     # CODE = FVMAIN + SECFV; FW = VARS + CODE; FW_BASE = 4 GiB - FW_SIZE;
     # CODE_BASE = FW_BASE + VARS. SECFV stays at the flash top (reset vector).
     sub(src / "OvmfPkg" / "Include" / "Fdf" / "OvmfPkgDefines.fdf.inc", [
-        ("FW_BASE_ADDRESS   = 0xFFC00000", "FW_BASE_ADDRESS   = 0xFFBF4000"),
-        ("FW_SIZE           = 0x00400000", "FW_SIZE           = 0x0040C000"),
-        ("FW_BLOCKS         = 0x400", "FW_BLOCKS         = 0x40C"),
-        ("CODE_BASE_ADDRESS = 0xFFC84000", "CODE_BASE_ADDRESS = 0xFFC78000"),
-        ("CODE_SIZE         = 0x0037C000", "CODE_SIZE         = 0x00388000"),
-        ("CODE_BLOCKS       = 0x37C", "CODE_BLOCKS       = 0x388"),
-        ("SECFV_SIZE        = 0x34000", "SECFV_SIZE        = 0x40000"),
+        ("FW_BASE_ADDRESS   = 0xFFC00000", "FW_BASE_ADDRESS   = 0xFFBEC000"),
+        ("FW_SIZE           = 0x00400000", "FW_SIZE           = 0x00414000"),
+        ("FW_BLOCKS         = 0x400", "FW_BLOCKS         = 0x414"),
+        ("CODE_BASE_ADDRESS = 0xFFC84000", "CODE_BASE_ADDRESS = 0xFFC70000"),
+        ("CODE_SIZE         = 0x0037C000", "CODE_SIZE         = 0x00390000"),
+        ("CODE_BLOCKS       = 0x37C", "CODE_BLOCKS       = 0x390"),
+        ("SECFV_SIZE        = 0x34000", "SECFV_SIZE        = 0x48000"),
     ])
 
 

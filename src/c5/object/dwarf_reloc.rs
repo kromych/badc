@@ -805,7 +805,7 @@ fn build_debug_info(
         }
         write_uleb128(&mut body, ABBREV_ENUMERATION_TYPE);
         push_string(&mut body, &ed.name);
-        body.push(4);
+        body.push(ed.byte_size());
         for (cname, cval) in &ed.constants {
             write_uleb128(&mut body, ABBREV_ENUMERATOR);
             push_string(&mut body, cname);

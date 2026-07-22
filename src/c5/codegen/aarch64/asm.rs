@@ -27,6 +27,10 @@ pub(crate) enum AsmOpndA64 {
     /// `%N` / `%wN` / `%xN`: operand N of the statement, at the register width
     /// named by the modifier (or the operand's own width when unmodified).
     Ref { idx: u8, is64: Option<bool> },
+    /// `%cN` / `%PN`: operand N substituted as a bare constant, without
+    /// immediate syntax. Valid on an `i`-class operand; the emitter
+    /// resolves the compile-time constant value.
+    RefConst(u8),
     /// An explicit register: `x5` / `w5` / `sp` / `xzr` (`num == 31` is the
     /// zero register or SP, per the instruction).
     Reg { num: u8, is64: bool },
@@ -88,6 +92,10 @@ pub(crate) enum AsmOpndA64 {
     /// (`forward` selects the next definition after the branch, otherwise the
     /// most recent one at or before it).
     Label { num: u32, forward: bool },
+    /// The location counter `.` as a branch target: the address of the branch
+    /// instruction itself, so the encoded displacement is zero (`cbnz %0, .`,
+    /// the device-load ordering barrier's never-taken control dependency).
+    Here,
     /// `%lK`: an `asm goto` label reference by label-list index (the
     /// frontend canonicalizes `%l[name]` and operand-relative `%lN` to
     /// this form). The emitter branches to the label's target block.
@@ -151,6 +159,29 @@ fn sysreg_field(name: &str) -> Option<u16> {
             "elr_el1" => (3, 0, 4, 0, 1),
             "spsr_el1" => (3, 0, 4, 0, 0),
             "currentel" => (3, 0, 4, 2, 2),
+            // Stack pointer, exception-link, saved-PSTATE, vector-base and
+            // thread-id registers at EL0/EL2/EL3 (the EL1 forms are above).
+            "sp_el0" => (3, 0, 4, 1, 0),
+            "sp_el1" => (3, 4, 4, 1, 0),
+            "sp_el2" => (3, 6, 4, 1, 0),
+            "elr_el2" => (3, 4, 4, 0, 1),
+            "elr_el3" => (3, 6, 4, 0, 1),
+            "spsr_el2" => (3, 4, 4, 0, 0),
+            "spsr_el3" => (3, 6, 4, 0, 0),
+            "vbar_el2" => (3, 4, 12, 0, 0),
+            "vbar_el3" => (3, 6, 12, 0, 0),
+            "tpidr_el2" => (3, 4, 13, 0, 2),
+            // EL1/EL2 control and translation registers (the EL1
+            // sctlr/tcr/ttbr0/mair/esr/far forms are above).
+            "cpacr_el1" => (3, 0, 1, 0, 2),
+            "sctlr_el2" => (3, 4, 1, 0, 0),
+            "hcr_el2" => (3, 4, 1, 1, 0),
+            "cptr_el2" => (3, 4, 1, 1, 2),
+            "tcr_el2" => (3, 4, 2, 0, 2),
+            "ttbr0_el2" => (3, 4, 2, 0, 0),
+            "mair_el2" => (3, 4, 10, 2, 0),
+            "esr_el2" => (3, 4, 5, 2, 0),
+            "far_el2" => (3, 4, 6, 0, 0),
             _ => return None,
         })
     };
@@ -237,6 +268,26 @@ fn sysop_base(mnem: &str, op: &str) -> Option<u32> {
         _ => return None,
     };
     Some(0xD508_0000 | (op1 << 16) | (crn << 12) | (crm << 8) | (op2 << 5))
+}
+
+/// The 4-bit CRm value of a `dmb` / `dsb` barrier option, or None if the
+/// name is not one. `isb` takes only `sy`; `clrex` only a numeric imm.
+fn barrier_option(name: &str) -> Option<u32> {
+    Some(match name.to_ascii_lowercase().as_str() {
+        "sy" => 15,
+        "st" => 14,
+        "ld" => 13,
+        "ish" => 11,
+        "ishst" => 10,
+        "ishld" => 9,
+        "nsh" => 7,
+        "nshst" => 6,
+        "nshld" => 5,
+        "osh" => 3,
+        "oshst" => 2,
+        "oshld" => 1,
+        _ => return None,
+    })
 }
 
 /// The 5-bit prefetch-operation code of a `prfm` op name
@@ -700,6 +751,33 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
                 .map_err(|_| format!("inline asm: bad goto-label reference `{tok}`"))?;
             return Ok(AsmOpndA64::GotoLabel(k));
         }
+        // `%cN` / `%PN`: a bare-constant substitution.
+        if let Some(&m) = rest.as_bytes().first()
+            && matches!(m, b'c' | b'P')
+            && rest.len() > 1
+            && rest[1..].bytes().all(|c| c.is_ascii_digit())
+        {
+            let idx: u8 = rest[1..]
+                .parse()
+                .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            return Ok(AsmOpndA64::RefConst(idx));
+        }
+        // `%aN`: operand N rendered as an address reference. The operand holds
+        // an address in a general register, so this is the base-only memory
+        // form `[xN]`.
+        if let Some(digits) = rest.strip_prefix('a')
+            && !digits.is_empty()
+            && digits.bytes().all(|c| c.is_ascii_digit())
+        {
+            let idx: u8 = digits
+                .parse()
+                .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            return Ok(AsmOpndA64::Mem {
+                base: MemBase::Ref(idx),
+                off: 0,
+                pre: false,
+            });
+        }
         // `%N` (natural width); the GP views `%wN` (32) / `%xN` (64); and the FP
         // scalar views `%sN` (single) / `%dN` (double). A view flag rides `is64`
         // (w/s = 32, x/d = 64) and the emitter resolves it against the operand's
@@ -760,6 +838,11 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     if let Some(c) = cond_code(tok) {
         return Ok(AsmOpndA64::Cond(c));
     }
+    // The location counter `.` names the current instruction as a branch
+    // target (`b .`, `cbnz %0, .`); the emitter encodes a zero displacement.
+    if tok == "." {
+        return Ok(AsmOpndA64::Here);
+    }
     // A local-label reference `Nb` / `Nf` (mnemonics never start with a digit).
     if let Some((digits, dir)) = tok
         .strip_suffix('b')
@@ -771,6 +854,12 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     {
         return Ok(AsmOpndA64::Label { num, forward: dir });
     }
+    // GAS makes the `#` on an immediate optional, so a bare integer literal is
+    // an immediate (`brk 0x800`, `hlt 0xf000`). Checked last: registers,
+    // system registers and local labels are matched above.
+    if let Some(v) = parse_int(tok) {
+        return Ok(AsmOpndA64::Imm(v));
+    }
     Err(format!("inline asm: unsupported operand `{tok}`"))
 }
 
@@ -781,6 +870,14 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
 pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
     let text =
         core::str::from_utf8(tmpl).map_err(|_| String::from("inline asm: non-UTF8 template"))?;
+    let stripped;
+    let text = match emit_common::strip_asm_comments(text, emit_common::AsmComments::A64) {
+        Some(t) => {
+            stripped = t;
+            stripped.as_str()
+        }
+        None => text,
+    };
     // `%=` expands to a per-instance number (shared helper). TODO: named
     // local-label definitions / references (the x86-64 parser has them).
     let expanded;
@@ -817,6 +914,39 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             if piece.is_empty() {
                 continue;
             }
+        }
+        // `.arch` / `.arch_extension` / `.cpu` select the assembler's target
+        // architecture or an ISA extension. The encoder admits every form its
+        // table holds regardless, so these carry no code and are ignored.
+        if let Some(tok) = piece.split_whitespace().next()
+            && matches!(tok, ".arch" | ".arch_extension" | ".cpu")
+        {
+            continue;
+        }
+        // A `.byte`-family directive whose arguments reference operands
+        // (`.long %c0`) resolves its values at emit time; the directive
+        // keyword rides the mnemonic field.
+        if let Some((tok, rest)) = piece
+            .split_once(char::is_whitespace)
+            .filter(|(_, r)| r.contains('%'))
+            && emit_common::data_directive_width(tok).is_some()
+        {
+            let mut operands = Vec::new();
+            for a in split_operands(rest) {
+                // Directive arguments are bare integers, not `#`-prefixed.
+                operands.push(match parse_int(a) {
+                    Some(v) => AsmOpndA64::Imm(v),
+                    None => parse_operand(a)?,
+                });
+            }
+            insns.push(AsmInsnA64 {
+                mnemonic: String::from(tok),
+                operands,
+                bytes: Vec::new(),
+                label_def: None,
+                sym_target: None,
+            });
+            continue;
         }
         // Reuse the shared raw-byte recognizer for a single piece.
         if let Some(bytes) = emit_common::parse_raw_template(piece.as_bytes()) {
@@ -915,6 +1045,41 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 continue;
             }
         }
+        // Barriers: `dmb` / `dsb` take a domain option (default `sy`), `isb`
+        // takes only `sy`, `clrex` a numeric imm. All are constant and encode
+        // to their word here: `1101 0101 0000 0011 0011 CRm opc 11111` with
+        // opc 4 (dsb), 5 (dmb), 6 (isb), 2 (clrex). Byte-verified vs clang.
+        if matches!(mnem, "dmb" | "dsb" | "isb" | "clrex") {
+            let toks = split_operands(rest);
+            if toks.len() > 1 {
+                return Err(format!("inline asm: `{mnem}` takes at most one option"));
+            }
+            let crm = match toks.first() {
+                None => 15,
+                Some(t) => match barrier_option(t) {
+                    Some(v) if matches!(mnem, "dmb" | "dsb") || (mnem == "isb" && v == 15) => v,
+                    _ => match t.strip_prefix('#').and_then(parse_int) {
+                        Some(v) if (0..=15).contains(&v) => v as u32,
+                        _ => return Err(format!("inline asm: bad `{mnem}` option `{t}`")),
+                    },
+                },
+            };
+            let opc = match mnem {
+                "dsb" => 4u32,
+                "dmb" => 5,
+                "isb" => 6,
+                _ => 2, // clrex
+            };
+            let word = 0xD503_301F | (crm << 8) | (opc << 5);
+            insns.push(AsmInsnA64 {
+                mnemonic: String::new(),
+                operands: Vec::new(),
+                bytes: word.to_le_bytes().to_vec(),
+                label_def: None,
+                sym_target: None,
+            });
+            continue;
+        }
         // `dc` / `ic` / `tlbi` name a system operation as the first token and
         // take an optional address register. The op resolves to a base word; the
         // register -- explicit, an operand reference, or absent (xzr) -- is
@@ -961,10 +1126,18 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     _ => return Err(format!("inline asm: bad prefetch op `{}`", toks[0])),
                 },
             };
-            let mem = parse_operand(toks[1])?;
-            if !matches!(mem, AsmOpndA64::Mem { .. } | AsmOpndA64::MemReg { .. }) {
-                return Err(String::from("inline asm: `prfm` needs a memory operand"));
-            }
+            let mem = match parse_operand(toks[1])? {
+                // A bare `%N` reference names the base-register form `[xN]`,
+                // as `%aN` does: a `Q`/`m` operand holds the object's address
+                // in the register the emitter resolves the reference to.
+                AsmOpndA64::Ref { idx, .. } => AsmOpndA64::Mem {
+                    base: MemBase::Ref(idx),
+                    off: 0,
+                    pre: false,
+                },
+                m @ (AsmOpndA64::Mem { .. } | AsmOpndA64::MemReg { .. }) => m,
+                _ => return Err(String::from("inline asm: `prfm` needs a memory operand")),
+            };
             insns.push(AsmInsnA64 {
                 mnemonic: String::from("prfm"),
                 operands: alloc::vec![AsmOpndA64::Imm(code), mem],
@@ -974,19 +1147,17 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             });
             continue;
         }
-        // A direct `bl` / `b` to a bare identifier is a call / tail-branch to a
+        // A direct `bl` / `b` to a symbol name is a call / tail-branch to a
         // symbol (`bl schedule`); the target is resolved to a rel26 by the fixup
         // pass, not parsed as a register operand. A local-label branch (`b 1f`)
-        // starts with a digit, so it is excluded.
+        // starts with a digit, so it is excluded. The name may embed operand
+        // references (`bl __get_user_%c0`), which are substituted at emit time,
+        // so the text is kept verbatim here.
         if matches!(mnem, "bl" | "b") {
-            let is_bare_ident = !rest.is_empty()
-                && rest
-                    .bytes()
-                    .next()
-                    .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_')
-                && rest.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+            let is_symbol_target = !rest.is_empty()
+                && super::super::ssa::emit_common::is_asm_symbol_template(rest)
                 && parse_reg(rest).is_none();
-            if is_bare_ident {
+            if is_symbol_target {
                 insns.push(AsmInsnA64 {
                     mnemonic: String::from(mnem),
                     operands: Vec::new(),
@@ -1057,7 +1228,7 @@ pub(crate) fn assign_operand_regs(
     // x0..x15 are the allocatable pool; x16/x17 are the emitter's scratch.
     let pool: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
     for (i, op) in operands.iter().enumerate() {
-        if matches!(op.constraint, C::Reg | C::Mem) {
+        if matches!(op.constraint, C::Reg | C::Mem | C::MemBase) {
             let r = pool
                 .iter()
                 .copied()
@@ -1140,6 +1311,7 @@ mod tests {
             is_output: false,
             is_rw: false,
             width: 8,
+            seg: crate::c5::ir::AsmSeg::None,
         };
         // With x0 and x2 clobbered, three GP operands take x1, x3, x4.
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
@@ -1181,6 +1353,60 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn bare_immediate_operand() {
+        // GAS accepts an immediate without `#`; a bare integer literal parses
+        // to the same operand as the `#`-prefixed form.
+        let insns = parse_template(b"brk 0x800; hlt 0xf000; brk #0x800").unwrap();
+        assert_eq!(insns[0].operands, [AsmOpndA64::Imm(0x800)]);
+        assert_eq!(insns[1].operands, [AsmOpndA64::Imm(0xf000)]);
+        assert_eq!(insns[2].operands, insns[0].operands);
+        // A trailing `b`/`f` is still a local-label reference, not an integer.
+        let insns = parse_template(b"b 1f").unwrap();
+        assert_eq!(
+            insns[0].operands,
+            [AsmOpndA64::Label {
+                num: 1,
+                forward: true
+            }]
+        );
+    }
+
+    #[test]
+    fn barrier_encodings() {
+        // Every dmb/dsb domain option, isb, and clrex encode to their
+        // constant words. Expected words from
+        // `clang --target=aarch64-unknown-linux-gnu`.
+        #[rustfmt::skip]
+        let cases: &[(&[u8], u32)] = &[
+            (b"dmb sy",    0xd5033fbf), (b"dmb ish",   0xd5033bbf),
+            (b"dmb ishld", 0xd50339bf), (b"dmb ishst", 0xd5033abf),
+            (b"dmb osh",   0xd50333bf), (b"dmb oshld", 0xd50331bf),
+            (b"dmb oshst", 0xd50332bf), (b"dmb nsh",   0xd50337bf),
+            (b"dmb nshld", 0xd50335bf), (b"dmb nshst", 0xd50336bf),
+            (b"dmb ld",    0xd5033dbf), (b"dmb st",    0xd5033ebf),
+            (b"dmb",       0xd5033fbf),
+            (b"dsb sy",    0xd5033f9f), (b"dsb ish",   0xd5033b9f),
+            (b"dsb ishst", 0xd5033a9f), (b"dsb ld",    0xd5033d9f),
+            (b"dsb st",    0xd5033e9f),
+            (b"isb",       0xd5033fdf), (b"isb sy",    0xd5033fdf),
+            (b"clrex",     0xd5033f5f), (b"clrex #7",  0xd503375f),
+        ];
+        for (tmpl, want) in cases {
+            let insns = parse_template(tmpl).unwrap();
+            assert_eq!(insns.len(), 1);
+            assert_eq!(
+                insns[0].bytes,
+                want.to_le_bytes(),
+                "template {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+        // An unknown option and an isb domain option are rejected.
+        assert!(parse_template(b"dmb full").is_err());
+        assert!(parse_template(b"isb ish").is_err());
     }
 
     #[test]
@@ -1338,6 +1564,44 @@ mod tests {
     }
 
     #[test]
+    fn parse_sysreg_el_transition_names() {
+        // Thread/EL-transition and EL1/EL2 control registers named directly
+        // rather than by the generic `sN_N_cN_cN_N` spelling. Every field is
+        // byte-verified: `mrs x0, NAME` assembled by clang equals the word our
+        // encoder builds from the field. midr_el1 is the regression guard.
+        assert_eq!(sysreg_field("midr_el1"), Some(0x4000));
+        for (name, field) in [
+            ("sp_el0", 0x4208),
+            ("sp_el1", 0x6208),
+            ("sp_el2", 0x7208),
+            ("elr_el2", 0x6201),
+            ("elr_el3", 0x7201),
+            ("spsr_el2", 0x6200),
+            ("spsr_el3", 0x7200),
+            ("tpidr_el2", 0x6682),
+            ("vbar_el2", 0x6600),
+            ("vbar_el3", 0x7600),
+            ("cpacr_el1", 0x4082),
+            ("sctlr_el2", 0x6080),
+            ("hcr_el2", 0x6088),
+            ("cptr_el2", 0x608A),
+            ("tcr_el2", 0x6102),
+            ("ttbr0_el2", 0x6100),
+            ("mair_el2", 0x6510),
+            ("esr_el2", 0x6290),
+            ("far_el2", 0x6300),
+        ] {
+            assert_eq!(sysreg_field(name), Some(field), "{name}");
+            // Case-insensitive, and the named form equals its generic spelling.
+            assert_eq!(sysreg_field(&name.to_ascii_uppercase()), Some(field));
+        }
+        // The generic spelling s3_0_c4_c1_0 names the same register as sp_el0.
+        assert_eq!(sysreg_field("s3_0_c4_c1_0"), sysreg_field("sp_el0"));
+        let insns = parse_template(b"mrs %0, sp_el0").unwrap();
+        assert_eq!(insns[0].operands[1], AsmOpndA64::SysReg(0x4208));
+    }
+
+    #[test]
     fn parse_prefetch() {
         // `prfm <prfop>, [Xn{, #off}]`: the prfop name resolves to its 5-bit
         // code in the Rt slot, the memory operand parses as for a load.
@@ -1350,7 +1614,18 @@ mod tests {
         assert_eq!(insns[0].operands[0], AsmOpndA64::Imm(0));
         assert!(matches!(insns[0].operands[1], AsmOpndA64::Mem { .. }));
         assert_eq!(insns[1].operands[0], AsmOpndA64::Imm(19));
-        // A bad prefetch op and a missing memory operand are rejected.
+        // A bare `%N` reference names the base-register form `[xN]`, as `%aN`
+        // does; the LL/SC atomics spell their `+Q` operand this way.
+        let bare = parse_template(b"prfm pstl1strm, %2").unwrap();
+        assert_eq!(
+            bare[0].operands[1],
+            AsmOpndA64::Mem {
+                base: MemBase::Ref(2),
+                off: 0,
+                pre: false,
+            }
+        );
+        // A bad prefetch op and a register (non-memory) operand are rejected.
         assert!(parse_template(b"prfm bogus, [x0]").is_err());
         assert!(parse_template(b"prfm pldl1keep, x0").is_err());
     }
@@ -1627,6 +1902,30 @@ mod tests {
     }
 
     #[test]
+    fn assign_mem_base_operands() {
+        use crate::c5::ir::{AsmConstraint as C, AsmOperand};
+        let op = |constraint, is_output, is_rw| AsmOperand {
+            constraint,
+            is_output,
+            is_rw,
+            width: 4,
+            seg: crate::c5::ir::AsmSeg::None,
+        };
+        // The LL/SC operand shape `=&r, =&r, +Q, r`: the `Q` operand takes a
+        // pool register for its address, like `m`.
+        let ops = [
+            op(C::Reg, true, false),
+            op(C::Reg, true, false),
+            op(C::MemBase, true, true),
+            op(C::Reg, false, false),
+        ];
+        assert_eq!(
+            assign_operand_regs(&ops, 0, 0).unwrap(),
+            [Some(0), Some(1), Some(2), Some(3)]
+        );
+    }
+
+    #[test]
     fn assign_honors_fixed_registers() {
         use crate::c5::ir::{AsmConstraint, AsmOperand};
         let op = |constraint| AsmOperand {
@@ -1634,6 +1933,7 @@ mod tests {
             is_output: false,
             is_rw: false,
             width: 8,
+            seg: crate::c5::ir::AsmSeg::None,
         };
         // A register-asm operand keeps its register; the pool operand
         // avoids it.

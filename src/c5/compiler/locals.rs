@@ -113,53 +113,6 @@ impl Compiler {
         }
     }
 
-    /// Parse the GCC declarator suffix `asm("reg")` on a block-scope
-    /// declaration and resolve the register name for the current
-    /// target. Only the `register`-class automatic form is modelled;
-    /// GCC's other use of the suffix (a linkage-name rename) is TODO.
-    /// The named register must be one the inline-asm operand pool can
-    /// carry: x86-64 GPRs minus rsp / rbp / r10 / r11 (emit scratch),
-    /// AArch64 x0..x15 (x16 / x17 are emit scratch).
-    fn parse_register_asm_suffix(
-        &mut self,
-        is_register: bool,
-        is_static: bool,
-        is_extern: bool,
-    ) -> Result<u8, C5Error> {
-        self.next()?; // consume `asm`
-        self.consume(b'(', "`(` expected after declarator `asm`")?;
-        if self.lex.tk != '"' {
-            return Err(self.compile_err("declarator `asm`: register name string expected"));
-        }
-        let nstart = self.lex.ival as usize;
-        self.next()?; // consume the string
-        let name_bytes: alloc::vec::Vec<u8> = self.data[nstart..].to_vec();
-        self.data.truncate(nstart);
-        self.consume(b')', "`)` expected after declarator `asm(\"...\")`")?;
-        if !is_register || is_static || is_extern {
-            return Err(self.compile_err("declarator `asm` is only supported on `register` locals"));
-        }
-        let name = core::str::from_utf8(&name_bytes).unwrap_or("");
-        let name = name.trim_start_matches('%');
-        let reg = if self.target.is_aarch64() {
-            match super::super::codegen::aarch64::asm::clobber_reg_name(name) {
-                Some((false, num)) if num < 16 => Some(num),
-                _ => None,
-            }
-        } else {
-            match super::super::codegen::x86_64::asm::reg_by_name(name) {
-                Some((num, _)) if num < 16 && !matches!(num, 4 | 5 | 10 | 11) => Some(num),
-                _ => None,
-            }
-        };
-        match reg {
-            Some(r) => Ok(r),
-            None => Err(self.compile_err(alloc::format!(
-                "declarator `asm`: `{name}` is not a supported register for this target"
-            ))),
-        }
-    }
-
     pub(super) fn parse_function_body_local_decl(
         &mut self,
         maybe_unused: bool,
@@ -169,15 +122,13 @@ impl Compiler {
         // Block-scope `_Thread_local` / `__thread` gives a `static` object
         // thread storage duration (C11 6.7.1).
         let mut is_thread_local = false;
-        // `register` storage class: gates the `asm("reg")` declarator
-        // suffix (GCC register-asm variables).
-        let mut is_register = false;
         let mut saw_specifier = false;
         let mut qual_bits: i64 = 0;
         // Reset the const carrier for this declaration; the leading
         // qualifier loop here consumes `const` (a TypeQual) before the
         // base-type parse, so record it as we go.
         self.pending.base_is_const = false;
+        self.pending.saw_register_storage = false;
         while self.lex.tk == Token::Extern
             || self.lex.tk == Token::Static
             || self.lex.tk == Token::ThreadLocal
@@ -193,14 +144,12 @@ impl Compiler {
             if self.lex.tk == Token::ThreadLocal {
                 is_thread_local = true;
             }
-            if self.lex.tk == Token::FuncSpec
-                && self.symbols[self.lex.curr_id_idx].name == "register"
-            {
-                is_register = true;
+            if self.lex_is_register_storage() {
+                self.pending.saw_register_storage = true;
             }
             // `volatile` qualifies the declared type (C99 6.7.3); `const`
             // is recorded out-of-band for value folding.
-            qual_bits |= self.lex_volatile_bit();
+            qual_bits |= self.lex_qualifier_bits();
             self.pending.base_is_const |= self.lex_is_const_qual();
             saw_specifier = true;
             self.next()?;
@@ -236,12 +185,10 @@ impl Compiler {
             if self.lex.tk == Token::ThreadLocal {
                 is_thread_local = true;
             }
-            if self.lex.tk == Token::FuncSpec
-                && self.symbols[self.lex.curr_id_idx].name == "register"
-            {
-                is_register = true;
+            if self.lex_is_register_storage() {
+                self.pending.saw_register_storage = true;
             }
-            qual_bits |= self.lex_volatile_bit();
+            qual_bits |= self.lex_qualifier_bits();
             self.pending.base_is_const |= self.lex_is_const_qual();
             self.next()?;
         }
@@ -280,16 +227,7 @@ impl Compiler {
             self.pending.vla_allowed = true;
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = false;
-            // GCC declarator suffix `asm("reg")`: a register-asm
-            // variable. Only the register-class local form is
-            // modelled (the binding is honored for `r`-class asm
-            // operands); the rename form on other declarators is
-            // TODO.
-            let asm_reg = if self.lex.tk == Token::Asm {
-                Some(self.parse_register_asm_suffix(is_register, is_static, is_extern)?)
-            } else {
-                None
-            };
+            let asm_reg = self.parse_register_asm_binding(is_static, is_extern)?;
             // Trailing cleanup wins for this declarator; else the leading one.
             let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
             // C23 6.7.13.5 `[[maybe_unused]]` / GNU
@@ -364,16 +302,19 @@ impl Compiler {
                 }
                 break;
             }
-            if self.symbols[loc_idx].class == Token::Loc as i64 {
+            if self.symbols[loc_idx].class == Token::Loc as i64
+                && !self.symbols[loc_idx].is_global_register
+            {
                 return Err(self.compile_err("duplicate local definition"));
             }
 
             self.shadow_symbol(loc_idx);
 
-            // C11 6.7.5 on block-scope objects: a static local's `.data`
-            // slot honors the requested alignment like a file-scope object;
-            // an automatic object lives in 8-byte frame slots (no stack
-            // realignment), so a larger request there is a diagnostic. The
+            // C11 6.7.5 on block-scope objects: a static local's `.data` slot
+            // honors the requested alignment like a file-scope object. An
+            // automatic object lives in 8-byte frame slots; a request above 16
+            // exceeds the frame pointer's guarantee, so the prologue realigns
+            // sp down to it (recorded once the slot is reserved). The
             // attribute requires a power of two.
             let req_align = core::mem::take(&mut self.pending.attr_align);
             if req_align > 8 && !(req_align as usize).is_power_of_two() {
@@ -386,8 +327,27 @@ impl Compiler {
             // pointee type's alignment; a pointer object holds its own
             // pointer-aligned value, so the request does not apply to it.
             let obj_is_pointer = is_pointer_ty(ty);
-            if (req_align > 8 && !is_static && !obj_is_pointer)
-                || req_align > super::MAX_STATIC_ALIGN as i64
+            // Required alignment of an automatic object: the larger of the
+            // declarator request and the type's own alignment. Above 16 the
+            // frame is realigned; a pointer object is excluded.
+            let auto_align = if is_static || obj_is_pointer {
+                0
+            } else {
+                core::cmp::max(req_align.max(0), self.align_of_type(ty) as i64)
+            };
+            let realign_auto = auto_align > 16;
+            if realign_auto && auto_align > super::MAX_FRAME_ALIGN {
+                return Err(self.compile_err(format!(
+                    "requested alignment {auto_align} exceeds the maximum for an \
+                     automatic object ({}); use static storage",
+                    super::MAX_FRAME_ALIGN
+                )));
+            }
+            // Requests at or below 16 the frame cannot place, and any request
+            // beyond the static ceiling, stay diagnostics.
+            if !realign_auto
+                && ((req_align > 8 && !is_static && !obj_is_pointer)
+                    || req_align > super::MAX_STATIC_ALIGN as i64)
             {
                 return Err(self.compile_err(format!(
                     "requested alignment {req_align} is not supported here \
@@ -412,25 +372,54 @@ impl Compiler {
                 self.symbols[loc_idx].is_const_qualified = self.pending.base_is_const
                     && array_size == 0
                     && super::types::is_integer_scalar_ty(ty);
-                if req_align > 8 {
-                    self.align_data_to(req_align as usize);
-                    self.data_align = self.data_align.max(req_align as usize);
+                // As for a file-scope object: the type's own alignment
+                // counts even when the declarator carries no attribute. A
+                // block-scope static shares the `.data` / `.bss` placement of
+                // a file-scope object, so the type's alignment holds up to
+                // MAX_STATIC_ALIGN.
+                let want_align = core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty));
+                if want_align > 8 {
+                    self.align_data_to(want_align);
+                    self.data_align = self.data_align.max(want_align);
                 }
                 self.allocate_static_local(loc_idx, ty, array_size)?;
                 self.ast_emit_static_local_decl(loc_idx as u32);
             } else {
                 self.symbols[loc_idx].class = Token::Loc as i64;
                 self.symbols[loc_idx].type_ = ty;
-                self.symbols[loc_idx].asm_reg = asm_reg;
                 self.symbols[loc_idx].was_referenced = false;
                 self.symbols[loc_idx].decl_line = self.lex.line;
                 let decl_file = self.intern_source_file() as u32;
                 self.symbols[loc_idx].decl_file = decl_file;
                 self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
+                // Unconditional write so a reused symbol slot does not
+                // leak a stale binding from an outer name.
+                self.symbols[loc_idx].asm_register = asm_reg;
+                self.check_register_asm_init(asm_reg)?;
                 self.pending_local_init_ast = None;
                 self.pending_local_aggregate_ast = None;
                 self.pending_local_runtime_elements.clear();
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
+                // C11 6.7.5: an automatic object whose alignment exceeds the
+                // frame's 16-byte guarantee (a declarator request or an
+                // `aligned(N)`-raised type) is placed in the prologue's
+                // realigned region. Record its slot, alignment, and byte size
+                // now that the slot is assigned. A variable-length array and
+                // `alloca` both move sp and cannot share the region, so that
+                // combination is rejected (here for the VLA, at function close
+                // for a separate `alloca`).
+                if realign_auto {
+                    if self.symbols[loc_idx].is_vla {
+                        return Err(self.compile_err(
+                            "an over-aligned variable-length array is not supported; \
+                             use static storage or a fixed size",
+                        ));
+                    }
+                    let slot = self.symbols[loc_idx].val;
+                    let asz = self.symbols[loc_idx].array_size;
+                    let size = self.local_storage_slots(ty, asz) * 8;
+                    self.func_over_aligned.push((slot, auto_align, size));
+                }
                 // Dual-emit: push `Decl::Local { sym, slot_off,
                 // init }`. The init flavour comes from whichever
                 // cross-helper carry the inner allocator filled:
@@ -488,9 +477,13 @@ impl Compiler {
                 self.register_cleanup_var(loc_idx, fn_sym);
             }
 
-            self.accept(',')?;
+            if self.pending.auto_type_single_declarator && self.lex.tk == ',' {
+                return Err(self.compile_err("`__auto_type` declaration takes a single declarator"));
+            }
+            self.accept_declarator_separator()?;
         }
         self.next()?;
+        self.pending.auto_type_single_declarator = false;
         Ok(())
     }
 
@@ -566,7 +559,7 @@ impl Compiler {
                 return self.emit_static_array_init_runtime(loc_idx, ty, array_size);
             }
             if array_size == -1 {
-                if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                if self.is_traversable_aggregate_ty(ty) {
                     // Static-local of struct array, deferred size:
                     // `static struct T xs[] = { {...}, {...}, ... };`
                     // Pre-scan the source for the element count so
@@ -626,11 +619,7 @@ impl Compiler {
                                         .compile_err("too many initializers in struct-array row"));
                                 }
                                 let here = off + (row * inner_dim + j) * elem_size as i64;
-                                if self.lex.tk == '{' {
-                                    self.collect_struct_initializer(sid, here)?;
-                                } else {
-                                    self.fill_struct_fields(sid, here, false)?;
-                                }
+                                self.init_struct_array_element(sid, here)?;
                                 j += 1;
                                 self.accept(',')?;
                             }
@@ -672,11 +661,7 @@ impl Compiler {
                             i = lo;
                         }
                         let here = off + i * elem_size as i64;
-                        if self.lex.tk == '{' {
-                            self.collect_struct_initializer(sid, here)?;
-                        } else {
-                            self.fill_struct_fields(sid, here, false)?;
-                        }
+                        self.init_struct_array_element(sid, here)?;
                         i += 1;
                         self.accept(',')?;
                     }
@@ -702,7 +687,7 @@ impl Compiler {
                     self.data.push(0);
                 }
                 self.write_array_init_into_data(off, ty, &elements);
-            } else if array_size > 0 && is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            } else if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
                 // Known-size static-local array of structs. Each element
                 // is a (possibly brace-elided, C99 6.7.8p20) struct
                 // initializer; the generic array collector below would
@@ -793,11 +778,7 @@ impl Compiler {
                             }
                             self.next()?; // `=`
                             let here = var_offset + elem * elem_size as i64;
-                            if self.lex.tk == '{' {
-                                self.collect_struct_initializer(sid, here)?;
-                            } else {
-                                self.fill_struct_fields(sid, here, false)?;
-                            }
+                            self.init_struct_array_element(sid, here)?;
                             i = desig + 1;
                             self.accept(',')?;
                             continue;
@@ -849,10 +830,8 @@ impl Compiler {
                     let here = var_offset + i * group_stride;
                     if !inner_dims.is_empty() {
                         self.collect_struct_array_data(sid, here, &inner_dims, elem_size as i64)?;
-                    } else if self.lex.tk == '{' {
-                        self.collect_struct_initializer(sid, here)?;
                     } else {
-                        self.fill_struct_fields(sid, here, false)?;
+                        self.init_struct_array_element(sid, here)?;
                     }
                     i += 1;
                     self.accept(',')?;
@@ -864,10 +843,18 @@ impl Compiler {
                 let elements = self.collect_array_initializer(ty)?;
                 let var_offset = self.symbols[loc_idx].val;
                 self.write_array_init_into_data(var_offset, ty, &elements);
-            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            } else if self.is_traversable_aggregate_ty(ty) {
                 let sid = struct_id_of(ty);
                 let var_offset = self.symbols[loc_idx].val;
+                // C99 6.5.2.5: `static T s = (T){ ... };` names its own
+                // type; drop the redundant cast so the brace list fills
+                // the struct, matching the file-scope allocator.
+                self.skip_opt_compound_literal_cast()?;
+                let cl_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
                 self.collect_struct_initializer(sid, var_offset)?;
+                for _ in 0..cl_parens {
+                    self.accept(')')?;
+                }
             } else {
                 let var_offset = self.symbols[loc_idx].val;
                 self.parse_global_initializer(ty, var_offset, false)?;
@@ -1194,10 +1181,8 @@ impl Compiler {
             let here = base + e * elem_size;
             if chain {
                 self.fill_element_field_designator(sid, ty, here)?;
-            } else if self.lex.tk == '{' {
-                self.collect_struct_initializer(sid, here)?;
             } else {
-                self.fill_struct_fields(sid, here, false)?;
+                self.init_struct_array_element(sid, here)?;
             }
             if e < hi {
                 self.lex.restore(snap);
@@ -1245,7 +1230,7 @@ impl Compiler {
             // Stage each element in self.data, count them, then
             // reserve one stack frame slot block and Mcpy the
             // staged bytes into it.
-            if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
+            if self.is_traversable_aggregate_ty(ty) && self.lex.tk == '{' {
                 // Local deferred-size struct array. Same
                 // scan-then-pre-allocate sequence as the
                 // file-scope path so an element's string-literal
@@ -1310,11 +1295,14 @@ impl Compiler {
                                 count
                             )));
                         }
-                        // C99 6.7.8p20: an element's braces may be elided;
-                        // the runtime path fills the struct's fields from
-                        // the flat list.
-                        let braced = self.lex.tk == '{';
-                        self.emit_struct_runtime_at(local_val, i * elem_size as i64, sid, braced)?;
+                        // C99 6.7.8p20: an element's braces may be elided,
+                        // and 6.5.2.5 lets it be a whole-element compound
+                        // literal; the runtime element fill handles both.
+                        self.emit_struct_array_element_runtime(
+                            local_val,
+                            i * elem_size as i64,
+                            sid,
+                        )?;
                         i += 1;
                         self.accept(',')?;
                     }
@@ -1348,11 +1336,7 @@ impl Compiler {
                         i = lo;
                     }
                     let here = staged_off as i64 + i * elem_size as i64;
-                    if self.lex.tk == '{' {
-                        self.collect_struct_initializer(sid, here)?;
-                    } else {
-                        self.fill_struct_fields(sid, here, false)?;
-                    }
+                    self.init_struct_array_element(sid, here)?;
                     i += 1;
                     self.accept(',')?;
                 }
@@ -1422,7 +1406,7 @@ impl Compiler {
                 // nested struct braces. Stage each element's
                 // bytes in `self.data` and Mcpy the block into
                 // the local slot.
-                if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
+                if self.is_traversable_aggregate_ty(ty) && self.lex.tk == '{' {
                     let elem_size = self.size_of_type(ty);
                     let sid = struct_id_of(ty);
                     // Pre-scan each element's brace list: if any
@@ -1476,14 +1460,13 @@ impl Compiler {
                                 )));
                             }
                             // C99 6.7.8p20: an element's braces may be
-                            // elided; the runtime path fills the struct's
-                            // fields from the flat list.
-                            let braced = self.lex.tk == '{';
-                            self.emit_struct_runtime_at(
+                            // elided, and 6.5.2.5 lets it be a whole-element
+                            // compound literal; the runtime element fill
+                            // handles both.
+                            self.emit_struct_array_element_runtime(
                                 local_val,
                                 i * elem_size as i64,
                                 sid,
-                                braced,
                             )?;
                             i += 1;
                             self.accept(',')?;
@@ -1572,11 +1555,7 @@ impl Compiler {
                                 }
                                 self.next()?; // `=`
                                 let here = staged_off as i64 + elem * elem_size as i64;
-                                if self.lex.tk == '{' {
-                                    self.collect_struct_initializer(sid, here)?;
-                                } else {
-                                    self.fill_struct_fields(sid, here, false)?;
-                                }
+                                self.init_struct_array_element(sid, here)?;
                                 i = desig + 1;
                                 self.accept(',')?;
                                 continue;
@@ -1637,10 +1616,8 @@ impl Compiler {
                                 &inner_dims,
                                 elem_size as i64,
                             )?;
-                        } else if self.lex.tk == '{' {
-                            self.collect_struct_initializer(sid, here)?;
                         } else {
-                            self.fill_struct_fields(sid, here, false)?;
+                            self.init_struct_array_element(sid, here)?;
                         }
                         i += 1;
                         self.accept(',')?;
@@ -1713,7 +1690,7 @@ impl Compiler {
                     packed_bytes
                 };
                 self.emit_local_array_init(local_val, start_addr, total_bytes);
-            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
+            } else if self.is_traversable_aggregate_ty(ty) && self.lex.tk == '{' {
                 // Local struct value with brace-list initializer.
                 // C99 6.7.8p13: every entry may be a non-constant
                 // expression. Pre-scan the brace list; if all
@@ -1861,7 +1838,7 @@ impl Compiler {
             // C99 6.3.2.1p3: an array compound literal used as a
             // value decays to a pointer to its first element.
             value_ty = elem_ty + Ty::Ptr as i64;
-        } else if is_struct_ty(t) && struct_ptr_depth(t) == 0 {
+        } else if self.is_traversable_aggregate_ty(t) {
             let sid = struct_id_of(t);
             let elem_size = self.size_of_type(t);
             let cl_slots = self.slots_of_type(t);
@@ -2174,15 +2151,14 @@ impl Compiler {
                 } else {
                     self.fill_array_leaves_runtime(local_val, off, sub_span, ty, elem_size)?;
                 }
-            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            } else if self.is_traversable_aggregate_ty(ty) {
                 // Array-of-struct element (C99 6.7.8p17): recurse into the
                 // struct initializer instead of the scalar-leaf path, which
                 // would hand the element's `{` to the expression parser.
                 // Reached when a struct-array MEMBER is forced onto the
                 // runtime path by a non-constant element value (e.g.
                 // `&mms->field[0]`); braces may be elided (6.7.8p20).
-                let braced = self.lex.tk == '{';
-                self.emit_struct_runtime_at(local_val, off, struct_id_of(ty), braced)?;
+                self.emit_struct_array_element_runtime(local_val, off, struct_id_of(ty))?;
             } else {
                 self.emit_array_leaf_runtime(local_val, off, ty)?;
             }

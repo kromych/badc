@@ -313,7 +313,7 @@ mod jit_impl {
         // page is RW (no exec permission); an attempt to execute
         // through it faults with the expected SIGSEGV / EXCEPTION.
         let mut data_region = if !build.data.is_empty() {
-            Some(DataRegion::new(&build.data)?)
+            Some(DataRegion::new(&build.data, build.data_align)?)
         } else {
             None
         };
@@ -1074,6 +1074,10 @@ mod jit_impl {
     /// strings + globals here through RIP-relative / ADRP+ADD
     /// loads patched by [`apply_jit_fixups`].
     struct DataRegion {
+        // Allocation base handed back to `munmap` / `VirtualFree`. `ptr`
+        // may be rounded up from it to meet a static object's alignment.
+        map_ptr: *mut u8,
+        // Usable data base, aligned to the program's data alignment.
         ptr: *mut u8,
         // Read by `munmap` on POSIX; Windows `VirtualFree(MEM_RELEASE)`
         // requires size = 0, so the field is dead on that target.
@@ -1083,7 +1087,7 @@ mod jit_impl {
 
     impl DataRegion {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
-        fn new(data: &[u8]) -> Result<Self, C5Error> {
+        fn new(data: &[u8], data_align: usize) -> Result<Self, C5Error> {
             unsafe extern "C" {
                 fn mmap(
                     addr: *mut c_void,
@@ -1094,7 +1098,13 @@ mod jit_impl {
                     offset: i64,
                 ) -> *mut c_void;
             }
-            let len = round_up_to_page(data.len());
+            // mmap only guarantees page alignment. A static object may
+            // request a wider boundary (a page-multiple per-CPU stack),
+            // so over-allocate by the shortfall and round the usable base
+            // up to `align`; the data offsets then land on their boundary.
+            let page = page_size();
+            let align = data_align.max(page).max(1).next_power_of_two();
+            let len = round_up_to_page(data.len()) + (align - page);
             let ptr = unsafe {
                 mmap(
                     std::ptr::null_mut(),
@@ -1110,17 +1120,22 @@ mod jit_impl {
                     &format!("JIT: data mmap failed: {}", std::io::Error::last_os_error()),
                 )));
             }
+            let base = ((ptr as usize + align - 1) & !(align - 1)) as *mut u8;
             unsafe {
-                std::ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut u8, data.len());
+                std::ptr::copy_nonoverlapping(data.as_ptr(), base, data.len());
             }
             Ok(DataRegion {
-                ptr: ptr as *mut u8,
+                map_ptr: ptr as *mut u8,
+                ptr: base,
                 len,
             })
         }
 
         #[cfg(target_os = "windows")]
-        fn new(data: &[u8]) -> Result<Self, C5Error> {
+        fn new(data: &[u8], _data_align: usize) -> Result<Self, C5Error> {
+            // VirtualAlloc returns memory aligned to the allocation
+            // granularity (64 KiB), which already meets the static-object
+            // alignment ceiling, so no extra rounding is needed here.
             let len = round_up_to_page(data.len());
             let ptr = unsafe {
                 VirtualAlloc(
@@ -1142,6 +1157,7 @@ mod jit_impl {
                 std::ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut u8, data.len());
             }
             Ok(DataRegion {
+                map_ptr: ptr as *mut u8,
                 ptr: ptr as *mut u8,
                 len,
             })
@@ -1172,11 +1188,11 @@ mod jit_impl {
                 unsafe extern "C" {
                     fn munmap(addr: *mut c_void, len: usize) -> c_int;
                 }
-                munmap(self.ptr as *mut c_void, self.len);
+                munmap(self.map_ptr as *mut c_void, self.len);
             }
             #[cfg(target_os = "windows")]
             unsafe {
-                VirtualFree(self.ptr as *mut c_void, 0, MEM_RELEASE);
+                VirtualFree(self.map_ptr as *mut c_void, 0, MEM_RELEASE);
             }
         }
     }

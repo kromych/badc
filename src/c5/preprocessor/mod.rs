@@ -434,6 +434,14 @@ impl Preprocessor {
                 "__builtin_return_address",
                 super::op::Intrinsic::ReturnAddress,
             ),
+            // The variadic-access builtins are likewise available with
+            // no header (freestanding code typedefs `__builtin_va_list`
+            // and calls them directly); <stdarg.h>'s va_* macros map
+            // onto the same names.
+            ("__builtin_va_start", super::op::Intrinsic::VaStart),
+            ("__builtin_va_arg", super::op::Intrinsic::VaArg),
+            ("__builtin_va_end", super::op::Intrinsic::VaEnd),
+            ("__builtin_va_copy", super::op::Intrinsic::VaCopy),
         ] {
             intrinsics.insert(name.to_string(), kind as i64);
         }
@@ -516,9 +524,10 @@ impl Preprocessor {
         // `__GNUC__` and the rest of the GCC identity are opt-in
         // (`--gnu`, [`Self::enable_gnu`]). badc implements the GNU C
         // extensions real code gates on `__GNUC__`, but not all of them
-        // (`__int128` is absent), so it does not claim the macro by
-        // default; code that gates a 128-bit path on `__GNUC__` plus a
-        // 64-bit target would otherwise fail to compile.
+        // (`<x86intrin.h>` and the x86 intrinsics are absent), so it
+        // does not claim the macro by default; code that gates an
+        // intrinsic path on `__GNUC__` plus an x86 target would
+        // otherwise fail to compile.
         // Byte-order predefines (GCC/clang form). Every supported target
         // is little-endian.
         macros.insert("__ORDER_LITTLE_ENDIAN__".to_string(), "1234".to_string());
@@ -550,6 +559,20 @@ impl Preprocessor {
                 },
             );
         }
+        // `__builtin_expect(exp, c)` is a compiler builtin in GCC,
+        // available with no header; its value is the first operand.
+        // Predefined here so code that never triggers the
+        // `<_builtins.h>` auto-include still compiles; that header's
+        // identical definition harmlessly re-registers it.
+        fn_macros.insert(
+            "__builtin_expect".to_string(),
+            FnMacro {
+                params: alloc::vec!["exp".to_string(), "c".to_string()],
+                body: "(exp)".to_string(),
+                is_variadic: false,
+                va_name: None,
+            },
+        );
         // C11 6.10.8.3 conditional-feature macros. An implementation that
         // reports `__STDC_VERSION__ == 201112L` defines each of these for an
         // optional feature it does not provide; library code gates on them
@@ -621,6 +644,8 @@ impl Preprocessor {
         // `__SIZEOF_POINTER__ * 8`). All badc targets are 64-bit, so the
         // pointer / size_t / ptrdiff_t sizes are 8; `long` and `wchar_t`
         // follow the data model (LLP64 Windows narrows both).
+        // C99 5.2.4.2.1: CHAR_BIT is 8 on every supported target.
+        macros.insert("__CHAR_BIT__".to_string(), "8".to_string());
         macros.insert("__SIZEOF_SHORT__".to_string(), "2".to_string());
         macros.insert("__SIZEOF_INT__".to_string(), "4".to_string());
         macros.insert("__SIZEOF_LONG_LONG__".to_string(), "8".to_string());
@@ -629,6 +654,10 @@ impl Preprocessor {
         macros.insert("__SIZEOF_PTRDIFF_T__".to_string(), "8".to_string());
         macros.insert("__SIZEOF_FLOAT__".to_string(), "4".to_string());
         macros.insert("__SIZEOF_DOUBLE__".to_string(), "8".to_string());
+        // Headers gate their own 128-bit typedefs on this macro rather
+        // than probing for `__int128`; the type and its operators are
+        // supported on every target.
+        macros.insert("__SIZEOF_INT128__".to_string(), "16".to_string());
         let (long_bytes, wchar_bytes) = match target {
             Target::WindowsX64 | Target::WindowsAarch64 => ("4", "2"),
             _ => ("8", "4"),
@@ -718,14 +747,27 @@ impl Preprocessor {
 
     /// Define the GCC identity macros (`--gnu`). badc claims `__GNUC__`
     /// only on request because it implements most, but not all, of the
-    /// GNU C surface (`__int128` is absent). `__GNUC_STDC_INLINE__`
-    /// reports ISO C99 inline semantics (not the GNU89 dialect);
+    /// GNU C surface (`<x86intrin.h>` and the x86 intrinsics are
+    /// absent). `__GNUC_STDC_INLINE__` reports ISO C99 inline
+    /// semantics (not the GNU89 dialect);
     /// `__VERSION__` is the compiler-identification string embedded by
     /// code such as `Py_GetCompiler`. `__STRICT_ANSI__` reports strict
     /// ISO conformance alongside `__GNUC__`, exactly as
     /// `gcc`/`clang -std=c11` does, so portable code uses the standard
     /// path for the GNU-only features badc lacks.
     pub fn enable_gnu(&mut self) {
+        // The claimed version stays at 4.2.1. The language features a 5.1
+        // claim implies are backed -- `__atomic_*` (4.7), `asm goto`
+        // (4.5), `__builtin_types_compatible_p` including array type
+        // names, designated-initializer ranges, `__builtin_*_overflow`
+        // (5.1) -- but the version also gates the x86 intrinsic surface.
+        // Real code keys `<x86intrin.h>` and the SSE2 / SSSE3 / SSE4.1 /
+        // AES-NI / PCLMUL / RDRAND intrinsic families off `__GNUC__ >=
+        // 4.4`, along with per-function `__attribute__((target(...)))`.
+        // badc lowers none of those, so 4.2.1 is the highest version it
+        // can claim without selecting paths it cannot compile. Raise it
+        // once the intrinsics are lowered, not merely once a header
+        // named `<x86intrin.h>` exists.
         self.macros.insert("__GNUC__".to_string(), "4".to_string());
         self.macros
             .insert("__GNUC_MINOR__".to_string(), "2".to_string());
@@ -735,16 +777,28 @@ impl Preprocessor {
             .insert("__GNUC_STDC_INLINE__".to_string(), "1".to_string());
         self.macros
             .insert("__VERSION__".to_string(), "\"4.2.1\"".to_string());
-        // badc backs the `__`-prefixed GNU extensions but not the ones a
-        // GNU dialect gates on `!__STRICT_ANSI__` (`typeof` of an array,
-        // `__int128`). Reporting strict ISO conformance alongside
-        // `__GNUC__` -- exactly `gcc`/`clang -std=c11` -- routes portable
-        // code to the standard path for those, while keeping the
-        // `__`-prefixed surface available. (`__builtin_types_compatible_p`
-        // is now backed by the compiler, so code gating on it works
-        // regardless of this macro.)
+        // The `__sync_*` builtins lower for these widths, so the
+        // capability macros a lock-free path tests are honest.
+        for w in [1u32, 2, 4, 8] {
+            self.macros.insert(
+                alloc::format!("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_{w}"),
+                "1".to_string(),
+            );
+        }
+        // Report strict ISO conformance alongside `__GNUC__`, exactly as
+        // `gcc`/`clang -std=c11` does, so a header takes its standard-C
+        // path rather than a GNU-dialect path for any extension badc
+        // does not provide. Both the plain and `__`-prefixed spellings
+        // of the extensions badc does implement stay available.
         self.macros
             .insert("__STRICT_ANSI__".to_string(), "1".to_string());
+        // `=@cc<cond>` inline-asm flag outputs (GCC 6). Implemented for
+        // x86_64 only, so the macro follows the target predefine rather
+        // than the dialect alone.
+        if self.macros.contains_key("__x86_64__") {
+            self.macros
+                .insert("__GCC_ASM_FLAG_OUTPUTS__".to_string(), "1".to_string());
+        }
     }
 
     /// Enable / disable gcc-`-H`-style include tracing. When on,
@@ -959,47 +1013,17 @@ impl Preprocessor {
                 match parse_directive(directive) {
                     Directive::Define(name, body) => {
                         if active {
-                            self.macros.insert(name.to_string(), body.to_string());
-                            self.fn_macros.remove(name);
+                            self.apply_define(name, body);
                         }
                     }
-                    Directive::DefineFn(name, mut params, body) => {
+                    Directive::DefineFn(name, params, body) => {
                         if active {
-                            // A trailing `...` (C99 6.10.3) or the GCC
-                            // named-rest form `name...` makes the macro
-                            // variadic; the named form additionally binds
-                            // the trailing arguments to `name`.
-                            let mut is_variadic = false;
-                            let mut va_name = None;
-                            if let Some(last) = params.last().copied() {
-                                if last == "..." {
-                                    is_variadic = true;
-                                    params.pop();
-                                } else if let Some(prefix) = last.strip_suffix("...") {
-                                    let prefix = prefix.trim();
-                                    if is_ident(prefix) {
-                                        is_variadic = true;
-                                        va_name = Some(prefix.to_string());
-                                        params.pop();
-                                    }
-                                }
-                            }
-                            self.fn_macros.insert(
-                                name.to_string(),
-                                FnMacro {
-                                    params: params.iter().map(|s| s.to_string()).collect(),
-                                    body: body.to_string(),
-                                    is_variadic,
-                                    va_name,
-                                },
-                            );
-                            self.macros.remove(name);
+                            self.apply_define_fn(name, params, body);
                         }
                     }
                     Directive::Undef(name) => {
                         if active {
-                            self.macros.remove(name);
-                            self.fn_macros.remove(name);
+                            self.apply_undef(name);
                         }
                     }
                     Directive::Ifdef(name) => {
@@ -1303,13 +1327,16 @@ impl Preprocessor {
                 let mut buffer = String::from(line);
                 let mut consumed = 1usize;
                 // A function-like macro call may span lines whose arguments
-                // carry conditional directives (C99 6.10.3p11 leaves this
-                // undefined, but the common toolchains evaluate them and
-                // real code relies on it). Track a local conditional state
-                // so only the active branch's lines join the argument
-                // buffer; directive lines never become argument text.
-                let mut join_stack: Vec<CondFrame> = Vec::new();
-                let mut join_active = true;
+                // carry preprocessor directives (C99 6.10.3p11 leaves this
+                // undefined; gcc and clang process such directives as if
+                // the invocation were not present, and real code relies on
+                // it). Directives here work on the same conditional stack
+                // as top-level ones -- an `#if` opened inside the argument
+                // list may close after the call's `)`, and vice versa.
+                // Directive lines never become argument text; content
+                // lines join the buffer only while the current branch is
+                // active.
+                //
                 // The scan state advances over appended bytes only;
                 // re-scanning the grown buffer per joined line is
                 // quadratic in the invocation length.
@@ -1327,91 +1354,96 @@ impl Preprocessor {
                 {
                     let cont = lines[idx + consumed];
                     consumed += 1;
+                    let dline = source_line + consumed - 1;
                     let cont_trimmed = cont.trim_start();
                     if let Some(rest) = cont_trimmed.strip_prefix('#') {
                         match parse_directive(rest.trim_start()) {
+                            Directive::Define(name, body) => {
+                                if active {
+                                    self.apply_define(name, body);
+                                }
+                            }
+                            Directive::DefineFn(name, params, body) => {
+                                if active {
+                                    self.apply_define_fn(name, params, body);
+                                }
+                            }
+                            Directive::Undef(name) => {
+                                if active {
+                                    self.apply_undef(name);
+                                }
+                            }
                             Directive::Ifdef(name) => {
-                                let taken = join_active
+                                let taken = active
                                     && (self.macros.contains_key(name)
-                                        || self.fn_macros.contains_key(name));
-                                join_stack.push(CondFrame {
-                                    parent_active: join_active,
+                                        || self.fn_macros.contains_key(name)
+                                        || is_builtin_operator_name(name));
+                                cond_stack.push(CondFrame {
+                                    parent_active: active,
                                     this_branch_taken: taken,
                                     any_branch_taken: taken,
                                     saw_else: false,
                                 });
-                                join_active = taken;
+                                active = taken;
                             }
                             Directive::Ifndef(name) => {
-                                let taken = join_active
+                                let taken = active
                                     && !(self.macros.contains_key(name)
-                                        || self.fn_macros.contains_key(name));
-                                join_stack.push(CondFrame {
-                                    parent_active: join_active,
+                                        || self.fn_macros.contains_key(name)
+                                        || is_builtin_operator_name(name));
+                                cond_stack.push(CondFrame {
+                                    parent_active: active,
                                     this_branch_taken: taken,
                                     any_branch_taken: taken,
                                     saw_else: false,
                                 });
-                                join_active = taken;
+                                active = taken;
                             }
                             Directive::If(expr) => {
-                                let taken = join_active
-                                    && self.eval_condition(expr, source_line, filename)?;
-                                join_stack.push(CondFrame {
-                                    parent_active: join_active,
+                                let taken = active && self.eval_condition(expr, dline, filename)?;
+                                cond_stack.push(CondFrame {
+                                    parent_active: active,
                                     this_branch_taken: taken,
                                     any_branch_taken: taken,
                                     saw_else: false,
                                 });
-                                join_active = taken;
+                                active = taken;
                             }
-                            // An `#elif` / `#else` / `#endif` with no
-                            // frame opened inside the argument list
-                            // belongs to the conditional enclosing the
-                            // macro call; apply it to the outer stack so
-                            // argument gathering resumes in the right
-                            // branch and the outer frame still closes.
                             Directive::Elif(expr) => {
-                                let stack = if join_stack.is_empty() {
-                                    &mut cond_stack
-                                } else {
-                                    &mut join_stack
-                                };
-                                let eligible = elif_eligible(stack, filename, source_line)?;
+                                let eligible = elif_eligible(&cond_stack, filename, dline)?;
                                 let cond =
-                                    eligible && self.eval_condition(expr, source_line, filename)?;
-                                let taken = apply_elif(stack, cond, filename, source_line)?;
-                                if join_stack.is_empty() {
-                                    active = taken;
-                                }
-                                join_active = taken;
+                                    eligible && self.eval_condition(expr, dline, filename)?;
+                                active = apply_elif(&mut cond_stack, cond, filename, dline)?;
                             }
                             Directive::Else => {
-                                let stack = if join_stack.is_empty() {
-                                    &mut cond_stack
-                                } else {
-                                    &mut join_stack
-                                };
-                                let taken = apply_else(stack, filename, source_line)?;
-                                if join_stack.is_empty() {
-                                    active = taken;
-                                }
-                                join_active = taken;
+                                active = apply_else(&mut cond_stack, filename, dline)?;
                             }
                             Directive::Endif => {
-                                if let Some(frame) = join_stack.pop() {
-                                    join_active = frame.parent_active;
-                                } else {
-                                    active = apply_endif(&mut cond_stack, filename, source_line)?;
-                                    join_active = active;
+                                active = apply_endif(&mut cond_stack, filename, dline)?;
+                            }
+                            Directive::Error(message) => {
+                                if active {
+                                    return Err(C5Error::Compile(super::error::fmt_compile_err(
+                                        filename,
+                                        dline,
+                                        &format!("#error {}", message.trim()),
+                                    )));
                                 }
                             }
-                            // Other directives inside a macro argument are
-                            // rare and undefined; consume the line without
-                            // adding it to the argument text.
+                            Directive::Warning(message) if active => {
+                                self.warnings.push(super::error::fmt_compile_warn(
+                                    filename,
+                                    dline,
+                                    &format!("#warning {}", message.trim()),
+                                ));
+                            }
+                            // TODO: `#include`, `#line`, and `#pragma`
+                            // inside an argument list are consumed
+                            // without effect; their output would have to
+                            // interleave with the joined expansion.
                             _ => {}
                         }
-                    } else if join_active {
+                    } else if active {
                         let appended = buffer.len();
                         buffer.push('\n');
                         buffer.push_str(cont);
@@ -1452,6 +1484,50 @@ impl Preprocessor {
         }
 
         Ok(out)
+    }
+
+    /// Install an object-like macro definition.
+    fn apply_define(&mut self, name: &str, body: &str) {
+        self.macros.insert(name.to_string(), body.to_string());
+        self.fn_macros.remove(name);
+    }
+
+    /// Install a function-like macro definition. A trailing `...`
+    /// (C99 6.10.3) or the GCC named-rest form `name...` makes the
+    /// macro variadic; the named form additionally binds the trailing
+    /// arguments to `name`.
+    fn apply_define_fn(&mut self, name: &str, mut params: Vec<&str>, body: &str) {
+        let mut is_variadic = false;
+        let mut va_name = None;
+        if let Some(last) = params.last().copied() {
+            if last == "..." {
+                is_variadic = true;
+                params.pop();
+            } else if let Some(prefix) = last.strip_suffix("...") {
+                let prefix = prefix.trim();
+                if is_ident(prefix) {
+                    is_variadic = true;
+                    va_name = Some(prefix.to_string());
+                    params.pop();
+                }
+            }
+        }
+        self.fn_macros.insert(
+            name.to_string(),
+            FnMacro {
+                params: params.iter().map(|s| s.to_string()).collect(),
+                body: body.to_string(),
+                is_variadic,
+                va_name,
+            },
+        );
+        self.macros.remove(name);
+    }
+
+    /// Remove a macro definition of either kind.
+    fn apply_undef(&mut self, name: &str) {
+        self.macros.remove(name);
+        self.fn_macros.remove(name);
     }
 
     /// Record the first macro-expansion diagnostic of a pass; later

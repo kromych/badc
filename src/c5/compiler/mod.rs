@@ -34,11 +34,24 @@ pub(crate) use type_layout::{StructReturnAbi, host_abi_agg_desc, struct_return_a
 pub(crate) mod types;
 
 /// Largest alignment (in bytes) honored on a static object via C11
-/// `_Alignas` / the GCC `aligned` attribute. Static objects are placed at
-/// this alignment in `.data`; automatic objects stay capped lower because
-/// stack-frame realignment is not implemented. A page covers the common
-/// cache-line (64) and page-aligned requests.
-pub(crate) const MAX_STATIC_ALIGN: usize = 4096;
+/// `_Alignas` / the GCC `aligned` attribute, whether the request comes
+/// from the declarator or the object's type. Static objects (file-scope,
+/// block-scope static, and initialised or zero-init alike) are placed at
+/// this alignment in `.data` / `.bss`; automatic objects stay capped lower
+/// because stack-frame realignment is not implemented. 64 KiB is the
+/// largest page size in common use (the aarch64 max-page-size) and covers
+/// cache-line, page, and page-multiple requests such as a per-CPU stack.
+/// The self-contained ELF writer raises the read-write segment `p_align`
+/// to the object's alignment so a PIE load bias preserves it, and the JIT
+/// over-aligns its data mapping the same way; both are bounded by
+/// `TEXT_VMADDR_BASE`, which fixes the structural ceiling above this.
+pub(crate) const MAX_STATIC_ALIGN: usize = 65536;
+
+/// Maximum alignment an automatic (stack) object may request. The prologue
+/// realigns sp down to the object's alignment (C11 6.7.5 `_Alignas` / GNU
+/// `aligned`); a larger request must use static storage. One page bounds the
+/// per-frame waste the realignment reserves.
+pub(crate) const MAX_FRAME_ALIGN: i64 = 4096;
 
 /// Captured enum tag + constants for DWARF emission. C99 6.7.2.2
 /// enums collapse to `int` in c5 -- the tag carries no semantic
@@ -52,6 +65,28 @@ pub(crate) const MAX_STATIC_ALIGN: usize = 4096;
 pub struct EnumDef {
     pub name: String,
     pub constants: Vec<(String, i64)>,
+    /// The enum's underlying integer type tag (`Ty::Int` for a plain
+    /// enum, a sub-int width for `__attribute__((packed))`). A bare
+    /// `enum Tag` reference resolves its size / alignment through this.
+    pub underlying_ty: i64,
+}
+
+impl EnumDef {
+    /// Byte size of the underlying integer type. Packed enums narrow to
+    /// 1/2/4/8; a plain enum is 4. Target-independent: the underlying
+    /// type is never `long`.
+    pub fn byte_size(&self) -> u8 {
+        let t = self.underlying_ty & !types::UNSIGNED_BIT;
+        if t == super::token::Ty::Char as i64 {
+            1
+        } else if t == super::token::Ty::Short as i64 {
+            2
+        } else if t == super::token::Ty::Int as i64 {
+            4
+        } else {
+            8
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -74,6 +109,11 @@ pub struct StructDef {
     /// size is `max(field size)` instead of the sum. Member
     /// access otherwise reuses the struct path verbatim.
     pub is_union: bool,
+    /// `false` for a tag that has been named but whose body has not
+    /// been parsed (C99 6.7.2.3 incomplete type). Size cannot stand in
+    /// for this: a complete empty `struct {}` and a struct whose only
+    /// member is a flexible array both have size 0.
+    pub is_complete: bool,
     /// `true` for the synthesized aggregate that models a GCC vector type
     /// (`__attribute__((vector_size(N)))`). It has one array field of the
     /// element type; the flag lets the cast and binary-operator paths treat it
@@ -174,6 +214,13 @@ pub struct StructField {
     /// { { 1, 2 } }`). Zero for a regular field and for anonymous-union
     /// members, which the `anon_union_group` path handles.
     pub anon_struct_group: u32,
+    /// Alignment requested for this field by an explicit
+    /// `__attribute__((aligned(N)))` / `_Alignas(N)`, or 0 when the
+    /// field sits at its type's natural alignment. `packed` drops a
+    /// field's natural alignment but not an explicit request (GCC and
+    /// clang both keep an `aligned(64)` member 64-aligned inside a
+    /// packed struct), so the re-lay path needs the request preserved.
+    pub explicit_align: u32,
 }
 
 /// Optional preprocessor / driver knobs threaded through compiler
@@ -578,6 +625,13 @@ pub(in crate::c5::compiler) struct Pending {
     pub param_decl_context: bool,
     pub last_array_decay_size: i64,
 
+    /// Full dimension list of the array expression that most recently
+    /// decayed to a pointer at an identifier load. `&arr` reads it to
+    /// rebuild the pointer-to-array aggregate for a multi-dimensional
+    /// array (C99 6.5.3.2p3), where `last_array_decay_size` holds only
+    /// the outermost dimension. Cleared the same way so it doesn't leak.
+    pub last_array_decay_dims: alloc::vec::Vec<i64>,
+
     /// Set by `parse_typeof_specifier` to true when its operand was an
     /// array type (a bare array expression or an array-shaped type name).
     /// `__builtin_types_compatible_p` reads it so `typeof(arr)` compares
@@ -585,6 +639,22 @@ pub(in crate::c5::compiler) struct Pending {
     /// the flat type system otherwise collapses through array-to-pointer
     /// decay. Consumed and reset by each `parse_generic_type_name` reader.
     pub typeof_operand_was_array: bool,
+
+    /// Element count of a 1D array expression operand of `typeof`,
+    /// captured before the unevaluated parse restores the decay
+    /// markers. `parse_typeof_specifier` moves it onto
+    /// `typedef_base_array_size` so a declarator through the specifier
+    /// gets the dimension, mirroring an array typedef base.
+    pub typeof_operand_array_size: i64,
+
+    /// Byte width of a `typeof` operand that decayed to the element
+    /// pointer with only the row size recorded (a pointer-to-array
+    /// deref `*p`, a string literal, or a 1D row of a multi-dim
+    /// subscript). Captured only when the row is 1D-reducible (no
+    /// pending multi-dim stride); `parse_typeof_specifier` recovers the
+    /// element count as `bytes / sizeof(elem)` so `typeof(*p)` is the
+    /// array type rather than the decayed element pointer.
+    pub typeof_operand_array_bytes: i64,
 
     /// Companion to `last_array_decay_size` for cases where the
     /// row's byte size is known directly but its shape can't be
@@ -735,6 +805,26 @@ pub(in crate::c5::compiler) struct Pending {
     /// feature; this is the GCC/Clang extension that scope-guard and
     /// auto-cleanup idioms rely on).
     pub attr_cleanup: Option<usize>,
+    /// A consumed `__attribute__((weak))`: the declared symbol binds
+    /// STB_WEAK in the object's symbol table.
+    pub attr_weak: bool,
+    /// A consumed `__attribute__((used))`: keep the definition in the
+    /// object even when nothing in the unit references it.
+    pub attr_used: bool,
+    /// A consumed `__attribute__((section("name")))`: the named object
+    /// section the declared symbol's bytes go to.
+    pub attr_section: Option<alloc::string::String>,
+    /// A consumed `__attribute__((alias("target")))`: the declared name
+    /// is an additional symbol for `target`.
+    pub attr_alias: Option<alloc::string::String>,
+    /// A consumed `register` storage-class specifier. Gates the GNU
+    /// explicit-register `asm("reg")` declarator suffix; a plain
+    /// `register` without the suffix stays the historical no-op hint.
+    pub saw_register_storage: bool,
+    /// Set by an `__auto_type` base-type parse: the declaration must
+    /// hold exactly one declarator, so the declarator loop rejects a
+    /// `,` while this is set. Cleared when the declaration ends.
+    pub auto_type_single_declarator: bool,
 }
 
 impl Default for Pending {
@@ -767,7 +857,10 @@ impl Default for Pending {
             parsing_fn_ptr_proto: false,
             param_decl_context: false,
             last_array_decay_size: 0,
+            last_array_decay_dims: alloc::vec::Vec::new(),
             typeof_operand_was_array: false,
+            typeof_operand_array_size: 0,
+            typeof_operand_array_bytes: 0,
             last_array_decay_bytes: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field
             // docs above.
@@ -790,6 +883,12 @@ impl Default for Pending {
             attr_destructor: false,
             attr_init_priority: None,
             attr_cleanup: None,
+            attr_weak: false,
+            attr_used: false,
+            attr_section: None,
+            attr_alias: None,
+            saw_register_storage: false,
+            auto_type_single_declarator: false,
         }
     }
 }
@@ -848,6 +947,11 @@ pub struct Compiler {
     /// coalescing reserves these interior cells; without a symbol they are
     /// absent from the per-function variable list. Reset per function.
     multi_cell_temps: alloc::vec::Vec<(i64, i64)>,
+    /// `(slot_off, align, size_bytes)` for each automatic object in the current
+    /// function whose required alignment exceeds 16 (C11 6.7.5). Drained at
+    /// function close into `FinishedFunction::over_aligned_slots`. Reset per
+    /// function.
+    func_over_aligned: alloc::vec::Vec<(i64, i64, i64)>,
 
     /// True once the current function has emitted at least one
     /// alloca intrinsic. Drives the function-end backpatch that
@@ -1004,6 +1108,16 @@ pub struct Compiler {
     /// against `labels` at function end; an unresolved entry is
     /// a compile error.
     unresolved_gotos: Vec<String>,
+    /// One entry per open block, holding that block's `__label__`
+    /// declarations as (source name, unique key). A label name is
+    /// resolved by scanning the stack from the innermost block out,
+    /// so an inner declaration shadows an outer one and two sibling
+    /// blocks declaring the same name get distinct keys. Cleared at
+    /// every function start.
+    local_label_scopes: Vec<Vec<(String, String)>>,
+    /// Counter making each `__label__` declaration's key unique
+    /// within the function.
+    local_label_seq: u32,
     /// Per nested `switch` body: drained at switch close. The
     /// AST emitter records each case's constant on its `Stmt::Case`
     /// node; this stack is the parser-side depth tracker that
@@ -1032,6 +1146,12 @@ pub struct Compiler {
     /// formatted lines so the final consumer (CLI / test) can dump them
     /// without knowing their structure.
     warnings: Vec<String>,
+
+    /// File-scope `asm("...")` templates, validated at parse time
+    /// (section data directives only). The codegen materializes them
+    /// into the object's named sections under the emit target's
+    /// directive conventions.
+    pub(super) file_asm: Vec<String>,
 
     /// gcc `-H`-shape include trace produced by the preprocessor when
     /// `with_full_options_and_label_with_trace(.., show_includes =
@@ -1109,6 +1229,19 @@ pub struct Compiler {
     /// `Program::init_funcs`. Populated at each function-body close
     /// when `pending.attr_constructor` / `attr_destructor` is set.
     init_funcs: Vec<crate::c5::program::InitFunc>,
+    /// `__attribute__((alias("target")))` function declarations, moved
+    /// onto `Program::function_aliases`.
+    function_aliases: Vec<crate::c5::program::FunctionAlias>,
+    /// Aliases whose target was not yet defined when the declarator was
+    /// parsed. C99 leaves the ordering open and GCC accepts a target defined
+    /// later in the unit, so resolution is retried once the unit is complete.
+    /// Each entry is the alias symbol, its target name, and whether the
+    /// declarator was an object rather than a function.
+    pending_aliases: Vec<(usize, String, bool)>,
+    /// Names given external linkage by a file-scope `asm(".globl name");`.
+    /// The directive may precede the definition, so the names are applied
+    /// once the unit is complete.
+    pending_asm_globl: Vec<String>,
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -1537,6 +1670,7 @@ impl Compiler {
             committed_loc_offs: 0,
             max_loc_offs: 0,
             multi_cell_temps: alloc::vec::Vec::new(),
+            func_over_aligned: alloc::vec::Vec::new(),
             uses_alloca_in_current_fn: false,
             func_vla_decls: 0,
             stmt_expr_arena_ranges: Vec::new(),
@@ -1559,12 +1693,15 @@ impl Compiler {
             nest_depth: 0,
             labels: Vec::new(),
             unresolved_gotos: Vec::new(),
+            local_label_scopes: Vec::new(),
+            local_label_seq: 0,
             switch_cases: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),
             tag_scopes: alloc::vec![alloc::vec::Vec::new()],
             enums: Vec::new(),
             warnings: pp_warnings,
+            file_asm: Vec::new(),
             include_trace: pp_include_trace,
             pp_entrypoint,
             pp_subsystem,
@@ -1576,6 +1713,9 @@ impl Compiler {
             code_relocs: Vec::new(),
             pending_exports,
             init_funcs: Vec::new(),
+            function_aliases: Vec::new(),
+            pending_aliases: Vec::new(),
+            pending_asm_globl: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
             pending: Pending::default(),
@@ -1925,6 +2065,7 @@ impl Compiler {
         let exports = self.resolve_exports()?;
         Ok(Program {
             data: self.data,
+            file_asm: self.file_asm,
             data_align: self.data_align,
             data_object_starts: self.data_object_starts,
             entry_pc,
@@ -1977,6 +2118,7 @@ impl Compiler {
             user_ssa_funcs: Vec::new(),
             extern_function_imports: extern_imports,
             init_funcs: self.init_funcs,
+            function_aliases: self.function_aliases,
         })
     }
 }

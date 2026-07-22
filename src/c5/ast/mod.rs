@@ -636,6 +636,11 @@ pub(crate) struct FinishedFunction {
     /// no direct slot reference (reached only via the base address). Empty
     /// when the function has no multi-cell local.
     pub multi_cell_slots: alloc::vec::Vec<(i64, i64)>,
+    /// `(slot_off, align, size_bytes)` for each automatic object whose required
+    /// alignment exceeds 16 (C11 6.7.5 `_Alignas` / GNU `aligned`). The walker
+    /// packs these into `FunctionSsa::over_aligned` + `frame_align`. Empty when
+    /// no automatic object needs stack realignment.
+    pub over_aligned_slots: alloc::vec::Vec<(i64, i64, i64)>,
     pub name: alloc::string::String,
 }
 

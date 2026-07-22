@@ -34,6 +34,10 @@ pub(super) struct ParsedParams {
     pub(super) indices: Vec<usize>,
     pub(super) types: Vec<i64>,
     pub(super) is_variadic: bool,
+    /// False for an empty parameter list (`T ()`), which declares no
+    /// prototype. `(void)` is a prototype with no parameters, so the two
+    /// spellings are distinct types under C99 6.7.5.3.
+    pub(super) is_prototyped: bool,
 }
 
 impl Compiler {
@@ -41,6 +45,9 @@ impl Compiler {
         let mut args = Vec::new();
         let mut types = Vec::new();
         let mut is_variadic = false;
+        // An empty list declares no prototype; `(void)` declares one with
+        // no parameters.
+        let is_prototyped = self.lex.tk != ')';
         // `(void)` -- C's "no parameters" sigil. With `void` now
         // its own lexeme (`Token::Void`), the early-match below
         // unambiguously fires only for the void-sigil shape; an
@@ -109,7 +116,7 @@ impl Compiler {
                 ty += Ty::Ptr as i64;
                 leading_ptr_count += 1;
                 while self.lex.tk == Token::TypeQual {
-                    ty |= self.lex_volatile_bit();
+                    ty |= self.lex_qualifier_bits();
                     self.next()?;
                 }
             }
@@ -285,6 +292,7 @@ impl Compiler {
             indices: args,
             types,
             is_variadic,
+            is_prototyped,
         })
     }
 }

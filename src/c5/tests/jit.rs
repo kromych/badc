@@ -538,6 +538,109 @@ fn inline_asm_operands_under_pressure() {
 }
 
 #[test]
+fn register_asm_variable_pinned_to_staging_scratch_neighbor() {
+    // A local register variable bound to the register neighboring the
+    // emitter's asm-staging scratch (x86-64 r11, next to r10; AArch64 x0,
+    // used through GCC's `r0` spelling) must be honored as a `+r` operand:
+    // the value loads into the named register and the store-back reads it
+    // there, so the staging cannot use that register as its own scratch.
+    // Run under a 2-register cap so the operands spill and the staging
+    // exercises the scratch path.
+    let src = r#"
+        static long rt(long a, long b) {
+        #if defined(__aarch64__)
+            register long v asm("r0") = a;
+            __asm__ volatile("add %0, %0, %1" : "+r"(v) : "r"(b));
+        #elif defined(__x86_64__)
+            register long v asm("r11") = a;
+            __asm__ volatile("addq %1, %0" : "+r"(v) : "r"(b) : "cc");
+        #else
+            long v = a + b;
+        #endif
+            return v;
+        }
+        int main(void) { return rt(40, 2) == 42 ? 0 : 1; }
+    "#;
+    assert_eq!(
+        jit_exit(src, &["reg-asm-scratch-neighbor"]),
+        0,
+        "bound register not honored across asm staging"
+    );
+    assert_eq!(
+        jit_exit_native_optimized(src, &["reg-asm-scratch-neighbor-opt"]),
+        0,
+        "bound register not honored across asm staging (-O)"
+    );
+    // Under a 2-register cap the operands spill, so the staging exercises
+    // the scratch path that must not reuse the bound register.
+    let capped = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit(src, &["reg-asm-scratch-neighbor-cap"])
+    });
+    assert_eq!(
+        capped, 0,
+        "bound register not honored under register pressure"
+    );
+    let capped_opt = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit_native_optimized(src, &["reg-asm-scratch-neighbor-cap-opt"])
+    });
+    assert_eq!(
+        capped_opt, 0,
+        "bound register not honored under pressure (-O)"
+    );
+}
+
+#[test]
+fn inline_asm_memory_output_to_local_under_pressure() {
+    // Four memory outputs to locals (`=m`, aarch64 `=Q`) and four register
+    // inputs: eight operands. Under a 2-register cap the operands spill to
+    // sp-relative slots, and a memory output carries its destination address
+    // as the operand. Reading a spilled place unshifted let a later operand
+    // capture the block's own scratch, corrupting an output address: a wrong
+    // store at -O0, a store through a bad pointer (SIGSEGV) at -O. The sibling
+    // above covers register outputs; this covers the memory-output address.
+    let src = r#"
+        static int asm_store4(int a, int b, int c, int d) {
+            int p = 0, q = 0, r = 0, s = 0;
+        #if defined(__aarch64__)
+            __asm__("str %w4, %0\n\t"
+                    "str %w5, %1\n\t"
+                    "str %w6, %2\n\t"
+                    "str %w7, %3"
+                    : "=Q"(p), "=Q"(q), "=Q"(r), "=Q"(s)
+                    : "r"(a), "r"(b), "r"(c), "r"(d));
+        #elif defined(__x86_64__)
+            __asm__("movl %4, %0\n\t"
+                    "movl %5, %1\n\t"
+                    "movl %6, %2\n\t"
+                    "movl %7, %3"
+                    : "=m"(p), "=m"(q), "=m"(r), "=m"(s)
+                    : "r"(a), "r"(b), "r"(c), "r"(d));
+        #else
+            p = a; q = b; r = c; s = d;
+        #endif
+            return p + q * 10 + r * 100 + s * 1000;
+        }
+        int main(void) {
+            return asm_store4(6, 7, 8, 9) == 9876 ? 0 : 1;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit(src, &["asm-mem-output-pressure"])
+    });
+    assert_eq!(
+        result, 0,
+        "inline-asm memory output captured a corrupt destination address under pressure"
+    );
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit_native_optimized(src, &["asm-mem-output-pressure-opt"])
+    });
+    assert_eq!(
+        result, 0,
+        "inline-asm memory output address read a corrupt place through the moved sp under -O"
+    );
+}
+
+#[test]
 fn division_with_spilled_dividend_under_pressure() {
     // On x86_64 the divmod lowering stages the dividend into the
     // destination register; when the allocator reuses the divisor's
@@ -1196,6 +1299,10 @@ fn jit_fixture(name: &str) -> i32 {
 }
 
 const JIT_FIXTURES: &[(&str, i32)] = &[
+    ("overaligned_data_placement.c", 0),
+    ("overaligned_type_placement.c", 0),
+    ("page_multiple_alignment.c", 0),
+    ("max_alignment_placement.c", 0),
     ("mem2reg_cross_block.c", 42),
     ("mem2reg_addr_taken_neighbor.c", 42),
     ("mem2reg_i64_local.c", 84),
@@ -1325,6 +1432,8 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("ssa_fp_routing.c", 0),
     ("ssa_callee_saved_x19.c", 0),
     ("ssa_va_arg_loop.c", 0),
+    ("builtin_va_list_typedef.c", 0),
+    ("builtin_expect_no_header.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
     ("sysv_variadic_host_abi.c", 0),
     ("aapcs64_variadic_host_abi.c", 0),
@@ -1483,6 +1592,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("local_aggregate_runtime_init.c", 0),
     ("aggregate_init_struct_member_copy.c", 0),
     ("computed_goto.c", 0),
+    ("local_label.c", 0),
     ("label_addr_array_init.c", 0),
     ("static_init_once_guard.c", 0),
     ("computed_goto_static_table.c", 0),
@@ -1502,6 +1612,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("decl_trailing_attribute.c", 0),
     ("winsock_netdb_protoent.c", 0),
     ("slot_coalesce_disjoint_temps.c", 0),
+    ("overaligned_automatic.c", 0),
     ("alloca_alignment.c", 0),
     ("alloca_arena_in_bounds.c", 0),
     ("alloca_large.c", 42),
@@ -2067,4 +2178,111 @@ fn atexit_handlers_run_on_libc_exit() {
     let contents = std::fs::read_to_string(&marker).expect("atexit handler must write the marker");
     let _ = std::fs::remove_file(&marker);
     assert_eq!(contents, "ran");
+}
+
+/// A file-scope address constant cast to a pointer-width integer slot is a
+/// link-time relocation, not a compile-time integer (C99 6.6 / 6.3.2.3):
+/// an object address, a bare array name, a `&arr[i]` element designator, and
+/// a function name must each resolve to the same value the runtime `&` /
+/// array decay yields.
+#[test]
+fn addr_constant_cast_to_integer_slot() {
+    let src = "static int obj;\n\
+               static int arr[4];\n\
+               static int callee(void) { return 7; }\n\
+               unsigned long p_obj = (unsigned long)&obj;\n\
+               unsigned long p_arr = (unsigned long)arr;\n\
+               unsigned long p_elt = (unsigned long)&arr[2];\n\
+               unsigned long p_fn = (unsigned long)callee;\n\
+               int main(void) {\n\
+                   if (p_obj != (unsigned long)&obj) return 1;\n\
+                   if (p_arr != (unsigned long)arr) return 2;\n\
+                   if (p_elt != (unsigned long)&arr[2]) return 3;\n\
+                   if (p_fn != (unsigned long)callee) return 4;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-addr-const"]), 0);
+}
+
+/// A string literal is a static-storage array whose address is a link-time
+/// constant (C99 6.4.5p6 / 6.6p9), so `&"..."` and `&"..."[i]` are valid
+/// static initializers. Each must resolve to the string's runtime address
+/// with its bytes intact -- as a struct member (via a constant `?:`), as an
+/// array element, and cast to a pointer-width integer.
+#[test]
+fn addr_of_string_literal_static_init() {
+    let src = "typedef unsigned long uptr;\n\
+               struct e { int a; uptr d; };\n\
+               static struct e t = { 5, (0 ? 0 : (uptr)&\"example\") };\n\
+               static const char *arr[] = { &\"abc\"[1], \"xy\" };\n\
+               static int eq(const char *a, const char *b) {\n\
+                   while (*a && *a == *b) { a++; b++; }\n\
+                   return *a == *b;\n\
+               }\n\
+               int main(void) {\n\
+                   if (t.a != 5) return 1;\n\
+                   if (!eq((const char *)t.d, \"example\")) return 2;\n\
+                   if (!eq(arr[0], \"bc\")) return 3;\n\
+                   if (!eq(arr[1], \"xy\")) return 4;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-addr-str"]), 0);
+}
+
+/// A label may carry an attribute-specifier (C23 6.9 / GNU:
+/// `L: __attribute__((unused)) stmt;`). The attribute appertains to the
+/// label and must be discarded without disturbing the labeled statement,
+/// which still runs when reached by fallthrough or `goto`.
+#[test]
+fn attribute_specifier_on_label() {
+    let src = "int main(void) {\n\
+                   int x = 0;\n\
+                   goto skip;\n\
+                   x = 100;\n\
+               skip: __attribute__((__unused__)) x += 7;\n\
+               done: __attribute__((unused)) __attribute__((cold)) x += 35;\n\
+                   return x;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-label-attr"]), 42);
+}
+
+/// C99 6.7.8p6: a designator list may chain a `[i]` / `.sub` step onto a
+/// `.member` designator (`.extent[0] = { ... }`), including when the member
+/// lives in an anonymous struct nested in an anonymous union. Each addressed
+/// sub-object must receive its value.
+#[test]
+fn member_then_index_designator_in_anon_group() {
+    let src = "struct ext { int first; unsigned count; };\n\
+               struct map { union { struct { struct ext extent[4]; unsigned nr; }; \
+                                     struct { void *f; void *r; }; }; };\n\
+               static struct map m = { { .extent[0] = { .first = 7, .count = 4294967295U }, \
+                                         .nr = 1, }, };\n\
+               int main(void) {\n\
+                   if (m.extent[0].first != 7) return 1;\n\
+                   if (m.extent[0].count != 4294967295U) return 2;\n\
+                   if (m.nr != 1) return 3;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-desig-chain"]), 0);
+}
+
+/// C99 6.5.2.5: an array-of-struct member may take compound-literal
+/// elements (`.hook = { (struct call){...}, (struct call){...} }`), the same
+/// as a top-level array of struct. Each element's fields land at its stride,
+/// and an omitted field zero-fills.
+#[test]
+fn struct_array_member_compound_literal_elements() {
+    let src = "struct call { int key; int tramp; };\n\
+               struct table { struct call hook[2]; int n; };\n\
+               static struct table t = { .hook = { (struct call){ .key = 11, .tramp = 22 }, \
+                                                   (struct call){ .key = 33 } }, .n = 5 };\n\
+               int main(void) {\n\
+                   if (t.hook[0].key != 11) return 1;\n\
+                   if (t.hook[0].tramp != 22) return 2;\n\
+                   if (t.hook[1].key != 33) return 3;\n\
+                   if (t.hook[1].tramp != 0) return 4;\n\
+                   if (t.n != 5) return 5;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-cl-array-member"]), 0);
 }

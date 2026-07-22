@@ -1212,6 +1212,30 @@ impl Cc {
             Cc::Ns => Cc::S,
         }
     }
+
+    /// Recover a condition from its architectural nibble, the form an
+    /// inline-asm flag-output constraint carries through the IR.
+    pub(crate) fn from_nibble(n: u8) -> Option<Cc> {
+        Some(match n {
+            0x0 => Cc::O,
+            0x1 => Cc::No,
+            0x2 => Cc::B,
+            0x3 => Cc::Ae,
+            0x4 => Cc::E,
+            0x5 => Cc::Ne,
+            0x6 => Cc::Be,
+            0x7 => Cc::A,
+            0x8 => Cc::S,
+            0x9 => Cc::Ns,
+            0xA => Cc::P,
+            0xB => Cc::Np,
+            0xC => Cc::L,
+            0xD => Cc::Ge,
+            0xE => Cc::Le,
+            0xF => Cc::G,
+            _ => return None,
+        })
+    }
 }
 
 /// `SETcc r/m8` -- write byte = 1 if condition holds, else 0. The
@@ -1703,9 +1727,22 @@ pub(crate) fn lower(
         alloc::collections::BTreeMap::new();
     let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
+    let mut asm_sections: Vec<super::ssa::emit_common::AsmSection> = Vec::new();
+    // File-scope asm section blocks precede the per-function ones
+    // (`.align` takes a byte count on x86-64 ELF).
+    super::ssa::emit_common::materialize_file_asm(
+        &program.file_asm,
+        false,
+        super::ssa::emit_common::AsmComments::X86,
+        &|blocks| crate::c5::codegen::encode_file_asm_section_code(blocks, target),
+        &mut asm_sections,
+    )
+    .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
+    let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
+    let mut asm_text_abs_refs: Vec<super::AsmTextAbsRef> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     // Each `JsrExt` / `TailExt` site records a `CALL rel32`
     // / `JMP rel32` placeholder; displacements get backfilled once
@@ -1817,6 +1854,26 @@ pub(crate) fn lower(
         // constants.
         super::ssa::emit_common::time_pass("passes::constfold::run (x86_64)", || {
             crate::c5::codegen::passes::constfold::run(&mut ssa_funcs);
+        });
+        // Re-run mem2reg on callers the inliner spliced into. A relocated
+        // callee local can land on an address-free, single-width slot that
+        // pre-inline mem2reg never saw (it did not exist then), so its store
+        // and load stay in the frame -- and a constant stored there is not
+        // folded into the `"i"`-constrained inline-asm operand that reads it.
+        // Confined to inlined callers by the did_inline gate; promoted slots
+        // feed the same debug-info location drop as the initial mem2reg.
+        super::ssa::emit_common::time_pass("ssa::mem2reg::run post-inline (x86_64)", || {
+            for f in &mut ssa_funcs {
+                if f.did_inline {
+                    let promoted = super::ssa::mem2reg::run(f);
+                    if !promoted.is_empty() {
+                        promoted_local_slots
+                            .entry(f.ent_pc)
+                            .or_default()
+                            .extend(promoted);
+                    }
+                }
+            }
         });
         // Split constant-index local arrays that unrolling exposed into
         // per-element slots and re-run mem2reg to promote them to SSA
@@ -1962,10 +2019,24 @@ pub(crate) fn lower(
     let _ssa_emit_pass_start = std::time::Instant::now();
     // Function name -> entry PC, so an inline-asm `call`/`jmp` to a bare symbol
     // resolves to a relocation the fixup pass patches like any other call.
+    let mut asm_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
         .collect();
+    // Every function's entry PC -> its name, defined or extern (an extern
+    // function referenced by address gets an ent_pc placeholder too). A `%c`
+    // function operand a replacement `call` in a section relocates against
+    // resolves its `ImmCode` ent_pc through this.
+    let fn_name_by_pc: alloc::collections::BTreeMap<usize, &str> = {
+        use crate::c5::token::Token;
+        program
+            .symbols
+            .iter()
+            .filter(|s| s.class == Token::Fun as i64 && !s.name.is_empty())
+            .map(|s| (s.val as usize, s.name.as_str()))
+            .collect()
+    };
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
         pc_to_native[ent_pc] = code.len();
@@ -1978,6 +2049,20 @@ pub(crate) fn lower(
             .extern_imm_data_refs
             .iter()
             .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
+            .collect();
+        // Same, for cross-TU function references: a `%c` function operand a
+        // replacement `call` / `jmp` in a section relocates against. Each
+        // `ImmCode` value-id maps to its callee's name via the entry PC.
+        let extern_code_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
+            .insts
+            .iter()
+            .enumerate()
+            .filter_map(|(v, inst)| match inst {
+                super::super::ir::Inst::ImmCode(pc) => fn_name_by_pc
+                    .get(pc)
+                    .map(|n| (v as u32, alloc::string::String::from(*n))),
+                _ => None,
+            })
             .collect();
         let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
             .extern_tls_refs
@@ -1996,6 +2081,8 @@ pub(crate) fn lower(
                 ssa_line_rows: &mut ssa_line_rows,
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut func_prologue_native,
+                asm_sections: &mut asm_sections,
+                asm_extern_call_sites: &mut asm_extern_call_sites,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2007,6 +2094,7 @@ pub(crate) fn lower(
                 &mut fixups,
                 &mut got_fixups,
                 &extern_data_names,
+                &extern_code_names,
                 &extern_tls_names,
                 imports,
                 &variadic_targets,
@@ -2014,6 +2102,8 @@ pub(crate) fn lower(
                 program.tls_data.len(),
                 &mut fn_unwind,
                 &name2entpc,
+                &mut asm_section_text_refs,
+                &mut asm_text_abs_refs,
             )
         };
         #[cfg(feature = "std")]
@@ -2032,9 +2122,8 @@ pub(crate) fn lower(
             // failed without recording one.
             #[cfg(feature = "std")]
             if let Some(reason) = super::ssa::emit_common::take_bail() {
-                return Err(C5Error::Compile(alloc::format!(
-                    "{reason} (x86_64, function `{}`)",
-                    func_ssa.name,
+                return Err(C5Error::Compile(crate::c5::error::fmt_codegen_err(
+                    &alloc::format!("{reason} (x86_64, function `{}`)", func_ssa.name),
                 )));
             }
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -2065,17 +2154,27 @@ pub(crate) fn lower(
         .iter()
         .map(|(pc, name)| (*pc, name.as_str()))
         .collect();
-    let mut user_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
-    let resolved_fixups: Vec<Fixup> = if extern_pc_lookup.is_empty() {
-        fixups
-    } else {
+    // Seeded with the inline-asm branch sites whose target this unit does
+    // not define; they take the same by-name relocation.
+    let mut user_extern_call_sites: Vec<super::UserExternCallSite> = asm_extern_call_sites;
+    // A direct branch whose callee the linker resolves -- across a
+    // named-section boundary, or to a weak definition a sibling unit
+    // may override -- likewise becomes a by-name call relocation.
+    let reloc_ctx = super::reloc_callee_ctx(program, &ssa_funcs, &pc_to_native, native.output_kind);
+    let resolved_fixups: Vec<Fixup> = {
         let mut out = Vec::with_capacity(fixups.len());
         for f in fixups {
+            let is_tail = matches!(f.kind, BranchKind::Jmp);
             if let Some(name) = extern_pc_lookup.get(&f.target_ent_pc) {
-                let is_tail = matches!(f.kind, BranchKind::Jmp);
                 user_extern_call_sites.push(super::UserExternCallSite {
                     instr_offset: f.native_offset,
                     symbol_name: (*name).into(),
+                    is_tail,
+                });
+            } else if let Some(name) = reloc_ctx.reloc_callee(f.native_offset, f.target_ent_pc) {
+                user_extern_call_sites.push(super::UserExternCallSite {
+                    instr_offset: f.native_offset,
+                    symbol_name: name.into(),
                     is_tail,
                 });
             } else {
@@ -2142,6 +2241,7 @@ pub(crate) fn lower(
             user_extern_data_refs.push(super::UserExternDataRef {
                 instr_offset,
                 symbol_name: (*name).into(),
+                direct_pcrel: None,
             });
             continue;
         }
@@ -2212,6 +2312,9 @@ pub(crate) fn lower(
     };
 
     Ok(Build {
+        asm_sections,
+        asm_section_text_refs,
+        asm_text_abs_refs,
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),

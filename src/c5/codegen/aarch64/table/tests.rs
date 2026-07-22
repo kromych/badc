@@ -1277,6 +1277,19 @@ fn logical_immediate_encoder() {
     assert_eq!(enc("orr", &[x(5), x(6), Opnd::Imm(0x1)]), 0xB24000C5); // orr x5, x6, #1
 }
 
+#[test]
+fn bic_immediate_is_and_of_complement() {
+    // `bic Rd, Rn, #imm` assembles as `and Rd, Rn, #~imm`, the complement taken
+    // at the operand width. Golden words from GNU as / clang.
+    // bic x0, x1, #(1<<55) == and x0, x1, #0xff7fffffffffffff
+    assert_eq!(enc("bic", &[x(0), x(1), Opnd::Imm(1 << 55)]), 0x9248F820);
+    // bic w0, w1, #0xf == and w0, w1, #0xfffffff0
+    assert_eq!(enc("bic", &[w(0), w(1), Opnd::Imm(0xF)]), 0x121C6C20);
+    // The complement of -1 is 0, which is not a valid bitmask (as GNU as also
+    // rejects `bic x0, x1, #-1`).
+    assert!(encode("bic", &[x(0), x(1), Opnd::Imm(-1)]).is_err());
+}
+
 /// Differential sweeps found seven database rows disagreeing with the
 /// architecture; the generator corrects them (DB_FIXES). Encoding the
 /// corrected forms locks the true bits -- had the raw rows shipped, the bytes
@@ -1330,10 +1343,29 @@ fn memory_and_positional_registers() {
     // Atomic memory ops share the Rs@16 / Rt@0 / base layout.
     assert_eq!(enc("swp", &[w(14), w(15), m(16)]), 0xB82E820F);
     assert_eq!(enc("ldadd", &[x(17), x(18), m(19)]), 0xF8310272);
+    // Compare-and-swap-pair: Rs@16, Rt@0, base@5; the 2nd/4th operands are the
+    // implied Rs+1 / Rt+1 (validated, not encoded). Bit 30 is the 64-bit form,
+    // bit 22 acquire, bit 15 release. Byte-identical to GNU as.
+    assert_eq!(enc("casp", &[x(0), x(1), x(2), x(3), m(4)]), 0x48207C82);
+    assert_eq!(enc("caspal", &[x(0), x(1), x(2), x(3), m(4)]), 0x4860FC82);
+    assert_eq!(enc("casp", &[w(0), w(1), w(2), w(3), m(4)]), 0x08207C82);
+    assert_eq!(enc("caspa", &[x(4), x(5), x(6), x(7), m(8)]), 0x48647D06);
+    assert_eq!(enc("caspl", &[w(2), w(3), w(4), w(5), m(6)]), 0x0822FCC4);
+    // A malformed pair -- odd base, non-consecutive, or mismatched width --
+    // cannot be encoded and is rejected, never silently mis-encoded.
+    assert!(encode("casp", &[x(1), x(2), x(3), x(4), m(5)]).is_err()); // odd Rs
+    assert!(encode("casp", &[x(0), x(3), x(2), x(3), m(4)]).is_err()); // gap
+    assert!(encode("casp", &[w(0), x(1), x(2), x(3), m(4)]).is_err()); // width
     // Store-exclusive: the status register is Rd at bit 16 (not bit 0); the
     // stored value may be wider than the status register.
     assert_eq!(enc("stlxr", &[w(20), w(21), m(22)]), 0x8814FED5);
     assert_eq!(enc("stlxr", &[w(23), x(24), m(25)]), 0xC817FF38);
+    // Exclusive load/store singles, the shapes the `Q` constraint
+    // substitution feeds. Words match clang.
+    assert_eq!(enc("ldxr", &[w(0), m(2)]), 0x885F7C40); // ldxr w0, [x2]
+    assert_eq!(enc("ldaxr", &[x(0), m(1)]), 0xC85FFC20); // ldaxr x0, [x1]
+    assert_eq!(enc("stxr", &[w(1), w(0), m(2)]), 0x88017C40); // stxr w1, w0, [x2]
+    assert_eq!(enc("stlxr", &[w(1), x(0), m(2)]), 0xC801FC40); // stlxr w1, x0, [x2]
     // Load/store exclusive pair: Rd2/Rs2 at bit 10.
     assert_eq!(enc("ldaxp", &[x(0), x(1), m(2)]), 0xC87F8440);
     assert_eq!(enc("stxp", &[w(3), w(4), w(5), m(6)]), 0x882314C4);

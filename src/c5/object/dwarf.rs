@@ -1664,7 +1664,7 @@ fn build_debug_info(
         write_uleb128(&mut body, ABBREV_ENUMERATION_TYPE);
         body.extend_from_slice(ed.name.as_bytes());
         body.push(0);
-        body.push(4);
+        body.push(ed.byte_size());
         for (cname, cval) in &ed.constants {
             write_uleb128(&mut body, ABBREV_ENUMERATOR);
             body.extend_from_slice(cname.as_bytes());

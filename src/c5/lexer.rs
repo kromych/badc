@@ -7,18 +7,21 @@ use super::error::C5Error;
 use super::symbol::Symbol;
 use super::token::{Tok, Token, Ty};
 
-/// Default struct-alignment cap when no `#pragma pack(N)` is
-/// active. Matches the aggregate-layout cap of 16 bytes; no natural
-/// type exceeds 8, so this only lets an explicit
-/// `__attribute__((aligned(16)))` survive, and explicit pack pragmas
-/// can lower it.
-const DEFAULT_PACK: usize = 16;
+/// Member-alignment cap when no `#pragma pack(N)` is active: none.
+/// A member's alignment is then whatever its type or an explicit
+/// `__attribute__((aligned(N)))` asks for.
+const DEFAULT_PACK: usize = usize::MAX;
 
-/// Clamp a user-supplied pack value to `[1, DEFAULT_PACK]`. C99
-/// permits 1, 2, 4, 8, 16. `0` is treated as "default" (matching
-/// `#pragma pack()` with no arg).
+/// Largest pack value that packs. GCC and clang honor 1, 2, 4, 8 and
+/// 16; a larger request packs nothing, since no natural alignment
+/// exceeds 16, and it must not clamp an explicit `aligned(N)` either.
+const MAX_HONORED_PACK: usize = 16;
+
+/// Clamp a user-supplied pack value. `0` means "default" (matching
+/// `#pragma pack()` with no arg); anything above [`MAX_HONORED_PACK`]
+/// packs nothing.
 fn clamp_pack(n: usize) -> usize {
-    if n == 0 || n > DEFAULT_PACK {
+    if n == 0 || n > MAX_HONORED_PACK {
         DEFAULT_PACK
     } else {
         n
@@ -1898,6 +1901,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("typeof", Token::Typeof),
     ("__typeof__", Token::Typeof),
     ("__typeof", Token::Typeof),
+    ("__auto_type", Token::AutoType),
     ("__attribute__", Token::Attribute),
     ("__attribute", Token::Attribute),
     ("__declspec", Token::Attribute),
@@ -1956,6 +1960,10 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("restrict", Token::TypeQual),
     ("__restrict", Token::TypeQual),
     ("__restrict__", Token::TypeQual),
+    // x86 named-address-space qualifiers: an access through such a type
+    // rides a `%gs:` / `%fs:` segment override (GCC named address spaces).
+    ("__seg_gs", Token::TypeQual),
+    ("__seg_fs", Token::TypeQual),
     // MSVC calling-convention decorations. Each badc target has a
     // single calling convention, so these carry no information and are
     // consumed as no-op qualifiers wherever a declarator decoration may
@@ -1979,6 +1987,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("__signed", Token::Signed),
     ("__signed__", Token::Signed),
     ("__extension__", Token::Extension),
+    ("__label__", Token::LocalLabel),
     ("unsigned", Token::Unsigned),
     ("short", Token::Short),
     ("long", Token::Long),

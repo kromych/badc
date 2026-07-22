@@ -375,6 +375,42 @@ int main(void) { write_db7(read_db7()); return 0; }
 }
 
 #[test]
+fn inline_asm_lar_lsl_r32_from_r16_source_encode_0f02_0f03() {
+    // `lar`/`lsl` read a 16-bit selector into a 32-bit destination. The
+    // kernel casts the source to `u16` (`lar %[ss], %[ar]` with `[ss] "rm"
+    // ((u16)x)`), so the source is a 16-bit register or `m16` and the
+    // catalogue's `r16,r/m16` and `r32,r/m32` forms both miss. GNU as
+    // encodes `lar %bx,%eax` as `0F 02 C3` (no `66` prefix, the 32-bit
+    // destination sets the operand size); `lsl` is `0F 03 /r`.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+unsigned lar_ss(unsigned short ss){ unsigned ar; __asm__ volatile("lar %[s], %[a]" : [a]"=r"(ar) : [s]"rm"((unsigned short)ss)); return ar; }
+unsigned lsl_ss(unsigned short ss){ unsigned lim; __asm__ volatile("lsl %[s], %[l]" : [l]"=r"(lim) : [s]"rm"((unsigned short)ss)); return lim; }
+int main(void){ return (int)(lar_ss(3) + lsl_ss(3)); }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let text = &obj.text;
+    // `0F 02`/`0F 03` with a mod=11 ModRM (register-direct source), and no
+    // `66` operand-size prefix on the byte before the `0F`.
+    let has = |op: u8| {
+        (2..text.len()).any(|i| {
+            text[i - 1] == 0x0F && text[i] == op && text[i + 1] >= 0xC0 && text[i - 2] != 0x66
+        })
+    };
+    assert!(has(0x02), "lar must encode 0F 02 /r, no 66 prefix: {text:02x?}");
+    assert!(has(0x03), "lsl must encode 0F 03 /r, no 66 prefix: {text:02x?}");
+}
+
+#[test]
 fn seg_qualified_direct_access_rides_a_segment_prefix() {
     // A direct read / write through a `__seg_gs` / `__seg_fs` pointer (GCC
     // named address spaces, the x86 percpu pattern) lowers to a plain load /

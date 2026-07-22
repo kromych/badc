@@ -40,7 +40,9 @@
 
 use alloc::vec::Vec;
 
-use super::super::ir::{BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
+use super::super::ir::{
+    AsmSeg, BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator,
+};
 use super::DataFixup;
 use super::GotFixup;
 use super::Target;
@@ -3066,6 +3068,7 @@ fn emit_inst(
             *addr,
             *disp,
             *kind,
+            None,
             alloc.is_f32(v),
             alloc,
             frame,
@@ -3076,7 +3079,40 @@ fn emit_inst(
             value,
             kind,
             ..
-        } => emit_store(code, dst, v, *addr, *disp, *value, *kind, alloc, frame),
+        } => emit_store(
+            code, dst, v, *addr, *disp, *value, *kind, None, alloc, frame,
+        ),
+        Inst::SegLoad {
+            addr, kind, seg, ..
+        } => emit_load(
+            code,
+            dst,
+            *addr,
+            0,
+            *kind,
+            seg_prefix(*seg),
+            alloc.is_f32(v),
+            alloc,
+            frame,
+        ),
+        Inst::SegStore {
+            addr,
+            value,
+            kind,
+            seg,
+            ..
+        } => emit_store(
+            code,
+            dst,
+            v,
+            *addr,
+            0,
+            *value,
+            *kind,
+            seg_prefix(*seg),
+            alloc,
+            frame,
+        ),
         Inst::LoadLocal { off, kind, .. } => {
             emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, func, abi)
         }
@@ -3308,6 +3344,8 @@ fn inst_variant_name(inst: &super::super::ir::Inst) -> &'static str {
         Inst::TlsAddr(_) => "TlsAddr",
         Inst::Load { .. } => "Load",
         Inst::Store { .. } => "Store",
+        Inst::SegLoad { .. } => "SegLoad",
+        Inst::SegStore { .. } => "SegStore",
         Inst::LoadLocal { .. } => "LoadLocal",
         Inst::StoreLocal { .. } => "StoreLocal",
         Inst::LoadIndexed { .. } => "LoadIndexed",
@@ -3559,9 +3597,30 @@ fn local_slot_off(off: i64, func: &FunctionSsa, frame: Frame, abi: super::Abi) -
     }
 }
 
+/// Segment-override prefix byte for an x86 named address space:
+/// `%gs:` is 0x65, `%fs:` is 0x64. `None` carries no override.
+fn seg_prefix(seg: AsmSeg) -> Option<u8> {
+    match seg {
+        AsmSeg::Gs => Some(0x65),
+        AsmSeg::Fs => Some(0x64),
+        AsmSeg::None => None,
+    }
+}
+
 /// Width-dispatched integer load `rd = *(kind*)[base + disp]`
 /// (MOV / MOVSXD / MOVSX / MOVZX per C99 6.3.1.3).
-fn emit_load_kind_mem(code: &mut Vec<u8>, kind: LoadKind, rd: Reg, base: Reg, disp: i32) {
+fn emit_load_kind_mem(
+    code: &mut Vec<u8>,
+    kind: LoadKind,
+    rd: Reg,
+    base: Reg,
+    disp: i32,
+    seg: Option<u8>,
+) {
+    // A segment override is a legacy prefix preceding the opcode (and REX).
+    if let Some(p) = seg {
+        code.push(p);
+    }
     match kind {
         LoadKind::I64 => emit_mov_r_mem(code, rd, base, disp),
         LoadKind::I32 => emit_movsxd_r_mem(code, rd, base, disp),
@@ -3575,7 +3634,17 @@ fn emit_load_kind_mem(code: &mut Vec<u8>, kind: LoadKind, rd: Reg, base: Reg, di
 }
 
 /// Width-dispatched integer store `*(kind*)[base + disp] = src`.
-fn emit_store_kind_mem(code: &mut Vec<u8>, kind: StoreKind, base: Reg, disp: i32, src: Reg) {
+fn emit_store_kind_mem(
+    code: &mut Vec<u8>,
+    kind: StoreKind,
+    base: Reg,
+    disp: i32,
+    src: Reg,
+    seg: Option<u8>,
+) {
+    if let Some(p) = seg {
+        code.push(p);
+    }
     match kind {
         StoreKind::I64 => emit_mov_mem_r(code, base, disp, src),
         StoreKind::I32 => super::encode::emit_mov_mem32_r(code, base, disp, src),
@@ -3607,12 +3676,17 @@ fn emit_load_fp_mem(
     keep_f32: bool,
     base: Reg,
     disp: i32,
+    seg: Option<u8>,
     frame: Frame,
     site: &str,
 ) -> bool {
     let Some(dd) = fp_or_spill_dst(dst) else {
         return fail(&alloc::format!("{site}: dst not fp reg / spill"));
     };
+    // Segment override precedes the mandatory SSE prefix and the opcode.
+    if let Some(p) = seg {
+        code.push(p);
+    }
     if matches!(kind, LoadKind::F32) {
         emit_movss_xmm_mem(code, dd, base, disp);
         if !keep_f32 {
@@ -3641,6 +3715,7 @@ fn emit_store_fp_mem(
     kind: StoreKind,
     base: Reg,
     disp: i32,
+    seg: Option<u8>,
     frame: Frame,
     site: &str,
 ) -> bool {
@@ -3649,14 +3724,24 @@ fn emit_store_fp_mem(
             "{site}: value not fp reg / spill / int reg"
         ));
     };
+    // Emit the segment override immediately before the store opcode, past any
+    // value materialisation / narrowing the branches do first.
+    let push_seg = |code: &mut Vec<u8>| {
+        if let Some(p) = seg {
+            code.push(p);
+        }
+    };
     if matches!(kind, StoreKind::F32) {
         if value_is_f32 {
+            push_seg(code);
             emit_movss_mem_xmm(code, base, disp, dn);
         } else {
             emit_cvtsd2ss(code, SCRATCH_XMM15, dn);
+            push_seg(code);
             emit_movss_mem_xmm(code, base, disp, SCRATCH_XMM15);
         }
     } else {
+        push_seg(code);
         emit_movsd_mem_xmm(code, base, disp, dn);
     }
     mirror_fp_dst(code, dst, dn, frame);
@@ -3696,12 +3781,22 @@ fn emit_load_local(
         return fail("LoadLocal: offset doesn't fit in disp32");
     };
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
-        return emit_load_fp_mem(code, dst, kind, keep_f32, base, disp, frame, "LoadLocal");
+        return emit_load_fp_mem(
+            code,
+            dst,
+            kind,
+            keep_f32,
+            base,
+            disp,
+            None,
+            frame,
+            "LoadLocal",
+        );
     }
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("LoadLocal: dst not int reg / spill");
     };
-    emit_load_kind_mem(code, kind, rd, base, disp);
+    emit_load_kind_mem(code, kind, rd, base, disp, None);
     spill_dst_to_slot(code, dst, rd, frame);
     true
 }
@@ -3739,6 +3834,7 @@ fn emit_store_local(
             kind,
             base,
             disp,
+            None,
             frame,
             "StoreLocal",
         );
@@ -3767,7 +3863,7 @@ fn emit_store_local(
     // the full source value, matching the c5 rule that an
     // assignment expression yields the stored value before any
     // re-narrowing on read-back (C99 6.5.16p3).
-    emit_store_kind_mem(code, kind, base, disp, rv);
+    emit_store_kind_mem(code, kind, base, disp, rv, None);
     // Mirror the store value into the destination Place.
     mirror_int_dst(code, dst, rv, frame);
     true
@@ -3928,6 +4024,7 @@ fn emit_load(
     addr: u32,
     disp: i32,
     kind: LoadKind,
+    seg: Option<u8>,
     keep_f32: bool,
     alloc: &Allocation,
     frame: Frame,
@@ -3941,12 +4038,12 @@ fn emit_load(
         return fail("Load: addr Place not int reg / spill");
     };
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
-        return emit_load_fp_mem(code, dst, kind, keep_f32, base, disp, frame, "Load");
+        return emit_load_fp_mem(code, dst, kind, keep_f32, base, disp, seg, frame, "Load");
     }
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("Load: dst not int reg / spill");
     };
-    emit_load_kind_mem(code, kind, rd, base, disp);
+    emit_load_kind_mem(code, kind, rd, base, disp, seg);
     spill_dst_to_slot(code, dst, rd, frame);
     true
 }
@@ -3959,6 +4056,7 @@ fn emit_store(
     disp: i32,
     value: u32,
     kind: StoreKind,
+    seg: Option<u8>,
     alloc: &Allocation,
     frame: Frame,
 ) -> bool {
@@ -3985,6 +4083,7 @@ fn emit_store(
             kind,
             base,
             disp,
+            seg,
             frame,
             "Store",
         );
@@ -4011,7 +4110,7 @@ fn emit_store(
     let Some(rs) = materialize_int(code, value_place, value_scratch, frame) else {
         return fail("Store: value Place not int reg / spill");
     };
-    emit_store_kind_mem(code, kind, base, disp, rs);
+    emit_store_kind_mem(code, kind, base, disp, rs, seg);
     // Stored value also feeds dst when the allocator wants it
     // parked (Store ops leave the written value in the
     // accumulator per the c5 stack-machine semantics).

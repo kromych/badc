@@ -1283,6 +1283,11 @@ fn run_inst<H: Host>(
             };
             return Ok(());
         }
+        // The interpreter has no segment base to model an x86 named
+        // address space; a direct segment access reports unimplemented
+        // rather than reading the generic address space.
+        Inst::SegLoad { .. } => "SegLoad",
+        Inst::SegStore { .. } => "SegStore",
         Inst::Phi { .. } => "Phi",
     };
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))

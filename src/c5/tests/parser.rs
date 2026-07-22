@@ -1518,15 +1518,13 @@ fn seg_address_space_qualifiers_parse_as_qualifiers() {
 // Reaches the SSA walk (via native emit), so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]
-fn direct_seg_access_is_rejected_pending_segment_load_store() {
+fn direct_seg_access_lowers_on_x86_and_is_rejected_elsewhere() {
     use crate::{NativeOptions, Target};
-    // A direct read / write through a `__seg_gs` / `__seg_fs` pointer needs a
-    // segment-prefixed load / store, which the plain access path does not yet
-    // emit. It is rejected rather than lowered as a plain access that would
-    // silently drop the segment; the qualifier is instead honored on inline-
-    // asm memory operands. Both targets reject (no target has a plain
-    // segment-prefixed access path yet).
-    let emit_err = |src: &str, target: Target| -> String {
+    // A direct read / write through a `__seg_gs` / `__seg_fs` pointer lowers to
+    // a segment-prefixed access on x86 (the encoding is asserted in the linker
+    // tests). A target without segment registers has no lowering and rejects
+    // rather than dropping the qualifier (a silent wrong-address access).
+    let emit = |src: &str, target: Target| {
         let program = Compiler::with_target(src.to_string(), target)
             .compile()
             .expect("parse");
@@ -1535,17 +1533,21 @@ fn direct_seg_access_is_rejected_pending_segment_load_store() {
             target,
             NativeOptions::default(),
         )
-        .expect_err("expected emit to reject a direct segment access")
-        .to_string()
     };
     let read = "extern unsigned long v; unsigned long r(void){ \
          return *(unsigned long __seg_gs *)(__UINTPTR_TYPE__)&v; } int main(void){ return 0; }";
     let write = "extern unsigned long v; void w(unsigned long x){ \
          *(unsigned long __seg_gs *)(__UINTPTR_TYPE__)&v = x; } int main(void){ return 0; }";
-    for target in [Target::LinuxX64, Target::LinuxAarch64] {
-        assert!(emit_err(read, target).contains("direct __seg_gs/__seg_fs read"));
-        assert!(emit_err(write, target).contains("direct __seg_gs/__seg_fs write"));
-    }
+    emit(read, Target::LinuxX64).expect("x86 seg read lowers");
+    emit(write, Target::LinuxX64).expect("x86 seg write lowers");
+    let read_err = emit(read, Target::LinuxAarch64)
+        .expect_err("aarch64 rejects a direct seg read")
+        .to_string();
+    let write_err = emit(write, Target::LinuxAarch64)
+        .expect_err("aarch64 rejects a direct seg write")
+        .to_string();
+    assert!(read_err.contains("__seg_gs/__seg_fs read (x86 only)"));
+    assert!(write_err.contains("__seg_gs/__seg_fs write (x86 only)"));
 }
 
 #[test]

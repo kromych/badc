@@ -645,6 +645,11 @@ pub(super) fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
             *addr = map_v(*addr, remap);
             *value = map_v(*value, remap);
         }
+        Inst::SegLoad { addr, .. } => *addr = map_v(*addr, remap),
+        Inst::SegStore { addr, value, .. } => {
+            *addr = map_v(*addr, remap);
+            *value = map_v(*value, remap);
+        }
         Inst::StoreLocal { value, .. } => *value = map_v(*value, remap),
         Inst::LoadIndexed { base, index, .. } => {
             *base = map_v(*base, remap);

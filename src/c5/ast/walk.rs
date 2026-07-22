@@ -13,10 +13,10 @@ use alloc::string::String;
 use super::super::codegen::Target;
 use super::super::codegen::ssa::build::SsaBuilder;
 use super::super::compiler::types::{
-    STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty,
+    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty,
     is_vector_ty, is_volatile_ty, load_kind, segment_of_ty, strip_unsigned, struct_ptr_depth,
 };
-use super::super::ir::{AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind, ValueId};
+use super::super::ir::{AsmSeg, AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind, ValueId};
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::{AtomicKind, Expr, ExprId, Stmt, StmtId, UnOp};
@@ -3118,13 +3118,25 @@ impl<'a> Walker<'a> {
                 // the store so the assignment yields the f32 value.
                 let kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lhs);
-                // A write through a `__seg_gs` / `__seg_fs` pointer needs a
-                // segment-prefixed store; see the load guard in `walk_unary`.
-                if segment_of_ty(*ty).is_some() {
-                    return Err(WalkError::UnsupportedExpr {
-                        id: *lhs,
-                        kind: "direct __seg_gs/__seg_fs write",
-                    });
+                // A write through a `__seg_gs` / `__seg_fs` pointer rides a
+                // segment-override prefix (GCC named address spaces), mirroring
+                // the load guard in `walk_unary`; x86 only. The lvalue of the
+                // qualified deref yields the pointer's address value.
+                if let Some(seg) = segment_of_ty(*ty) {
+                    if !self.target.is_x86_64() {
+                        return Err(WalkError::UnsupportedExpr {
+                            id: *lhs,
+                            kind: "direct __seg_gs/__seg_fs write (x86 only)",
+                        });
+                    }
+                    let addr = self.walk_expr_lvalue(b, *lhs)?;
+                    let mut value = self.walk_expr_rvalue(b, *rhs)?;
+                    if matches!(kind, StoreKind::F32) {
+                        value = b.fp_narrow_to_f32(value);
+                    }
+                    b.seg_store(addr, value, kind, asm_seg_of(seg), vol);
+                    let rhs_ty = expr_ty(self.ast.expr(*rhs)).unwrap_or(*ty);
+                    return Ok(self.narrow_int_to_ty(b, value, rhs_ty, *ty));
                 }
                 if let Expr::Ident {
                     class,
@@ -5389,19 +5401,21 @@ impl<'a> Walker<'a> {
                 if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                     return Ok(addr);
                 }
-                // A read through a `__seg_gs` / `__seg_fs` pointer needs a
-                // segment-prefixed load, which the plain load path does not
-                // yet emit. Reject rather than drop the segment (a silent
-                // wrong-segment access). TODO: segment-prefixed load/store;
-                // until then such objects are reachable via an inline-asm
-                // memory operand, which honors the qualifier.
-                if segment_of_ty(ty).is_some() {
-                    return Err(WalkError::UnsupportedExpr {
-                        id: child,
-                        kind: "direct __seg_gs/__seg_fs read",
-                    });
-                }
+                // A read through a `__seg_gs` / `__seg_fs` pointer rides a
+                // segment-override prefix (GCC named address spaces). Only the
+                // x86 encoder emits it; on a target without segment registers
+                // reject rather than drop the qualifier (a silent wrong-address
+                // access).
                 let kind = load_kind_for(ty, self.target);
+                if let Some(seg) = segment_of_ty(ty) {
+                    if !self.target.is_x86_64() {
+                        return Err(WalkError::UnsupportedExpr {
+                            id: child,
+                            kind: "direct __seg_gs/__seg_fs read (x86 only)",
+                        });
+                    }
+                    return Ok(b.seg_load(addr, kind, asm_seg_of(seg), is_volatile_ty(ty)));
+                }
                 Ok(b.load_vol(addr, kind, is_volatile_ty(ty)))
             }
         }
@@ -5706,9 +5720,20 @@ fn load_kind_for(ty: i64, target: Target) -> LoadKind {
     load_kind(ty, target, LoadKind::F64)
 }
 
+/// Map the type-system segment qualifier onto the IR's segment tag.
+fn asm_seg_of(seg: Segment) -> AsmSeg {
+    match seg {
+        Segment::Gs => AsmSeg::Gs,
+        Segment::Fs => AsmSeg::Fs,
+    }
+}
+
 /// Mirror of [`load_kind_for`] for stores.
 fn store_kind_for(ty: i64, target: Target) -> StoreKind {
-    let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+    // A store width carries no signedness, so the bare band type is enough;
+    // `strip_unsigned` also clears the segment bits so a `__seg_gs` /
+    // `__seg_fs`-qualified type classifies by its underlying width.
+    let stripped = strip_unsigned(ty);
     if is_pointer_ty(ty) {
         return StoreKind::I64;
     }

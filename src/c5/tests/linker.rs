@@ -375,6 +375,66 @@ int main(void) { write_db7(read_db7()); return 0; }
 }
 
 #[test]
+fn seg_qualified_direct_access_rides_a_segment_prefix() {
+    // A direct read / write through a `__seg_gs` / `__seg_fs` pointer (GCC
+    // named address spaces, the x86 percpu pattern) lowers to a plain load /
+    // store carrying a segment-override prefix: `%gs:` is 0x65, `%fs:` is
+    // 0x64. gcc -O2 emits `65 48 8b ..` (gs read) / `64 48 8b ..` (fs read) /
+    // `65 48 89 ..` (gs write); badc computes the address into a base register
+    // first, so it emits the register-indirect form of the same instruction.
+    // Scan for the override byte followed by a REX.W and the 64-bit mov
+    // opcode -- allocator register choice independent.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let text_of = |src: &str| -> alloc::vec::Vec<u8> {
+        let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL").text
+    };
+    // 0x8b = mov r64, r/m64 (read); 0x89 = mov r/m64, r64 (write).
+    let riding = |text: &[u8], pfx: u8, op: u8| -> bool {
+        text.windows(3)
+            .any(|w| w[0] == pfx && (0x48..=0x4f).contains(&w[1]) && w[2] == op)
+    };
+    // main must reference each function so it survives dead-code elimination.
+    let read_prog = |seg: &str| {
+        alloc::format!(
+            "unsigned long r(unsigned long *p){{ return *(unsigned long {seg} *)p; }}\n\
+             int main(void){{ unsigned long x = 0; return (int)r(&x); }}"
+        )
+    };
+    let gs_read = text_of(&read_prog("__seg_gs"));
+    let fs_read = text_of(&read_prog("__seg_fs"));
+    let gs_write = text_of(
+        "void w(unsigned long *p, unsigned long x){ *(unsigned long __seg_gs *)p = x; }\n\
+         int main(void){ unsigned long x = 0; w(&x, 1); return 0; }",
+    );
+    let plain = text_of(&read_prog(""));
+    assert!(
+        riding(&gs_read, 0x65, 0x8b),
+        "`__seg_gs` read must ride a %gs (0x65) prefix on the 64-bit load: {gs_read:02x?}"
+    );
+    assert!(
+        riding(&fs_read, 0x64, 0x8b),
+        "`__seg_fs` read must ride a %fs (0x64) prefix on the 64-bit load: {fs_read:02x?}"
+    );
+    assert!(
+        riding(&gs_write, 0x65, 0x89),
+        "`__seg_gs` write must ride a %gs (0x65) prefix on the 64-bit store: {gs_write:02x?}"
+    );
+    assert!(
+        !riding(&plain, 0x65, 0x8b) && !riding(&plain, 0x64, 0x8b),
+        "an unqualified load must carry no segment override: {plain:02x?}"
+    );
+}
+
+#[test]
 fn block_scope_externs_emit_distinct_undef_symbols() {
     // C99 6.2.2p4: a block-scope `extern` declaration has external
     // linkage and refers to the file-scope object of the same name in

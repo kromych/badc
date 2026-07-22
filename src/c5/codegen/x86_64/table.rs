@@ -423,7 +423,11 @@ fn encode_best(mnem: Mnem, opw: u8, ops: &[Opnd]) -> (Option<InsnBuf>, bool) {
 /// 32-bit register (both `lar %di,%eax` and `lar %edi,%eax` encode `0F 02 C7`);
 /// the `r32,r/m32` and `r32,r/m16` forms are both supplemented so a
 /// 16- or 32-bit source register or `m16` memory operand matches. A 64-bit
-/// destination does not occur.
+/// destination does not occur. The AMD SVM ops `vmload` / `vmsave` / `vmrun`
+/// address the VMCB through an implicit `rax`; the database lists only the
+/// operandless spelling, so the explicit-`%rax` form the compilers emit
+/// (`vmsave %rax`) is supplemented, encoding identically since `rax` is not
+/// named in the opcode.
 static FORMS_SUPPLEMENT: &[Form] = &[
     Form {
         mnem: Mnem::Lsl,
@@ -478,6 +482,48 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         rexw: RexW::W0,
         reg: RegField::FromOp(0),
         rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Vmload,
+        mnemonic: "vmload",
+        ops: &[OpPat::Fixed(0, W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x01, 0xDA],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Vmsave,
+        mnemonic: "vmsave",
+        ops: &[OpPat::Fixed(0, W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x01, 0xDB],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Vmrun,
+        mnemonic: "vmrun",
+        ops: &[OpPat::Fixed(0, W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x01, 0xD8],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 255,
         imm: None,
         imm_op: 255,
     },

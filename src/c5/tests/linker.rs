@@ -411,6 +411,40 @@ int main(void){ return (int)(lar_ss(3) + lsl_ss(3)); }
 }
 
 #[test]
+fn inline_asm_svm_vmsave_vmload_take_implicit_rax_operand() {
+    // The AMD SVM ops address the VMCB through an implicit `rax`; the kernel
+    // spells the operand out (`vmsave %0` with `"a"(pa)`). GNU as encodes
+    // `vmsave %rax` as `0F 01 DB` and `vmload %rax` as `0F 01 DA`, `rax`
+    // unnamed in the opcode.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+void do_vmsave(unsigned long pa){ __asm__ volatile("vmsave %0" : : "a"(pa) : "memory"); }
+void do_vmload(unsigned long pa){ __asm__ volatile("vmload %0" : : "a"(pa) : "memory"); }
+int main(void){ do_vmsave(0); do_vmload(0); return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let text = &obj.text;
+    let has = |b: [u8; 3]| text.windows(3).any(|w| w == b);
+    assert!(
+        has([0x0F, 0x01, 0xDB]),
+        "vmsave must encode 0F 01 DB: {text:02x?}"
+    );
+    assert!(
+        has([0x0F, 0x01, 0xDA]),
+        "vmload must encode 0F 01 DA: {text:02x?}"
+    );
+}
+
+#[test]
 fn seg_qualified_direct_access_rides_a_segment_prefix() {
     // A direct read / write through a `__seg_gs` / `__seg_fs` pointer (GCC
     // named address spaces, the x86 percpu pattern) lowers to a plain load /

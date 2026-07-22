@@ -524,6 +524,54 @@ fn parenthesized_bitfield_lvalue_assigns_as_a_store() {
 }
 
 #[test]
+fn parenthesized_bitfield_lvalue_post_inc_and_compound_assign() {
+    // C99 6.5.1p5 / 6.5.2.4 / 6.5.16.2: `(p->f)++` and `(p->f) OP= v` on a
+    // parenthesized bitfield lvalue must emit the same object as the
+    // unparenthesized forms. Parentheses hid the trailing `++` / `OP=` from the
+    // member parser, which committed to a read; the post-increment and compound-
+    // assignment paths recover the bitfield member from that read node.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let text_of = |src: &str| -> alloc::vec::Vec<u8> {
+        let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL").text
+    };
+    let decl = "struct s { unsigned int a:4, b:1, f:3, c:4; };\n";
+    let build = |body: &str| -> alloc::vec::Vec<u8> {
+        text_of(&alloc::format!(
+            "{decl}void op(struct s *p){{ {body} }}\nint main(void){{ return 0; }}\n"
+        ))
+    };
+    assert_eq!(
+        build("(p->f)++;"),
+        build("p->f++;"),
+        "`(p->f)++` must emit the same object as `p->f++`"
+    );
+    assert_eq!(
+        build("(p->f)--;"),
+        build("p->f--;"),
+        "`(p->f)--` must emit the same object as `p->f--`"
+    );
+    assert_eq!(
+        build("(p->f) += 2;"),
+        build("p->f += 2;"),
+        "`(p->f) += 2` must emit the same object as `p->f += 2`"
+    );
+    assert_eq!(
+        build("(p->f) |= 5;"),
+        build("p->f |= 5;"),
+        "`(p->f) |= 5` must emit the same object as `p->f |= 5`"
+    );
+}
+
+#[test]
 fn seg_qualified_direct_access_rides_a_segment_prefix() {
     // A direct read / write through a `__seg_gs` / `__seg_fs` pointer (GCC
     // named address spaces, the x86 percpu pattern) lowers to a plain load /

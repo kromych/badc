@@ -1323,6 +1323,31 @@ fn flex_array_member_static_init() {
 }
 
 #[test]
+fn flex_array_member_multidim_static_init() {
+    // A multi-dimensional flexible array member (`T v[][M]`) initialized
+    // at file scope: each element of the flexible outer dimension is a
+    // sub-array of the inner dimensions, so a nested brace list fills it
+    // and the object's tail is sized to the scalar-leaf count. Read back
+    // through a flat pointer so the check does not depend on multi-dim
+    // subscripting of the member.
+    let src = "
+        struct db { unsigned mask; int map[][4]; };
+        static const struct db d = {
+            .mask = 7,
+            .map = { { 1, 2, 3, 4 }, { 5, 6, 7, 8 } },
+        };
+        int main(void) {
+            const int *p = (const int *)d.map;
+            if (d.mask != 7) return 1;
+            for (int i = 0; i < 8; i++)
+                if (p[i] != i + 1) return 10 + i;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn attribute_section_placement() {
     // `section("name")` placements: the interpreter ignores them; the
     // native object writer places the bytes (locked by the object-level

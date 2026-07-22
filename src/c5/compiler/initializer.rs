@@ -2127,6 +2127,7 @@ impl Compiler {
         &mut self,
         field_base: usize,
         elem_ty: i64,
+        inner_dims: &[i64],
     ) -> Result<(), C5Error> {
         let elem_size = self.size_of_type(elem_ty);
         let grow_to = |data: &mut alloc::vec::Vec<u8>, end: usize| {
@@ -2134,6 +2135,23 @@ impl Compiler {
                 data.resize(end, 0);
             }
         };
+        // Multi-dimensional flexible array member (`T v[][M]`): each
+        // element of the flexible outer dimension is itself a sub-array.
+        // The general array collector fills a brace list of arbitrary rank,
+        // zero-padding short rows (C99 6.7.8p21); write its flat leaves into
+        // the member and record the scalar-leaf count the enclosing object
+        // uses to size its tail (bytes = count * sizeof(base element)).
+        if !inner_dims.is_empty()
+            && self.lex.tk == '{'
+            && !(is_struct_ty(elem_ty) && struct_ptr_depth(elem_ty) == 0)
+        {
+            self.pending.init_inner_dims = inner_dims.to_vec();
+            let elems = self.collect_array_initializer(elem_ty)?;
+            grow_to(&mut self.data, field_base + elems.len() * elem_size);
+            self.write_array_init_into_data(field_base as i64, elem_ty, &elems);
+            self.flex_array_measured_count = Some(elems.len());
+            return Ok(());
+        }
         if self.lex.tk == '"' && (elem_ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64 {
             let start_addr = self.take_concat_string_literal()?;
             self.data.push(0); // ensure NUL terminator in the literal's bytes
@@ -2508,7 +2526,12 @@ impl Compiler {
                         "non-constant flexible array member initializer not yet supported",
                     ));
                 }
-                self.fill_flexible_array_member(field_base, field.ty)?;
+                let inner_dims: Vec<i64> = field
+                    .array_dims
+                    .get(1..)
+                    .map(|s| s.to_vec())
+                    .unwrap_or_default();
+                self.fill_flexible_array_member(field_base, field.ty, &inner_dims)?;
                 pos = field_idx + 1;
                 self.accept(',')?;
                 continue;

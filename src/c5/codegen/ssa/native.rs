@@ -141,6 +141,7 @@ pub(crate) fn compile_function_to_bytes(
             // offset, so the recorded fixups are unused here.
             let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
             let mut asm_sections: Vec<super::emit_common::AsmSection> = Vec::new();
+            let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
             let mut asm_extern_call_sites = Vec::new();
             // The JIT single-function path builds no PE; the unwind
             // descriptor is discarded.
@@ -178,6 +179,7 @@ pub(crate) fn compile_function_to_bytes(
                     // The ssa_native path is single-function; a cross-function
                     // inline-asm call has no target here (rejected downstream).
                     &alloc::collections::BTreeMap::new(),
+                    &mut asm_section_text_refs,
                 )
             };
             if !ok {
@@ -188,6 +190,7 @@ pub(crate) fn compile_function_to_bytes(
                 + plt_call_fixups.len()
                 + got_fixups.len()
                 + data_fixups.len()
+                + asm_section_text_refs.len()
                 + pending_func_fixups.len()
                 + tls_index_fixups.len();
             if outer != 0 {

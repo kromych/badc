@@ -1516,6 +1516,10 @@ pub(crate) struct Build {
     /// the PE writer then falls back to the coarse whole-`.text`
     /// entry.
     pub fn_unwind: Vec<FnUnwind>,
+    /// Inline-asm main-stream references to labels defined in the template's
+    /// pushed sections. The relocatable ELF writer emits one PC-relative
+    /// reloc per entry against the target section's symbol.
+    pub asm_section_text_refs: Vec<AsmSectionTextRef>,
 }
 
 /// x86_64 Win64 prologue unwind descriptor for one function.
@@ -1633,6 +1637,26 @@ pub(crate) struct DataFixup {
     pub adrp_offset: usize,
     /// Offset into `Build::data`.
     pub data_offset: u64,
+}
+
+/// Relocation for an inline-asm main-stream instruction that references a
+/// label defined in one of the template's pushed sections (`jmp 6f` where
+/// `6:` sits in a `.pushsection` block). The two land in different object
+/// sections, so the reference is a relocation against the target section's
+/// symbol, not an in-stream displacement. The writer resolves `section_index`
+/// to that section's placement and emits one PC-relative reloc.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct AsmSectionTextRef {
+    /// Byte offset within `Build::text` of the relocated field (the branch
+    /// displacement); the reloc's `r_offset`.
+    pub instr_offset: usize,
+    /// Index into `Build::asm_sections` of the section holding the label.
+    pub section_index: usize,
+    /// Byte offset of the label within that section's own bytes.
+    pub section_offset: u32,
+    /// Addend applied on top of the label's placed offset; -4 for a 4-byte
+    /// PC-relative field, whose displacement is measured from its own end.
+    pub addend: i64,
 }
 
 // TLS relocations don't need a writer-time fixup type for Linux:

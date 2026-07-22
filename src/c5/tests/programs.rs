@@ -1379,6 +1379,32 @@ fn local_struct_array_compound_literal_elements() {
 }
 
 #[test]
+fn address_of_multidim_array_is_pointer_to_array() {
+    // C99 6.5.3.2p3: `&arr` on a multi-dimensional array has type pointer
+    // to the whole array `T[D0][D1]...`, so `(*p)[i][j][k]` and
+    // `typeof(&arr)` see the multi-dim shape rather than the decayed
+    // element pointer. Covers a direct deref, a `typeof(&arr)` variable,
+    // and a statement-expression yielding the pointer, read and written.
+    let src = "
+        typedef unsigned long long u64;
+        static u64 hw[4][6][8];
+        int main(void) {
+            u64 c = 0;
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 6; j++)
+                    for (int k = 0; k < 8; k++) hw[i][j][k] = c++;
+            if ((*(&hw))[1][2][3] != (u64)(1 * 48 + 2 * 8 + 3)) return 1;
+            typeof(&hw) p = &hw;
+            if ((*p)[3][5][7] != (u64)(3 * 48 + 5 * 8 + 7)) return 2;
+            (*({ typeof(&hw) fp = &hw; fp; }))[0][0][0] = 999;
+            if (hw[0][0][0] != 999) return 3;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn parameter_array_multidim_subscript() {
     // C99 6.7.5.3p7: a parameter declared `T name[][M...]` is adjusted to
     // a pointer to `T[M...]`. Subscripting `name[i][j]...` must stride by

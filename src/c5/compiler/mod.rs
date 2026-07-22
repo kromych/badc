@@ -625,6 +625,13 @@ pub(in crate::c5::compiler) struct Pending {
     pub param_decl_context: bool,
     pub last_array_decay_size: i64,
 
+    /// Full dimension list of the array expression that most recently
+    /// decayed to a pointer at an identifier load. `&arr` reads it to
+    /// rebuild the pointer-to-array aggregate for a multi-dimensional
+    /// array (C99 6.5.3.2p3), where `last_array_decay_size` holds only
+    /// the outermost dimension. Cleared the same way so it doesn't leak.
+    pub last_array_decay_dims: alloc::vec::Vec<i64>,
+
     /// Set by `parse_typeof_specifier` to true when its operand was an
     /// array type (a bare array expression or an array-shaped type name).
     /// `__builtin_types_compatible_p` reads it so `typeof(arr)` compares
@@ -850,6 +857,7 @@ impl Default for Pending {
             parsing_fn_ptr_proto: false,
             param_decl_context: false,
             last_array_decay_size: 0,
+            last_array_decay_dims: alloc::vec::Vec::new(),
             typeof_operand_was_array: false,
             typeof_operand_array_size: 0,
             typeof_operand_array_bytes: 0,

@@ -345,6 +345,50 @@ int main(void) { unsigned int u = 0; return futex_op(1, &u); }
 }
 
 #[test]
+fn inline_asm_ldr_q_operand_in_gas_block_encodes_memory_form() {
+    // The arm64 `load_unaligned_zeropad` / `read_word_at_a_time` blocks load a
+    // `Q` operand with `ldr %0, %2` and carry the `.irp`/`.equ` register-number
+    // table for their `__ex_table` entry, so the macro pass substitutes `%2`
+    // before the parse. Rendered as a bare register, `ldr Xt, xN` has no A64
+    // encoding; rendered as the `Q` memory reference `[xN]` it is the plain
+    // load 0xf9400000 (Rn/Rt aside), byte-identical to GNU as.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+unsigned long load_zeropad(const void *addr) {
+    unsigned long ret;
+    __asm__(
+"1:	ldr	%0, %2\n"
+"2:\n"
+"	.equ	.Lg, 0\n"
+        : "=&r" (ret) : "r" (addr), "Q" (*(unsigned long *)addr));
+    return ret;
+}
+int main(void) { unsigned long v = 0; return (int)load_zeropad(&v); }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let words: alloc::vec::Vec<u32> = obj
+        .text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // Rn (bits 9:5) and Rt (bits 4:0) are allocator-chosen.
+    let ldr_mask = !((0x1Fu32 << 5) | 0x1F);
+    assert!(
+        words.iter().any(|&w| w & ldr_mask == 0xf940_0000),
+        "ldr must take the `Q` operand as a memory reference `[xN]`: {words:08x?}"
+    );
+}
+
+#[test]
 fn inline_asm_dot_branch_target_encodes_zero_displacement() {
     // The device-load ordering barrier (`__io_ar`) branches to the location
     // counter `.`: `cbnz %0, .` is a never-taken control dependency whose

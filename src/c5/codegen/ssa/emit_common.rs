@@ -1225,6 +1225,11 @@ fn expand_gas_statements(
             "inline asm: macro expansion nested too deep",
         ));
     }
+    // Conditional-assembly stack, evaluated as the macro expands so a `.ifc` /
+    // `.if` can test a `.set` symbol or a substituted operand: each frame is
+    // (this branch emits, some branch already taken).
+    let mut cond: alloc::vec::Vec<(bool, bool)> = alloc::vec::Vec::new();
+    let emitting = |c: &[(bool, bool)]| c.iter().all(|&(on, _)| on);
     let mut i = 0usize;
     while i < stmts.len() {
         let s = stmts[i].as_str();
@@ -1232,11 +1237,58 @@ fn expand_gas_statements(
         if s.is_empty() {
             continue;
         }
-        let (tok, rest) = match s.find(char::is_whitespace) {
-            Some(p) => (&s[..p], s[p..].trim()),
-            None => (s, ""),
-        };
+        let (tok, rest) = split_first_token(s);
+        // Conditional directives are tracked whether or not the enclosing
+        // branch emits, so nesting stays balanced across dead branches.
         match tok {
+            ".if" | ".ifeq" | ".ifne" | ".ifgt" | ".iflt" | ".ifge" | ".ifle" => {
+                let taken = emitting(&cond) && gas_if_taken(tok, rest, equ)?;
+                cond.push((taken, taken));
+                continue;
+            }
+            ".ifc" | ".ifnc" => {
+                let taken = emitting(&cond) && gas_ifc_taken(tok, rest);
+                cond.push((taken, taken));
+                continue;
+            }
+            ".elseif" => {
+                let outer = emitting(&cond[..cond.len().saturating_sub(1)]);
+                let f = cond
+                    .last_mut()
+                    .ok_or("inline asm: `.elseif` without `.if`")?;
+                let taken = outer && !f.1 && gas_if_taken(".if", rest, equ)?;
+                f.0 = taken;
+                f.1 |= taken;
+                continue;
+            }
+            ".else" => {
+                let outer = emitting(&cond[..cond.len().saturating_sub(1)]);
+                let f = cond.last_mut().ok_or("inline asm: `.else` without `.if`")?;
+                f.0 = outer && !f.1;
+                f.1 = true;
+                continue;
+            }
+            ".endif" => {
+                cond.pop().ok_or("inline asm: `.endif` without `.if`")?;
+                continue;
+            }
+            _ => {}
+        }
+        if !emitting(&cond) {
+            // A dead branch: skip it, but consume any macro / repeat body so its
+            // `.endm` / `.endr` does not leak into the enclosing stream.
+            match tok {
+                ".macro" => i = collect_gas_body(stmts, i, ".macro", ".endm")?.1,
+                ".irp" => i = collect_gas_body(stmts, i, ".irp", ".endr")?.1,
+                _ => {}
+            }
+            continue;
+        }
+        match tok {
+            ".error" => {
+                let msg = rest.trim().trim_matches('"');
+                return Err(alloc::format!("inline asm: `.error` {msg}"));
+            }
             ".macro" => {
                 let (name, params) = parse_gas_macro_header(rest)?;
                 let (body, next) = collect_gas_body(stmts, i, ".macro", ".endm")?;
@@ -1312,14 +1364,7 @@ fn expand_gas_statements(
                     let def = &macros[tok];
                     let params = def.params.clone();
                     let body = def.body.clone();
-                    let args = split_top_commas(rest);
-                    let mut map = alloc::collections::BTreeMap::new();
-                    for (p, a) in params.iter().zip(args.iter()) {
-                        map.insert(p.clone(), alloc::string::String::from(*a));
-                    }
-                    for p in params.iter().skip(args.len()) {
-                        map.insert(p.clone(), alloc::string::String::new());
-                    }
+                    let map = bind_gas_macro_args(&params, rest);
                     let expanded: alloc::vec::Vec<alloc::string::String> =
                         body.iter().map(|l| subst_gas_params(l, &map)).collect();
                     expand_gas_statements(&expanded, macros, equ, out, inst_width, depth + 1)?;
@@ -1337,7 +1382,89 @@ fn expand_gas_statements(
             }
         }
     }
+    if !cond.is_empty() {
+        return Err(alloc::string::String::from(
+            "inline asm: unterminated `.if` in macro expansion",
+        ));
+    }
     Ok(())
+}
+
+/// Whether a GNU as `.if`-family directive takes its branch: evaluate the
+/// condition expression against the current `.set` symbol table and apply the
+/// directive's relation to zero.
+fn gas_if_taken(
+    tok: &str,
+    rest: &str,
+    equ: &alloc::collections::BTreeMap<alloc::string::String, i64>,
+) -> Result<bool, alloc::string::String> {
+    let v = eval_asm_expr_with_labels(rest, &|t| equ.get(t).copied())
+        .ok_or_else(|| alloc::format!("inline asm: non-constant `{tok}` condition `{rest}`"))?;
+    Ok(match tok {
+        ".ifeq" => v == 0,
+        ".ifne" | ".if" => v != 0,
+        ".ifgt" => v > 0,
+        ".iflt" => v < 0,
+        ".ifge" => v >= 0,
+        ".ifle" => v <= 0,
+        _ => {
+            return Err(alloc::format!(
+                "inline asm: unsupported conditional `{tok}`"
+            ));
+        }
+    })
+}
+
+/// Whether a GNU as `.ifc` / `.ifnc` string-comparison takes its branch. The
+/// two arguments are separated by a comma and compared after trimming
+/// surrounding whitespace (`.ifc %eax, %eax`).
+fn gas_ifc_taken(tok: &str, rest: &str) -> bool {
+    let (a, b) = match rest.split_once(',') {
+        Some((a, b)) => (a.trim(), b.trim()),
+        None => (rest.trim(), ""),
+    };
+    (a == b) == (tok == ".ifc")
+}
+
+/// Bind a GNU as macro invocation's arguments to its parameters. A `key=value`
+/// argument whose key names a parameter binds by keyword; the rest fill the
+/// still-unbound parameters positionally, in order. Unsupplied parameters bind
+/// to the empty string.
+fn bind_gas_macro_args(
+    params: &[alloc::string::String],
+    rest: &str,
+) -> alloc::collections::BTreeMap<alloc::string::String, alloc::string::String> {
+    let args = split_top_commas(rest);
+    let is_keyword = |a: &str| {
+        a.split_once('=')
+            .is_some_and(|(k, _)| params.iter().any(|p| p == k.trim()))
+    };
+    let mut map = alloc::collections::BTreeMap::new();
+    for a in &args {
+        if is_keyword(a) {
+            let (k, v) = a.split_once('=').unwrap();
+            map.insert(
+                alloc::string::String::from(k.trim()),
+                alloc::string::String::from(v.trim()),
+            );
+        }
+    }
+    let mut unbound: alloc::vec::Vec<&alloc::string::String> =
+        params.iter().filter(|p| !map.contains_key(*p)).collect();
+    let mut next = unbound.drain(..);
+    for a in &args {
+        if is_keyword(a) {
+            continue;
+        }
+        if let Some(p) = next.next() {
+            map.insert(p.clone(), alloc::string::String::from(*a));
+        }
+    }
+    for p in params {
+        map.entry(p.clone())
+            .or_insert_with(alloc::string::String::new);
+    }
+    map
 }
 
 /// Expand GNU as `.rept N` / `.endr` (repeat the enclosed lines N times) into
@@ -1717,6 +1844,14 @@ fn base_section_shorthand(tok: &str) -> bool {
     )
 }
 
+/// Split off the first whitespace-delimited token and the trimmed remainder.
+fn split_first_token(s: &str) -> (&str, &str) {
+    match s.find(char::is_whitespace) {
+        Some(p) => (&s[..p], s[p..].trim()),
+        None => (s, ""),
+    }
+}
+
 fn extract_asm_sections_impl(
     text: &str,
     is_aarch64: bool,
@@ -1742,10 +1877,38 @@ fn extract_asm_sections_impl(
     };
     for piece in text.split([';', '\n']) {
         let piece = piece.trim();
-        let (tok, rest) = match piece.find(char::is_whitespace) {
-            Some(p) => (&piece[..p], piece[p..].trim()),
-            None => (piece, ""),
-        };
+        if piece.is_empty() {
+            continue;
+        }
+        // Peel any leading `name:` labels: GNU as treats them as statements
+        // preceding the rest of the line, so a section directive or an
+        // instruction may follow a label on the same line (`1:\t.pushsection
+        // ...`). A label goes to the current stream; a token ending in `:` that
+        // is not a valid label is left in place as the statement.
+        let mut stmt = piece;
+        loop {
+            let (tok, rest) = split_first_token(stmt);
+            let Some(name) = tok.strip_suffix(':') else {
+                break;
+            };
+            if !is_asm_symbol_name(name) && !is_numeric_label(name) {
+                break;
+            }
+            match *stack.last().unwrap() {
+                None => {
+                    code.push_str(tok);
+                    code.push('\n');
+                }
+                Some(idx) => blocks[idx]
+                    .items
+                    .push(AsmSectionItem::Label(alloc::string::String::from(name))),
+            }
+            stmt = rest;
+        }
+        if stmt.is_empty() {
+            continue;
+        }
+        let (tok, rest) = split_first_token(stmt);
         match tok {
             ".pushsection" | ".section" => {
                 let block = parse_section_args(rest)?;
@@ -1805,50 +1968,20 @@ fn extract_asm_sections_impl(
             }
             _ => {}
         }
-        if piece.is_empty() {
-            continue;
-        }
         match *stack.last().unwrap() {
+            // The remaining statement is an instruction, kept verbatim for the
+            // arch backend to encode.
             None => {
-                code.push_str(piece);
+                code.push_str(stmt);
                 code.push('\n');
             }
-            Some(idx) => {
-                // Peel any leading `name:` labels; GNU as allows a directive
-                // to follow a label on the same line.
-                let (mut tok, mut rest) = (tok, rest);
-                while let Some(name) = tok.strip_suffix(':') {
-                    // A numeric label (`2:`, `14470:`) is a GNU as local label;
-                    // the materializer gives each a per-instance-unique symbol.
-                    if !is_asm_symbol_name(name) && !is_numeric_label(name) {
-                        return Err(alloc::format!("inline asm: bad label `{tok}:`"));
-                    }
-                    blocks[idx]
-                        .items
-                        .push(AsmSectionItem::Label(alloc::string::String::from(name)));
-                    let (t, r) = match rest.find(char::is_whitespace) {
-                        Some(p) => (&rest[..p], rest[p..].trim()),
-                        None => (rest, ""),
-                    };
-                    if t.is_empty() {
-                        tok = t;
-                        break;
-                    }
-                    tok = t;
-                    rest = r;
-                }
-                if !tok.is_empty() {
-                    // A non-directive token is an instruction, kept as text for
-                    // the arch backend to encode. GNU as assembles instructions
-                    // in any section (the x86 ALTERNATIVE replacement in an
-                    // `"ax"` section, a trampoline body in `.rodata`); the
-                    // section flags set the object section's attributes, not
-                    // whether code is admitted.
-                    blocks[idx]
-                        .items
-                        .push(parse_section_item(tok, rest, is_aarch64)?);
-                }
-            }
+            // GNU as assembles instructions in any section (the x86 ALTERNATIVE
+            // replacement in an `"ax"` section, a trampoline body in
+            // `.rodata`); the section flags set the object section's
+            // attributes, not whether code is admitted.
+            Some(idx) => blocks[idx]
+                .items
+                .push(parse_section_item(tok, rest, is_aarch64)?),
         }
     }
     Ok(Some((code, blocks)))
@@ -2315,6 +2448,13 @@ fn strip_trailing_pcrel(s: &str) -> Option<&str> {
 /// `- .` PC-relative marker. Returns `None` when `a` is not such a form (a
 /// bare `%cN` stays a constant operand handled by the caller).
 fn parse_operand_reloc(a: &str) -> Option<Result<AsmSectionValue, alloc::string::String>> {
+    // The operand reference may be wrapped in one paren and subtract the
+    // field's own position (`.long (%l[label]) - .`, canonicalized to
+    // `(%l0) - .`); the closing paren must follow the operand index.
+    let (a, paren) = match a.trim().strip_prefix('(') {
+        Some(r) => (r.trim_start(), true),
+        None => (a, false),
+    };
     let rest = a.strip_prefix('%')?;
     let (goto, rest) = if let Some(r) = rest.strip_prefix('l') {
         (true, r)
@@ -2330,9 +2470,15 @@ fn parse_operand_reloc(a: &str) -> Option<Result<AsmSectionValue, alloc::string:
         .position(|c| !c.is_ascii_digit())
         .unwrap_or(rest.len());
     let idx: u8 = rest.get(..end)?.parse().ok()?;
-    let (tail, pcrel) = match strip_trailing_pcrel(rest[end..].trim()) {
+    let after = rest[end..].trim_start();
+    let after = if paren {
+        after.strip_prefix(')')?.trim_start()
+    } else {
+        after
+    };
+    let (tail, pcrel) = match strip_trailing_pcrel(after.trim()) {
         Some(base) => (base, true),
-        None => (rest[end..].trim(), false),
+        None => (after.trim(), false),
     };
     // A `%l` goto label always relocates; a `%c` operand only when it is
     // PC-relative or carries an addend (a bare `%cN` is a plain constant).
@@ -4118,7 +4264,8 @@ mod asm_section_tests {
     fn extract_and_materialize() {
         let text = "1: nop\n.pushsection .discard.t,\"aw\",@progbits\n.balign 8\n.quad 1b\n.long 1b - .\n.long %c0, 7\n.asciz \"hi\"\n.popsection\nnop\n";
         let (code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        assert_eq!(code, "1: nop\nnop\n");
+        // The `1:` label is peeled onto its own line ahead of the `nop`.
+        assert_eq!(code, "1:\nnop\nnop\n");
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].name, ".discard.t");
         assert_eq!(blocks[0].flags, "aw");

@@ -6685,16 +6685,9 @@ fn emit_inline_asm(
     // single-definition labels.
     let multidef = super::ssa::emit_common::rewrite_multidef_local_labels(text);
     let text = multidef.as_deref().unwrap_or(text);
-    let mut extracted = match super::ssa::emit_common::extract_asm_sections(text, false) {
-        Ok(e) => e,
-        Err(m) => {
-            bail_msg(&m);
-            return false;
-        }
-    };
     // The operand register assignment is needed both for the code stream and,
-    // ahead of it, for a replacement instruction that references a template
-    // operand (`popcntl %1, %0`); compute it once, up front.
+    // ahead of it, for the GNU-as macro pass and a replacement instruction that
+    // references a template operand (`popcntl %1, %0`); compute it once, first.
     let op_reg =
         match super::asm::assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs)
         {
@@ -6704,6 +6697,64 @@ fn emit_inline_asm(
                 return false;
             }
         };
+    // Expand any GNU-as macro directives (`.macro` / `.irp` / `.ifc` / `.set` /
+    // `.if`) before section extraction, substituting each register operand to
+    // its assigned AT&T name so the macro's register-name comparisons resolve.
+    let const_of = |idx: u8| -> Option<i64> {
+        match func.insts.get(*args.get(idx as usize)? as usize) {
+            Some(Inst::Imm(v)) => Some(*v),
+            _ => None,
+        }
+    };
+    let gas_subst = |tok: &str| -> Option<alloc::string::String> {
+        let body = tok.strip_prefix('%')?;
+        let (modifier, digits) = match body.as_bytes().first() {
+            Some(m) if m.is_ascii_alphabetic() => (Some(*m), &body[1..]),
+            _ => (None, body),
+        };
+        let idx: u8 = digits.parse().ok()?;
+        if matches!(modifier, Some(b'c') | Some(b'P') | Some(b'n')) {
+            let v = const_of(idx)?;
+            return Some(alloc::format!(
+                "{}",
+                if modifier == Some(b'n') { -v } else { v }
+            ));
+        }
+        let op = asm.operands.get(idx as usize)?;
+        if !matches!(
+            op.constraint,
+            AsmConstraint::Reg
+                | AsmConstraint::Fixed(_)
+                | AsmConstraint::Bound(_)
+                | AsmConstraint::Match(_)
+        ) {
+            return None;
+        }
+        let r = op_reg.get(idx as usize).copied().flatten()?;
+        let width = match modifier {
+            Some(b'b') => 1,
+            Some(b'w') => 2,
+            Some(b'k') => 4,
+            Some(b'q') => 8,
+            _ => op.width,
+        };
+        super::asm::gpr_att_name(r, width).map(|n| alloc::format!("%{n}"))
+    };
+    let gas = match super::ssa::emit_common::expand_asm_gas_macros(text, 4, &gas_subst) {
+        Ok(e) => e,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    let text = gas.as_deref().unwrap_or(text);
+    let mut extracted = match super::ssa::emit_common::extract_asm_sections(text, false) {
+        Ok(e) => e,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
     // Encode any replacement instructions in an executable section
     // (`.altinstr_replacement,"ax"`) to bytes and relocations before layout. A
     // `%lK` goto branch resolves through the enclosing `asm goto` row to its

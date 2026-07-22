@@ -522,6 +522,45 @@ int main(void){ return f(0); }
 }
 
 #[test]
+fn inline_asm_more_than_eight_register_operands() {
+    // A block with more register operands than the eight caller-saved pool
+    // registers must still allocate: the callee-saved r12..r15 join the pool,
+    // saved and restored in the frame's asm scratch region. The kernel's IRQ
+    // stack-switch asm (`common_interrupt`) needs this. Eleven register
+    // operands (one output, ten inputs) force r12..r15 into use.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+long sum(long a,long b,long c,long d,long e,long f,long g,long h,long i,long j){
+    long out;
+    __asm__("xorq %0,%0\n\t addq %1,%0\n\t addq %2,%0\n\t addq %3,%0\n\t addq %4,%0\n\t"
+            "addq %5,%0\n\t addq %6,%0\n\t addq %7,%0\n\t addq %8,%0\n\t addq %9,%0\n\t addq %10,%0"
+        : "=&r"(out)
+        : "r"(a),"r"(b),"r"(c),"r"(d),"r"(e),"r"(f),"r"(g),"r"(h),"r"(i),"r"(j));
+    return out;
+}
+int main(void){ return (int)sum(1,2,3,4,5,6,7,8,9,10); }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts)
+        .expect("eleven register operands must allocate across r12..r15");
+    let text = parse_native_elf(&bytes).expect("parse ET_REL").text;
+    // A callee-saved high register is used as an operand, so its save/restore
+    // (`mov %r1x, disp(%rbp)` / the reverse) carries REX.WR (0x4C) or REX.WB.
+    assert!(
+        text.windows(2)
+            .any(|w| (w[0] == 0x4C || w[0] == 0x4D) && (w[1] == 0x89 || w[1] == 0x8B)),
+        "a high register save/restore must appear: {text:02x?}"
+    );
+}
+
+#[test]
 fn parenthesized_bitfield_lvalue_assigns_as_a_store() {
     // C99 6.5.1p5: a parenthesized lvalue is an lvalue. The member parser
     // selects a bitfield read vs write from the token after the member, so

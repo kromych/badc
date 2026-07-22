@@ -156,6 +156,14 @@ fn anon_struct_designated_init() {
 }
 
 #[test]
+fn anon_group_designator_chain() {
+    // C99 6.7.8p7: a `.member[i]` / `.member.inner` designator chain inside
+    // the brace of a flattened anonymous union/struct member, constant and
+    // runtime store paths.
+    assert_eq!(run_fixture("anon_group_designator_chain.c"), 0);
+}
+
+#[test]
 fn wide_string_struct_member() {
     // C99 6.7.8p15: a wide string literal initializes a wchar_t-width array
     // member; constant (file-scope + local) and runtime store paths, with

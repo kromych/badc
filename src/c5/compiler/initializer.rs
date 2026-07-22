@@ -1766,6 +1766,47 @@ impl Compiler {
         Ok((cur_offset, field))
     }
 
+    /// Continue a designator chain (`[i]`, `.inner`) from an already-selected
+    /// member `entry` based at `entry_base`, consume the trailing `=`, and
+    /// write the value through the shared member dispatch. The cursor is on
+    /// the first `[`/`.` of the continuation. Shared by the top-level struct
+    /// path and the flattened anonymous struct/union brace handlers so
+    /// `.member[i]` / `.member.inner` designators (C99 6.7.8p7) resolve the
+    /// same way in every initializer context.
+    fn fill_member_designator_chain_t(
+        &mut self,
+        struct_id: usize,
+        entry: &super::StructField,
+        entry_base: usize,
+        target: InitTarget,
+    ) -> Result<(), C5Error> {
+        let (final_offset, final_field) =
+            self.resolve_nested_designator_chain(entry_base as i64, entry.ty, Some(entry.clone()))?;
+        if self.lex.tk != Token::Assign {
+            return Err(self.compile_err("`=` expected after nested-designator chain"));
+        }
+        self.next()?;
+        // A pointer final member stores the address of a compound literal, so
+        // keep the cast for the scalar leaf; a value member drops it.
+        if is_pointer_ty(final_field.ty) || struct_ptr_depth(final_field.ty) > 0 {
+            self.pending.compound_lit_close_parens = 0;
+        } else {
+            self.skip_opt_compound_literal_cast()?;
+        }
+        let chain_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+        self.fill_member_value_t(
+            struct_id,
+            &final_field,
+            target,
+            final_offset as usize,
+            false,
+        )?;
+        for _ in 0..chain_parens {
+            self.accept(')')?;
+        }
+        Ok(())
+    }
+
     /// A compound array-element designator `[N].field... = v` in a const
     /// struct array, entered with the cursor just past `[N]` on the leading
     /// `.`/`[`. Resolves the field chain from the element's base and writes
@@ -2380,33 +2421,7 @@ impl Compiler {
                 if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
                     let outer = self.structs[struct_id].fields[outer_idx].clone();
                     let chain_base = (var_offset as usize) + outer.offset;
-                    let (final_offset, final_field) = self.resolve_nested_designator_chain(
-                        chain_base as i64,
-                        outer.ty,
-                        Some(outer.clone()),
-                    )?;
-                    if self.lex.tk != Token::Assign {
-                        return Err(self.compile_err("`=` expected after nested-designator chain"));
-                    }
-                    self.next()?;
-                    // See the single-level path below: keep the cast for a
-                    // pointer final member (address-of a compound literal).
-                    if is_pointer_ty(final_field.ty) || struct_ptr_depth(final_field.ty) > 0 {
-                        self.pending.compound_lit_close_parens = 0;
-                    } else {
-                        self.skip_opt_compound_literal_cast()?;
-                    }
-                    let chain_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
-                    self.fill_member_value_t(
-                        struct_id,
-                        &final_field,
-                        target,
-                        final_offset as usize,
-                        false,
-                    )?;
-                    for _ in 0..chain_parens {
-                        self.accept(')')?;
-                    }
+                    self.fill_member_designator_chain_t(struct_id, &outer, chain_base, target)?;
                     pos = outer_idx + 1;
                     self.accept(',')?;
                     continue;
@@ -2483,19 +2498,30 @@ impl Compiler {
                         }
                         let nm = self.symbols[self.lex.curr_id_idx].name.clone();
                         self.next()?;
+                        let sel = self.structs[struct_id]
+                            .fields
+                            .iter()
+                            .position(|f| f.anon_struct_group == group && f.name == nm)
+                            .ok_or_else(|| {
+                                self.compile_err(format!("anonymous member {nm} not found"))
+                            })?;
+                        // C99 6.7.8p7: the designator may continue as
+                        // `.member[i]` / `.member.inner` before `=`.
+                        if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+                            let mem = self.structs[struct_id].fields[sel].clone();
+                            let mem_base = (var_offset as usize) + mem.offset;
+                            self.fill_member_designator_chain_t(struct_id, &mem, mem_base, target)?;
+                            mem_pos = sel + 1;
+                            self.accept(',')?;
+                            continue;
+                        }
                         if self.lex.tk != Token::Assign {
                             return Err(
                                 self.compile_err(format!("`=` expected after `.{nm}` designator"))
                             );
                         }
                         self.next()?;
-                        self.structs[struct_id]
-                            .fields
-                            .iter()
-                            .position(|f| f.anon_struct_group == group && f.name == nm)
-                            .ok_or_else(|| {
-                                self.compile_err(format!("anonymous member {nm} not found"))
-                            })?
+                        sel
                     } else {
                         while mem_pos < self.structs[struct_id].fields.len()
                             && self.structs[struct_id].fields[mem_pos].anon_struct_group != group
@@ -2553,19 +2579,29 @@ impl Compiler {
                         }
                         let nm = self.symbols[self.lex.curr_id_idx].name.clone();
                         self.next()?;
+                        let sel = self.structs[struct_id]
+                            .fields
+                            .iter()
+                            .position(|f| f.anon_union_group == group && f.name == nm)
+                            .ok_or_else(|| {
+                                self.compile_err(format!("anonymous member {nm} not found"))
+                            })?;
+                        // C99 6.7.8p7: the designator may continue as
+                        // `.member[i]` / `.member.inner` before `=`.
+                        if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+                            let mem = self.structs[struct_id].fields[sel].clone();
+                            let mem_base = (var_offset as usize) + mem.offset;
+                            self.fill_member_designator_chain_t(struct_id, &mem, mem_base, target)?;
+                            self.accept(',')?;
+                            continue;
+                        }
                         if self.lex.tk != Token::Assign {
                             return Err(
                                 self.compile_err(format!("`=` expected after `.{nm}` designator"))
                             );
                         }
                         self.next()?;
-                        self.structs[struct_id]
-                            .fields
-                            .iter()
-                            .position(|f| f.anon_union_group == group && f.name == nm)
-                            .ok_or_else(|| {
-                                self.compile_err(format!("anonymous member {nm} not found"))
-                            })?
+                        sel
                     } else {
                         field_idx
                     };

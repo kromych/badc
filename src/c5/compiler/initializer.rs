@@ -1626,6 +1626,19 @@ impl Compiler {
         Ok((off as i128, InitElemReloc::Data(Some(sym_idx))))
     }
 
+    /// Stage an array-typed compound literal `(T[]){...}` in the data segment
+    /// (cursor on the leading `[` of the array declarator) and return its byte
+    /// offset and interned symbol, for the constant-expression address path.
+    pub(super) fn emit_array_compound_literal_body(
+        &mut self,
+        elem_ty: i64,
+    ) -> Result<(i64, usize), C5Error> {
+        match self.parse_array_compound_literal(elem_ty)? {
+            (off, InitElemReloc::Data(Some(sym))) => Ok((off as i64, sym)),
+            _ => Err(self.compile_err("array compound literal did not intern a symbol")),
+        }
+    }
+
     /// Create a synthetic internal `__compound.N` symbol anchored at
     /// data offset `off`, used as the relocation target for an
     /// anonymous compound literal stored in the data segment. Returns

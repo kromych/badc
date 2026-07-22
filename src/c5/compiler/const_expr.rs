@@ -1345,6 +1345,20 @@ impl Compiler {
                         self.next()?;
                     }
                 }
+                // C99 6.5.2.5 array-typed compound literal `(T[]){ ... }`: an
+                // anonymous static array. Its name decays to the address of
+                // the first element, so the object is an lvalue of element
+                // type `ty` that a following `[i].member` chain designates.
+                if self.lex.tk == Token::Brak {
+                    let (off, sym) = self.emit_array_compound_literal_body(ty)?;
+                    return Ok(ConstDesig {
+                        value: off,
+                        ty,
+                        is_lvalue: true,
+                        sym: Some(sym),
+                        sym_code: false,
+                    });
+                }
                 while self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
@@ -1355,6 +1369,19 @@ impl Compiler {
                     ));
                 }
                 self.next()?;
+                // C99 6.5.2.5 struct-typed compound literal `(T){ ... }`: an
+                // anonymous static object, an lvalue whose address is the
+                // constant. A non-brace operand is an ordinary cast.
+                if self.lex.tk == '{' && is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                    let (off, sym) = self.emit_compound_literal_body(ty)?;
+                    return Ok(ConstDesig {
+                        value: off,
+                        ty,
+                        is_lvalue: true,
+                        sym: Some(sym),
+                        sym_code: false,
+                    });
+                }
                 let operand = self.parse_const_expr_unary_val()?;
                 return Ok(ConstDesig {
                     value: operand.as_int(),

@@ -1543,6 +1543,14 @@ fn address_of_parenthesized_compound_literal_static_init() {
 }
 
 #[test]
+fn array_compound_literal_address_const() {
+    // C99 6.5.2.5 / 6.6: `&(T[]){ ... }[i].member` as an address constant in a
+    // static initializer -- an anonymous static array whose designated member
+    // address is stored (a sysfs attribute-table shape).
+    assert_eq!(run_fixture("array_compound_literal_address_const.c"), 0);
+}
+
+#[test]
 fn attribute_section_placement() {
     // `section("name")` placements: the interpreter ignores them; the
     // native object writer places the bytes (locked by the object-level

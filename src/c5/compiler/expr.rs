@@ -629,6 +629,18 @@ impl Compiler {
         None
     }
 
+    /// A value-producing operator (function call, conditional, ...) yields a
+    /// fresh rvalue whose type is its own, never an array-decayed operand.
+    /// Drop the pending array-decay hints an array / string operand left set
+    /// so `sizeof` / `typeof` of the result read the result type, not the
+    /// operand's array shape (C99 6.3.2.1p3). Mirrors the cast and binary-
+    /// operator sites.
+    fn drop_operand_array_decay(&mut self) {
+        self.pending.last_array_decay_size = 0;
+        self.pending.last_array_decay_bytes = 0;
+        self.pending.last_array_decay_dims.clear();
+    }
+
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
         self.with_nesting("expression", |c| c.expr_inner(lev))
     }
@@ -1590,6 +1602,10 @@ impl Compiler {
                         self.emit_lea(result_temp_off);
                     }
                     self.ty = result_ty;
+                    // C99 6.5.2.2: the call's value is its return type, not an
+                    // array-decayed argument. Drop the hint an array / string
+                    // argument left pending (the fix for `typeof(f("s"))`).
+                    self.drop_operand_array_decay();
                     // A callee whose return type is itself a function
                     // pointer (`int (*f())()`) leaves a fn-pointer
                     // rvalue, so a following unary `*` is the C99
@@ -2866,6 +2882,9 @@ impl Compiler {
                 // regardless; the tag lets a following `->` / `[` / `*`
                 // see the right pointer level.
                 self.ty = indirect_ret_ty;
+                // Same as the direct call: the result is the return type, so
+                // drop any array-decay hint an argument left pending.
+                self.drop_operand_array_decay();
                 // Drop the AST vstack pushes the call's emit
                 // sequence leaked, mirror of the direct-call
                 // truncation.
@@ -3419,6 +3438,9 @@ impl Compiler {
                     );
                     self.ast_acc = Some(id);
                 }
+                // C99 6.5.15: a conditional's array operands decay to a
+                // pointer, so its result is never an array.
+                self.drop_operand_array_decay();
                 self.ty = result_ty;
             } else if self.lex.tk == Token::Lor {
                 let lhs_ast = self.ast_acc;

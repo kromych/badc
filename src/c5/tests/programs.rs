@@ -1348,6 +1348,37 @@ fn flex_array_member_multidim_static_init() {
 }
 
 #[test]
+fn local_struct_array_compound_literal_elements() {
+    // C99 6.5.2.5: a local array-of-struct may list its elements as
+    // compound literals `(T){ ... }` whose type names the element's own
+    // struct. The redundant cast is stripped so the brace list fills the
+    // element in place. A `(U){ ... }` of a different type is instead the
+    // first field's value under brace elision (6.7.8p20), so the two must
+    // not be confused.
+    let src = "
+        struct pe { const char *name; int v; };
+        struct inner { int a, b; };
+        struct outer { struct inner in; int x; };
+        int main(void) {
+            struct pe p[] = {
+                (struct pe){ \"x\", 11 },
+                (struct pe){ \"y\", 22 },
+                {},
+            };
+            if (p[0].v != 11 || p[1].v != 22 || p[2].v != 0) return 1;
+            if (p[0].name[0] != 'x' || p[1].name[0] != 'y') return 2;
+            /* Brace-elided element whose first field is a compound literal
+               of a different type: fills `in` then `x`, not the whole
+               element. */
+            struct outer o[] = { (struct inner){ 1, 2 }, 5 };
+            if (o[0].in.a != 1 || o[0].in.b != 2 || o[0].x != 5) return 3;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn attribute_section_placement() {
     // `section("name")` placements: the interpreter ignores them; the
     // native object writer places the bytes (locked by the object-level

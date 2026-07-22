@@ -619,11 +619,7 @@ impl Compiler {
                                         .compile_err("too many initializers in struct-array row"));
                                 }
                                 let here = off + (row * inner_dim + j) * elem_size as i64;
-                                if self.lex.tk == '{' {
-                                    self.collect_struct_initializer(sid, here)?;
-                                } else {
-                                    self.fill_struct_fields(sid, here, false)?;
-                                }
+                                self.init_struct_array_element(sid, here)?;
                                 j += 1;
                                 self.accept(',')?;
                             }
@@ -665,11 +661,7 @@ impl Compiler {
                             i = lo;
                         }
                         let here = off + i * elem_size as i64;
-                        if self.lex.tk == '{' {
-                            self.collect_struct_initializer(sid, here)?;
-                        } else {
-                            self.fill_struct_fields(sid, here, false)?;
-                        }
+                        self.init_struct_array_element(sid, here)?;
                         i += 1;
                         self.accept(',')?;
                     }
@@ -786,11 +778,7 @@ impl Compiler {
                             }
                             self.next()?; // `=`
                             let here = var_offset + elem * elem_size as i64;
-                            if self.lex.tk == '{' {
-                                self.collect_struct_initializer(sid, here)?;
-                            } else {
-                                self.fill_struct_fields(sid, here, false)?;
-                            }
+                            self.init_struct_array_element(sid, here)?;
                             i = desig + 1;
                             self.accept(',')?;
                             continue;
@@ -842,10 +830,8 @@ impl Compiler {
                     let here = var_offset + i * group_stride;
                     if !inner_dims.is_empty() {
                         self.collect_struct_array_data(sid, here, &inner_dims, elem_size as i64)?;
-                    } else if self.lex.tk == '{' {
-                        self.collect_struct_initializer(sid, here)?;
                     } else {
-                        self.fill_struct_fields(sid, here, false)?;
+                        self.init_struct_array_element(sid, here)?;
                     }
                     i += 1;
                     self.accept(',')?;
@@ -1195,10 +1181,8 @@ impl Compiler {
             let here = base + e * elem_size;
             if chain {
                 self.fill_element_field_designator(sid, ty, here)?;
-            } else if self.lex.tk == '{' {
-                self.collect_struct_initializer(sid, here)?;
             } else {
-                self.fill_struct_fields(sid, here, false)?;
+                self.init_struct_array_element(sid, here)?;
             }
             if e < hi {
                 self.lex.restore(snap);
@@ -1349,11 +1333,7 @@ impl Compiler {
                         i = lo;
                     }
                     let here = staged_off as i64 + i * elem_size as i64;
-                    if self.lex.tk == '{' {
-                        self.collect_struct_initializer(sid, here)?;
-                    } else {
-                        self.fill_struct_fields(sid, here, false)?;
-                    }
+                    self.init_struct_array_element(sid, here)?;
                     i += 1;
                     self.accept(',')?;
                 }
@@ -1573,11 +1553,7 @@ impl Compiler {
                                 }
                                 self.next()?; // `=`
                                 let here = staged_off as i64 + elem * elem_size as i64;
-                                if self.lex.tk == '{' {
-                                    self.collect_struct_initializer(sid, here)?;
-                                } else {
-                                    self.fill_struct_fields(sid, here, false)?;
-                                }
+                                self.init_struct_array_element(sid, here)?;
                                 i = desig + 1;
                                 self.accept(',')?;
                                 continue;
@@ -1638,10 +1614,8 @@ impl Compiler {
                                 &inner_dims,
                                 elem_size as i64,
                             )?;
-                        } else if self.lex.tk == '{' {
-                            self.collect_struct_initializer(sid, here)?;
                         } else {
-                            self.fill_struct_fields(sid, here, false)?;
+                            self.init_struct_array_element(sid, here)?;
                         }
                         i += 1;
                         self.accept(',')?;

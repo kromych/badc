@@ -2016,6 +2016,74 @@ impl Compiler {
         Ok(())
     }
 
+    /// Non-destructive: the struct id named by a compound-literal cast
+    /// `(T){ ... }` at the current position (possibly behind grouping
+    /// parens), when `T` is a struct/union value type. `None` otherwise.
+    /// The lexer is restored before returning.
+    fn peek_element_compound_literal_sid(&mut self) -> Result<Option<usize>, C5Error> {
+        if self.lex.tk != '(' {
+            return Ok(None);
+        }
+        let snap = self.lex.snapshot();
+        loop {
+            self.next()?; // consume `(`
+            if self.lex.tk != '(' {
+                break;
+            }
+        }
+        let sid = if self.lex.tk == Token::Struct as i64 || self.lex.tk == Token::Union as i64 {
+            self.next()?;
+            if self.lex.tk == Token::Id {
+                let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.find_struct_id(&name)
+            } else {
+                None
+            }
+        } else if self.is_lex_typedef_name() {
+            let ty = self.symbols[self.lex.curr_id_idx].type_;
+            if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                Some(struct_id_of(ty))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        self.lex.restore(snap);
+        Ok(sid)
+    }
+
+    /// Initialize one struct array element at `here` from the current
+    /// brace-list position. The element may be a braced initializer
+    /// (`{ ... }`), a brace-elided flat run of field values (C99
+    /// 6.7.8p20), or a whole-element compound literal `(T){ ... }` (C99
+    /// 6.5.2.5) whose type names the element's own struct. A `(U){ ... }`
+    /// naming a different type is the initializer of the element's first
+    /// field under brace elision, so it is left for `fill_struct_fields`.
+    /// (A by-value field cannot have the element's own struct type, so
+    /// the type match is unambiguous.)
+    pub(super) fn init_struct_array_element(
+        &mut self,
+        struct_id: usize,
+        here: i64,
+    ) -> Result<(), C5Error> {
+        if self.peek_element_compound_literal_sid()? == Some(struct_id) {
+            self.skip_opt_compound_literal_cast()?;
+            let close_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+            self.collect_struct_initializer(struct_id, here)?;
+            for _ in 0..close_parens {
+                self.accept(')')?;
+            }
+            return Ok(());
+        }
+        if self.lex.tk == '{' {
+            self.collect_struct_initializer(struct_id, here)?;
+        } else {
+            self.fill_struct_fields(struct_id, here, false)?;
+        }
+        Ok(())
+    }
+
     /// C99 6.5.2.5: an initializer element may be written as a compound
     /// literal `(Type){ ... }`. When it appears as an aggregate member's
     /// value the cast type names the member's own type, so the `(Type)`

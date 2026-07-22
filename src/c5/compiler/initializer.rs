@@ -742,7 +742,7 @@ impl Compiler {
     ///
     /// The leading `&` / `(` and a balancing `)` are skipped; the byte
     /// offset accumulates the array-index strides and field offsets.
-    fn parse_const_address(&mut self) -> Result<Option<(i64, usize)>, C5Error> {
+    pub(super) fn parse_const_address(&mut self) -> Result<Option<(i64, usize, bool)>, C5Error> {
         let snap = self.lex.snapshot();
         // The speculative scan may lex a string literal (whose bytes are
         // appended to the data segment) before deciding this is not an
@@ -837,6 +837,10 @@ impl Compiler {
         // 6.5.2.1p2). An empty `array_dims` is the 1D case. A `.field`
         // selection resets the dimension ladder to the field's own type.
         let mut cur_dims = self.symbols[sym_idx].array_dims.clone();
+        // Element count of the current sub-object's array (a 1D array records
+        // it here with an empty `array_dims`), used to report whether the
+        // final sub-object still has an unsubscripted dimension.
+        let mut cur_array_size = self.symbols[sym_idx].array_size;
         let mut level = 0usize;
         let elem_stride_at = |cur_ty: i64, cur_dims: &[i64], level: usize, this: &Self| -> i64 {
             let elem = this.size_of_type(cur_ty) as i64;
@@ -883,6 +887,7 @@ impl Compiler {
                 off += field.offset as i64;
                 cur_ty = field.ty;
                 cur_dims = field.array_dims.clone();
+                cur_array_size = field.array_size;
                 level = 0;
                 self.next()?;
             } else if self.lex.tk == Token::AddOp || self.lex.tk == Token::SubOp {
@@ -903,7 +908,18 @@ impl Compiler {
                 break;
             }
         }
-        Ok(Some((off, sym_idx)))
+        // C99 6.3.2.1p3: the designation is an array object (an unsubscripted
+        // dimension remains) that decays to the address of its first element.
+        // The caller uses this to accept a bare `g.arr` pointer initializer.
+        // A 1D array records its extent in `cur_array_size` with empty
+        // `cur_dims`; a multi-dim one lists every dimension in `cur_dims`.
+        let rank = if cur_dims.is_empty() {
+            (cur_array_size > 0) as usize
+        } else {
+            cur_dims.len()
+        };
+        let final_is_array = level < rank;
+        Ok(Some((off, sym_idx, final_is_array)))
     }
 
     /// Try to parse `cond ? A : B )` as a constant-init value, with the
@@ -1026,7 +1042,7 @@ impl Compiler {
             // A `:` or `)` terminator appears when this value is a
             // conditional arm (`cond ? &a : &b`) or a parenthesised leaf;
             // `,` / `}` terminate a brace-list element.
-            if let Some((off, sym_idx)) = self.parse_const_address()?
+            if let Some((off, sym_idx, _)) = self.parse_const_address()?
                 && (self.lex.tk == ','
                     || self.lex.tk == '}'
                     || self.lex.tk == ':'

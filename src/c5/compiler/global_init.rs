@@ -336,6 +336,30 @@ impl Compiler {
             self.data_reloc_sym_idx.push(target_idx);
             return Ok(());
         }
+        // `T *p = g.arr;` / `T *p = g.member.arr[i];` -- a bare designation of
+        // a global's array sub-object decays to the address of its first
+        // element (C99 6.3.2.1p3), an address constant. The whole-array case
+        // above and the `&`-forms below cover their shapes; here the base is
+        // any global (a union or a struct) reached through a `.`/`[` chain. A
+        // chain ending in a non-array sub-object is a non-constant load and
+        // falls through to the diagnostic below.
+        if self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].class == Token::Glo as i64
+            && is_pointer_ty(var_ty)
+            && !is_thread_local
+        {
+            let snap = self.lex.snapshot();
+            let data_snap = self.data.len();
+            if let Some((off, sym_idx, is_array)) = self.parse_const_address()?
+                && is_array
+                && (self.lex.tk == ';' || self.lex.tk == ',')
+            {
+                self.emit_data_addr_reloc(var_offset, sym_idx, off);
+                return Ok(());
+            }
+            self.lex.restore(snap);
+            self.data.truncate(data_snap);
+        }
         // String literal in a `char *p` global initializer.
         if self.lex.tk == '"' && is_pointer_ty(var_ty) {
             if is_thread_local {

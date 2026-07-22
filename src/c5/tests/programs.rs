@@ -140,6 +140,13 @@ fn runtime_anon_struct_init() {
 }
 
 #[test]
+fn global_member_array_decay_pointer_init() {
+    // C99 6.3.2.1p3 / 6.6: `T *p = g.member;` where the member is an array
+    // decays to an address constant; union offset 0 and struct offset != 0.
+    assert_eq!(run_fixture("global_member_array_decay_pointer_init.c"), 0);
+}
+
+#[test]
 fn runtime_array_designator() {
     // C99 6.7.8p6 `[N] =` array designators interleaved with positional
     // entries in a runtime (non-constant) array initializer, at parity with

@@ -1150,6 +1150,71 @@ fn asm_main_stream_reference_binds_label_in_pushed_section() {
 }
 
 #[test]
+fn file_scope_asm_assembles_instructions_in_rodata() {
+    // A file-scope asm whose `.pushsection .rodata` holds a trampoline body:
+    // GNU as assembles instructions into any section, the flags only setting
+    // the object section's attributes. The section token classifier rejected a
+    // non-directive token unless the section was `"ax"`-flagged, so the `pushq`
+    // reported an unsupported directive. A `.rodata` given without explicit
+    // flags is allocatable, as GNU as knows the name.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"asm(
+        ".pushsection .rodata\n"
+        "tmpl:\n"
+        "\tpushq $0x18\n"
+        "\tpushq %rsp\n"
+        "\tpushfq\n"
+        "\tpushq %r15\n"
+        "\tpopq %r15\n"
+        "\tpopfq\n"
+        ".popsection\n");
+    "#;
+    let program = Compiler::with_options(
+        src.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    // Before the fix the `pushq` reported an unsupported directive, so a
+    // successful emit is itself part of the guard.
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    // `pushq $0x18; pushq %rsp; pushfq` is `6A 18 54 9C`, byte-identical to gas.
+    assert!(
+        bytes.windows(4).any(|w| w == [0x6a, 0x18, 0x54, 0x9c]),
+        "the trampoline body must assemble to bytes in the object"
+    );
+    const SHF_ALLOC: u64 = 0x2;
+    assert_eq!(
+        elf_section_flags(&bytes, b".rodata") & SHF_ALLOC,
+        SHF_ALLOC,
+        "`.rodata` given without flags is allocatable, as gas knows the name"
+    );
+}
+
+/// `sh_flags` of the first section named `want` in an ELF64 object, or 0.
+fn elf_section_flags(bytes: &[u8], want: &[u8]) -> u64 {
+    let u16a = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32a = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64a = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let (shoff, shentsize, shnum, shstrndx) = (u64a(0x28) as usize, u16a(0x3a), u16a(0x3c), u16a(0x3e));
+    let stroff = u64a(shoff + shstrndx * shentsize + 0x18) as usize;
+    (0..shnum)
+        .map(|i| shoff + i * shentsize)
+        .find(|&sh| {
+            let name_at = stroff + u32a(sh);
+            bytes[name_at..].starts_with(want) && bytes[name_at + want.len()] == 0
+        })
+        .map(|sh| u64a(sh + 8))
+        .unwrap_or(0)
+}
+
+#[test]
 fn asm_lsl_encodes_32bit_destination_form() {
     // `lsl` loads a segment limit into a register: the source is a 16-bit
     // selector but the destination may be 32-bit, so the operands are written

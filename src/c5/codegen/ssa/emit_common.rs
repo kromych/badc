@@ -1763,13 +1763,15 @@ pub(crate) fn extract_asm_sections(
                     rest = r;
                 }
                 if !tok.is_empty() {
-                    // An `"ax"`-flagged section may hold replacement
-                    // instructions (the x86 ALTERNATIVE), kept as text for the
-                    // arch backend to encode; a data section rejects code.
-                    let exec = blocks[idx].flags.contains('x');
+                    // A non-directive token is an instruction, kept as text for
+                    // the arch backend to encode. GNU as assembles instructions
+                    // in any section (the x86 ALTERNATIVE replacement in an
+                    // `"ax"` section, a trampoline body in `.rodata`); the
+                    // section flags set the object section's attributes, not
+                    // whether code is admitted.
                     blocks[idx]
                         .items
-                        .push(parse_section_item(tok, rest, is_aarch64, exec)?);
+                        .push(parse_section_item(tok, rest, is_aarch64)?);
                 }
             }
         }
@@ -1807,12 +1809,36 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
             return Err(alloc::format!("inline asm: bad section argument `{p}`"));
         }
     }
+    if flags.is_empty() {
+        flags = alloc::string::String::from(default_section_flags(name));
+    }
     Ok(AsmSectionBlock {
         name: alloc::string::String::from(name),
         flags,
         sh_type,
         items: alloc::vec::Vec::new(),
     })
+}
+
+/// GNU as default attributes for a well-known section name, used when the
+/// directive gives no explicit `"flags"`. GNU as knows these names carry
+/// allocation, write, and execute attributes; a `.pushsection .rodata`
+/// without flags is allocatable, an unknown name defaults to none. The
+/// match is exact or on the dotted-suffix form (`.rodata.str1.1`).
+fn default_section_flags(name: &str) -> &'static str {
+    // The leading `.` and first dotted component: `.rodata.str1.1` -> `.rodata`.
+    let base = match name.get(1..).and_then(|r| r.find('.')) {
+        Some(i) => &name[..1 + i],
+        None => name,
+    };
+    match base {
+        ".text" => "ax",
+        ".rodata" => "a",
+        ".data" | ".data1" | ".sdata" => "aw",
+        ".bss" | ".sbss" => "aw",
+        ".init_array" | ".fini_array" | ".preinit_array" => "aw",
+        _ => "",
+    }
 }
 
 /// An assembler symbol name: identifier characters, not starting with a
@@ -1994,14 +2020,12 @@ fn parse_align_operands(rest: &str) -> Option<(i64, Option<u8>, Option<u32>)> {
     Some((spec, fill, max))
 }
 
-/// Parse one directive inside a named section. `exec` marks an
-/// `"ax"`-flagged section, where a non-directive token is a replacement
-/// instruction kept as text; a data section rejects one.
+/// Parse one directive inside a named section. A non-directive token is an
+/// instruction kept as text for the arch backend to encode.
 fn parse_section_item(
     tok: &str,
     rest: &str,
     is_aarch64: bool,
-    exec: bool,
 ) -> Result<AsmSectionItem, alloc::string::String> {
     if let Some(w) = data_directive_width(tok) {
         // `.word` is target-dependent: 2 bytes on x86 ELF, 4 on AArch64.
@@ -2103,12 +2127,12 @@ fn parse_section_item(
         }
         ".type" => parse_type_directive(rest),
         ".size" => parse_size_directive(rest),
-        // A non-directive token inside an executable section is a replacement
-        // instruction (`.pushsection .altinstr_replacement,"ax"`). Keep it as
-        // text; the arch backend encodes it to bytes and relocations. A data
-        // section rejects code rather than drop it, which would leave the
-        // `.altinstructions` entry pointing at absent bytes.
-        _ if exec && !tok.starts_with('.') => {
+        // A non-directive token is an instruction: the ALTERNATIVE replacement
+        // in `.altinstr_replacement,"ax"`, or a trampoline body assembled into
+        // `.rodata`. Keep it as text; the arch backend encodes it to bytes and
+        // relocations. A token spelled as a directive (`.`-prefixed) that is
+        // not recognized is rejected below.
+        _ if !tok.starts_with('.') => {
             let line = if rest.is_empty() {
                 alloc::string::String::from(tok)
             } else {
@@ -4597,15 +4621,20 @@ mod asm_section_tests {
             "instruction kept as Code: {:?}",
             repl.items
         );
-        // A data section is not executable, so an instruction there is rejected
-        // rather than dropped, which would leave a data entry pointing at absent
-        // bytes.
-        let data = "771: nop\n.pushsection .altinstructions,\"a\"\n\
+        // GNU as assembles instructions into any section; the flags set the
+        // object section's attributes, not whether code is admitted. An
+        // instruction in a section flagged `"a"` (not executable) is likewise
+        // kept as a `Code` item for the backend to encode.
+        let data = "771: nop\n.pushsection .data.tramp,\"a\"\n\
                     774: wrmsr\n775:\n.popsection\n";
-        let err = extract_asm_sections(data, false).unwrap_err();
+        let (_code, blocks) = extract_asm_sections(data, false).unwrap().unwrap();
+        let sec = blocks.iter().find(|b| b.name == ".data.tramp").unwrap();
         assert!(
-            err.contains("wrmsr") && err.contains("named section"),
-            "{err}"
+            sec.items
+                .iter()
+                .any(|it| matches!(it, AsmSectionItem::Code(t) if t == "wrmsr")),
+            "instruction in a non-executable section is kept as Code: {:?}",
+            sec.items
         );
     }
 

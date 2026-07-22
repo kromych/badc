@@ -2448,6 +2448,13 @@ fn strip_trailing_pcrel(s: &str) -> Option<&str> {
 /// `- .` PC-relative marker. Returns `None` when `a` is not such a form (a
 /// bare `%cN` stays a constant operand handled by the caller).
 fn parse_operand_reloc(a: &str) -> Option<Result<AsmSectionValue, alloc::string::String>> {
+    // The operand reference may be wrapped in one paren and subtract the
+    // field's own position (`.long (%l[label]) - .`, canonicalized to
+    // `(%l0) - .`); the closing paren must follow the operand index.
+    let (a, paren) = match a.trim().strip_prefix('(') {
+        Some(r) => (r.trim_start(), true),
+        None => (a, false),
+    };
     let rest = a.strip_prefix('%')?;
     let (goto, rest) = if let Some(r) = rest.strip_prefix('l') {
         (true, r)
@@ -2463,9 +2470,15 @@ fn parse_operand_reloc(a: &str) -> Option<Result<AsmSectionValue, alloc::string:
         .position(|c| !c.is_ascii_digit())
         .unwrap_or(rest.len());
     let idx: u8 = rest.get(..end)?.parse().ok()?;
-    let (tail, pcrel) = match strip_trailing_pcrel(rest[end..].trim()) {
+    let after = rest[end..].trim_start();
+    let after = if paren {
+        after.strip_prefix(')')?.trim_start()
+    } else {
+        after
+    };
+    let (tail, pcrel) = match strip_trailing_pcrel(after.trim()) {
         Some(base) => (base, true),
-        None => (rest[end..].trim(), false),
+        None => (after.trim(), false),
     };
     // A `%l` goto label always relocates; a `%c` operand only when it is
     // PC-relative or carries an addend (a bare `%cN` is a plain constant).

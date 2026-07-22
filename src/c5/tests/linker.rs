@@ -4448,6 +4448,28 @@ int f(int *p) {
         : "=r" (r) : "m" (*p));
     return r;
 }
+int main(void) { int x = 0; return f(&x); }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let sec = |n: &str| {
+        sections
+            .iter()
+            .find(|(s, _, _, _)| s == n)
+            .unwrap_or_else(|| panic!("{n} missing"))
+    };
+    // One 4-byte entry, one PC-relative reference into `.text` (the `9:`
+    // label), proving the pushed section closed and its `.long` relocated.
+    assert_eq!(sec(".lktab").3.len(), 4);
+    assert_eq!(sec(".rela.lktab").3.len(), 24);
+}
 
 #[test]
 fn inline_asm_gas_macro_register_number_encodes() {
@@ -4483,6 +4505,69 @@ int f(int x) {
         : "+r" (r) : : "memory");
     return r;
 }
+int main(void) { return f(0); }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let sec = sections
+        .iter()
+        .find(|(s, _, _, _)| s == ".rtab")
+        .expect(".rtab missing");
+    assert_eq!(sec.3.len(), 4, "one .long entry");
+    let v = u32::from_le_bytes(sec.3[0..4].try_into().unwrap());
+    assert_eq!(v, 0x0000_0311, "type 0x11 with register number 3 (rbx)");
+}
+
+#[test]
+fn inline_asm_parenthesized_goto_label_reloc() {
+    // A section data reference may wrap a goto-label operand in one paren and
+    // subtract the field's own position (`.long (%l[out]) - .`). The operand
+    // relocation must be recognized through the paren; otherwise the value is
+    // rejected as a bad section value.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+int f(int *p, int v) {
+    __asm__ volatile goto("1:\tmovl %1, %0\n"
+        ".pushsection .gtab,\"a\"\n"
+        ".balign 4\n"
+        ".long (1b) - .\n"
+        ".long (%l[out]) - .\n"
+        ".popsection\n"
+        : "+m" (*p) : "r" (v) : : out);
+    return 0;
+out:
+    return 1;
+}
+int main(void) { int x = 0; return f(&x, 1); }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let sec = |n: &str| {
+        sections
+            .iter()
+            .find(|(s, _, _, _)| s == n)
+            .unwrap_or_else(|| panic!("{n} missing"))
+    };
+    // Two 4-byte entries, each a PC-relative reference into `.text` (the `1:`
+    // label and the `out` goto target).
+    assert_eq!(sec(".gtab").3.len(), 8);
+    assert_eq!(sec(".rela.gtab").3.len(), 2 * 24);
+}
+
 #[test]
 fn asm_string_operand_data_is_emitted() {
     // A string-literal `i`-class operand is interned into the data buffer

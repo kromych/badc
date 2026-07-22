@@ -502,6 +502,11 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
             f(addr);
             f(value);
         }
+        Inst::SegLoad { addr, .. } => f(addr),
+        Inst::SegStore { addr, value, .. } => {
+            f(addr);
+            f(value);
+        }
         Inst::StoreLocal { value, .. } => f(value),
         Inst::LoadIndexed { base, index, .. } => {
             f(base);

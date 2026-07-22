@@ -32,7 +32,7 @@
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE,
+    AsmSeg, AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE,
     StoreKind, Terminator, ValueId,
 };
 
@@ -640,6 +640,48 @@ impl SsaBuilder {
             value,
             kind,
             volatile,
+        })
+    }
+
+    /// `Inst::SegLoad` -- a load through an x86 `__seg_gs` / `__seg_fs`
+    /// pointer, riding a segment-override prefix. `seg` is `Gs` or `Fs`.
+    pub(crate) fn seg_load(
+        &mut self,
+        addr: ValueId,
+        kind: LoadKind,
+        seg: AsmSeg,
+        volatile: bool,
+    ) -> ValueId {
+        let v = self.push(Inst::SegLoad {
+            addr,
+            kind,
+            volatile,
+            seg,
+        });
+        if matches!(kind, LoadKind::F32) {
+            self.mark_f32(v);
+        }
+        v
+    }
+
+    /// `Inst::SegStore` -- the store companion to [`Self::seg_load`]. A
+    /// segment store names memory disjoint from any local slot, but the
+    /// local-load cache is cleared conservatively as for [`Self::store_vol`].
+    pub(crate) fn seg_store(
+        &mut self,
+        addr: ValueId,
+        value: ValueId,
+        kind: StoreKind,
+        seg: AsmSeg,
+        volatile: bool,
+    ) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::SegStore {
+            addr,
+            value,
+            kind,
+            volatile,
+            seg,
         })
     }
 

@@ -119,6 +119,13 @@ impl Target {
         )
     }
 
+    /// Whether the target is x86_64 (any OS). Gates the x86 named
+    /// address spaces (`__seg_gs` / `__seg_fs`), whose accesses ride a
+    /// segment-override prefix that only the x86 encoder emits.
+    pub fn is_x86_64(self) -> bool {
+        matches!(self, Target::LinuxX64 | Target::WindowsX64)
+    }
+
     /// Whether plain `char` is signed. C99 6.2.5p15 leaves the
     /// signedness of unqualified `char` implementation-defined; to
     /// interoperate with the host toolchain and match the platform

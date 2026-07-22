@@ -385,8 +385,13 @@ fn run_one(func: &mut FunctionSsa) {
                     }
                 }
                 // Reads and pure computes the pass does not model: no
-                // clobber, no entry.
-                Inst::LoadIndexed { .. }
+                // clobber, no entry. A `__seg_gs` / `__seg_fs` access names a
+                // distinct address space that does not alias the generic-space
+                // pointer table or any tracked slot, so it neither forwards nor
+                // invalidates an entry here.
+                Inst::SegLoad { .. }
+                | Inst::SegStore { .. }
+                | Inst::LoadIndexed { .. }
                 | Inst::Imm(_)
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
@@ -495,6 +500,11 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         | Inst::ParamRef { .. } => {}
         Inst::Load { addr, .. } => f(addr),
         Inst::Store { addr, value, .. } => {
+            f(addr);
+            f(value);
+        }
+        Inst::SegLoad { addr, .. } => f(addr),
+        Inst::SegStore { addr, value, .. } => {
             f(addr);
             f(value);
         }

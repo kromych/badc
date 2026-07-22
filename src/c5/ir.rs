@@ -147,6 +147,29 @@ pub(crate) enum Inst {
         value: ValueId,
         kind: StoreKind,
     },
+    /// Load through an x86 named-address-space pointer (`__seg_gs` /
+    /// `__seg_fs`): the memory reference rides a segment-override prefix
+    /// (`%gs:` / `%fs:`). Width / signedness follow `kind` as for
+    /// [`Self::Load`]. `addr` holds the full effective address; kept
+    /// opaque to the addressing-mode passes so a segment access is never
+    /// merged with a plain access at the same numeric address (they name
+    /// different memory). x86-only; `seg` is `Gs` or `Fs`.
+    SegLoad {
+        addr: ValueId,
+        kind: LoadKind,
+        volatile: bool,
+        seg: AsmSeg,
+    },
+    /// Store through an x86 named-address-space pointer. Companion to
+    /// [`Self::SegLoad`]; leaves the stored value in the accumulator like
+    /// [`Self::Store`].
+    SegStore {
+        addr: ValueId,
+        value: ValueId,
+        kind: StoreKind,
+        volatile: bool,
+        seg: AsmSeg,
+    },
     /// Binary arithmetic / comparison / shift. `lhs` is the value
     /// that was on top of the c5 stack at the op; `rhs` is the
     /// current accumulator (matches `a = pop() <op> a` semantics).

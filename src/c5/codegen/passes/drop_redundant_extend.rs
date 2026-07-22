@@ -100,6 +100,15 @@ pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
                     observe(&mut hi, &mut work, *value);
                 }
             }
+            Inst::SegLoad { addr, .. } => observe(&mut hi, &mut work, *addr),
+            Inst::SegStore {
+                addr, value, kind, ..
+            } => {
+                observe(&mut hi, &mut work, *addr);
+                if *kind == StoreKind::I64 {
+                    observe(&mut hi, &mut work, *value);
+                }
+            }
             Inst::StoreLocal { value, kind, .. } => {
                 if *kind == StoreKind::I64 {
                     observe(&mut hi, &mut work, *value);
@@ -707,6 +716,11 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         | Inst::ParamRef { .. } => {}
         Inst::Load { addr, .. } => f(addr),
         Inst::Store { addr, value, .. } => {
+            f(addr);
+            f(value);
+        }
+        Inst::SegLoad { addr, .. } => f(addr),
+        Inst::SegStore { addr, value, .. } => {
             f(addr);
             f(value);
         }

@@ -3202,11 +3202,9 @@ pub(crate) fn materialize_asm_sections(
     // that stays pending named a label the section never defines -- rejected
     // (a forward `.type` before its label was filled in by the definition).
     for s in sink.iter_mut() {
-        if let Some(l) = s
-            .labels
-            .iter()
-            .find(|l| l.offset == PENDING_LABEL && (l.sym_type != AsmSymType::NoType || l.size.is_some()))
-        {
+        if let Some(l) = s.labels.iter().find(|l| {
+            l.offset == PENDING_LABEL && (l.sym_type != AsmSymType::NoType || l.size.is_some())
+        }) {
             return Err(alloc::format!(
                 "inline asm: `.type`/`.size` names undefined label `{}`",
                 l.name

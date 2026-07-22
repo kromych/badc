@@ -1686,8 +1686,14 @@ fn file_scope_asm_constraints() {
          asm(\".pushsection .a,\\\"a\\\"\\n.quad 1\\n.popsection\\n.globl f\");\n\
          int main(void) { return f(); }");
     // A bare instruction at file scope assembles into `.text`, as GNU as does
-    // (`asm("nop")` emits a nop into the current section).
-    ok("asm(\"nop\"); int main(void) { return 0; }");
+    // (`asm("nop")` emits a nop into the current section). File-scope
+    // instruction assembly is x86-only, so pin the target rather than the host.
+    Compiler::with_target(
+        "asm(\"nop\"); int main(void) { return 0; }".to_string(),
+        crate::c5::Target::LinuxX64,
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("expected accept, got {e}"));
     // `.globl` with no operand is not a directive this accepts.
     expect_compile_error(
         "asm(\".globl\"); int main(void) { return 0; }",

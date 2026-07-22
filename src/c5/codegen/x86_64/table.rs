@@ -399,10 +399,9 @@ fn encode_best(mnem: Mnem, opw: u8, ops: &[Opnd]) -> (Option<InsnBuf>, bool) {
     let start = forms.partition_point(|f| f.mnem < mnem);
     let mut best: Option<InsnBuf> = None;
     let mut matched = false;
-    for f in &forms[start..] {
-        if f.mnem != mnem {
-            break;
-        }
+    let generated = forms[start..].iter().take_while(|f| f.mnem == mnem);
+    let supplemental = FORMS_SUPPLEMENT.iter().filter(|f| f.mnem == mnem);
+    for f in generated.chain(supplemental) {
         if !form_matches(f, ops, opw) {
             continue;
         }
@@ -415,6 +414,43 @@ fn encode_best(mnem: Mnem, opw: u8, ops: &[Opnd]) -> (Option<InsnBuf>, bool) {
     }
     (best, matched)
 }
+
+/// Forms the external instruction database omits, encoded by the same
+/// interpreter as the generated catalogue. The segment-descriptor loads
+/// `lsl` / `lar` take a 16-bit source but the destination may be 32-bit; the
+/// generator's uniform-width `r/m` model drops that `r32/m16` form, so the
+/// 32-bit form is supplemented here. The 16-bit form is in the generated
+/// catalogue; a 64-bit destination does not occur.
+static FORMS_SUPPLEMENT: &[Form] = &[
+    Form {
+        mnem: Mnem::Lsl,
+        mnemonic: "lsl",
+        ops: &[OpPat::Reg(W::L), OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x03],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lar,
+        mnemonic: "lar",
+        ops: &[OpPat::Reg(W::L), OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x02],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+];
 
 fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<InsnBuf, String> {
     let mut code = InsnBuf::new();

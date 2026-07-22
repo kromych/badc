@@ -2179,3 +2179,27 @@ fn atexit_handlers_run_on_libc_exit() {
     let _ = std::fs::remove_file(&marker);
     assert_eq!(contents, "ran");
 }
+
+/// A file-scope address constant cast to a pointer-width integer slot is a
+/// link-time relocation, not a compile-time integer (C99 6.6 / 6.3.2.3):
+/// an object address, a bare array name, a `&arr[i]` element designator, and
+/// a function name must each resolve to the same value the runtime `&` /
+/// array decay yields.
+#[test]
+fn addr_constant_cast_to_integer_slot() {
+    let src = "static int obj;\n\
+               static int arr[4];\n\
+               static int callee(void) { return 7; }\n\
+               unsigned long p_obj = (unsigned long)&obj;\n\
+               unsigned long p_arr = (unsigned long)arr;\n\
+               unsigned long p_elt = (unsigned long)&arr[2];\n\
+               unsigned long p_fn = (unsigned long)callee;\n\
+               int main(void) {\n\
+                   if (p_obj != (unsigned long)&obj) return 1;\n\
+                   if (p_arr != (unsigned long)arr) return 2;\n\
+                   if (p_elt != (unsigned long)&arr[2]) return 3;\n\
+                   if (p_fn != (unsigned long)callee) return 4;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-addr-const"]), 0);
+}

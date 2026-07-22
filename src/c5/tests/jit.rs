@@ -2245,3 +2245,23 @@ fn attribute_specifier_on_label() {
                }\n";
     assert_eq!(jit_exit(src, &["jit-label-attr"]), 42);
 }
+
+/// C99 6.7.8p6: a designator list may chain a `[i]` / `.sub` step onto a
+/// `.member` designator (`.extent[0] = { ... }`), including when the member
+/// lives in an anonymous struct nested in an anonymous union. Each addressed
+/// sub-object must receive its value.
+#[test]
+fn member_then_index_designator_in_anon_group() {
+    let src = "struct ext { int first; unsigned count; };\n\
+               struct map { union { struct { struct ext extent[4]; unsigned nr; }; \
+                                     struct { void *f; void *r; }; }; };\n\
+               static struct map m = { { .extent[0] = { .first = 7, .count = 4294967295U }, \
+                                         .nr = 1, }, };\n\
+               int main(void) {\n\
+                   if (m.extent[0].first != 7) return 1;\n\
+                   if (m.extent[0].count != 4294967295U) return 2;\n\
+                   if (m.nr != 1) return 3;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-desig-chain"]), 0);
+}

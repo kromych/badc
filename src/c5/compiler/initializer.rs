@@ -2742,11 +2742,7 @@ impl Compiler {
                 }
                 let nm = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
-                if self.lex.tk != Token::Assign {
-                    return Err(self.compile_err(format!("`=` expected after `.{nm}` designator")));
-                }
-                self.next()?;
-                self.structs[struct_id]
+                let idx = self.structs[struct_id]
                     .fields
                     .iter()
                     .position(|f| {
@@ -2757,7 +2753,43 @@ impl Compiler {
                         };
                         g == group && f.name == nm
                     })
-                    .ok_or_else(|| self.compile_err(format!("anonymous member {nm} not found")))?
+                    .ok_or_else(|| self.compile_err(format!("anonymous member {nm} not found")))?;
+                // C99 6.7.8p6: a `[i]` / `.sub` designator may continue into
+                // the selected member (`.extent[0] = ...`). Resolve the chain
+                // onto the member's address and initialize the designated
+                // sub-object.
+                if self.lex.tk == Token::Brak || self.lex.tk == Token::Dot {
+                    let entry = self.structs[struct_id].fields[idx].clone();
+                    let base = (var_offset as usize) + entry.offset;
+                    let (final_off, final_field) =
+                        self.resolve_nested_designator_chain(base as i64, entry.ty, Some(entry))?;
+                    if self.lex.tk != Token::Assign {
+                        return Err(self.compile_err("`=` expected after nested-designator chain"));
+                    }
+                    self.next()?;
+                    if self.is_traversable_aggregate_ty(final_field.ty) && self.lex.tk == '{' {
+                        self.collect_struct_initializer_t(
+                            struct_id_of(final_field.ty),
+                            target.rebased(final_off),
+                        )?;
+                    } else {
+                        self.fill_member_value_t(
+                            struct_id,
+                            &final_field,
+                            target,
+                            final_off as usize,
+                            false,
+                        )?;
+                    }
+                    mem_pos = idx + 1;
+                    self.accept(',')?;
+                    continue;
+                }
+                if self.lex.tk != Token::Assign {
+                    return Err(self.compile_err(format!("`=` expected after `.{nm}` designator")));
+                }
+                self.next()?;
+                idx
             } else {
                 while mem_pos < group_end {
                     let g = if is_union {

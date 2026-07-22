@@ -4448,6 +4448,41 @@ int f(int *p) {
         : "=r" (r) : "m" (*p));
     return r;
 }
+
+#[test]
+fn inline_asm_gas_macro_register_number_encodes() {
+    // A GNU as `.macro` invoked with keyword arguments, using `.irp` to scan a
+    // register-name list, `.ifc` to match the operand's register, a
+    // self-referential `.set` counter, and `.if`/`.error` to reject a
+    // no-match. The body emits one `.long type + (regnr << 8)`. Binding the
+    // operand to `rbx` (register number 3) makes the value deterministic:
+    // 0x11 + (3 << 8) = 0x311.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+int f(int x) {
+    register int r asm("rbx") = x;
+    __asm__ volatile(
+        ".pushsection .rtab,\"a\"\n"
+        ".macro enc_reg type:req reg:req\n"
+        ".set found, 0\n"
+        ".set n, 0\n"
+        ".irp rs,eax,ecx,edx,ebx,esp,ebp,esi,edi\n"
+        ".ifc \\reg, %%\\rs\n"
+        ".set found, found+1\n"
+        ".long \\type + (n << 8)\n"
+        ".endif\n"
+        ".set n, n+1\n"
+        ".endr\n"
+        ".if (found != 1)\n"
+        ".error \"enc_reg: bad register\"\n"
+        ".endif\n"
+        ".endm\n"
+        "enc_reg reg=%0, type=0x11\n"
+        ".purgem enc_reg\n"
+        ".popsection\n"
+        : "+r" (r) : : "memory");
+    return r;
+}
 #[test]
 fn asm_string_operand_data_is_emitted() {
     // A string-literal `i`-class operand is interned into the data buffer

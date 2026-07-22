@@ -388,42 +388,55 @@ pub(crate) fn flag_cond_code(cond: &str) -> Option<u8> {
     })
 }
 
+/// AT&T names of the 16 GPRs, indexed by architectural number, per access
+/// size. The 8-bit row uses the REX-form low-byte names for rsp/rbp/rsi/rdi.
+const GPR_Q: [&str; 16] = [
+    "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13",
+    "r14", "r15",
+];
+const GPR_D: [&str; 16] = [
+    "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi", "r8d", "r9d", "r10d", "r11d", "r12d",
+    "r13d", "r14d", "r15d",
+];
+const GPR_W: [&str; 16] = [
+    "ax", "cx", "dx", "bx", "sp", "bp", "si", "di", "r8w", "r9w", "r10w", "r11w", "r12w", "r13w",
+    "r14w", "r15w",
+];
+const GPR_B: [&str; 16] = [
+    "al", "cl", "dl", "bl", "spl", "bpl", "sil", "dil", "r8b", "r9b", "r10b", "r11b", "r12b",
+    "r13b", "r14b", "r15b",
+];
+
+/// AT&T name (without the `%` prefix) of a GPR by architectural number and
+/// byte width, the inverse of the width tables in [`reg_by_name`]. `None` for
+/// a width other than 1/2/4/8 or a number outside 0..16.
+pub(crate) fn gpr_att_name(num: u8, width: u8) -> Option<&'static str> {
+    let table = match width {
+        8 => &GPR_Q,
+        4 => &GPR_D,
+        2 => &GPR_W,
+        1 => &GPR_B,
+        _ => return None,
+    };
+    table.get(num as usize).copied()
+}
+
 /// Map an AT&T register name (without the `%` prefix) to its
 /// architectural number and access size. Covers the 8/16/32/64-bit
 /// names for the 16 GPRs.
 pub(crate) fn reg_by_name(name: &str) -> Option<(u8, AsmRegSize)> {
     use AsmRegSize::*;
     let n = name;
-    // 64-bit.
-    let q = [
-        "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12",
-        "r13", "r14", "r15",
-    ];
-    if let Some(i) = q.iter().position(|&r| r == n) {
+    if let Some(i) = GPR_Q.iter().position(|&r| r == n) {
         return Some((i as u8, Quad));
     }
-    // 32-bit.
-    let d = [
-        "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi", "r8d", "r9d", "r10d", "r11d",
-        "r12d", "r13d", "r14d", "r15d",
-    ];
-    if let Some(i) = d.iter().position(|&r| r == n) {
+    if let Some(i) = GPR_D.iter().position(|&r| r == n) {
         return Some((i as u8, Long));
     }
-    // 16-bit.
-    let w = [
-        "ax", "cx", "dx", "bx", "sp", "bp", "si", "di", "r8w", "r9w", "r10w", "r11w", "r12w",
-        "r13w", "r14w", "r15w",
-    ];
-    if let Some(i) = w.iter().position(|&r| r == n) {
+    if let Some(i) = GPR_W.iter().position(|&r| r == n) {
         return Some((i as u8, Word));
     }
-    // 8-bit (low byte; REX-form names for rsp/rbp/rsi/rdi).
-    let b = [
-        "al", "cl", "dl", "bl", "spl", "bpl", "sil", "dil", "r8b", "r9b", "r10b", "r11b", "r12b",
-        "r13b", "r14b", "r15b",
-    ];
-    if let Some(i) = b.iter().position(|&r| r == n) {
+    if let Some(i) = GPR_B.iter().position(|&r| r == n) {
         return Some((i as u8, Byte));
     }
     // MMX registers mm0..mm7. Marked with register numbers 16..24 so they

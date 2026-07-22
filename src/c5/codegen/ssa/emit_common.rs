@@ -1225,6 +1225,11 @@ fn expand_gas_statements(
             "inline asm: macro expansion nested too deep",
         ));
     }
+    // Conditional-assembly stack, evaluated as the macro expands so a `.ifc` /
+    // `.if` can test a `.set` symbol or a substituted operand: each frame is
+    // (this branch emits, some branch already taken).
+    let mut cond: alloc::vec::Vec<(bool, bool)> = alloc::vec::Vec::new();
+    let emitting = |c: &[(bool, bool)]| c.iter().all(|&(on, _)| on);
     let mut i = 0usize;
     while i < stmts.len() {
         let s = stmts[i].as_str();
@@ -1232,11 +1237,58 @@ fn expand_gas_statements(
         if s.is_empty() {
             continue;
         }
-        let (tok, rest) = match s.find(char::is_whitespace) {
-            Some(p) => (&s[..p], s[p..].trim()),
-            None => (s, ""),
-        };
+        let (tok, rest) = split_first_token(s);
+        // Conditional directives are tracked whether or not the enclosing
+        // branch emits, so nesting stays balanced across dead branches.
         match tok {
+            ".if" | ".ifeq" | ".ifne" | ".ifgt" | ".iflt" | ".ifge" | ".ifle" => {
+                let taken = emitting(&cond) && gas_if_taken(tok, rest, equ)?;
+                cond.push((taken, taken));
+                continue;
+            }
+            ".ifc" | ".ifnc" => {
+                let taken = emitting(&cond) && gas_ifc_taken(tok, rest);
+                cond.push((taken, taken));
+                continue;
+            }
+            ".elseif" => {
+                let outer = emitting(&cond[..cond.len().saturating_sub(1)]);
+                let f = cond
+                    .last_mut()
+                    .ok_or("inline asm: `.elseif` without `.if`")?;
+                let taken = outer && !f.1 && gas_if_taken(".if", rest, equ)?;
+                f.0 = taken;
+                f.1 |= taken;
+                continue;
+            }
+            ".else" => {
+                let outer = emitting(&cond[..cond.len().saturating_sub(1)]);
+                let f = cond.last_mut().ok_or("inline asm: `.else` without `.if`")?;
+                f.0 = outer && !f.1;
+                f.1 = true;
+                continue;
+            }
+            ".endif" => {
+                cond.pop().ok_or("inline asm: `.endif` without `.if`")?;
+                continue;
+            }
+            _ => {}
+        }
+        if !emitting(&cond) {
+            // A dead branch: skip it, but consume any macro / repeat body so its
+            // `.endm` / `.endr` does not leak into the enclosing stream.
+            match tok {
+                ".macro" => i = collect_gas_body(stmts, i, ".macro", ".endm")?.1,
+                ".irp" => i = collect_gas_body(stmts, i, ".irp", ".endr")?.1,
+                _ => {}
+            }
+            continue;
+        }
+        match tok {
+            ".error" => {
+                let msg = rest.trim().trim_matches('"');
+                return Err(alloc::format!("inline asm: `.error` {msg}"));
+            }
             ".macro" => {
                 let (name, params) = parse_gas_macro_header(rest)?;
                 let (body, next) = collect_gas_body(stmts, i, ".macro", ".endm")?;
@@ -1312,14 +1364,7 @@ fn expand_gas_statements(
                     let def = &macros[tok];
                     let params = def.params.clone();
                     let body = def.body.clone();
-                    let args = split_top_commas(rest);
-                    let mut map = alloc::collections::BTreeMap::new();
-                    for (p, a) in params.iter().zip(args.iter()) {
-                        map.insert(p.clone(), alloc::string::String::from(*a));
-                    }
-                    for p in params.iter().skip(args.len()) {
-                        map.insert(p.clone(), alloc::string::String::new());
-                    }
+                    let map = bind_gas_macro_args(&params, rest);
                     let expanded: alloc::vec::Vec<alloc::string::String> =
                         body.iter().map(|l| subst_gas_params(l, &map)).collect();
                     expand_gas_statements(&expanded, macros, equ, out, inst_width, depth + 1)?;
@@ -1337,7 +1382,89 @@ fn expand_gas_statements(
             }
         }
     }
+    if !cond.is_empty() {
+        return Err(alloc::string::String::from(
+            "inline asm: unterminated `.if` in macro expansion",
+        ));
+    }
     Ok(())
+}
+
+/// Whether a GNU as `.if`-family directive takes its branch: evaluate the
+/// condition expression against the current `.set` symbol table and apply the
+/// directive's relation to zero.
+fn gas_if_taken(
+    tok: &str,
+    rest: &str,
+    equ: &alloc::collections::BTreeMap<alloc::string::String, i64>,
+) -> Result<bool, alloc::string::String> {
+    let v = eval_asm_expr_with_labels(rest, &|t| equ.get(t).copied())
+        .ok_or_else(|| alloc::format!("inline asm: non-constant `{tok}` condition `{rest}`"))?;
+    Ok(match tok {
+        ".ifeq" => v == 0,
+        ".ifne" | ".if" => v != 0,
+        ".ifgt" => v > 0,
+        ".iflt" => v < 0,
+        ".ifge" => v >= 0,
+        ".ifle" => v <= 0,
+        _ => {
+            return Err(alloc::format!(
+                "inline asm: unsupported conditional `{tok}`"
+            ));
+        }
+    })
+}
+
+/// Whether a GNU as `.ifc` / `.ifnc` string-comparison takes its branch. The
+/// two arguments are separated by a comma and compared after trimming
+/// surrounding whitespace (`.ifc %eax, %eax`).
+fn gas_ifc_taken(tok: &str, rest: &str) -> bool {
+    let (a, b) = match rest.split_once(',') {
+        Some((a, b)) => (a.trim(), b.trim()),
+        None => (rest.trim(), ""),
+    };
+    (a == b) == (tok == ".ifc")
+}
+
+/// Bind a GNU as macro invocation's arguments to its parameters. A `key=value`
+/// argument whose key names a parameter binds by keyword; the rest fill the
+/// still-unbound parameters positionally, in order. Unsupplied parameters bind
+/// to the empty string.
+fn bind_gas_macro_args(
+    params: &[alloc::string::String],
+    rest: &str,
+) -> alloc::collections::BTreeMap<alloc::string::String, alloc::string::String> {
+    let args = split_top_commas(rest);
+    let is_keyword = |a: &str| {
+        a.split_once('=')
+            .is_some_and(|(k, _)| params.iter().any(|p| p == k.trim()))
+    };
+    let mut map = alloc::collections::BTreeMap::new();
+    for a in &args {
+        if is_keyword(a) {
+            let (k, v) = a.split_once('=').unwrap();
+            map.insert(
+                alloc::string::String::from(k.trim()),
+                alloc::string::String::from(v.trim()),
+            );
+        }
+    }
+    let mut unbound: alloc::vec::Vec<&alloc::string::String> =
+        params.iter().filter(|p| !map.contains_key(*p)).collect();
+    let mut next = unbound.drain(..);
+    for a in &args {
+        if is_keyword(a) {
+            continue;
+        }
+        if let Some(p) = next.next() {
+            map.insert(p.clone(), alloc::string::String::from(*a));
+        }
+    }
+    for p in params {
+        map.entry(p.clone())
+            .or_insert_with(alloc::string::String::new);
+    }
+    map
 }
 
 /// Expand GNU as `.rept N` / `.endr` (repeat the enclosed lines N times) into

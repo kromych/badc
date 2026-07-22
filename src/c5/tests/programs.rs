@@ -1379,6 +1379,32 @@ fn local_struct_array_compound_literal_elements() {
 }
 
 #[test]
+fn parameter_array_multidim_subscript() {
+    // C99 6.7.5.3p7: a parameter declared `T name[][M...]` is adjusted to
+    // a pointer to `T[M...]`. Subscripting `name[i][j]...` must stride by
+    // the inner dimensions at each level and decay to the element at the
+    // innermost, for both a 2-D and a 3-D parameter.
+    let src = "
+        unsigned char g(unsigned char otp[][4]) { return otp[1][2]; }
+        int h(int a[][2][4]) { return a[1][0][2]; }
+        int main(void) {
+            unsigned char m[3][4];
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 4; j++) m[i][j] = i * 10 + j;
+            if (g(m) != 12) return 1;
+            int n[3][2][4];
+            int c = 0;
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 2; j++)
+                    for (int k = 0; k < 4; k++) n[i][j][k] = c++;
+            if (h(n) != 1 * 8 + 0 * 4 + 2) return 2;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn address_of_parenthesized_compound_literal_static_init() {
     // C99 6.5.2.5 / 6.6: a file-scope object may be initialized with the
     // address of a compound literal, which has static storage duration.

@@ -1910,20 +1910,14 @@ impl Compiler {
                     let dims = self.symbols[id_idx].array_dims.clone();
                     if !dims.is_empty() && is_pointer_ty(self.ty) {
                         if dims[0] == 0 {
-                            // Pointer-to-array variable
-                            // (`T (*p)[M1][Mn]`): the declarator
-                            // baked one Ptr per `Mi` into the
-                            // symbol's type. Collapse those Ptrs so
-                            // the surviving level is the single
-                            // decayed-array pointer to the scalar
-                            // element. Element size comes from the
-                            // type at the bottom of the array Ptrs;
-                            // the n-1 trailing Ptrs (one per Mi
-                            // after the `*` itself) get peeled.
-                            let array_ptrs = (dims.len() as i64) - 1;
-                            let scalar_ty =
-                                self.symbols[id_idx].type_ - (dims.len() as i64) * (Ty::Ptr as i64);
-                            self.ty -= array_ptrs * (Ty::Ptr as i64);
+                            // Array-sugar parameter (`T name[][M...]`, C99
+                            // 6.7.5.3p7): the outermost dimension decayed to a
+                            // single pointer, so `type_` carries one Ptr above
+                            // the scalar base. Keep that pointer as the running
+                            // type and seed the inner-dimension strides from the
+                            // scalar element size; each subscript peels one
+                            // level, the innermost decaying to the element.
+                            let scalar_ty = self.symbols[id_idx].type_ - (Ty::Ptr as i64);
                             let elem_size = self.size_of_type(scalar_ty) as i64;
                             self.seed_multi_dim_strides(&dims, elem_size);
                         } else {

@@ -2635,13 +2635,22 @@ impl Compiler {
             // A positional initializer fills the first member of an
             // anonymous union (C99 6.7.8); the remaining members share
             // its storage, so advance past the whole group rather than
-            // landing on the next alternative.
+            // landing on the next alternative. When the member instead
+            // belongs to an anonymous struct that is the union's
+            // alternative, its sibling members continue positionally
+            // (6.7.8p17), so only skip the union once the struct is left.
             pos = field_idx + 1;
             let group = field.anon_union_group;
             if group != 0 {
+                let sstruct = field.anon_struct_group;
                 let fields = &self.structs[struct_id].fields;
-                while pos < fields.len() && fields[pos].anon_union_group == group {
-                    pos += 1;
+                let next_in_same_struct = sstruct != 0
+                    && pos < fields.len()
+                    && fields[pos].anon_struct_group == sstruct;
+                if !next_in_same_struct {
+                    while pos < fields.len() && fields[pos].anon_union_group == group {
+                        pos += 1;
+                    }
                 }
             }
             self.accept(',')?;

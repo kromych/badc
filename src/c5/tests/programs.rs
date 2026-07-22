@@ -1379,6 +1379,36 @@ fn local_struct_array_compound_literal_elements() {
 }
 
 #[test]
+fn positional_after_designated_in_anonymous_union_struct() {
+    // C99 6.7.8p17: after a designator into a member of an anonymous
+    // struct that is an anonymous union's alternative, a positional
+    // initializer continues at the next member of that struct, not past
+    // the whole union. `.name` then `0` must fill `size`, and `.align`
+    // then `0` must fill `is_signed`, not overflow the object.
+    let src = "
+        struct tef {
+            const char *type;
+            union {
+                struct {
+                    const char *name; const int size; const int align;
+                    const unsigned int is_signed : 1; unsigned int needs_test : 1;
+                    const int filter_type; const int len;
+                };
+                int (*define_fields)(void *);
+            };
+        };
+        static struct tef a = { .type = \"int\", .name = \"x\", .size = 4, 5 };
+        static struct tef b = { .type = \"int\", .name = \"y\", .size = 4, .align = 8, 0, .filter_type = 3 };
+        int main(void) {
+            if (a.size != 4 || a.align != 5) return 1;
+            if (b.size != 4 || b.align != 8 || b.is_signed != 0 || b.filter_type != 3) return 2;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
 fn address_of_multidim_array_is_pointer_to_array() {
     // C99 6.5.3.2p3: `&arr` on a multi-dimensional array has type pointer
     // to the whole array `T[D0][D1]...`, so `(*p)[i][j][k]` and

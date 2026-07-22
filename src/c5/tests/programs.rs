@@ -404,6 +404,15 @@ fn alignof_expression() {
 }
 
 #[test]
+fn typedef_aligned_attribute() {
+    // A GNU `aligned(N)` type attribute on a typedef sets the aliased
+    // type's alignment (raising or lowering it), honored by `__alignof__`,
+    // `sizeof`, struct / union field layout, and array element alignment.
+    // The fixture's `_Static_assert`s and runtime checks match gcc / clang.
+    assert_eq!(run_fixture("typedef_aligned_attribute.c"), 0);
+}
+
+#[test]
 fn builtin_return_address() {
     // __builtin_return_address(0) is the caller's return address; native
     // reads the saved slot at [fp+8], the VM returns a non-zero per-frame

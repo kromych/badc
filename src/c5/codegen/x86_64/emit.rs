@@ -6290,6 +6290,7 @@ fn encode_one_x86_section_insn(
             width: 4,
             pcrel: true,
             branch: false,
+            signed: false,
             target: AsmSectionTarget::TextBlock(bid),
             addend: -4,
         };
@@ -6323,11 +6324,38 @@ fn encode_one_x86_section_insn(
             width: 4,
             pcrel: true,
             branch: true,
+            signed: false,
             target,
             addend: -4,
         };
         return Ok(AsmSectionItem::CodeBytes {
             bytes,
+            relocs: alloc::vec![reloc],
+        });
+    }
+    // `pushq $symbol`: the symbol's address as an absolute immediate. `68`
+    // pushes a sign-extended imm32; the field takes an `R_X86_64_32S` reloc
+    // against the symbol (addend 0), like the compiler-emitted form.
+    if matches!(insn.operands.first(), Some(AsmOpnd::ImmSym)) {
+        if mnem != "push" {
+            return Err(alloc::format!(
+                "inline asm: replacement `{text}` symbol immediate requires `push`"
+            ));
+        }
+        let name = insn.sym_target.clone().ok_or_else(|| {
+            alloc::format!("inline asm: replacement `{text}` symbol immediate has no symbol")
+        })?;
+        let reloc = AsmSectionReloc {
+            offset: 1,
+            width: 4,
+            pcrel: false,
+            branch: false,
+            signed: true,
+            target: AsmSectionTarget::Symbol(name),
+            addend: 0,
+        };
+        return Ok(AsmSectionItem::CodeBytes {
+            bytes: alloc::vec![0x68, 0, 0, 0, 0],
             relocs: alloc::vec![reloc],
         });
     }
@@ -6477,6 +6505,7 @@ fn encode_one_x86_section_insn(
             width: 4,
             pcrel: true,
             branch: false,
+            signed: false,
             target,
             addend: off - 4 - trailing as i64,
         });
@@ -7151,6 +7180,14 @@ fn emit_inline_asm(
                         disp,
                         size: size.unwrap_or(AsmRegSize::Quad),
                     }
+                }
+                // A `$symbol` absolute-address immediate needs a symbol
+                // relocation the function-body stream does not carry; it is
+                // assembled only in file-scope section code.
+                AsmOpnd::ImmSym => {
+                    return fail(
+                        "inline asm: `$symbol` address immediate is only supported in file-scope asm",
+                    );
                 }
                 // Handled above (jmp / jcc / lea referencing a local label); a
                 // label reaching operand resolution rode an unsupported form.

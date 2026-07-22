@@ -1923,6 +1923,8 @@ pub(super) fn write_relocatable(
                     // emitted call: `R_X86_64_PLT32`, not a data `PC32`.
                     (Machine::X86_64, true, 4) if r.branch => R_X86_64_PLT32,
                     (Machine::X86_64, false, 8) => R_X86_64_64,
+                    // A `push $symbol` imm32 the CPU sign-extends takes 32S.
+                    (Machine::X86_64, false, 4) if r.signed => R_X86_64_32S,
                     (Machine::X86_64, false, _) => R_X86_64_32,
                     (Machine::X86_64, true, 8) => R_X86_64_PC64,
                     (Machine::X86_64, true, _) => R_X86_64_PC32,

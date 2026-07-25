@@ -37,8 +37,10 @@ libelf + openssl development headers.
 `sweep.py` walks the built tree for Kbuild `.cmd` files, keeps the kernel C
 compiles (`-D__KERNEL__`, a `.c` source, `-c`), and rewrites each gcc command
 into badc's flag set: the preprocessor surface is kept (`-D`/`-U`/`-I`/
-`-iquote`/`-include`, `-isystem` folded into `-I`) and everything else is
-dropped -- warnings, `-O`/`-g`/`-std`, and the gcc code-model/hardening set
+`-iquote`/`-include`, `-isystem` folded into `-I`), the recorded optimization
+level is honored (`-O1` and above become badc `-O`; `-O0` units -- e.g. ones
+that `#error` under `__OPTIMIZE__` -- stay plain), and everything else is
+dropped -- warnings, `-g`/`-std`, and the gcc code-model/hardening set
 (`-mcmodel=kernel`, `-mno-red-zone`, `-fno-strict-aliasing`,
 `-fstack-protector*`, ...) have no badc spelling. Each unit runs as
 `badc --gnu -q -c --target=<triple>` from the kernel tree (Kbuild paths are

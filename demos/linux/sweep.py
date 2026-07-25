@@ -126,6 +126,7 @@ def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
     configuration probed with badc can be replayed over a corpus captured from
     a reference build."""
     out: list[str] = []
+    opt: str | None = None
     i = 1
     while i < len(argv):
         a = argv[i]
@@ -147,10 +148,17 @@ def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
             i += 1
         elif a in DROP_ARG:
             i += 2
+        elif a.startswith("-O"):
+            opt = a  # last one wins, as with gcc
+            i += 1
         elif a.startswith("-"):
-            i += 1  # warnings, -O, -g, -std, -f*, -m*, -Wp,* -- no badc spelling
+            i += 1  # warnings, -g, -std, -f*, -m*, -Wp,* -- no badc spelling
         else:
             i += 1  # positional: the source (added by the caller) or an object
+    # Replay at the recorded optimization level: units the reference build
+    # compiled -O0 (e.g. ones that #error under __OPTIMIZE__) stay plain.
+    if opt is not None and opt != "-O0":
+        out.append("-O")
     return out
 
 

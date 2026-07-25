@@ -2840,9 +2840,12 @@ fn emit_inline_asm_aarch64(
     };
     // The constant value of an `i`-class operand reference, if any.
     let const_of = |idx: u8| -> Option<i64> {
-        match func.insts.get(*args.get(idx as usize)? as usize) {
+        let arg = *args.get(idx as usize)?;
+        match func.insts.get(arg as usize) {
             Some(super::super::ir::Inst::Imm(v)) => Some(*v),
-            _ => None,
+            // An unpromoted function (a computed goto opts out of mem2reg)
+            // leaves an `"i"` constant operand a load of a constant local.
+            _ => super::ssa::emit_common::asm_operand_local_const(func, arg),
         }
     };
     let gas_subst = |tok: &str| -> Option<String> {
@@ -2858,6 +2861,15 @@ fn emit_inline_asm_aarch64(
         };
         let idx: u8 = digits.parse().ok()?;
         let r = op_reg.get(idx as usize).copied().flatten()?;
+        // A `Q` operand substitutes as the whole memory reference `[xN]`
+        // through its address register, matching the operand converter's
+        // rule for the un-expanded `%N` form.
+        if matches!(
+            asm.operands.get(idx as usize).map(|o| o.constraint),
+            Some(AsmConstraint::MemBase)
+        ) {
+            return Some(alloc::format!("[x{r}]"));
+        }
         let wide = asm
             .operands
             .get(idx as usize)
@@ -2893,6 +2905,17 @@ fn emit_inline_asm_aarch64(
         Some((c, b)) => (c.as_str(), b.as_slice()),
         None => (text, &[][..]),
     };
+    // Expand `.rept N ... .endr` in the main stream to straight-line text, as
+    // the deferred-region path does: a standalone padding block (`.rept 8;
+    // nop; .endr`) otherwise reaches the instruction parse unexpanded.
+    let rept = match super::ssa::emit_common::expand_asm_rept(code_text) {
+        Ok(r) => r,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    let code_text = rept.as_deref().unwrap_or(code_text);
     let insns = match parse_template(code_text.as_bytes()) {
         Ok(i) => i,
         Err(m) => {

@@ -502,6 +502,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("macro_multiline_comment_body.c", 0),
     ("compound_literal_paren_init.c", 0),
     ("alignof_operator.c", 0),
+    ("typedef_aligned_attribute.c", 0),
     ("assign_expr_value_narrowed.c", 0),
     ("struct_copy_comma_side_effect.c", 0),
     ("inline_two_reg_struct_param.c", 0),

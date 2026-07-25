@@ -269,6 +269,20 @@ pub(crate) struct Symbol {
     /// the unsigned (zero-extending) extraction.
     pub is_enum_typedef: bool,
 
+    /// Explicit alignment (bytes) a typedef's type carries from a GNU
+    /// `__attribute__((aligned(N)))` type attribute, or 0 for the
+    /// type's natural alignment. Unlike `_Alignas` on an object or
+    /// member (raise-only), a type attribute sets the alignment and may
+    /// lower it below the natural value (`typedef long long
+    /// __attribute__((aligned(4))) t;`). The scalar type tag cannot
+    /// record this, so a declaration through the typedef re-seeds
+    /// `pending.type_align` from here for struct-field layout,
+    /// `__alignof__`, and object placement.
+    pub type_align: i64,
+    /// Shadow slot for `type_align`. See `h_array_size`: a block-scope
+    /// typedef reusing an outer name saves the outer alignment here.
+    pub h_type_align: i64,
+
     /// C99 6.2.2 linkage class of a file-scope identifier.
     /// `Linkage::None` for block-scope names; `Linkage::Internal`
     /// for `static`-qualified file-scope names; `Linkage::External`

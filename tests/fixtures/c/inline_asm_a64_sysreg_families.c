@@ -54,6 +54,36 @@ void os_lock_ops(unsigned long v) {
     unsigned long t;
     __asm__ volatile("mrs %0, osdlr_el1" : "=r"(t));
     __asm__ volatile("msr osdlr_el1, %0" : : "r"(v | t));
+    __asm__ volatile("msr oslar_el1, %0" : : "r"(v));
+}
+
+unsigned long read_pmu_control(void) {
+    unsigned long v = 0, t;
+    __asm__ volatile("mrs %0, id_aa64dfr0_el1" : "=r"(t));
+    v ^= t;
+    __asm__ volatile("mrs %0, pmcr_el0" : "=r"(t));
+    v ^= t;
+    __asm__ volatile("mrs %0, pmcntenset_el0" : "=r"(t));
+    v ^= t;
+    __asm__ volatile("mrs %0, pmcntenclr_el0" : "=r"(t));
+    v ^= t;
+    __asm__ volatile("mrs %0, pmovsclr_el0" : "=r"(t));
+    v ^= t;
+    __asm__ volatile("mrs %0, pmselr_el0" : "=r"(t));
+    v ^= t;
+    __asm__ volatile("mrs %0, pmceid0_el0" : "=r"(t));
+    v ^= t;
+    __asm__ volatile("mrs %0, pmceid1_el0" : "=r"(t));
+    v ^= t;
+    __asm__ volatile("mrs %0, pmccfiltr_el0" : "=r"(t));
+    v ^= t;
+    __asm__ volatile("mrs %0, pmintenset_el1" : "=r"(t));
+    v ^= t;
+    __asm__ volatile("mrs %0, pmintenclr_el1" : "=r"(t));
+    v ^= t;
+    __asm__ volatile("mrs %0, pmuserenr_el0" : "=r"(t));
+    v ^= t;
+    return v;
 }
 
 int main(void) { return 42; }

@@ -133,7 +133,20 @@ fn sysreg_field(name: &str) -> Option<u16> {
             "id_aa64mmfr1_el1" => (3, 0, 0, 7, 1),
             "mdscr_el1" => (2, 0, 0, 2, 2),
             "osdlr_el1" => (2, 0, 1, 3, 4),
+            "oslar_el1" => (2, 0, 1, 0, 4),
+            "id_aa64dfr0_el1" => (3, 0, 0, 5, 0),
             "pmccntr_el0" => (3, 3, 9, 13, 0),
+            "pmccfiltr_el0" => (3, 3, 14, 15, 7),
+            "pmceid0_el0" => (3, 3, 9, 12, 6),
+            "pmceid1_el0" => (3, 3, 9, 12, 7),
+            "pmcntenclr_el0" => (3, 3, 9, 12, 2),
+            "pmcntenset_el0" => (3, 3, 9, 12, 1),
+            "pmcr_el0" => (3, 3, 9, 12, 0),
+            "pmintenclr_el1" => (3, 0, 9, 14, 2),
+            "pmintenset_el1" => (3, 0, 9, 14, 1),
+            "pmovsclr_el0" => (3, 3, 9, 12, 3),
+            "pmselr_el0" => (3, 3, 9, 12, 5),
+            "pmuserenr_el0" => (3, 3, 9, 14, 0),
             "ctr_el0" => (3, 3, 0, 0, 1),
             "dczid_el0" => (3, 3, 0, 0, 7),
             "fpcr" => (3, 3, 4, 4, 0),
@@ -2017,6 +2030,19 @@ mod tests {
             ("id_aa64mmfr1_el1", 0xC039), // mrs x2 -> 0xD5380722
             ("osdlr_el1", 0x809C),        // mrs x0 -> 0xD5301380
             ("pmccntr_el0", 0xDCE8),      // mrs x1 -> 0xD53B9D01
+            ("oslar_el1", 0x8084),        // msr x0 -> 0xD5101080
+            ("id_aa64dfr0_el1", 0xC028),  // mrs x0 -> 0xD5380500
+            ("pmccfiltr_el0", 0xDF7F),    // mrs x0 -> 0xD53BEFE0
+            ("pmceid0_el0", 0xDCE6),      // mrs x0 -> 0xD53B9CC0
+            ("pmceid1_el0", 0xDCE7),      // mrs x0 -> 0xD53B9CE0
+            ("pmcntenclr_el0", 0xDCE2),   // mrs x0 -> 0xD53B9C40
+            ("pmcntenset_el0", 0xDCE1),   // mrs x0 -> 0xD53B9C20
+            ("pmcr_el0", 0xDCE0),         // mrs x0 -> 0xD53B9C00
+            ("pmintenclr_el1", 0xC4F2),   // mrs x0 -> 0xD5389E40
+            ("pmintenset_el1", 0xC4F1),   // mrs x0 -> 0xD5389E20
+            ("pmovsclr_el0", 0xDCE3),     // mrs x0 -> 0xD53B9C60
+            ("pmselr_el0", 0xDCE5),       // mrs x0 -> 0xD53B9CA0
+            ("pmuserenr_el0", 0xDCF0),    // mrs x0 -> 0xD53B9E00
             // Debug breakpoint/watchpoint families, index in CRm (0 and 15).
             ("dbgbvr0_el1", 0x8004),
             ("dbgbvr15_el1", 0x807C),

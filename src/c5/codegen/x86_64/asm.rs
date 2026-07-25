@@ -543,11 +543,14 @@ pub(crate) fn assign_operand_regs(
             used[r as usize] = true;
         }
     }
-    // `r` operands take free pool registers (rax rbx rcx rdx rsi rdi r8 r9);
-    // a memory operand takes one too, to hold its address, and a flag output
-    // one to receive its `setcc` result. Every pool register is byte
-    // addressable under REX, as `setcc` requires.
-    let pool = [0u8, 3, 1, 2, 6, 7, 8, 9];
+    // `r` operands take free pool registers; a memory operand takes one for its
+    // address and a flag output one for its `setcc` result. The pool is every
+    // GP register bar rsp / rbp (frame) and r10 / r11 (emitter asm scratch):
+    // rax rbx rcx rdx rsi rdi r8 r9 r12 r13 r14 r15, each byte addressable under
+    // REX as `setcc` needs. The emitter saves and restores every operand
+    // register around the block, so the callee-saved rbx / r12..r15 stay usable
+    // when a clobber list takes the caller-saved bank.
+    let pool = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15];
     for (i, op) in operands.iter().enumerate() {
         if matches!(op.constraint, C::Reg | C::Mem | C::Flags(_)) {
             let r = pool
@@ -3490,16 +3493,27 @@ mod tests {
             width: 8,
             seg: crate::c5::ir::AsmSeg::None,
         };
-        // Pool order is rax(0) rbx(3) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9).
-        // With rax/rbx/rcx/rdx clobbered, three `r` operands skip them and land
-        // on rsi/rdi/r8 rather than reusing a clobbered register.
+        // Pool order is rax(0) rbx(3) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9)
+        // r12(12) r13(13) r14(14) r15(15). With rax/rbx/rcx/rdx clobbered,
+        // three `r` operands skip them and land on rsi/rdi/r8 rather than
+        // reusing a clobbered register.
         let clob = (1 << 0) | (1 << 3) | (1 << 1) | (1 << 2);
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
         let a = assign_operand_regs(&gp, clob, 0).unwrap();
         assert_eq!(a, [Some(6), Some(7), Some(8)]);
+        // An asm that calls out clobbers the caller-saved bank
+        // (rax rcx rdx rsi rdi r8 r9); its `r` operands then take the
+        // callee-saved registers rbx r12..r15, which the emitter saves and
+        // restores around the block.
+        let caller_saved = [0u8, 1, 2, 6, 7, 8, 9]
+            .iter()
+            .fold(0u32, |m, &r| m | (1 << r));
+        let five = [op(C::Reg), op(C::Reg), op(C::Reg), op(C::Reg), op(C::Reg)];
+        let a = assign_operand_regs(&five, caller_saved, 0).unwrap();
+        assert_eq!(a, [Some(3), Some(12), Some(13), Some(14), Some(15)]);
         // A clobber list covering every pool register leaves nothing to assign;
         // reject rather than reuse a clobbered register.
-        let all = [0u8, 3, 1, 2, 6, 7, 8, 9]
+        let all = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15]
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
         assert!(assign_operand_regs(&[op(C::Reg)], all, 0).is_err());

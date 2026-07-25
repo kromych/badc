@@ -1258,6 +1258,15 @@ pub(crate) struct Build {
     /// sh_addralign (e.g. `.rodata.cst16`); the writers place the
     /// data section at a multiple of it.
     pub data_align: usize,
+    /// Base alignment `text` requires in the image, at least 16.
+    /// Raised past 16 only by an inline-asm alignment directive above
+    /// the section default (`.p2align 6`) or a linked object with a
+    /// larger `.text` sh_addralign; a raise makes every writer place
+    /// `text[0]` at a multiple of it (relocatable ELF via sh_addralign,
+    /// the image writers past their entry stub) so section-relative
+    /// alignment padding holds absolutely. At the default 16 the
+    /// writers keep their established placement byte-identically.
+    pub text_align: usize,
     /// Bytes of zero-initialised data placed past the file image, in the
     /// `[data.len(), data.len() + bss_size)` offset range. Carries no file
     /// storage: the loader zero-fills it (ELF `p_memsz > p_filesz`, PE

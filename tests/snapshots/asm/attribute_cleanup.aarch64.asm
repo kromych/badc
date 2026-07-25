@@ -15,10 +15,10 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x8]
-               	mov	x0, #0x2                // =2
-               	stur	w0, [x29, #-0x10]
-               	mov	x0, #0x3                // =3
-               	stur	w0, [x29, #-0x18]
+               	mov	x1, #0x2                // =2
+               	stur	w1, [x29, #-0x10]
+               	mov	x2, #0x3                // =3
+               	stur	w2, [x29, #-0x18]
                	sub	x0, x29, #0x18
                	ldrsw	x1, [x0]
                	adrp	x2, <page>

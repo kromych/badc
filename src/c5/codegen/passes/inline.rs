@@ -288,90 +288,12 @@ fn is_inline_candidate(
     // matching `ParamRef`; the cells carry no live value into the
     // body. The inliner drops them at splice time. A live LoadLocal
     // (its result feeds a downstream operand) would lose data after
-    // the drop, so this loop builds a use mask first and rejects the
-    // function if any allowed-but-dropped inst is actually live.
-    let n = func.insts.len();
-    let mut used = vec![false; n];
-    let mark = |v: ValueId, used: &mut [bool]| {
-        if v != NO_VALUE && (v as usize) < used.len() {
-            used[v as usize] = true;
-        }
-    };
-    for inst in &func.insts {
-        match inst {
-            Inst::Load { addr, .. } => mark(*addr, &mut used),
-            Inst::Store { addr, value, .. } => {
-                mark(*addr, &mut used);
-                mark(*value, &mut used);
-            }
-            Inst::StoreLocal { value, .. } => mark(*value, &mut used),
-            Inst::LoadIndexed { base, index, .. } => {
-                mark(*base, &mut used);
-                mark(*index, &mut used);
-            }
-            Inst::StoreIndexed {
-                base, index, value, ..
-            } => {
-                mark(*base, &mut used);
-                mark(*index, &mut used);
-                mark(*value, &mut used);
-            }
-            Inst::Binop { lhs, rhs, .. } => {
-                mark(*lhs, &mut used);
-                mark(*rhs, &mut used);
-            }
-            Inst::BinopI { lhs, .. } => mark(*lhs, &mut used),
-            Inst::Fneg(v) => mark(*v, &mut used),
-            Inst::Fma { a, b, c, .. } => {
-                mark(*a, &mut used);
-                mark(*b, &mut used);
-                mark(*c, &mut used);
-            }
-            Inst::Extend { value, .. } => mark(*value, &mut used),
-            Inst::FpCast { value, .. } => mark(*value, &mut used),
-            Inst::Mcpy { dst, src, .. } => {
-                mark(*dst, &mut used);
-                mark(*src, &mut used);
-            }
-            Inst::Call { args, .. }
-            | Inst::CallExt { args, .. }
-            | Inst::Intrinsic { args, .. }
-            | Inst::InlineAsm { args, .. } => {
-                for &a in args {
-                    mark(a, &mut used);
-                }
-            }
-            Inst::CallIndirect { target, args, .. } => {
-                mark(*target, &mut used);
-                for &a in args {
-                    mark(a, &mut used);
-                }
-            }
-            _ => {}
-        }
-    }
-    // Each block contributes its terminator's value operand to the
-    // use mask: the Return's payload, a Bz / Bnz cond, and any
-    // block's exit_acc all live to the end of the block.
-    for blk in &func.blocks {
-        match blk.terminator {
-            Terminator::Return(v) => mark(v, &mut used),
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(cond, &mut used),
-            _ => {}
-        }
-        if blk.exit_acc != NO_VALUE {
-            mark(blk.exit_acc, &mut used);
-        }
-    }
-    // Phi-incoming values are uses too; the splice has to translate
-    // each, but it must not drop a value the body relies on.
-    for inst in &func.insts {
-        if let Inst::Phi { incoming, .. } = inst {
-            for &(_, v) in incoming {
-                mark(v, &mut used);
-            }
-        }
-    }
+    // the drop, so build a use mask first and reject the function if
+    // any allowed-but-dropped inst is actually live. A spilled
+    // parameter cell instead relocates into a caller slot, so its live
+    // accesses are admissible.
+    let used = value_use_mask(func);
+    let spilled = spilled_param_cells(func);
     // Frame slots holding a register-passed struct parameter's bytes. A
     // body `LocalAddr` of one of these redirects to the caller's
     // argument address at the splice; any other `LocalAddr` names a
@@ -474,16 +396,17 @@ fn is_inline_candidate(
             | Inst::Load { .. }
             | Inst::LoadIndexed { .. } => {}
             Inst::LocalAddr(s) => {
-                // A callee's own local slot (negative) is relocated into the
-                // caller's frame by the splice when the callee has no
-                // aggregate parameter or return; a parameter cell address
-                // (off >= 2) has no caller equivalent. With aggregates only a
-                // struct-parameter slot (redirects to the caller's argument)
-                // or the aggregate-return result slot (redirects to the
-                // caller's return slot) is admissible.
+                // On the reloc path the splice relocates a callee's own local
+                // slot (negative) and a spilled parameter cell (its prologue
+                // spill initializes the relocated slot) into the caller's
+                // frame; an unspilled cell (a stack-passed parameter, the
+                // reserved cells) has no reproducible initialization. With
+                // aggregates only a struct-parameter slot (redirects to the
+                // caller's argument) or the aggregate-return result slot
+                // (redirects to the caller's return slot) is admissible.
                 if reloc {
-                    if *s >= 2 {
-                        say(format_args!("LocalAddr of parameter cell {s}"));
+                    if *s >= 0 && !spilled.contains(s) {
+                        say(format_args!("LocalAddr of unspilled parameter cell {s}"));
                         return false;
                     }
                 } else if !param_agg_slots.contains(s) && Some(*s) != result_slot {
@@ -530,26 +453,24 @@ fn is_inline_candidate(
                 }
             }
             Inst::LoadLocal { off, volatile, .. } => {
-                // A negative slot in a no-aggregate callee is a relocated
-                // local read the splice keeps. Otherwise the splice drops the
-                // read -- a parameter cell arrives as a value and the caller's
-                // frame has no matching slot -- which is safe only when the
-                // result is dead in the callee body and the access is not
-                // volatile (C99 5.1.2.3p2: a volatile read is a side effect
-                // even when the value is unused).
-                let relocated = reloc && *off < 0;
+                // A relocated slot read (own local or spilled parameter cell
+                // on the reloc path) is kept by the splice. Otherwise the
+                // splice drops the read, which is safe only when the result
+                // is dead in the callee body and the access is not volatile
+                // (C99 5.1.2.3p2: a volatile read is a side effect even when
+                // the value is unused).
+                let relocated = reloc && (*off < 0 || spilled.contains(off));
                 if !relocated && (used[idx] || *volatile) {
                     say(format_args!("live or volatile LoadLocal at v{}", idx));
                     return false;
                 }
             }
             Inst::StoreLocal { off, volatile, .. } => {
-                // A negative slot in a no-aggregate callee is a relocated
-                // local write the splice keeps. Otherwise the store is
-                // dropped; a drop into a struct-parameter slot would leave
-                // the redirected read stale, and a dropped volatile store
-                // would elide a required access (C99 6.7.3p6).
-                let relocated = reloc && *off < 0;
+                // A relocated slot write is kept by the splice. Otherwise the
+                // store is dropped; a drop into a struct-parameter slot would
+                // leave the redirected read stale, and a dropped volatile
+                // store would elide a required access (C99 6.7.3p6).
+                let relocated = reloc && (*off < 0 || spilled.contains(off));
                 if !relocated && (param_agg_slots.contains(off) || *volatile) {
                     say(format_args!(
                         "StoreLocal into a struct-parameter slot or volatile at v{}",
@@ -579,10 +500,9 @@ fn is_inline_candidate(
             // operand args -- an output's destination address among them --
             // and an asm-goto's `jump_tables` row clones into the caller. On
             // this path the callee has no aggregate, so every output address
-            // is a relocated own-local (its `LocalAddr(<0)` rides the slot
-            // relocation), a remapped pointer, or a carried global; a
-            // parameter-cell address (`LocalAddr(>=2)`) is already rejected
-            // above, so no output escapes to a slot the splice cannot write.
+            // is a relocated slot (own-local or parameter cell, riding the
+            // slot relocation), a remapped pointer, or a carried global, so
+            // no output escapes to a slot the splice cannot write.
             Inst::InlineAsm { .. } => {
                 if !reloc {
                     say(format_args!("inline asm in a non-reloc callee"));
@@ -613,6 +533,118 @@ fn is_inline_candidate(
         }
     }
     true
+}
+
+/// Parameter cells (slots >= 2) whose first program-order access is the
+/// walker's prologue spill: a `StoreLocal` of the cell's own `ParamRef`
+/// (the i-th declared parameter sits at cell i + 2). Only such a cell
+/// relocates into a caller frame slot at the splice -- the kept spill
+/// then initializes the relocated slot with the remapped argument. A
+/// stack-passed parameter's cell has no spill (the caller's
+/// outgoing-argument slot arrives initialized), so relocating it would
+/// read an uninitialized slot.
+fn spilled_param_cells(func: &FunctionSsa) -> BTreeSet<i64> {
+    let mut seen: BTreeSet<i64> = BTreeSet::new();
+    let mut spilled: BTreeSet<i64> = BTreeSet::new();
+    for inst in &func.insts {
+        let (cell, is_spill) = match inst {
+            Inst::LocalAddr(s) if *s >= 2 => (*s, false),
+            Inst::LoadLocal { off, .. } if *off >= 2 => (*off, false),
+            Inst::StoreLocal { off, value, .. } if *off >= 2 => {
+                let spill = matches!(
+                    func.insts.get(*value as usize),
+                    Some(Inst::ParamRef { idx, .. }) if *idx as i64 + 2 == *off
+                );
+                (*off, spill)
+            }
+            _ => continue,
+        };
+        if seen.insert(cell) && is_spill {
+            spilled.insert(cell);
+        }
+    }
+    spilled
+}
+
+/// Per-value "referenced by an operand" mask: instruction operands,
+/// terminator values (Return payload, Bz / Bnz cond), block exit
+/// accumulators, and phi-incoming values all mark their value used.
+fn value_use_mask(func: &FunctionSsa) -> Vec<bool> {
+    let mut used = vec![false; func.insts.len()];
+    let mark = |v: ValueId, used: &mut [bool]| {
+        if v != NO_VALUE && (v as usize) < used.len() {
+            used[v as usize] = true;
+        }
+    };
+    for inst in &func.insts {
+        match inst {
+            Inst::Load { addr, .. } => mark(*addr, &mut used),
+            Inst::Store { addr, value, .. } => {
+                mark(*addr, &mut used);
+                mark(*value, &mut used);
+            }
+            Inst::StoreLocal { value, .. } => mark(*value, &mut used),
+            Inst::LoadIndexed { base, index, .. } => {
+                mark(*base, &mut used);
+                mark(*index, &mut used);
+            }
+            Inst::StoreIndexed {
+                base, index, value, ..
+            } => {
+                mark(*base, &mut used);
+                mark(*index, &mut used);
+                mark(*value, &mut used);
+            }
+            Inst::Binop { lhs, rhs, .. } => {
+                mark(*lhs, &mut used);
+                mark(*rhs, &mut used);
+            }
+            Inst::BinopI { lhs, .. } => mark(*lhs, &mut used),
+            Inst::Fneg(v) => mark(*v, &mut used),
+            Inst::Fma { a, b, c, .. } => {
+                mark(*a, &mut used);
+                mark(*b, &mut used);
+                mark(*c, &mut used);
+            }
+            Inst::Extend { value, .. } => mark(*value, &mut used),
+            Inst::FpCast { value, .. } => mark(*value, &mut used),
+            Inst::Mcpy { dst, src, .. } => {
+                mark(*dst, &mut used);
+                mark(*src, &mut used);
+            }
+            Inst::Call { args, .. }
+            | Inst::CallExt { args, .. }
+            | Inst::Intrinsic { args, .. }
+            | Inst::InlineAsm { args, .. } => {
+                for &a in args {
+                    mark(a, &mut used);
+                }
+            }
+            Inst::CallIndirect { target, args, .. } => {
+                mark(*target, &mut used);
+                for &a in args {
+                    mark(a, &mut used);
+                }
+            }
+            Inst::Phi { incoming, .. } => {
+                for &(_, v) in incoming {
+                    mark(v, &mut used);
+                }
+            }
+            _ => {}
+        }
+    }
+    for blk in &func.blocks {
+        match blk.terminator {
+            Terminator::Return(v) => mark(v, &mut used),
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(cond, &mut used),
+            _ => {}
+        }
+        if blk.exit_acc != NO_VALUE {
+            mark(blk.exit_acc, &mut used);
+        }
+    }
+    used
 }
 
 /// Map a single operand `v` through `remap`. `NO_VALUE` stays.
@@ -933,6 +965,37 @@ fn splice_multi_block(
 
     let mut original = core::mem::take(caller);
     let splice_block = original.blocks[splice_block_idx].clone();
+    // Spilled parameter cells that need materialization -- the cell's
+    // address is taken, an access is volatile, or an access whose value the
+    // body consumes -- relocate into fresh caller slots below the callee's
+    // relocated own locals; the kept prologue spill (`StoreLocal` of the
+    // `ParamRef`, first access by construction) initializes the relocated
+    // cell with the remapped argument value. A cell touched only by dead
+    // non-volatile accesses (the leftover spill itself) keeps the
+    // established drop; the candidate filter rejects live accesses to
+    // unspilled cells.
+    let callee_used = value_use_mask(callee);
+    let spilled = spilled_param_cells(callee);
+    let param_cells: alloc::collections::BTreeSet<i64> = callee
+        .insts
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, inst)| match inst {
+            Inst::LocalAddr(s) if *s >= 2 => Some(*s),
+            Inst::LoadLocal { off, volatile, .. } | Inst::StoreLocal { off, volatile, .. }
+                if *off >= 2 && (*volatile || callee_used[idx]) =>
+            {
+                Some(*off)
+            }
+            _ => None,
+        })
+        .filter(|s| spilled.contains(s))
+        .collect();
+    let param_cell_reloc: alloc::collections::BTreeMap<i64, i64> = param_cells
+        .iter()
+        .enumerate()
+        .map(|(i, &s)| (s, -(original.locals + callee.locals + i as i64 + 1)))
+        .collect();
     // Caller's own asm-goto rows precede the callee's in `merged_jump_tables`;
     // a spliced callee `AsmGoto { table }` re-indexes to `caller_jt_len + table`.
     let caller_jt_len = original.jump_tables.len() as u32;
@@ -1022,11 +1085,13 @@ fn splice_multi_block(
                             _ => arg,
                         };
                     }
-                    Inst::LocalAddr(s) if *s < 0 => {
+                    Inst::LocalAddr(s) if *s < 0 || *s >= 2 => {
                         callee_remap[ce_pc as usize] = at;
                         at += 1;
                     }
-                    Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } if *off < 0 => {
+                    Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. }
+                        if *off < 0 || param_cell_reloc.contains_key(off) =>
+                    {
                         callee_remap[ce_pc as usize] = at;
                         at += 1;
                     }
@@ -1222,16 +1287,20 @@ fn splice_multi_block(
                         );
                         continue;
                     }
-                    // A relocated callee local (negative slot): keep the
-                    // access, shifting the slot below the caller's own locals.
-                    // A multi-block splice callee has no aggregate parameter or
-                    // return (the candidate filter rejects those), so every
-                    // negative slot is one of the callee's own locals. A
-                    // parameter cell (off >= 0) and the alloca init carry
-                    // no live value into the body and are dropped.
-                    Inst::LocalAddr(s) if *s < 0 => {
+                    // A relocated slot access: a callee own local (negative)
+                    // shifts below the caller's own locals; a materialized
+                    // parameter cell takes its fresh slot from
+                    // `param_cell_reloc`. The remaining cells (0, 1, dead
+                    // parameter spills) and the alloca init carry no live
+                    // value into the body and are dropped.
+                    Inst::LocalAddr(s) if *s < 0 || *s >= 2 => {
+                        let slot = if *s < 0 {
+                            s - original.locals
+                        } else {
+                            param_cell_reloc[s]
+                        };
                         callee_remap[ce_pc as usize] = new_insts.len() as u32;
-                        new_insts.push(Inst::LocalAddr(s - original.locals));
+                        new_insts.push(Inst::LocalAddr(slot));
                         new_inst_src.push((0, 0));
                         new_f32.push(false);
                         continue;
@@ -1240,10 +1309,15 @@ fn splice_multi_block(
                         off,
                         kind,
                         volatile,
-                    } if *off < 0 => {
+                    } if *off < 0 || param_cell_reloc.contains_key(off) => {
+                        let off = if *off < 0 {
+                            off - original.locals
+                        } else {
+                            param_cell_reloc[off]
+                        };
                         callee_remap[ce_pc as usize] = new_insts.len() as u32;
                         new_insts.push(Inst::LoadLocal {
-                            off: off - original.locals,
+                            off,
                             kind: *kind,
                             volatile: *volatile,
                         });
@@ -1262,10 +1336,15 @@ fn splice_multi_block(
                         value,
                         kind,
                         volatile,
-                    } if *off < 0 => {
+                    } if *off < 0 || param_cell_reloc.contains_key(off) => {
+                        let off = if *off < 0 {
+                            off - original.locals
+                        } else {
+                            param_cell_reloc[off]
+                        };
                         callee_remap[ce_pc as usize] = new_insts.len() as u32;
                         new_insts.push(Inst::StoreLocal {
-                            off: off - original.locals,
+                            off,
                             value: map_v(*value, &callee_remap),
                             kind: *kind,
                             volatile: *volatile,
@@ -1426,10 +1505,11 @@ fn splice_multi_block(
     carry(&callee.extern_tls_refs, &callee_remap, &mut tls_refs);
 
     // Relocate the callee's own local slots into fresh caller frame slots
-    // below the caller's locals (Step 6 shifts each slot by `original.locals`);
-    // grow the frame and carry the callee's multi-cell (struct/union) slot
-    // records at their shifted ids. A callee with no locals leaves both alone.
-    let merged_locals = original.locals + callee.locals;
+    // below the caller's locals (Step 6 shifts each slot by `original.locals`;
+    // relocated parameter cells follow below those); grow the frame and carry
+    // the callee's multi-cell (struct/union) slot records at their shifted
+    // ids. A callee with no locals leaves both alone.
+    let merged_locals = original.locals + callee.locals + param_cell_reloc.len() as i64;
     let mut merged_multi_cell = original.multi_cell_slots;
     for &(slot, size) in &callee.multi_cell_slots {
         merged_multi_cell.push((slot - original.locals, size));
@@ -2283,7 +2363,9 @@ mod tests {
     /// multi-block splice relocates -- and `needs_reloc_splice` routes it
     /// off the flat path. An input-only single-block asm (`__wrmsr` shape)
     /// is likewise admitted. The same output addressing a parameter cell
-    /// stays rejected: that slot has no caller equivalent.
+    /// relocates only when the walker's prologue spill precedes it (the
+    /// spill initializes the fresh caller slot); without the spill (a
+    /// stack-passed parameter's cell) the candidate is rejected.
     #[test]
     fn output_asm_to_own_local_inlines() {
         use crate::c5::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
@@ -2302,39 +2384,60 @@ mod tests {
             clobber_memory: false,
             volatile: false,
         };
-        // v0 LocalAddr(slot); v1 asm writes output through v0; v2 reads
-        // the slot; Return(v2).
-        let out_via_local = |slot: i64| FunctionSsa {
-            locals: if slot < 0 { -slot } else { 0 },
-            insts: alloc::vec![
-                Inst::LocalAddr(slot),
-                Inst::InlineAsm {
-                    asm: alloc::boxed::Box::new(reg_output()),
-                    args: alloc::vec![0],
-                },
-                Inst::LoadLocal {
-                    off: slot,
+        // Spill (params only): v0 ParamRef, v1 StoreLocal; then v2
+        // LocalAddr(slot); v3 asm writes the output through v2; v4 reads
+        // the slot; Return(v4).
+        let out_via_local = |slot: i64, spill: bool| {
+            let mut insts = alloc::vec::Vec::new();
+            if spill {
+                insts.push(Inst::ParamRef {
+                    idx: 0,
                     kind: LoadKind::I64,
+                });
+                insts.push(Inst::StoreLocal {
+                    off: slot,
+                    value: 0,
+                    kind: StoreKind::I64,
                     volatile: false,
-                },
-            ],
-            inst_src: alloc::vec![(0, 0); 3],
-            f32_values: alloc::vec![false; 3],
-            blocks: alloc::vec![Block {
-                start_pc: 0,
-                inst_range: 0..3,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
-            }],
-            ..Default::default()
+                });
+            }
+            let addr = insts.len() as u32;
+            insts.push(Inst::LocalAddr(slot));
+            insts.push(Inst::InlineAsm {
+                asm: alloc::boxed::Box::new(reg_output()),
+                args: alloc::vec![addr],
+            });
+            insts.push(Inst::LoadLocal {
+                off: slot,
+                kind: LoadKind::I64,
+                volatile: false,
+            });
+            let n = insts.len() as u32;
+            FunctionSsa {
+                locals: if slot < 0 { -slot } else { 0 },
+                n_params: usize::from(spill),
+                inst_src: alloc::vec![(0, 0); n as usize],
+                f32_values: alloc::vec![false; n as usize],
+                blocks: alloc::vec![Block {
+                    start_pc: 0,
+                    inst_range: 0..n,
+                    terminator: Terminator::Return(n - 1),
+                    exit_acc: n - 1,
+                }],
+                insts,
+                ..Default::default()
+            }
         };
-        let own = out_via_local(-1);
+        let own = out_via_local(-1, false);
         assert!(is_inline_candidate(&own, 32, abi, None));
         assert!(needs_reloc_splice(&own));
-        let param = out_via_local(2);
+        let param = out_via_local(2, true);
+        assert!(is_inline_candidate(&param, 32, abi, None));
+        assert!(needs_reloc_splice(&param));
+        let unspilled = out_via_local(2, false);
         let mut reason = alloc::string::String::new();
-        assert!(!is_inline_candidate(&param, 32, abi, Some(&mut reason)));
-        assert_eq!(reason, "LocalAddr of parameter cell 2");
+        assert!(!is_inline_candidate(&unspilled, 32, abi, Some(&mut reason)));
+        assert_eq!(reason, "LocalAddr of unspilled parameter cell 2");
 
         // Input-only single-block asm: admitted, routed to the reloc splice.
         let input_only = FunctionSsa {

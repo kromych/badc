@@ -725,6 +725,7 @@ pub(crate) fn emit_function(
     let prologue_native = &mut *cx.prologue_native;
     let asm_sections = &mut *cx.asm_sections;
     let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
+    let text_align = &mut *cx.text_align;
     let abi = target.abi();
     let frame = compute_frame(func, alloc, abi, target);
     let scratch = ScratchPool::new();
@@ -1056,6 +1057,7 @@ pub(crate) fn emit_function(
                     prologue_native: &mut *prologue_native,
                     asm_sections: &mut *asm_sections,
                     asm_extern_call_sites: &mut *asm_extern_call_sites,
+                    text_align: &mut *text_align,
                 };
                 let fcx = FnCtx {
                     func,
@@ -8927,6 +8929,7 @@ mod tests {
         let mut elf_tpoff = Vec::new();
         let mut asm_sections = Vec::new();
         let mut asm_extern_call_sites = Vec::new();
+        let mut text_align: usize = 16;
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -8941,6 +8944,7 @@ mod tests {
                 prologue_native: &mut prologue_native,
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
+                text_align: &mut text_align,
             };
             emit_function(
                 &func,
@@ -9099,6 +9103,7 @@ mod tests {
         let mut elf_tpoff = Vec::new();
         let mut asm_sections = Vec::new();
         let mut asm_extern_call_sites = Vec::new();
+        let mut text_align: usize = 16;
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -9113,6 +9118,7 @@ mod tests {
                 prologue_native: &mut prologue_native,
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
+                text_align: &mut text_align,
             };
             emit_function(
                 &func,
@@ -9170,6 +9176,7 @@ mod tests {
         let mut elf_tpoff = Vec::new();
         let mut asm_sections = Vec::new();
         let mut asm_extern_call_sites = Vec::new();
+        let mut text_align: usize = 16;
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -9184,6 +9191,7 @@ mod tests {
                 prologue_native: &mut prologue_native,
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
+                text_align: &mut text_align,
             };
             emit_function(
                 &func,

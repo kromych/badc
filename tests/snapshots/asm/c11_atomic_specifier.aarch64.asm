@@ -53,9 +53,9 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	stur	w0, [x29, #-0x30]
-               	mov	x0, #0xd                // =13
-               	sturh	w0, [x29, #-0x40]
-               	ldursw	x0, [x29, #-0x30]
+               	mov	x1, #0xd                // =13
+               	sturh	w1, [x29, #-0x40]
+               	sxtw	x0, w0
                	mov	x17, #0xfff9            // =65529
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32

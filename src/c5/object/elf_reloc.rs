@@ -2248,7 +2248,8 @@ pub(super) fn write_relocatable(
             .unwrap_or(0);
         text_body.drain(carve.text_keep_len..carve_hi);
     }
-    let text_off = round_up(out.len() as u64, 16);
+    let text_align = build.text_align.max(16) as u64;
+    let text_off = round_up(out.len() as u64, text_align);
     out.resize(text_off as usize, 0);
     out.extend_from_slice(&text_body);
     sh.push(Elf64Shdr {
@@ -2257,7 +2258,7 @@ pub(super) fn write_relocatable(
         sh_flags: SHF_ALLOC | SHF_EXECINSTR,
         sh_offset: text_off,
         sh_size: text_body.len() as u64,
-        sh_addralign: 16,
+        sh_addralign: text_align,
         ..Default::default()
     });
 
@@ -3144,6 +3145,7 @@ mod tests {
     fn empty_build_for(_machine: Machine) -> Build {
         use super::super::{Abi, OutputKind, ResolvedImports};
         Build {
+            text_align: 16,
             asm_sections: Vec::new(),
             asm_section_text_refs: Vec::new(),
             asm_text_abs_refs: Vec::new(),

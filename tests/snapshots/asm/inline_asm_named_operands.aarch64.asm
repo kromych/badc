@@ -175,7 +175,19 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x25               // =37
-               	bl	<addr>
+               	stur	w0, [x29, #-0x30]
+               	sub	x0, x29, #0x30
+               	sub	sp, sp, #0x10
+               	str	x0, [sp, #0x8]
+               	str	x0, [sp]
+               	ldr	x16, [sp]
+               	ldr	w0, [x16]
+               	add	w0, w0, #0x5
+               	ldr	x16, [sp]
+               	str	w0, [x16]
+               	ldr	x0, [sp, #0x8]
+               	add	sp, sp, #0x10
+               	ldursw	x0, [x29, #-0x30]
                	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

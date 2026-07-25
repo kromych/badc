@@ -1452,8 +1452,10 @@ mod tests {
             let insns = parse_template(t).unwrap();
             assert_eq!(insns[0].operands, [AsmOpndA64::Here(off)], "{t:?}");
         }
-        // Any other `.`-prefixed operand stays unsupported.
-        assert!(parse_template(b"b .foo").is_err());
+        // A dotted name is an ordinary GNU as symbol, not the location
+        // counter: it parses as a symbol branch.
+        let insns = parse_template(b"b .foo").unwrap();
+        assert_eq!(insns[0].sym_target.as_deref(), Some(".foo"));
         // A bare `ret` defaults to the link register.
         let insns = parse_template(b"ret").unwrap();
         assert_eq!(

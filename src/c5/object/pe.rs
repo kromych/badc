@@ -373,7 +373,17 @@ pub(super) fn write(
     //    build.text`; the program's `mprotect` calls go through
     //    the regular IAT lookup just like every other libc call.
     let stub_len = stub.bytes.len() as u32;
-    let text_prologue_len = stub_len;
+    // An asm alignment request above the section default pads past the
+    // stub so `build.text[0]` lands at that alignment within the
+    // SECTION_ALIGNMENT-aligned section and the section-relative
+    // padding holds absolutely; otherwise the established stub-relative
+    // placement stays.
+    let text_align = build.text_align.max(16) as u32;
+    let text_prologue_len = if text_align > 16 {
+        round_up(stub_len, text_align)
+    } else {
+        stub_len
+    };
 
     // The `.data` section is present when the c5 program has
     // initialized data OR any `_Thread_local` globals (the TLS
@@ -900,6 +910,9 @@ pub(super) fn write(
     //    that references something outside the section.
     let mut text_bytes: Vec<u8> = Vec::with_capacity(text_size as usize);
     text_bytes.extend_from_slice(&stub.bytes);
+    // Alignment pad between the stub and `build.text`; never executed
+    // (the stub exits through its own tail).
+    text_bytes.resize(text_prologue_len as usize, 0xCC);
     text_bytes.extend_from_slice(&build.text);
 
     // Stub-internal fixup: the direct call to main. Only

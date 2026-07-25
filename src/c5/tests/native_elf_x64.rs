@@ -398,6 +398,8 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_port_dx.c", 42),
     ("inline_asm_x64_c_mem.c", 42),
     ("inline_asm_x64_align.c", 42),
+    ("inline_asm_x64_align_above_section.c", 42),
+    ("file_scope_asm_local_label_branch.c", 42),
     ("inline_asm_pushsection.c", 42),
     ("inline_asm_alternative_replacement.c", 42),
     ("file_scope_asm_decls.c", 0),
@@ -879,21 +881,38 @@ fn fixture_parity() {
     );
 }
 
-/// A code-stream `.align` boundary is section-relative and holds
-/// absolutely only up to the fixed `.text` section alignment (16); a
-/// larger request is rejected rather than silently under-aligned.
+/// A code-stream `.align` boundary above the section default is
+/// accepted (it was rejected before the writers honored a raised text
+/// alignment), and the executable PT_LOAD keeps p_offset == p_vaddr
+/// modulo the page size, so the raised in-segment placement holds at
+/// the mapped address. The absolute-boundary semantics are locked at
+/// run time by the `inline_asm_x64_align_above_section.c` fixture.
 #[test]
-fn inline_asm_align_beyond_section_alignment_rejected() {
+fn inline_asm_align_beyond_section_default_accepted() {
     let program = Compiler::new(super::with_prelude(
-        "int main(void) { __asm__(\".align 32\"); return 0; }\n",
+        "int main(void) { __asm__(\".align 64\"); return 0; }\n",
     ))
     .compile()
     .expect("compile");
-    let err = emit_native(&program, Target::LinuxX64).expect_err("emit must reject");
-    assert!(
-        format!("{err}").contains("exceeds the section alignment"),
-        "unexpected error: {err}"
-    );
+    let bytes = emit_native(&program, Target::LinuxX64).expect("emit_native");
+    let rd_u16 = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+    let rd_u64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_phoff = rd_u64(0x20) as usize;
+    let e_phnum = rd_u16(0x38) as usize;
+    const PF_X: u32 = 1;
+    let mut exec_seen = false;
+    for i in 0..e_phnum {
+        let ph = e_phoff + i * 56;
+        let p_type = u32::from_le_bytes(bytes[ph..ph + 4].try_into().unwrap());
+        let p_flags = u32::from_le_bytes(bytes[ph + 4..ph + 8].try_into().unwrap());
+        if p_type == 1 && p_flags & PF_X != 0 {
+            let p_offset = rd_u64(ph + 8);
+            let p_vaddr = rd_u64(ph + 16);
+            assert_eq!(p_offset % 4096, p_vaddr % 4096, "offset/vaddr congruence");
+            exec_seen = true;
+        }
+    }
+    assert!(exec_seen, "no executable PT_LOAD");
 }
 
 /// When a dynamic import binds a versioned default symbol, the writer
@@ -1036,6 +1055,24 @@ fn fixture_parity_native_optimized() {
         failures.len(),
         NATIVE_ELF_X64_FIXTURES.len(),
         failures.join("\n  ")
+    );
+}
+
+/// A `%c` RIP-relative operand whose `i`-class value arrives through an
+/// always_inline helper's parameter resolves only under -O: the inliner
+/// relocates the parameter cell into the caller and store-forwarding
+/// carries the address into the asm input capture. gcc likewise
+/// rejects the shape at -O0, so no -O0 parity entry exists.
+#[test]
+fn riprel_param_fixture_runs_under_optimize() {
+    let outcome = build_and_run_fixture_with_options(
+        "inline_asm_x64_riprel_param.c",
+        NativeOptions::new().with_optimize(),
+        "-O",
+    );
+    assert!(
+        matches!(outcome, RunOutcome::Exit(42)),
+        "expected exit 42, got {outcome:?}"
     );
 }
 

@@ -32,6 +32,9 @@ pub(crate) struct EmitCtx<'a> {
     /// this unit does not define. The callee's address is a link-time
     /// decision, so each site becomes a call relocation against the name.
     pub(crate) asm_extern_call_sites: &'a mut alloc::vec::Vec<super::UserExternCallSite>,
+    /// Alignment the text stream requires in the image, raised by an
+    /// inline-asm alignment directive above the section default.
+    pub(crate) text_align: &'a mut usize,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
@@ -3109,6 +3112,36 @@ pub(crate) fn align_fill_pattern(fill: Option<u8>, exec: bool, aarch64: bool) ->
     }
 }
 
+/// The x86-64 multi-byte NOP of each length GNU as pads executable
+/// alignment gaps with, lengths 1..=11.
+const X86_NOPS: [&[u8]; 11] = [
+    &[0x90],
+    &[0x66, 0x90],
+    &[0x0f, 0x1f, 0x00],
+    &[0x0f, 0x1f, 0x40, 0x00],
+    &[0x0f, 0x1f, 0x44, 0x00, 0x00],
+    &[0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00],
+    &[0x0f, 0x1f, 0x80, 0x00, 0x00, 0x00, 0x00],
+    &[0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00],
+    &[0x66, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00],
+    &[0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00],
+    &[
+        0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ],
+];
+
+/// Fill an x86-64 executable alignment gap with multi-byte NOPs, as GNU as
+/// does: the sub-maximal remainder first, then maximal-length NOPs.
+pub(crate) fn push_x86_exec_align_fill(out: &mut alloc::vec::Vec<u8>, gap: usize) {
+    let rem = gap % X86_NOPS.len();
+    if rem > 0 {
+        out.extend_from_slice(X86_NOPS[rem - 1]);
+    }
+    for _ in 0..gap / X86_NOPS.len() {
+        out.extend_from_slice(X86_NOPS[X86_NOPS.len() - 1]);
+    }
+}
+
 /// Measure the section-relative offset of every label the blocks define,
 /// before the field values (or the main stream) are laid out. Each item's
 /// byte length is structural -- data width times count, string length,
@@ -3297,10 +3330,14 @@ pub(crate) fn materialize_asm_sections(
                     // neither the bytes nor the section's own alignment.
                     if max.is_none_or(|m| gap <= m as usize) {
                         sec.align = sec.align.max(*n);
-                        let (pat, plen) =
-                            align_fill_pattern(*fill, b.flags.contains('x'), align_is_p2);
-                        for _ in 0..gap {
-                            sec.bytes.push(pat[sec.bytes.len() % plen]);
+                        if fill.is_none() && b.flags.contains('x') && !align_is_p2 {
+                            push_x86_exec_align_fill(&mut sec.bytes, gap);
+                        } else {
+                            let (pat, plen) =
+                                align_fill_pattern(*fill, b.flags.contains('x'), align_is_p2);
+                            for _ in 0..gap {
+                                sec.bytes.push(pat[sec.bytes.len() % plen]);
+                            }
                         }
                     }
                 }
@@ -3822,19 +3859,21 @@ fn split_operand_ref(s: &str) -> Option<(Option<u8>, u8, &str)> {
 /// Whether each reference is substitutable is settled at emit time, once the
 /// operands' constants are known.
 pub(crate) fn is_asm_symbol_template(s: &str) -> bool {
+    // GNU as symbol names take letters, digits, `_` and `.`; the first
+    // character must not be a digit. A name of dots alone is the
+    // location counter (`.`), not a symbol.
+    let sym_char = |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b'.';
     if !s
         .bytes()
         .next()
-        .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_')
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_' || c == b'.')
+        || s.bytes().all(|c| c == b'.')
     {
         return false;
     }
     let mut rest = s;
     while let Some(p) = rest.find('%') {
-        if !rest[..p]
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || c == b'_')
-        {
+        if !rest[..p].bytes().all(sym_char) {
             return false;
         }
         match split_operand_ref(&rest[p + 1..]) {
@@ -3842,7 +3881,7 @@ pub(crate) fn is_asm_symbol_template(s: &str) -> bool {
             None => return false,
         }
     }
-    rest.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+    rest.bytes().all(sym_char)
 }
 
 /// Substitute the operand references in a branch-target symbol name, so the
@@ -4712,7 +4751,9 @@ mod asm_section_tests {
             false,
         );
         assert_eq!(exec.len(), 9);
-        assert!(exec[1..8].iter().all(|&b| b == 0x90));
+        // x86 executable default fill is the GNU as multi-byte NOP run:
+        // a 7-byte gap takes the single 7-byte NOP.
+        assert_eq!(exec[1..8], [0x0f, 0x1f, 0x80, 0x00, 0x00, 0x00, 0x00]);
         let data = mat(
             ".pushsection .t,\"aw\"\n.byte 1\n.balign 8\n.byte 2\n.popsection\n",
             false,

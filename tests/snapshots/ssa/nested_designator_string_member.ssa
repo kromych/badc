@@ -102,7 +102,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=3
     terminator Return(v40)   (exit_acc=v40)
   block 18  start_pc=0
     v41  LocalAddr(-2)                                    -> x0
-    v42  ImmData(36)                                      -> x1
+    v42  ImmData(52)                                      -> x1
     v43  Mcpy { dst=v41, src=v42, size=16 }               -> x0
     v44  Imm(119)                                         -> x1
     v45  LocalAddr(-2)                                    -> x0
@@ -148,7 +148,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=3
     v85  Store { addr=v84, disp=0, value=v81, kind=I32 }  -> -
     v86  LocalAddr(-2)                                    -> x0
     v87  BinopI { op=add, lhs=v86, rhs_imm=4 }            -> x0
-    v88  ImmData(57)                                      -> x1
+    v88  ImmData(41)                                      -> x1
     terminator Jmp(b19)
   block 19  start_pc=0
     v150 Imm(0)                                           -> x2

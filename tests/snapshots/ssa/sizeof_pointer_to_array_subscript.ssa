@@ -5,27 +5,27 @@ fn ent_pc=1 n_params=0 variadic=false locals=14
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-14)                                   -> x0
-    v2   ImmData(1163)                                    -> x1
+    v2   ImmData(27)                                      -> x1
     v3   Store { addr=v1, disp=0, value=v2, kind=I64 }    -> -
     v4   LocalAddr(-14)                                   -> x0
     v5   BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x1
-    v6   ImmData(1176)                                    -> x1
+    v6   ImmData(40)                                      -> x1
     v7   Store { addr=v4, disp=8, value=v6, kind=I64 }    -> -
     v8   LocalAddr(-14)                                   -> x0
     v9   BinopI { op=add, lhs=v8, rhs_imm=16 }            -> x1
-    v10  ImmData(1192)                                    -> x1
+    v10  ImmData(56)                                      -> x1
     v11  Store { addr=v8, disp=16, value=v10, kind=I64 }  -> -
     v12  LocalAddr(-14)                                   -> x0
     v13  BinopI { op=add, lhs=v12, rhs_imm=24 }           -> x1
-    v14  ImmData(1224)                                    -> x1
+    v14  ImmData(88)                                      -> x1
     v15  Store { addr=v12, disp=24, value=v14, kind=I64 } -> -
     v16  LocalAddr(-14)                                   -> x0
     v17  BinopI { op=add, lhs=v16, rhs_imm=32 }           -> x1
-    v18  ImmData(1288)                                    -> x1
+    v18  ImmData(152)                                     -> x1
     v19  Store { addr=v16, disp=32, value=v18, kind=I64 } -> -
     v20  LocalAddr(-14)                                   -> x0
     v21  BinopI { op=add, lhs=v20, rhs_imm=40 }           -> x1
-    v22  ImmData(1352)                                    -> x1
+    v22  ImmData(216)                                     -> x1
     v23  Store { addr=v20, disp=40, value=v22, kind=I64 } -> -
     v24  LocalAddr(-14)                                   -> x0
     v25  Load { addr=v24, disp=0, kind=I64 }              -> x0

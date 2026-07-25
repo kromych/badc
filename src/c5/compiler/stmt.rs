@@ -468,6 +468,11 @@ impl Compiler {
         // below records `const` as it consumes the base specifiers.
         self.pending.base_is_const = false;
         self.pending.saw_register_storage = false;
+        // As in `parse_function_body_local_decl`: a stale file-scope
+        // carrier must not bleed onto a static's emission record.
+        self.pending.attr_used = false;
+        self.pending.attr_section = None;
+        self.pending.attr_weak = false;
         while self.lex.tk == Token::Extern
             || self.lex.tk == Token::Static
             || self.lex.tk == Token::ThreadLocal
@@ -640,6 +645,7 @@ impl Compiler {
                     && array_size == 0
                     && super::types::is_integer_scalar_ty(ty);
                 self.allocate_static_local(loc_idx, ty, array_size)?;
+                self.push_block_static_record(loc_idx, ty);
                 self.ast_emit_static_local_decl(loc_idx as u32);
             } else {
                 self.symbols[loc_idx].class = Token::Loc as i64;
@@ -1255,7 +1261,7 @@ impl Compiler {
         // `asm goto` takes the general extended-asm path directly: the
         // operand-free template shortcuts below have no label grammar.
         if is_goto {
-            self.data.truncate(tstart);
+            self.truncate_data(tstart);
             return self.parse_extended_asm(template, is_volatile, true);
         }
         // The x87 FPU control-word forms carry exactly one memory operand.
@@ -1302,12 +1308,12 @@ impl Compiler {
             _ => None,
         };
         if let Some(kind) = by_addr_kind {
-            self.data.truncate(tstart);
+            self.truncate_data(tstart);
             return self.parse_single_operand_asm(kind, true);
         }
         // `clflush (%0)`: the `"r"(ptr)` operand value is itself the address.
         if tmpl_lc == "clflush (%0)" {
-            self.data.truncate(tstart);
+            self.truncate_data(tstart);
             return self.parse_single_operand_asm(super::super::op::Intrinsic::X86Clflush, false);
         }
         // `cpuid` / `xgetbv` carry register-constrained operands. The
@@ -1319,20 +1325,20 @@ impl Compiler {
             _ => None,
         };
         if let Some(is_cpuid) = cpuid_is_cpuid {
-            self.data.truncate(tstart);
+            self.truncate_data(tstart);
             return self.parse_cpuid_xgetbv_asm(is_cpuid);
         }
         // `divq %4` -- x86-64 unsigned 128/64 division (the `udiv_qrnnd`
         // assembly-macro shape). The register-tied operands are handled
         // specially, like cpuid.
         if tmpl_lc == "divq %4" {
-            self.data.truncate(tstart);
+            self.truncate_data(tstart);
             return self.parse_divq_asm();
         }
         // `rdtsc` -- x86-64 read timestamp counter: two register-tied
         // outputs, no inputs.
         if tmpl_lc == "rdtsc" {
-            self.data.truncate(tstart);
+            self.truncate_data(tstart);
             return self.parse_rdtsc_asm();
         }
         // AArch64 cache maintenance + barriers. Match the
@@ -1349,7 +1355,7 @@ impl Compiler {
                 _ => None,
             };
             if let Some((kind, is_output)) = reg_op {
-                self.data.truncate(tstart);
+                self.truncate_data(tstart);
                 return self.parse_aarch64_reg_asm(kind, is_output);
             }
             let barrier = match tmpl_ws.as_str() {
@@ -1358,7 +1364,7 @@ impl Compiler {
                 _ => None,
             };
             if let Some(kind) = barrier {
-                self.data.truncate(tstart);
+                self.truncate_data(tstart);
                 return self.parse_aarch64_barrier_asm(kind);
             }
             // AArch64 128-bit atomic RMW: the `ldaxp`/`stlxp` exclusive-pair
@@ -1379,7 +1385,7 @@ impl Compiler {
                 } else {
                     I::Atomic128Xchg
                 };
-                self.data.truncate(tstart);
+                self.truncate_data(tstart);
                 return self.parse_atomic128_asm(kind);
             }
             // AArch64 128-bit atomic load / store: the plain `ldp`/`stp`
@@ -1417,7 +1423,7 @@ impl Compiler {
                 None
             };
             if let Some(kind) = ldst_kind {
-                self.data.truncate(tstart);
+                self.truncate_data(tstart);
                 return self.parse_atomic128_asm(kind);
             }
         }
@@ -1439,7 +1445,7 @@ impl Compiler {
             .collect();
         if compact == "pause" || compact == "yield" || compact == "repnop" {
             self.skip_asm_operand_region()?;
-            self.data.truncate(tstart);
+            self.truncate_data(tstart);
             self.mark_emit_other();
             self.ty = Ty::Int as i64;
             let pos = self.ast_src_pos();
@@ -1459,7 +1465,7 @@ impl Compiler {
         // clobbers` operand lists into an `AsmBlock`. The template bytes
         // are dropped from the data section; the parsed block references
         // its operand expressions by AST id.
-        self.data.truncate(tstart);
+        self.truncate_data(tstart);
         self.parse_extended_asm(template, is_volatile, false)
     }
 
@@ -1518,7 +1524,7 @@ impl Compiler {
             if self.lex.tk == ':' {
                 section += 1;
                 if is_goto && section > 4 {
-                    self.data.truncate(data_base);
+                    self.truncate_data(data_base);
                     return Err(self.compile_err("inline asm goto: too many `:` sections"));
                 }
                 self.next()?;
@@ -1532,7 +1538,7 @@ impl Compiler {
                 // Label list: identifiers naming C labels (forward
                 // references allowed, as for `goto`).
                 if self.lex.tk != Token::Id {
-                    self.data.truncate(data_base);
+                    self.truncate_data(data_base);
                     return Err(self.compile_err("inline asm goto: label identifier expected"));
                 }
                 let name = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -1554,7 +1560,7 @@ impl Compiler {
             if self.lex.tk == Token::Brak && section <= 2 {
                 self.next()?; // `[`
                 if self.lex.tk != Token::Id {
-                    self.data.truncate(data_base);
+                    self.truncate_data(data_base);
                     return Err(self.compile_err("inline asm: operand name expected after `[`"));
                 }
                 op_name = Some(self.symbols[self.lex.curr_id_idx].name.clone());
@@ -1562,7 +1568,7 @@ impl Compiler {
                 self.consume(b']', "`]` expected after asm operand name")?;
             }
             if self.lex.tk != '"' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("inline asm: constraint string expected"));
             }
             // The lexer appended the constraint bytes to the data
@@ -1577,7 +1583,7 @@ impl Compiler {
                 self.next()?;
             }
             let cbytes: alloc::vec::Vec<u8> = self.data[cstart..].to_vec();
-            self.data.truncate(cstart);
+            self.truncate_data(cstart);
             let cstr = core::str::from_utf8(&cbytes).unwrap_or("");
             if section >= 3 {
                 // Clobber list: a bare register name, `"cc"`, or
@@ -1623,14 +1629,14 @@ impl Compiler {
                 match Self::parse_asm_constraint(cstr, is_output, n_outputs, is_x86) {
                     Some(c) => c,
                     None => {
-                        self.data.truncate(data_base);
+                        self.truncate_data(data_base);
                         return Err(self.compile_err(alloc::format!(
                             "inline asm: unsupported constraint `{cstr}`"
                         )));
                     }
                 };
             if self.lex.tk != '(' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("inline asm: `(` expected after constraint"));
             }
             self.next()?; // consume `(`
@@ -1664,7 +1670,7 @@ impl Compiler {
                 && !self.target.is_aarch64()
                 && self.size_of_type(self.ty) > 8
             {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self
                     .compile_err("inline asm: `A` operand wider than a register is unsupported"));
             }
@@ -1677,7 +1683,7 @@ impl Compiler {
                 && !self.target.is_aarch64()
                 && self.size_of_type(self.ty) != 16
             {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self
                     .compile_err("inline asm: only 16-byte (__m128i) `x` operands are supported"));
             }
@@ -1746,7 +1752,7 @@ impl Compiler {
                         None => true,
                     };
                 if !addressable {
-                    self.data.truncate(data_base);
+                    self.truncate_data(data_base);
                     return Err(self.compile_err(if stores_back {
                         "inline asm: output operand must be an lvalue"
                     } else {
@@ -1763,7 +1769,7 @@ impl Compiler {
             let e = match self.ast_acc.take() {
                 Some(e) => e,
                 None => {
-                    self.data.truncate(data_base);
+                    self.truncate_data(data_base);
                     return Err(self.compile_err("inline asm: operand expression expected"));
                 }
             };
@@ -1821,7 +1827,7 @@ impl Compiler {
                 n_outputs += 1;
             }
             if self.lex.tk != ')' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("inline asm: `)` expected after operand"));
             }
             self.next()?; // consume the operand's `)`
@@ -2096,7 +2102,7 @@ impl Compiler {
         let snap = self.lex.snapshot();
         self.next()?;
         let bare = self.lex.tk == ')';
-        self.lex.restore(snap);
+        self.restore_lex(snap);
         if !bare {
             return Ok(None);
         }
@@ -2462,7 +2468,7 @@ impl Compiler {
                 continue;
             }
             if self.lex.tk != '"' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("unsupported cpuid / xgetbv asm syntax"));
             }
             // Constraint string: the last alphabetic byte is the register
@@ -2476,7 +2482,7 @@ impl Compiler {
                     clobbered[slot] = true;
                 }
                 self.next()?;
-                self.data.truncate(cstart);
+                self.truncate_data(cstart);
                 continue;
             }
             let (letter, match_digit, read_write) = {
@@ -2502,7 +2508,7 @@ impl Compiler {
                 (letter, digit, cbytes.contains(&b'+'))
             };
             self.next()?; // consume the constraint string
-            self.data.truncate(cstart);
+            self.truncate_data(cstart);
             let slot = match letter {
                 Some(b'a') => 0usize,
                 Some(b'b') => 1,
@@ -2511,7 +2517,7 @@ impl Compiler {
                 _ => match match_digit.and_then(|d| out_order.get(d).copied()) {
                     Some(s) => s,
                     None => {
-                        self.data.truncate(data_base);
+                        self.truncate_data(data_base);
                         return Err(self.compile_err("cpuid / xgetbv: unsupported asm constraint"));
                     }
                 },
@@ -2520,7 +2526,7 @@ impl Compiler {
                 out_order.push(slot);
             }
             if self.lex.tk != '(' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("cpuid / xgetbv: `(` expected after constraint"));
             }
             self.next()?; // consume `(`
@@ -2539,14 +2545,14 @@ impl Compiler {
                 inp[slot] = self.ast_acc.take();
             }
             if self.lex.tk != ')' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("cpuid / xgetbv: `)` expected after asm operand"));
             }
             self.next()?; // consume the operand's `)`
         }
         self.next()?; // consume the outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
-        self.data.truncate(data_base);
+        self.truncate_data(data_base);
 
         // Each implicitly written register must be captured by an output
         // operand or listed as a clobber; a clobber's value is discarded
@@ -2675,7 +2681,7 @@ impl Compiler {
                 continue;
             }
             if self.lex.tk != '"' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("unsupported divq asm syntax"));
             }
             let cstart = self.lex.ival as usize;
@@ -2697,12 +2703,12 @@ impl Compiler {
                 (letter, digit)
             };
             self.next()?; // consume the constraint string
-            self.data.truncate(cstart);
+            self.truncate_data(cstart);
             if section >= 3 {
                 continue; // clobbers carry no operand
             }
             if self.lex.tk != '(' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("divq: `(` expected after constraint"));
             }
             self.next()?; // consume `(`
@@ -2715,7 +2721,7 @@ impl Compiler {
                     Some(b'a') => q_addr = self.ast_acc.take(),
                     Some(b'd') => rem_addr = self.ast_acc.take(),
                     _ => {
-                        self.data.truncate(data_base);
+                        self.truncate_data(data_base);
                         return Err(self.compile_err("divq: outputs must be `=a` and `=d`"));
                     }
                 }
@@ -2728,14 +2734,14 @@ impl Compiler {
                 }
             }
             if self.lex.tk != ')' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("divq: `)` expected after asm operand"));
             }
             self.next()?; // consume the operand's `)`
         }
         self.next()?; // consume the outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
-        self.data.truncate(data_base);
+        self.truncate_data(data_base);
 
         let (q, rem, n0, n1, d) = match (q_addr, rem_addr, n0, n1, divisor) {
             (Some(q), Some(rem), Some(n0), Some(n1), Some(d)) => (q, rem, n0, n1, d),
@@ -2801,7 +2807,7 @@ impl Compiler {
             if self.lex.tk == Token::Brak {
                 self.next()?; // `[`
                 if self.lex.tk != Token::Id {
-                    self.data.truncate(data_base);
+                    self.truncate_data(data_base);
                     return Err(self.compile_err("128-bit atomic asm: operand name expected"));
                 }
                 role = match self.symbols[self.lex.curr_id_idx].name.as_str() {
@@ -2813,7 +2819,7 @@ impl Compiler {
                 self.consume(b']', "`]` expected after asm operand name")?;
             }
             if self.lex.tk != '"' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("unsupported 128-bit atomic asm operand"));
             }
             let cstart = self.lex.ival as usize;
@@ -2826,7 +2832,7 @@ impl Compiler {
             if matches!(role, Role::Reg) && self.data[cstart..].contains(&b'm') {
                 role = Role::Mem;
             }
-            self.data.truncate(cstart);
+            self.truncate_data(cstart);
             // The masked store-insert has no C output: its section-1 register
             // operands (`[f]`, `[l]`, `[h]`) are asm scratch, unlike the load
             // shapes whose section-1 `[l]`/`[h]` are result lvalues.
@@ -2839,7 +2845,7 @@ impl Compiler {
                 continue;
             }
             if self.lex.tk != '(' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("128-bit atomic asm: `(` expected after constraint"));
             }
             self.next()?; // `(`
@@ -2861,7 +2867,7 @@ impl Compiler {
                     match self.ast_acc.take() {
                         Some(id) => out_addrs.push(id),
                         None => {
-                            self.data.truncate(data_base);
+                            self.truncate_data(data_base);
                             return Err(
                                 self.compile_err("128-bit atomic asm: empty output operand")
                             );
@@ -2872,20 +2878,20 @@ impl Compiler {
                 Role::Reg => match self.ast_acc.take() {
                     Some(id) => in_vals.push(id),
                     None => {
-                        self.data.truncate(data_base);
+                        self.truncate_data(data_base);
                         return Err(self.compile_err("128-bit atomic asm: empty input operand"));
                     }
                 },
             }
             if self.lex.tk != ')' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("128-bit atomic asm: `)` expected after operand"));
             }
             self.next()?; // operand `)`
         }
         self.next()?; // outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
-        self.data.truncate(data_base);
+        self.truncate_data(data_base);
 
         // Expected result-address and input-value counts per shape.
         let (want_out, want_in) = match kind {
@@ -2945,7 +2951,7 @@ impl Compiler {
                 continue;
             }
             if self.lex.tk != '"' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("unsupported rdtsc asm syntax"));
             }
             let cstart = self.lex.ival as usize;
@@ -2955,16 +2961,16 @@ impl Compiler {
                 .find(|b| b.is_ascii_alphabetic())
                 .copied();
             self.next()?; // consume the constraint string
-            self.data.truncate(cstart);
+            self.truncate_data(cstart);
             if section >= 3 {
                 continue; // clobbers
             }
             if section != 1 {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("rdtsc takes no input operands"));
             }
             if self.lex.tk != '(' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("rdtsc: `(` expected after constraint"));
             }
             self.next()?; // consume `(`
@@ -2975,19 +2981,19 @@ impl Compiler {
                 Some(b'a') => low_addr = self.ast_acc.take(),
                 Some(b'd') => high_addr = self.ast_acc.take(),
                 _ => {
-                    self.data.truncate(data_base);
+                    self.truncate_data(data_base);
                     return Err(self.compile_err("rdtsc: outputs must be `=a` and `=d`"));
                 }
             }
             if self.lex.tk != ')' {
-                self.data.truncate(data_base);
+                self.truncate_data(data_base);
                 return Err(self.compile_err("rdtsc: `)` expected after asm operand"));
             }
             self.next()?; // consume the operand's `)`
         }
         self.next()?; // consume the outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
-        self.data.truncate(data_base);
+        self.truncate_data(data_base);
 
         let (low, high) = match (low_addr, high_addr) {
             (Some(l), Some(h)) => (l, h),

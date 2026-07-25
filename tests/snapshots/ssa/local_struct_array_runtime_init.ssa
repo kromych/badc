@@ -9,16 +9,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v3   Imm(9)                                           -> x0
     v4   StoreLocal { off=-2, value=v3, kind=I32 }        -> -
     v5   LocalAddr(-6)                                    -> x0
-    v6   ImmData(10)                                      -> x1
+    v6   ImmData(26)                                      -> x1
     v7   Mcpy { dst=v5, src=v6, size=32 }                 -> x0
-    v8   ImmData(42)                                      -> x0
+    v8   ImmData(10)                                      -> x0
     v9   LocalAddr(-6)                                    -> x1
     v10  Store { addr=v9, disp=0, value=v8, kind=I64 }    -> -
     v11  LocalAddr(-1)                                    -> x1
     v12  LocalAddr(-6)                                    -> x0
     v13  BinopI { op=add, lhs=v12, rhs_imm=8 }            -> x2
     v14  Store { addr=v12, disp=8, value=v11, kind=I64 }  -> -
-    v15  ImmData(44)                                      -> x1
+    v15  ImmData(12)                                      -> x1
     v16  LocalAddr(-6)                                    -> x0
     v17  BinopI { op=add, lhs=v16, rhs_imm=16 }           -> x2
     v18  Store { addr=v16, disp=16, value=v15, kind=I64 } -> -

@@ -83,8 +83,8 @@ impl Compiler {
                     || (c == Token::Glo as i64
                         && self.symbols[self.lex.curr_id_idx].array_size != 0)
             });
-        self.lex.restore(snap);
-        self.data.truncate(data_snap);
+        self.restore_lex(snap);
+        self.truncate_data(data_snap);
         Ok(reloc)
     }
 
@@ -154,7 +154,7 @@ impl Compiler {
         if self.lex.tk == Token::Generic {
             let after = self.generic_select_to_winner()?;
             self.parse_global_initializer_inner(var_ty, var_offset, is_thread_local)?;
-            self.lex.restore(after);
+            self.restore_lex(after);
             return Ok(());
         }
         // C99 6.7.8p11 allows a scalar initializer to be enclosed
@@ -214,7 +214,7 @@ impl Compiler {
                     }
                     return self.parse_global_initializer(var_ty, var_offset, is_thread_local);
                 }
-                self.lex.restore(pre_paren);
+                self.restore_lex(pre_paren);
             } else {
                 // Parenthesised expression. Peek past the matching `)`: a
                 // trailing operator means the parentheses wrap a sub-operand of a
@@ -241,9 +241,9 @@ impl Compiler {
                 if trailing_operator {
                     // Re-parse the whole initializer through the float / integer
                     // constant-expression path below.
-                    self.lex.restore(pre_paren);
+                    self.restore_lex(pre_paren);
                 } else {
-                    self.lex.restore(after_open);
+                    self.restore_lex(after_open);
                     self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
                     self.accept(')')?;
                     return Ok(());
@@ -355,8 +355,8 @@ impl Compiler {
                 self.emit_data_addr_reloc(var_offset, sym_idx, off);
                 return Ok(());
             }
-            self.lex.restore(snap);
-            self.data.truncate(data_snap);
+            self.restore_lex(snap);
+            self.truncate_data(data_snap);
         }
         // String literal in a `char *p` global initializer.
         if self.lex.tk == '"' && is_pointer_ty(var_ty) {

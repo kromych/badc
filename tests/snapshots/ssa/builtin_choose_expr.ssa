@@ -79,7 +79,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=25
     terminator Jmp(b10)   (exit_acc=v37)
   block 10  start_pc=0
     v39  LocalAddr(-24)                                   -> x0
-    v40  ImmData(52)                                      -> x1
+    v40  ImmData(20)                                      -> x1
     v41  Mcpy { dst=v39, src=v40, size=57 }               -> x0
     terminator Jmp(b11)
   block 11  start_pc=0

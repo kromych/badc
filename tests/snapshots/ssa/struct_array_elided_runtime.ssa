@@ -7,7 +7,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   LocalAddr(-2)                                    -> x0
-    v4   ImmData(8)                                       -> x1
+    v4   ImmData(24)                                      -> x1
     v5   Mcpy { dst=v3, src=v4, size=16 }                 -> x0
     v6   LoadLocal { off=2, kind=I32 }                    -> x0
     v7   LocalAddr(-2)                                    -> x0
@@ -93,7 +93,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     terminator Return(v72)   (exit_acc=v72)
   block 8  start_pc=0
     v73  LocalAddr(-5)                                    -> x0
-    v74  ImmData(24)                                      -> x1
+    v74  ImmData(40)                                      -> x1
     v75  Mcpy { dst=v73, src=v74, size=24 }               -> x0
     v76  LoadLocal { off=2, kind=I32 }                    -> x0
     v77  LocalAddr(-5)                                    -> x0

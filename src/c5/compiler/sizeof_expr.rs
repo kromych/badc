@@ -45,7 +45,7 @@ impl Compiler {
                 && self.lex.tk != Token::Dot
                 && self.lex.tk != Token::Arrow;
         }
-        self.lex.restore(snap);
+        self.restore_lex(snap);
         Ok(ok)
     }
 
@@ -206,7 +206,7 @@ impl Compiler {
             // does not consume a paren that was never sizeof's
             // to begin with.
             if had_paren {
-                self.lex.restore(pre_paren_snap);
+                self.restore_lex(pre_paren_snap);
                 had_paren = false;
             }
             let lev = Token::Inc as i64;

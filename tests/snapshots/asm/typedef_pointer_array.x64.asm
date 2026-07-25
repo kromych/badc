@@ -250,6 +250,15 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %rdx
                	movq	%rdx, 0x10(%rax)
                	popq	%rdx
+               	leaq	<rip>, %rax
+               	leaq	-0x18(%rbp), %rcx
+               	movq	%rax, (%rcx)
+               	leaq	<rip>, %rcx
+               	leaq	-0x18(%rbp), %rax
+               	movq	%rcx, 0x8(%rax)
+               	leaq	<rip>, %rcx
+               	leaq	-0x18(%rbp), %rax
+               	movq	%rcx, 0x10(%rax)
                	leaq	-0x18(%rbp), %rax
                	movq	(%rax), %rax
                	movslq	(%rax), %rax

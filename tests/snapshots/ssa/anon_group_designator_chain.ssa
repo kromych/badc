@@ -9,7 +9,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=14
     v3   ParamRef(1, kind=I32)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-6)                                    -> x0
-    v6   ImmData(8)                                       -> x1
+    v6   ImmData(120)                                     -> x1
     v7   Mcpy { dst=v5, src=v6, size=48 }                 -> x0
     v8   Imm(1)                                           -> x0
     v9   LocalAddr(-6)                                    -> x1
@@ -23,7 +23,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=14
     v17  BinopI { op=add, lhs=v16, rhs_imm=12 }           -> x1
     v18  Store { addr=v16, disp=12, value=v3, kind=I32 }  -> -
     v19  LocalAddr(-13)                                   -> x0
-    v20  ImmData(56)                                      -> x1
+    v20  ImmData(168)                                     -> x1
     v21  Mcpy { dst=v19, src=v20, size=52 }               -> x0
     v22  Imm(2)                                           -> x0
     v23  LocalAddr(-13)                                   -> x1
@@ -189,7 +189,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=14
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-6)                                    -> x0
-    v2   ImmData(108)                                     -> x1
+    v2   ImmData(12)                                      -> x1
     v3   Mcpy { dst=v1, src=v2, size=48 }                 -> x0
     v4   LocalAddr(-6)                                    -> x0
     v5   Load { addr=v4, disp=0, kind=U32 }               -> x0
@@ -247,7 +247,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=14
     terminator Return(v42)   (exit_acc=v42)
   block 8  start_pc=0
     v43  LocalAddr(-13)                                   -> x0
-    v44  ImmData(156)                                     -> x1
+    v44  ImmData(60)                                      -> x1
     v45  Mcpy { dst=v43, src=v44, size=52 }               -> x0
     v46  LocalAddr(-13)                                   -> x0
     v47  Load { addr=v46, disp=0, kind=U32 }              -> x0

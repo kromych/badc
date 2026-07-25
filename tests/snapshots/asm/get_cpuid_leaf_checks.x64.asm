@@ -10,16 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<__get_cpuid>:
-               	movl	$0x1, %eax
-               	xorq	%rax, %rax
-               	retq
-
-<__get_cpuid_count>:
-               	movl	$0x1, %eax
-               	xorq	%rax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp

@@ -89,112 +89,27 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
     }
     out.sort_by_key(|f| f.ent_pc);
     // Correctness cleanup at every optimization level, before the
-    // static DCE below reads the call graph: fold constant-condition
+    // caller's static DCE reads the call graph: fold constant-condition
     // branches the walker could not drop (constant loop conditions)
     // and delete the unreachable blocks they orphan -- including the
     // tails sealed off behind `noreturn` calls -- so a dead arm's
-    // calls neither pin a static function here nor lower into calls
+    // calls neither pin a static function nor lower into calls
     // and relocations against symbols the program never references.
     // The fixed point also resolves a merge phi that a pruned branch
     // collapses to one incoming. The -O pipeline reruns this post-inline.
     crate::c5::codegen::passes::simplify_branches::run(&mut out);
-    drop_unreachable_statics(&mut out, program);
     Ok(out)
 }
 
-/// Drop every `FunctionSsa` whose ent_pc is unreachable from the
-/// program's static-DCE roots. Roots are the entry point (`main`),
-/// every externally-linked function (`Linkage::External` /
-/// `Linkage::None`), and every name starting with `_` (the gcc /
-/// clang -Wunused-function convention -- treated as deliberately
-/// retained, matching what `warn_unused_static_functions`
-/// exempts). Anything transitively reachable from a root via
-/// `Inst::Call` or `Inst::ImmCode` survives. `Inst::CallIndirect`
-/// is handled conservatively: any function whose address appears
-/// in `Inst::ImmCode` is already marked reachable, so an indirect
-/// dispatch cannot reach a function the marker hasn't seen.
-///
-/// An `always_inline` function is exempt from the `_`-prefix rule: gcc
-/// keeps no out-of-line copy of one inlined at every call site, and such
-/// a body can be uncompilable out of line (a parameter-dependent `"i"`
-/// inline-asm operand is constant only after inlining). It survives when
-/// genuinely referenced -- a non-inlined call or its address taken -- via
-/// `Inst::Call` / `Inst::ImmCode` regardless.
+/// Drop every `FunctionSsa` unreachable per [`compute_live_sets`].
+/// Runs after the function set was mutated (the -O pipeline's inliner
+/// and branch folds) but with the `.data` image already fixed by
+/// compaction, so every data object -- and thus every `code_relocs`
+/// target -- counts as live.
 pub(crate) fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
-    use crate::c5::ir::Inst;
-    use crate::c5::symbol::Linkage;
-    use crate::c5::token::Token;
-
-    let mut linkage_by_name: alloc::collections::BTreeMap<&str, Linkage> =
-        alloc::collections::BTreeMap::new();
-    for sym in &program.symbols {
-        if sym.class == Token::Fun as i64 && !sym.name.is_empty() {
-            linkage_by_name.insert(sym.name.as_str(), sym.linkage);
-        }
-    }
-
-    let mut by_pc: alloc::collections::BTreeMap<usize, usize> = alloc::collections::BTreeMap::new();
-    for (i, f) in funcs.iter().enumerate() {
-        by_pc.insert(f.ent_pc, i);
-    }
-
-    let mut reachable: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
-    let mut queue: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
-
-    for f in funcs.iter() {
-        let is_root = f.name == "main"
-            || (f.name.starts_with('_') && !f.is_always_inline)
-            || matches!(
-                linkage_by_name.get(f.name.as_str()).copied(),
-                Some(Linkage::External) | Some(Linkage::None)
-            );
-        if is_root {
-            queue.push(f.ent_pc);
-        }
-    }
-    // Static initialisers of the form `int (*fp)(int) = some_fn;`
-    // park the target's ent_pc in `program.code_relocs` (the slot
-    // is patched at link / load time). Treat each entry as a root
-    // so the function whose address sits in the data segment
-    // survives DCE even when it has no in-text call site.
-    for r in &program.code_relocs {
-        queue.push(r.target_ent_pc as usize);
-    }
-    // Every export name binds a function. Treat as a root so
-    // `#pragma export(<name>)` keeps the body around when the
-    // user's source has no in-image call site.
-    for e in &program.exports {
-        queue.push(e.ent_pc);
-    }
-    // Constructors / destructors are referenced only through
-    // `.init_array` / `.fini_array`; keep them as roots even when
-    // `static` and never called in-image.
-    for f in &program.init_funcs {
-        queue.push(f.ent_pc);
-    }
-    // `__attribute__((used))` keeps a definition alive without an
-    // in-image reference; an alias symbol's `val` is its target's
-    // entry, referenced through the alias name at link time.
-    for s in &program.symbols {
-        if s.class == Token::Fun as i64 && (s.is_used || s.is_alias || s.section_name.is_some()) {
-            queue.push(s.val as usize);
-        }
-    }
-
-    while let Some(pc) = queue.pop() {
-        if !reachable.insert(pc) {
-            continue;
-        }
-        let Some(&idx) = by_pc.get(&pc) else { continue };
-        for_each_block_inst(&funcs[idx], |inst| match inst {
-            Inst::Call { target_pc, .. } => queue.push(*target_pc),
-            Inst::ImmCode(target_pc) => queue.push(*target_pc),
-            _ => {}
-        });
-    }
-
+    let live = compute_live_sets(funcs, program, true).func_pcs;
     funcs.retain(|f| {
-        let keep = reachable.contains(&f.ent_pc);
+        let keep = live.contains(&f.ent_pc);
         #[cfg(feature = "codegen_test")]
         if !keep && std::env::var("BADC_DEBUG_STATIC_DCE").is_ok() {
             std::eprintln!(
@@ -233,7 +148,7 @@ pub(crate) fn produce_ssa_funcs(
         // code or data references is unobservable; drop it before codegen
         // so the unused `static inline` helpers headers pull into every
         // unit do not reach the image.
-        let live = compute_live_functions(&funcs, program);
+        let live = compute_live_sets(&funcs, program, false).func_pcs;
         funcs.retain(|f| live.contains(&f.ent_pc));
         #[cfg(feature = "std")]
         measure_dead_data(&funcs, program);
@@ -285,118 +200,47 @@ fn order_by_section(mut funcs: Vec<FunctionSsa>, program: &Program) -> Vec<Funct
     funcs
 }
 
-/// Reachable user functions: the set of `ent_pc`s the program can reach.
-/// Roots are externally-visible functions (C99 6.2.2 external linkage --
-/// callable from another unit) and functions whose address is stored in
-/// the data segment (dispatch tables, via `code_relocs`). From the roots,
-/// a function's direct calls (`Inst::Call`) and address-of references
-/// (`Inst::ImmCode`) keep their targets reachable. A function absent from
-/// the result has internal linkage and no reference path, so it can be
-/// dropped before codegen.
-pub(crate) fn compute_live_functions(
+/// Result of [`compute_live_sets`]: live function ent_pcs, the sorted
+/// data-object start offsets, and the per-object live flag (interval i
+/// spans `[starts[i], starts[i+1])`, the last running to the data end).
+pub(crate) struct LiveSets {
+    pub func_pcs: alloc::collections::BTreeSet<usize>,
+    pub starts: Vec<i64>,
+    pub data_live: Vec<bool>,
+}
+
+#[derive(Clone, Copy)]
+enum Node {
+    Func(usize),
+    Data(usize),
+}
+
+/// Joint function + data reachability for one translation unit (C99
+/// 6.2.2: an unreferenced internal-linkage definition is unobservable
+/// and dropped from the object, as gcc -O does). Nodes are functions
+/// (by ent_pc) and data objects (intervals over the sorted union of
+/// `data_object_starts` and the named-global offsets; an unrecorded
+/// start glues an object to its predecessor, kept conservatively).
+/// Roots: external-linkage / `used` / alias / named-section
+/// definitions, constructors / destructors, exports, the entry, names
+/// spelled in file-scope asm, and the NULL guard. Edges: a live
+/// function keeps its callees, address-taken functions, addressed
+/// data, and symbols named in its asm templates; a live data object
+/// keeps its relocation targets. A relocation in a dead object keeps
+/// nothing -- neither its target nor an extern undefined reference
+/// reaches the emitted object. `assume_data_live` pre-marks all data
+/// live for callers running after the `.data` image is final.
+pub(crate) fn compute_live_sets(
     funcs: &[FunctionSsa],
     program: &Program,
-) -> alloc::collections::BTreeSet<usize> {
+    assume_data_live: bool,
+) -> LiveSets {
     use crate::c5::ir::Inst;
     use crate::c5::symbol::Linkage;
     use crate::c5::token::Token;
     use alloc::collections::{BTreeMap, BTreeSet};
 
-    let by_ent: BTreeMap<usize, &FunctionSsa> = funcs.iter().map(|f| (f.ent_pc, f)).collect();
-    let mut live: BTreeSet<usize> = BTreeSet::new();
-    let mut work: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
-
-    for s in &program.symbols {
-        if s.class == Token::Fun as i64
-            && matches!(s.linkage, Linkage::External)
-            && by_ent.contains_key(&(s.val as usize))
-            && live.insert(s.val as usize)
-        {
-            work.push(s.val as usize);
-        }
-    }
-    for r in &program.code_relocs {
-        let ent = r.target_ent_pc as usize;
-        if by_ent.contains_key(&ent) && live.insert(ent) {
-            work.push(ent);
-        }
-    }
-    // A `__attribute__((constructor))` / `((destructor))` function is
-    // referenced only through `.init_array` / `.fini_array` (or the
-    // startup runtime), never by an in-image call, yet must survive DCE
-    // -- these are frequently `static` (the `type_init`-style idiom).
-    for f in &program.init_funcs {
-        if by_ent.contains_key(&f.ent_pc) && live.insert(f.ent_pc) {
-            work.push(f.ent_pc);
-        }
-    }
-    // `used`-attributed definitions and alias targets survive without
-    // an in-image reference (see the equivalent roots above).
-    for s in &program.symbols {
-        let ent = s.val as usize;
-        if s.class == Token::Fun as i64
-            && (s.is_used || s.is_alias || s.section_name.is_some())
-            && by_ent.contains_key(&ent)
-            && live.insert(ent)
-        {
-            work.push(ent);
-        }
-    }
-    while let Some(ent) = work.pop() {
-        let Some(f) = by_ent.get(&ent) else { continue };
-        for_each_block_inst(f, |inst| {
-            let target = match inst {
-                Inst::Call { target_pc, .. } => Some(*target_pc),
-                Inst::ImmCode(t) => Some(*t),
-                _ => None,
-            };
-            if let Some(t) = target
-                && by_ent.contains_key(&t)
-                && live.insert(t)
-            {
-                work.push(t);
-            }
-        });
-    }
-    live
-}
-
-/// Visit the instructions belonging to a function's blocks. The
-/// unreachable-block prune drops a dead block from `blocks` but leaves
-/// its instructions in the flat `insts` array, so a liveness scan over
-/// `insts` would resurrect call targets only dead code names; the block
-/// ranges are the live view.
-fn for_each_block_inst(f: &FunctionSsa, mut visit: impl FnMut(&crate::c5::ir::Inst)) {
-    for blk in &f.blocks {
-        for v in blk.inst_range.clone() {
-            visit(&f.insts[v as usize]);
-        }
-    }
-}
-
-/// Sorted data-object start offsets and a per-object live flag, shared by
-/// the data-DCE measurement and the compaction prune so the two cannot
-/// disagree on what is reachable. Objects are the `[starts[i],
-/// starts[i+1])` intervals (the last running to `data_len`) of the sorted
-/// union of `Program::data_object_starts` (anonymous literals) and the
-/// named-global offsets (`symbols[..].val`).
-///
-/// `Inst::ImmData` in a surviving function is the only code->data edge
-/// (string literals, global addresses, and aggregate-initializer
-/// templates all lower through it); `data_relocs` are the data->data
-/// edges. Roots are those edges plus externally-linked globals,
-/// relocation slots, and the leading NULL guard (object 0). Marking is
-/// conservative: a referenced object is never reported dead.
-fn live_data_intervals(
-    funcs: &[FunctionSsa],
-    program: &Program,
-    data_len: i64,
-) -> (Vec<i64>, Vec<bool>) {
-    use crate::c5::ir::Inst;
-    use crate::c5::symbol::Linkage;
-    use crate::c5::token::Token;
-    use alloc::collections::BTreeSet;
-
+    let data_len = program.data.len() as i64;
     let mut start_set: BTreeSet<i64> = BTreeSet::new();
     start_set.insert(0);
     for &s in &program.data_object_starts {
@@ -408,7 +252,7 @@ fn live_data_intervals(
         // A `_Thread_local` symbol's `val` is an offset into the separate
         // TLS image, not `.data`; conflating it here would plant a spurious
         // `.data` object boundary at a coinciding low offset and split a
-        // real object. The symbol remap below skips them for the same reason.
+        // real object.
         if sym.class == Token::Glo as i64
             && sym.defined_here
             && !sym.is_thread_local
@@ -426,76 +270,193 @@ fn live_data_intervals(
         }
     };
 
-    let mut live = alloc::vec![false; n];
-    // The 8-byte NULL guard at offset 0 must stay at offset 0 so a data
-    // pointer is never confused with NULL.
-    if n > 0 {
-        live[0] = true;
-    }
-    for f in funcs {
-        for inst in &f.insts {
-            if let Inst::ImmData(off) = inst
-                && (0..data_len).contains(off)
-            {
-                live[interval_of(*off)] = true;
-            }
-        }
-    }
+    let by_ent: BTreeMap<usize, &FunctionSsa> = funcs.iter().map(|f| (f.ent_pc, f)).collect();
+
+    // Internal names an asm template can reference by spelling.
+    let mut named: BTreeMap<&str, Node> = BTreeMap::new();
     for sym in &program.symbols {
-        // External-linkage objects are reachable from sibling units;
-        // `used` and named-section objects are kept by declared intent
-        // (their consumers live outside this unit's reference graph).
         if sym.class == Token::Glo as i64
             && sym.defined_here
             && !sym.is_thread_local
-            && (matches!(sym.linkage, Linkage::External)
-                || sym.is_used
-                || sym.section_name.is_some())
+            && !sym.name.is_empty()
             && (0..data_len).contains(&sym.val)
         {
-            live[interval_of(sym.val)] = true;
+            named.insert(sym.name.as_str(), Node::Data(interval_of(sym.val)));
         }
     }
-    for off in program
-        .code_relocs
-        .iter()
-        .map(|r| r.data_offset as i64)
-        .chain(
-            program
-                .extern_data_relocs
-                .iter()
-                .map(|r| r.data_offset as i64),
-        )
-    {
-        if (0..data_len).contains(&off) {
-            live[interval_of(off)] = true;
+    for f in funcs {
+        if !f.name.is_empty() {
+            named.insert(f.name.as_str(), Node::Func(f.ent_pc));
         }
     }
-    // The target interval is resolved via the anchor: a one-past-the-end
-    // target coincides with the next object's start and would mark the
-    // wrong object live.
-    let edges: Vec<(usize, usize)> = program
-        .data_relocs
-        .iter()
-        .filter(|r| (r.data_offset as i64) < data_len && (r.target_anchor as i64) < data_len)
-        .map(|r| {
-            (
-                interval_of(r.data_offset as i64),
-                interval_of(r.target_anchor as i64),
-            )
-        })
-        .collect();
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for &(src, dst) in &edges {
-            if live[src] && !live[dst] {
-                live[dst] = true;
-                changed = true;
+
+    // Relocation edges, keyed by the interval holding the slot.
+    let mut code_edges: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
+    let mut data_edges: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
+    if n > 0 {
+        for r in &program.code_relocs {
+            let off = r.data_offset as i64;
+            if (0..data_len).contains(&off) {
+                code_edges[interval_of(off)].push(r.target_ent_pc as usize);
+            }
+        }
+        // The target interval resolves via the anchor: a one-past-the-end
+        // target coincides with the next object's start and would mark
+        // the wrong object.
+        for r in &program.data_relocs {
+            let (off, anchor) = (r.data_offset as i64, r.target_anchor as i64);
+            if (0..data_len).contains(&off) && (0..data_len).contains(&anchor) {
+                data_edges[interval_of(off)].push(interval_of(anchor));
             }
         }
     }
-    (starts, live)
+
+    let mut func_pcs: BTreeSet<usize> = BTreeSet::new();
+    let mut data_live = alloc::vec![false; n];
+    let mut work: alloc::vec::Vec<Node> = alloc::vec::Vec::new();
+    // A block-scope static exists only in an emitted instance of its
+    // function, so its `used` / `section` intent keeps it only while
+    // the owner survives: an edge from the owner, not a root.
+    let mut owner_deps: BTreeMap<usize, alloc::vec::Vec<usize>> = BTreeMap::new();
+
+    for s in &program.symbols {
+        // A named section does not retain a function (gcc parity: the
+        // section-attributed `static inline` helpers headers pull in
+        // are dropped when unreferenced; a kept one is still placed in
+        // its section). `used` and alias do.
+        if s.class == Token::Fun as i64
+            && (matches!(s.linkage, Linkage::External) || s.is_used || s.is_alias)
+            && by_ent.contains_key(&(s.val as usize))
+        {
+            work.push(Node::Func(s.val as usize));
+        }
+        if s.class == Token::Glo as i64
+            && s.defined_here
+            && !s.is_thread_local
+            && (0..data_len).contains(&s.val)
+            && (matches!(s.linkage, Linkage::External) || s.is_used || s.section_name.is_some())
+        {
+            match s.owner_ent_pc {
+                Some(pc) => owner_deps
+                    .entry(pc as usize)
+                    .or_default()
+                    .push(interval_of(s.val)),
+                None => work.push(Node::Data(interval_of(s.val))),
+            }
+        }
+    }
+    // Constructors / destructors are referenced through `.init_array` /
+    // `.fini_array`, exports through the export table, the entry through
+    // the image header -- none has an in-image reference.
+    for f in &program.init_funcs {
+        work.push(Node::Func(f.ent_pc));
+    }
+    for e in &program.exports {
+        work.push(Node::Func(e.ent_pc));
+    }
+    if program.entry_name.is_some() {
+        work.push(Node::Func(program.entry_pc));
+    }
+    // The 8-byte NULL guard stays at offset 0 so a data pointer is never
+    // confused with NULL.
+    if n > 0 {
+        work.push(Node::Data(0));
+    }
+    for t in &program.file_asm {
+        push_asm_names(t.as_bytes(), &named, &mut work);
+    }
+    if assume_data_live {
+        for i in 0..n {
+            work.push(Node::Data(i));
+        }
+    }
+
+    while let Some(node) = work.pop() {
+        match node {
+            Node::Func(pc) => {
+                if !func_pcs.insert(pc) {
+                    continue;
+                }
+                if let Some(deps) = owner_deps.get(&pc) {
+                    for &d in deps {
+                        work.push(Node::Data(d));
+                    }
+                }
+                let Some(f) = by_ent.get(&pc) else { continue };
+                for_each_block_inst(f, |inst| match inst {
+                    Inst::Call { target_pc, .. } => work.push(Node::Func(*target_pc)),
+                    Inst::ImmCode(t) => work.push(Node::Func(*t)),
+                    Inst::ImmData(off) if (0..data_len).contains(off) => {
+                        work.push(Node::Data(interval_of(*off)));
+                    }
+                    Inst::InlineAsm { asm, .. } => {
+                        push_asm_names(&asm.template, &named, &mut work);
+                    }
+                    _ => {}
+                });
+            }
+            Node::Data(i) => {
+                if data_live[i] {
+                    continue;
+                }
+                data_live[i] = true;
+                for &t in &code_edges[i] {
+                    work.push(Node::Func(t));
+                }
+                for &d in &data_edges[i] {
+                    work.push(Node::Data(d));
+                }
+            }
+        }
+    }
+    LiveSets {
+        func_pcs,
+        starts,
+        data_live,
+    }
+}
+
+/// Push the nodes of internal symbols whose names appear as identifier
+/// tokens in an asm template. Conservative in the keep direction: any
+/// token spelled like a defined name counts as a reference.
+fn push_asm_names(
+    text: &[u8],
+    named: &alloc::collections::BTreeMap<&str, Node>,
+    work: &mut alloc::vec::Vec<Node>,
+) {
+    let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'$';
+    let mut i = 0;
+    while i < text.len() {
+        if !is_ident(text[i]) {
+            i += 1;
+            continue;
+        }
+        let s = i;
+        while i < text.len() && is_ident(text[i]) {
+            i += 1;
+        }
+        if text[s].is_ascii_digit() {
+            continue;
+        }
+        if let Ok(tok) = core::str::from_utf8(&text[s..i])
+            && let Some(node) = named.get(tok)
+        {
+            work.push(*node);
+        }
+    }
+}
+
+/// Visit the instructions belonging to a function's blocks. The
+/// unreachable-block prune drops a dead block from `blocks` but leaves
+/// its instructions in the flat `insts` array, so a liveness scan over
+/// `insts` would resurrect call targets only dead code names; the block
+/// ranges are the live view.
+fn for_each_block_inst(f: &FunctionSsa, mut visit: impl FnMut(&crate::c5::ir::Inst)) {
+    for blk in &f.blocks {
+        for v in blk.inst_range.clone() {
+            visit(&f.insts[v as usize]);
+        }
+    }
 }
 
 /// New packed offset for a data byte at `off`, given the sorted object
@@ -544,7 +505,8 @@ pub(crate) fn compact_program_data(
     let funcs = produce_ssa_funcs(program, target)?;
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
         funcs.iter().map(|f| f.ent_pc).collect();
-    let (starts, live) = live_data_intervals(&funcs, program, data_len);
+    let sets = compute_live_sets(&funcs, program, false);
+    let (starts, live) = (sets.starts, sets.data_live);
     let n = starts.len();
 
     // Each kept object moves to a new base congruent to its old start
@@ -690,6 +652,16 @@ pub(crate) fn compact_program_data(
     let map = |off: i64| remap_data_off(off, &starts, &new_base, data_len);
 
     let mut out = program.clone();
+    // A relocation whose slot lies in a dropped object drops with it:
+    // emitting it would plant a reference -- for an extern target, an
+    // undefined symbol -- from an object the unit cannot reach.
+    let slot_live = |off: u64| {
+        let off = off as i64;
+        !(0..data_len).contains(&off) || live[interval_of(off)]
+    };
+    out.data_relocs.retain(|r| slot_live(r.data_offset));
+    out.code_relocs.retain(|r| slot_live(r.data_offset));
+    out.extern_data_relocs.retain(|r| slot_live(r.data_offset));
     out.data = new_data;
     out.data_pad_ranges = new_pad_ranges;
     out.data_align_marks = new_align_marks;
@@ -704,7 +676,17 @@ pub(crate) fn compact_program_data(
             && !sym.is_thread_local
             && (0..data_len).contains(&sym.val)
         {
-            sym.val = map(sym.val);
+            if new_base[interval_of(sym.val)] < 0 {
+                // The object was dropped; retire the record in place
+                // (removal would shift the indices the AST references)
+                // so no writer places or carves it.
+                sym.defined_here = false;
+                sym.is_used = false;
+                sym.section_name = None;
+                sym.val = 0;
+            } else {
+                sym.val = map(sym.val);
+            }
         }
     }
     for r in &mut out.data_relocs {
@@ -755,14 +737,6 @@ pub(crate) fn compact_program_data(
 /// no effect on codegen). Emits one line per translation unit to the
 /// path in `BADC_DATA_DCE_LOG` when that variable is set, validating the
 /// object-boundary model and the achievable `.data` reduction.
-///
-/// Objects are the `[start, next_start)` intervals of the sorted union of
-/// `Program::data_object_starts` (anonymous literals) and the named-global
-/// offsets (`symbols[..].val`). An interval is live if reached from a root
-/// -- an `Inst::ImmData` in a surviving function, an externally-linked
-/// named global, or a relocation slot -- or, transitively, from a live
-/// object holding a data pointer (`data_relocs`). Marking is conservative:
-/// it never reports a referenced object dead.
 #[cfg(feature = "std")]
 fn measure_dead_data(funcs: &[FunctionSsa], program: &Program) {
     use std::io::Write;
@@ -774,7 +748,8 @@ fn measure_dead_data(funcs: &[FunctionSsa], program: &Program) {
     if data_len == 0 {
         return;
     }
-    let (starts, live) = live_data_intervals(funcs, program, data_len);
+    let sets = compute_live_sets(funcs, program, false);
+    let (starts, live) = (sets.starts, sets.data_live);
     let n = starts.len();
 
     let mut dead_bytes: i64 = 0;

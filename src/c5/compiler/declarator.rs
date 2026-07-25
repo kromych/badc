@@ -94,7 +94,7 @@ impl Compiler {
             self.next()?;
             return Ok(true);
         }
-        self.lex.restore(proto_snap);
+        self.restore_lex(proto_snap);
         Ok(false)
     }
 
@@ -116,7 +116,7 @@ impl Compiler {
         }
         let is_param_list =
             ok && self.lex.tk != Token::MulOp && (self.lex.tk == ')' || self.lex_is_type_start());
-        self.lex.restore(snap);
+        self.restore_lex(snap);
         is_param_list
     }
 

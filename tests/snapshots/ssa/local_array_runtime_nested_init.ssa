@@ -13,7 +13,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=23
     v7   Imm(8)                                           -> x0
     v8   StoreLocal { off=-19, value=v7, kind=I32 }       -> -
     v9   LocalAddr(-4)                                    -> x0
-    v10  ImmData(8)                                       -> x1
+    v10  ImmData(24)                                      -> x1
     v11  Mcpy { dst=v9, src=v10, size=32 }                -> x0
     v12  LocalAddr(-22)                                   -> x0
     v13  LocalAddr(-4)                                    -> x1
@@ -91,7 +91,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=23
     terminator Return(v70)   (exit_acc=v70)
   block 8  start_pc=0
     v71  LocalAddr(-8)                                    -> x0
-    v72  ImmData(40)                                      -> x1
+    v72  ImmData(56)                                      -> x1
     v73  Mcpy { dst=v71, src=v72, size=32 }               -> x0
     v74  LocalAddr(-22)                                   -> x0
     v75  LocalAddr(-8)                                    -> x1
@@ -137,7 +137,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=23
     terminator Return(v108)   (exit_acc=v108)
   block 12  start_pc=0
     v109 LocalAddr(-14)                                   -> x0
-    v110 ImmData(72)                                      -> x1
+    v110 ImmData(88)                                      -> x1
     v111 Mcpy { dst=v109, src=v110, size=48 }             -> x0
     v112 LocalAddr(-22)                                   -> x0
     v113 LocalAddr(-14)                                   -> x1
@@ -210,7 +210,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=23
     terminator Return(v165)   (exit_acc=v165)
   block 20  start_pc=0
     v166 LocalAddr(-18)                                   -> x0
-    v167 ImmData(120)                                     -> x1
+    v167 ImmData(136)                                     -> x1
     v168 Mcpy { dst=v166, src=v167, size=32 }             -> x0
     v169 LocalAddr(-22)                                   -> x0
     v170 LocalAddr(-18)                                   -> x1

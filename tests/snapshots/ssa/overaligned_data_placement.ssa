@@ -88,7 +88,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v60  Imm(6)                                           -> x0
     terminator Return(v60)   (exit_acc=v60)
   block 12  start_pc=0
-    v61  ImmData(320)                                     -> x0
+    v61  ImmData(1088)                                    -> x0
     v62  Imm(64)                                          -> x1
     v63  Imm(0)                                           -> x1
     v64  Imm(0)                                           -> x1
@@ -102,7 +102,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v70  Imm(7)                                           -> x0
     terminator Return(v70)   (exit_acc=v70)
   block 14  start_pc=0
-    v71  ImmData(384)                                     -> x0
+    v71  ImmData(1152)                                    -> x0
     v72  Imm(128)                                         -> x1
     v73  Imm(0)                                           -> x1
     v74  Imm(0)                                           -> x1
@@ -136,7 +136,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v94  ImmData(256)                                     -> x1
     v95  Imm(22)                                          -> x2
     v96  Store { addr=v94, disp=0, value=v95, kind=I32 }  -> -
-    v97  ImmData(384)                                     -> x1
+    v97  ImmData(1152)                                    -> x1
     v98  Imm(33)                                          -> x2
     v99  Store { addr=v97, disp=0, value=v98, kind=I32 }  -> -
     v100 ImmData(512)                                     -> x1
@@ -161,7 +161,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v115 Imm(0)                                           -> x2
     terminator Bnz { cond=v112, target=b36, fall=b21 }   (exit_acc=v112)
   block 21  start_pc=0
-    v116 ImmData(384)                                     -> x0
+    v116 ImmData(1152)                                    -> x0
     v117 Load { addr=v116, disp=0, kind=I32 }             -> x0
     v118 BinopI { op=ne, lhs=v117, rhs_imm=33 }           -> x0
     v119 BinopI { op=ne, lhs=v118, rhs_imm=0 }            -> x0

@@ -1894,6 +1894,13 @@ fn static_init_braced_scalar() {
 }
 
 #[test]
+fn zero_size_static_distinct() {
+    // Zero-sized statics (GNU empty struct) keep distinct addresses:
+    // the object model identifies objects by start offset.
+    assert_eq!(run_fixture("zero_size_static_distinct.c"), 0);
+}
+
+#[test]
 fn paren_string_char_array_init() {
     // C99 6.7.9p14 + 6.5.1: a parenthesized string literal initializes a
     // char array by copying its bytes (a common `._data = (LITERAL)` macro

@@ -68,7 +68,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=16
     v7   Imm(69)                                          -> x1
     v8   Imm(0)                                           -> x0
     v9   LocalAddr(-12)                                   -> x0
-    v10  ImmData(24)                                      -> x2
+    v10  ImmData(88)                                      -> x2
     v11  Mcpy { dst=v9, src=v10, size=20 }                -> x0
     v12  Imm(1)                                           -> x0
     v13  LocalAddr(-12)                                   -> x2
@@ -102,7 +102,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=16
     terminator Return(v38)   (exit_acc=v38)
   block 12  start_pc=0
     v39  LocalAddr(-4)                                    -> x0
-    v40  ImmData(54)                                      -> x1
+    v40  ImmData(38)                                      -> x1
     v41  Mcpy { dst=v39, src=v40, size=16 }               -> x0
     v42  LocalAddr(-4)                                    -> x0
     terminator Jmp(b13)
@@ -170,7 +170,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=16
     terminator Return(v44)   (exit_acc=v44)
   block 22  start_pc=0
     v45  LocalAddr(-7)                                    -> x0
-    v46  ImmData(70)                                      -> x1
+    v46  ImmData(54)                                      -> x1
     v47  Mcpy { dst=v45, src=v46, size=16 }               -> x0
     v48  LocalAddr(-7)                                    -> x0
     v49  Imm(0)                                           -> x1
@@ -227,7 +227,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=16
     terminator Return(v85)   (exit_acc=v85)
   block 30  start_pc=0
     v86  LocalAddr(-9)                                    -> x0
-    v87  ImmData(86)                                      -> x1
+    v87  ImmData(70)                                      -> x1
     v88  Mcpy { dst=v86, src=v87, size=8 }                -> x0
     v89  LocalAddr(-9)                                    -> x0
     v90  Imm(0)                                           -> x1
@@ -248,7 +248,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=16
     v101 Imm(10)                                          -> x0
     v102 Imm(0)                                           -> x1
     v103 LocalAddr(-2)                                    -> x1
-    v104 ImmData(94)                                      -> x2
+    v104 ImmData(110)                                     -> x2
     v105 Mcpy { dst=v103, src=v104, size=8 }              -> x1
     v106 LoadLocal { off=-16, kind=I32 }                  -> x1
     v107 LocalAddr(-2)                                    -> x1

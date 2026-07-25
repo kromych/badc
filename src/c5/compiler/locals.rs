@@ -129,6 +129,12 @@ impl Compiler {
         // base-type parse, so record it as we go.
         self.pending.base_is_const = false;
         self.pending.saw_register_storage = false;
+        // The file-scope statement loop resets these; at block scope a
+        // stale carrier (the enclosing function's own attributes) would
+        // otherwise bleed onto a block-scope static's emission record.
+        self.pending.attr_used = false;
+        self.pending.attr_section = None;
+        self.pending.attr_weak = false;
         while self.lex.tk == Token::Extern
             || self.lex.tk == Token::Static
             || self.lex.tk == Token::ThreadLocal
@@ -400,6 +406,7 @@ impl Compiler {
                     self.data_align = self.data_align.max(want_align);
                 }
                 self.allocate_static_local(loc_idx, ty, array_size)?;
+                self.push_block_static_record(loc_idx, ty);
                 self.ast_emit_static_local_decl(loc_idx as u32);
             } else {
                 self.symbols[loc_idx].class = Token::Loc as i64;
@@ -517,21 +524,68 @@ impl Compiler {
     /// for static locals (the file-scope path handles them, but
     /// the routing through `parse_global_initializer` here only
     /// covers scalars).
+    /// Push the persistent emission record of a block-scope static: a
+    /// `name.<n>` internal symbol carrying the object's offset, extent,
+    /// and `used` / `section` attributes past the scope-exit restore of
+    /// the scoped binding (toolchains emit the same `name.N` locals).
+    /// Function close stamps `owner_ent_pc`; static DCE then treats the
+    /// object as a per-instance part of its function. Thread-locals are
+    /// skipped: their `val` is a TLS offset outside the `.data` model.
+    pub(super) fn push_block_static_record(&mut self, loc_idx: usize, ty: i64) {
+        if self.symbols[loc_idx].is_thread_local {
+            return;
+        }
+        let final_array = self.symbols[loc_idx].array_size;
+        let reserved = if final_array > 0 {
+            ((self.size_of_type(ty) as i64 * final_array + 7) / 8 * 8).max(8)
+        } else {
+            (self.slots_of_type(ty) * 8).max(8)
+        };
+        let name = alloc::format!(
+            "{}.{}",
+            self.symbols[loc_idx].name,
+            self.next_block_static_id
+        );
+        self.next_block_static_id += 1;
+        let hash = crate::c5::lexer::hash_name(name.as_bytes());
+        let record_idx = self.symbols.len();
+        self.symbols.push(crate::c5::symbol::Symbol {
+            name,
+            token: Token::Id as i64,
+            class: Token::Glo as i64,
+            type_: ty,
+            val: self.symbols[loc_idx].val,
+            array_size: final_array,
+            reserved_data_bytes: reserved,
+            data_align: self.symbols[loc_idx].data_align,
+            linkage: crate::c5::symbol::Linkage::Internal,
+            defined_here: true,
+            has_initializer: true,
+            ..Default::default()
+        });
+        self.symbol_index.record(hash);
+        self.apply_symbol_attributes(record_idx);
+        self.pending_block_static_syms.push(record_idx);
+    }
+
     pub(super) fn allocate_static_local(
         &mut self,
         loc_idx: usize,
         ty: i64,
         array_size: i64,
     ) -> Result<(), C5Error> {
-        // Storage. Mirrors run_compile's file-scope allocator.
+        // Storage. Mirrors run_compile's file-scope allocator. A
+        // zero-sized object (empty struct, GNU) still reserves one slot:
+        // the data-DCE interval model and the named-section carve
+        // identify objects by start offset, so no two may share one.
         let bytes = if array_size > 0 {
             let total = (self.size_of_type(ty) as i64) * array_size;
-            ((total + 7) / 8) * 8
+            (((total + 7) / 8) * 8).max(8)
         } else if array_size == -1 {
             // Deferred-size array: handled below after parsing init.
             0
         } else {
-            self.slots_of_type(ty) * 8
+            (self.slots_of_type(ty) * 8).max(8)
         };
         self.symbols[loc_idx].array_size = array_size.max(0);
         // A `static _Thread_local` local lives in the TLS block (`.tdata` /
@@ -921,8 +975,8 @@ impl Compiler {
             }
             self.next()?;
         }
-        self.lex.restore(snap);
-        self.data.truncate(data_snap);
+        self.restore_lex(snap);
+        self.truncate_data(data_snap);
         Ok(found)
     }
 
@@ -1205,9 +1259,9 @@ impl Compiler {
         if fields > 0 {
             elems += 1;
         }
-        self.data.truncate(saved_data);
+        self.truncate_data(saved_data);
         self.next_ent_pc = saved_pc;
-        self.lex.restore(snap);
+        self.restore_lex(snap);
         Ok(walked.map(|_| elems))
     }
 
@@ -1276,7 +1330,7 @@ impl Compiler {
                 self.init_struct_array_element(sid, here)?;
             }
             if e < hi {
-                self.lex.restore(snap);
+                self.restore_lex(snap);
             }
         }
         Ok(())
@@ -2089,6 +2143,25 @@ impl Compiler {
         !(is_struct_ty(s.type_) && struct_ptr_depth(s.type_) == 0)
     }
 
+    /// Whether an identifier value in an automatic-storage initializer
+    /// forces the per-member runtime-store path. Locals and file-scope
+    /// scalar reads are runtime values; an address (`&id`, a function
+    /// name, an array name's decay) is materialized by a runtime store
+    /// so the staged template carries no absolute relocation.
+    fn init_id_needs_runtime(&self, prev_was_amp: bool) -> bool {
+        let s = &self.symbols[self.lex.curr_id_idx];
+        if s.class == Token::Loc as i64 {
+            return true;
+        }
+        if prev_was_amp && (s.class == Token::Glo as i64 || s.class == Token::Fun as i64) {
+            return true;
+        }
+        if s.class == Token::Fun as i64 || (s.class == Token::Glo as i64 && s.array_size != 0) {
+            return true;
+        }
+        self.glo_value_read_is_runtime(self.lex.curr_id_idx)
+    }
+
     /// Pre-scan an array initializer's brace list (current token
     /// must be `{`) and return `(element_count, needs_runtime)`.
     /// The count is the number of top-level (comma-separated)
@@ -2106,8 +2179,8 @@ impl Compiler {
         let mut count: i64 = 0;
         // Detect an empty list (`{}`) -- 0 elements rather than 1.
         let mut saw_any = false;
-        // Whether the previously scanned token was a unary/binary `&`;
-        // a global read in `&global` is a constant address.
+        // Whether the previously scanned token was a unary/binary `&`
+        // (see `init_id_needs_runtime` for the address rule).
         let mut prev_was_amp = false;
         while depth > 0 && self.lex.tk != 0 {
             if self.lex.tk == '(' && self.lex.peek_after_whitespace(b'{') {
@@ -2142,11 +2215,7 @@ impl Compiler {
                 continue;
             } else if self.lex.tk == Token::Id {
                 saw_any = true;
-                let class = self.symbols[self.lex.curr_id_idx].class;
-                if class == Token::Loc as i64 {
-                    needs_runtime = true;
-                }
-                if !prev_was_amp && self.glo_value_read_is_runtime(self.lex.curr_id_idx) {
+                if self.init_id_needs_runtime(prev_was_amp) {
                     needs_runtime = true;
                 }
                 if self.lex.peek_after_whitespace(b'[') || self.lex.peek_after_whitespace(b'(') {
@@ -2167,7 +2236,7 @@ impl Compiler {
             prev_was_amp = self.lex.tk == Token::AndOp;
             self.next()?;
         }
-        self.lex.restore(snap);
+        self.restore_lex(snap);
         Ok((count, needs_runtime))
     }
 
@@ -2180,13 +2249,12 @@ impl Compiler {
     /// return.
     ///
     /// Constants for this check: integer / float / string
-    /// literals, address-of-global (`&id`), enum / `#define`
-    /// constants (class == Num), bare globals / functions /
-    /// syscall stubs (class == Glo / Fun / Sys), and any cast or
-    /// paren expression composed of the same. Non-constants:
-    /// references to Loc-class symbols (parameters or locals),
-    /// indexed reads (`id[...]`), member access (`.` / `->`),
-    /// and function calls (`id(args)`).
+    /// literals, enum / `#define` constants (class == Num), bare
+    /// file-scope scalar constants, and any cast or paren
+    /// expression composed of the same. Runtime values: Loc-class
+    /// references, indexed reads (`id[...]`), member access
+    /// (`.` / `->`), calls, and any address (`&id`, a function
+    /// name, an array's decay -- see `init_id_needs_runtime`).
     pub(super) fn array_init_needs_runtime(&mut self) -> Result<bool, C5Error> {
         Ok(self.scan_array_init()?.1)
     }
@@ -2408,16 +2476,13 @@ impl Compiler {
         // Multiple chained designators (`.outer.inner = ...`,
         // `[5][2] = ...`) are skipped in order.
         let mut at_entry_start = true;
-        // Whether the previously scanned token was `&` (address-of):
-        // a global read in `&global` is a constant address.
+        // Whether the previously scanned token was `&` (address-of).
+        // An address-valued member (`&g`, a function name, an array
+        // name's decay) takes the runtime path: automatic storage is
+        // built by stores, so the staged template carries no absolute
+        // relocation (as toolchains emit; an abs-reloc-free link --
+        // a vDSO or firmware stub -- rejects a template relocation).
         let mut prev_was_amp = false;
-        // Per-value tracking: a bare `&global` (or `&g + const`) is a
-        // link-time constant the data path handles, but an address
-        // combined with a bitwise / shift operator (the address-tagging
-        // idiom `(uintptr_t)&g | tag`) is not, so it needs the runtime
-        // path. Both flags reset at each value boundary.
-        let mut value_has_addr = false;
-        let mut value_has_bitop = false;
         while depth > 0 && self.lex.tk != 0 {
             // Designator skip works at any depth: nested
             // `.inner = { .x = ... }` carries its own
@@ -2454,8 +2519,6 @@ impl Compiler {
                 }
                 at_entry_start = false;
                 prev_was_amp = false;
-                value_has_addr = false;
-                value_has_bitop = false;
                 continue;
             }
             if self.lex.tk == '(' && self.lex.peek_after_whitespace(b'{') {
@@ -2479,21 +2542,10 @@ impl Compiler {
                 // depth.
                 at_entry_start = true;
                 prev_was_amp = false;
-                value_has_addr = false;
-                value_has_bitop = false;
                 self.next()?;
                 continue;
             } else if self.lex.tk == Token::Id {
-                let class = self.symbols[self.lex.curr_id_idx].class;
-                if class == Token::Loc as i64 {
-                    needs_runtime = true;
-                }
-                if prev_was_amp {
-                    value_has_addr = true;
-                    if value_has_bitop {
-                        needs_runtime = true;
-                    }
-                } else if self.glo_value_read_is_runtime(self.lex.curr_id_idx) {
+                if self.init_id_needs_runtime(prev_was_amp) {
                     needs_runtime = true;
                 }
                 if self.lex.peek_after_whitespace(b'[') || self.lex.peek_after_whitespace(b'(') {
@@ -2506,22 +2558,12 @@ impl Compiler {
                 needs_runtime = true;
                 at_entry_start = false;
             } else {
-                if self.lex.tk == Token::OrOp
-                    || self.lex.tk == Token::XorOp
-                    || self.lex.tk == Token::ShlOp
-                    || self.lex.tk == Token::ShrOp
-                {
-                    value_has_bitop = true;
-                    if value_has_addr {
-                        needs_runtime = true;
-                    }
-                }
                 at_entry_start = false;
             }
             prev_was_amp = self.lex.tk == Token::AndOp;
             self.next()?;
         }
-        self.lex.restore(snap);
+        self.restore_lex(snap);
         Ok(needs_runtime)
     }
 }

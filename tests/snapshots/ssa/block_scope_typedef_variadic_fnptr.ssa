@@ -9,16 +9,16 @@ fn ent_pc=6 n_params=0 variadic=false locals=8
     v3   Store { addr=v1, disp=0, value=v2, kind=I8 }     -> -
     v4   LocalAddr(-8)                                    -> x7
     v5   Imm(64)                                          -> x6
-    v6   ImmData(64)                                      -> x2
+    v6   ImmData(16)                                      -> x2
     v7   Imm(7)                                           -> x1
-    v8   ImmData(70)                                      -> x8
-    v9   ImmData(56)                                      -> x0
+    v8   ImmData(22)                                      -> x8
+    v9   ImmData(8)                                       -> x0
     v10  Load { addr=v9, disp=0, kind=I64 }               -> x0
     v11  CallIndirect { target=v10, args=[v4, v5, v6, v7, v8], callee_variadic=true, fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
     v13  Extend { value=v11, kind=I32 }                   -> x0
     v14  LocalAddr(-8)                                    -> x7
-    v15  ImmData(75)                                      -> x6
+    v15  ImmData(27)                                      -> x6
     v16  CallExt { binding_idx=66, args=[v14, v15], fp_arg_mask=0x0 } -> x0
     v17  BinopI { op=ne, lhs=v16, rhs_imm=0 }             -> x0
     terminator Bz { cond=v17, target=b2, fall=b1 }   (exit_acc=v17)

@@ -15,10 +15,10 @@ fn ent_pc=13 n_params=2 variadic=false locals=8
     terminator Bz { cond=v8, target=b26, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0
     v9   LocalAddr(-2)                                    -> x0
-    v10  ImmData(8)                                       -> x1
+    v10  ImmData(40)                                      -> x1
     v11  Mcpy { dst=v9, src=v10, size=16 }                -> x0
     v12  LocalAddr(-8)                                    -> x0
-    v13  ImmData(24)                                      -> x1
+    v13  ImmData(56)                                      -> x1
     v14  Mcpy { dst=v12, src=v13, size=8 }                -> x0
     v15  Imm(0)                                           -> x0
     v16  StoreLocal { off=-7, value=v15, kind=F64 }       -> -
@@ -43,7 +43,7 @@ fn ent_pc=13 n_params=2 variadic=false locals=8
   block 5  start_pc=0
     v20  StoreLocal { off=-5, value=v15, kind=I32 }       -> -
     v21  LocalAddr(-4)                                    -> x1
-    v22  ImmData(32)                                      -> x2
+    v22  ImmData(16)                                      -> x2
     v23  Mcpy { dst=v21, src=v22, size=4 }                -> x1
     v24  LocalAddr(-2)                                    -> x1
     terminator Jmp(b6)

@@ -284,6 +284,7 @@ fn run() {
     // Errors and warnings still print; only informational lines
     // are quieted.
     let mut quiet = false;
+    let mut mno_sse = false;
     // `--export-all` exports every non-static function in the dynamic
     // symbol table / export trie of native output, so a runtime
     // `dlopen` consumer can `dlsym` it without a source-level `#pragma
@@ -489,6 +490,10 @@ fn run() {
             // progress, `info: wrote file <path>` lines). Errors
             // and warnings remain on stderr unchanged.
             "-q" | "--quiet" => quiet = true,
+            // gcc `-mno-sse` (x86_64): compiler-generated code keeps off
+            // the SSE registers. Freestanding environments (OS kernels)
+            // fault on any XMM access; see `NativeOptions::no_sse`.
+            "-mno-sse" => mno_sse = true,
             // Export every non-static function (dlopen/dlsym visibility).
             "--export-all" => export_all = true,
             // Export every defined non-static global (function and data)
@@ -1019,6 +1024,7 @@ fn run() {
         let mut reloc_opts = badc::NativeOptions::new()
             .with_debug_info(emit_debug_info)
             .with_inline_cap(inline_cap);
+        reloc_opts.no_sse = mno_sse;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -1564,6 +1570,7 @@ fn run() {
         let mut reloc_opts = badc::NativeOptions::new()
             .with_debug_info(emit_debug_info)
             .with_inline_cap(inline_cap);
+        reloc_opts.no_sse = mno_sse;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -1682,6 +1689,7 @@ fn run() {
         let mut reloc_opts = badc::NativeOptions::new()
             .with_debug_info(emit_debug_info)
             .with_inline_cap(inline_cap);
+        reloc_opts.no_sse = mno_sse;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }

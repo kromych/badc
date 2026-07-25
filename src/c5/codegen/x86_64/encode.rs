@@ -2104,6 +2104,7 @@ pub(crate) fn lower(
                 &name2entpc,
                 &mut asm_section_text_refs,
                 &mut asm_text_abs_refs,
+                native.no_sse,
             )
         };
         #[cfg(feature = "std")]

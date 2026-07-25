@@ -96,7 +96,7 @@ impl Compiler {
     /// Advance past one initializer element's value to the next top-level `,`
     /// or the closing `}`, tracking bracket depth so a comma nested inside a
     /// brace / paren / bracket group does not end the element early.
-    fn skip_init_element_value(&mut self) -> Result<(), C5Error> {
+    pub(super) fn skip_init_element_value(&mut self) -> Result<(), C5Error> {
         let mut depth: i32 = 0;
         while self.lex.tk != 0 {
             if depth == 0 && (self.lex.tk == ',' || self.lex.tk == '}') {

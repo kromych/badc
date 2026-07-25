@@ -4683,6 +4683,31 @@ impl Compiler {
         Ok(after)
     }
 
+    /// Parse one assignment-expression for its type only. The lexer
+    /// position and every emitted artifact (code, data, relocs, AST)
+    /// are rewound, as for a `_Generic` controlling expression (C99
+    /// 6.5.1.1p2 unevaluated semantics).
+    pub(super) fn peek_expr_type(&mut self) -> Result<i64, C5Error> {
+        let snap = self.lex.snapshot();
+        let data_start = self.data.len();
+        let saved_text_len = self.next_ent_pc;
+        let saved_reloc = self.code_reloc_sym_idx.len();
+        let saved_ast_acc = self.ast_acc;
+        let saved_vstack = self.ast_vstack.len();
+        let saved_ty = self.ty;
+        let result = self.expr(Token::Assign as i64);
+        let ty = self.ty;
+        self.ty = saved_ty;
+        self.next_ent_pc = saved_text_len;
+        self.clear_recent_emits();
+        self.code_reloc_sym_idx.truncate(saved_reloc);
+        self.ast_acc = saved_ast_acc;
+        self.ast_vstack.truncate(saved_vstack);
+        self.data.truncate(data_start);
+        self.lex.restore(snap);
+        result.map(|_| ty)
+    }
+
     /// Parse `__builtin_types_compatible_p ( type-name , type-name )`
     /// (GCC) and return 1 when the two type names are compatible (flat
     /// tags equal after dropping top-level qualifiers), else 0. The

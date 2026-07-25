@@ -1148,6 +1148,55 @@ impl Compiler {
         Ok(())
     }
 
+    /// Count the elements the brace list at the current `{` holds for
+    /// a struct array, walking entry types the same way the fill loop
+    /// does: an expression of the element type is one element (C99
+    /// 6.7.8p13); other values flat-fill fields, one element per
+    /// `struct_flat_init_slots` run (6.7.8p20). Restores the lexer.
+    /// `None` when a designator or brace entry appears -- those lists
+    /// keep the caller's group- or slot-based estimate.
+    fn count_struct_array_init_elems(&mut self, sid: usize) -> Result<Option<i64>, C5Error> {
+        debug_assert!(self.lex.tk == '{');
+        let snap = self.lex.snapshot();
+        let slots = self.struct_flat_init_slots(sid).max(1) as i64;
+        self.next()?; // `{`
+        let mut elems: i64 = 0;
+        let mut fields: i64 = 0;
+        let mut walked = Some(());
+        while self.lex.tk != '}' && self.lex.tk != 0 {
+            if self.lex.tk == '{' || self.lex.tk == Token::Brak || self.lex.tk == Token::Dot {
+                walked = None;
+                break;
+            }
+            let is_elem = match self.peek_expr_type() {
+                Ok(t) => is_struct_ty(t) && struct_ptr_depth(t) == 0 && struct_id_of(t) == sid,
+                Err(_) => false,
+            };
+            if is_elem {
+                if fields > 0 {
+                    elems += 1;
+                    fields = 0;
+                }
+                elems += 1;
+            } else {
+                fields += 1;
+                if fields == slots {
+                    elems += 1;
+                    fields = 0;
+                }
+            }
+            self.skip_init_element_value()?;
+            if self.lex.tk == ',' {
+                self.next()?;
+            }
+        }
+        if fields > 0 {
+            elems += 1;
+        }
+        self.lex.restore(snap);
+        Ok(walked.map(|_| elems))
+    }
+
     /// If the next brace-list entry is an array designator `[N]` or a
     /// GNU range `[lo ... hi]`, consume it and return `(lo, hi, chain)`
     /// (`hi == lo` for the single form). A following `= value` consumes
@@ -1275,6 +1324,11 @@ impl Compiler {
                     // group count (C99 6.7.8p22); the file-scope path uses the
                     // same pre-scan.
                     self.designated_array_count(groups as i64)?
+                } else if let Some(n) = self.count_struct_array_init_elems(sid)? {
+                    // Entries may be element-typed expressions (one
+                    // element each, C99 6.7.8p13) mixed with flat field
+                    // values; count by walking entry types.
+                    n
                 } else {
                     let items = self.lex.count_top_level_items_in_array();
                     let slots = self.struct_flat_init_slots(sid).max(1);

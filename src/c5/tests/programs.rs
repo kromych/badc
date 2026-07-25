@@ -452,6 +452,14 @@ fn deferred_array_designator() {
 }
 
 #[test]
+fn struct_array_init_from_elem_values() {
+    // Initializer entries that are expressions of the element type
+    // count one element each (C99 6.7.8p13); mixed and flat lists
+    // keep the field-slot walk (6.7.8p20).
+    assert_eq!(run_fixture("struct_array_init_from_elem_values.c"), 0);
+}
+
+#[test]
 fn deferred_struct_array_row_designator() {
     // A `[N] =` designator naming a row of a deferred-size 2-D struct
     // array sets the cursor and the outer size (C99 6.7.8p7+p22), with

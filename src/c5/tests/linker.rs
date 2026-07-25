@@ -1471,6 +1471,183 @@ fn unreferenced_static_function_is_dropped_from_object() {
     );
 }
 
+/// Relocatable-emit options for an entry-less TU, the `-c` shape the
+/// dead-static tests below exercise.
+#[cfg(test)]
+fn reloc_tu(src: &str, target: crate::c5::Target, optimize: bool) -> alloc::vec::Vec<u8> {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
+    let copts = CompileOptions {
+        no_entry_point: true,
+        gnu: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(String::from(src), target, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        optimize,
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    emit_native_with_options(&program, target, opts).expect("emit")
+}
+
+#[test]
+fn dead_static_data_with_extern_relocs_drops_reloc_and_undef() {
+    // A static pointer table holding extern-symbol addresses, itself
+    // unreferenced, and a dead static->static pointer chain. gcc -O
+    // drops the objects, their relocation slots, and the undefined
+    // reference; a relocation slot must not root its own object, or an
+    // isolated link consuming the object fails on the undefined name.
+    use crate::c5::Target;
+    use crate::c5::linker::{NativeSymSection, parse_native_elf};
+    let src = "\
+        extern int ext_key;\n\
+        static int *dead_tab[2] = { &ext_key, &ext_key };\n\
+        static long dead_target = 7;\n\
+        static long *dead_chain = &dead_target;\n\
+        int keep(int x) { return x; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let bytes = reloc_tu(src, target, false);
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        assert!(
+            !obj.symbols
+                .iter()
+                .any(|s| s.name == "ext_key" && s.section == NativeSymSection::Undef),
+            "undefined ext_key must drop with the dead slots ({target:?})"
+        );
+        assert!(
+            obj.data_relocs.is_empty(),
+            "dead objects' .rela.data entries must drop ({target:?})"
+        );
+    }
+}
+
+#[test]
+fn dead_static_fnptr_table_drops_table_and_callee() {
+    // A static function referenced only from a static, itself
+    // unreferenced, function-pointer table: the table's relocation is
+    // not a root, so the table, the callee, and the callee's extern
+    // reference all drop (gcc -O parity).
+    use crate::c5::Target;
+    use crate::c5::linker::{NativeSymSection, parse_native_elf};
+    let src = "\
+        extern int missing_ext(int);\n\
+        static int helper(int x) { return missing_ext(x) + 1; }\n\
+        static int (*const dead_tbl[1])(int) = { helper };\n\
+        int keep(int x) { return x; }\n";
+    let bytes = reloc_tu(src, Target::LinuxX64, false);
+    assert!(
+        !bytes.windows(6).any(|w| w == b"helper"),
+        "table-only callee must drop with the dead table"
+    );
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        !obj.symbols
+            .iter()
+            .any(|s| s.name == "missing_ext" && s.section == NativeSymSection::Undef),
+        "the dead callee's extern reference must not surface as an undef"
+    );
+}
+
+#[test]
+fn static_fnptr_table_read_by_live_code_keeps_callee() {
+    // Inverse guard for the reloc-edge rule: the same table read by an
+    // external function keeps the table and, through its relocation
+    // slot, the callee.
+    let src = "\
+        static int helper(int x) { return x + 1; }\n\
+        static int (*const tbl[1])(int) = { helper };\n\
+        int keep(int x) { return tbl[0](x); }\n";
+    let bytes = reloc_tu(src, crate::c5::Target::LinuxX64, false);
+    assert!(
+        bytes.windows(6).any(|w| w == b"helper"),
+        "callee reachable through a live table's relocation must survive"
+    );
+}
+
+#[test]
+fn asm_named_statics_survive_dce() {
+    // A static function named only inside a live function's asm
+    // template and a static object named only in file-scope asm are
+    // referenced by the emitted sections; both must survive.
+    let src = "\
+        static int asm_fn(int x) { return x + 2; }\n\
+        static long asm_blob[2] = { 0x1122334455667788L, 0 };\n\
+        asm(\".pushsection .keepme,\\\"a\\\"\\n.quad asm_blob\\n.popsection\");\n\
+        void keep(void) { __asm__ volatile(\"// asm_fn\" ::: \"memory\"); }\n";
+    let bytes = reloc_tu(src, crate::c5::Target::LinuxAarch64, false);
+    assert!(
+        bytes.windows(6).any(|w| w == b"asm_fn"),
+        "static named in a live function's asm template must survive"
+    );
+    let pat = 0x1122334455667788u64.to_le_bytes();
+    assert!(
+        bytes.windows(8).any(|w| w == pat),
+        "static named in file-scope asm must keep its bytes"
+    );
+}
+
+#[test]
+fn used_and_section_statics_survive_dce() {
+    // `__attribute__((used))` and named-section placement keep an
+    // otherwise unreferenced internal definition: their consumers
+    // resolve only at link time (kernel-style section protocols).
+    let src = "\
+        static long used_obj __attribute__((used)) = 0x2233445566778899L;\n\
+        static long sect_obj __attribute__((section(\".keep2\"))) = 0x33445566778899aaL;\n\
+        static __attribute__((section(\".text.keepf\"))) int sect_fn(int x) { return x; }\n\
+        int keep(int x) { return x; }\n";
+    let bytes = reloc_tu(src, crate::c5::Target::LinuxX64, false);
+    assert!(
+        bytes
+            .windows(8)
+            .any(|w| w == 0x2233445566778899u64.to_le_bytes()),
+        "used-attributed static data must survive"
+    );
+    assert!(
+        bytes
+            .windows(8)
+            .any(|w| w == 0x33445566778899aau64.to_le_bytes()),
+        "named-section static data must survive"
+    );
+    assert!(
+        bytes.windows(7).any(|w| w == b"sect_fn"),
+        "named-section static function must survive"
+    );
+}
+
+#[test]
+fn unreferenced_static_data_drops_from_object() {
+    // Plain dead static data (no relocations) leaves no bytes behind.
+    let src = "\
+        static long dead_obj[2] = { 0x445566778899aabbL, 0x5566778899aabbccL };\n\
+        int keep(int x) { return x; }\n";
+    let bytes = reloc_tu(src, crate::c5::Target::LinuxX64, false);
+    assert!(
+        !bytes
+            .windows(8)
+            .any(|w| w == 0x445566778899aabbu64.to_le_bytes()),
+        "unreferenced static data must not keep its bytes"
+    );
+}
+
+#[test]
+fn underscore_prefixed_static_drops_after_inline() {
+    // gcc parity: a leading underscore does not retain a static. The
+    // helper's only call is inlined at -O, after which the post-inline
+    // DCE rerun must drop the out-of-line body.
+    let src = "\
+        static int __only_call(int x) { return x + 3; }\n\
+        int keep(int x) { return __only_call(x); }\n";
+    let bytes = reloc_tu(src, crate::c5::Target::LinuxX64, true);
+    assert!(
+        !bytes.windows(11).any(|w| w == b"__only_call"),
+        "underscore-prefixed static must drop once its only call is inlined"
+    );
+}
+
 #[test]
 fn always_inline_immediate_asm_operand_drops_standalone_body() {
     // An always_inline accessor whose inline asm has an `i`

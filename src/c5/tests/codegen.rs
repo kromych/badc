@@ -1833,7 +1833,7 @@ fn atomic128_store_insert_aarch64() {
 #[test]
 fn atomic128_cmpxchg_llsc_generic_encoder_aarch64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    let program = super::compile_str_bare(
+    let program = super::compile_str_bare_for(
         "typedef unsigned long long u64;\n\
          typedef unsigned __int128 u128;\n\
          int cx(volatile u128 *p, u64 ol, u64 oh, u64 nl, u64 nh){\n\
@@ -1861,6 +1861,7 @@ fn atomic128_cmpxchg_llsc_generic_encoder_aarch64() {
              : [ol]\"r\"(ol), [oh]\"r\"(oh), [nl]\"r\"(nl), [nh]\"r\"(nh)\n\
              : \"cc\", \"memory\"); return rl==ol && rh==oh; }\n\
          int main(void){ return 0; }",
+        Target::LinuxAarch64,
     );
     let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
         .expect("emit MacOSAarch64");

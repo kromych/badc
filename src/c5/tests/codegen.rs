@@ -1824,6 +1824,64 @@ fn atomic128_store_insert_aarch64() {
     assert!(any_bic, "store-insert must emit a BIC (mask clear)");
 }
 
+/// 128-bit compare-and-swap through the pre-LSE `ldxp`/`stxp` exclusive pair,
+/// the kernel `__ll_sc__cmpxchg128` shape. Unlike the recognized load/store
+/// idioms this is not lowered to an intrinsic: `prfm`, `ldxp`, `cmp`, `ccmp`,
+/// `b.ne`, `stxp`/`stlxp` and `cbnz` each go through the per-instruction
+/// inline-asm encoder. Before `ldxp` gained a catalogue row this failed to
+/// encode; the test locks the generic encoding and the plain / release forms.
+#[test]
+fn atomic128_cmpxchg_llsc_generic_encoder_aarch64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare(
+        "typedef unsigned long long u64;\n\
+         typedef unsigned __int128 u128;\n\
+         int cx(volatile u128 *p, u64 ol, u64 oh, u64 nl, u64 nh){\n\
+           u64 rl, rh; unsigned t;\n\
+           __asm__ volatile(\"prfm pstl1strm, %[v]\\n\\t\"\n\
+             \"1: ldxp %[rl], %[rh], %[v]\\n\\t\"\n\
+             \"cmp %[rl], %[ol]\\n\\t\"\n\
+             \"ccmp %[rh], %[oh], 0, eq\\n\\t\"\n\
+             \"b.ne 2f\\n\\t\"\n\
+             \"stxp %w[t], %[nl], %[nh], %[v]\\n\\t\"\n\
+             \"cbnz %w[t], 1b\\n2:\"\n\
+             : [v]\"+Q\"(*p), [rl]\"=&r\"(rl), [rh]\"=&r\"(rh), [t]\"=&r\"(t)\n\
+             : [ol]\"r\"(ol), [oh]\"r\"(oh), [nl]\"r\"(nl), [nh]\"r\"(nh)\n\
+             : \"cc\", \"memory\"); return rl==ol && rh==oh; }\n\
+         int cxm(volatile u128 *p, u64 ol, u64 oh, u64 nl, u64 nh){\n\
+           u64 rl, rh; unsigned t;\n\
+           __asm__ volatile(\"prfm pstl1strm, %[v]\\n\\t\"\n\
+             \"1: ldxp %[rl], %[rh], %[v]\\n\\t\"\n\
+             \"cmp %[rl], %[ol]\\n\\t\"\n\
+             \"ccmp %[rh], %[oh], 0, eq\\n\\t\"\n\
+             \"b.ne 2f\\n\\t\"\n\
+             \"stlxp %w[t], %[nl], %[nh], %[v]\\n\\t\"\n\
+             \"cbnz %w[t], 1b\\n\\tdmb ish\\n2:\"\n\
+             : [v]\"+Q\"(*p), [rl]\"=&r\"(rl), [rh]\"=&r\"(rh), [t]\"=&r\"(t)\n\
+             : [ol]\"r\"(ol), [oh]\"r\"(oh), [nl]\"r\"(nl), [nh]\"r\"(nh)\n\
+             : \"cc\", \"memory\"); return rl==ol && rh==oh; }\n\
+         int main(void){ return 0; }",
+    );
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
+        .expect("emit MacOSAarch64");
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    // LDXP Xt1, Xt2, [Xn] (acquire bit 15 clear), verified against clang.
+    let any_ldxp = words().any(|w| (w & 0xFFFF_8000) == 0xC87F_0000);
+    // STXP Ws, Xt1, Xt2, [Xn] and its release sibling STLXP (bit 15 set).
+    let any_stxp = words().any(|w| (w & 0xFFE0_8000) == 0xC820_0000);
+    let any_stlxp = words().any(|w| (w & 0xFFE0_8000) == 0xC820_8000);
+    // PRFM (immediate), unsigned-offset form.
+    let any_prfm = words().any(|w| (w & 0xFFC0_0000) == 0xF980_0000);
+    assert!(any_ldxp, "cmpxchg128 must emit a generic-path LDXP");
+    assert!(any_stxp, "cmpxchg128 must emit an STXP");
+    assert!(any_stlxp, "cmpxchg128 (release) must emit an STLXP");
+    assert!(any_prfm, "cmpxchg128 must emit the PRFM prefetch");
+}
+
 /// The AArch64 `Q` constraint: a memory operand whose address is a single
 /// base register, substituted as `[xN]`. Operand registers assign in pool
 /// order (x0, x1, ...), so the expected words are exact; each is verified

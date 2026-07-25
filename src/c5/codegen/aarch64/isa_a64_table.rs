@@ -396,6 +396,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "ldursh", ops: &[W, Mem], base: 0x78C00000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // ldursh Wd, [Xn|SP, #offS]
     Form { mnemonic: "ldursh", ops: &[X, Mem], base: 0x78800000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // ldursh Xd, [Xn|SP, #offS]
     Form { mnemonic: "ldursw", ops: &[X, Mem], base: 0xB8800000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, SImm { op: 1, shift: 12, width: 9 }] },  // ldursw Xd, [Xn|SP, #offS]
+    Form { mnemonic: "ldxp", ops: &[W, W, Mem], base: 0x887F0000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }] },  // ldxp Wd, Wd2, [Xn|SP]
+    Form { mnemonic: "ldxp", ops: &[X, X, Mem], base: 0xC87F0000, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 10 }, Reg { op: 2, shift: 5 }] },  // ldxp Xd, Xd2, [Xn|SP]
     Form { mnemonic: "ldxr", ops: &[W, Mem], base: 0x885F7C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // ldxr Wd, [Xn|SP]
     Form { mnemonic: "ldxr", ops: &[X, Mem], base: 0xC85F7C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // ldxr Xd, [Xn|SP]
     Form { mnemonic: "ldxrb", ops: &[W, Mem], base: 0x085F7C00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // ldxrb Wd, [Xn|SP]

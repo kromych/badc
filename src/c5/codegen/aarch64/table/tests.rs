@@ -1379,6 +1379,13 @@ fn memory_and_positional_registers() {
     // Load/store exclusive pair: Rd2/Rs2 at bit 10.
     assert_eq!(enc("ldaxp", &[x(0), x(1), m(2)]), 0xC87F8440);
     assert_eq!(enc("stxp", &[w(3), w(4), w(5), m(6)]), 0x882314C4);
+    // Non-acquire load-exclusive pair `ldxp` (ldaxp with the acquire bit
+    // cleared), the load half of the pre-LSE cmpxchg128 loop. Words match
+    // clang: ldxp x1,x2,[x0]=0xC87F0801, ldxp w8,w9,[x10]=0x887F2548.
+    assert_eq!(enc("ldxp", &[x(0), x(1), m(2)]), 0xC87F0440);
+    assert_eq!(enc("ldxp", &[w(0), w(1), m(2)]), 0x887F0440);
+    assert_eq!(enc("ldxp", &[x(1), x(2), m(0)]), 0xC87F0801);
+    assert_eq!(enc("ldxp", &[w(8), w(9), m(10)]), 0x887F2548);
     // Register at written index 0 mapping to Rn (no Rd operand): relaxing the
     // fixed slot order.
     assert_eq!(enc("blr", &[x(9)]), 0xD63F0120);

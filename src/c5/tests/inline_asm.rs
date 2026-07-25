@@ -687,6 +687,7 @@ fn aarch64_bare_immediate_operand_encodes_like_gcc() {
 }
 
 #[test]
+#[cfg(feature = "native-emit")]
 fn fixed_register_input_output_pair_is_accepted() {
     use crate::{NativeOptions, Target};
     // An input and an output pinned to the same register are a tied

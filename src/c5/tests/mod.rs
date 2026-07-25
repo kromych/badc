@@ -105,6 +105,14 @@ pub fn compile_str_bare(src: &str) -> Program {
     Compiler::new(src.to_string()).compile().unwrap()
 }
 
+/// `compile_str_bare` with an explicit target, for sources whose asm
+/// constraints only parse for that target's family.
+pub fn compile_str_bare_for(src: &str, target: crate::Target) -> Program {
+    Compiler::with_target(src.to_string(), target)
+        .compile()
+        .unwrap()
+}
+
 /// Link a compiled program against the embedded startup runtime into
 /// a complete, runnable native image, mirroring the CLI's native path
 /// (`emit_native` -> relocatable objects -> `link_native_objects` ->

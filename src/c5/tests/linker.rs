@@ -4788,7 +4788,9 @@ fn file_scope_asm_incbin_embeds_file_bytes() {
              \".byte 0xa5\\n\"\n\
              \".popsection\");\n\
          int main(void) {{ return 0; }}\n",
-        path.display()
+        // Forward slashes keep the embedded C string literal free of
+        // escape sequences; Windows file APIs accept them.
+        path.display().to_string().replace('\\', "/")
     );
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
         let program = Compiler::new(src.clone()).compile().expect("compile");

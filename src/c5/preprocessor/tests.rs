@@ -1,5 +1,7 @@
 use super::include::include_parent_dir;
-use super::text::ends_in_open_block_comment;
+use super::text::{
+    ends_in_open_block_comment_once, scan_steps_taken, unfold_line_continuations, unfold_ref,
+};
 use super::*;
 
 fn process(source: &str) -> String {
@@ -323,11 +325,11 @@ fn macro_body_block_comment_spanning_lines() {
 
 #[test]
 fn block_comment_open_detector() {
-    assert!(ends_in_open_block_comment("foo /* bar"));
-    assert!(!ends_in_open_block_comment("foo /* bar */ baz"));
-    assert!(!ends_in_open_block_comment("foo // /* not open"));
-    assert!(!ends_in_open_block_comment("s = \"/*\""));
-    assert!(ends_in_open_block_comment("c = '/' ; /* open"));
+    assert!(ends_in_open_block_comment_once("foo /* bar"));
+    assert!(!ends_in_open_block_comment_once("foo /* bar */ baz"));
+    assert!(!ends_in_open_block_comment_once("foo // /* not open"));
+    assert!(!ends_in_open_block_comment_once("s = \"/*\""));
+    assert!(ends_in_open_block_comment_once("c = '/' ; /* open"));
 }
 
 #[test]
@@ -1497,4 +1499,173 @@ fn cross_expansion_invocation_hideset_is_strict() {
         "#define TWICE(...) __VA_ARGS__ __VA_ARGS__\n#define R(a) a*S\n#define S(a) R(a)\nTWICE(R(()))\n",
     );
     assert!(out.contains("()*R()*S"), "{out}");
+}
+
+/// Recursively collect files under `dir` whose extension is in `exts`.
+fn collect_sources(dir: &std::path::Path, exts: &[&str], out: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_sources(&path, exts, out);
+        } else if path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| exts.contains(&e))
+        {
+            out.push(path);
+        }
+    }
+}
+
+/// The incremental line-continuation collapse must match the full-rescan
+/// reference byte for byte on every C source and header in the tree.
+#[test]
+fn unfold_matches_reference_on_repo_sources() {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut files = Vec::new();
+    collect_sources(&root.join("tests/fixtures/c"), &["c"], &mut files);
+    collect_sources(&root.join("libc/include"), &["h"], &mut files);
+    let mut checked = 0usize;
+    for path in &files {
+        let Ok(bytes) = std::fs::read(path) else {
+            continue;
+        };
+        // unfold operates on &str; skip any file that is not UTF-8, as
+        // the preprocessor requires UTF-8 input in any case.
+        let Ok(src) = String::from_utf8(bytes) else {
+            continue;
+        };
+        assert_eq!(
+            unfold_line_continuations(&src),
+            unfold_ref(&src),
+            "unfold mismatch on {}",
+            path.display()
+        );
+        checked += 1;
+    }
+    assert!(checked > 900, "expected many sources, checked {checked}");
+}
+
+/// Differential fuzz: the incremental collapse must match the full-rescan
+/// reference on random inputs built from the tokens the scanner tracks
+/// (comment openers/closers, quotes, escapes, and CR/LF line endings)
+/// plus curated edge cases.
+#[test]
+fn unfold_matches_reference_fuzz() {
+    const CHUNKS: &[&[u8]] = &[
+        b"/", b"*", b"\"", b"'", b"\\", b"\n", b"\r", b"\r\n", b" ", b"a", b"b", b"x", b"/*",
+        b"*/", b"//", b"\\\n", b"\\\r\n", b"\"\\", b"'\\", b"**", b"*/*", b";",
+    ];
+    let curated: &[&str] = &[
+        "code\\",
+        "/* open",
+        "/* a\nb\n*/ c",
+        "\"str \\\nmore\"",
+        "'c' /* x */ y",
+        "a // /* \\\nnot open",
+        "\"\\\"/*\" real /* open",
+        "line1\\\r\nline2 /* c\r\n*/ end",
+        "x /*",
+        "*/",
+        "\\\n\\\n\\\n",
+        "/*/",
+    ];
+    for &c in curated {
+        assert_eq!(
+            unfold_line_continuations(c),
+            unfold_ref(c),
+            "unfold mismatch on curated case {c:?}"
+        );
+    }
+    // Deterministic xorshift64; fixed seed keeps failures reproducible.
+    let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut next = || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    let cases = 6000;
+    for _ in 0..cases {
+        let len = (next() % 48) as usize + 1;
+        let mut bytes = Vec::new();
+        for _ in 0..len {
+            bytes.extend_from_slice(CHUNKS[(next() as usize) % CHUNKS.len()]);
+        }
+        // Every chunk is ASCII, so the join is valid UTF-8.
+        let src = String::from_utf8(bytes).unwrap();
+        assert_eq!(
+            unfold_line_continuations(&src),
+            unfold_ref(&src),
+            "unfold mismatch on fuzz case {src:?}"
+        );
+    }
+}
+
+/// Scanner work must grow linearly with the size of a multi-line block
+/// comment. Contrast the incremental scanner (each byte visited once)
+/// with the full-rescan reference (quadratic) via the step counter, so
+/// the assertion is exact and cannot flake on timing.
+#[test]
+fn unfold_block_comment_scan_is_linear() {
+    let mk = |lines: usize| {
+        let mut s = String::from("/*\n");
+        for _ in 0..lines {
+            s.push_str("x comment line\n");
+        }
+        s.push_str("*/\ncode;\n");
+        s
+    };
+    let small = mk(1500);
+    let big = mk(3000);
+
+    assert_eq!(unfold_line_continuations(&small), unfold_ref(&small));
+    assert_eq!(unfold_line_continuations(&big), unfold_ref(&big));
+
+    let _ = scan_steps_taken();
+    unfold_line_continuations(&small);
+    let new_small = scan_steps_taken();
+    unfold_line_continuations(&big);
+    let new_big = scan_steps_taken();
+    // Doubling the comment doubles the work, not quadruples it.
+    assert!(
+        new_big < new_small * 3,
+        "incremental scan not linear: {new_small} -> {new_big}"
+    );
+
+    unfold_ref(&small);
+    let ref_small = scan_steps_taken();
+    unfold_ref(&big);
+    let ref_big = scan_steps_taken();
+    // The reference re-reads the growing buffer on each join, so doubling
+    // the comment quadruples its work: the quadratic being removed.
+    assert!(
+        ref_big > ref_small * 3,
+        "reference expected quadratic: {ref_small} -> {ref_big}"
+    );
+}
+
+/// A single very large block comment must collapse quickly. The
+/// pre-incremental full rescan did not finish this in minutes; the
+/// incremental scan handles it in milliseconds. The ceiling is generous
+/// so a slow machine does not flake while a return to quadratic still
+/// trips it.
+#[test]
+fn unfold_80k_line_block_comment_is_fast() {
+    let mut s = String::from("/*\n");
+    for _ in 0..80_000 {
+        s.push_str("comment\n");
+    }
+    s.push_str("*/\ncode;\n");
+    let start = std::time::Instant::now();
+    let out = unfold_line_continuations(&s);
+    let elapsed = start.elapsed();
+    assert!(elapsed.as_secs() < 20, "unfold too slow: {elapsed:?}");
+    // Total line count is preserved by blank padding, and the code past
+    // the comment survives.
+    assert_eq!(out.matches('\n').count(), s.lines().count());
+    assert!(out.contains("code;"));
 }

@@ -13,7 +13,7 @@ Disassembly of section .text:
 <deep_touch>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x110, %rsp            # imm = 0x110
+               	subq	$0x100, %rsp            # imm = 0x100
                	movslq	%edi, %rdi
                	xorq	%rax, %rax
                	jmp	<addr>
@@ -34,7 +34,7 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movsbq	(%rax), %rax
                	movq	%rcx, %rax
-               	addq	$0x110, %rsp            # imm = 0x110
+               	addq	$0x100, %rsp            # imm = 0x100
                	popq	%rbp
                	retq
 

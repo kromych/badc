@@ -13,7 +13,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x8, lsl #12   // =0x8000
-               	sub	sp, sp, #0x9d0
+               	sub	sp, sp, #0x9a0
                	sub	x0, x29, #0x2, lsl #12  // =0x2000
                	sub	x0, x0, #0x328
                	adrp	x1, <page>
@@ -6664,7 +6664,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x8, lsl #12   // =0x8000
-               	add	sp, sp, #0x9d0
+               	add	sp, sp, #0x9a0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x4, lsl #12  // =0x4000
@@ -6707,7 +6707,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x8, lsl #12   // =0x8000
-               	add	sp, sp, #0x9d0
+               	add	sp, sp, #0x9a0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x8, lsl #12  // =0x8000
@@ -6726,7 +6726,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x8, lsl #12   // =0x8000
-               	add	sp, sp, #0x9d0
+               	add	sp, sp, #0x9a0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x8, lsl #12  // =0x8000
@@ -6736,12 +6736,12 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x8, lsl #12   // =0x8000
-               	add	sp, sp, #0x9d0
+               	add	sp, sp, #0x9a0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x8, lsl #12   // =0x8000
-               	add	sp, sp, #0x9d0
+               	add	sp, sp, #0x9a0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>

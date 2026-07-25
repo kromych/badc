@@ -24,9 +24,9 @@ Disassembly of section .text:
                	ret
 
 <run>:
-               	str	x19, [sp, #-0x70]!
-               	stp	x29, x30, [sp, #0x60]
-               	add	x29, sp, #0x60
+               	str	x19, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	mov	x5, x1
                	mov	x1, #0x0                // =0
                	stur	w1, [x29, #-0x8]
@@ -44,35 +44,35 @@ Disassembly of section .text:
                	blr	x9
                	ldursw	x1, [x29, #-0x8]
                	add	x0, x0, x1
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x19, [sp], #0x70
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x19, [sp], #0x30
                	ret
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x80
-               	sub	x0, x29, #0x8
+               	sub	sp, sp, #0x50
+               	sub	x0, x29, #0x48
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x1, [x0]
-               	sub	x0, x29, #0x28
+               	sub	x0, x29, #0x20
                	mov	x1, #0x3                // =3
                	str	x1, [x0, #0x10]
-               	sub	x0, x29, #0x48
+               	sub	x0, x29, #0x40
                	mov	x1, #0x7                // =7
                	str	x1, [x0, #0x10]
-               	sub	x0, x29, #0x8
-               	sub	x1, x29, #0x28
+               	sub	x0, x29, #0x48
+               	sub	x1, x29, #0x20
                	mov	x2, #0x5                // =5
-               	sub	x3, x29, #0x48
+               	sub	x3, x29, #0x40
                	mov	x4, #0x9                // =9
                	bl	<addr>
                	cmp	x0, #0xc0d
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
-               	add	sp, sp, #0x80
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1

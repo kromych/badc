@@ -16,22 +16,22 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	movabsq	$0x43e158e460913d00, %rax # imm = 0x43E158E460913D00
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movsd	%xmm14, -0x28(%rbp,%riz)
                	movabsq	$0x43e0000000000000, %rax # imm = 0x43E0000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x10(%rbp,%riz)
+               	movsd	%xmm14, -0x20(%rbp,%riz)
                	movabsq	$0x43ef399b1438a100, %rax # imm = 0x43EF399B1438A100
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x18(%rbp,%riz)
                	movabsq	$0x4059000000000000, %rax # imm = 0x4059000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x20(%rbp,%riz)
+               	movsd	%xmm14, -0x10(%rbp,%riz)
                	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
                	movq	%rax, %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	movsd	-0x8(%rbp,%riz), %xmm1
+               	movsd	-0x28(%rbp,%riz), %xmm1
                	movapd	%xmm1, %xmm14
                	movabsq	$0x43e0000000000000, %r11 # imm = 0x43E0000000000000
                	movq	%r11, %xmm15
@@ -50,7 +50,7 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x10(%rbp,%riz), %xmm1
+               	movsd	-0x20(%rbp,%riz), %xmm1
                	movapd	%xmm1, %xmm14
                	movabsq	$0x43e0000000000000, %r11 # imm = 0x43E0000000000000
                	movq	%r11, %xmm15
@@ -88,7 +88,7 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x20(%rbp,%riz), %xmm1
+               	movsd	-0x10(%rbp,%riz), %xmm1
                	movapd	%xmm1, %xmm14
                	movabsq	$0x43e0000000000000, %r11 # imm = 0x43E0000000000000
                	movq	%r11, %xmm15
@@ -113,7 +113,7 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x20(%rbp,%riz), %xmm0
+               	movsd	-0x10(%rbp,%riz), %xmm0
                	cvttsd2si	%xmm0, %rax
                	cmpq	$0x64, %rax
                	je	<addr>

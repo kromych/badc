@@ -12,31 +12,31 @@ Disassembly of section .text:
                	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x100
+               	sub	sp, sp, #0x20
                	mov	x0, #0x0                // =0
                	mov	x0, #0x8000             // =32768
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
-               	sub	x0, x29, #0xd8
+               	sub	x0, x29, #0x10
                	mov	x1, #0x64               // =100
                	strh	w1, [x0]
-               	sub	x0, x29, #0xd8
+               	sub	x0, x29, #0x10
                	mov	x1, #0xc8               // =200
                	strh	w1, [x0, #0x2]
-               	sub	x0, x29, #0xd8
+               	sub	x0, x29, #0x10
                	mov	x1, #0xfed4             // =65236
                	movk	x1, #0xffff, lsl #16
                	movk	x1, #0xffff, lsl #32
                	movk	x1, #0xffff, lsl #48
                	strh	w1, [x0, #0x4]
-               	sub	x2, x29, #0xd8
-               	sub	x0, x29, #0xd8
+               	sub	x2, x29, #0x10
+               	sub	x0, x29, #0x10
                	ldrsh	x1, [x0]
-               	sub	x0, x29, #0xd8
+               	sub	x0, x29, #0x10
                	ldrsh	x0, [x0, #0x2]
                	add	x0, x1, x0
-               	sub	x1, x29, #0xd8
+               	sub	x1, x29, #0x10
                	ldrsh	x1, [x1, #0x4]
                	add	x0, x0, x1
                	mov	x17, #0xffff            // =65535
@@ -50,39 +50,39 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	sxtw	x0, w1
                	strh	w0, [x2, #0x6]
-               	sub	x0, x29, #0xd8
+               	sub	x0, x29, #0x10
                	ldrsh	x0, [x0, #0x6]
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x13               // =19
-               	add	sp, sp, #0x100
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0xe0
+               	sub	x0, x29, #0x18
                	mov	x1, #0x7                // =7
                	strh	w1, [x0]
-               	sub	x0, x29, #0xe0
+               	sub	x0, x29, #0x18
                	mov	x1, #0xfff9             // =65529
                	movk	x1, #0xffff, lsl #16
                	movk	x1, #0xffff, lsl #32
                	movk	x1, #0xffff, lsl #48
                	strh	w1, [x0, #0x2]
-               	sub	x0, x29, #0xe0
+               	sub	x0, x29, #0x18
                	mov	x1, #0xc0de             // =49374
                	strh	w1, [x0, #0x4]
-               	sub	x0, x29, #0xe0
+               	sub	x0, x29, #0x18
                	ldrsh	x1, [x0]
-               	sub	x0, x29, #0xe0
+               	sub	x0, x29, #0x18
                	ldrsh	x0, [x0, #0x2]
                	add	x0, x1, x0
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x14               // =20
-               	add	sp, sp, #0x100
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0xe0
+               	sub	x0, x29, #0x18
                	ldrh	w0, [x0, #0x4]
                	mov	x17, #0xc0de            // =49374
                	eor	x0, x0, x17
@@ -90,11 +90,11 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x15               // =21
-               	add	sp, sp, #0x100
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2a               // =42
-               	add	sp, sp, #0x100
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>

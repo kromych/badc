@@ -13,21 +13,21 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	movl	$0x3f000000, %ecx       # imm = 0x3F000000
                	movq	%rcx, %xmm14
-               	movss	%xmm14, -0x8(%rbp,%riz)
+               	movss	%xmm14, -0x20(%rbp,%riz)
                	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x10(%rbp,%riz)
+               	movsd	%xmm14, -0x18(%rbp,%riz)
                	movabsq	$0x4039000000000000, %rax # imm = 0x4039000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x18(%rbp,%riz)
+               	movsd	%xmm14, -0x10(%rbp,%riz)
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm14
                	cvtsd2ss	%xmm14, %xmm0
                	movl	$0x1, %eax
-               	movss	-0x8(%rbp,%riz), %xmm1
+               	movss	-0x20(%rbp,%riz), %xmm1
                	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm1
                	setne	%cl
@@ -38,7 +38,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rax, %rax
-               	movsd	-0x10(%rbp,%riz), %xmm1
+               	movsd	-0x18(%rbp,%riz), %xmm1
                	movabsq	$0x3fd0000000000000, %rcx # imm = 0x3FD0000000000000
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm1
@@ -50,7 +50,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rax, %rax
-               	movsd	-0x18(%rbp,%riz), %xmm1
+               	movsd	-0x10(%rbp,%riz), %xmm1
                	movabsq	$0x4039000000000000, %rcx # imm = 0x4039000000000000
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm1
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x7, %eax
                	movslq	%eax, %rax
-               	addq	$0x30, %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax

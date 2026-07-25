@@ -13,15 +13,15 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x70, %rsp
+               	subq	$0x30, %rsp
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	%xmm14, -0x10(%rbp,%riz)
+               	movsd	-0x10(%rbp,%riz), %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
                	movsd	%xmm0, 0x18(%rsp)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x10(%rbp,%riz), %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
                	movsd	%xmm0, 0x10(%rsp)
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x3fec10624dd2f1aa, %rax # imm = 0x3FEC10624DD2F1AA
@@ -76,7 +76,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x3feff7ced916872b, %rax # imm = 0x3FEFF7CED916872B
@@ -112,11 +112,11 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movl	$0x13, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>

@@ -13,7 +13,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x40, %rsp
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	leaq	-0x30(%rbp), %rdx
@@ -81,7 +81,7 @@ Disassembly of section .text:
                	leaq	-0x6f(%rcx), %rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
-               	addq	$0x50, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>

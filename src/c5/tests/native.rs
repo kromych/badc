@@ -1057,6 +1057,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("init_scalar_conversion.c", 0),
     ("fnptr_typedef_return_proto.c", 0),
     ("asm_empty_barrier.c", 0),
+    ("inline_asm_frame_region_reuse.c", 0),
     ("syslimits_path_max.c", 0),
     ("libc_atoll_wcsrtombs.c", 0),
     ("gcc_atomics.c", 0),

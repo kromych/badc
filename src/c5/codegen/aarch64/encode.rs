@@ -1659,7 +1659,7 @@ pub(crate) fn lower(
     if !native.optimize {
         let coalesce_dwarf =
             super::ssa::emit_common::time_pass("ssa::slot_coalesce::run (aarch64)", || {
-                super::ssa::slot_coalesce::run(&mut ssa_funcs)
+                super::ssa::slot_coalesce::run(&mut ssa_funcs, false)
             });
         for (ent_pc, map) in coalesce_dwarf {
             for (orig, new) in map {
@@ -1789,6 +1789,26 @@ pub(crate) fn lower(
                 crate::c5::codegen::ssa::shadow::drop_unreachable_statics(&mut ssa_funcs, program);
             },
         );
+        // Frame compaction after inlining, promotion, and the branch
+        // folds; see x86_64.rs's matching block for the rationale and
+        // the `index_fold` ordering constraint.
+        let coalesce_dwarf =
+            super::ssa::emit_common::time_pass("ssa::slot_coalesce::run -O (aarch64)", || {
+                super::ssa::slot_coalesce::run(&mut ssa_funcs, true)
+            });
+        for (ent_pc, map) in coalesce_dwarf {
+            for (orig, new) in map {
+                match new {
+                    Some(new) => {
+                        coalesced_slot_remap
+                            .entry(ent_pc)
+                            .or_default()
+                            .insert(orig, new);
+                    }
+                    None => promoted_local_slots.entry(ent_pc).or_default().push(orig),
+                }
+            }
+        }
         super::ssa::emit_common::time_pass("passes::split_crit_edges::run (aarch64)", || {
             crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
         });

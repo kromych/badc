@@ -37,7 +37,7 @@ Disassembly of section .text:
 <bigframe>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x340, %rsp            # imm = 0x340
+               	subq	$0x330, %rsp            # imm = 0x330
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%rdi, %rbx
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	addq	$0x340, %rsp            # imm = 0x340
+               	addq	$0x330, %rsp            # imm = 0x330
                	popq	%rbp
                	retq
 

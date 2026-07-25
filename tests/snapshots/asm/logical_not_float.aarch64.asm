@@ -114,9 +114,9 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	fmov	d16, x0
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	d16, [x17]
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	fmov	d17, x0
                	fcmp	d0, d17

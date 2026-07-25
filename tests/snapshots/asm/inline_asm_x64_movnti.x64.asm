@@ -16,8 +16,8 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	movl	$0x2a, %eax
                	xorq	%rcx, %rcx
-               	movl	%ecx, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %rcx
+               	movl	%ecx, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rcx
                	movq	%rax, -0x30(%rbp)
                	movq	%rbx, -0x28(%rbp)
                	movq	%rcx, -0x20(%rbp)
@@ -28,7 +28,7 @@ Disassembly of section .text:
                	sfence
                	movq	-0x30(%rbp), %rax
                	movq	-0x28(%rbp), %rbx
-               	movslq	-0x10(%rbp), %rax
+               	movslq	-0x8(%rbp), %rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
                	addq	$0x30, %rsp

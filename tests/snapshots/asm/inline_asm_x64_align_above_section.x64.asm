@@ -33,7 +33,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
                	movq	%rax, -0x18(%rbp)
                	nopl	(%rax)
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	movq	-0x18(%rbp), %r10
                	movq	%rax, (%r10)
                	movq	-0x20(%rbp), %rax
-               	movq	-0x10(%rbp), %rax
+               	movq	-0x8(%rbp), %rax
                	andq	$0x1f, %rax
                	testq	%rax, %rax
                	je	<addr>

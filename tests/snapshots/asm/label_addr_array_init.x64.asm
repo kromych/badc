@@ -74,7 +74,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rcx, %rcx
-               	movq	%rcx, -0x10(%rbp)
+               	movq	%rcx, -0x8(%rbp)
                	jmp	<addr>
                	leaq	<rip>, %rcx        # <addr>
                	movq	%rcx, (%rax)
@@ -84,7 +84,7 @@ Disassembly of section .text:
                	movq	%rcx, 0x10(%rax)
                	movl	$0x1, %ecx
                	movb	%cl, 0x18(%rax)
-               	movq	%rcx, -0x10(%rbp)
+               	movq	%rcx, -0x8(%rbp)
                	xorq	%rcx, %rcx
                	movl	%ecx, -0x8(%rbp)
                	movslq	0x10(%rbp), %rcx
@@ -120,7 +120,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rcx, %rcx
-               	movq	%rcx, -0x10(%rbp)
+               	movq	%rcx, -0x8(%rbp)
                	jmp	<addr>
                	leaq	<rip>, %rcx        # <addr>
                	movq	%rcx, (%rax)
@@ -130,7 +130,7 @@ Disassembly of section .text:
                	movq	%rcx, 0x10(%rax)
                	movl	$0x1, %ecx
                	movb	%cl, 0x18(%rax)
-               	movq	%rcx, -0x10(%rbp)
+               	movq	%rcx, -0x8(%rbp)
                	xorq	%rcx, %rcx
                	movl	%ecx, -0x8(%rbp)
                	movslq	0x10(%rbp), %rcx

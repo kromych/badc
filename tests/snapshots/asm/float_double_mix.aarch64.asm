@@ -12,11 +12,11 @@ Disassembly of section .text:
                	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x90
+               	sub	sp, sp, #0x20
                	mov	x0, #0xcccd             // =52429
                	movk	x0, #0x3dcc, lsl #16
                	fmov	s16, w0
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x20
                	str	s16, [x17]
                	mov	x0, #0x999a             // =39322
                	movk	x0, #0x9999, lsl #16
@@ -25,7 +25,7 @@ Disassembly of section .text:
                	fmov	d16, x0
                	sub	x17, x29, #0x18
                	str	d16, [x17]
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x20
                	ldr	s0, [x16]
                	sub	x16, x29, #0x18
                	ldr	d1, [x16]
@@ -56,15 +56,15 @@ Disassembly of section .text:
                	b.eq	<addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xcccd             // =52429
                	movk	x0, #0x3dcc, lsl #16
                	fmov	s16, w0
-               	sub	x17, x29, #0x30
+               	sub	x17, x29, #0x20
                	str	s16, [x17]
-               	sub	x16, x29, #0x30
+               	sub	x16, x29, #0x20
                	ldr	s0, [x16]
                	fcvt	d0, s0
                	mov	x0, #0xa0000000         // =2684354560
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xf62e             // =63022
@@ -99,17 +99,17 @@ Disassembly of section .text:
                	movk	x0, #0x9add, lsl #32
                	movk	x0, #0x3fbf, lsl #48
                	fmov	d16, x0
-               	sub	x17, x29, #0x48
+               	sub	x17, x29, #0x20
                	str	d16, [x17]
-               	sub	x16, x29, #0x48
+               	sub	x16, x29, #0x20
                	ldr	d0, [x16]
                	fcvt	s1, d0
                	mov	x0, #0xd6ea             // =55018
                	movk	x0, #0x3dfc, lsl #16
                	fmov	s16, w0
-               	sub	x17, x29, #0x58
+               	sub	x17, x29, #0x10
                	str	s16, [x17]
-               	sub	x16, x29, #0x58
+               	sub	x16, x29, #0x10
                	ldr	s0, [x16]
                	fsub	s0, s1, s0
                	mov	x0, #0x0                // =0
@@ -129,7 +129,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
@@ -141,9 +141,9 @@ Disassembly of section .text:
                	mov	x0, #0xaaab             // =43691
                	movk	x0, #0x3eaa, lsl #16
                	fmov	s16, w0
-               	sub	x17, x29, #0x88
+               	sub	x17, x29, #0x10
                	str	s16, [x17]
-               	sub	x16, x29, #0x88
+               	sub	x16, x29, #0x10
                	ldr	s1, [x16]
                	fsub	s0, s0, s1
                	mov	x0, #0x0                // =0
@@ -163,18 +163,18 @@ Disassembly of section .text:
                	b.eq	<addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
                	b	<addr>
                	b	<addr>
                	fcvt	d0, s1
-               	sub	x16, x29, #0x48
+               	sub	x16, x29, #0x20
                	ldr	d1, [x16]
                	fsub	d0, d0, d1
                	mov	x0, #0x0                // =0

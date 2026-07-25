@@ -13,20 +13,20 @@ Disassembly of section .text:
 <compute>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	movslq	%esi, %rsi
                	movabsq	$0x400921fb54442d18, %rax # imm = 0x400921FB54442D18
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movsd	%xmm14, -0x10(%rbp,%riz)
                	movabsq	$-0x4000000000000000, %rax # imm = 0xC000000000000000
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x10(%rbp,%riz), %xmm0
                	movapd	%xmm0, %xmm15
                	movq	%rax, %xmm0
                	mulsd	%xmm15, %xmm0
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rsi, %xmm1
                	mulsd	%xmm1, %xmm0
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
 

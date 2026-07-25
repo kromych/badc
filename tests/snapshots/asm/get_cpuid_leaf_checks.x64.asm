@@ -23,7 +23,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x210, %rsp            # imm = 0x210
+               	subq	$0x1c0, %rsp            # imm = 0x1C0
                	movl	$0xa5a5a5a5, %eax       # imm = 0xA5A5A5A5
                	movl	%eax, -0x8(%rbp)
                	movl	%eax, -0x10(%rbp)
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
-               	addq	$0x210, %rsp            # imm = 0x210
+               	addq	$0x1c0, %rsp            # imm = 0x1C0
                	popq	%rbp
                	retq
                	movl	$0xa5a5a5a5, %eax       # imm = 0xA5A5A5A5
@@ -135,7 +135,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
-               	addq	$0x210, %rsp            # imm = 0x210
+               	addq	$0x1c0, %rsp            # imm = 0x1C0
                	popq	%rbp
                	retq
                	movl	$0xa5a5a5a5, %eax       # imm = 0xA5A5A5A5
@@ -192,7 +192,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x3, %eax
-               	addq	$0x210, %rsp            # imm = 0x210
+               	addq	$0x1c0, %rsp            # imm = 0x1C0
                	popq	%rbp
                	retq
                	movl	$0xa5a5a5a5, %eax       # imm = 0xA5A5A5A5
@@ -250,11 +250,11 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x4, %eax
-               	addq	$0x210, %rsp            # imm = 0x210
+               	addq	$0x1c0, %rsp            # imm = 0x1C0
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x210, %rsp            # imm = 0x210
+               	addq	$0x1c0, %rsp            # imm = 0x1C0
                	popq	%rbp
                	retq
                	leaq	-0x148(%rbp), %rax

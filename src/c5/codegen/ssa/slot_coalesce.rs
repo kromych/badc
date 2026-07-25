@@ -31,7 +31,7 @@
 //! scalars) carries `None` and its location is dropped, since no single
 //! frame address holds it for the whole scope.
 
-use super::super::ir::{FunctionSsa, Inst, ValueId};
+use super::super::ir::{BinOp, FunctionSsa, Inst, ValueId};
 use super::mem2reg::successors;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
@@ -41,11 +41,17 @@ use alloc::vec::Vec;
 /// `None` = shared), keyed by the function's `ent_pc`.
 pub(crate) type CoalesceDwarf = BTreeMap<usize, BTreeMap<i64, Option<i64>>>;
 
-pub(crate) fn run(funcs: &mut [FunctionSsa]) -> CoalesceDwarf {
+/// `compact` (the -O post-inline mode) repacks the frame even when fewer
+/// than two scalar slots can share: slots whose every access mem2reg
+/// promoted or the branch folds pruned are dropped and the survivors are
+/// renumbered densely, so a spliced-then-promoted callee region stops
+/// occupying the frame. Without it (the -O0 mode) a function that has
+/// nothing to share is left untouched.
+pub(crate) fn run(funcs: &mut [FunctionSsa], compact: bool) -> CoalesceDwarf {
     let mut out = CoalesceDwarf::new();
     for f in funcs.iter_mut() {
         let ent_pc = f.ent_pc;
-        let m = coalesce(f);
+        let m = coalesce(f, compact);
         if !m.is_empty() {
             out.insert(ent_pc, m);
         }
@@ -53,7 +59,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) -> CoalesceDwarf {
     out
 }
 
-fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
+fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
     // A returns-twice call (setjmp family / vfork) re-enters the frame
     // after the first-return path ran: live ranges from ordinary
     // liveness do not bound slot lifetime (C99 7.13.2.1p3), so every
@@ -110,6 +116,19 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
         }
     }
 
+    // Instructions covered by a block: the emitted tape. Branch folding
+    // deletes blocks but leaves their instructions in `insts`; an access
+    // reachable through no block never executes and must not reserve or
+    // keep a slot.
+    let mut in_block = alloc::vec![false; f.insts.len()];
+    for blk in &f.blocks {
+        for pc in blk.inst_range.clone() {
+            if let Some(b) = in_block.get_mut(pc as usize) {
+                *b = true;
+            }
+        }
+    }
+
     // Supplement the recorded extents with extents derived from how each
     // `LocalAddr` result is used: a whole-struct `Mcpy` carries the byte
     // size, a field load / store the displacement. A parser-allocated struct
@@ -117,31 +136,57 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
     // through a base address but carries no `VariableInfo`, so it is absent
     // from `multi_cell_slots`; without this a coalesced slot could land on
     // such a temporary's interior cell, which no instruction names directly.
-    let mut la_base: BTreeMap<ValueId, i64> = BTreeMap::new();
-    for (i, inst) in f.insts.iter().enumerate() {
-        if let Inst::LocalAddr(base) = inst
-            && movable(*base)
-        {
-            la_base.insert(i as ValueId, *base);
+    // A field address may be a constant `Add` / `Sub` over the base rather
+    // than a bare displacement, so chains resolve to `(base, byte_offset)`;
+    // the tape is not ordered definitions-before-uses, hence the fixpoint.
+    let mut la_base: BTreeMap<ValueId, (i64, i64)> = BTreeMap::new();
+    loop {
+        let mut grew = false;
+        for (i, inst) in f.insts.iter().enumerate().filter(|(i, _)| in_block[*i]) {
+            let v = i as ValueId;
+            if la_base.contains_key(&v) {
+                continue;
+            }
+            let resolved = match inst {
+                Inst::LocalAddr(base) if movable(*base) => Some((*base, 0)),
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs,
+                    rhs_imm,
+                } => la_base.get(lhs).map(|&(b, o)| (b, o + *rhs_imm)),
+                Inst::BinopI {
+                    op: BinOp::Sub,
+                    lhs,
+                    rhs_imm,
+                } => la_base.get(lhs).map(|&(b, o)| (b, o - *rhs_imm)),
+                _ => None,
+            };
+            if let Some(r) = resolved {
+                la_base.insert(v, r);
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
         }
     }
     let mut extent: BTreeMap<i64, i64> = BTreeMap::new();
-    for inst in &f.insts {
+    for (_, inst) in f.insts.iter().enumerate().filter(|(i, _)| in_block[*i]) {
         match inst {
             Inst::Load { addr, disp, .. } | Inst::Store { addr, disp, .. } => {
-                if let Some(&base) = la_base.get(addr) {
+                if let Some(&(base, off)) = la_base.get(addr) {
                     let e = extent.entry(base).or_insert(0);
-                    *e = (*e).max(*disp as i64 + 8);
+                    *e = (*e).max(off + *disp as i64 + 8);
                 }
             }
             Inst::Mcpy { dst, src, size } => {
-                if let Some(&base) = la_base.get(dst) {
+                if let Some(&(base, off)) = la_base.get(dst) {
                     let e = extent.entry(base).or_insert(0);
-                    *e = (*e).max(*size);
+                    *e = (*e).max(off + *size);
                 }
-                if let Some(&base) = la_base.get(src) {
+                if let Some(&(base, off)) = la_base.get(src) {
                     let e = extent.entry(base).or_insert(0);
-                    *e = (*e).max(*size);
+                    *e = (*e).max(off + *size);
                 }
             }
             // A struct-returning call writes its whole result through the
@@ -210,7 +255,7 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
             reserved_single.insert(off);
         }
     }
-    for inst in &f.insts {
+    for (_, inst) in f.insts.iter().enumerate().filter(|(i, _)| in_block[*i]) {
         let off = match inst {
             Inst::LocalAddr(off) | Inst::AllocaInit(off) => *off,
             Inst::Call { ret_slot_local, .. }
@@ -236,7 +281,7 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
     // Candidate scalar slots: movable, only ever a scalar LoadLocal /
     // StoreLocal, not an aggregate interior, not reserved.
     let mut candidates: BTreeSet<i64> = BTreeSet::new();
-    for inst in &f.insts {
+    for (_, inst) in f.insts.iter().enumerate().filter(|(i, _)| in_block[*i]) {
         if let Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } = inst
             && movable(*off)
             && !agg_cells.contains(off)
@@ -245,7 +290,9 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
             candidates.insert(*off);
         }
     }
-    if candidates.len() < 2 {
+    // Nothing to share leaves the -O0 frame untouched; the compact mode
+    // still repacks so unreferenced slots are dropped.
+    if !compact && candidates.len() < 2 {
         return BTreeMap::new();
     }
     let slots: Vec<i64> = candidates.iter().copied().collect();
@@ -377,6 +424,28 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
     // still lands), then reserved singles, then one slot per colour. Slots at
     // or below the floor and the parameter slots (positive offsets) are not
     // in the map and keep their offset.
+    // In compact mode an aggregate run no live instruction or `FunctionSsa`
+    // field reaches -- every access was promoted or sits in a deleted block
+    // -- is dropped rather than repacked.
+    let mut referenced: BTreeSet<i64> = field_slots.clone();
+    if compact {
+        for (_, inst) in f.insts.iter().enumerate().filter(|(i, _)| in_block[*i]) {
+            match inst {
+                Inst::LocalAddr(off)
+                | Inst::AllocaInit(off)
+                | Inst::LoadLocal { off, .. }
+                | Inst::StoreLocal { off, .. } => {
+                    referenced.insert(*off);
+                }
+                Inst::Call { ret_slot_local, .. }
+                | Inst::CallIndirect { ret_slot_local, .. }
+                | Inst::CallExt { ret_slot_local, .. } => {
+                    referenced.insert(*ret_slot_local);
+                }
+                _ => {}
+            }
+        }
+    }
     let mut new_off: BTreeMap<i64, i64> = BTreeMap::new();
     let mut next_mag = floor;
     let cells_sorted: Vec<i64> = agg_cells.iter().copied().collect();
@@ -388,6 +457,10 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
             j += 1;
         }
         let hi_off = cells_sorted[j];
+        if compact && !(lo_off..=hi_off).any(|off| referenced.contains(&off)) {
+            i = j + 1;
+            continue;
+        }
         let width = hi_off - lo_off + 1;
         for off in lo_off..=hi_off {
             new_off.insert(off, -(next_mag + 1 + (hi_off - off)));
@@ -466,4 +539,135 @@ fn coalesce(f: &mut FunctionSsa) -> BTreeMap<i64, Option<i64>> {
             }
         })
         .collect()
+}
+
+#[cfg(all(test, feature = "std"))]
+mod tests {
+    use super::super::super::ir::{Block, LoadKind, StoreKind, Terminator};
+    use super::*;
+
+    fn one_block(insts: Vec<Inst>, ret: ValueId, locals: i64) -> FunctionSsa {
+        let n = insts.len() as u32;
+        FunctionSsa {
+            locals,
+            synthetic_base: 1,
+            inst_src: alloc::vec![(0, 0); n as usize],
+            f32_values: alloc::vec![false; n as usize],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..n,
+                terminator: Terminator::Return(ret),
+                exit_acc: ret,
+            }],
+            insts,
+            ..Default::default()
+        }
+    }
+
+    /// Compact mode drops slots and multi-cell groups with no remaining
+    /// reference and renumbers the survivor; the -O0 mode leaves a
+    /// function with fewer than two shareable scalars untouched.
+    #[test]
+    fn compact_drops_unreferenced_slots_and_groups() {
+        let build = || {
+            let mut f = one_block(
+                alloc::vec![
+                    Inst::LocalAddr(-7),
+                    Inst::Load {
+                        addr: 0,
+                        disp: 0,
+                        kind: LoadKind::I64,
+                        volatile: false,
+                    },
+                ],
+                1,
+                10,
+            );
+            f.multi_cell_slots = alloc::vec![(-5, 2)];
+            f
+        };
+        let mut f = build();
+        let map = coalesce(&mut f, true);
+        assert_eq!(f.locals, 1);
+        assert!(matches!(f.insts[0], Inst::LocalAddr(-1)));
+        assert_eq!(map, BTreeMap::from([(-7, Some(-1))]));
+
+        let mut f = build();
+        assert!(coalesce(&mut f, false).is_empty());
+        assert_eq!(f.locals, 10);
+    }
+
+    /// An access left in the tape by block deletion (covered by no block)
+    /// neither reserves nor keeps its slot.
+    #[test]
+    fn orphan_inst_does_not_keep_slot() {
+        let mut f = one_block(
+            alloc::vec![
+                Inst::LocalAddr(-7),
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+                Inst::StoreLocal {
+                    off: -2,
+                    value: 1,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+            ],
+            1,
+            10,
+        );
+        f.blocks[0].inst_range = 0..2;
+        coalesce(&mut f, true);
+        assert_eq!(f.locals, 1);
+    }
+
+    /// A constant-Add field address extends an unrecorded temporary's
+    /// extent, so its interior cell rides with the base as one group and
+    /// a shared scalar never lands on it. Locked in the -O0 mode.
+    #[test]
+    fn binopi_field_address_extends_group() {
+        let mut f = one_block(
+            alloc::vec![
+                Inst::LocalAddr(-3),
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs_imm: 8,
+                },
+                Inst::Store {
+                    addr: 1,
+                    disp: 0,
+                    value: 0,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+                Inst::LoadLocal {
+                    off: -9,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+                Inst::StoreLocal {
+                    off: -8,
+                    value: 3,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+            ],
+            3,
+            9,
+        );
+        let map = coalesce(&mut f, false);
+        assert_eq!(f.locals, 3);
+        assert!(matches!(f.insts[0], Inst::LocalAddr(-2)));
+        assert!(matches!(f.insts[3], Inst::LoadLocal { off: -3, .. }));
+        assert!(matches!(f.insts[4], Inst::StoreLocal { off: -3, .. }));
+        assert_eq!(
+            map,
+            BTreeMap::from([(-9, None), (-8, None), (-3, Some(-2)), (-2, Some(-1))])
+        );
+    }
 }

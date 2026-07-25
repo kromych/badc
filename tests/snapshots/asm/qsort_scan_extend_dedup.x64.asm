@@ -84,7 +84,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x130, %rsp            # imm = 0x130
+               	subq	$0x100, %rsp            # imm = 0x100
                	movl	$0x3039, %ecx           # imm = 0x3039
                	xorq	%rax, %rax
                	jmp	<addr>
@@ -121,11 +121,11 @@ Disassembly of section .text:
                	cmpq	$0x40, %rcx
                	jl	<addr>
                	xorq	%rax, %rax
-               	addq	$0x130, %rsp            # imm = 0x130
+               	addq	$0x100, %rsp            # imm = 0x100
                	popq	%rbp
                	retq
                	movl	$0x1, %eax
-               	addq	$0x130, %rsp            # imm = 0x130
+               	addq	$0x100, %rsp            # imm = 0x100
                	popq	%rbp
                	retq
                	jmp	<addr>

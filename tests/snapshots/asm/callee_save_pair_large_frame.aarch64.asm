@@ -33,7 +33,7 @@ Disassembly of section .text:
 <bigframe>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x340
+               	sub	sp, sp, #0x330
                	stp	x20, x21, [sp]
                	mov	x20, x0
                	mov	x21, x1
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	sxtw	x0, w1
                	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x340
+               	add	sp, sp, #0x330
                	ldp	x29, x30, [sp], #0x10
                	ret
 

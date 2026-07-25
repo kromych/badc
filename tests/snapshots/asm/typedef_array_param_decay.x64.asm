@@ -87,7 +87,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x120, %rsp            # imm = 0x120
+               	subq	$0x100, %rsp            # imm = 0x100
                	leaq	-0x80(%rbp), %rax
                	addq	$0x0, %rax
                	movl	$0x1, %ecx
@@ -145,7 +145,7 @@ Disassembly of section .text:
                	cmpq	$0x88, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x120, %rsp            # imm = 0x120
+               	addq	$0x100, %rsp            # imm = 0x100
                	popq	%rbp
                	retq
                	leaq	-0x100(%rbp), %rax
@@ -153,7 +153,7 @@ Disassembly of section .text:
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x120, %rsp            # imm = 0x120
+               	addq	$0x100, %rsp            # imm = 0x100
                	popq	%rbp
                	retq
                	leaq	-0x100(%rbp), %rax
@@ -161,10 +161,10 @@ Disassembly of section .text:
                	cmpq	$0x10, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x120, %rsp            # imm = 0x120
+               	addq	$0x100, %rsp            # imm = 0x100
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x120, %rsp            # imm = 0x120
+               	addq	$0x100, %rsp            # imm = 0x100
                	popq	%rbp
                	retq

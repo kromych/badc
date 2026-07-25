@@ -12,7 +12,7 @@ Disassembly of section .text:
                	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x90
+               	sub	sp, sp, #0x50
                	sub	x0, x29, #0x30
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -81,10 +81,10 @@ Disassembly of section .text:
                	movk	x4, #0x89ab, lsl #16
                	movk	x4, #0x4567, lsl #32
                	movk	x4, #0x123, lsl #48
-               	stur	x4, [x29, #-0x48]
-               	ldur	x0, [x29, #-0x48]
+               	stur	x4, [x29, #-0x38]
+               	ldur	x0, [x29, #-0x38]
                	lsr	x0, x0, #7
-               	ldur	x1, [x29, #-0x48]
+               	ldur	x1, [x29, #-0x38]
                	lsl	x1, x1, #57
                	orr	x6, x0, x1
                	mov	x0, #0x0                // =0
@@ -110,15 +110,15 @@ Disassembly of section .text:
                	cmp	x6, x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x90
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>

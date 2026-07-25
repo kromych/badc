@@ -105,7 +105,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x20, %rsp
                	leaq	-0x20(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
@@ -125,6 +125,6 @@ Disassembly of section .text:
                	andq	$0xff, %rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
-               	addq	$0x40, %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq

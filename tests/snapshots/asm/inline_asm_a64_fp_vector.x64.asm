@@ -14,7 +14,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
                	movzbq	(%rcx), %rdx
@@ -26,16 +26,16 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rdx
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movl	%edi, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x8(%rbp), %rcx
                	movss	(%rcx,%riz), %xmm0
-               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x8(%rbp), %rcx
                	movss	(%rcx,%riz), %xmm1
                	addss	%xmm1, %xmm0
                	movss	%xmm0, (%rax,%riz)
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movslq	(%rax), %rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
                	movq	%rbx, (%rsp)
-               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
                	movzbq	(%rcx), %rdx
@@ -60,12 +60,12 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rdx
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
-               	leaq	-0x10(%rbp), %rbx
-               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x8(%rbp), %rbx
+               	leaq	-0x10(%rbp), %rax
                	movslq	(%rax), %rdi
                	callq	<addr>
                	movl	%eax, (%rbx)
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movss	(%rax,%riz), %xmm0
                	movl	$0x42280000, %eax       # imm = 0x42280000
                	movq	%rax, %xmm15

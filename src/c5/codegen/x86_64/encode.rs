@@ -1787,7 +1787,7 @@ pub(crate) fn lower(
     if !native.optimize {
         let coalesce_dwarf =
             super::ssa::emit_common::time_pass("ssa::slot_coalesce::run (x86_64)", || {
-                super::ssa::slot_coalesce::run(&mut ssa_funcs)
+                super::ssa::slot_coalesce::run(&mut ssa_funcs, false)
             });
         for (ent_pc, map) in coalesce_dwarf {
             for (orig, new) in map {
@@ -1935,6 +1935,28 @@ pub(crate) fn lower(
                 crate::c5::codegen::ssa::shadow::drop_unreachable_statics(&mut ssa_funcs, program);
             },
         );
+        // Frame compaction after inlining, promotion, and the branch
+        // folds: slots with no remaining reference are dropped and the
+        // survivors repacked, so a spliced-then-promoted callee region
+        // stops occupying the frame. Before `index_fold`, whose derived
+        // address forms the compactor does not model.
+        let coalesce_dwarf =
+            super::ssa::emit_common::time_pass("ssa::slot_coalesce::run -O (x86_64)", || {
+                super::ssa::slot_coalesce::run(&mut ssa_funcs, true)
+            });
+        for (ent_pc, map) in coalesce_dwarf {
+            for (orig, new) in map {
+                match new {
+                    Some(new) => {
+                        coalesced_slot_remap
+                            .entry(ent_pc)
+                            .or_default()
+                            .insert(orig, new);
+                    }
+                    None => promoted_local_slots.entry(ent_pc).or_default().push(orig),
+                }
+            }
+        }
         super::ssa::emit_common::time_pass("passes::split_crit_edges::run (x86_64)", || {
             crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
         });

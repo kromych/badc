@@ -10,10 +10,10 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	str	x20, [sp, #-0x50]!
+               	str	x20, [sp, #-0x40]!
                	str	x19, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
                	sub	x20, x29, #0x8
                	mov	x0, #0x40               // =64
                	bl	<addr>
@@ -23,9 +23,9 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x40]
+               	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x50
+               	ldr	x20, [sp], #0x40
                	ret
                	mov	x1, #0x0                // =0
                	b	<addr>
@@ -147,9 +147,9 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x63               // =99
-               	ldp	x29, x30, [sp, #0x40]
+               	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x50
+               	ldr	x20, [sp], #0x40
                	ret
                	sub	x0, x29, #0x8
                	ldr	x0, [x0]
@@ -160,18 +160,18 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x40]
+               	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x50
+               	ldr	x20, [sp], #0x40
                	ret
                	lsl	x1, x4, #3
                	add	x1, x1, #0xa
                	add	x0, x1, x0
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	ldp	x29, x30, [sp, #0x40]
+               	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x50
+               	ldr	x20, [sp], #0x40
                	ret
                	b	<addr>
                	b	<addr>

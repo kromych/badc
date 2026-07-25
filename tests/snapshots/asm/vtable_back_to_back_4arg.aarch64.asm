@@ -26,10 +26,10 @@ Disassembly of section .text:
                	ret
 
 <driver>:
-               	str	x20, [sp, #-0x90]!
+               	str	x20, [sp, #-0x50]!
                	str	x19, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x80]
-               	add	x29, sp, #0x80
+               	stp	x29, x30, [sp, #0x40]
+               	add	x29, sp, #0x40
                	sub	x0, x29, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -56,16 +56,16 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	ldr	x0, [x0, #0x8]
                	sub	x1, x29, #0x10
-               	sub	x2, x29, #0x40
+               	sub	x2, x29, #0x18
                	mov	x9, x0
                	mov	x0, x1
                	mov	x1, x2
                	mov	x2, x20
                	blr	x9
-               	ldursw	x0, [x29, #-0x40]
-               	ldp	x29, x30, [sp, #0x80]
+               	ldursw	x0, [x29, #-0x18]
+               	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x90
+               	ldr	x20, [sp], #0x50
                	ret
 
 <main>:

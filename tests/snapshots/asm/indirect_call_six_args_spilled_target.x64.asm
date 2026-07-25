@@ -25,7 +25,7 @@ Disassembly of section .text:
 <run>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
+               	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
                	xorq	%rax, %rax
                	movl	%eax, -0x8(%rbp)
@@ -41,34 +41,34 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x60, %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
-               	leaq	-0x8(%rbp), %rax
+               	subq	$0x50, %rsp
+               	leaq	-0x48(%rbp), %rax
                	leaq	-<rip>, %rcx       # <addr>
                	movq	%rcx, (%rax)
-               	leaq	-0x28(%rbp), %rax
+               	leaq	-0x20(%rbp), %rax
                	movl	$0x3, %ecx
                	movq	%rcx, 0x10(%rax)
-               	leaq	-0x48(%rbp), %rax
+               	leaq	-0x40(%rbp), %rax
                	movl	$0x7, %ecx
                	movq	%rcx, 0x10(%rax)
-               	leaq	-0x8(%rbp), %rdi
-               	leaq	-0x28(%rbp), %rsi
+               	leaq	-0x48(%rbp), %rdi
+               	leaq	-0x20(%rbp), %rsi
                	movl	$0x5, %edx
-               	leaq	-0x48(%rbp), %rcx
+               	leaq	-0x40(%rbp), %rcx
                	movl	$0x9, %r8d
                	callq	<addr>
                	cmpq	$0xc0d, %rax            # imm = 0xC0D
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax
-               	addq	$0x80, %rsp
+               	addq	$0x50, %rsp
                	popq	%rbp
                	retq
                	movl	$0x1, %eax

@@ -13,7 +13,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x110, %rsp            # imm = 0x110
+               	subq	$0x90, %rsp
                	leaq	-0x20(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
-               	addq	$0x110, %rsp            # imm = 0x110
+               	addq	$0x90, %rsp
                	popq	%rbp
                	retq
                	leaq	-0x30(%rbp), %rax
@@ -68,7 +68,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
-               	addq	$0x110, %rsp            # imm = 0x110
+               	addq	$0x90, %rsp
                	popq	%rbp
                	retq
                	leaq	-0x30(%rbp), %rcx
@@ -147,7 +147,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x3, %eax
-               	addq	$0x110, %rsp            # imm = 0x110
+               	addq	$0x90, %rsp
                	popq	%rbp
                	retq
                	leaq	-0x10(%rbp), %rcx
@@ -222,7 +222,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x110, %rsp            # imm = 0x110
+               	addq	$0x90, %rsp
                	popq	%rbp
                	retq
                	leaq	-0x10(%rbp), %rcx
@@ -247,7 +247,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x5, %eax
-               	addq	$0x110, %rsp            # imm = 0x110
+               	addq	$0x90, %rsp
                	popq	%rbp
                	retq
                	leaq	-0x50(%rbp), %rax
@@ -323,11 +323,11 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x6, %eax
-               	addq	$0x110, %rsp            # imm = 0x110
+               	addq	$0x90, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x110, %rsp            # imm = 0x110
+               	addq	$0x90, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>

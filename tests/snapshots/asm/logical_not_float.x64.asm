@@ -141,8 +141,8 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x10(%rbp,%riz)
-               	movsd	-0x10(%rbp,%riz), %xmm0
+               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movsd	-0x8(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	sete	%al

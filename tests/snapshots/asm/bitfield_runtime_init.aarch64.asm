@@ -12,7 +12,7 @@ Disassembly of section .text:
                	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	mov	x4, x0
                	sxtw	x4, w4
                	sxtw	x1, w1
@@ -126,7 +126,7 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
@@ -136,7 +136,7 @@ Disassembly of section .text:
 <build_mixed>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
+               	sub	sp, sp, #0x20
                	mov	x5, x0
                	sxtw	x5, w5
                	sxtw	x1, w1
@@ -258,7 +258,7 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x0, ne
                	sxtw	x0, w0
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>

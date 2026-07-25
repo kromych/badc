@@ -28,7 +28,7 @@ Disassembly of section .text:
 <driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x70, %rsp
+               	subq	$0x30, %rsp
                	movq	%rbx, (%rsp)
                	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
@@ -50,12 +50,12 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	movq	0x8(%rax), %rax
                	leaq	-0x10(%rbp), %rdi
-               	leaq	-0x40(%rbp), %rsi
+               	leaq	-0x18(%rbp), %rsi
                	movq	%rbx, %rdx
                	callq	*%rax
-               	movslq	-0x40(%rbp), %rax
+               	movslq	-0x18(%rbp), %rax
                	movq	(%rsp), %rbx
-               	addq	$0x70, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
 

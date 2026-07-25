@@ -16,11 +16,11 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movsd	%xmm14, -0x18(%rbp,%riz)
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x10(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	movsd	-0x10(%rbp,%riz), %xmm1
                	addsd	%xmm1, %xmm0
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
@@ -38,7 +38,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x10(%rbp,%riz), %xmm0
-               	movsd	-0x8(%rbp,%riz), %xmm1
+               	movsd	-0x18(%rbp,%riz), %xmm1
                	subsd	%xmm1, %xmm0
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm15
@@ -54,7 +54,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	movsd	-0x10(%rbp,%riz), %xmm1
                	mulsd	%xmm1, %xmm0
                	movabsq	$0x400e000000000000, %rax # imm = 0x400E000000000000
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsd	-0x10(%rbp,%riz), %xmm0
-               	movsd	-0x8(%rbp,%riz), %xmm1
+               	movsd	-0x18(%rbp,%riz), %xmm1
                	divsd	%xmm1, %xmm0
                	movabsq	$0x3ff999999999999a, %rax # imm = 0x3FF999999999999A
                	movq	%rax, %xmm15
@@ -99,7 +99,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
@@ -137,7 +137,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	movsd	-0x10(%rbp,%riz), %xmm1
                	ucomisd	%xmm1, %xmm0
                	setb	%al
@@ -151,7 +151,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	movsd	-0x10(%rbp,%riz), %xmm1
                	ucomisd	%xmm1, %xmm0
                	seta	%al
@@ -162,7 +162,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	ucomisd	%xmm0, %xmm0
                	sete	%al
                	movzbq	%al, %rax
@@ -175,7 +175,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	movsd	-0x10(%rbp,%riz), %xmm1
                	ucomisd	%xmm1, %xmm0
                	setne	%al
@@ -189,7 +189,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	ucomisd	%xmm0, %xmm0
                	setbe	%al
                	movzbq	%al, %rax
@@ -202,7 +202,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	movsd	-0x10(%rbp,%riz), %xmm1
                	ucomisd	%xmm1, %xmm0
                	setae	%al
@@ -216,8 +216,8 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	movsd	%xmm0, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	%xmm0, -0x18(%rbp,%riz)
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	movabsq	$0x401c000000000000, %rax # imm = 0x401C000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -232,12 +232,12 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
-               	movsd	%xmm0, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	%xmm0, -0x18(%rbp,%riz)
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	cvttsd2si	%xmm0, %rax
                	movslq	%eax, %rax
                	cmpq	$0x7, %rax
@@ -246,7 +246,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
@@ -263,8 +263,8 @@ Disassembly of section .text:
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	movsd	%xmm0, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	%xmm0, -0x18(%rbp,%riz)
+               	movsd	-0x18(%rbp,%riz), %xmm0
                	cvttsd2si	%xmm0, %rax
                	movslq	%eax, %rax
                	cmpq	$-0x1, %rax

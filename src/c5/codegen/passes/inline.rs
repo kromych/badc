@@ -71,6 +71,167 @@ const CALLER_INST_BUDGET: usize = 2048;
 /// 8 bytes, so this caps the inlined-frame growth at 256 bytes.
 const RECURSIVE_FRAME_SLOTS: i64 = 32;
 
+/// Local-slot count (2 KiB) a caller's frame must exceed -- together with
+/// `FRAME_GROWTH_FACTOR` times its pre-inline size -- before optional
+/// inlining into it stops; only a mandatory (`always_inline`) request is
+/// honoured past the bound. Region reuse and the post-inline slot
+/// compaction keep organic growth under this backstop. Mirrors gcc's
+/// large-stack-frame / large-stack-frame-growth pair, which a plain
+/// `inline` hint does not bypass.
+const CALLER_FRAME_SLOTS: i64 = 256;
+
+/// Relative growth bound for the caller frame gate.
+const FRAME_GROWTH_FACTOR: i64 = 4;
+
+#[derive(Clone, Copy)]
+enum RegionKey {
+    Pool,
+    Callee(usize),
+}
+
+/// Frame regions recorded for one caller, persisting across the candidacy
+/// fixpoint: a splice places the callee's relocated locals (own slots plus
+/// materialized parameter cells) into a recorded region instead of
+/// appending a fresh one per call site, so N sites cost one region.
+///
+/// A region may back at most one live activation: the spliced objects'
+/// lifetimes end when the inlined body exits (C99 6.2.4p2), so a non-UB
+/// access happens only from inside that splice's own blocks, and a second
+/// activation can nest inside the first only when a later fixpoint round
+/// splices a body into those blocks -- which requires an `Inst::Call`
+/// there (`CallExt` / `CallIndirect` sites are never spliced). A call-free
+/// body therefore never contains another splice and every call-free splice
+/// shares the one `pool` region; a call-bearing callee can nest an
+/// activation of itself only through a call cycle, so one off every cycle
+/// (`call_cycle_members`) reuses a single per-callee region across its
+/// sites, and a cycle member appends per site.
+#[derive(Default)]
+struct CallerRegions {
+    /// Shared region for call-free bodies: `(base, size)` slot-magnitude
+    /// record occupying offsets `-(base + 1) ..= -(base + size)`.
+    pool: Option<(i64, i64)>,
+    /// One region per call-bearing off-cycle callee, keyed by ent_pc.
+    per_callee: BTreeMap<usize, Option<(i64, i64)>>,
+}
+
+impl CallerRegions {
+    /// Slot-magnitude base for a splice needing `needed` slots given the
+    /// caller's current locals count. Reuses the keyed record when it
+    /// fits, grows it in place while it is still the top of the locals
+    /// region, and otherwise opens a fresh region at the top (a stale
+    /// record's sites keep their baked offsets). The caller then sets
+    /// `locals = locals.max(base + needed)`; records never overlap each
+    /// other or the caller's own slots because every record is carved at
+    /// the top of the locals region current at its creation.
+    fn place(&mut self, key: Option<RegionKey>, needed: i64, locals: i64) -> i64 {
+        let rec: &mut Option<(i64, i64)> = match key {
+            None => return locals,
+            Some(RegionKey::Pool) => &mut self.pool,
+            Some(RegionKey::Callee(pc)) => self.per_callee.entry(pc).or_default(),
+        };
+        match rec {
+            Some((base, size)) if needed <= *size => *base,
+            Some((base, size)) if *base + *size == locals => {
+                *size = needed;
+                *base
+            }
+            _ => {
+                *rec = Some((locals, needed));
+                locals
+            }
+        }
+    }
+}
+
+/// Functions on a direct-call cycle (a non-singleton SCC or a self edge)
+/// in the unit's `Inst::Call` graph, by ent_pc. Inlining replaces a call
+/// with the callee's own calls -- all existing edges of the callee -- so
+/// the graph's transitive closure never grows and membership decided on
+/// the pre-inline bodies stays sound for the whole fixpoint. Iterative
+/// Tarjan.
+fn call_cycle_members(funcs: &[FunctionSsa]) -> BTreeSet<usize> {
+    let n = funcs.len();
+    let idx_of: BTreeMap<usize, usize> = funcs
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.ent_pc, i))
+        .collect();
+    let succ: Vec<Vec<usize>> = funcs
+        .iter()
+        .map(|f| {
+            let mut out: Vec<usize> = f
+                .insts
+                .iter()
+                .filter_map(|i| match i {
+                    Inst::Call { target_pc, .. } => idx_of.get(target_pc).copied(),
+                    _ => None,
+                })
+                .collect();
+            out.sort_unstable();
+            out.dedup();
+            out
+        })
+        .collect();
+    let mut index = vec![usize::MAX; n];
+    let mut low = vec![0usize; n];
+    let mut on_stack = vec![false; n];
+    let mut stack: Vec<usize> = Vec::new();
+    let mut next_index = 0usize;
+    let mut members = BTreeSet::new();
+    for root in 0..n {
+        if index[root] != usize::MAX {
+            continue;
+        }
+        let mut work: Vec<(usize, usize)> = vec![(root, 0)];
+        while let Some((v, ci)) = work.pop() {
+            if ci == 0 {
+                index[v] = next_index;
+                low[v] = next_index;
+                next_index += 1;
+                stack.push(v);
+                on_stack[v] = true;
+            }
+            let mut resumed = false;
+            let mut i = ci;
+            while let Some(&w) = succ[v].get(i) {
+                i += 1;
+                if index[w] == usize::MAX {
+                    work.push((v, i));
+                    work.push((w, 0));
+                    resumed = true;
+                    break;
+                }
+                if on_stack[w] {
+                    low[v] = low[v].min(index[w]);
+                }
+            }
+            if resumed {
+                continue;
+            }
+            if low[v] == index[v] {
+                let mut scc: Vec<usize> = Vec::new();
+                loop {
+                    let w = stack.pop().unwrap();
+                    on_stack[w] = false;
+                    scc.push(w);
+                    if w == v {
+                        break;
+                    }
+                }
+                if scc.len() > 1 || succ[v].contains(&v) {
+                    for m in scc {
+                        members.insert(funcs[m].ent_pc);
+                    }
+                }
+            }
+            if let Some(&(p, _)) = work.last() {
+                low[p] = low[p].min(low[v]);
+            }
+        }
+    }
+    members
+}
+
 fn store_width(kind: StoreKind) -> i64 {
     match kind {
         StoreKind::I8 => 1,
@@ -893,6 +1054,8 @@ fn splice_multi_block(
     splice_block_idx: usize,
     call_pc: u32,
     call_args: &[ValueId],
+    regions: &mut CallerRegions,
+    cyclic: &BTreeSet<usize>,
 ) {
     let n_caller = caller.blocks.len();
     let n_callee = callee.blocks.len();
@@ -991,10 +1154,25 @@ fn splice_multi_block(
         })
         .filter(|s| spilled.contains(s))
         .collect();
+    // Region backing the callee's relocated slots, shared across call
+    // sites when sound (see `CallerRegions`); a cycle member appends.
+    let needed = callee.locals + param_cells.len() as i64;
+    let region_base = if needed > 0 {
+        let key = if !callee.insts.iter().any(|i| matches!(i, Inst::Call { .. })) {
+            Some(RegionKey::Pool)
+        } else if !cyclic.contains(&callee.ent_pc) {
+            Some(RegionKey::Callee(callee.ent_pc))
+        } else {
+            None
+        };
+        regions.place(key, needed, original.locals)
+    } else {
+        original.locals
+    };
     let param_cell_reloc: alloc::collections::BTreeMap<i64, i64> = param_cells
         .iter()
         .enumerate()
-        .map(|(i, &s)| (s, -(original.locals + callee.locals + i as i64 + 1)))
+        .map(|(i, &s)| (s, -(region_base + callee.locals + i as i64 + 1)))
         .collect();
     // Caller's own asm-goto rows precede the callee's in `merged_jump_tables`;
     // a spliced callee `AsmGoto { table }` re-indexes to `caller_jt_len + table`.
@@ -1295,7 +1473,7 @@ fn splice_multi_block(
                     // value into the body and are dropped.
                     Inst::LocalAddr(s) if *s < 0 || *s >= 2 => {
                         let slot = if *s < 0 {
-                            s - original.locals
+                            s - region_base
                         } else {
                             param_cell_reloc[s]
                         };
@@ -1311,7 +1489,7 @@ fn splice_multi_block(
                         volatile,
                     } if *off < 0 || param_cell_reloc.contains_key(off) => {
                         let off = if *off < 0 {
-                            off - original.locals
+                            off - region_base
                         } else {
                             param_cell_reloc[off]
                         };
@@ -1338,7 +1516,7 @@ fn splice_multi_block(
                         volatile,
                     } if *off < 0 || param_cell_reloc.contains_key(off) => {
                         let off = if *off < 0 {
-                            off - original.locals
+                            off - region_base
                         } else {
                             param_cell_reloc[off]
                         };
@@ -1504,15 +1682,19 @@ fn splice_multi_block(
     carry(&original.extern_tls_refs, &remap, &mut tls_refs);
     carry(&callee.extern_tls_refs, &callee_remap, &mut tls_refs);
 
-    // Relocate the callee's own local slots into fresh caller frame slots
-    // below the caller's locals (Step 6 shifts each slot by `original.locals`;
-    // relocated parameter cells follow below those); grow the frame and carry
-    // the callee's multi-cell (struct/union) slot records at their shifted
-    // ids. A callee with no locals leaves both alone.
-    let merged_locals = original.locals + callee.locals + param_cell_reloc.len() as i64;
+    // Relocate the callee's own local slots into the caller frame region
+    // at `region_base` (Step 6 shifts each slot by it; relocated parameter
+    // cells follow below the shifted locals); grow the frame and carry the
+    // callee's multi-cell (struct/union) slot records at their shifted
+    // ids, skipping the duplicates a shared region re-records per site. A
+    // callee with no locals leaves everything alone.
+    let merged_locals = original.locals.max(region_base + needed);
     let mut merged_multi_cell = original.multi_cell_slots;
     for &(slot, size) in &callee.multi_cell_slots {
-        merged_multi_cell.push((slot - original.locals, size));
+        let rec = (slot - region_base, size);
+        if !merged_multi_cell.contains(&rec) {
+            merged_multi_cell.push(rec);
+        }
     }
 
     // Shift the caller's own asm-goto rows (from a prior splice step)
@@ -1633,7 +1815,12 @@ fn needs_reloc_splice(c: &FunctionSsa) -> bool {
 
 /// Splice eligible call sites in `caller` with the bodies named by
 /// `callees`. Modifies `caller` in place.
-fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSsa>) {
+fn inline_caller(
+    caller: &mut FunctionSsa,
+    callees: &BTreeMap<usize, &FunctionSsa>,
+    regions: &mut CallerRegions,
+    cyclic: &BTreeSet<usize>,
+) {
     let mut new_insts: Vec<Inst> = Vec::with_capacity(caller.insts.len());
     let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(caller.inst_src.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(caller.insts.len());
@@ -2015,7 +2202,7 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                 n = caller.name
             );
         }
-        splice_multi_block(caller, callee, b_idx, pc, &args);
+        splice_multi_block(caller, callee, b_idx, pc, &args, regions, cyclic);
         steps += 1;
     }
 }
@@ -2059,6 +2246,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
         }
         return;
     }
+    // Pre-inline state driving the frame gates and region reuse: the
+    // per-caller locals snapshot, call-cycle membership, and the
+    // per-caller region records.
+    let orig_locals: Vec<i64> = funcs.iter().map(|f| f.locals).collect();
+    let cyclic = call_cycle_members(funcs);
+    let mut regions: BTreeMap<usize, CallerRegions> = BTreeMap::new();
     // Iterate to a fixed point: each pass re-evaluates candidacy on
     // the now-substituted function bodies, so a helper that became a
     // leaf after its own sub-calls were inlined becomes eligible on
@@ -2092,7 +2285,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             break;
         }
         let mut changed = false;
-        for caller in funcs.iter_mut() {
+        for (fi, caller) in funcs.iter_mut().enumerate() {
             // Drop self-recursive inlines: a recursive call would
             // expand indefinitely. The candidate set names ent_pc;
             // the caller's ent_pc is the loop guard.
@@ -2117,6 +2310,11 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             {
                 local.retain(|_, c| c.is_inline);
             }
+            if caller.locals > CALLER_FRAME_SLOTS
+                && caller.locals > orig_locals[fi].saturating_mul(FRAME_GROWTH_FACTOR)
+            {
+                local.retain(|_, c| c.is_always_inline);
+            }
             if local.is_empty() {
                 continue;
             }
@@ -2131,7 +2329,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             // entry valid. Only multi-block splicing shifts block ids;
             // `inline_caller` gates that path off for such callers.
             let before = caller.insts.len();
-            inline_caller(caller, &local);
+            inline_caller(
+                caller,
+                &local,
+                regions.entry(caller.ent_pc).or_default(),
+                &cyclic,
+            );
             if caller.insts.len() != before {
                 changed = true;
                 // The splice relocated the callee's own local slots into
@@ -2200,6 +2403,263 @@ fn unhonoured_always_inline(
 mod tests {
     use super::*;
     use crate::c5::codegen::Target;
+
+    fn call_to(target_pc: usize) -> Inst {
+        Inst::Call {
+            target_pc,
+            args: Vec::new(),
+            fixed_args: 0,
+            fp_return: false,
+            fp_arg_mask: 0,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        }
+    }
+
+    /// Single-block asm callee writing an output through an own local
+    /// (reloc-splice shape) with `locals` frame slots.
+    fn asm_callee(ent_pc: usize, locals: i64) -> FunctionSsa {
+        use crate::c5::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
+        let insts = alloc::vec![
+            Inst::LocalAddr(-1),
+            Inst::InlineAsm {
+                asm: alloc::boxed::Box::new(AsmBlock {
+                    template: b"mov %0, 1".to_vec(),
+                    operands: alloc::vec![AsmOperand {
+                        constraint: AsmConstraint::Reg,
+                        is_output: true,
+                        is_rw: false,
+                        width: 8,
+                        seg: AsmSeg::None,
+                    }],
+                    clobber_regs: 0,
+                    clobber_fp_regs: 0,
+                    clobber_memory: false,
+                    volatile: false,
+                }),
+                args: alloc::vec![0],
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+        ];
+        FunctionSsa {
+            ent_pc,
+            locals,
+            inst_src: alloc::vec![(0, 0); insts.len()],
+            f32_values: alloc::vec![false; insts.len()],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..insts.len() as u32,
+                terminator: Terminator::Return(2),
+                exit_acc: 2,
+            }],
+            insts,
+            ..Default::default()
+        }
+    }
+
+    /// Two-block callee with `locals` slots whose body keeps a call to
+    /// `inner_pc` (splices through the multi-block path; the inner call
+    /// survives when `inner_pc` is not a candidate).
+    fn calling_callee(ent_pc: usize, locals: i64, inner_pc: usize) -> FunctionSsa {
+        let insts = alloc::vec![
+            Inst::Imm(5),
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I64,
+                volatile: false,
+            },
+            call_to(inner_pc),
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+        ];
+        FunctionSsa {
+            ent_pc,
+            locals,
+            inst_src: alloc::vec![(0, 0); insts.len()],
+            f32_values: alloc::vec![false; insts.len()],
+            blocks: alloc::vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..3,
+                    terminator: Terminator::Jmp(1),
+                    exit_acc: NO_VALUE,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 3..4,
+                    terminator: Terminator::Return(3),
+                    exit_acc: 3,
+                },
+            ],
+            insts,
+            ..Default::default()
+        }
+    }
+
+    /// Caller with `n_calls` sequential calls to `target_pc` and `locals`
+    /// own slots.
+    fn multi_call_caller(
+        ent_pc: usize,
+        locals: i64,
+        target_pc: usize,
+        n_calls: usize,
+    ) -> FunctionSsa {
+        let mut insts: Vec<Inst> = (0..n_calls).map(|_| call_to(target_pc)).collect();
+        insts.push(Inst::Imm(0));
+        let n = insts.len() as u32;
+        FunctionSsa {
+            ent_pc,
+            locals,
+            inst_src: alloc::vec![(0, 0); n as usize],
+            f32_values: alloc::vec![false; n as usize],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..n,
+                terminator: Terminator::Return(n - 1),
+                exit_acc: n - 1,
+            }],
+            insts,
+            ..Default::default()
+        }
+    }
+
+    /// A call-free (pooled) callee spliced at 8 sites grows the caller's
+    /// frame by one region, not one per site.
+    #[test]
+    fn callfree_region_pools_across_sites() {
+        let abi = Target::LinuxX64.abi();
+        let mut funcs = alloc::vec![multi_call_caller(1, 2, 100, 8), asm_callee(100, 4),];
+        run(&mut funcs, 32, abi);
+        assert!(
+            funcs[0]
+                .insts
+                .iter()
+                .all(|i| !matches!(i, Inst::Call { .. })),
+            "all 8 sites must inline"
+        );
+        assert_eq!(
+            funcs[0].locals, 6,
+            "8 splices of a 4-slot call-free callee must add one 4-slot region"
+        );
+    }
+
+    /// A call-bearing callee off every call cycle reuses one per-callee
+    /// region across its sites.
+    #[test]
+    fn offcycle_callee_region_reused_across_sites() {
+        let abi = Target::LinuxX64.abi();
+        let mut funcs = alloc::vec![multi_call_caller(1, 2, 200, 2), calling_callee(200, 3, 999),];
+        run(&mut funcs, 32, abi);
+        let inner_calls = funcs[0]
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 999))
+            .count();
+        assert_eq!(inner_calls, 2, "both spliced bodies keep the inner call");
+        assert_eq!(
+            funcs[0].locals, 5,
+            "2 splices of a 3-slot off-cycle callee must share one region"
+        );
+    }
+
+    /// A callee on a call cycle appends a region per site: a later round
+    /// can splice its mutual-recursion partner -- and with it another
+    /// activation of the callee -- inside a prior body, so its regions
+    /// never share.
+    #[test]
+    fn cycle_member_regions_append_per_site() {
+        let abi = Target::LinuxX64.abi();
+        let partner = FunctionSsa {
+            ent_pc: 400,
+            is_variadic: true,
+            insts: alloc::vec![call_to(300), Inst::Imm(0)],
+            inst_src: alloc::vec![(0, 0); 2],
+            f32_values: alloc::vec![false; 2],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: Terminator::Return(1),
+                exit_acc: 1,
+            }],
+            ..Default::default()
+        };
+        let mut funcs = alloc::vec![
+            multi_call_caller(1, 2, 300, 2),
+            calling_callee(300, 2, 400),
+            partner,
+        ];
+        run(&mut funcs, 32, abi);
+        assert_eq!(
+            funcs[0].locals, 6,
+            "2 splices of a 2-slot cycle member must append 2 regions"
+        );
+    }
+
+    /// The caller frame gate: once a caller's locals exceed both bounds,
+    /// only an always_inline callee is still spliced.
+    #[test]
+    fn caller_frame_gate_blocks_optional_inlining() {
+        let abi = Target::LinuxX64.abi();
+        for always in [false, true] {
+            let leaf = FunctionSsa {
+                ent_pc: 600,
+                is_inline: always,
+                is_always_inline: always,
+                insts: alloc::vec![Inst::Imm(7)],
+                inst_src: alloc::vec![(0, 0)],
+                f32_values: alloc::vec![false],
+                blocks: alloc::vec![Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator: Terminator::Return(0),
+                    exit_acc: 0,
+                }],
+                ..Default::default()
+            };
+            // Iteration 1 splices the 400-slot callee (gate not yet hit),
+            // materializing its inner call; iteration 2 re-checks the gate
+            // at 402 slots and admits only a mandatory request.
+            let mut funcs = alloc::vec![
+                multi_call_caller(1, 2, 500, 1),
+                calling_callee(500, 400, 600),
+                leaf,
+            ];
+            run(&mut funcs, 32, abi);
+            let leaf_calls = funcs[0]
+                .insts
+                .iter()
+                .filter(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 600))
+                .count();
+            assert_eq!(
+                leaf_calls,
+                usize::from(!always),
+                "always={always}: gate must block exactly the optional case"
+            );
+        }
+    }
+
+    /// Direct-call cycle membership: mutual recursion and self edges are
+    /// members; acyclic callers and leaves are not.
+    #[test]
+    fn call_cycle_membership() {
+        let f = |ent_pc: usize, targets: &[usize]| FunctionSsa {
+            ent_pc,
+            insts: targets.iter().map(|&t| call_to(t)).collect(),
+            ..Default::default()
+        };
+        let funcs = alloc::vec![f(1, &[2]), f(2, &[1]), f(3, &[1]), f(4, &[4]), f(5, &[]),];
+        let members = call_cycle_members(&funcs);
+        assert_eq!(members, BTreeSet::from([1, 2, 4]));
+    }
 
     /// A self-recursive callee is not a candidate: inlining it does not
     /// remove the recursion, so it would only unroll the call tree.

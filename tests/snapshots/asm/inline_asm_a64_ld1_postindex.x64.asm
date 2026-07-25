@@ -13,7 +13,7 @@ Disassembly of section .text:
 <postindex_walk>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	leaq	-0x20(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
@@ -33,7 +33,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
-               	addq	$0x30, %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
 

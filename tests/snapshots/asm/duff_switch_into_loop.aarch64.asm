@@ -108,7 +108,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x70
+               	sub	sp, sp, #0x50
                	mov	x0, #0x0                // =0
                	b	<addr>
                	sub	x2, x29, #0x28
@@ -143,11 +143,11 @@ Disassembly of section .text:
                	cmp	x1, #0x27
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x70
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x70
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>

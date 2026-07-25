@@ -965,10 +965,9 @@ impl Ast {
 /// tags carried outside the AST (e.g. `FinishedFunction::param_tys`,
 /// `Symbol::type_`).
 pub(crate) fn remap_struct_ty(ty: i64, remap: &[usize]) -> i64 {
-    use crate::c5::compiler::types::{STRUCT_BASE, STRUCT_STRIDE};
-    use crate::c5::compiler::types::{UNSIGNED_BIT, VOLATILE_BIT};
+    use crate::c5::compiler::types::{STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, strip_unsigned};
     let unsigned = ty & UNSIGNED_BIT;
-    let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+    let stripped = strip_unsigned(ty);
     if stripped < STRUCT_BASE {
         return ty;
     }

@@ -39,7 +39,7 @@ use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_bool_ty, is_char_band_ptr_ty,
+    UNSIGNED_BIT, VOLATILE_BIT, format_type, fp_result_ty, integer_promote, is_bool_ty,
     is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty, is_vector_ty,
     is_void_ptr_ty, struct_id_of, struct_ptr_depth,
 };
@@ -725,12 +725,11 @@ impl Compiler {
             // C99 6.5.3.4: `sizeof(<type>)`, `sizeof(<expr>)`, or
             // `sizeof <unary-expr>`. The shared helper handles
             // all three shapes; this site just emits the result
-            // as a runtime immediate and pins the expression
-            // type at `int`.
+            // as a runtime immediate typed `size_t` (6.5.3.4p4).
             self.next()?;
             let total_bytes = self.sizeof_operand_bytes()?;
             self.emit_imm(total_bytes);
-            self.ty = Ty::Int as i64;
+            self.ty = self.size_t_ty();
             // C99 6.5.3.4p2: `sizeof` of a variable-length array is a
             // runtime value -- emit a load of the VLA's byte-count
             // slot. Every other operand folds to a compile-time
@@ -742,12 +741,11 @@ impl Compiler {
             }
         } else if self.lex.tk == Token::Alignof {
             // C11 6.5.3.4: `_Alignof ( type-name )`, a compile-time
-            // constant. Emit the alignment as a runtime immediate and
-            // pin the type at `int`, matching the `sizeof` site.
+            // constant typed `size_t`, matching the `sizeof` site.
             self.next()?;
             let align = self.alignof_operand_bytes()?;
             self.emit_imm(align);
-            self.ty = Ty::Int as i64;
+            self.ty = self.size_t_ty();
             self.ast_emit_int_lit(align, self.ty);
         } else if self.lex.tk == Token::Generic {
             // C11 6.5.1.1 generic selection `_Generic(expr, T1: e1, ...)`.
@@ -3409,22 +3407,17 @@ impl Compiler {
                     let then_sp = is_struct_ty(then_ty) && struct_ptr_depth(then_ty) > 0;
                     let else_sp = is_struct_ty(else_ty) && struct_ptr_depth(else_ty) > 0;
                     // Both pointers: the null-pointer-constant arm yields the
-                    // other arm's type, and a `void*` arm yields `void*`. The
-                    // two rules pick the same side here, so they share an arm.
+                    // other arm's type; otherwise a `void*` arm against any
+                    // other pointer yields pointer-to-void carrying both
+                    // arms' qualifiers (c5 models only `volatile` on tags).
                     result_ty = if then_ptr && else_ptr && then_npc && !else_npc {
                         else_ty
-                    } else if then_ptr
-                        && else_ptr
-                        && ((else_npc && !then_npc)
-                            || (is_void_ptr_ty(then_ty) && !is_char_band_ptr_ty(else_ty)))
-                    {
+                    } else if then_ptr && else_ptr && else_npc && !then_npc {
                         then_ty
-                    } else if then_ptr
-                        && else_ptr
-                        && is_void_ptr_ty(else_ty)
-                        && !is_char_band_ptr_ty(then_ty)
-                    {
-                        else_ty
+                    } else if then_ptr && else_ptr && is_void_ptr_ty(then_ty) {
+                        then_ty | (else_ty & VOLATILE_BIT)
+                    } else if then_ptr && else_ptr && is_void_ptr_ty(else_ty) {
+                        else_ty | (then_ty & VOLATILE_BIT)
                     } else if then_sp && !else_sp {
                         then_ty
                     } else if else_sp && !then_sp {

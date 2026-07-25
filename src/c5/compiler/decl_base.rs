@@ -1229,12 +1229,11 @@ impl Compiler {
             m.char_tag(self.target.plain_char_signed())
         } else if self.lex.tk == Token::Void {
             self.next()?;
-            // `void` shares the `unsigned char` encoding so void-pointer
-            // arithmetic / sizeof / fn-ptr tables match the legacy
-            // void-as-char path; the void-ness rides `base_was_void`,
-            // which the function-decl path reads for `returns_void`.
+            // `void` rides the `unsigned char` representation plus
+            // `VOID_BIT` (see `types::void_ty`); `base_was_void` feeds
+            // the function-decl path's `returns_void`.
             self.pending.base_was_void = true;
-            Ty::Char as i64 | UNSIGNED_BIT
+            super::types::void_ty()
         } else if self.lex.tk == Token::Float {
             self.next()?;
             Ty::Float as i64

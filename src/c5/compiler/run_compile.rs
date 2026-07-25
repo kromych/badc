@@ -25,7 +25,7 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty,
+    format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty, is_void_ty, strip_unsigned,
     struct_id_of, struct_ptr_depth,
 };
 
@@ -734,15 +734,10 @@ impl Compiler {
                 // declarator. `pending_base_was_void` was set if
                 // the base type spelled `void`; it stays valid
                 // for the FIRST declarator in a comma-separated
-                // group only -- subsequent ones see the flag
-                // and would mis-fire if the declarator added
-                // pointer levels in between. Gate on
-                // "no leading `*` added" by checking that the
-                // declarator's returned `ty` still equals the
-                // bare-void encoding. Any declarator that bumped
-                // `ty` by `Ty::Ptr` falls out.
-                let declarator_is_bare_void =
-                    self.pending.base_was_void && ty == (Ty::Char as i64 | UNSIGNED_BIT);
+                // group only. Gate on "no leading `*` added": any
+                // declarator that bumped `ty` by `Ty::Ptr` is no
+                // longer scalar `void` and falls out.
+                let declarator_is_bare_void = self.pending.base_was_void && is_void_ty(ty);
                 // Consume the flag so the next iteration of the
                 // declarator loop (`void *a, b;`) doesn't
                 // re-trigger on a different declarator's shape.
@@ -1450,7 +1445,7 @@ impl Compiler {
                     // float-typed code expects, and the load/store
                     // semantics stay consistent.
                     for &idx in params.indices.iter() {
-                        let pty = self.symbols[idx].type_ & !(UNSIGNED_BIT | VOLATILE_BIT);
+                        let pty = strip_unsigned(self.symbols[idx].type_);
                         if pty != Ty::Float as i64 {
                             continue;
                         }

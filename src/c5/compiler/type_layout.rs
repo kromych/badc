@@ -35,7 +35,7 @@ impl Compiler {
             // struct value, whose size lives in the struct table.
             return self.structs[struct_id_of(ptr_ty)].size as i64;
         }
-        let stripped = ptr_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+        let stripped = strip_unsigned(ptr_ty);
         if stripped == (Ty::Long as i64) + (Ty::Ptr as i64) && self.target.is_windows() {
             return 4;
         }
@@ -211,7 +211,7 @@ impl Compiler {
     /// array dimension rides `pending.typedef_base_array_size`, the
     /// same carrier an array-typedef base uses.
     pub(super) fn builtin_va_list_tag(&mut self) -> i64 {
-        let ptr = (Ty::Char as i64 | UNSIGNED_BIT) + Ty::Ptr as i64;
+        let ptr = super::types::void_ty() + Ty::Ptr as i64;
         let uint = Ty::Int as i64 | UNSIGNED_BIT;
         let (fields, size): (&[(&str, usize, i64)], usize) = match self.target {
             Target::LinuxX64 => (
@@ -510,7 +510,7 @@ impl Compiler {
         // Unsigned bit is orthogonal to width: `unsigned char` is
         // still 1 byte, `unsigned int` is still 4 bytes. Strip it
         // before consulting the band identity.
-        let ty = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+        let ty = strip_unsigned(ty);
         if is_struct_ty(ty) {
             if struct_ptr_depth(ty) > 0 {
                 8
@@ -551,7 +551,7 @@ impl Compiler {
     /// `long` / pointer = 8). Struct values inherit the max
     /// alignment of their fields, capped at `MAX_STATIC_ALIGN`.
     pub(super) fn align_of_type(&self, ty: i64) -> usize {
-        let ty = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+        let ty = strip_unsigned(ty);
         if ty == Ty::Float as i64 {
             // `float` is 4 bytes; its natural alignment matches.
             // Same rule the rest of the integer / pointer family
@@ -607,7 +607,7 @@ fn flat_scalar_size(ty: i64, target: Target) -> u32 {
     if is_pointer_ty(ty) {
         return 8;
     }
-    let bare = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+    let bare = strip_unsigned(ty);
     if bare == Ty::Bool as i64 || bare == Ty::Char as i64 {
         1
     } else if bare == Ty::Short as i64 {
@@ -656,7 +656,7 @@ pub(crate) fn flatten_struct_fields(
             if is_struct_value {
                 flatten_struct_fields(structs, target, struct_id_of(elem_ty), off, out);
             } else {
-                let bare = elem_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+                let bare = strip_unsigned(elem_ty);
                 let kind = if is_pointer_ty(elem_ty) {
                     ScalarKind::Int
                 } else if bare == Ty::Float as i64 {

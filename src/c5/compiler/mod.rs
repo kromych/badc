@@ -539,11 +539,6 @@ pub(in crate::c5::compiler) struct Pending {
     /// the array length. Cleared by every base-type parse
     /// (`0` means "not from an array typedef").
     pub typedef_base_array_size: i64,
-    /// Alignment declared on a base typedef via
-    /// `__attribute__((aligned(N)))`, captured when the typedef name is
-    /// resolved as a base type so a direct (non-pointer) use in `_Alignof`
-    /// reports the declared alignment. 0 when absent.
-    pub typedef_base_align: i64,
     /// Dimension list (outermost first) accompanying
     /// `typedef_base_array_size` when the typedef alias is a
     /// multi-dimensional array; empty for a 1-D alias. Written by the
@@ -779,6 +774,15 @@ pub(in crate::c5::compiler) struct Pending {
     /// honor up to 16, anything larger (or an automatic object above
     /// the 8-byte slot alignment) is a diagnostic, never silent.
     pub attr_align: i64,
+    /// Alignment (bytes) carried by the base type of the declaration
+    /// under parse, from a typedef whose type has a GNU
+    /// `aligned(N)` attribute. Distinct from `attr_align` (an object /
+    /// member `_Alignas`, raise-only): a type attribute sets the
+    /// alignment and may lower it below the natural value, so the
+    /// struct-field layout uses it to replace the field's natural
+    /// alignment rather than raising it. Seeded when a typedef-name
+    /// resolves as a base type; 0 for a type with natural alignment.
+    pub type_align: i64,
     /// `__attribute__((packed))` seen on the declarator being parsed.
     /// A struct member takes it to clamp that field's alignment to 1
     /// (GCC member-level packed), independent of a struct-level `packed`.
@@ -849,7 +853,6 @@ impl Default for Pending {
             init_inner_dims: alloc::vec::Vec::new(),
             init_target_array_size: 0,
             typedef_base_array_size: 0,
-            typedef_base_align: 0,
             typedef_base_array_dims: alloc::vec::Vec::new(),
             declarator_leading_ptr_count: 0,
             vla_allowed: false,
@@ -881,6 +884,7 @@ impl Default for Pending {
             compound_lit_close_parens: 0,
             attr_maybe_unused: false,
             attr_align: 0,
+            type_align: 0,
             attr_packed: false,
             attr_vector_size: 0,
             attr_thread_local: false,

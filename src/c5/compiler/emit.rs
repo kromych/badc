@@ -589,6 +589,7 @@ impl Compiler {
         s.h_params = s.params.clone();
         s.h_is_variadic = s.is_variadic;
         s.h_array_size = s.array_size;
+        s.h_type_align = s.type_align;
         s.h_inner_array_size = s.inner_array_size;
         // Clone rather than `mem::take`: the inner-scope binding
         // (parameter or block local) keeps using the live
@@ -620,6 +621,7 @@ impl Compiler {
         sym.params = core::mem::take(&mut sym.h_params);
         sym.is_variadic = sym.h_is_variadic;
         sym.array_size = sym.h_array_size;
+        sym.type_align = sym.h_type_align;
         sym.inner_array_size = sym.h_inner_array_size;
         sym.array_dims = core::mem::take(&mut sym.h_array_dims);
         sym.is_vla = sym.h_is_vla;

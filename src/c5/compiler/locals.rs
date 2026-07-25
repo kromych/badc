@@ -377,7 +377,19 @@ impl Compiler {
                 // block-scope static shares the `.data` / `.bss` placement of
                 // a file-scope object, so the type's alignment holds up to
                 // MAX_STATIC_ALIGN.
-                let want_align = core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty));
+                // A GNU `aligned(N)` type attribute on the typedef base
+                // raises the static object's placement like an explicit
+                // request (a reducing one is absorbed by the natural
+                // alignment); a pointer object keeps pointer alignment.
+                let type_align = if obj_is_pointer {
+                    0
+                } else {
+                    self.pending.type_align.max(0) as usize
+                };
+                let want_align = core::cmp::max(
+                    core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty)),
+                    type_align,
+                );
                 if want_align > 8 {
                     self.align_data_to(want_align);
                     self.data_align = self.data_align.max(want_align);

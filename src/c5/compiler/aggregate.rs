@@ -172,6 +172,7 @@ impl Compiler {
             // group and turn an unrelated scalar field into a
             // bogus array.
             self.pending.typedef_base_array_size = 0;
+            self.pending.type_align = 0;
             // Field type prefix: int, char, float, double, or struct Name.
             // Leading qualifiers / int modifiers / function specifiers
             // (`const`, `unsigned`, ...) are no-ops; track if any int
@@ -218,10 +219,6 @@ impl Compiler {
             // unsigned, so a value with the field's high bit set
             // zero-extends rather than sign-extends.
             let mut field_base_is_enum = false;
-            // Alignment declared on the field's base typedef via
-            // `__attribute__((aligned(N)))`; applied at placement when the
-            // field is a direct (non-pointer) use of the typedef.
-            let mut typedef_member_align: i64 = 0;
             let field_base_tok = self.lex.tk;
             let mut field_base = if let Some(inner) = atomic_field_base {
                 inner
@@ -333,7 +330,6 @@ impl Compiler {
                 if self.symbols[self.lex.curr_id_idx].is_enum_typedef {
                     field_base_is_enum = true;
                 }
-                typedef_member_align = self.symbols[self.lex.curr_id_idx].typedef_align;
                 let aliased = self.symbols[self.lex.curr_id_idx].type_;
                 // C99 6.7.7 paragraph 3: a typedef name carries
                 // through any array dimension on its alias. Stash
@@ -344,6 +340,13 @@ impl Compiler {
                     self.pending.typedef_base_array_size = typedef_array;
                     self.pending.typedef_base_array_dims =
                         self.symbols[self.lex.curr_id_idx].array_dims.clone();
+                }
+                // Carry the typedef's explicit type alignment so a field
+                // declared with it lays out on the requested boundary
+                // (below its natural value for a reducing `aligned(N)`).
+                let typedef_align = self.symbols[self.lex.curr_id_idx].type_align;
+                if typedef_align > 0 {
+                    self.pending.type_align = typedef_align;
                 }
                 // Carry the typedef's fn-pointer lineage forward
                 // (mirrors `decl_base.rs` for the non-aggregate
@@ -390,6 +393,13 @@ impl Compiler {
                 }
             }
             field_base |= trailing_quals;
+
+            // Explicit type alignment carried by a typedef base (GNU
+            // `aligned(N)`), consumed once for every declarator sharing
+            // this base. Replaces the field's natural alignment below,
+            // so a reducing attribute lowers it; a pointer declarator
+            // through the typedef keeps pointer alignment instead.
+            let type_align_override = core::mem::take(&mut self.pending.type_align) as usize;
 
             // Anonymous struct/union member (C11 6.7.2.1p13). The
             // type-prefix parse just registered an anon-tagged
@@ -767,13 +777,15 @@ impl Compiler {
                     // explicit attribute included (GCC and clang both give
                     // alignment 1 for an `aligned(64)` member under
                     // `pack(1)`). A pack request above 16 packs nothing.
+                    // A typedef's explicit type alignment replaces the
+                    // field's natural alignment (it may lower it), except
+                    // through a pointer declarator or under `packed`,
+                    // which drops a type attribute to 1 (a member
+                    // `_Alignas` survives packing via `decl_align`).
                     let natural_align = if is_empty_aggregate || attr_packed {
                         1
-                    } else if typedef_member_align > 0 && !is_pointer_ty(field_ty) {
-                        // GNU typedef `aligned(N)` sets the aliased type's
-                        // alignment, which may be below its natural alignment; a
-                        // pointer through the typedef keeps pointer alignment.
-                        typedef_member_align as usize
+                    } else if type_align_override > 0 && !is_pointer_ty(field_ty) {
+                        type_align_override
                     } else {
                         self.align_of_type(field_ty)
                     };

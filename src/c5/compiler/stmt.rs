@@ -43,6 +43,7 @@ pub(super) struct BlockShadow {
     params: Vec<i64>,
     is_variadic: bool,
     array_size: i64,
+    type_align: i64,
     inner_array_size: i64,
     array_dims: Vec<i64>,
     is_vla: bool,
@@ -66,6 +67,7 @@ impl Compiler {
             params: s.params.clone(),
             is_variadic: s.is_variadic,
             array_size: s.array_size,
+            type_align: s.type_align,
             inner_array_size: s.inner_array_size,
             array_dims: s.array_dims.clone(),
             is_vla: s.is_vla,
@@ -89,6 +91,7 @@ impl Compiler {
         s.params = b.params;
         s.is_variadic = b.is_variadic;
         s.array_size = b.array_size;
+        s.type_align = b.type_align;
         s.inner_array_size = b.inner_array_size;
         s.array_dims = b.array_dims;
         s.is_vla = b.is_vla;
@@ -344,6 +347,9 @@ impl Compiler {
         mut block_symbols: Option<&mut Vec<BlockShadow>>,
     ) -> Result<(), C5Error> {
         self.next()?; // consume `typedef`
+        // Scope the object-alignment carrier to this typedef so a prior
+        // statement's `_Alignas` does not leak onto the alias.
+        self.pending.attr_align = 0;
         let lbt = self.parse_decl_base_type()?;
         while self.lex.tk != ';' {
             let (id_idx, mut ty, mut td_array) = self.parse_declarator(lbt)?;
@@ -389,9 +395,13 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
-            // GNU `__attribute__((aligned(N)))` on the typedef sets the aliased
-            // type's alignment; mirror the file-scope path.
-            self.symbols[id_idx].typedef_align = self.pending.attr_align;
+            // GNU `aligned(N)` type attribute on the alias (its own
+            // attribute, else propagated from an aligned typedef base).
+            self.symbols[id_idx].type_align = if self.pending.attr_align > 0 {
+                self.pending.attr_align
+            } else {
+                self.pending.type_align
+            };
             // Preserve an array / vector typedef's element count (C99 6.7.7):
             // the file-scope path stores this (run_compile), but the block-scope
             // path dropped it, so a second declaration using the typedef
@@ -425,6 +435,11 @@ impl Compiler {
             self.accept(',')?;
         }
         self.next()?; // consume `;`
+        // Clear the alignment carriers so this typedef's attribute does
+        // not leak onto a following block declaration; the file-scope
+        // loop resets them per declaration, the block path does not.
+        self.pending.attr_align = 0;
+        self.pending.type_align = 0;
         Ok(())
     }
 

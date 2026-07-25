@@ -3501,9 +3501,10 @@ mod tests {
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
         let a = assign_operand_regs(&gp, clob, 0).unwrap();
         assert_eq!(a, [Some(6), Some(7), Some(8)]);
-        // A clobber list covering every pool register leaves nothing to assign;
-        // reject rather than reuse a clobbered register.
-        let all = [0u8, 3, 1, 2, 6, 7, 8, 9]
+        // A clobber list covering every pool register (including the
+        // r12..r15 tail) leaves nothing to assign; reject rather than
+        // reuse a clobbered register.
+        let all = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15]
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
         assert!(assign_operand_regs(&[op(C::Reg)], all, 0).is_err());

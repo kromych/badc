@@ -2208,7 +2208,7 @@ pub(crate) fn rewrite_multidef_local_labels(text: &str) -> Option<alloc::string:
 /// (`.p2align e,,max`) to keep the default fill while giving a max skip.
 /// Returns the alignment spec (interpreted per directive by the caller), the
 /// optional fill byte, and the optional maximum number of bytes to skip.
-fn parse_align_operands(rest: &str) -> Option<(i64, Option<u8>, Option<u32>)> {
+pub(crate) fn parse_align_operands(rest: &str) -> Option<(i64, Option<u8>, Option<u32>)> {
     let mut fields = rest.split(',').map(str::trim);
     let spec = parse_raw_int(fields.next()?)?;
     let field = |f: Option<&str>| -> Option<Option<i64>> {
@@ -2990,7 +2990,7 @@ impl SectionLabelOffsets {
 
 /// Bytes needed to advance `at` to the next multiple of `align`, or zero when
 /// GNU as would drop the alignment because the gap exceeds the `max` skip.
-fn align_gap(at: i64, align: i64, max: Option<u32>) -> i64 {
+pub(crate) fn align_gap(at: i64, align: i64, max: Option<u32>) -> i64 {
     let gap = (align - at.rem_euclid(align)).rem_euclid(align);
     match max {
         Some(m) if gap > m as i64 => 0,
@@ -3003,7 +3003,7 @@ fn align_gap(at: i64, align: i64, max: Option<u32>) -> i64 {
 /// target NOP encoding (single-byte on x86, the 4-byte instruction on AArch64)
 /// and a data section with zero. The materializer cycles the pattern by
 /// absolute section offset, so the AArch64 NOP lands instruction-aligned.
-fn align_fill_pattern(fill: Option<u8>, exec: bool, aarch64: bool) -> ([u8; 4], usize) {
+pub(crate) fn align_fill_pattern(fill: Option<u8>, exec: bool, aarch64: bool) -> ([u8; 4], usize) {
     match (fill, exec, aarch64) {
         (Some(b), _, _) => ([b, 0, 0, 0], 1),
         (None, false, _) => ([0, 0, 0, 0], 1),

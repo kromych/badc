@@ -2169,6 +2169,20 @@ fn inline_asm_raw_bytes() {
 }
 
 #[test]
+fn inline_asm_x64_align_padding_opaque() {
+    // `.align` / `.p2align` / `.balign` padding in the code stream has no
+    // modelled effect; the surrounding computation is unaffected.
+    assert_eq!(run_fixture("inline_asm_x64_align.c"), 42);
+}
+
+#[test]
+fn inline_asm_x64_port_dx_parses() {
+    // The `(%dx)` port spelling parses to the same operand as bare `%dx`;
+    // the guarded port accesses stay unexecuted.
+    assert_eq!(run_fixture("inline_asm_x64_port_dx.c"), 42);
+}
+
+#[test]
 fn compound_assign_int_fp() {
     // C99 6.5.16.2: an integer lvalue with a floating rhs in a
     // compound assignment performs the operation in floating point

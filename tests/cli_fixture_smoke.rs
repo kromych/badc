@@ -94,6 +94,10 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("register_var_asm_operand_split.c", "linux-aarch64"), // x86-64 split-literal register name
     ("register_var_asm_operand_r11.c", "linux-aarch64"), // x86-64 r11 operand binding + %c call
     ("inline_asm_x64_sib.c", "linux-aarch64"), // x86-64 scaled-index memory operands
+    ("inline_asm_x64_sib_nobase.c", "linux-aarch64"), // x86-64 no-base scaled-index memory operands
+    ("inline_asm_x64_port_dx.c", "linux-aarch64"), // x86-64 `(%dx)` port in/out
+    ("inline_asm_x64_c_mem.c", "linux-aarch64"), // x86-64 `%c` RIP-relative memory forms
+    ("inline_asm_x64_align.c", "linux-aarch64"), // x86-64 `.align` in the code stream
     ("cpuid_partial_outputs.c", "linux-aarch64"), // x86-64 cpuid
     ("inline_asm_x64_flag_outputs.c", "linux-aarch64"), // x86-64 `=@cc` flag outputs
     ("inline_asm_x64_string_ops.c", "linux-aarch64"), // x86-64 string primitives / prefixes

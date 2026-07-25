@@ -392,6 +392,10 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_branch_target_operand.c", 42),
     ("inline_asm_x64_segment.c", 42),
     ("inline_asm_x64_sib.c", 42),
+    ("inline_asm_x64_sib_nobase.c", 42),
+    ("inline_asm_x64_port_dx.c", 42),
+    ("inline_asm_x64_c_mem.c", 42),
+    ("inline_asm_x64_align.c", 42),
     ("inline_asm_pushsection.c", 42),
     ("file_scope_asm_decls.c", 0),
     ("inline_asm_goto_output.c", 42),
@@ -869,6 +873,23 @@ fn fixture_parity() {
         failures.len(),
         NATIVE_ELF_X64_FIXTURES.len(),
         failures.join("\n  ")
+    );
+}
+
+/// A code-stream `.align` boundary is section-relative and holds
+/// absolutely only up to the fixed `.text` section alignment (16); a
+/// larger request is rejected rather than silently under-aligned.
+#[test]
+fn inline_asm_align_beyond_section_alignment_rejected() {
+    let program = Compiler::new(super::with_prelude(
+        "int main(void) { __asm__(\".align 32\"); return 0; }\n",
+    ))
+    .compile()
+    .expect("compile");
+    let err = emit_native(&program, Target::LinuxX64).expect_err("emit must reject");
+    assert!(
+        format!("{err}").contains("exceeds the section alignment"),
+        "unexpected error: {err}"
     );
 }
 

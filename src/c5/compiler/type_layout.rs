@@ -365,7 +365,12 @@ impl Compiler {
     /// `make_vector_type`. The entry's size is the row byte count, so
     /// `pointee_size` scales `p[i]` / `p + 1` by the whole row.
     pub(super) fn array_agg_type(&mut self, elem_ty: i64, dims: &[i64]) -> i64 {
-        let count: i64 = dims.iter().product::<i64>().max(1);
+        // A zero dimension (`T (*p)[0]`, GCC zero-length array) makes a
+        // complete zero-size pointee; a negative product is an unsized
+        // sentinel that leaked through a typedef carrier and keeps the
+        // single-element fallback.
+        let raw: i64 = dims.iter().product();
+        let count: i64 = if raw < 0 { 1 } else { raw };
         let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
         let mut name = alloc::format!("__array_{}", elem_ty);
         for d in dims {

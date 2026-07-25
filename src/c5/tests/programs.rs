@@ -312,6 +312,16 @@ fn zero_length_local_array() {
 }
 
 #[test]
+fn zero_length_array_sizeof() {
+    // GCC `T[0]` is a complete zero-size type: `sizeof(*p)` on
+    // `T (*p)[0]` (local, member, cast) and `sizeof(T[0])` fold to 0.
+    // Locks the size-keyed fifo-layout dispatch: a nonzero result
+    // selected a record layout that consumed payload bytes as length
+    // headers.
+    assert_eq!(run_fixture("zero_length_array_sizeof.c"), 0);
+}
+
+#[test]
 fn int128_type_layout() {
     // GCC `__int128` / `__int128_t` / `__uint128_t` / `unsigned __int128`
     // as a 16-byte type: sizeof, struct / array layout (the aarch64

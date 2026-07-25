@@ -4544,6 +4544,12 @@ impl Compiler {
         let elem_size = self.size_of_type(elem_ty) as i64;
         self.seed_multi_dim_strides(&dims, elem_size);
         self.pending.last_array_decay_bytes = self.structs[id].size as i64;
+        if self.structs[id].size == 0 {
+            // Zero-size row (`T (*p)[0]`): the byte channel cannot
+            // distinguish 0 from "no hint", so surface the genuine-zero
+            // sentinel the `sizeof` recovery honors.
+            self.pending.last_array_decay_size = -1;
+        }
         self.ty = elem_ty + Ty::Ptr as i64;
     }
 

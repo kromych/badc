@@ -685,3 +685,106 @@ fn aarch64_bare_immediate_operand_encodes_like_gcc() {
     assert!(has(0xD421_0000), "expected `brk 0x800` (0xD4210000)");
     assert!(has(0xD45E_0000), "expected `hlt 0xf000` (0xD45E0000)");
 }
+
+#[test]
+fn fixed_register_input_output_pair_is_accepted() {
+    use crate::{NativeOptions, Target};
+    // An input and an output pinned to the same register are a tied
+    // pair: the register carries the input value in and the output
+    // value out (both gcc and clang accept this; it is how call-style
+    // instructions with fixed argument registers are wrapped).
+    let emit = |src: &str, target: Target| {
+        let program = crate::Compiler::with_options(
+            src.to_string(),
+            target,
+            crate::CompileOptions::default(),
+        )
+        .compile()
+        .expect("compile");
+        crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .expect("emit");
+    };
+    emit(
+        "long f(long v) { register long in asm(\"x0\") = v; \
+         register long out asm(\"x0\"); \
+         __asm__ volatile(\"add x0, x0, #1\" : \"=r\"(out) : \"r\"(in)); \
+         return out; } int main(void) { return 0; }",
+        Target::LinuxAarch64,
+    );
+    emit(
+        "long f(long v) { register long in asm(\"rax\") = v; \
+         register long out asm(\"rax\"); \
+         __asm__ volatile(\"addq $1, %%rax\" : \"=r\"(out) : \"r\"(in)); \
+         return out; } int main(void) { return 0; }",
+        Target::LinuxX64,
+    );
+}
+
+#[test]
+fn two_inputs_on_one_fixed_register_are_accepted() {
+    // Two inputs pinned to one register both read it; gcc and clang
+    // accept the form (only the same-value use is meaningful).
+    for (target, body) in [
+        (
+            crate::Target::LinuxAarch64,
+            "register long a asm(\"x1\") = v; register long b asm(\"x1\") = v; \
+             long out; __asm__(\"add %0, %1, %2\" : \"=r\"(out) : \"r\"(a), \"r\"(b));",
+        ),
+        (
+            crate::Target::LinuxX64,
+            "register long a asm(\"rcx\") = v; register long b asm(\"rcx\") = v; \
+             long out; __asm__(\"leaq (%1,%2), %0\" : \"=r\"(out) : \"r\"(a), \"r\"(b));",
+        ),
+    ] {
+        let src = alloc::format!(
+            "long f(long v) {{ {body} return out; }} int main(void) {{ return 0; }}"
+        );
+        crate::Compiler::with_options(src, target, crate::CompileOptions::default())
+            .compile()
+            .expect("compile");
+    }
+}
+
+#[test]
+fn two_outputs_on_one_fixed_register_are_rejected() {
+    // Two outputs cannot both leave a value in one register; gcc
+    // rejects the register-variable form ("invalid hard register usage
+    // between output operands") and the class-letter form alike.
+    let err = |src: &str, target: crate::Target| -> alloc::string::String {
+        crate::Compiler::with_options(src.to_string(), target, crate::CompileOptions::default())
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default()
+    };
+    for (target, src) in [
+        (
+            crate::Target::LinuxAarch64,
+            "long f(void) { register long a asm(\"x0\"); register long b asm(\"x0\"); \
+             __asm__(\"mov x0, #7\" : \"=r\"(a), \"=r\"(b)); return a + b; } \
+             int main(void) { return 0; }",
+        ),
+        (
+            crate::Target::LinuxX64,
+            "long f(void) { register long a asm(\"rax\"); register long b asm(\"rax\"); \
+             __asm__(\"movq $7, %%rax\" : \"=r\"(a), \"=r\"(b)); return a + b; } \
+             int main(void) { return 0; }",
+        ),
+        (
+            crate::Target::LinuxX64,
+            "long f(void) { long a, b; \
+             __asm__(\"movq $7, %%rax\" : \"=a\"(a), \"=a\"(b)); return a + b; } \
+             int main(void) { return 0; }",
+        ),
+    ] {
+        let e = err(src, target);
+        assert!(
+            e.contains("two outputs bound to one fixed register"),
+            "expected the duplicate-output diagnostic, got {e:?}"
+        );
+    }
+}

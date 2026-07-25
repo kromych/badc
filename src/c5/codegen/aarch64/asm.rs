@@ -93,10 +93,11 @@ pub(crate) enum AsmOpndA64 {
     /// (`forward` selects the next definition after the branch, otherwise the
     /// most recent one at or before it).
     Label { num: u32, forward: bool },
-    /// The location counter `.` as a branch target: the address of the branch
-    /// instruction itself, so the encoded displacement is zero (`cbnz %0, .`,
-    /// the device-load ordering barrier's never-taken control dependency).
-    Here,
+    /// The location counter `.` as a branch target, with an optional signed
+    /// byte offset: the address of the branch instruction itself (`cbnz %0,
+    /// .`) or a fixed displacement from it (`bl . + 4`, a branch to the next
+    /// instruction that only records a return address).
+    Here(i32),
     /// `%lK`: an `asm goto` label reference by label-list index (the
     /// frontend canonicalizes `%l[name]` and operand-relative `%lN` to
     /// this form). The emitter branches to the label's target block.
@@ -923,9 +924,17 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
         return Ok(AsmOpndA64::Cond(c));
     }
     // The location counter `.` names the current instruction as a branch
-    // target (`b .`, `cbnz %0, .`); the emitter encodes a zero displacement.
+    // target (`b .`, `cbnz %0, .`), optionally displaced by a signed byte
+    // offset (`bl . + 4`); the emitter encodes the displacement.
     if tok == "." {
-        return Ok(AsmOpndA64::Here);
+        return Ok(AsmOpndA64::Here(0));
+    }
+    if let Some(rest) = tok.strip_prefix('.').map(str::trim_start)
+        && let Some(body) = rest.strip_prefix(['+', '-'])
+        && let Some(v) = parse_int(body.trim_start())
+        && let Ok(off) = i32::try_from(if rest.starts_with('-') { -v } else { v })
+    {
+        return Ok(AsmOpndA64::Here(off));
     }
     // A local-label reference `Nb` / `Nf` (mnemonics never start with a digit).
     if let Some((digits, dir)) = tok
@@ -1299,6 +1308,12 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 continue;
             }
         }
+        // A bare `ret` defaults its operand to the link register.
+        let rest = if mnem == "ret" && rest.is_empty() {
+            "x30"
+        } else {
+            rest
+        };
         let mut operands = Vec::new();
         if !rest.is_empty() {
             for op in split_operands(rest) {
@@ -1332,17 +1347,15 @@ pub(crate) fn assign_operand_regs(
     let mut used = [false; 32];
     // Fixed constraints (register-asm variables) own their register;
     // assign them before the clobber marks, whose bits include the
-    // fixed operands' own registers.
+    // fixed operands' own registers. Operands may share one register --
+    // an input and an output pinned to the same register form a tied
+    // pair (the register carries the input value in and the output
+    // value out); the front end rejects two outputs on one register.
     for (i, op) in operands.iter().enumerate() {
         if let C::Fixed(r) = op.constraint {
             if (r as usize) >= 16 {
                 return Err(String::from(
                     "inline asm: fixed operand register outside x0..x15",
-                ));
-            }
-            if used[r as usize] {
-                return Err(String::from(
-                    "inline asm: two operands bound to one fixed register",
                 ));
             }
             used[r as usize] = true;
@@ -1410,6 +1423,32 @@ pub(crate) fn assign_operand_regs(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_location_counter_targets() {
+        // `.` alone and with a signed byte offset, decimal or hex.
+        for (t, off) in [
+            (&b"b ."[..], 0),
+            (b"bl . + 4", 4),
+            (b"b .+8", 8),
+            (b"b . - 4", -4),
+            (b"b . + 0x10", 16),
+        ] {
+            let insns = parse_template(t).unwrap();
+            assert_eq!(insns[0].operands, [AsmOpndA64::Here(off)], "{t:?}");
+        }
+        // Any other `.`-prefixed operand stays unsupported.
+        assert!(parse_template(b"b .foo").is_err());
+        // A bare `ret` defaults to the link register.
+        let insns = parse_template(b"ret").unwrap();
+        assert_eq!(
+            insns[0].operands,
+            [AsmOpndA64::Reg {
+                num: 30,
+                is64: true
+            }]
+        );
+    }
 
     #[test]
     fn parse_data_processing() {
@@ -2121,24 +2160,34 @@ mod tests {
     #[test]
     fn assign_honors_fixed_registers() {
         use crate::c5::ir::{AsmConstraint, AsmOperand};
-        let op = |constraint| AsmOperand {
+        let op = |constraint, is_output| AsmOperand {
             constraint,
-            is_output: false,
+            is_output,
             is_rw: false,
             width: 8,
             seg: crate::c5::ir::AsmSeg::None,
         };
         // A register-asm operand keeps its register; the pool operand
         // avoids it.
-        let ops = [op(AsmConstraint::Fixed(9)), op(AsmConstraint::Reg)];
+        let ops = [
+            op(AsmConstraint::Fixed(9), false),
+            op(AsmConstraint::Reg, false),
+        ];
         let assigned = assign_operand_regs(&ops, 0, 0).unwrap();
         assert_eq!(assigned[0], Some(9));
         assert_ne!(assigned[1], Some(9));
-        // Two operands pinned to one register collide.
-        let dup = [op(AsmConstraint::Fixed(9)), op(AsmConstraint::Fixed(9))];
-        assert!(assign_operand_regs(&dup, 0, 0).is_err());
+        // An output and an input pinned to one register share it: the
+        // register carries the input value in and the output value out.
+        let pair = [
+            op(AsmConstraint::Fixed(0), true),
+            op(AsmConstraint::Fixed(0), false),
+        ];
+        assert_eq!(
+            assign_operand_regs(&pair, 0, 0).unwrap(),
+            [Some(0), Some(0)]
+        );
         // x16/x17 (emit scratch) and beyond are rejected.
-        let hi = [op(AsmConstraint::Fixed(16))];
+        let hi = [op(AsmConstraint::Fixed(16), false)];
         assert!(assign_operand_regs(&hi, 0, 0).is_err());
     }
 }

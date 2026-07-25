@@ -2463,6 +2463,7 @@ enum DeferredGotoTarget {
 #[derive(Clone, Copy)]
 enum LabelBranch {
     B,
+    Bl,
     BCond(u8),
     Cb { nz: bool, rt: u8, is64: bool },
     Tb { nz: bool, rt: u8, bit: u8 },
@@ -2492,6 +2493,14 @@ fn label_branch_word(kind: &LabelBranch, delta: i64) -> Result<u32, alloc::strin
                 ));
             }
             super::encode::enc_b(words)
+        }
+        LabelBranch::Bl => {
+            if !fits(26) {
+                return Err(String::from(
+                    "aarch64 inline asm: branch target out of range",
+                ));
+            }
+            super::encode::enc_bl(words)
         }
         // B.cond: 0101_0100 | imm19 << 5 | cond.
         LabelBranch::BCond(c) => {
@@ -2549,6 +2558,7 @@ fn build_label_branch(
     use alloc::string::String;
     Ok(match insn.mnemonic.as_str() {
         "b" if insn.operands.len() == 1 => LabelBranch::B,
+        "bl" if insn.operands.len() == 1 => LabelBranch::Bl,
         "cbz" | "cbnz" if insn.operands.len() == 2 => match conv(&insn.operands[0])? {
             Opnd::Reg { num: rt, is64 } => LabelBranch::Cb {
                 nz: insn.mnemonic == "cbnz",
@@ -2710,12 +2720,19 @@ fn encode_deferred_asm_region(
                 ));
             }
             match insn.operands.last() {
-                Some(AsmOpndA64::Here) => {
-                    // `.` names the branch's own address: displacement zero.
+                Some(&AsmOpndA64::Here(off)) => {
+                    // `.` names the branch's own address, plus any offset.
                     let kind = build_label_branch(insn, conv)?;
                     let word = match kind {
-                        LabelBranch::Adr { rd } => super::encode::enc_adr(Reg(rd), 0),
-                        _ => label_branch_word(&kind, 0)?,
+                        LabelBranch::Adr { rd } => {
+                            if !(-(1i32 << 20)..(1i32 << 20)).contains(&off) {
+                                return Err(String::from(
+                                    "aarch64 inline asm: adr target out of +/-1MiB range",
+                                ));
+                            }
+                            super::encode::enc_adr(Reg(rd), off)
+                        }
+                        _ => label_branch_word(&kind, off as i64)?,
                     };
                     bytes.extend_from_slice(&word.to_le_bytes());
                 }
@@ -3153,7 +3170,7 @@ fn emit_inline_asm_aarch64(
                     "aarch64 inline asm: label reference outside a branch",
                 ));
             }
-            AsmOpndA64::Here => {
+            AsmOpndA64::Here(_) => {
                 return Err(String::from(
                     "aarch64 inline asm: `.` reference outside a branch",
                 ));
@@ -3256,7 +3273,7 @@ fn emit_inline_asm_aarch64(
         };
         if matches!(
             insn.operands.last(),
-            Some(AsmOpndA64::Label { .. } | AsmOpndA64::Here)
+            Some(AsmOpndA64::Label { .. } | AsmOpndA64::Here(_))
         ) || goto_label.is_some()
         {
             let kind = match build_label_branch(insn, &conv) {
@@ -3283,11 +3300,17 @@ fn emit_inline_asm_aarch64(
                 emit(code, 0);
                 continue;
             }
-            if matches!(insn.operands.last(), Some(AsmOpndA64::Here)) {
-                // `.` names the branch's own address: displacement zero.
+            if let Some(&AsmOpndA64::Here(off)) = insn.operands.last() {
+                // `.` names the branch's own address, plus any offset.
                 let word = match kind {
-                    LabelBranch::Adr { rd } => super::encode::enc_adr(Reg(rd), 0),
-                    _ => match label_branch_word(&kind, 0) {
+                    LabelBranch::Adr { rd } => {
+                        if !(-(1i32 << 20)..(1i32 << 20)).contains(&off) {
+                            bail_msg("aarch64 inline asm: adr target out of +/-1MiB range");
+                            return false;
+                        }
+                        super::encode::enc_adr(Reg(rd), off)
+                    }
+                    _ => match label_branch_word(&kind, off as i64) {
                         Ok(w) => w,
                         Err(m) => {
                             bail_msg(&m);

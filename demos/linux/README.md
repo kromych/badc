@@ -162,11 +162,18 @@ BADC=<badc> BADC_FALLBACK=fails.txt BADC_MANIFEST=manifest.txt \
     make -C <tree> -j12 CC=$PWD/demos/linux/buildcc.py vmlinux bzImage
 ```
 
-`fails.txt` holds one kernel-relative source path per line (the `ok: false`
-entries of a sweep JSON report). The manifest gets one line per kernel
+`fails.txt` holds one kernel-relative source or object path per line (the
+`ok: false` entries of a sweep JSON report). Object entries discriminate a
+compile context: a source also built into an isolated-link environment
+(the EFI stub's `lib-%.o`) is listed by the object it becomes there,
+leaving its other compiles to badc. The manifest gets one line per kernel
 unit: `badc`, `fallback`, or `fail` plus the source and first diagnostic.
 Environment: `BADC` (required), `BADC_REAL_CC` (default `gcc`),
-`BADC_TARGET` (default `linux-x64`), `BADC_TIMEOUT` (default 300s).
+`BADC_TARGET` (default `linux-x64`), `BADC_TIMEOUT` (default 300s),
+`BADC_WEAKEN` (symbols demoted to STB_WEAK in each badc object; see the
+shim docstring -- it compensates for badc's missing GNU89 extern-inline
+no-external-definition rule, `native_save_fl` in this kernel, until badc
+implements the inline linkage model).
 
 Objects must survive more than the link: with `CONFIG_OBJTOOL=y` kbuild
 runs objtool (`--orc`, jump-label and static-call rewriting) over every

@@ -475,17 +475,30 @@ pub(crate) enum Stmt {
     VlaScopeExit { save_slot: i64 },
 }
 
+/// Value source of one runtime-initializer element: an expression to
+/// evaluate, or a copy of `bytes` from an earlier-initialized span of
+/// the same object at `src_off`. The copy form implements the GNU
+/// range designator (`[lo ... hi] = expr`) in an automatic
+/// initializer: the expression is evaluated once into the range's
+/// first span and every further span copies its bytes, matching the
+/// reference compilers' once-evaluation semantics.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum RuntimeInitValue {
+    Expr(ExprId),
+    Copy { src_off: i64, bytes: i64 },
+}
+
 /// One stored element in a runtime aggregate initializer.
 /// `offset` is the byte offset into the local; `value` is the
-/// element's expression; `ty` is the destination type that
-/// drives the walker's `store_kind_for` pick. `bitfield`, when set,
-/// makes the walker emit a load-clear-shift-or-store into the
+/// element's expression or copy source; `ty` is the destination type
+/// that drives the walker's `store_kind_for` pick. `bitfield`, when
+/// set, makes the walker emit a load-clear-shift-or-store into the
 /// storage unit at `offset` instead of a full-width store (a
 /// bitfield member with a non-constant initializer).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RuntimeInitElement {
     pub offset: i64,
-    pub value: ExprId,
+    pub value: RuntimeInitValue,
     pub ty: i64,
     pub bitfield: Option<BitfieldDesc>,
 }

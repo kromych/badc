@@ -599,7 +599,7 @@ impl Compiler {
                     let count = if groups > 0 {
                         // `[N]` designators can push the size past the
                         // positional group count (C99 6.7.8p22).
-                        self.designated_array_count(groups as i64)?
+                        self.designated_array_count(groups as i64, 1)?
                     } else {
                         let items = self.lex.count_top_level_items_in_array();
                         let slots = self.struct_flat_init_slots(sid).max(1);
@@ -1332,7 +1332,7 @@ impl Compiler {
                     // `[N]` designators can push the size past the positional
                     // group count (C99 6.7.8p22); the file-scope path uses the
                     // same pre-scan.
-                    self.designated_array_count(groups as i64)?
+                    self.designated_array_count(groups as i64, 1)?
                 } else if let Some(n) = self.count_struct_array_init_elems(sid)? {
                     // Entries may be element-typed expressions (one
                     // element each, C99 6.7.8p13) mixed with flat field
@@ -1365,18 +1365,19 @@ impl Compiler {
                     self.next()?; // consume outer `{`
                     let mut i: i64 = 0;
                     while self.lex.tk != '}' {
-                        // C99 6.7.8p7 `[N] =` designator jumps the cursor.
-                        // TODO: member chains (`[N].field =`) and ranges
-                        // with runtime element values route through
-                        // per-field stores.
+                        // C99 6.7.8p7 `[N] =` (or GNU `[lo ... hi] =`)
+                        // designator jumps the cursor.
+                        // TODO: member chains (`[N].field =`) with runtime
+                        // element values route through per-field stores.
+                        let mut range_hi = i;
                         if let Some((idx, hi, chain)) = self.take_array_element_designator(count)? {
-                            if chain || hi > idx {
+                            if chain {
                                 return Err(self.compile_err(
-                                    "`[N].field` / range designator requires constant \
-                                     element values",
+                                    "`[N].field` designator requires constant element values",
                                 ));
                             }
                             i = idx;
+                            range_hi = hi;
                         }
                         if i >= count {
                             return Err(self.compile_err(format!(
@@ -1394,6 +1395,17 @@ impl Compiler {
                             i * elem_size as i64,
                             sid,
                         )?;
+                        // GNU range: evaluated once into element `i`; the
+                        // rest of the range copies its bytes.
+                        if range_hi > i {
+                            self.push_runtime_range_copies(
+                                i * elem_size as i64,
+                                elem_size as i64,
+                                range_hi - i,
+                                ty,
+                            );
+                            i = range_hi;
+                        }
                         i += 1;
                         self.accept(',')?;
                     }
@@ -1453,14 +1465,30 @@ impl Compiler {
             // each element initialised as if by assignment in
             // declaration order.
             if self.lex.tk == '{' {
-                let (final_size, needs_runtime) = self.scan_array_init()?;
+                let (scan_count, needs_runtime) = self.scan_array_init()?;
                 if needs_runtime {
+                    // C99 6.7.8p22: `[N]` / `[lo ... hi]` designators can
+                    // push the size past the positional entry count; a row
+                    // of a multi-dimensional array counts once per entry.
+                    let inner = self.inner_dims_of(loc_idx);
+                    let inner_span: i64 = inner.iter().product::<i64>().max(1);
+                    let fallback = if inner_span > 1 { 0 } else { scan_count };
+                    let rows = self.designated_array_count(fallback, inner_span)?;
+                    let final_size = rows * inner_span;
                     self.symbols[loc_idx].array_size = final_size;
                     self.symbols[loc_idx].val =
                         self.reserve_slots(self.local_storage_slots(ty, final_size));
                     let local_val = self.symbols[loc_idx].val;
                     let var_name = self.symbols[loc_idx].name.clone();
-                    let inner = self.inner_dims_of(loc_idx);
+                    // C99 6.7.8p21: positions a designator skips receive
+                    // static-storage zero-init. Seed the slot from a staged
+                    // zero block before the per-element stores.
+                    let full_bytes = self.size_of_type(ty) * final_size.max(0) as usize;
+                    let zero_off = self.data.len();
+                    for _ in 0..full_bytes {
+                        self.data.push(0);
+                    }
+                    self.emit_local_array_init(local_val, zero_off, full_bytes);
                     self.emit_local_array_init_runtime(
                         local_val, 0, ty, final_size, &inner, &var_name,
                     )?;
@@ -1532,20 +1560,22 @@ impl Compiler {
                         self.next()?; // consume outer `{`
                         let mut i: i64 = 0;
                         while self.lex.tk != '}' {
-                            // C99 6.7.8p7 `[N] =` designator jumps the cursor.
-                            // TODO: member chains (`[N].field =`) and ranges
-                            // with runtime element values route through
-                            // per-field stores.
+                            // C99 6.7.8p7 `[N] =` (or GNU `[lo ... hi] =`)
+                            // designator jumps the cursor.
+                            // TODO: member chains (`[N].field =`) with
+                            // runtime element values route through per-field
+                            // stores.
+                            let mut range_hi = i;
                             if let Some((idx, hi, chain)) =
                                 self.take_array_element_designator(declared_array_size)?
                             {
-                                if chain || hi > idx {
+                                if chain {
                                     return Err(self.compile_err(
-                                        "`[N].field` / range designator requires constant \
-                                         element values",
+                                        "`[N].field` designator requires constant element values",
                                     ));
                                 }
                                 i = idx;
+                                range_hi = hi;
                             }
                             if i >= declared_array_size {
                                 return Err(self.compile_err(format!(
@@ -1564,6 +1594,17 @@ impl Compiler {
                                 i * elem_size as i64,
                                 sid,
                             )?;
+                            // GNU range: evaluated once into element `i`;
+                            // the rest of the range copies its bytes.
+                            if range_hi > i {
+                                self.push_runtime_range_copies(
+                                    i * elem_size as i64,
+                                    elem_size as i64,
+                                    range_hi - i,
+                                    ty,
+                                );
+                                i = range_hi;
+                            }
                             i += 1;
                             self.accept(',')?;
                         }
@@ -1868,7 +1909,14 @@ impl Compiler {
                 if self.lex.tk != '{' {
                     return Err(self.compile_err("`{` expected in compound literal"));
                 }
-                let (count, needs_runtime) = self.scan_array_init()?;
+                let (scan_count, needs_runtime) = self.scan_array_init()?;
+                // C99 6.7.8p22: designators can push the size past the
+                // positional entry count.
+                let count = if needs_runtime {
+                    self.designated_array_count(scan_count, 1)?
+                } else {
+                    scan_count
+                };
                 slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
                 if needs_runtime {
                     let full = elem_size * count as usize;
@@ -2142,9 +2190,8 @@ impl Compiler {
     /// initializer whose elements aren't all compile-time
     /// constants. C99 6.7.8 paragraph 13 specifies that each
     /// element is initialised as if by assignment in declaration
-    /// order. Elements past the brace list keep whatever the
-    /// stack frame had on entry (c5 doesn't zero-pad locals
-    /// today; matches the constant-init path's behaviour).
+    /// order. Positions the brace list leaves out keep the zero
+    /// seed every caller Mcpy's into the slot first (6.7.8p21).
     ///
     /// `local_val` is the base slot offset (negative, from FP);
     /// `ty` the element type; `max` the declared dimension. On
@@ -2200,10 +2247,12 @@ impl Compiler {
         let sub_bytes = sub_span * elem_size;
         let mut i: i64 = 0;
         while self.lex.tk != '}' {
-            // C99 6.7.8p6 array designator `[N] = ...`: reposition the
-            // write cursor; subsequent positional entries continue from
-            // there. Mirrors the constant path in
+            // C99 6.7.8p6 array designator `[N] = ...` (or the GNU range
+            // `[lo ... hi] = ...`): reposition the write cursor;
+            // subsequent positional entries continue from there (after the
+            // range end). Mirrors the constant path in
             // `collect_array_initializer`.
+            let mut range_hi = i;
             if self.lex.tk == Token::Brak {
                 self.next()?; // consume `[`
                 let n = self.parse_constant_int()?;
@@ -2212,10 +2261,16 @@ impl Compiler {
                         "array designator index must be non-negative (got {n})"
                     )));
                 }
+                range_hi = n;
                 if self.lex.tk == Token::Ellipsis {
-                    return Err(self.compile_err(
-                        "range designator in a non-constant array initializer is not yet supported",
-                    ));
+                    self.next()?; // consume `...`
+                    let hi = self.parse_constant_int()?;
+                    if hi < n {
+                        return Err(self.compile_err(format!(
+                            "array range designator high {hi} below low {n}"
+                        )));
+                    }
+                    range_hi = hi;
                 }
                 if self.lex.tk != ']' {
                     return Err(self.compile_err("`]` expected after array designator index"));
@@ -2227,7 +2282,7 @@ impl Compiler {
                 self.next()?; // consume `=`
                 i = n;
             }
-            if i >= count {
+            if range_hi >= count {
                 return Err(self.compile_err(format!(
                     "too many initializers for array `{}` (> {})",
                     var_name, count
@@ -2258,11 +2313,42 @@ impl Compiler {
             } else {
                 self.emit_array_leaf_runtime(local_val, off, ty)?;
             }
+            // GNU range: the entry was evaluated once into element `i`;
+            // the rest of the range copies its bytes.
+            if range_hi > i {
+                self.push_runtime_range_copies(off, sub_bytes, range_hi - i, ty);
+                i = range_hi;
+            }
             i += 1;
             self.accept(',')?;
         }
         self.next()?; // consume `}`
         Ok(())
+    }
+
+    /// Append `extra` copy elements replicating the `span`-byte span at
+    /// `src_off` to the spans that follow it -- the GNU range designator
+    /// fill after its first span was stored. `ty` is the element type
+    /// (the row's leaf type for a multi-dimensional row span).
+    pub(super) fn push_runtime_range_copies(
+        &mut self,
+        src_off: i64,
+        span: i64,
+        extra: i64,
+        ty: i64,
+    ) {
+        for k in 1..=extra {
+            self.pending_local_runtime_elements
+                .push(super::super::ast::RuntimeInitElement {
+                    offset: src_off + k * span,
+                    value: super::super::ast::RuntimeInitValue::Copy {
+                        src_off,
+                        bytes: span,
+                    },
+                    ty,
+                    bitfield: None,
+                });
+        }
     }
 
     /// Fill up to `n` scalar leaves at consecutive offsets from `base`

@@ -3356,7 +3356,7 @@ impl Compiler {
                     self.pending_local_runtime_elements.push(
                         super::super::ast::RuntimeInitElement {
                             offset: field_base + k as i64,
-                            value,
+                            value: super::super::ast::RuntimeInitValue::Expr(value),
                             ty: Ty::Char as i64,
                             bitfield: None,
                         },
@@ -3389,7 +3389,7 @@ impl Compiler {
                     self.pending_local_runtime_elements.push(
                         super::super::ast::RuntimeInitElement {
                             offset: field_base + (k * w) as i64,
-                            value,
+                            value: super::super::ast::RuntimeInitValue::Expr(value),
                             ty: field.ty,
                             bitfield: None,
                         },
@@ -3467,7 +3467,7 @@ impl Compiler {
                 self.pending_local_runtime_elements
                     .push(super::super::ast::RuntimeInitElement {
                         offset: field_base,
-                        value,
+                        value: super::super::ast::RuntimeInitValue::Expr(value),
                         ty: elem_ty,
                         bitfield: None,
                     });
@@ -3503,7 +3503,7 @@ impl Compiler {
             self.pending_local_runtime_elements
                 .push(super::super::ast::RuntimeInitElement {
                     offset: field_base,
-                    value,
+                    value: super::super::ast::RuntimeInitValue::Expr(value),
                     ty: field.ty,
                     bitfield,
                 });
@@ -3550,7 +3550,7 @@ impl Compiler {
                     self.pending_local_runtime_elements.push(
                         super::super::ast::RuntimeInitElement {
                             offset: at,
-                            value,
+                            value: super::super::ast::RuntimeInitValue::Expr(value),
                             ty,
                             bitfield: None,
                         },

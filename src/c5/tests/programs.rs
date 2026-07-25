@@ -163,6 +163,25 @@ fn runtime_array_designator() {
 }
 
 #[test]
+fn runtime_range_designator() {
+    // GNU `[lo ... hi] =` range in a runtime array initializer: the value
+    // is evaluated once and copied across the range (gcc semantics),
+    // positional entries resume after the range end, later designators
+    // override with the last entry winning, and a deferred size resolves
+    // to the range end + 1.
+    assert_eq!(run_fixture("runtime_range_designator.c"), 0);
+}
+
+#[test]
+fn runtime_range_designator_struct() {
+    // The struct-element and 2-D-row counterparts of the runtime range
+    // fill: one evaluation of the braced entry, byte copies across the
+    // range, declared and deferred sizes, a range inside a struct
+    // member's array, and override order.
+    assert_eq!(run_fixture("runtime_range_designator_struct.c"), 0);
+}
+
+#[test]
 fn anon_struct_designated_init() {
     // C99 6.7.8p7: `.member` designators inside a brace on a flattened
     // anonymous-struct region, out of order, in both the constant and the

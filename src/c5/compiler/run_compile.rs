@@ -30,20 +30,27 @@ use super::types::{
 };
 
 impl Compiler {
-    /// Size of a deferred-size struct array (`struct T xs[] = { ... }`) that
-    /// may use array designators (`[N] = { ... }`). C99 6.7.8p22: the size is
-    /// one greater than the largest index initialized, whether reached
-    /// positionally or by a designator. The positional group count
-    /// (`fallback`) misses a designator that jumps past it, so peek the
-    /// element list -- evaluating each `[expr]` designator -- and track the
-    /// running index the same way the fill loop does. Snapshot-restored, with
-    /// any data / PC the constant-fold touched rewound, so the real fill
+    /// Size of a deferred-size array (`T xs[] = { ... }`) that may use
+    /// array designators (`[N] = ...`, GNU `[lo ... hi] = ...`). C99
+    /// 6.7.8p22: the size is one greater than the largest index
+    /// initialized, whether reached positionally or by a designator. The
+    /// positional group count (`fallback`) misses a designator that jumps
+    /// past it, so peek the element list -- evaluating each `[expr]`
+    /// designator -- and track the running index the same way the fill
+    /// loop does. `inner_span` > 1 makes a run of that many unbraced
+    /// values count as one entry (a flat row of a multi-dimensional
+    /// array); pass 1 to count every value. Snapshot-restored, with any
+    /// data / PC the constant-fold touched rewound, so the real fill
     /// re-parses from a clean state.
-    pub(super) fn designated_array_count(&mut self, fallback: i64) -> Result<i64, C5Error> {
+    pub(super) fn designated_array_count(
+        &mut self,
+        fallback: i64,
+        inner_span: i64,
+    ) -> Result<i64, C5Error> {
         let snap = self.lex.snapshot();
         let saved_data = self.data.len();
         let saved_pc = self.next_ent_pc;
-        let result = self.designated_array_count_inner(fallback);
+        let result = self.designated_array_count_inner(fallback, inner_span);
         self.lex.restore(snap);
         self.data.truncate(saved_data);
         self.next_ent_pc = saved_pc;
@@ -66,7 +73,11 @@ impl Compiler {
         is_desig
     }
 
-    fn designated_array_count_inner(&mut self, fallback: i64) -> Result<i64, C5Error> {
+    fn designated_array_count_inner(
+        &mut self,
+        fallback: i64,
+        inner_span: i64,
+    ) -> Result<i64, C5Error> {
         self.next()?; // consume `{`
         let mut i: i64 = 0;
         let mut max_count = fallback;
@@ -74,6 +85,11 @@ impl Compiler {
             if self.lex.tk == Token::Brak {
                 self.next()?;
                 i = self.parse_constant_int()?;
+                // GNU `[lo ... hi]`: the entry ends at the range high.
+                if self.lex.tk == Token::Ellipsis {
+                    self.next()?;
+                    i = i.max(self.parse_constant_int()?);
+                }
                 if self.lex.tk == ']' {
                     self.next()?;
                 }
@@ -81,7 +97,24 @@ impl Compiler {
                     self.next()?;
                 }
             }
-            self.skip_init_element_value()?;
+            if inner_span > 1 && self.lex.tk != '{' {
+                // A flat run of up to `inner_span` leaves fills one row,
+                // matching the runtime fill's brace-elision absorption.
+                let mut used: i64 = 0;
+                loop {
+                    self.skip_init_element_value()?;
+                    used += 1;
+                    if used >= inner_span || self.lex.tk != ',' {
+                        break;
+                    }
+                    self.next()?;
+                    if self.lex.tk == '}' {
+                        break;
+                    }
+                }
+            } else {
+                self.skip_init_element_value()?;
+            }
             if i + 1 > max_count {
                 max_count = i + 1;
             }
@@ -2068,7 +2101,7 @@ impl Compiler {
                                 // ... }`) per element. A `[N]` designator may
                                 // raise the size past the positional count
                                 // (C99 6.7.8p22), so peek the designators.
-                                self.designated_array_count(groups as i64)?
+                                self.designated_array_count(groups as i64, 1)?
                             } else {
                                 // Brace-elided: the flat value list fills
                                 // consecutive elements, each consuming the
@@ -2081,7 +2114,7 @@ impl Compiler {
                                 // to the highest designated index + 1 (C99
                                 // 6.7.8p22), which the positional count misses.
                                 if self.array_first_element_is_designator() {
-                                    self.designated_array_count(positional)?
+                                    self.designated_array_count(positional, 1)?
                                 } else {
                                     positional
                                 }

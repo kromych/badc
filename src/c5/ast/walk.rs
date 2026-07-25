@@ -2302,7 +2302,46 @@ impl<'a> Walker<'a> {
                     b.mcpy(dst, src, *size_bytes);
                 }
                 for elem in elements {
-                    let v = self.walk_expr_rvalue(b, elem.value)?;
+                    let value = match elem.value {
+                        // A range-designator copy element: transfer the bytes
+                        // of the range's first, already-stored span. A bit
+                        // copy, not a value conversion, so scalar widths use
+                        // integer load/store kinds (an f32 sNaN round-trip
+                        // through a float register would quieten it).
+                        super::super::ast::RuntimeInitValue::Copy { src_off, bytes } => {
+                            debug_assert!(elem.bitfield.is_none());
+                            let base = b.local_addr(slot);
+                            let dst = if elem.offset == 0 {
+                                base
+                            } else {
+                                b.binop_imm(BinOp::Add, base, elem.offset)
+                            };
+                            let src = if src_off == 0 {
+                                base
+                            } else {
+                                b.binop_imm(BinOp::Add, base, src_off)
+                            };
+                            let scalar = !(is_struct_ty(elem.ty) && struct_ptr_depth(elem.ty) == 0);
+                            let kinds = match bytes {
+                                1 => Some((LoadKind::U8, StoreKind::I8)),
+                                2 => Some((LoadKind::U16, StoreKind::I16)),
+                                4 => Some((LoadKind::U32, StoreKind::I32)),
+                                8 => Some((LoadKind::I64, StoreKind::I64)),
+                                _ => None,
+                            };
+                            match kinds {
+                                Some((lk, sk)) if scalar => {
+                                    let vol = is_volatile_ty(elem.ty);
+                                    let v = b.load_vol(src, lk, vol);
+                                    b.store_vol(dst, v, sk, vol);
+                                }
+                                _ => b.mcpy(dst, src, bytes),
+                            }
+                            continue;
+                        }
+                        super::super::ast::RuntimeInitValue::Expr(value) => value,
+                    };
+                    let v = self.walk_expr_rvalue(b, value)?;
                     let base = b.local_addr(slot);
                     let addr = if elem.offset == 0 {
                         base

@@ -15,6 +15,10 @@ pub(crate) struct Symbol {
     /// reserves one element, so a larger initializer must allocate
     /// fresh storage rather than overrun the following globals.
     pub reserved_data_bytes: i64,
+    /// For a defined file-scope object, `sizeof` the object in bytes,
+    /// filled at unit finalize. The object writers emit it as the symbol
+    /// size (`st_size`); 0 means unknown and keeps the size unset.
+    pub data_byte_size: i64,
     pub h_class: i64,
     pub h_type: i64,
     pub h_val: i64,

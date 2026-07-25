@@ -424,10 +424,17 @@ impl Compiler {
         }
         let saved_ty = self.ty;
         self.ty = self.parse_decl_base_type()?;
+        // A typedef base may carry an explicit type alignment (GNU
+        // `aligned(N)`). It applies to the type and to an array of it
+        // (C11 6.2.8: an array's alignment is its element's), but a
+        // pointer to it has pointer alignment.
+        let type_align_override = core::mem::take(&mut self.pending.type_align);
         let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
+        let mut had_ptr = false;
         while self.lex.tk == Token::MulOp {
             self.next()?;
             self.ty += Ty::Ptr as i64;
+            had_ptr = true;
             while self.lex.tk == Token::TypeQual {
                 self.next()?;
             }
@@ -436,6 +443,7 @@ impl Compiler {
             let nested_ptrs = self.parse_abstract_ptr_declarator_levels()?;
             if nested_ptrs > 0 {
                 self.ty += nested_ptrs * (Ty::Ptr as i64);
+                had_ptr = true;
             }
         }
         while self.lex.tk == Token::Brak {
@@ -450,7 +458,11 @@ impl Compiler {
             return Err(self.compile_err("`)` expected to close `_Alignof`"));
         }
         self.next()?;
-        let align = self.align_of_type(self.ty) as i64;
+        let align = if type_align_override > 0 && !had_ptr {
+            type_align_override
+        } else {
+            self.align_of_type(self.ty) as i64
+        };
         self.ty = saved_ty;
         Ok(align)
     }

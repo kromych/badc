@@ -1890,6 +1890,39 @@ fn compile_for_target(
 }
 
 #[test]
+fn typedef_aligned_type_attribute_layout_linux_x64() {
+    // A GNU `aligned(N)` type attribute on a typedef sets the aliased
+    // type's alignment. Pinned to LinuxX64 (LP64) so the exact ABI sizes
+    // and offsets are locked: a reducing `aligned(4)` lowers an 8-byte
+    // type's field to a 4-byte boundary; an increasing `aligned(16)`
+    // raises it. Any layout drift fails the `_Static_assert`s below.
+    let src = "\
+        typedef unsigned long long __attribute__((aligned(4))) u64a4;\n\
+        typedef int __attribute__((aligned(16))) i16;\n\
+        struct SR { int a; u64a4 b; };\n\
+        struct SI { char a; i16 b; };\n\
+        _Static_assert(__alignof__(u64a4) == 4, \"reduce\");\n\
+        _Static_assert(__alignof__(i16) == 16, \"increase\");\n\
+        _Static_assert(sizeof(struct SR) == 12, \"SR size\");\n\
+        _Static_assert(__builtin_offsetof(struct SR, b) == 4, \"SR off\");\n\
+        _Static_assert(sizeof(struct SI) == 32, \"SI size\");\n\
+        _Static_assert(__builtin_offsetof(struct SI, b) == 16, \"SI off\");\n\
+        int main(void) {\n\
+            typedef unsigned long long __attribute__((aligned(4))) lu64;\n\
+            struct BR { int a; lu64 b; };\n\
+            struct After { int a; unsigned long long b; };\n\
+            _Static_assert(sizeof(struct BR) == 12, \"block reduce\");\n\
+            _Static_assert(sizeof(struct After) == 16, \"no attribute leak\");\n\
+            return 0;\n\
+        }\n";
+    assert!(
+        compile_for_target(src, super::super::codegen::Target::LinuxX64).is_ok(),
+        "aligned-typedef layout must match the LP64 ABI: {:?}",
+        compile_for_target(src, super::super::codegen::Target::LinuxX64).err()
+    );
+}
+
+#[test]
 fn stack_pointer_register_variable_as_asm_operand() {
     // GCC binds an `r` operand naming a register variable to that
     // register. The stack and frame pointers have no storage behind

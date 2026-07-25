@@ -3182,6 +3182,43 @@ impl Compiler {
                     self.ty = lhs_ty;
                     continue;
                 }
+                // A parenthesized bitfield lvalue (`(s.f) OP= x`) reaches here
+                // as the read node the member parser committed to (parentheses
+                // hid the `OP=`, so it picked a read). C99 6.5.16.2: desugar to
+                // `s.f = s.f OP x`, evaluating the field once. The read node is
+                // reused as the operator's left operand; the store is a bitfield
+                // assignment of the combined value.
+                let bf_lvalue = compound_lhs_ast.and_then(|id| match self.ast.expr(id) {
+                    super::super::ast::Expr::Member {
+                        obj,
+                        field_off,
+                        bitfield: Some(desc),
+                        ty,
+                        ..
+                    } => Some((id, *obj, *field_off, *desc, *ty)),
+                    _ => None,
+                });
+                if let Some((read, obj, field_off, desc, field_ty)) = bf_lvalue {
+                    let pos = self.ast_src_pos();
+                    self.next()?;
+                    self.expr(Token::Assign as i64)?;
+                    let rhs = self
+                        .ast_acc
+                        .ok_or_else(|| self.compile_err("bad rhs in compound assignment"))?;
+                    let op = self.compound_assign_binop(binop, field_ty, self.ty, false)?;
+                    let combined = self.ast.push_expr(
+                        super::super::ast::Expr::Binary {
+                            op,
+                            lhs: read,
+                            rhs,
+                            ty: field_ty,
+                        },
+                        pos,
+                    );
+                    self.ast_emit_bitfield_assign(obj, field_off, desc, combined, field_ty);
+                    self.ty = field_ty;
+                    continue;
+                }
                 self.next()?;
                 // Rewrite the trailing load into a Psh so the
                 // address sits on the c5 stack across the compound
@@ -3933,9 +3970,12 @@ impl Compiler {
                 }
                 self.ty = common;
             } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {
-                if let Some((lv, ety)) = self.direct_inc_lvalue()
-                    && self.is_int128_ty(ety)
-                {
+                // A bitfield member or 128-bit lvalue cannot use the trailing-
+                // load rewrite (its read is a shift-and-mask / address-valued
+                // load); build `Expr::PostInc` directly, as the pre-increment
+                // path above does. A parenthesized bitfield (`(s.f)++`) reaches
+                // here as the read node the member parser committed to.
+                if let Some((lv, ety)) = self.direct_inc_lvalue() {
                     let by = if self.lex.tk == Token::Inc { 1 } else { -1 };
                     let src = self.ast_src_pos();
                     self.next()?;

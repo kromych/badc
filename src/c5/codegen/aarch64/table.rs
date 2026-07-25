@@ -161,11 +161,11 @@ pub(crate) enum Opnd {
     FpImm(u8),
     /// An `lsl #shift` modifier operand.
     Lsl(u32),
-    /// A system register, as its 15-bit `mrs`/`msr` field
-    /// (`(op0-2)<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2`).
+    /// A system register, as its 16-bit `mrs`/`msr` field
+    /// (`op0<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2`).
     SysReg(u16),
-    /// A `dc`/`ic`/`tlbi` system-operation base word (Rt field left zero); the
-    /// encoder ORs in the register operand or xzr.
+    /// A `dc`/`ic`/`tlbi`/`at`/`sys` system-operation base word (Rt field left
+    /// zero); the encoder ORs in the register operand or xzr.
     SysOp(u32),
     /// A memory reference `[base, #off]` (`off` in bytes, signed); the form's
     /// offset field decides the scaling and range.
@@ -386,11 +386,12 @@ fn fp_ldst_reg(mnem: &str, rt: &Opnd) -> Option<(u8, u32, u32, u32)> {
 /// trailing shift defaults to 0).
 pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // System-register move: `mrs Xt, <sysreg>` / `msr <sysreg>, Xt`. The
-    // register is always 64-bit; the 15-bit system-register field sits at bit 5.
+    // register is always 64-bit; the 16-bit `op0:op1:CRn:CRm:op2` field sits at
+    // bit 5, with the L bit (read/write) fixed by the base word.
     if mnemonic == "mrs" || mnemonic == "msr" {
         let (base, rt, field) = match (mnemonic, ops) {
-            ("mrs", [Opnd::Reg { num, .. }, Opnd::SysReg(f)]) => (0xD530_0000u32, *num, *f),
-            ("msr", [Opnd::SysReg(f), Opnd::Reg { num, .. }]) => (0xD510_0000u32, *num, *f),
+            ("mrs", [Opnd::Reg { num, .. }, Opnd::SysReg(f)]) => (0xD520_0000u32, *num, *f),
+            ("msr", [Opnd::SysReg(f), Opnd::Reg { num, .. }]) => (0xD500_0000u32, *num, *f),
             _ => return Err(String::from("inline asm: bad mrs/msr operands")),
         };
         return Ok(base | ((field as u32) << 5) | (rt as u32 & 31));
@@ -1349,13 +1350,13 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         let imm5 = ((index as u32) << (size + 1)) | (1u32 << size);
         return Ok(0x4E00_1C00 | (imm5 << 16) | ((rn as u32) << 5) | (rd as u32));
     }
-    // System operation: `dc`/`ic`/`tlbi <op>{, Xt}`. The op is a base word; the
-    // Rt field takes the register operand or xzr (31) when there is none.
-    if let "dc" | "ic" | "tlbi" = mnemonic {
+    // System operation: `dc`/`ic`/`tlbi`/`at`/`sys <op>{, Xt}`. The op is a base
+    // word; the Rt field takes the register operand or xzr (31) when absent.
+    if let "dc" | "ic" | "tlbi" | "at" | "sys" = mnemonic {
         let (base, rt) = match ops {
             [Opnd::SysOp(b)] => (*b, 31u32),
             [Opnd::SysOp(b), Opnd::Reg { num, .. }] => (*b, *num as u32),
-            _ => return Err(String::from("inline asm: bad dc/ic/tlbi operands")),
+            _ => return Err(String::from("inline asm: bad sys-op operands")),
         };
         return Ok(base | (rt & 31));
     }

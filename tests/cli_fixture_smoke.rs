@@ -80,21 +80,32 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_cdqe.c", "linux-aarch64"), // x86-64 cdqe
     ("inline_asm_x64_movnti.c", "linux-aarch64"), // x86-64 movnti/sfence
     ("inline_asm_x64_clflush.c", "linux-aarch64"), // x86-64 clflush/prefetch
+    ("inline_asm_x64_prefetch.c", "linux-aarch64"), // x86-64 prefetch hint family
     ("inline_asm_x64_setjmp_label.c", "linux-aarch64"), // x86-64 asm context switch
     ("inline_asm_x64_mem_disp.c", "linux-aarch64"), // x86-64 disp(%reg) memory operands
     ("inline_asm_x64_imm_mem.c", "linux-aarch64"), // x86-64 byte/word imm-to-memory ALU
     ("inline_asm_x64_flags_push.c", "linux-aarch64"), // x86-64 pushf/popf and word push/pop
     ("inline_asm_m_operand_array_cast.c", "linux-aarch64"), // x86-64 addq/adcq region operand
     ("inline_asm_x64_const_expr.c", "linux-aarch64"), // x86-64 addq/adcq const-expr displacements
+    ("inline_asm_x64_callee_saved_operands.c", "linux-aarch64"), // x86-64 callee-saved operand pool
+    ("inline_asm_x64_callee_saved_preserved.c", "linux-aarch64"), // x86-64 callee-saved survival across call
     ("inline_asm_x64_constraint_a.c", "linux-aarch64"), // x86-64 `A` accumulator constraint
     ("register_var_asm_operand_sp.c", "linux-aarch64"), // x86-64 rsp / rbp operand binding
     ("register_var_asm_operand_split.c", "linux-aarch64"), // x86-64 split-literal register name
     ("register_var_asm_operand_r11.c", "linux-aarch64"), // x86-64 r11 operand binding + %c call
     ("inline_asm_x64_sib.c", "linux-aarch64"), // x86-64 scaled-index memory operands
+    ("inline_asm_x64_sib_nobase.c", "linux-aarch64"), // x86-64 no-base scaled-index memory operands
+    ("inline_asm_x64_port_dx.c", "linux-aarch64"), // x86-64 `(%dx)` port in/out
+    ("inline_asm_x64_c_mem.c", "linux-aarch64"), // x86-64 `%c` RIP-relative memory forms
+    ("inline_asm_x64_align.c", "linux-aarch64"), // x86-64 `.align` in the code stream
     ("cpuid_partial_outputs.c", "linux-aarch64"), // x86-64 cpuid
     ("inline_asm_x64_flag_outputs.c", "linux-aarch64"), // x86-64 `=@cc` flag outputs
     ("inline_asm_x64_string_ops.c", "linux-aarch64"), // x86-64 string primitives / prefixes
+    ("inline_asm_x64_system_ext.c", "linux-aarch64"), // x86-64 invpcid/invvpid/invlpga/cmpxchg16b/fldl/fstpl/mxcsr/ljmp/fs-gs push
+    ("inline_asm_x64_port_io.c", "linux-aarch64"), // x86-64 string port-I/O (ins / outs)
     ("inline_asm_a64_comments.c", "linux-x64"), // aarch64 comment syntax
+    ("inline_asm_a64_sysreg_families.c", "linux-x64"), // aarch64 named/indexed sysregs + S-form
+    ("inline_asm_a64_at_sys.c", "linux-x64"), // aarch64 `at` / generic `sys`
 ];
 
 #[test]

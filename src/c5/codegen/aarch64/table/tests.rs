@@ -246,6 +246,10 @@ fn sys_op_dc_ic_tlbi() {
     assert_eq!(enc("tlbi", &[Opnd::SysOp(0xD508_8700)]), 0xD508_871F); // tlbi vmalle1
     assert_eq!(enc("tlbi", &[Opnd::SysOp(0xD508_8720), x(3)]), 0xD508_8723); // tlbi vae1, x3
     assert_eq!(enc("ic", &[Opnd::SysOp(0xD508_7100)]), 0xD508_711F); // ic ialluis
+    // `at`/`sys` share the same path; base words verified against clang.
+    assert_eq!(enc("at", &[Opnd::SysOp(0xD508_7800), x(0)]), 0xD508_7800); // at s1e1r, x0
+    assert_eq!(enc("sys", &[Opnd::SysOp(0xD50B_7A20), x(0)]), 0xD50B_7A20); // sys #3,c7,c10,#1,x0
+    assert_eq!(enc("sys", &[Opnd::SysOp(0xD50B_7E20)]), 0xD50B_7E3F); // sys #3,c7,c14,#1 (xzr)
 }
 
 #[test]
@@ -1238,12 +1242,18 @@ fn data_processing_registers() {
 
 #[test]
 fn system_register_move() {
-    // mrs Xt, <sysreg> = 0xD5300000 | field<<5 | Rt; msr <sysreg>, Xt =
-    // 0xD5100000 | field<<5 | Rt. CTR_EL0 field 0x5801 is cross-checked against
+    // mrs Xt, <sysreg> = 0xD5200000 | field<<5 | Rt; msr <sysreg>, Xt =
+    // 0xD5000000 | field<<5 | Rt. CTR_EL0 field 0xD801 is cross-checked against
     // the pattern-matched encoding 0xD53B0020.
-    assert_eq!(enc("mrs", &[x(0), Opnd::SysReg(0x5801)]), 0xD53B0020);
-    assert_eq!(enc("mrs", &[x(5), Opnd::SysReg(0x5801)]), 0xD53B0025);
-    assert_eq!(enc("msr", &[Opnd::SysReg(0x5801), x(0)]), 0xD51B0020);
+    assert_eq!(enc("mrs", &[x(0), Opnd::SysReg(0xD801)]), 0xD53B0020);
+    assert_eq!(enc("mrs", &[x(5), Opnd::SysReg(0xD801)]), 0xD53B0025);
+    assert_eq!(enc("msr", &[Opnd::SysReg(0xD801), x(0)]), 0xD51B0020);
+    // Named/family fields and the generic S-form (op0=0), full words per clang.
+    assert_eq!(enc("mrs", &[x(0), Opnd::SysReg(0xC801)]), 0xD539_0020); // clidr_el1
+    assert_eq!(enc("mrs", &[x(0), Opnd::SysReg(0x8004)]), 0xD530_0080); // dbgbvr0_el1
+    assert_eq!(enc("mrs", &[x(0), Opnd::SysReg(0xDF40)]), 0xD53B_E800); // pmevcntr0_el0
+    assert_eq!(enc("mrs", &[x(0), Opnd::SysReg(0x1881)]), 0xD523_1020); // s0_3_c1_c0_1
+    assert_eq!(enc("msr", &[Opnd::SysReg(0x1881), x(0)]), 0xD503_1020); // msr s0_3_c1_c0_1, x0
 }
 
 #[test]

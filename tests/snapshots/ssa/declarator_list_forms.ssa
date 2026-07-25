@@ -203,7 +203,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=16
     v121 Imm(0)                                           -> x2
     terminator Bnz { cond=v119, target=b34, fall=b21 }   (exit_acc=v119)
   block 21  start_pc=0
-    v122 ImmData(152)                                     -> x0
+    v122 ImmData(216)                                     -> x0
     v123 Load { addr=v122, disp=0, kind=I32 }             -> x0
     v124 BinopI { op=ne, lhs=v123, rhs_imm=0 }            -> x0
     v125 Imm(0)                                           -> x2

@@ -613,17 +613,17 @@ fn ent_pc=7 n_params=0 variadic=false locals=39
     v688 Imm(0)                                           -> x0
     terminator Jmp(b136)   (exit_acc=v688)
   block 136  start_pc=0
-    v689 ImmData(1256)                                    -> x0
+    v689 ImmData(1272)                                    -> x0
     v690 Load { addr=v689, disp=0, kind=I32 }             -> x0
     v691 BinopI { op=eq, lhs=v690, rhs_imm=0 }            -> x0
     terminator Bz { cond=v691, target=b138, fall=b137 }   (exit_acc=v691)
   block 137  start_pc=0
-    v692 ImmData(1244)                                    -> x7
+    v692 ImmData(1228)                                    -> x7
     v693 CallExt { binding_idx=0, args=[v692], fp_arg_mask=0x0 } -> x0
     v694 Imm(0)                                           -> x0
     terminator Return(v694)   (exit_acc=v694)
   block 138  start_pc=0
-    v695 ImmData(1256)                                    -> x0
+    v695 ImmData(1272)                                    -> x0
     v696 Load { addr=v695, disp=0, kind=I32 }             -> x0
     v697 BinopI { op=shl, lhs=v696, rhs_imm=32 }          -> x1
     v698 Extend { value=v696, kind=I32 }                  -> x1

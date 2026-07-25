@@ -412,8 +412,8 @@ impl Compiler {
             if inner_dims.is_empty() && self.lex.tk == '"' && (is_wchar_array || is_char_array) {
                 brace_wrapped = true;
             } else {
-                self.lex.restore(snap);
-                self.data.truncate(data_snap);
+                self.restore_lex(snap);
+                self.truncate_data(data_snap);
             }
         }
         // A string-literal array initializer may be parenthesized
@@ -433,8 +433,8 @@ impl Compiler {
             if self.lex.tk == '"' && (self.lex.str_is_wide || is_char_array) {
                 paren_depth = depth;
             } else {
-                self.lex.restore(snap);
-                self.data.truncate(data_snap);
+                self.restore_lex(snap);
+                self.truncate_data(data_snap);
             }
         }
         if self.lex.tk == '"' && self.lex.str_is_wide {
@@ -454,7 +454,7 @@ impl Compiler {
                 let store_nul = target_size <= 0 || chars < target_size as usize;
                 if !store_nul {
                     elem_count -= 1;
-                    self.data.truncate(start_addr + elem_count * w);
+                    self.truncate_data(start_addr + elem_count * w);
                 }
             }
             let elems: Vec<(i128, InitElemReloc)> = (0..elem_count)
@@ -658,7 +658,7 @@ impl Compiler {
                 // The string's bytes were appended to the data segment by
                 // the lexer; they are copied into `elements` now, so drop
                 // them to avoid an orphaned literal.
-                self.data.truncate(start_addr);
+                self.truncate_data(start_addr);
                 cursor = total;
                 self.accept(',')?;
                 continue;
@@ -790,7 +790,7 @@ impl Compiler {
                         // pointer, array). Skip the whole group by token
                         // balance; such casts do not appear before a
                         // pointer-arithmetic address constant.
-                        self.lex.restore(paren_snap);
+                        self.restore_lex(paren_snap);
                         self.next()?; // re-consume `(`
                         let mut depth: i64 = 1;
                         while depth > 0 && self.lex.tk != 0 {
@@ -818,14 +818,14 @@ impl Compiler {
             }
         }
         if self.lex.tk != Token::Id {
-            self.lex.restore(snap);
-            self.data.truncate(data_snap);
+            self.restore_lex(snap);
+            self.truncate_data(data_snap);
             return Ok(None);
         }
         let sym_idx = self.lex.curr_id_idx;
         if self.symbols[sym_idx].class != Token::Glo as i64 {
-            self.lex.restore(snap);
-            self.data.truncate(data_snap);
+            self.restore_lex(snap);
+            self.truncate_data(data_snap);
             return Ok(None);
         }
         let mut off = self.symbols[sym_idx].val;
@@ -855,8 +855,8 @@ impl Compiler {
                 self.next()?;
                 let n = self.parse_constant_int()?;
                 if self.lex.tk != ']' {
-                    self.lex.restore(snap);
-                    self.data.truncate(data_snap);
+                    self.restore_lex(snap);
+                    self.truncate_data(data_snap);
                     return Ok(None);
                 }
                 self.next()?;
@@ -867,8 +867,8 @@ impl Compiler {
                 if self.lex.tk != Token::Id
                     || !(is_struct_ty(cur_ty) && struct_ptr_depth(cur_ty) == 0)
                 {
-                    self.lex.restore(snap);
-                    self.data.truncate(data_snap);
+                    self.restore_lex(snap);
+                    self.truncate_data(data_snap);
                     return Ok(None);
                 }
                 let fname = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -878,8 +878,8 @@ impl Compiler {
                     .iter()
                     .position(|f| f.name == fname)
                 else {
-                    self.lex.restore(snap);
-                    self.data.truncate(data_snap);
+                    self.restore_lex(snap);
+                    self.truncate_data(data_snap);
                     return Ok(None);
                 };
                 let field = self.structs[sid].fields[fpos].clone();
@@ -931,8 +931,8 @@ impl Compiler {
         let snap = self.lex.snapshot();
         let data_snap = self.data.len();
         let restore = |s: &mut Self| {
-            s.lex.restore(snap);
-            s.data.truncate(data_snap);
+            s.restore_lex(snap);
+            s.truncate_data(data_snap);
         };
         // The condition runs up to `?` (a logical-OR expression). A
         // non-integer leaf (e.g. a bare `(T*)&g` with no conditional)
@@ -987,7 +987,7 @@ impl Compiler {
         if self.lex.tk == Token::Generic {
             let after = self.generic_select_to_winner()?;
             let result = self.parse_constant_init_value()?;
-            self.lex.restore(after);
+            self.restore_lex(after);
             return Ok(result);
         }
         // `&(T){...}` -- the address of a compound literal as an aggregate
@@ -1030,7 +1030,7 @@ impl Compiler {
                     }
                 }
             }
-            self.lex.restore(snap);
+            self.restore_lex(snap);
         }
         // A constant address of a global's sub-object: `&g.field`,
         // `g.array_field`, `(&buf[i])->field`. Takes priority over the
@@ -1049,7 +1049,7 @@ impl Compiler {
             {
                 return Ok((off as i128, InitElemReloc::Data(Some(sym_idx))));
             }
-            self.lex.restore(snap);
+            self.restore_lex(snap);
         }
         // An unparenthesized constant conditional `cond ? A : B` whose arms
         // may be address constants -- a dispatch table's
@@ -1078,8 +1078,8 @@ impl Compiler {
             if let Some(v) = selected {
                 return Ok(v);
             }
-            self.lex.restore(snap);
-            self.data.truncate(data_snap);
+            self.restore_lex(snap);
+            self.truncate_data(data_snap);
         }
         // Float literal -- store the f64 bit pattern. The element
         // type drives the runtime interpretation; the on-disk
@@ -1130,7 +1130,7 @@ impl Compiler {
                 return Ok((bits as i128, InitElemReloc::Float64Bits));
             }
             if self.lex.tk == Token::Num {
-                self.lex.restore(snap);
+                self.restore_lex(snap);
                 let v = self.parse_constant_i128()?;
                 return Ok((v, InitElemReloc::None));
             }
@@ -1162,7 +1162,7 @@ impl Compiler {
                 // its entries. Rewind to the `-` and route through
                 // `parse_constant_int`, which honours the C99 6.6
                 // precedence chain.
-                self.lex.restore(snap);
+                self.restore_lex(snap);
                 let v = self.parse_constant_i128()?;
                 return Ok((v, InitElemReloc::None));
             }
@@ -1185,7 +1185,7 @@ impl Compiler {
             self.next()?; // consume the sign
             let signed_float_paren =
                 self.lex.tk == '(' && self.contents_until_close_paren_have_float()?;
-            self.lex.restore(snap);
+            self.restore_lex(snap);
             if signed_float_paren {
                 let bits = self.parse_const_expr_add_val()?.as_float();
                 return Ok((bits.to_bits() as i128, InitElemReloc::Float64Bits));
@@ -1244,7 +1244,7 @@ impl Compiler {
                 // skip-and-recurse path below, where the value is the
                 // leaf's address and the cast merely retypes it.
                 if !self.post_cast_is_reloc_leaf()? {
-                    self.lex.restore(snap);
+                    self.restore_lex(snap);
                     return match self.parse_const_expr_cond_val()? {
                         ConstVal::Float(f) => Ok((f.to_bits() as i128, InitElemReloc::Float64Bits)),
                         v => Ok((
@@ -1325,7 +1325,7 @@ impl Compiler {
                     self.next()?; // consume the matching `)`
                     return Ok((v, reloc));
                 }
-                self.lex.restore(inner_snap);
+                self.restore_lex(inner_snap);
             }
             // Sub-expression in parens. Peek for any FloatNum
             // token inside (up to the matching `)`); if present,
@@ -1377,7 +1377,7 @@ impl Compiler {
                         is_cast_of_string = self.lex.tk == '"';
                     }
                 }
-                self.lex.restore(peek_snap);
+                self.restore_lex(peek_snap);
                 if is_cast_of_string {
                     let (value, reloc) = self.parse_constant_init_value()?;
                     if self.lex.tk != ')' {
@@ -1393,7 +1393,7 @@ impl Compiler {
             // through `parse_const_expr_primary_val`, so a static
             // initializer can use `((char *)"...")` and
             // `&((T *)0)->field` shapes inside arithmetic.
-            self.lex.restore(snap);
+            self.restore_lex(snap);
             let v = self.parse_constant_i128()?;
             return Ok((v, InitElemReloc::None));
         }
@@ -1992,9 +1992,9 @@ impl Compiler {
     }
 
     fn restore_init_checkpoint(&mut self, cp: InitCheckpoint) {
-        self.lex.restore(cp.lex);
+        self.restore_lex(cp.lex);
         self.next_ent_pc = cp.next_ent_pc;
-        self.data.truncate(cp.data);
+        self.truncate_data(cp.data);
         self.data_object_starts.truncate(cp.data_object_starts);
         self.data_relocs.truncate(cp.data_relocs);
         self.data_reloc_sym_idx.truncate(cp.data_reloc_sym_idx);
@@ -2132,7 +2132,7 @@ impl Compiler {
         } else {
             None
         };
-        self.lex.restore(snap);
+        self.restore_lex(snap);
         Ok(sid)
     }
 
@@ -2221,7 +2221,7 @@ impl Compiler {
                 grouping += 1;
                 continue;
             }
-            self.lex.restore(snap);
+            self.restore_lex(snap);
             return Ok(false);
         }
         // Skip the balanced token run to the matching `)`. The type name
@@ -2280,16 +2280,16 @@ impl Compiler {
                 || self.lex.tk == ';'
                 || self.lex.tk == ')'
                 || self.lex.tk == ']';
-            self.data.truncate(data_mark);
+            self.truncate_data(data_mark);
             if complete {
-                self.lex.restore(at_brace);
+                self.restore_lex(at_brace);
                 self.pending.compound_lit_close_parens = grouping;
                 return Ok(true);
             }
-            self.lex.restore(snap);
+            self.restore_lex(snap);
             return Ok(false);
         }
-        self.lex.restore(snap);
+        self.restore_lex(snap);
         Ok(false)
     }
 
@@ -2970,8 +2970,8 @@ impl Compiler {
             if self.lex.tk == '"' {
                 char_array_brace_string = true;
             } else {
-                self.lex.restore(snap);
-                self.data.truncate(data_snap);
+                self.restore_lex(snap);
+                self.truncate_data(data_snap);
             }
         }
         // A string literal initializing a char array may be enclosed
@@ -2997,8 +2997,8 @@ impl Compiler {
             if self.lex.tk == '"' {
                 char_array_paren_depth = depth;
             } else {
-                self.lex.restore(snap);
-                self.data.truncate(data_snap);
+                self.restore_lex(snap);
+                self.truncate_data(data_snap);
             }
         }
         if field.array_size > 0 && self.lex.tk == '"' && strip_unsigned(field.ty) == Ty::Char as i64
@@ -3448,7 +3448,22 @@ impl Compiler {
             self.ast_binop(crate::c5::ir::BinOp::Add);
         }
         self.ast_psh();
+        // C99 6.7.9p11: a scalar member's initializer may be enclosed
+        // in braces; strip a single wrapper as the constant path does.
+        let braced_scalar = self.lex.tk == '{';
+        if braced_scalar {
+            self.next()?;
+        }
         self.expr(Token::Assign as i64)?;
+        if braced_scalar {
+            self.accept(',')?;
+            if self.lex.tk != '}' {
+                return Err(self.compile_err(
+                    "scalar initializer wrapped in `{ ... }` must hold a single value",
+                ));
+            }
+            self.next()?; // consume `}`
+        }
         // C99 6.7.9p13: a brace-elided first field taking an expression
         // of the enclosing struct's own type is a whole-object copy, not
         // elision into the first scalar field. Copy the bytes and stop.
@@ -3515,6 +3530,31 @@ impl Compiler {
     /// stages its bytes; the `Runtime` arm evaluates the leaf as an
     /// assignment-expression and records a runtime store element.
     pub(super) fn init_leaf_scalar(
+        &mut self,
+        target: InitTarget,
+        at: i64,
+        ty: i64,
+    ) -> Result<(), C5Error> {
+        // C99 6.7.9p11: a scalar member's initializer may be enclosed
+        // in braces; strip a single wrapper on either target path.
+        let braced_scalar = !self.is_traversable_aggregate_ty(ty) && self.lex.tk == '{';
+        if braced_scalar {
+            self.next()?;
+        }
+        let r = self.init_leaf_scalar_value(target, at, ty);
+        if braced_scalar && r.is_ok() {
+            self.accept(',')?;
+            if self.lex.tk != '}' {
+                return Err(self.compile_err(
+                    "scalar initializer wrapped in `{ ... }` must hold a single value",
+                ));
+            }
+            self.next()?; // consume `}`
+        }
+        r
+    }
+
+    fn init_leaf_scalar_value(
         &mut self,
         target: InitTarget,
         at: i64,
@@ -3634,6 +3674,10 @@ impl Compiler {
         if total_bytes == 0 {
             return;
         }
+        // The staged template is an anonymous data object (the Mcpy
+        // source); record its boundary like a literal's so static DCE
+        // neither glues it to a neighbor nor drops part of it.
+        self.data_object_starts.push(src_data_addr as i64);
         self.emit_lea(local_val);
         self.ast_psh();
         self.emit_data_imm(src_data_addr as i64);
@@ -3742,7 +3786,7 @@ impl Compiler {
             }
             self.next()?;
         }
-        self.lex.restore(snap);
+        self.restore_lex(snap);
         Ok(has_float)
     }
 

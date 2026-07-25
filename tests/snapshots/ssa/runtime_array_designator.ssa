@@ -11,7 +11,7 @@ fn ent_pc=0 n_params=3 variadic=false locals=9
     v5   ParamRef(2, kind=I32)                            -> x2
     v6   Imm(0)                                           -> x0
     v7   LocalAddr(-3)                                    -> x0
-    v8   ImmData(8)                                       -> x1
+    v8   ImmData(24)                                      -> x1
     v9   Mcpy { dst=v7, src=v8, size=24 }                 -> x0
     v10  LoadLocal { off=2, kind=I32 }                    -> x0
     v11  LocalAddr(-3)                                    -> x0
@@ -156,7 +156,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v18  Imm(9)                                           -> x1
     v19  Imm(0)                                           -> x2
     v20  LocalAddr(-6)                                    -> x2
-    v21  ImmData(32)                                      -> x6
+    v21  ImmData(48)                                      -> x6
     v22  Mcpy { dst=v20, src=v21, size=12 }               -> x2
     v23  LocalAddr(-6)                                    -> x2
     v24  Store { addr=v23, disp=0, value=v16, kind=I32 }  -> -

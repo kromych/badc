@@ -430,7 +430,7 @@ impl Compiler {
             // Non-constant operand -> a VLA dimension: rewind for the
             // caller's runtime-expression parse.
             Err(_) if self.pending.const_expr_nonconst => {
-                self.lex.restore(snap);
+                self.restore_lex(snap);
                 Ok(None)
             }
             // A genuine constant-expression error (division by zero, an
@@ -560,7 +560,7 @@ impl Compiler {
         self.pending.const_expr_nonconst = false;
         let is_const = self.parse_const_expr_cond_val().is_ok();
         self.pending.const_expr_nonconst = saved_nonconst;
-        self.lex.restore(snap);
+        self.restore_lex(snap);
         self.skip_balanced_to_comma()?;
         if self.lex.tk != ')' {
             return Err(self.compile_err("`)` expected to close `__builtin_constant_p`"));
@@ -1080,7 +1080,7 @@ impl Compiler {
             // winning expression as a constant.
             let after = self.generic_select_to_winner()?;
             let v = self.parse_const_expr_cond_val()?;
-            self.lex.restore(after);
+            self.restore_lex(after);
             return Ok(v);
         }
         if self.lex.tk == Token::BuiltinTypesCompatible {
@@ -1680,7 +1680,7 @@ impl Compiler {
                     || self.lex.tk == Token::Dot
                     || self.lex.tk == Token::Arrow;
                 if postfix {
-                    self.lex.restore(snap);
+                    self.restore_lex(snap);
                 } else {
                     self.symbols[idx].was_referenced = true;
                     return Ok(ConstVal::Addr(ConstAddr {

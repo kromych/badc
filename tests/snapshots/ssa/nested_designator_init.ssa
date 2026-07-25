@@ -43,7 +43,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v21  Imm(10)                                          -> x0
     v22  Imm(0)                                           -> x1
     v23  LocalAddr(-3)                                    -> x1
-    v24  ImmData(24)                                      -> x2
+    v24  ImmData(40)                                      -> x2
     v25  Mcpy { dst=v23, src=v24, size=16 }               -> x1
     v26  LoadLocal { off=-1, kind=I32 }                   -> x1
     v27  LocalAddr(-3)                                    -> x1

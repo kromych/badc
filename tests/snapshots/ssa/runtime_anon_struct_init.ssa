@@ -9,7 +9,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=14
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-4)                                    -> x0
-    v6   ImmData(8)                                       -> x1
+    v6   ImmData(24)                                      -> x1
     v7   Mcpy { dst=v5, src=v6, size=32 }                 -> x0
     v8   Imm(1)                                           -> x1
     v9   LocalAddr(-4)                                    -> x0
@@ -27,7 +27,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=14
     v21  BinopI { op=add, lhs=v20, rhs_imm=24 }           -> x8
     v22  Store { addr=v20, disp=24, value=v19, kind=I32 } -> -
     v23  LocalAddr(-8)                                    -> x0
-    v24  ImmData(40)                                      -> x2
+    v24  ImmData(56)                                      -> x2
     v25  Mcpy { dst=v23, src=v24, size=32 }               -> x0
     v26  Imm(2)                                           -> x0
     v27  LocalAddr(-8)                                    -> x2
@@ -168,7 +168,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=10
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-5)                                    -> x0
-    v6   ImmData(88)                                      -> x1
+    v6   ImmData(104)                                     -> x1
     v7   Mcpy { dst=v5, src=v6, size=40 }                 -> x0
     v8   Imm(9)                                           -> x0
     v9   LocalAddr(-5)                                    -> x1
@@ -298,7 +298,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=8
   block 3  start_pc=0
     v23  Imm(0)                                           -> x0
     v24  LocalAddr(-6)                                    -> x0
-    v25  ImmData(72)                                      -> x2
+    v25  ImmData(88)                                      -> x2
     v26  Mcpy { dst=v24, src=v25, size=16 }               -> x0
     v27  Imm(3)                                           -> x0
     v28  LocalAddr(-6)                                    -> x2

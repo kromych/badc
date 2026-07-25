@@ -7,7 +7,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=4
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   LocalAddr(-4)                                    -> x0
-    v4   ImmData(8)                                       -> x1
+    v4   ImmData(24)                                      -> x1
     v5   Mcpy { dst=v3, src=v4, size=32 }                 -> x0
     v6   Imm(0)                                           -> x0
     v7   LocalAddr(-4)                                    -> x1
@@ -36,7 +36,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=4
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   LocalAddr(-4)                                    -> x0
-    v4   ImmData(40)                                      -> x1
+    v4   ImmData(56)                                      -> x1
     v5   Mcpy { dst=v3, src=v4, size=32 }                 -> x0
     v6   Imm(0)                                           -> x0
     v7   LocalAddr(-4)                                    -> x1
@@ -63,7 +63,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=6
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-6)                                    -> x0
-    v2   ImmData(72)                                      -> x1
+    v2   ImmData(88)                                      -> x1
     v3   Mcpy { dst=v1, src=v2, size=32 }                 -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-6)                                    -> x1
@@ -92,7 +92,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=3
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   LocalAddr(-3)                                    -> x0
-    v4   ImmData(104)                                     -> x1
+    v4   ImmData(120)                                     -> x1
     v5   Mcpy { dst=v3, src=v4, size=24 }                 -> x0
     v6   LoadLocal { off=2, kind=I64 }                    -> x0
     v7   Imm(0)                                           -> x0
@@ -117,7 +117,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=4
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> x0
-    v2   ImmData(128)                                     -> x1
+    v2   ImmData(144)                                     -> x1
     v3   Mcpy { dst=v1, src=v2, size=16 }                 -> x0
     v4   LocalAddr(-2)                                    -> x0
     v5   LocalAddr(-4)                                    -> x1
@@ -190,7 +190,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=6
     v33  Imm(9)                                           -> x1
     v34  Store { addr=v31, disp=8, value=v33, kind=I64 }  -> -
     v35  LocalAddr(-6)                                    -> x0
-    v36  ImmData(144)                                     -> x1
+    v36  ImmData(160)                                     -> x1
     v37  Mcpy { dst=v35, src=v36, size=16 }               -> x0
     v38  LocalAddr(-4)                                    -> x0
     v39  LocalAddr(-6)                                    -> x1

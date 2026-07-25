@@ -51,8 +51,8 @@ impl Compiler {
         let saved_data = self.data.len();
         let saved_pc = self.next_ent_pc;
         let result = self.designated_array_count_inner(fallback, inner_span);
-        self.lex.restore(snap);
-        self.data.truncate(saved_data);
+        self.restore_lex(snap);
+        self.truncate_data(saved_data);
         self.next_ent_pc = saved_pc;
         // A non-constant designator (invalid, or a shape this peek can't
         // fold) falls back to the positional count; the real fill re-parses
@@ -67,8 +67,8 @@ impl Compiler {
         let saved_data = self.data.len();
         let saved_pc = self.next_ent_pc;
         let is_desig = self.next().is_ok() && self.lex.tk == Token::Brak;
-        self.lex.restore(snap);
-        self.data.truncate(saved_data);
+        self.restore_lex(snap);
+        self.truncate_data(saved_data);
         self.next_ent_pc = saved_pc;
         is_desig
     }
@@ -155,7 +155,7 @@ impl Compiler {
     fn parse_file_scope_asm(&mut self) -> Result<(), C5Error> {
         use crate::c5::codegen::ssa::emit_common as engine;
         let (template, tstart, _is_volatile, is_goto) = self.parse_asm_head()?;
-        self.data.truncate(tstart);
+        self.truncate_data(tstart);
         if is_goto {
             return Err(self.compile_err("`asm goto` is not supported at file scope"));
         }
@@ -1737,6 +1737,11 @@ impl Compiler {
                         bl.function_bc_pc = ent_pc as u64;
                         self.variables.push(bl);
                     }
+                    // Stamp the owner on each block-scope static's
+                    // emission record for the same reason.
+                    for i in core::mem::take(&mut self.pending_block_static_syms) {
+                        self.symbols[i].owner_ent_pc = Some(ent_pc as u64);
+                    }
                     // Record declared multi-cell locals (aggregates and
                     // multi-cell scalars) for slot coalescing. A declared
                     // local at frame slot `fp_slot` (most-negative cell)
@@ -2040,7 +2045,7 @@ impl Compiler {
                                 *first = 1;
                             }
                             let elem = self.size_of_type(ty) as i64;
-                            let aligned = ((elem + 7) / 8) * 8;
+                            let aligned = (((elem + 7) / 8) * 8).max(8);
                             if decl_align > 8 {
                                 self.align_data_to(decl_align);
                             } else if self.size_of_type(ty) > 1 {
@@ -2365,11 +2370,14 @@ impl Compiler {
                         self.symbols[id_idx].has_initializer = true;
                         self.symbols[id_idx].defined_here = true;
                     } else {
+                        // A zero-sized object (empty struct, GNU) still
+                        // reserves one slot so no two objects share a
+                        // start offset (mirrors the block-scope allocator).
                         let mut bytes = if array_size > 0 {
                             let total = (self.size_of_type(ty) as i64) * array_size;
-                            ((total + 7) / 8) * 8
+                            (((total + 7) / 8) * 8).max(8)
                         } else {
-                            self.slots_of_type(ty) * 8
+                            (self.slots_of_type(ty) * 8).max(8)
                         };
                         // A flexible array member initialized via `.<fam> =
                         // {...}` needs its element bytes reserved now, before
@@ -2393,7 +2401,7 @@ impl Compiler {
                                 let snap = self.lex.snapshot();
                                 self.next()?; // `=`
                                 let count = self.flexible_array_init_count(sid)? as i64;
-                                self.lex.restore(snap);
+                                self.restore_lex(snap);
                                 bytes += count * elem;
                                 bytes = ((bytes + 7) / 8) * 8;
                             }
@@ -2664,7 +2672,7 @@ impl Compiler {
                                     let mut k = idx;
                                     loop {
                                         if let Some(snap) = value_snap {
-                                            self.lex.restore(snap);
+                                            self.restore_lex(snap);
                                         }
                                         let here = var_offset + k * group_stride;
                                         // C99 6.7.8p20: the braces around each
@@ -2876,7 +2884,7 @@ impl Compiler {
     /// collected for the current declarator onto its symbol. Shared by
     /// the function and file-scope-object paths; the object writers
     /// read the fields off the symbol.
-    fn apply_symbol_attributes(&mut self, id_idx: usize) {
+    pub(super) fn apply_symbol_attributes(&mut self, id_idx: usize) {
         if self.pending.attr_weak {
             self.symbols[id_idx].is_weak = true;
         }

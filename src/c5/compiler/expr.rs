@@ -710,10 +710,8 @@ impl Compiler {
             if !is_wide {
                 self.data.push(0);
             }
-            // Record the resolved object start (after adjacent-literal
-            // concatenation and the trailing NUL) for static DCE
-            // boundaries. Interior part starts are not recorded.
-            self.data_object_starts.push(start_offset);
+            // The object boundary was recorded when the first part was
+            // lexed (see `Compiler::next`).
             self.pending.last_array_decay_bytes = (self.data.len() as i64) - start_offset;
             self.ty = Ty::Ptr as i64;
             // Dual-emit: capture the decayed `char *` rvalue so
@@ -4606,7 +4604,7 @@ impl Compiler {
         let after = self.generic_select_to_winner()?;
         // Parse the selected expression live; it is the result.
         self.expr(Token::Assign as i64)?;
-        self.lex.restore(after);
+        self.restore_lex(after);
         Ok(())
     }
 
@@ -4681,8 +4679,8 @@ impl Compiler {
         // Drop the data the scan appended, then position at the selected
         // association's `:`; the following `next` re-lexes its first
         // token, appending any string data at `data_start`.
-        self.data.truncate(data_start);
-        self.lex.restore(chosen);
+        self.truncate_data(data_start);
+        self.restore_lex(chosen);
         self.next()?; // the `:` -> the expression's first token
         Ok(after)
     }
@@ -4707,8 +4705,8 @@ impl Compiler {
         self.code_reloc_sym_idx.truncate(saved_reloc);
         self.ast_acc = saved_ast_acc;
         self.ast_vstack.truncate(saved_vstack);
-        self.data.truncate(data_start);
-        self.lex.restore(snap);
+        self.truncate_data(data_start);
+        self.restore_lex(snap);
         result.map(|_| ty)
     }
 

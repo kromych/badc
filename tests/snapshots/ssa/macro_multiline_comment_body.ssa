@@ -22,7 +22,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v8   Imm(0)                                           -> x0
     terminator Jmp(b5)   (exit_acc=v8)
   block 5  start_pc=0
-    v10  ImmData(40)                                      -> x0
+    v10  ImmData(8)                                       -> x0
     v11  Load { addr=v10, disp=0, kind=I32 }              -> x0
     v12  BinopI { op=ne, lhs=v11, rhs_imm=1234 }          -> x0
     terminator Bz { cond=v12, target=b7, fall=b6 }   (exit_acc=v12)

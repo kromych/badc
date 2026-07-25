@@ -27,8 +27,40 @@ impl Compiler {
     // ---- Lexer plumbing ----
 
     pub(super) fn next(&mut self) -> Result<(), C5Error> {
+        let prev_tk = self.lex.tk;
         self.lex
-            .next(&mut self.symbols, &mut self.symbol_index, &mut self.data)
+            .next(&mut self.symbols, &mut self.symbol_index, &mut self.data)?;
+        // Every string literal interns its bytes at lex time (expression
+        // operands, initializer elements, attribute payloads alike), so
+        // record the object boundary here once. An adjacent part continues
+        // the previous literal (C99 6.4.5 concatenation) -- same object,
+        // no new boundary. Static DCE needs the boundary to drop a dead
+        // literal instead of gluing it to its neighbors.
+        if self.lex.tk == '"' && prev_tk != '"' {
+            self.data_object_starts.push(self.lex.ival);
+        }
+        Ok(())
+    }
+
+    /// Restore a lexer snapshot. A snapshot taken while the current
+    /// token was a string literal restores `ival` to the literal's data
+    /// offset without re-lexing it, so the boundary a truncation popped
+    /// must be re-recorded here; the resuming parse consumes the
+    /// literal's bytes as an object again.
+    pub(super) fn restore_lex(&mut self, snap: crate::c5::lexer::LexerSnapshot) {
+        self.lex.restore(snap);
+        if self.lex.tk == '"' {
+            self.data_object_starts.push(self.lex.ival);
+        }
+    }
+
+    /// Truncate the data segment (a speculative parse is being undone)
+    /// and drop the literal boundaries recorded past the new end: later
+    /// growth reuses those offsets for unrelated bytes, and a stale
+    /// boundary could split a live object.
+    pub(super) fn truncate_data(&mut self, len: usize) {
+        self.data.truncate(len);
+        self.data_object_starts.retain(|&s| s < len as i64);
     }
 
     /// Skip tokens until the matching close paren. Caller has

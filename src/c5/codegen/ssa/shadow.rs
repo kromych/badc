@@ -324,6 +324,10 @@ pub(crate) fn compute_live_sets(
     let mut func_pcs: BTreeSet<usize> = BTreeSet::new();
     let mut data_live = alloc::vec![false; n];
     let mut work: alloc::vec::Vec<Node> = alloc::vec::Vec::new();
+    // A block-scope static exists only in an emitted instance of its
+    // function, so its `used` / `section` intent keeps it only while
+    // the owner survives: an edge from the owner, not a root.
+    let mut owner_deps: BTreeMap<usize, alloc::vec::Vec<usize>> = BTreeMap::new();
 
     for s in &program.symbols {
         if s.class == Token::Fun as i64
@@ -341,7 +345,13 @@ pub(crate) fn compute_live_sets(
             && (0..data_len).contains(&s.val)
             && (matches!(s.linkage, Linkage::External) || s.is_used || s.section_name.is_some())
         {
-            work.push(Node::Data(interval_of(s.val)));
+            match s.owner_ent_pc {
+                Some(pc) => owner_deps
+                    .entry(pc as usize)
+                    .or_default()
+                    .push(interval_of(s.val)),
+                None => work.push(Node::Data(interval_of(s.val))),
+            }
         }
     }
     // Constructors / destructors are referenced through `.init_array` /
@@ -375,6 +385,11 @@ pub(crate) fn compute_live_sets(
             Node::Func(pc) => {
                 if !func_pcs.insert(pc) {
                     continue;
+                }
+                if let Some(deps) = owner_deps.get(&pc) {
+                    for &d in deps {
+                        work.push(Node::Data(d));
+                    }
                 }
                 let Some(f) = by_ent.get(&pc) else { continue };
                 for_each_block_inst(f, |inst| match inst {
@@ -670,7 +685,17 @@ pub(crate) fn compact_program_data(
             && !sym.is_thread_local
             && (0..data_len).contains(&sym.val)
         {
-            sym.val = map(sym.val);
+            if new_base[interval_of(sym.val)] < 0 {
+                // The object was dropped; retire the record in place
+                // (removal would shift the indices the AST references)
+                // so no writer places or carves it.
+                sym.defined_here = false;
+                sym.is_used = false;
+                sym.section_name = None;
+                sym.val = 0;
+            } else {
+                sym.val = map(sym.val);
+            }
         }
     }
     for r in &mut out.data_relocs {

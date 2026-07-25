@@ -5,7 +5,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=28
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
-    v2   ImmData(52)                                      -> x1
+    v2   ImmData(148)                                     -> x1
     v3   Mcpy { dst=v1, src=v2, size=4 }                  -> x0
     v4   Imm(42)                                          -> x0
     v5   Imm(0)                                           -> x0
@@ -44,7 +44,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=28
     v32  LoadLocal { off=-18, kind=I64 }                  -> x1
     terminator Bz { cond=v31, target=b6, fall=b5 }   (exit_acc=v31)
   block 5  start_pc=0
-    v33  ImmData(56)                                      -> x7
+    v33  ImmData(8)                                       -> x7
     v34  Imm(1)                                           -> x6
     v35  LocalAddr(-1)                                    -> x0
     v36  Imm(0)                                           -> x1
@@ -54,7 +54,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=28
     terminator Return(v39)   (exit_acc=v39)
   block 6  start_pc=0
     v40  LocalAddr(-4)                                    -> x0
-    v41  ImmData(78)                                      -> x1
+    v41  ImmData(158)                                     -> x1
     v42  Mcpy { dst=v40, src=v41, size=4 }                -> x0
     v43  LoadLocal { off=-2, kind=I32 }                   -> x0
     v44  Imm(42)                                          -> x0
@@ -91,7 +91,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=28
     v69  LoadLocal { off=-20, kind=I64 }                  -> x1
     terminator Bz { cond=v68, target=b12, fall=b11 }   (exit_acc=v68)
   block 11  start_pc=0
-    v70  ImmData(82)                                      -> x7
+    v70  ImmData(34)                                      -> x7
     v71  Imm(1)                                           -> x6
     v72  LocalAddr(-4)                                    -> x0
     v73  Imm(0)                                           -> x1
@@ -101,7 +101,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=28
     terminator Return(v76)   (exit_acc=v76)
   block 12  start_pc=0
     v77  LocalAddr(-6)                                    -> x0
-    v78  ImmData(104)                                     -> x1
+    v78  ImmData(168)                                     -> x1
     v79  Mcpy { dst=v77, src=v78, size=4 }                -> x0
     v80  LoadLocal { off=-2, kind=I32 }                   -> x0
     v81  Imm(42)                                          -> x0
@@ -138,7 +138,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=28
     v106 LoadLocal { off=-22, kind=I64 }                  -> x1
     terminator Bz { cond=v105, target=b18, fall=b17 }   (exit_acc=v105)
   block 17  start_pc=0
-    v107 ImmData(108)                                     -> x7
+    v107 ImmData(60)                                      -> x7
     v108 Imm(1)                                           -> x6
     v109 LocalAddr(-6)                                    -> x0
     v110 Imm(0)                                           -> x1
@@ -218,7 +218,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=28
     terminator Jmp(b27)   (exit_acc=v166)
   block 27  start_pc=0
     v175 LocalAddr(-12)                                   -> x0
-    v176 ImmData(159)                                     -> x1
+    v176 ImmData(175)                                     -> x1
     v177 Mcpy { dst=v175, src=v176, size=4 }              -> x0
     v178 Imm(200)                                         -> x0
     v179 Imm(0)                                           -> x0
@@ -250,7 +250,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=28
     v204 LoadLocal { off=-28, kind=I64 }                  -> x1
     terminator Bz { cond=v203, target=b33, fall=b32 }   (exit_acc=v203)
   block 32  start_pc=0
-    v205 ImmData(163)                                     -> x7
+    v205 ImmData(115)                                     -> x7
     v206 Imm(99)                                          -> x6
     v207 LocalAddr(-12)                                   -> x0
     v208 Imm(0)                                           -> x1

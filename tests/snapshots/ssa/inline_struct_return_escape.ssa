@@ -12,7 +12,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=1
     v6   LoadLocal { off=2, kind=I64 }                    -> x0
     v7   Store { addr=v3, disp=0, value=v1, kind=I64 }    -> -
     v8   LocalAddr(-1)                                    -> x0
-    v9   ImmData(8)                                       -> x1
+    v9   ImmData(24)                                      -> x1
     v10  Mcpy { dst=v8, src=v9, size=8 }                  -> x0
     v11  LoadLocal { off=2, kind=I64 }                    -> x0
     v12  LocalAddr(-1)                                    -> x0

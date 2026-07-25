@@ -110,7 +110,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=21
   block 5  start_pc=0
     v17  LocalAddr(-5)                                    -> x1
     v18  Imm(0)                                           -> x0
-    v19  ImmData(8)                                       -> x0
+    v19  ImmData(24)                                      -> x0
     v20  Imm(24)                                          -> x2
     v21  BinopI { op=add, lhs=v19, rhs_imm=24 }           -> x2
     v22  Imm(2)                                           -> x2

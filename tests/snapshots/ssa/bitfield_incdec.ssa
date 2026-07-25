@@ -153,7 +153,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     terminator Return(v112)   (exit_acc=v112)
   block 18  start_pc=0
     v113 LocalAddr(-4)                                    -> x0
-    v114 ImmData(12)                                      -> x1
+    v114 ImmData(28)                                      -> x1
     v115 Mcpy { dst=v113, src=v114, size=4 }              -> x0
     v116 LocalAddr(-4)                                    -> x0
     v117 Load { addr=v116, disp=0, kind=U32 }             -> x1

@@ -1634,6 +1634,147 @@ fn unreferenced_static_data_drops_from_object() {
 }
 
 #[test]
+fn block_static_lives_and_dies_with_its_function() {
+    // A block-scope static exists only in an emitted instance of its
+    // function. `used` + `section` on one (the addressable-record
+    // idiom) keep it -- placed in its named section -- only while the
+    // owner survives; with the owner dead, the object, its section,
+    // and its extern relocation all drop, as a toolchain that never
+    // instantiates the inline body emits nothing.
+    use crate::c5::linker::{NativeSymSection, parse_native_elf};
+    let dead = "\
+        extern int ext_key;\n\
+        static inline void helper(void) {\n\
+            static void * __attribute__((__used__)) \
+             __attribute__((__section__(\".discard.addressable\"))) rec = (void *)&ext_key;\n\
+        }\n\
+        int keep(int x) { return x; }\n";
+    let bytes = reloc_tu(dead, crate::c5::Target::LinuxX64, false);
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        !obj.symbols
+            .iter()
+            .any(|s| s.name == "ext_key" && s.section == NativeSymSection::Undef),
+        "a dead owner's used/section block static must drop with it"
+    );
+    assert!(
+        !bytes.windows(20).any(|w| w == b".discard.addressable"),
+        "no named section for a dropped block static"
+    );
+
+    let live = "\
+        extern int ext_key;\n\
+        static inline void helper(void) {\n\
+            static void * __attribute__((__used__)) \
+             __attribute__((__section__(\".discard.addressable\"))) rec = (void *)&ext_key;\n\
+        }\n\
+        int keep(int x) { helper(); return x; }\n";
+    let bytes = reloc_tu(live, crate::c5::Target::LinuxX64, false);
+    assert!(
+        bytes.windows(20).any(|w| w == b".discard.addressable"),
+        "a live owner's section-attributed block static goes to its section"
+    );
+}
+
+#[test]
+fn dead_block_static_pointer_array_drops_with_literals() {
+    // A block-scope `static const char *const` table in a dead inline
+    // helper: the emission record gives the array its own object
+    // boundary and every literal start is recorded at lex time, so the
+    // table, its relocations, and the string bytes all drop.
+    use crate::c5::linker::parse_native_elf;
+    let src = "\
+        static inline const char *name_of(int a) {\n\
+            static const char *const name_of[] = { \"qq-init\", \"qq-apply\" };\n\
+            return name_of[a];\n\
+        }\n\
+        int keep(int x) { return x; }\n";
+    let bytes = reloc_tu(src, crate::c5::Target::LinuxX64, false);
+    assert!(
+        !bytes.windows(7).any(|w| w == b"qq-init"),
+        "a dead table's string literals must drop"
+    );
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        obj.data_relocs.is_empty(),
+        "a dead table's pointer relocations must drop"
+    );
+}
+
+#[test]
+fn automatic_initializer_materializes_addresses_without_data_relocs() {
+    // C99 6.5.2.5p6 / 6.7.8: automatic storage (a compound literal, a
+    // local aggregate) is built at runtime, so an address member --
+    // `&global`, a function name, an array's decay -- is stored by the
+    // code, not baked into a staged template as an absolute data
+    // relocation. An abs-reloc-free link (vDSO, firmware stub) rejects
+    // such template relocations.
+    use crate::c5::linker::parse_native_elf;
+    let src = "\
+        struct dp { unsigned short limit; unsigned long base; } __attribute__((packed));\n\
+        static const unsigned long gdt[3] = { 0, 1, 2 };\n\
+        static int f1(int x) { return x + 1; }\n\
+        extern void take(const struct dp *p);\n\
+        void run(void) {\n\
+            struct h { int (*fp)(int); const unsigned long *p; } s = { f1, gdt };\n\
+            take(&(struct dp){ sizeof(gdt) - 1, (unsigned long)gdt });\n\
+            take((const struct dp *)(void *)s.fp((int)s.p[0]));\n\
+        }\n";
+    for optimize in [false, true] {
+        let bytes = reloc_tu(src, crate::c5::Target::LinuxX64, optimize);
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        assert!(
+            obj.data_relocs.is_empty(),
+            "automatic initializers must not emit .data relocations (optimize={optimize})"
+        );
+    }
+}
+
+#[test]
+fn zero_sized_static_keeps_a_distinct_start() {
+    // A zero-sized static (empty struct, GNU) reserves one slot: the
+    // interval model and the named-section carve identify objects by
+    // start offset, so a zero-size object sharing the next object's
+    // start would be attributed to it -- here, an address-taken key
+    // would follow a section-attributed record into its carved
+    // section, dangling once a link discards that section.
+    use crate::c5::linker::parse_native_elf;
+    let src = "\
+        typedef unsigned long uintptr_t;\n\
+        extern int ext_key;\n\
+        extern int consume(void *a, void *b);\n\
+        struct lk {};\n\
+        static inline int helper(int v) {\n\
+            static struct lk key1;\n\
+            static void * __attribute__((__used__)) \
+             __attribute__((__section__(\".discard.addressable\"))) rec\n\
+                = (void *)(uintptr_t)&ext_key;\n\
+            static struct lk key2;\n\
+            return consume(&key1, &key2) + v;\n\
+        }\n\
+        int keep(int x) { return helper(x); }\n";
+    let bytes = reloc_tu(src, crate::c5::Target::LinuxX64, false);
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    // Each key occupies its own wholly-zero slot, so both references
+    // resolve against `.bss`. A zero-size key sharing the record's
+    // start resolves into the record's carved section instead -- and
+    // dangles once a link discards that section.
+    let bss_refs = obj
+        .text_relocs
+        .iter()
+        .filter(|r| {
+            obj.symbols
+                .get(r.sym_idx)
+                .is_some_and(|s| s.section == crate::c5::linker::NativeSymSection::Bss)
+        })
+        .count();
+    assert!(
+        bss_refs >= 2,
+        "both zero-sized keys must resolve in .bss (got {bss_refs})"
+    );
+}
+
+#[test]
 fn underscore_prefixed_static_drops_after_inline() {
     // gcc parity: a leading underscore does not retain a static. The
     // helper's only call is inlined at -O, after which the post-inline

@@ -1459,6 +1459,13 @@ pub struct Compiler {
     /// `Compiler::default()` on every fresh compile.
     next_compound_literal_id: usize,
 
+    /// Symbol indices of block-scope statics' emission records pushed
+    /// while the current function body parses. Function close stamps
+    /// each record's `owner_ent_pc` (mirrors `pending_block_locals`).
+    pending_block_static_syms: Vec<usize>,
+    /// Suffix counter for `name.<n>` emission records.
+    next_block_static_id: usize,
+
     /// Original `(source, opts)` snapshot captured in `with_options`
     /// when auto-include retry is permitted. On a "unknown function
     /// `name`" error during [`Self::compile`] the snapshot is
@@ -1765,6 +1772,8 @@ impl Compiler {
             glo_imm_refs: alloc::vec::Vec::new(),
             data_reloc_sym_idx: alloc::vec::Vec::new(),
             next_compound_literal_id: 0,
+            pending_block_static_syms: Vec::new(),
+            next_block_static_id: 0,
             retry_state: None,
         }
     }

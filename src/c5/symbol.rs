@@ -355,6 +355,14 @@ pub(crate) struct Symbol {
     /// binding even though the class is not `Loc`. Cleared on restore.
     pub is_scope_typedef: bool,
 
+    /// ent_pc of the enclosing function for a block-scope static's
+    /// emission record (the persistent `name.N` symbol; the scoped
+    /// binding itself is restored at function exit). A block-scope
+    /// static exists only in an emitted instance of its function, so
+    /// static DCE honors `is_used` / `section_name` on such a record
+    /// only while the owner survives. `None` for file-scope symbols.
+    pub owner_ent_pc: Option<u64>,
+
     /// True once the parser has emitted any reference to this
     /// symbol after its declaration -- a read, a write, an
     /// address-of, or a decay. Set by the expression parser's

@@ -11,7 +11,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=31
     v5   ImmData(24)                                      -> x1
     v6   Mcpy { dst=v4, src=v5, size=16 }                 -> x0
     v7   LocalAddr(-6)                                    -> x0
-    v8   ImmData(40)                                      -> x1
+    v8   ImmData(56)                                      -> x1
     v9   Mcpy { dst=v7, src=v8, size=16 }                 -> x0
     v10  LocalAddr(-2)                                    -> x0
     v11  LocalAddr(-6)                                    -> x1
@@ -40,7 +40,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=31
     terminator Return(v27)   (exit_acc=v27)
   block 4  start_pc=0
     v28  LocalAddr(-12)                                   -> x0
-    v29  ImmData(56)                                      -> x1
+    v29  ImmData(72)                                      -> x1
     v30  Mcpy { dst=v28, src=v29, size=48 }               -> x0
     v31  LocalAddr(-2)                                    -> x0
     v32  LocalAddr(-12)                                   -> x1
@@ -136,7 +136,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=31
     terminator Return(v99)   (exit_acc=v99)
   block 16  start_pc=0
     v100 LocalAddr(-18)                                   -> x0
-    v101 ImmData(104)                                     -> x1
+    v101 ImmData(120)                                     -> x1
     v102 Mcpy { dst=v100, src=v101, size=32 }             -> x0
     v103 LocalAddr(-2)                                    -> x0
     v104 LocalAddr(-18)                                   -> x1
@@ -169,7 +169,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=31
     v123 Imm(10)                                          -> x0
     v124 Imm(0)                                           -> x1
     v125 LocalAddr(-21)                                   -> x1
-    v126 ImmData(136)                                     -> x2
+    v126 ImmData(152)                                     -> x2
     v127 Mcpy { dst=v125, src=v126, size=16 }             -> x1
     v128 LoadLocal { off=-19, kind=I32 }                  -> x1
     v129 LocalAddr(-21)                                   -> x1

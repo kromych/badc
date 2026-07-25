@@ -513,7 +513,7 @@ impl Compiler {
             self.next()?;
         }
         let mut bytes = self.data[start..].to_vec();
-        self.data.truncate(start);
+        self.truncate_data(start);
         while bytes.last() == Some(&0) {
             bytes.pop();
         }
@@ -758,7 +758,7 @@ impl Compiler {
         // variable is that pointer, never an array.
         self.pending.typeof_operand_was_array = false;
         self.pending.auto_type_single_declarator = true;
-        self.lex.restore(snap);
+        self.restore_lex(snap);
         Ok(ty)
     }
 
@@ -1182,7 +1182,7 @@ impl Compiler {
             self.next()?;
         }
         let mut bytes = self.data[start..].to_vec();
-        self.data.truncate(start);
+        self.truncate_data(start);
         while bytes.last() == Some(&0) {
             bytes.pop();
         }

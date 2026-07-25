@@ -9,7 +9,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=15
     terminator Jmp(b24)   (exit_acc=v1)
   block 1  start_pc=0
     v9   LocalAddr(-3)                                    -> x1
-    v10  ImmData(8)                                       -> x6
+    v10  ImmData(24)                                      -> x6
     v11  Mcpy { dst=v9, src=v10, size=16 }                -> x1
     v12  Extend { value=v3, kind=I32 }                    -> x1
     v13  LocalAddr(-3)                                    -> x1
@@ -44,7 +44,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=15
     terminator Bnz { cond=v37, target=b29, fall=b4 }   (exit_acc=v37)
   block 4  start_pc=0
     v40  LocalAddr(-5)                                    -> x1
-    v41  ImmData(24)                                      -> x6
+    v41  ImmData(40)                                      -> x6
     v42  Mcpy { dst=v40, src=v41, size=16 }               -> x1
     v43  Extend { value=v3, kind=I32 }                    -> x1
     v44  BinopI { op=shl, lhs=v3, rhs_imm=1 }             -> x1
@@ -85,7 +85,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=15
     terminator Bnz { cond=v73, target=b28, fall=b7 }   (exit_acc=v73)
   block 7  start_pc=0
     v76  LocalAddr(-7)                                    -> x1
-    v77  ImmData(40)                                      -> x6
+    v77  ImmData(56)                                      -> x6
     v78  Mcpy { dst=v76, src=v77, size=16 }               -> x1
     v79  Extend { value=v3, kind=I32 }                    -> x1
     v80  LocalAddr(-7)                                    -> x1
@@ -145,7 +145,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=15
     terminator Bnz { cond=v124, target=b27, fall=b12 }   (exit_acc=v124)
   block 12  start_pc=0
     v127 LocalAddr(-9)                                    -> x1
-    v128 ImmData(56)                                      -> x6
+    v128 ImmData(72)                                      -> x6
     v129 Mcpy { dst=v127, src=v128, size=12 }             -> x1
     v130 Extend { value=v3, kind=I32 }                    -> x1
     v131 LocalAddr(-9)                                    -> x1

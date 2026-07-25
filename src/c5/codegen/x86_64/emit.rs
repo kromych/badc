@@ -6502,11 +6502,36 @@ fn encode_one_x86_section_insn(
         match *o {
             AsmOpnd::Imm(v) => concrete.push(Concrete::Imm(v)),
             AsmOpnd::Reg { reg, size } => concrete.push(Concrete::Reg { reg, size }),
-            AsmOpnd::Ref { idx, size } => concrete.push(reg_of(idx, size).ok_or_else(|| {
-                alloc::format!(
-                    "inline asm: replacement `{text}` operand `%{idx}` is not a register or constant"
-                )
-            })?),
+            AsmOpnd::Ref { idx, size } => {
+                // A memory-constraint (`m`) operand holds its address in the
+                // assigned register; `%N` is the register-indirect reference
+                // `(%r)`, the same lowering the code stream uses (a `lea %N`
+                // then computes the address). Any other operand resolves to a
+                // register or an `i`-class constant.
+                let op = refs.operands.get(idx as usize);
+                let mem = matches!(op.map(|o| o.constraint), Some(AsmConstraint::Mem))
+                    .then(|| refs.op_reg.get(idx as usize).copied().flatten())
+                    .flatten();
+                match mem {
+                    Some(base) => {
+                        let width = op.map(|o| o.width).unwrap_or(8);
+                        let size = asm_mem_size(size, insn, refs.operands, refs.op_reg)
+                            .unwrap_or(AsmRegSize::from_width(width));
+                        concrete.push(Concrete::Mem {
+                            base,
+                            index: None,
+                            scale: 1,
+                            disp: 0,
+                            size,
+                        });
+                    }
+                    None => concrete.push(reg_of(idx, size).ok_or_else(|| {
+                        alloc::format!(
+                            "inline asm: replacement `{text}` operand `%{idx}` is not a register or constant"
+                        )
+                    })?),
+                }
+            }
             AsmOpnd::Mem {
                 base,
                 index,

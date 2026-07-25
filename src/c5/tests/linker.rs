@@ -1267,6 +1267,61 @@ fn asm_replacement_mem_operand_resolves_nested_global_offset() {
 }
 
 #[test]
+fn asm_replacement_lea_of_mem_operand_uses_register_indirect() {
+    // A memory-constraint (`m`) operand as the source of a `lea` inside an
+    // executable replacement section: `%N` is the operand's address, held in
+    // the operand's assigned register, so it lowers to the register-indirect
+    // form `lea (%reg), %rdi` -- the same lowering the main code stream uses.
+    // Before the fix the section encoder resolved the `m` operand to a bare
+    // register and rejected `lea` (a register source has no `lea` encoding),
+    // so a successful emit carrying an `8D` ModRM over a register base is the
+    // guard.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+        static int sel_data;
+        void sel(void) {
+            __asm__ volatile(".pushsection .altinstr_replacement,\"ax\"\n"
+                "lea %[mem], %%rdi\n"
+                ".popsection\n"
+                : : [mem] "m" (sel_data) : "rdi");
+        }
+        int main(void) { sel(); return 0; }
+    "#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let repl = &sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".altinstr_replacement")
+        .expect(".altinstr_replacement present")
+        .3;
+    // `lea (%reg), %rdi` is `REX.W 8D ModRM`: reg field 7 (%rdi), mod=00. The
+    // base register is the free-pool choice; assert the opcode and the %rdi
+    // destination without pinning it.
+    assert!(
+        repl.len() >= 3
+            && repl[0] == 0x48
+            && repl[1] == 0x8d
+            && (repl[2] >> 3) & 7 == 7
+            && repl[2] >> 6 == 0,
+        "replacement must be `lea (%reg), %rdi` (48 8D /r, reg=7, mod=00): {repl:02x?}"
+    );
+    // A register-indirect base: rm is neither 4 (SIB) nor 5 (RIP-relative), so
+    // the `lea` carries no relocation -- the address already lives in a
+    // register the surrounding code loaded.
+    assert!(
+        (repl[2] & 7) != 4 && (repl[2] & 7) != 5,
+        "the `m` operand lowers to a register base, not RIP-relative or SIB: {repl:02x?}"
+    );
+}
+
+#[test]
 fn asm_main_stream_reference_binds_label_in_pushed_section() {
     // A GNU-as local label defined inside a `.pushsection ...,"ax"` block is
     // in scope for the surrounding asm's main instruction stream: `jmp 6f`

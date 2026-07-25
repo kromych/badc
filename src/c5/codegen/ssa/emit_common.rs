@@ -1852,6 +1852,22 @@ fn split_first_token(s: &str) -> (&str, &str) {
     }
 }
 
+/// Peel a leading `name:` label from a statement. GNU as terminates a label at
+/// the colon and requires no whitespace before the statement that follows, so
+/// `name:insn` is a label plus an instruction. Returns the label name and the
+/// remainder (leading whitespace trimmed), or `None` when the statement does
+/// not begin with a label. A colon reached only after other tokens (an
+/// operand's `seg:` or a far branch's `$sel:$off`) leaves whitespace or a
+/// sigil in the preceding text, which is not a valid label name.
+fn peel_leading_label(stmt: &str) -> Option<(&str, &str)> {
+    let colon = stmt.find(':')?;
+    let name = &stmt[..colon];
+    if !is_asm_symbol_name(name) && !is_numeric_label(name) {
+        return None;
+    }
+    Some((name, stmt[colon + 1..].trim_start()))
+}
+
 fn extract_asm_sections_impl(
     text: &str,
     is_aarch64: bool,
@@ -1882,22 +1898,16 @@ fn extract_asm_sections_impl(
         }
         // Peel any leading `name:` labels: GNU as treats them as statements
         // preceding the rest of the line, so a section directive or an
-        // instruction may follow a label on the same line (`1:\t.pushsection
-        // ...`). A label goes to the current stream; a token ending in `:` that
-        // is not a valid label is left in place as the statement.
+        // instruction may follow a label on the same line, with or without
+        // whitespace after the colon (`1:\t.pushsection ...`, `name:push %rcx`).
+        // A label goes to the current stream; a leading token that is not a
+        // valid label is left in place as the statement.
         let mut stmt = piece;
-        loop {
-            let (tok, rest) = split_first_token(stmt);
-            let Some(name) = tok.strip_suffix(':') else {
-                break;
-            };
-            if !is_asm_symbol_name(name) && !is_numeric_label(name) {
-                break;
-            }
+        while let Some((name, rest)) = peel_leading_label(stmt) {
             match *stack.last().unwrap() {
                 None => {
-                    code.push_str(tok);
-                    code.push('\n');
+                    code.push_str(name);
+                    code.push_str(":\n");
                 }
                 Some(idx) => blocks[idx]
                     .items
@@ -4888,6 +4898,42 @@ mod asm_section_tests {
                 .iter()
                 .any(|it| matches!(it, AsmSectionItem::Code(t) if t == "wrmsr")),
             "instruction in a non-executable section is kept as Code: {:?}",
+            sec.items
+        );
+    }
+
+    #[test]
+    fn label_without_whitespace_peels_from_following_instruction() {
+        // GNU as terminates a label at the colon and requires no whitespace
+        // before the statement that follows, so `name:insn` in a named section
+        // is a label plus an instruction. Both must reach the block as separate
+        // items -- a `Label` and a single-instruction `Code` -- not one glued
+        // `Code("name:insn")` the arch encoder then rejects.
+        let src = ".pushsection .spinlock.text,\"ax\"\n\
+                   wrapper:push %rcx\n\
+                   pop %rcx\n\
+                   .popsection\n";
+        let (_code, blocks) = extract_asm_sections(src, false).unwrap().unwrap();
+        let sec = blocks.iter().find(|b| b.name == ".spinlock.text").unwrap();
+        assert!(
+            sec.items
+                .iter()
+                .any(|it| matches!(it, AsmSectionItem::Label(n) if n == "wrapper")),
+            "label peeled as its own item: {:?}",
+            sec.items
+        );
+        assert!(
+            sec.items
+                .iter()
+                .any(|it| matches!(it, AsmSectionItem::Code(t) if t == "push %rcx")),
+            "the instruction after the label is a single-instruction Code item: {:?}",
+            sec.items
+        );
+        assert!(
+            !sec.items
+                .iter()
+                .any(|it| matches!(it, AsmSectionItem::Code(t) if t.contains(':'))),
+            "no Code item retains the label colon: {:?}",
             sec.items
         );
     }

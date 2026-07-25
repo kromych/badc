@@ -654,6 +654,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("break_continue.c", 4),
     ("for_loop.c", 10),
     ("for_init_stmt_expr_nested_stmt.c", 6),
+    ("stmt_expr_goto_label_value.c", 0),
     ("layout_bottom_test_loop.c", 45),
     ("layout_nested_loops.c", 27),
     ("layout_goto_block_addr.c", 16),

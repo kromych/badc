@@ -858,6 +858,14 @@ fn stmt_expr() {
 }
 
 #[test]
+fn stmt_expr_goto_label_value() {
+    // A labeled tail `({ ... goto out; ... out: v; })` supplies the
+    // construct's value and type on every path into the label -- the
+    // find-next-bit macro shape.
+    assert_eq!(run_fixture("stmt_expr_goto_label_value.c"), 0);
+}
+
+#[test]
 fn stmt_expr_pointer_arith_arrow() {
     // A statement expression ending in pointer arithmetic keeps the pointer
     // result type (C99 6.5.6p8), so `({ ...; p - 1; })->field` resolves the

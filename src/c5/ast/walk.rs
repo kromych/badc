@@ -2708,10 +2708,14 @@ impl<'a> Walker<'a> {
     /// Lower a GCC statement expression `({ ... })`. Walks the
     /// block items exactly as `Stmt::Compound` does -- new-block on
     /// a closed predecessor, decls through `walk_decl` -- but keeps
-    /// the value of the last expression-statement (GCC: the value
-    /// of the whole construct). `block` is the enclosed compound,
-    /// or the bare statement for a single-item block. Falls back to
-    /// an immediate 0 when no expression-statement is present.
+    /// the value of the final expression-statement (GCC: the value
+    /// of the whole construct; a non-expression tail makes it void,
+    /// lowered as an immediate 0). Labels wrapping the final
+    /// statement are entered before it is evaluated, so the value
+    /// is computed in the label's join block and is defined on
+    /// every arriving path -- fall-through and any `goto` into the
+    /// label. `block` is the enclosed compound, or the bare
+    /// statement for a single-item block.
     fn walk_stmt_expr(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
@@ -2722,16 +2726,32 @@ impl<'a> Walker<'a> {
             _ => alloc::vec![super::BlockItem::Stmt(block)],
         };
         let mut result: Option<super::super::ir::ValueId> = None;
-        for item in items {
+        let n = items.len();
+        for (i, item) in items.into_iter().enumerate() {
             if !b.is_block_open() {
                 let dead = b.new_block();
                 b.switch_to(dead);
             }
             match item {
-                super::BlockItem::Stmt(s) => {
+                super::BlockItem::Stmt(mut s) => {
+                    let last = i + 1 == n;
+                    if last {
+                        while let Stmt::Labeled { label, body } = self.ast.stmt(s) {
+                            let (label, body) = (*label, *body);
+                            let label_blk = self.block_for_label(b, label);
+                            if b.is_block_open() {
+                                b.jmp(label_blk);
+                            }
+                            b.switch_to(label_blk);
+                            s = body;
+                        }
+                    }
                     if let Stmt::Expr(e) = self.ast.stmt(s) {
                         let e = *e;
-                        result = Some(self.walk_expr_rvalue(b, e)?);
+                        let v = self.walk_expr_rvalue(b, e)?;
+                        if last {
+                            result = Some(v);
+                        }
                     } else {
                         let _ = self.walk_stmt(b, s)?;
                     }

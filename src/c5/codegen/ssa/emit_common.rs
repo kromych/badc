@@ -2733,6 +2733,206 @@ pub(crate) fn asm_operand_data_target(
     })
 }
 
+/// Load width / signedness of an integer [`LoadKind`]; `None` for the FP kinds.
+fn load_int_kind(kind: crate::c5::ir::LoadKind) -> Option<(u8, bool)> {
+    use crate::c5::ir::LoadKind as K;
+    Some(match kind {
+        K::I8 => (1, true),
+        K::U8 => (1, false),
+        K::I16 => (2, true),
+        K::U16 => (2, false),
+        K::I32 => (4, true),
+        K::U32 => (4, false),
+        K::I64 => (8, true),
+        K::F32 | K::F64 => return None,
+    })
+}
+
+/// `c` truncated to `width` bytes, then sign- or zero-extended to 64 bits.
+fn extend_to(c: i64, width: u8, signed: bool) -> i64 {
+    if width >= 8 {
+        return c;
+    }
+    let bits = width as u32 * 8;
+    let m = (c as u64) & ((1u64 << bits) - 1);
+    if signed && (m >> (bits - 1)) & 1 == 1 {
+        (m | !((1u64 << bits) - 1)) as i64
+    } else {
+        m as i64
+    }
+}
+
+/// Recover the constant of an `i`-class inline-asm operand that survived as a
+/// load of a constant local. C99 6.5p6 requires an `"i"` operand to be an
+/// integer constant expression; a function opted out of slot promotion (a
+/// computed goto leaves `mem2reg` unable to number the CFG, so it promotes
+/// nothing) keeps that constant as a `StoreLocal`(constant) + `LoadLocal` pair,
+/// which GNU as still folds. Recover it through the load and any width
+/// extension. Returns `None` for a genuinely non-constant operand (rejected as
+/// GNU as does).
+pub(crate) fn asm_operand_local_const(func: &crate::c5::ir::FunctionSsa, arg: u32) -> Option<i64> {
+    asm_operand_const_rec(func, arg, 0)
+}
+
+fn asm_operand_const_rec(func: &crate::c5::ir::FunctionSsa, arg: u32, depth: u32) -> Option<i64> {
+    use crate::c5::ir::{Inst, StoreKind};
+    if depth > 8 {
+        return None;
+    }
+    match func.insts.get(arg as usize)? {
+        Inst::Imm(v) => Some(*v),
+        Inst::Extend { value, kind } => {
+            let (w, signed) = load_int_kind(*kind)?;
+            Some(extend_to(
+                asm_operand_const_rec(func, *value, depth + 1)?,
+                w,
+                signed,
+            ))
+        }
+        &Inst::LoadLocal {
+            off,
+            kind,
+            volatile: false,
+        } => {
+            // Reaching-definition search backward over the CFG. Every path from
+            // the load must reach a store of the same constant of the load's
+            // width before any invalidator, so the value read is that constant.
+            // A frame-packed slot (reused for a disjoint-lifetime, address-taken
+            // variable) is handled correctly because the reaching store, not the
+            // whole slot, decides the value; a dead `do {} while (0)` back edge
+            // is followed through and finds no further store. Invalidators are a
+            // write that may alias the slot once its address has escaped (a
+            // call, a memory-clobbering asm, an atomic, a pointer store), a
+            // re-address, or a volatile access. Each block is scanned once (the
+            // load's own block first over its prefix, then in full if a back
+            // edge re-enters it).
+            let (lw, signed) = load_int_kind(kind)?;
+            let preds = super::mem2reg::predecessors(func);
+            // Blocks reachable from the entry: a dead predecessor (an
+            // eliminated `do {} while (0)` latch is one) never executes, so its
+            // edge carries no runtime value and must not be searched.
+            let reachable = {
+                let mut seen = alloc::vec![false; func.blocks.len()];
+                let mut stack = alloc::vec![0usize];
+                seen.get_mut(0).map(|s| *s = true);
+                while let Some(b) = stack.pop() {
+                    for s in super::mem2reg::successors(
+                        &func.blocks[b].terminator,
+                        &func.computed_goto_targets,
+                        &func.jump_tables,
+                    ) {
+                        if !core::mem::replace(&mut seen[s as usize], true) {
+                            stack.push(s as usize);
+                        }
+                    }
+                }
+                seen
+            };
+            let lb = func
+                .blocks
+                .iter()
+                .position(|b| b.inst_range.contains(&arg))?;
+            let mut result: Option<i64> = None;
+            let mut visited = alloc::vec![false; func.blocks.len()];
+            let mut work: alloc::vec::Vec<(usize, u32)> = alloc::vec![(lb, arg)];
+            let mut first = true;
+            while let Some((b, upper)) = work.pop() {
+                if !first {
+                    if visited[b] {
+                        continue;
+                    }
+                    visited[b] = true;
+                }
+                first = false;
+                let start = func.blocks[b].inst_range.start;
+                let mut i = upper;
+                let mut found = false;
+                while i > start {
+                    i -= 1;
+                    match &func.insts[i as usize] {
+                        Inst::StoreLocal {
+                            off: o,
+                            value,
+                            kind: sk,
+                            volatile,
+                        } if *o == off => {
+                            if *volatile {
+                                return None;
+                            }
+                            let sw = match sk {
+                                StoreKind::I8 => 1u8,
+                                StoreKind::I16 => 2,
+                                StoreKind::I32 => 4,
+                                StoreKind::I64 => 8,
+                                StoreKind::F32 | StoreKind::F64 => return None,
+                            };
+                            if sw != lw {
+                                return None;
+                            }
+                            let c = extend_to(
+                                asm_operand_const_rec(func, *value, depth + 1)?,
+                                lw,
+                                signed,
+                            );
+                            match result {
+                                None => result = Some(c),
+                                Some(p) if p == c => {}
+                                _ => return None,
+                            }
+                            found = true;
+                            break;
+                        }
+                        Inst::LocalAddr(o) if *o == off => return None,
+                        Inst::LoadLocal {
+                            off: o,
+                            volatile: true,
+                            ..
+                        } if *o == off => return None,
+                        bar @ (Inst::InlineAsm { .. }
+                        | Inst::Call { .. }
+                        | Inst::CallExt { .. }
+                        | Inst::CallIndirect { .. }
+                        | Inst::Intrinsic { .. }
+                        | Inst::AtomicRmw { .. }
+                        | Inst::AtomicCas { .. }
+                        | Inst::Store { .. }
+                        | Inst::StoreIndexed { .. }
+                        | Inst::SegStore { .. }
+                        | Inst::Mcpy { .. }) => {
+                            // An asm that neither clobbers memory nor writes an
+                            // output operand cannot reach the escaped slot.
+                            if let Inst::InlineAsm { asm, .. } = bar
+                                && !asm.clobber_memory
+                                && !asm.operands.iter().any(|o| o.is_output)
+                            {
+                                continue;
+                            }
+                            return None;
+                        }
+                        _ => {}
+                    }
+                }
+                if found {
+                    continue;
+                }
+                let live: alloc::vec::Vec<crate::c5::ir::BlockId> = preds[b]
+                    .iter()
+                    .copied()
+                    .filter(|&p| reachable[p as usize])
+                    .collect();
+                if live.is_empty() {
+                    return None;
+                }
+                for p in live {
+                    work.push((p as usize, func.blocks[p as usize].inst_range.end));
+                }
+            }
+            result
+        }
+        _ => None,
+    }
+}
+
 /// Fold a link-time data-address expression to its base `ImmData` value-id and
 /// the constant byte offset added to it, walking a chain of constant `Add`s
 /// (`&global`, `&global.field`, `&global.field[const]`). Returns `None` for a

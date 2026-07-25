@@ -6726,9 +6726,12 @@ fn emit_inline_asm(
     // `.if`) before section extraction, substituting each register operand to
     // its assigned AT&T name so the macro's register-name comparisons resolve.
     let const_of = |idx: u8| -> Option<i64> {
-        match func.insts.get(*args.get(idx as usize)? as usize) {
+        let arg = *args.get(idx as usize)?;
+        match func.insts.get(arg as usize) {
             Some(Inst::Imm(v)) => Some(*v),
-            _ => None,
+            // An unpromoted function (a computed goto opts out of mem2reg)
+            // leaves an `"i"` constant operand a load of a constant local.
+            _ => super::ssa::emit_common::asm_operand_local_const(func, arg),
         }
     };
     let gas_subst = |tok: &str| -> Option<alloc::string::String> {
@@ -6921,9 +6924,12 @@ fn emit_inline_asm(
     let mut goto_sites: alloc::vec::Vec<(usize, usize, usize)> = alloc::vec::Vec::new();
     // The constant value of an `i`-class operand reference, if any.
     let const_of = |idx: u8| -> Option<i64> {
-        match func.insts.get(*args.get(idx as usize)? as usize) {
+        let arg = *args.get(idx as usize)?;
+        match func.insts.get(arg as usize) {
             Some(Inst::Imm(v)) => Some(*v),
-            _ => None,
+            // An unpromoted function (a computed goto opts out of mem2reg)
+            // leaves an `"i"` constant operand a load of a constant local.
+            _ => super::ssa::emit_common::asm_operand_local_const(func, arg),
         }
     };
     // Section-label offsets, so a `.skip` in the main stream can size its

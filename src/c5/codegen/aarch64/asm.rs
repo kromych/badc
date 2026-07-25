@@ -668,9 +668,13 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
         });
     }
     let off = if parts.len() == 2 {
-        parts[1]
+        // The offset after `#` is a GNU as constant expression, not just a
+        // literal: `[xN, #4 * 0]` folds to 0. Operand references do not appear
+        // in an offset, so the resolver yields None.
+        let expr = parts[1]
             .strip_prefix('#')
-            .and_then(parse_int)
+            .ok_or_else(|| format!("inline asm: bad memory offset `{}`", parts[1]))?;
+        super::super::ssa::emit_common::eval_const_expr_ops(expr.trim(), &|_| None)
             .ok_or_else(|| format!("inline asm: bad memory offset `{}`", parts[1]))?
     } else {
         0

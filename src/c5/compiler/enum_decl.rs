@@ -4,10 +4,11 @@
 //! `Token::Num` symbol so subsequent references (in expressions, in
 //! array dimensions via `parse_constant_int`, etc.) resolve to the
 //! enumerated value. A tagged definition also records an `EnumDef`
-//! carrying the underlying integer type -- `int` normally, a narrower
-//! type for `__attribute__((packed))` -- so a later bare `enum Tag`
-//! reference resolves the same size. Anonymous enums skip registration;
-//! their constants stay reachable as int-typed `Token::Num` symbols.
+//! carrying the underlying integer type -- `int` when every value fits,
+//! wider / unsigned otherwise, a narrower type for
+//! `__attribute__((packed))` -- so a later bare `enum Tag` reference
+//! resolves the same size. Anonymous enums skip registration; their
+//! constants stay reachable as `Token::Num` symbols typed by the range.
 //!
 //! Lives next to `compiler/mod.rs` because the cluster is
 //! self-contained and the pair (`parse_enum_decl` -> `parse_enum_body`)
@@ -26,9 +27,29 @@ use super::{Compiler, EnumDef};
 /// name/value pairs the caller records for DWARF.
 type EnumBody = (i64, i64, alloc::vec::Vec<(String, i64)>);
 
+/// The integer type compatible with an enum whose values span
+/// `[min, max]`. C99 6.7.2.2p4 leaves the choice to the
+/// implementation; GCC picks the first of `int`, `unsigned int`,
+/// then a 64-bit type able to represent every value, unsigned when
+/// no enumerator is negative. Enumerator constants outside `int`'s
+/// range are a GCC extension typed the same way, so this also
+/// types the constants of such an enum.
+fn enum_compatible_ty(min: i64, max: i64) -> i64 {
+    if min >= i32::MIN as i64 && max <= i32::MAX as i64 {
+        Ty::Int as i64
+    } else if min >= 0 && max <= u32::MAX as i64 {
+        Ty::Int as i64 | UNSIGNED_BIT
+    } else if min >= 0 {
+        Ty::LongLong as i64 | UNSIGNED_BIT
+    } else {
+        Ty::LongLong as i64
+    }
+}
+
 impl Compiler {
     /// Parse an `enum` type reference / definition and return its underlying
-    /// integer type. A plain enum is `int` (C99 6.7.2.2p4); an
+    /// integer type. A plain enum takes `enum_compatible_ty` (C99
+    /// 6.7.2.2p4 leaves the choice open; `int` when every value fits); an
     /// `enum __attribute__((packed))` (per-enum `-fshort-enums`) uses the
     /// smallest integer type holding its enumerators, which changes the
     /// layout of any struct that embeds it, so the size is honored here.
@@ -60,7 +81,7 @@ impl Compiler {
             let underlying = if packed {
                 Self::packed_enum_underlying_ty(min, max)
             } else {
-                Ty::Int as i64
+                enum_compatible_ty(min, max)
             };
             if !tag_name.is_empty() && !captured.is_empty() {
                 self.enums.push(EnumDef {
@@ -116,6 +137,7 @@ impl Compiler {
         self.next()?; // consume `{`
         let mut i: i64 = 0;
         let mut captured: alloc::vec::Vec<(String, i64)> = alloc::vec::Vec::new();
+        let mut sym_indexes: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
         while self.lex.tk != '}' {
             if self.lex.tk != Token::Id {
                 return Err(self.compile_err("bad enum identifier"));
@@ -133,9 +155,13 @@ impl Compiler {
                 i = self.parse_constant_int()?;
             }
             self.symbols[idx].class = Token::Num as i64;
-            self.symbols[idx].type_ = Ty::Int as i64;
+            // During the body the constant carries its value's own type
+            // so a reference from a later enumerator converts correctly;
+            // the whole list is restamped below once the range is known.
+            self.symbols[idx].type_ = enum_compatible_ty(i, i);
             self.symbols[idx].val = i;
             captured.push((name, i));
+            sym_indexes.push(idx);
             i += 1;
             self.accept(',')?;
         }
@@ -144,6 +170,13 @@ impl Compiler {
         // caller records the resulting EnumDef once packedness is known.
         let min = captured.iter().map(|&(_, v)| v).min().unwrap_or(0);
         let max = captured.iter().map(|&(_, v)| v).max().unwrap_or(0);
+        // On completion every constant takes the type compatible with the
+        // whole value range (GCC; C23 6.7.2.2 codified it). `packed`
+        // narrows only the enum type, never the constants.
+        let compatible = enum_compatible_ty(min, max);
+        for &idx in &sym_indexes {
+            self.symbols[idx].type_ = compatible;
+        }
         Ok((min, max, captured))
     }
 }

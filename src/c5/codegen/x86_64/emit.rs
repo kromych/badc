@@ -6876,6 +6876,12 @@ fn emit_inline_asm(
             return false;
         }
     };
+    if let Some((_, blocks)) = &extracted
+        && let Err(m) = super::ssa::emit_common::reject_unit_symbol_items(blocks)
+    {
+        bail_msg(&m);
+        return false;
+    }
     // Encode any replacement instructions in an executable section
     // (`.altinstr_replacement,"ax"`) to bytes and relocations before layout. A
     // `%lK` goto branch resolves through the enclosing `asm goto` row to its

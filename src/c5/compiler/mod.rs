@@ -1163,6 +1163,13 @@ pub struct Compiler {
     /// directive conventions.
     pub(super) file_asm: Vec<String>,
 
+    /// `.weak` symbol names from file-scope asm, bound STB_WEAK by the
+    /// object writer wherever the name surfaces.
+    pub(super) asm_weak_names: Vec<String>,
+    /// `.set name, target` symbol aliases from file-scope asm, merged
+    /// onto `Program::function_aliases`.
+    pub(super) asm_sym_sets: Vec<(String, String)>,
+
     /// gcc `-H`-shape include trace produced by the preprocessor when
     /// `with_full_options_and_label_with_trace(.., show_includes =
     /// true)` was used. Empty otherwise. The CLI flushes this list
@@ -1712,6 +1719,8 @@ impl Compiler {
             enums: Vec::new(),
             warnings: pp_warnings,
             file_asm: Vec::new(),
+            asm_weak_names: Vec::new(),
+            asm_sym_sets: Vec::new(),
             include_trace: pp_include_trace,
             pp_entrypoint,
             pp_subsystem,
@@ -2073,9 +2082,17 @@ impl Compiler {
         };
         let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
         let exports = self.resolve_exports()?;
+        // `.set name, target` aliases from file-scope asm; `.weak name` in
+        // the unit selects the weak binding (either order, either statement).
+        let mut function_aliases = self.function_aliases;
+        for (name, target) in self.asm_sym_sets {
+            let weak = self.asm_weak_names.contains(&name);
+            function_aliases.push(crate::c5::program::FunctionAlias { name, target, weak });
+        }
         Ok(Program {
             data: self.data,
             file_asm: self.file_asm,
+            asm_weak_names: self.asm_weak_names,
             data_align: self.data_align,
             data_object_starts: self.data_object_starts,
             entry_pc,
@@ -2128,7 +2145,7 @@ impl Compiler {
             user_ssa_funcs: Vec::new(),
             extern_function_imports: extern_imports,
             init_funcs: self.init_funcs,
-            function_aliases: self.function_aliases,
+            function_aliases,
         })
     }
 }

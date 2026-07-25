@@ -2905,6 +2905,10 @@ fn emit_inline_asm_aarch64(
         Some((c, b)) => (c.as_str(), b.as_slice()),
         None => (text, &[][..]),
     };
+    if let Err(m) = super::ssa::emit_common::reject_unit_symbol_items(section_blocks) {
+        bail_msg(&m);
+        return false;
+    }
     // Expand `.rept N ... .endr` in the main stream to straight-line text, as
     // the deferred-region path does: a standalone padding block (`.rept 8;
     // nop; .endr`) otherwise reaches the instruction parse unexpanded.

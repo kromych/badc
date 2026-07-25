@@ -927,8 +927,9 @@ pub(super) fn write_relocatable(
             .map(|s| (s.val as usize, s.linkage))
             .collect()
     };
-    // `__attribute__((weak))` symbols bind STB_WEAK wherever the name
-    // surfaces: as a definition or as an UNDEF reference.
+    // `__attribute__((weak))` symbols and file-scope asm `.weak` names bind
+    // STB_WEAK wherever the name surfaces: as a definition or as an UNDEF
+    // reference.
     let weak_names: alloc::collections::BTreeSet<&str> = {
         use crate::c5::token::Token;
         program
@@ -940,6 +941,7 @@ pub(super) fn write_relocatable(
                     && !s.name.is_empty()
             })
             .map(|s| s.name.as_str())
+            .chain(program.asm_weak_names.iter().map(|s| s.as_str()))
             .collect()
     };
     let bind_for = |name: &str| -> u8 {
@@ -1147,6 +1149,22 @@ pub(super) fn write_relocatable(
             }
         }
     }
+    // A `.weak` name that surfaces nowhere else still gets a weak undefined
+    // entry, as GNU as emits one for a `.weak` with no definition.
+    let asm_weak_undef: Vec<&str> = program
+        .asm_weak_names
+        .iter()
+        .map(|s| s.as_str())
+        .filter(|&n| {
+            !defined_fn_names.contains(n)
+                && !program.function_aliases.iter().any(|a| a.name == n)
+                && !defined_data_by_name.contains_key(n)
+                && !asm_defined_labels.contains(n)
+                && !user_extern_names.contains(&n)
+                && !user_extern_data_names.contains(&n)
+                && !asm_extern_names.contains(&n)
+        })
+        .collect();
 
     // Rebuild strtab now that all names are known: file
     // basename + function names + libc-import symbol names +
@@ -1192,6 +1210,10 @@ pub(super) fn write_relocatable(
     }
     let asm_extern_names_start = all_names.len();
     for name in &asm_extern_names {
+        all_names.push(*name);
+    }
+    let asm_weak_undef_start = all_names.len();
+    for name in &asm_weak_undef {
         all_names.push(*name);
     }
     // Standard TLS symbols + local-exec relocations are the ELF interop
@@ -1243,9 +1265,11 @@ pub(super) fn write_relocatable(
         shndx: u16,
         value: u64,
         global: bool,
+        weak: bool,
         st_type: u8,
         st_size: u64,
     }
+    let weak_names_ref = &weak_names;
     let asm_labels: Vec<AsmLabelSym> = asm_placements
         .iter()
         .zip(build.asm_sections.iter())
@@ -1256,6 +1280,9 @@ pub(super) fn write_relocatable(
                 shndx,
                 value: base + l.offset as u64,
                 global: l.global,
+                // `.weak` in the defining statement, or a file-scope `.weak`
+                // in another statement of the unit.
+                weak: l.weak || weak_names_ref.contains(l.name.as_str()),
                 st_type: match l.sym_type {
                     AsmSymType::Func => STT_FUNC,
                     AsmSymType::Object => STT_OBJECT,
@@ -1345,7 +1372,7 @@ pub(super) fn write_relocatable(
     }
     // Local inline-asm section labels, still inside the LOCAL block.
     for (j, l) in asm_labels.iter().enumerate() {
-        if l.global {
+        if l.global || l.weak {
             continue;
         }
         asm_label_symidx.insert(l.name, symbols.len() as u32);
@@ -1359,15 +1386,15 @@ pub(super) fn write_relocatable(
         });
     }
     let first_global = symbols.len() as u32;
-    // Global (`.globl`) inline-asm section labels.
+    // Global (`.globl`) and weak (`.weak`) inline-asm section labels.
     for (j, l) in asm_labels.iter().enumerate() {
-        if !l.global {
+        if !(l.global || l.weak) {
             continue;
         }
         asm_label_symidx.insert(l.name, symbols.len() as u32);
         symbols.push(Elf64Sym {
             st_name: name_offs[asm_label_names_start + j],
-            st_info: pack_sym_info(STB_GLOBAL, l.st_type),
+            st_info: pack_sym_info(if l.weak { STB_WEAK } else { STB_GLOBAL }, l.st_type),
             st_shndx: l.shndx,
             st_value: l.value,
             st_size: l.st_size,
@@ -1517,6 +1544,16 @@ pub(super) fn write_relocatable(
         symbols.push(Elf64Sym {
             st_name: name_offs[asm_extern_names_start + i],
             st_info: pack_sym_info(bind_for(name), STT_NOTYPE),
+            st_shndx: SHN_UNDEF,
+            ..Default::default()
+        });
+    }
+
+    // Weak undefined entries for `.weak` names that surface nowhere else.
+    for (i, _name) in asm_weak_undef.iter().enumerate() {
+        symbols.push(Elf64Sym {
+            st_name: name_offs[asm_weak_undef_start + i],
+            st_info: pack_sym_info(STB_WEAK, STT_NOTYPE),
             st_shndx: SHN_UNDEF,
             ..Default::default()
         });
@@ -3072,6 +3109,7 @@ mod tests {
         Program {
             data: Vec::new(),
             file_asm: Vec::new(),
+            asm_weak_names: Vec::new(),
             data_object_starts: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),

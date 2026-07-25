@@ -143,6 +143,12 @@ pub struct Program {
     /// under the emit target's directive conventions; the VM ignores
     /// them (the sections are not loaded).
     pub file_asm: Vec<String>,
+    /// `.weak` symbol names from file-scope asm. The object writer
+    /// binds the name STB_WEAK wherever it surfaces -- a definition
+    /// (function, data, asm-section label, alias) or an undefined
+    /// reference -- and emits a weak undefined entry for a name that
+    /// surfaces nowhere else, as GNU as does.
+    pub asm_weak_names: Vec<String>,
     /// Base alignment `data` requires in the image, at least 8;
     /// raised to 16 when a file-scope object carries `_Alignas(16)`
     /// (or the attribute equivalents). The native writers place the

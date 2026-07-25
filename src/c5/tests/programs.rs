@@ -1381,6 +1381,14 @@ fn flexible_array_member() {
 }
 
 #[test]
+fn flex_2d_member_index() {
+    // A multi-dimensional flexible array member (`T v[][M]`) scales the
+    // outer subscript by the inner row size; rows decay and keep their
+    // array type under sizeof.
+    assert_eq!(run_fixture("flex_2d_member_index.c"), 0);
+}
+
+#[test]
 fn flex_array_member_static_init() {
     // A file-scope object initializing a flexible array member with
     // trailing elements (C99 6.7.2.1p18 GCC/clang extension) must place

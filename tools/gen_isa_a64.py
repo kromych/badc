@@ -121,10 +121,13 @@ EXCLUDED_ROWS = {
     'subg Xd|SP, Xn|SP, #imm1, #imm2',
 }
 
-# Assembler aliases the instruction database does not carry as rows.
+# Forms the instruction database does not carry as rows.
 # `bic (immediate)` assembles as `and Rd, Rn, #~imm`; the LogicalImmNot field
 # encodes the complement at the operand width. `bics (immediate)` is not
-# accepted by GNU as, so only `bic` is added. Keyed as the catalogue is:
+# accepted by GNU as, so only `bic` is added.
+# `ldxp` is the non-acquire load-exclusive pair, identical to the database's
+# `ldaxp` with the acquire `o0` bit (15) cleared; it is the load half of the
+# pre-LSE cmpxchg128 loop. Keyed as the catalogue is:
 # (mnemonic, ops-tuple) -> (base, fields, source-comment).
 EXTRA_FORMS = {
     ('bic', ('W', 'W', 'Imm')): (0x12000000, [
@@ -133,6 +136,12 @@ EXTRA_FORMS = {
     ('bic', ('X', 'X', 'Imm')): (0x92000000, [
         'Reg { op: 0, shift: 0 }', 'Reg { op: 1, shift: 5 }',
         'LogicalImmNot { op: 2, is64: true }'], 'bic Xd, Xn, #imm'),
+    ('ldxp', ('W', 'W', 'Mem')): (0x887F0000, [
+        'Reg { op: 0, shift: 0 }', 'Reg { op: 1, shift: 10 }',
+        'Reg { op: 2, shift: 5 }'], 'ldxp Wd, Wd2, [Xn|SP]'),
+    ('ldxp', ('X', 'X', 'Mem')): (0xC87F0000, [
+        'Reg { op: 0, shift: 0 }', 'Reg { op: 1, shift: 10 }',
+        'Reg { op: 2, shift: 5 }'], 'ldxp Xd, Xd2, [Xn|SP]'),
 }
 
 # Bare op-string tokens whose bit width is not written inline (widths verified

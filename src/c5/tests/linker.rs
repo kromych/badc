@@ -288,6 +288,176 @@ int lse_fetch(int i, atomic_t *v) {
 }
 
 #[test]
+fn inline_asm_prfm_q_operand_in_gas_block_encodes_memory_form() {
+    // A `Q` (`+Q`) operand's `%N` reference is the whole memory reference
+    // `[xN]` through its address register. When the block carries a GNU-as
+    // directive (`.equ` here, as the arm64 uaccess/futex blocks do via their
+    // `.irp`/`.equ` register-number tables), the macro pass substitutes each
+    // `%N` before the instruction parse, so it must render a `Q` operand as
+    // `[xN]` -- otherwise `prfm` (and `ldxr`/`stlxr`) see a bare register and
+    // reject it. `prfm pstl1strm, [xN]` is 0xf9800011 (Rn aside), the prefetch
+    // op 17 in the Rt slot; byte-identical to GNU as.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+int futex_op(int oparg, unsigned int *uaddr) {
+    unsigned int loops = 128;
+    int ret, oldval, tmp;
+    __asm__ volatile(
+"	prfm	pstl1strm, %2\n"
+"1:	ldxr	%w1, %2\n"
+"	add	%w3, %w1, %w5\n"
+"2:	stlxr	%w0, %w3, %2\n"
+"	cbnz	%w0, 1b\n"
+"	.equ	.Lz, 0\n"
+        : "=&r" (ret), "=&r" (oldval), "+Q" (*uaddr), "=&r" (tmp), "+r" (loops)
+        : "r" (oparg), "Ir" (-11) : "memory");
+    return ret;
+}
+int main(void) { unsigned int u = 0; return futex_op(1, &u); }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let words: alloc::vec::Vec<u32> = obj
+        .text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // Rn (bits 9:5) is the allocator-chosen address register.
+    let rn_mask = !(0x1Fu32 << 5);
+    assert!(
+        words.iter().any(|&w| w & rn_mask == 0xf980_0011),
+        "prfm must take the `Q` operand as a memory reference `[xN]`: {words:08x?}"
+    );
+    // The same `Q` operand feeds `ldxr Wt, [xN]` (0x885f7c00, Rn/Rt aside).
+    let ldxr_mask = !((0x1Fu32 << 5) | 0x1F);
+    assert!(
+        words.iter().any(|&w| w & ldxr_mask == 0x885f_7c00),
+        "ldxr must take the `Q` operand as a memory reference `[xN]`: {words:08x?}"
+    );
+}
+
+#[test]
+fn inline_asm_ldr_q_operand_in_gas_block_encodes_memory_form() {
+    // The arm64 `load_unaligned_zeropad` / `read_word_at_a_time` blocks load a
+    // `Q` operand with `ldr %0, %2` and carry the `.irp`/`.equ` register-number
+    // table for their `__ex_table` entry, so the macro pass substitutes `%2`
+    // before the parse. Rendered as a bare register, `ldr Xt, xN` has no A64
+    // encoding; rendered as the `Q` memory reference `[xN]` it is the plain
+    // load 0xf9400000 (Rn/Rt aside), byte-identical to GNU as.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+unsigned long load_zeropad(const void *addr) {
+    unsigned long ret;
+    __asm__(
+"1:	ldr	%0, %2\n"
+"2:\n"
+"	.equ	.Lg, 0\n"
+        : "=&r" (ret) : "r" (addr), "Q" (*(unsigned long *)addr));
+    return ret;
+}
+int main(void) { unsigned long v = 0; return (int)load_zeropad(&v); }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let words: alloc::vec::Vec<u32> = obj
+        .text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // Rn (bits 9:5) and Rt (bits 4:0) are allocator-chosen.
+    let ldr_mask = !((0x1Fu32 << 5) | 0x1F);
+    assert!(
+        words.iter().any(|&w| w & ldr_mask == 0xf940_0000),
+        "ldr must take the `Q` operand as a memory reference `[xN]`: {words:08x?}"
+    );
+}
+
+#[test]
+fn inline_asm_memory_offset_folds_constant_expression() {
+    // A memory-operand offset is a GNU as constant expression, not just a
+    // literal: the arm64 `__const_memcpy_toio` blocks write `str %w, [%r, #4 *
+    // N]`. Fold the `#4 * N` offset -- `#4 * 3` scales to 12 in `str Wt, [Xn,
+    // #12]`, encoded 0xb9000c00 (Rn/Rt aside), byte-identical to GNU as.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+void store2(volatile unsigned *to, const unsigned *from) {
+    __asm__ volatile(
+"str %w0, [%2, #4 * 0]\n"
+"str %w1, [%2, #4 * 3]\n"
+        : : "rZ"(from[0]), "rZ"(from[1]), "r"(to));
+}
+int main(void) { unsigned t = 0, f[2] = {1, 2}; store2(&t, f); return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let words: alloc::vec::Vec<u32> = obj
+        .text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // Rn (bits 9:5) and Rt (bits 4:0) are allocator-chosen.
+    let str_mask = !((0x1Fu32 << 5) | 0x1F);
+    assert!(
+        words.iter().any(|&w| w & str_mask == 0xb900_0c00),
+        "`#4 * 3` must fold to the scaled imm 3 (offset 12): {words:08x?}"
+    );
+}
+
+#[test]
+fn inline_asm_rept_in_main_stream_expands_nop_padding() {
+    // A `.rept N ... .endr` in the main asm stream must expand to straight-line
+    // text, as the deferred ALTERNATIVE-replacement path already does. The
+    // arm64 Cavium errata read emits a standalone `.rept 8; nop; .endr` padding
+    // block; unexpanded, `.rept` reaches the instruction parse and has no
+    // encoding. Each `nop` is 0xd503201f, byte-identical to GNU as.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+void nop_pad(void) { __asm__ volatile(".rept 8\nnop\n.endr\n"); }
+int main(void) { nop_pad(); return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let nops = obj
+        .text
+        .chunks_exact(4)
+        .filter(|c| u32::from_le_bytes((*c).try_into().unwrap()) == 0xd503_201f)
+        .count();
+    assert!(nops >= 8, "`.rept 8` must expand to 8 nops: found {nops}");
+}
+
+#[test]
 fn inline_asm_dot_branch_target_encodes_zero_displacement() {
     // The device-load ordering barrier (`__io_ar`) branches to the location
     // counter `.`: `cbnz %0, .` is a never-taken control dependency whose

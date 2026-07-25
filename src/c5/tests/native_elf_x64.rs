@@ -377,6 +377,8 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_callee_saved_preserved.c", 0),
     ("inline_asm_goto.c", 42),
     ("inline_asm_reg_var.c", 42),
+    ("inline_asm_reg_var_inout.c", 42),
+    ("inline_asm_a64_bl_here.c", 42),
     ("inline_asm_sp_reg_var.c", 42),
     ("declarator_list_forms.c", 42),
     ("register_var_stack_pointer.c", 0),

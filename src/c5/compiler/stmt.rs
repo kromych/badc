@@ -1825,6 +1825,25 @@ impl Compiler {
         // `ImmData`; truncating here would leave that reference dangling. Only
         // the error paths roll the data back.
 
+        // Operands pinned to one fixed register may share it: an input
+        // and an output form a tied pair (the register carries the input
+        // value in and the output value out, like a matching constraint).
+        // Two outputs cannot both leave a value in one register.
+        let fixed_reg = |op: &AsmOperand| match op.constraint {
+            AsmConstraint::Fixed(r) | AsmConstraint::RegOrImm(r) => Some(r),
+            _ => None,
+        };
+        for (i, a) in operands.iter().enumerate() {
+            let Some(r) = fixed_reg(a).filter(|_| a.is_output) else {
+                continue;
+            };
+            if operands[..i]
+                .iter()
+                .any(|b| b.is_output && fixed_reg(b) == Some(r))
+            {
+                return Err(self.compile_err("inline asm: two outputs bound to one fixed register"));
+            }
+        }
         // Every register operand is preserved across the statement.
         for (op, _) in operands.iter().zip(operand_exprs.iter()) {
             // A `Bound` operand is deliberately excluded: preserving the

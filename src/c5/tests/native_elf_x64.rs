@@ -667,6 +667,8 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("slot_coalesce_alloca.c", 0),
     ("fn_arg_decay_then_deref_assign.c", 0),
     ("array_range_designator.c", 0),
+    ("runtime_range_designator.c", 0),
+    ("runtime_range_designator_struct.c", 0),
     ("bitfield_mixed_base_packing.c", 0),
     ("flex_array_member_sizing.c", 0),
     ("variadic_struct_return.c", 0),

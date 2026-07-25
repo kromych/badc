@@ -112,6 +112,10 @@ def classify(argv: list[str]) -> tuple[str, str | None]:
     if asm is not None and src is None:
         return ("asm", asm)
     if src is not None and "-c" in argv:
+        # 16/32-bit units (x86 realmode boot, 32-bit vdso) are their own
+        # target, not the kernel's: replaying them as 64-bit cannot succeed.
+        if "-m16" in argv or "-m32" in argv:
+            return ("compat", src)
         return ("c", src)
     return ("other", None)
 
@@ -126,6 +130,7 @@ def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
     configuration probed with badc can be replayed over a corpus captured from
     a reference build."""
     out: list[str] = []
+    opt: str | None = None
     i = 1
     while i < len(argv):
         a = argv[i]
@@ -147,10 +152,17 @@ def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
             i += 1
         elif a in DROP_ARG:
             i += 2
+        elif a.startswith("-O"):
+            opt = a  # last one wins, as with gcc
+            i += 1
         elif a.startswith("-"):
-            i += 1  # warnings, -O, -g, -std, -f*, -m*, -Wp,* -- no badc spelling
+            i += 1  # warnings, -g, -std, -f*, -m*, -Wp,* -- no badc spelling
         else:
             i += 1  # positional: the source (added by the caller) or an object
+    # Replay at the recorded optimization level: units the reference build
+    # compiled -O0 (e.g. ones that #error under __OPTIMIZE__) stay plain.
+    if opt is not None and opt != "-O0":
+        out.append("-O")
     return out
 
 
@@ -211,7 +223,7 @@ def main(argv: list[str] | None = None) -> int:
     target = TARGETS[args.arch]
 
     units: list[tuple[str, list[str]]] = []  # (source, gcc argv)
-    n_asm = n_other = 0
+    n_asm = n_compat = n_other = 0
     for root, dirs, files in os.walk(kdir):
         rel_top = os.path.relpath(root, kdir).split(os.sep, 1)[0]
         if rel_top in SKIP_DIRS:
@@ -229,6 +241,8 @@ def main(argv: list[str] | None = None) -> int:
                 units.append((src, cmd))
             elif kind == "asm":
                 n_asm += 1
+            elif kind == "compat":
+                n_compat += 1
             else:
                 n_other += 1
     units.sort()
@@ -241,7 +255,8 @@ def main(argv: list[str] | None = None) -> int:
     scratch = LINUX_DIR / ".work" / f"sweep-{args.arch}"
     scratch.mkdir(parents=True, exist_ok=True)
     log(f"badc={badc} target={target} units={len(units)} "
-        f"asm-skipped={n_asm} other-cmds={n_other} jobs={args.jobs}")
+        f"asm-skipped={n_asm} compat-skipped={n_compat} "
+        f"other-cmds={n_other} jobs={args.jobs}")
 
     pre = [f for p in args.pre_I for f in ("-I", str(p.resolve()))]
     pre += [f for p in args.pre_include for f in ("-include", str(p.resolve()))]
@@ -315,7 +330,8 @@ def main(argv: list[str] | None = None) -> int:
         f"- badc: `{badc}`  target: `{target}`",
         f"- C units: {len(units)}  pass: {n_ok}  fail: {n_fail}  "
         f"pass rate: {100.0 * n_ok / len(units):.1f}%",
-        f"- .S units skipped: {n_asm}  non-compile .cmd files: {n_other}",
+        f"- .S units skipped: {n_asm}  16/32-bit units skipped: {n_compat}  "
+        f"non-compile .cmd files: {n_other}",
         f"- config: {'badc-probed, autoconf.h `' + str(args.probed_autoconf)
                     + '` (force-include rewritten in ' + str(n_sub) + '/'
                     + str(len(units)) + ' units, search path overlay in all)'

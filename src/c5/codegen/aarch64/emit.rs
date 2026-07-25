@@ -2840,9 +2840,12 @@ fn emit_inline_asm_aarch64(
     };
     // The constant value of an `i`-class operand reference, if any.
     let const_of = |idx: u8| -> Option<i64> {
-        match func.insts.get(*args.get(idx as usize)? as usize) {
+        let arg = *args.get(idx as usize)?;
+        match func.insts.get(arg as usize) {
             Some(super::super::ir::Inst::Imm(v)) => Some(*v),
-            _ => None,
+            // An unpromoted function (a computed goto opts out of mem2reg)
+            // leaves an `"i"` constant operand a load of a constant local.
+            _ => super::ssa::emit_common::asm_operand_local_const(func, arg),
         }
     };
     let gas_subst = |tok: &str| -> Option<String> {

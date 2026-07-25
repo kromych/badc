@@ -621,6 +621,116 @@ int main(void){ do_vmsave(0); do_vmload(0); return 0; }
 }
 
 #[test]
+fn inline_asm_svm_invlpga_takes_implicit_rax_ecx_operands() {
+    // `invlpga` addresses through an implicit `rax` (address) and `ecx`
+    // (ASID); the kernel spells both out (`invlpga %1, %0` with `"a"(addr)`,
+    // `"c"(asid)`). GNU as encodes `invlpga %rax, %ecx` as `0F 01 DF`, both
+    // registers unnamed in the opcode.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+void do_invlpga(unsigned long addr, unsigned int asid){
+    __asm__ volatile("invlpga %1, %0" : : "c"(asid), "a"(addr) : "memory");
+}
+int main(void){ do_invlpga(0, 0); return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let text = &obj.text;
+    assert!(
+        text.windows(3).any(|w| w == [0x0F, 0x01, 0xDF]),
+        "invlpga must encode 0F 01 DF: {text:02x?}"
+    );
+}
+
+#[test]
+fn inline_asm_section_operand_constant_survives_unpromoted_function() {
+    // C99 6.5p6: an `"i"` operand is an integer constant expression. A computed
+    // goto opts the function out of slot promotion, so the constant reaches the
+    // section-data operand as a store + load of a local rather than an
+    // immediate; GNU as folds it. badc must recover the constant by the load's
+    // reaching definition and emit it, as the kernel's `WARN_ON` bug table
+    // (`.word %c<flags>`) requires. The `do {} while (0)` mirrors that macro's
+    // dead back edge, which the recovery follows through.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    // A distinctive constant, unlikely to occur by chance in the object.
+    let src = r#"
+int f(int x){
+    static void *tab[] = { &&a, &&b };
+    do {
+        __auto_type flags = 0x5AB3C1D2;
+        __asm__ volatile(".pushsection .test_bugs,\"a\"\n\t.long %c0\n\t.popsection\n"
+                         : : "i"(flags));
+    } while (0);
+    goto *tab[x];
+    a: return 1;
+    b: return 2;
+}
+int main(void){ return f(0); }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts)
+        .expect("emit must recover the constant `\"i\"` operand");
+    // The section holds `.long 0x5AB3C1D2`, little-endian.
+    assert!(
+        bytes.windows(4).any(|w| w == [0xD2, 0xC1, 0xB3, 0x5A]),
+        "the section-data `\"i\"` operand constant must be emitted"
+    );
+}
+
+#[test]
+fn inline_asm_more_than_eight_register_operands() {
+    // A block with more register operands than the eight caller-saved pool
+    // registers must still allocate: the callee-saved r12..r15 join the pool,
+    // saved and restored in the frame's asm scratch region. The kernel's IRQ
+    // stack-switch asm (`common_interrupt`) needs this. Eleven register
+    // operands (one output, ten inputs) force r12..r15 into use.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+long sum(long a,long b,long c,long d,long e,long f,long g,long h,long i,long j){
+    long out;
+    __asm__("xorq %0,%0\n\t addq %1,%0\n\t addq %2,%0\n\t addq %3,%0\n\t addq %4,%0\n\t"
+            "addq %5,%0\n\t addq %6,%0\n\t addq %7,%0\n\t addq %8,%0\n\t addq %9,%0\n\t addq %10,%0"
+        : "=&r"(out)
+        : "r"(a),"r"(b),"r"(c),"r"(d),"r"(e),"r"(f),"r"(g),"r"(h),"r"(i),"r"(j));
+    return out;
+}
+int main(void){ return (int)sum(1,2,3,4,5,6,7,8,9,10); }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts)
+        .expect("eleven register operands must allocate across r12..r15");
+    let text = parse_native_elf(&bytes).expect("parse ET_REL").text;
+    // A callee-saved high register is used as an operand, so its save/restore
+    // (`mov %r1x, disp(%rbp)` / the reverse) carries REX.WR (0x4C) or REX.WB.
+    assert!(
+        text.windows(2)
+            .any(|w| (w[0] == 0x4C || w[0] == 0x4D) && (w[1] == 0x89 || w[1] == 0x8B)),
+        "a high register save/restore must appear: {text:02x?}"
+    );
+}
+
+#[test]
 fn parenthesized_bitfield_lvalue_assigns_as_a_store() {
     // C99 6.5.1p5: a parenthesized lvalue is an lvalue. The member parser
     // selects a bitfield read vs write from the token after the member, so
@@ -660,6 +770,54 @@ fn parenthesized_bitfield_lvalue_assigns_as_a_store() {
     assert_eq!(
         paren, plain,
         "`(p->c) = v` must emit the same object as `p->c = v`"
+    );
+}
+
+#[test]
+fn parenthesized_bitfield_lvalue_post_inc_and_compound_assign() {
+    // C99 6.5.1p5 / 6.5.2.4 / 6.5.16.2: `(p->f)++` and `(p->f) OP= v` on a
+    // parenthesized bitfield lvalue must emit the same object as the
+    // unparenthesized forms. Parentheses hid the trailing `++` / `OP=` from the
+    // member parser, which committed to a read; the post-increment and compound-
+    // assignment paths recover the bitfield member from that read node.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let text_of = |src: &str| -> alloc::vec::Vec<u8> {
+        let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL").text
+    };
+    let decl = "struct s { unsigned int a:4, b:1, f:3, c:4; };\n";
+    let build = |body: &str| -> alloc::vec::Vec<u8> {
+        text_of(&alloc::format!(
+            "{decl}void op(struct s *p){{ {body} }}\nint main(void){{ return 0; }}\n"
+        ))
+    };
+    assert_eq!(
+        build("(p->f)++;"),
+        build("p->f++;"),
+        "`(p->f)++` must emit the same object as `p->f++`"
+    );
+    assert_eq!(
+        build("(p->f)--;"),
+        build("p->f--;"),
+        "`(p->f)--` must emit the same object as `p->f--`"
+    );
+    assert_eq!(
+        build("(p->f) += 2;"),
+        build("p->f += 2;"),
+        "`(p->f) += 2` must emit the same object as `p->f += 2`"
+    );
+    assert_eq!(
+        build("(p->f) |= 5;"),
+        build("p->f |= 5;"),
+        "`(p->f) |= 5` must emit the same object as `p->f |= 5`"
     );
 }
 

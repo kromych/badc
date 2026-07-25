@@ -6630,7 +6630,9 @@ fn encode_one_x86_section_insn(
             } => {
                 let size = mem_size(insn);
                 let index = base_reg(index).ok_or_else(|| {
-                    alloc::format!("inline asm: replacement `{text}` memory index is not a register")
+                    alloc::format!(
+                        "inline asm: replacement `{text}` memory index is not a register"
+                    )
                 })?;
                 if sym {
                     let name = insn.sym_target.clone().ok_or_else(|| {
@@ -6641,8 +6643,12 @@ fn encode_one_x86_section_insn(
                             "inline asm: replacement `{text}` has more than one memory operand"
                         ));
                     }
-                    sym_disp =
-                        Some((AsmSectionTarget::Symbol(name), disp as i64, concrete.len(), false));
+                    sym_disp = Some((
+                        AsmSectionTarget::Symbol(name),
+                        disp as i64,
+                        concrete.len(),
+                        false,
+                    ));
                     concrete.push(Concrete::IndexMem {
                         index,
                         scale,

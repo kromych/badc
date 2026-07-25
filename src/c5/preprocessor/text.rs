@@ -1,5 +1,4 @@
 use alloc::string::String;
-use alloc::string::ToString;
 
 /// Phase-3 comment removal: strip `/* ... */` block comments and
 /// `// ...` line comments from the entire source. Each comment is
@@ -73,68 +72,100 @@ pub(super) fn strip_c_comments(source: &str) -> String {
     out
 }
 
-/// Report whether `s` (a partially assembled logical line with its
-/// newlines already removed) ends inside an unterminated `/* */` block
-/// comment. String and character literals and `//` line comments are
-/// tracked so a `/*` appearing inside one of them does not count as a
-/// comment opener.
-pub(super) fn ends_in_open_block_comment(s: &str) -> bool {
-    let b = s.as_bytes();
-    let mut i = 0;
-    let mut in_str = false;
-    let mut in_char = false;
-    let mut in_block = false;
-    while i < b.len() {
-        let c = b[i];
-        if in_block {
-            if c == b'*' && b.get(i + 1) == Some(&b'/') {
-                in_block = false;
-                i += 2;
-                continue;
+/// Lexical context of a logical line at a given byte, used to decide
+/// whether it ends inside an open `/* */` block comment. `Line` is a
+/// `//` comment, which runs to the end of the assembled line.
+#[derive(Clone, Copy, Default, PartialEq)]
+enum ScanMode {
+    #[default]
+    Normal,
+    Str,
+    Char,
+    Block,
+    Line,
+}
+
+/// Incremental scan state for `unfold_line_continuations`. It advances
+/// byte by byte with no 2-byte lookahead, so the state carries cleanly
+/// across a physical-line join and the assembled buffer is scanned only
+/// once overall. `esc` is a pending backslash escape inside a literal;
+/// `slash` a half-seen top-level `/`; `star` a half-seen `*` inside a
+/// block comment. `scanned` is the buffer length already consumed.
+#[derive(Clone, Copy, Default)]
+struct LineScan {
+    mode: ScanMode,
+    esc: bool,
+    slash: bool,
+    star: bool,
+    scanned: usize,
+}
+
+impl LineScan {
+    /// Consume `joined[self.scanned..]`, advance the state, and report
+    /// whether the assembled line now ends inside an open block
+    /// comment. String and char literals and `//` line comments are
+    /// tracked so a `/*` inside one of them is not a comment opener.
+    fn ends_in_open_block_comment(&mut self, joined: &[u8]) -> bool {
+        let mut i = self.scanned;
+        while i < joined.len() {
+            let c = joined[i];
+            match self.mode {
+                ScanMode::Normal => {
+                    if self.slash {
+                        self.slash = false;
+                        match c {
+                            b'*' => {
+                                self.mode = ScanMode::Block;
+                                i += 1;
+                                continue;
+                            }
+                            b'/' => {
+                                self.mode = ScanMode::Line;
+                                i += 1;
+                                continue;
+                            }
+                            _ => {}
+                        }
+                    }
+                    match c {
+                        b'/' => self.slash = true,
+                        b'"' => self.mode = ScanMode::Str,
+                        b'\'' => self.mode = ScanMode::Char,
+                        _ => {}
+                    }
+                }
+                ScanMode::Str | ScanMode::Char => {
+                    let close = if self.mode == ScanMode::Str { b'"' } else { b'\'' };
+                    if self.esc {
+                        self.esc = false;
+                    } else if c == b'\\' {
+                        self.esc = true;
+                    } else if c == close {
+                        self.mode = ScanMode::Normal;
+                    }
+                }
+                ScanMode::Block => {
+                    if self.star {
+                        self.star = false;
+                        if c == b'/' {
+                            self.mode = ScanMode::Normal;
+                            i += 1;
+                            continue;
+                        }
+                    }
+                    if c == b'*' {
+                        self.star = true;
+                    }
+                }
+                // A `//` comment runs to the end of the assembled line,
+                // so nothing after it can leave a block comment open.
+                ScanMode::Line => break,
             }
             i += 1;
-            continue;
         }
-        if in_str {
-            if c == b'\\' {
-                i += 2;
-                continue;
-            }
-            if c == b'"' {
-                in_str = false;
-            }
-            i += 1;
-            continue;
-        }
-        if in_char {
-            if c == b'\\' {
-                i += 2;
-                continue;
-            }
-            if c == b'\'' {
-                in_char = false;
-            }
-            i += 1;
-            continue;
-        }
-        if c == b'/' && b.get(i + 1) == Some(&b'*') {
-            in_block = true;
-            i += 2;
-            continue;
-        }
-        if c == b'/' && b.get(i + 1) == Some(&b'/') {
-            // A line comment runs to the end of the assembled line, so
-            // nothing after it can leave a block comment open.
-            return false;
-        }
-        if c == b'"' {
-            in_str = true;
-        } else if c == b'\'' {
-            in_char = true;
-        }
-        i += 1;
+        self.scanned = i;
+        self.mode == ScanMode::Block
     }
-    in_block
 }
 
 /// Phase-2 line-continuation collapse: every line ending in `\\`
@@ -149,14 +180,17 @@ pub(super) fn ends_in_open_block_comment(s: &str) -> bool {
 /// in a `\\`-continued macro definition must not split the definition.
 pub(super) fn unfold_line_continuations(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
-    let mut iter = source.lines().peekable();
+    let mut iter = source.lines();
+    let mut joined = String::new();
     while let Some(line) = iter.next() {
-        let mut joined = line.to_string();
+        joined.clear();
+        joined.push_str(line);
         let mut padding = 0;
+        let mut scan = LineScan::default();
         loop {
             if joined.ends_with('\\') {
                 joined.pop();
-            } else if !ends_in_open_block_comment(&joined) {
+            } else if !scan.ends_in_open_block_comment(joined.as_bytes()) {
                 break;
             }
             padding += 1;

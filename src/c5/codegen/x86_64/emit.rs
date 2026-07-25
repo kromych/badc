@@ -6344,7 +6344,7 @@ fn encode_one_x86_section_insn(
     goto_block: &dyn Fn(u8) -> Option<u32>,
     refs: &SectionOperandRefs<'_>,
 ) -> Result<super::ssa::emit_common::AsmSectionItem, alloc::string::String> {
-    use super::super::ir::{AsmConstraint, AsmRegSize};
+    use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg};
     use super::asm::{AsmMemBase, AsmOpnd, Concrete, Mnemonic};
     use super::ssa::emit_common::{AsmSectionItem, AsmSectionReloc, AsmSectionTarget};
     let insns = super::asm::parse_template(text.as_bytes())
@@ -6500,15 +6500,48 @@ fn encode_one_x86_section_insn(
     // `sym(,%index,scale)`). The disp32 field is located by re-encoding. At
     // most one such operand per instruction.
     let mut sym_disp: Option<(AsmSectionTarget, i64, usize, bool)> = None;
+    // A `__seg_gs` / `__seg_fs` memory operand's segment override; a template
+    // `%%gs:` rides `insn.seg` instead, and the two never conflict.
+    let mut operand_seg: Option<u8> = None;
     for o in &insn.operands {
         match *o {
             AsmOpnd::Imm(v) => concrete.push(Concrete::Imm(v)),
             AsmOpnd::Reg { reg, size } => concrete.push(Concrete::Reg { reg, size }),
-            AsmOpnd::Ref { idx, size } => concrete.push(reg_of(idx, size).ok_or_else(|| {
-                alloc::format!(
-                    "inline asm: replacement `{text}` operand `%{idx}` is not a register or constant"
-                )
-            })?),
+            AsmOpnd::Ref { idx, size } => {
+                // A memory-constraint (`m`) operand holds its address in the
+                // assigned register; `%N` is the register-indirect reference
+                // `(%r)`, the same lowering the code stream uses (a `lea %N`
+                // then computes the address). Any other operand resolves to a
+                // register or an `i`-class constant.
+                let op = refs.operands.get(idx as usize);
+                let mem = matches!(op.map(|o| o.constraint), Some(AsmConstraint::Mem))
+                    .then(|| refs.op_reg.get(idx as usize).copied().flatten())
+                    .flatten();
+                match mem {
+                    Some(base) => {
+                        let width = op.map(|o| o.width).unwrap_or(8);
+                        let size = asm_mem_size(size, insn, refs.operands, refs.op_reg)
+                            .unwrap_or(AsmRegSize::from_width(width));
+                        operand_seg = match op.map(|o| o.seg) {
+                            Some(AsmSeg::Gs) => Some(0x65),
+                            Some(AsmSeg::Fs) => Some(0x64),
+                            _ => operand_seg,
+                        };
+                        concrete.push(Concrete::Mem {
+                            base,
+                            index: None,
+                            scale: 1,
+                            disp: 0,
+                            size,
+                        });
+                    }
+                    None => concrete.push(reg_of(idx, size).ok_or_else(|| {
+                        alloc::format!(
+                            "inline asm: replacement `{text}` operand `%{idx}` is not a register or constant"
+                        )
+                    })?),
+                }
+            }
             AsmOpnd::Mem {
                 base,
                 index,
@@ -6597,7 +6630,9 @@ fn encode_one_x86_section_insn(
             } => {
                 let size = mem_size(insn);
                 let index = base_reg(index).ok_or_else(|| {
-                    alloc::format!("inline asm: replacement `{text}` memory index is not a register")
+                    alloc::format!(
+                        "inline asm: replacement `{text}` memory index is not a register"
+                    )
                 })?;
                 if sym {
                     let name = insn.sym_target.clone().ok_or_else(|| {
@@ -6608,8 +6643,12 @@ fn encode_one_x86_section_insn(
                             "inline asm: replacement `{text}` has more than one memory operand"
                         ));
                     }
-                    sym_disp =
-                        Some((AsmSectionTarget::Symbol(name), disp as i64, concrete.len(), false));
+                    sym_disp = Some((
+                        AsmSectionTarget::Symbol(name),
+                        disp as i64,
+                        concrete.len(),
+                        false,
+                    ));
                     concrete.push(Concrete::IndexMem {
                         index,
                         scale,
@@ -6638,7 +6677,7 @@ fn encode_one_x86_section_insn(
     super::asm::encode(&mut body, insn.mnemonic, insn.suffix, &concrete)
         .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
     let mut bytes = alloc::vec::Vec::new();
-    if let Some(seg) = insn.seg {
+    if let Some(seg) = insn.seg.or(operand_seg) {
         bytes.push(seg);
     }
     let seg_len = bytes.len() as u32;

@@ -1318,6 +1318,10 @@ impl Compiler {
         // consumer, so clear here to keep the channel scoped to
         // this one base-type parse.
         self.pending.typedef_base_array_size = 0;
+        // Same for the type-alignment carrier: a typedef whose alias
+        // carries an `aligned(N)` type attribute seeds it below, scoped
+        // to this one base-type parse.
+        self.pending.type_align = 0;
         self.pending.typedef_fn_proto = None;
         self.pending.fn_ptr_param_types = None;
         // Leading modifier soup -- the order doesn't matter; we
@@ -1454,6 +1458,13 @@ impl Compiler {
                 self.pending.typedef_base_array_size = typedef_array;
                 self.pending.typedef_base_array_dims =
                     self.symbols[self.lex.curr_id_idx].array_dims.clone();
+            }
+            // Carry the typedef's explicit type alignment (GNU
+            // `aligned(N)` on the alias) so a struct field / object /
+            // `__alignof__` through it honors the requested boundary.
+            let typedef_align = self.symbols[self.lex.curr_id_idx].type_align;
+            if typedef_align > 0 {
+                self.pending.type_align = typedef_align;
             }
             self.next()?;
             aliased

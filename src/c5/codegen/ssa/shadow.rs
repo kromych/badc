@@ -607,13 +607,20 @@ pub(crate) fn compact_program_data(
                 .all(|&b| b == 0)
     };
 
+    // The packed layout invalidates the parse-recorded padding ranges;
+    // rebuild them from the gaps this pass itself creates.
+    let mut new_pad_ranges: Vec<(i64, i64)> = Vec::new();
     let mut new_base = alloc::vec![-1i64; n];
     let mut new_data: Vec<u8> = Vec::with_capacity(program.data.len());
     for i in 0..n {
         if live[i] && !is_bss(i) {
             let want = starts[i].rem_euclid(align);
+            let pad_start = new_data.len() as i64;
             while (new_data.len() as i64).rem_euclid(align) != want {
                 new_data.push(0);
+            }
+            if (new_data.len() as i64) > pad_start {
+                new_pad_ranges.push((pad_start, new_data.len() as i64));
             }
             new_base[i] = new_data.len() as i64;
             new_data.extend_from_slice(&program.data[starts[i] as usize..obj_end(i) as usize]);
@@ -627,8 +634,12 @@ pub(crate) fn compact_program_data(
     // object's bss-relative offset must carry the same alignment residue
     // as its `.data` offset, which only holds when the base is aligned.
     if (0..n).any(&is_bss) {
+        let pad_start = new_data.len() as i64;
         while (new_data.len() as i64).rem_euclid(align) != 0 {
             new_data.push(0);
+        }
+        if (new_data.len() as i64) > pad_start {
+            new_pad_ranges.push((pad_start, new_data.len() as i64));
         }
     }
     let bss_base = new_data.len() as i64;
@@ -636,18 +647,52 @@ pub(crate) fn compact_program_data(
     for i in 0..n {
         if is_bss(i) {
             let want = starts[i].rem_euclid(align);
+            let pad_start = bss_cursor;
             while bss_cursor.rem_euclid(align) != want {
                 bss_cursor += 1;
+            }
+            if bss_cursor > pad_start {
+                new_pad_ranges.push((pad_start, bss_cursor));
             }
             new_base[i] = bss_cursor;
             bss_cursor += obj_end(i) - starts[i];
         }
     }
     let bss_size = bss_cursor - bss_base;
+    // Parse-recorded padding inside a surviving interval moves with it
+    // (intervals are copied wholesale, so interior offsets shift by the
+    // interval's delta); padding in a dropped interval is gone. The
+    // above-8 alignment marks move the same way.
+    for &(lo, hi) in &program.data_pad_ranges {
+        if !(0..data_len).contains(&lo) || hi <= lo || hi > data_len {
+            continue;
+        }
+        let i = interval_of(lo);
+        if new_base[i] < 0 || hi > obj_end(i) {
+            continue;
+        }
+        let delta = new_base[i] - starts[i];
+        new_pad_ranges.push((lo + delta, hi + delta));
+    }
+    new_pad_ranges.sort_unstable();
+    let mut new_align_marks: Vec<(i64, i64)> = Vec::new();
+    for &(off, a) in &program.data_align_marks {
+        if !(0..data_len).contains(&off) {
+            continue;
+        }
+        let i = interval_of(off);
+        if new_base[i] < 0 {
+            continue;
+        }
+        new_align_marks.push((new_base[i] + (off - starts[i]), a));
+    }
+    new_align_marks.sort_unstable();
     let map = |off: i64| remap_data_off(off, &starts, &new_base, data_len);
 
     let mut out = program.clone();
     out.data = new_data;
+    out.data_pad_ranges = new_pad_ranges;
+    out.data_align_marks = new_align_marks;
     out.finished_functions
         .retain(|f| live_func_pcs.contains(&f.ent_pc));
     for sym in &mut out.symbols {

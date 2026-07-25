@@ -222,17 +222,41 @@ impl Compiler {
     /// otherwise start unaligned and `ldr x19, [x19]` would fault on
     /// macOS arm64.
     pub(super) fn align_data_to_8(&mut self) {
+        let start = self.data.len();
         while !self.data.len().is_multiple_of(8) {
             self.data.push(0);
         }
+        self.record_data_pad(start);
     }
 
     /// Pad `self.data` to `align` bytes -- the `_Alignas(16)` /
     /// `aligned(16)` placement for a file-scope object.
     pub(super) fn align_data_to(&mut self, align: usize) {
+        let start = self.data.len();
         while !self.data.len().is_multiple_of(align.max(8)) {
             self.data.push(0);
         }
+        self.record_data_pad(start);
+        if align > 8 {
+            self.data_align_marks
+                .push((self.data.len() as i64, align as i64));
+        }
+    }
+
+    /// Record `[start, data.len())` as alignment padding. Consecutive
+    /// pads merge so each range spans the full gap before an object.
+    fn record_data_pad(&mut self, start: usize) {
+        let end = self.data.len();
+        if end == start {
+            return;
+        }
+        if let Some(last) = self.data_pad_ranges.last_mut()
+            && last.1 == start as i64
+        {
+            last.1 = end as i64;
+            return;
+        }
+        self.data_pad_ranges.push((start as i64, end as i64));
     }
 
     /// True when the most recently emitted instruction is `Imm 0` --

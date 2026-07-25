@@ -394,6 +394,7 @@ impl Compiler {
                     core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty)),
                     type_align,
                 );
+                self.symbols[loc_idx].data_align = want_align.max(1) as i64;
                 if want_align > 8 {
                     self.align_data_to(want_align);
                     self.data_align = self.data_align.max(want_align);

@@ -4478,6 +4478,140 @@ fn section_attribute_places_symbols_in_named_sections() {
     assert_eq!(&bytes[cfg_off..cfg_off + 4], &35i32.to_le_bytes());
 }
 
+/// Section headers of an ET_REL image: `name -> (sh_size, sh_addralign)`.
+#[cfg(feature = "native-emit")]
+type ElfSectionMap = std::collections::BTreeMap<String, (u64, u64)>;
+/// Named symbols of an ET_REL image: `name -> (st_shndx, st_value)`.
+#[cfg(feature = "native-emit")]
+type ElfSymbolMap = std::collections::BTreeMap<String, (usize, u64)>;
+
+/// Section headers and object symbols of an ET_REL image, for the
+/// named-section layout tests below.
+#[cfg(feature = "native-emit")]
+fn elf_layout(bytes: &[u8]) -> (ElfSectionMap, ElfSymbolMap) {
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64le(0x28) as usize;
+    let shnum = u16le(0x3c) as usize;
+    let shstrndx = u16le(0x3e) as usize;
+    let shdr = |i: usize| shoff + i * 64;
+    let shstr_off = u64le(shdr(shstrndx) + 0x18) as usize;
+    let name_at = |off: usize| -> String {
+        let s = shstr_off + off;
+        let end = bytes[s..].iter().position(|&b| b == 0).unwrap() + s;
+        core::str::from_utf8(&bytes[s..end]).unwrap().to_string()
+    };
+    let mut sections = std::collections::BTreeMap::new();
+    let mut by_index: Vec<String> = Vec::with_capacity(shnum);
+    for i in 0..shnum {
+        let name = name_at(u32le(shdr(i)) as usize);
+        sections.insert(name.clone(), (u64le(shdr(i) + 0x20), u64le(shdr(i) + 0x30)));
+        by_index.push(name);
+    }
+    let symtab_i = by_index.iter().position(|n| n == ".symtab").unwrap();
+    let strtab_i = by_index.iter().position(|n| n == ".strtab").unwrap();
+    let sym_off = u64le(shdr(symtab_i) + 0x18) as usize;
+    let sym_n = (u64le(shdr(symtab_i) + 0x20) / 24) as usize;
+    let str_off = u64le(shdr(strtab_i) + 0x18) as usize;
+    let mut syms = std::collections::BTreeMap::new();
+    for s in 0..sym_n {
+        let o = sym_off + s * 24;
+        let start = str_off + u32le(o) as usize;
+        let end = bytes[start..].iter().position(|&b| b == 0).unwrap() + start;
+        let name = core::str::from_utf8(&bytes[start..end]).unwrap();
+        if !name.is_empty() {
+            syms.insert(name.to_string(), (u16le(o + 6) as usize, u64le(o + 8)));
+        }
+    }
+    (sections, syms)
+}
+
+#[cfg(feature = "native-emit")]
+fn emit_reloc_for(src: &str) -> alloc::vec::Vec<u8> {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        src.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit")
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn named_section_alignment_and_size_data_only_unit() {
+    // A unit with no functions (the data-table TU shape): each named
+    // section's sh_addralign is its members' widest alignment --
+    // explicit `aligned(N)`, a natural aggregate alignment, or an
+    // aligned typedef -- its sh_size is exactly the members' span, and
+    // `.data` holds only the default-placement objects (the NULL guard
+    // slot plus `in_data`'s slot), not a shadow of the moved ones.
+    // Sizes and alignments match `gcc -c` on the same source.
+    let bytes = emit_reloc_for(
+        "__attribute__((section(\".d.ro\"), aligned(4096))) char raw[8192];\n\
+         __attribute__((section(\".d.c64\"), aligned(64))) int v64;\n\
+         struct nat16 { long long a, b; } __attribute__((aligned(16)));\n\
+         __attribute__((section(\".d.nat\"))) struct nat16 s16;\n\
+         typedef struct { char page[4096]; } __attribute__((aligned(4096))) page_t;\n\
+         __attribute__((section(\".d.page\"))) page_t percpu_page;\n\
+         int in_data = 5;\n",
+    );
+    let (sections, syms) = elf_layout(&bytes);
+    assert_eq!(sections[".d.ro"], (8192, 4096));
+    assert_eq!(sections[".d.c64"], (4, 64));
+    assert_eq!(sections[".d.nat"], (16, 16));
+    assert_eq!(sections[".d.page"], (4096, 4096));
+    assert_eq!(sections[".data"], (16, 8), "no ghost bytes in .data");
+    assert_eq!(sections[".bss"].0, 0);
+    assert_eq!(syms["raw"].1, 0);
+    assert_eq!(syms["in_data"].1, 8);
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn named_section_members_pack_in_declaration_order() {
+    // Several objects sharing one named section: bases follow
+    // declaration order at each member's own alignment (matching the
+    // emission order a toolchain assembler produces), even though the
+    // zero objects are segregated into the bss region of the unified
+    // layout first. Offsets, section sizes, and alignments match
+    // `gcc -c` on the same source; `.data` and `.bss` keep only the
+    // default-placement objects.
+    let bytes = emit_reloc_for(
+        "__attribute__((section(\".ms\"), aligned(64))) char a[10];\n\
+         __attribute__((section(\".ms\"))) int b = 7;\n\
+         __attribute__((section(\".ms\"), aligned(16))) char c[3] = {1, 2, 3};\n\
+         __attribute__((section(\".ms\"))) long long d;\n\
+         __attribute__((section(\".other\"), aligned(256))) static int st = 42;\n\
+         int plain = 9;\n\
+         long long reader(void) { return a[0] + b + c[1] + d + st + plain; }\n\
+         char *one_past_a(void) { return a + sizeof(a); }\n",
+    );
+    let (sections, syms) = elf_layout(&bytes);
+    assert_eq!(sections[".ms"], (0x20, 64));
+    assert_eq!(sections[".other"], (4, 256));
+    let ms = syms["a"].0;
+    assert_eq!(syms["a"], (ms, 0));
+    assert_eq!(syms["b"], (ms, 0xc));
+    assert_eq!(syms["c"], (ms, 0x10));
+    assert_eq!(syms["d"], (ms, 0x18));
+    assert!(
+        sections[".data"].0 < 0x40,
+        ".data keeps only the guard, plain, and literals (got {:#x})",
+        sections[".data"].0
+    );
+    assert_eq!(sections[".data"].1, 8, ".data alignment not inflated");
+    assert_eq!(sections[".bss"].0, 0, "no ghost bytes in .bss");
+}
+
 /// Minimal ELF64 section-header walk for the tests below: returns
 /// `(name, sh_type, sh_flags, bytes)` per section.
 fn elf_sections(bytes: &[u8]) -> alloc::vec::Vec<(String, u32, u64, alloc::vec::Vec<u8>)> {

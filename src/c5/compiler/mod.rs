@@ -926,6 +926,12 @@ pub struct Compiler {
     /// `__func__`) recorded as they are placed in `data`, for static
     /// DCE object boundaries. See `Program::data_object_starts`.
     data_object_starts: Vec<i64>,
+    /// Alignment-padding ranges within `data`. See
+    /// `Program::data_pad_ranges`.
+    data_pad_ranges: Vec<(i64, i64)>,
+    /// Above-8 alignment boundaries within `data`. See
+    /// `Program::data_align_marks`.
+    data_align_marks: Vec<(i64, i64)>,
     /// Element count the most recent flexible array member fill wrote.
     /// Read by the speculative pass that sizes a FAM-bearing object's
     /// storage before the real fill runs; `None` between measurements.
@@ -1681,6 +1687,8 @@ impl Compiler {
             next_ent_pc: 0,
             data,
             data_object_starts: Vec::new(),
+            data_pad_ranges: Vec::new(),
+            data_align_marks: Vec::new(),
             flex_array_measured_count: None,
             ty: 0,
             loc_offs: 0,
@@ -2095,6 +2103,8 @@ impl Compiler {
             asm_weak_names: self.asm_weak_names,
             data_align: self.data_align,
             data_object_starts: self.data_object_starts,
+            data_pad_ranges: self.data_pad_ranges,
+            data_align_marks: self.data_align_marks,
             entry_pc,
             warnings: self.warnings,
             tls_data: self.tls_data,

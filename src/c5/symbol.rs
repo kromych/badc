@@ -93,6 +93,14 @@ pub(crate) struct Symbol {
     /// `.bss` placement.
     pub section_name: Option<String>,
 
+    /// Placement alignment of a `Token::Glo` object with storage: the
+    /// widest of the declarator's `aligned(N)` / `_Alignas` request, the
+    /// type's natural alignment, and a typedef's `aligned(N)` type
+    /// attribute. Zero when the object never went through storage
+    /// allocation. The relocatable writer lays named sections out with
+    /// it; the unified `.data` placement keeps its own 8-byte floor.
+    pub data_align: i64,
+
     /// `__attribute__((alias("target")))`: this symbol is an additional
     /// name for its target; `val` carries the target's entry / offset.
     /// Excluded from the per-pc linkage join in the object writers so

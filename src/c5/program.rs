@@ -163,6 +163,18 @@ pub struct Program {
     /// starts are recorded, so a missing entry merely glues an object to
     /// its predecessor (kept conservatively), never splits a live one.
     pub data_object_starts: Vec<i64>,
+    /// `[start, end)` ranges of alignment padding within `data`: bytes
+    /// the layout pushed purely to align the next allocation, never
+    /// object content. The relocatable writer drops each range and
+    /// re-pads to the following object's own alignment when it removes
+    /// named-section objects from the default `.data` image.
+    pub data_pad_ranges: Vec<(i64, i64)>,
+    /// `(offset, align)` boundaries where the layout aligned `data`
+    /// above 8. The relocatable writer repacks kept content at these
+    /// boundaries; they cover objects the symbol table cannot surface
+    /// at write time (a block-scope static's symbol entry is restored
+    /// at scope exit).
+    pub data_align_marks: Vec<(i64, i64)>,
     pub entry_pc: usize,
     pub warnings: Vec<String>,
     /// Initialised + zero-init thread-local data. Layout matches

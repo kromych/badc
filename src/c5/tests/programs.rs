@@ -724,6 +724,15 @@ fn page_multiple_alignment() {
 }
 
 #[test]
+fn section_attr_aligned_placement() {
+    // An object with both `section("name")` and an alignment source
+    // (explicit `aligned(N)`, aligned typedef, or the type's natural
+    // alignment) lands on its boundary at runtime. Runtime address
+    // checks, matched against GCC and clang on x86-64 and aarch64.
+    assert_eq!(run_fixture("section_attr_aligned_placement.c"), 0);
+}
+
+#[test]
 fn max_alignment_placement() {
     // The widest static alignment badc honors (64 KiB) lands on its
     // boundary for bare, initialised, and block-scope-static storage. Off

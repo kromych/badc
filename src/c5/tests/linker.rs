@@ -4524,6 +4524,57 @@ fn elf_symbols(bytes: &[u8]) -> alloc::vec::Vec<(String, u8, u16, u64, u64)> {
 }
 
 #[test]
+fn single_tu_image_folds_called_asm_section_code() {
+    // A single-TU final image has no link step, so an executable pushed
+    // section whose label the C code calls is folded into the text stream:
+    // the emit must succeed (not report the callee undefined), the wrapper
+    // body must be present in the image, and its inner call must be
+    // resolved to a nonzero displacement. The execution round-trip is
+    // covered by the ELF fixture-parity suites on a matching host.
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    let src = "\
+        int cs_inner(int x);\n\
+        __asm__(\".pushsection .spinlock.text, \\\"ax\\\"\\n\"\n\
+                \".globl cs_wrapper\\n\"\n\
+                \".type cs_wrapper, @function\\n\"\n\
+                \"cs_wrapper:push %rcx;\"\n\
+                \"push %rdx;\"\n\
+                \"push %rsi;\"\n\
+                \"call cs_inner;\"\n\
+                \"pop %rsi;\"\n\
+                \"pop %rdx;\"\n\
+                \"pop %rcx;\"\n\
+                \"ret\\n\"\n\
+                \".size cs_wrapper, .-cs_wrapper\\n\"\n\
+                \".popsection\");\n\
+        int cs_inner(int x) { return x + 5; }\n\
+        int cs_wrapper(int x);\n\
+        int main(void) { return cs_wrapper(37); }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("a called asm-section label must resolve in a single-TU image");
+    // push %rcx; push %rdx; push %rsi; call rel32 ... pop %rsi; pop %rdx;
+    // pop %rcx; ret.
+    let head = [0x51u8, 0x52, 0x56, 0xE8];
+    let at = bytes
+        .windows(head.len())
+        .position(|w| w == head)
+        .expect("the folded wrapper body must be in the image");
+    let rel = i32::from_le_bytes(bytes[at + 4..at + 8].try_into().unwrap());
+    assert_ne!(
+        rel, 0,
+        "the inner call must be resolved, not left a placeholder"
+    );
+    assert_eq!(
+        &bytes[at + 8..at + 12],
+        &[0x5E, 0x5A, 0x59, 0xC3],
+        "the wrapper tail follows the call"
+    );
+}
+
+#[test]
 fn file_scope_asm_numeric_labels_bind_per_definition() {
     // GNU as numeric labels are redefinable: each `10:` is a new instance
     // and a `10b` reference binds to the nearest definition backward,

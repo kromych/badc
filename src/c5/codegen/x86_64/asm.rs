@@ -207,7 +207,8 @@ pub(crate) enum Mnemonic {
     /// `.align n` / `.p2align e` / `.balign n` inside the code stream: pad to
     /// an alignment boundary. `n` is the resolved byte alignment, `fill` the
     /// pad byte (the target NOP when absent), `max` the most bytes the pad may
-    /// add. The padding is placed relative to the enclosing function's start.
+    /// add. The boundary is section-relative, as in GNU as; the emitter caps
+    /// `n` at the `.text` section alignment so the boundary holds absolutely.
     Align {
         n: u32,
         fill: Option<u8>,
@@ -1427,8 +1428,7 @@ fn parse_index_mem_sym<'a>(tok: &'a str, labels: &[&str]) -> Option<(&'a str, As
 /// count; `.p2align` takes a power-of-two exponent. `None` for a malformed or
 /// out-of-range spec.
 fn parse_align_directive(name: &str, rest: &str) -> Option<(u32, Option<u8>, Option<u32>)> {
-    let (spec, fill, max) =
-        super::super::ssa::emit_common::parse_align_operands(rest.trim())?;
+    let (spec, fill, max) = super::super::ssa::emit_common::parse_align_operands(rest.trim())?;
     let n = match name {
         ".p2align" => (0..=12).contains(&spec).then(|| 1u32 << spec)?,
         ".align" | ".balign" => u32::try_from(spec)
@@ -2833,9 +2833,7 @@ fn as_reg(op: Concrete) -> Result<(u8, AsmRegSize), String> {
         Concrete::Mem { .. }
         | Concrete::AbsMem { .. }
         | Concrete::RipRel { .. }
-        | Concrete::IndexMem { .. } => {
-            Err(String::from("inline asm: unexpected memory operand"))
-        }
+        | Concrete::IndexMem { .. } => Err(String::from("inline asm: unexpected memory operand")),
         Concrete::Imm(_) => Err(String::from("inline asm: register operand expected")),
     }
 }
@@ -3152,6 +3150,139 @@ mod tests {
             insns[1].operands[0],
             AsmOpnd::LabelAddr { num: 1, .. }
         ));
+    }
+
+    #[test]
+    fn port_dx_parenthesized() {
+        // `(%dx)` names the variable I/O port, the same operand as bare
+        // `%dx`; both `%%` and the basic-asm single-`%` spellings parse.
+        // Encodings are the fixed EC..EF family (66-prefixed at word width).
+        let dx = AsmOpnd::Reg {
+            reg: 2,
+            size: AsmRegSize::Word,
+        };
+        let insns = parse_template(b"inb (%%dx), %%al").unwrap();
+        assert_eq!(insns[0].operands[0], dx);
+        let insns = parse_template(b"outl %%eax, (%dx)").unwrap();
+        assert_eq!(insns[0].operands[1], dx);
+        let port = Concrete::Reg {
+            reg: 2,
+            size: AsmRegSize::Word,
+        };
+        let al = Concrete::Reg {
+            reg: 0,
+            size: AsmRegSize::Byte,
+        };
+        assert_eq!(
+            enc(Mnemonic::In, Some(AsmRegSize::Byte), &[port, al]),
+            [0xEC]
+        );
+        assert_eq!(
+            enc(Mnemonic::Out, Some(AsmRegSize::Word), &[al, port]),
+            [0x66, 0xEF]
+        );
+    }
+
+    #[test]
+    fn const_modifier_riprel() {
+        // `%cN(%%rip)` / `%PN(%%rip)`: the displacement is an `i`-class
+        // operand substituted bare (no `$`), resolved at emit time.
+        let insns = parse_template(b"movl %c1(%%rip), %0").unwrap();
+        assert_eq!(
+            insns[0].operands[0],
+            AsmOpnd::RipRelRef {
+                idx: 1,
+                symbolic: false
+            }
+        );
+        let insns = parse_template(b"movq %P2(%%rip), %%rax").unwrap();
+        assert_eq!(
+            insns[0].operands[0],
+            AsmOpnd::RipRelRef {
+                idx: 2,
+                symbolic: true
+            }
+        );
+    }
+
+    #[test]
+    fn no_base_scaled_index() {
+        // `disp(,%index,scale)`: SIB with no base (base=101, mod=00, disp32).
+        // An r8+ index sets REX.X; a symbol displacement parses only with the
+        // name carried on the instruction for the emitter's relocation.
+        let insns = parse_template(b"movq 8(,%1,8), %0").unwrap();
+        assert_eq!(
+            insns[0].operands[0],
+            AsmOpnd::IndexMem {
+                index: AsmMemBase::Ref(1),
+                scale: 8,
+                disp: 8,
+                sym: false
+            }
+        );
+        let insns = parse_template(b"movq tab(,%%rcx,4), %%rbx").unwrap();
+        assert_eq!(insns[0].sym_target.as_deref(), Some("tab"));
+        assert_eq!(
+            insns[0].operands[0],
+            AsmOpnd::IndexMem {
+                index: AsmMemBase::Reg(1),
+                scale: 4,
+                disp: 0,
+                sym: true
+            }
+        );
+        // movq (,%r9,4), %rax -- REX.X extends the index register.
+        let ops = [
+            Concrete::IndexMem {
+                index: 9,
+                scale: 4,
+                disp: 0,
+                size: AsmRegSize::Quad,
+            },
+            Concrete::Reg {
+                reg: 0,
+                size: AsmRegSize::Quad,
+            },
+        ];
+        assert_eq!(
+            enc(Mnemonic::Mov, Some(AsmRegSize::Quad), &ops),
+            [0x4A, 0x8B, 0x04, 0x8D, 0, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn align_directives() {
+        // `.align` / `.balign` take a byte count on x86; `.p2align` an
+        // exponent. Fill and max-skip operands carry through.
+        let insns = parse_template(b"nop\n\t.align 8\n\tnop").unwrap();
+        assert_eq!(
+            insns[1].mnemonic,
+            Mnemonic::Align {
+                n: 8,
+                fill: None,
+                max: None
+            }
+        );
+        let insns = parse_template(b".p2align 4,,7").unwrap();
+        assert_eq!(
+            insns[0].mnemonic,
+            Mnemonic::Align {
+                n: 16,
+                fill: None,
+                max: Some(7)
+            }
+        );
+        let insns = parse_template(b".balign 16, 0x90").unwrap();
+        assert_eq!(
+            insns[0].mnemonic,
+            Mnemonic::Align {
+                n: 16,
+                fill: Some(0x90),
+                max: None
+            }
+        );
+        // A non-power-of-two byte count is rejected.
+        assert!(parse_template(b".align 3").is_err());
     }
 
     #[test]

@@ -2103,7 +2103,9 @@ fn run_inline_asm(
                 o,
                 AsmOpnd::Mem { .. }
                     | AsmOpnd::AbsMem { .. }
+                    | AsmOpnd::IndexMem { .. }
                     | AsmOpnd::RipRel { .. }
+                    | AsmOpnd::RipRelRef { .. }
                     | AsmOpnd::LabelAddr { .. }
                     | AsmOpnd::ImmLabel { .. }
                     | AsmOpnd::ImmSym

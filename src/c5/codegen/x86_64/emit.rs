@@ -6673,7 +6673,11 @@ fn encode_one_x86_section_insn(
         // `testb $imm, sym(%rip)`), matching gcc. An absolute `R_X86_64_32S`
         // field is patched with the symbol value plus the offset directly.
         let trailing = body.len() - (field + 4);
-        let addend = if pcrel { off - 4 - trailing as i64 } else { off };
+        let addend = if pcrel {
+            off - 4 - trailing as i64
+        } else {
+            off
+        };
         relocs.push(AsmSectionReloc {
             offset: seg_len + field as u32,
             width: 4,
@@ -7051,12 +7055,16 @@ fn emit_inline_asm(
             code.resize(code.len() + count as usize, fill);
             continue;
         }
-        // `.align` / `.p2align` / `.balign`: pad to the alignment boundary
-        // relative to the function start with the target NOP (or an explicit
-        // fill byte). A `max` skip drops the padding when it would exceed it.
+        // `.align` / `.p2align` / `.balign`: pad `code` (the unit's whole
+        // text stream, so its length is a section offset) to the boundary, as
+        // GNU as does section-relative. The boundary holds absolutely only up
+        // to the fixed `.text` section alignment (TODO: raise the section
+        // alignment from the largest directive instead of rejecting).
         if let super::asm::Mnemonic::Align { n, fill, max } = insn.mnemonic {
-            let gap =
-                super::ssa::emit_common::align_gap(code.len() as i64, n as i64, max) as usize;
+            if n > 16 {
+                return fail("inline asm: alignment beyond 16 exceeds the section alignment");
+            }
+            let gap = super::ssa::emit_common::align_gap(code.len() as i64, n as i64, max) as usize;
             let (pat, _) = super::ssa::emit_common::align_fill_pattern(fill, true, false);
             code.resize(code.len() + gap, pat[0]);
             continue;
@@ -7474,18 +7482,18 @@ fn emit_inline_asm(
                         .unwrap_or(AsmRegSize::Quad);
                     let index = match index {
                         super::asm::AsmMemBase::Reg(r) => r,
-                        super::asm::AsmMemBase::Ref(i) => match op_reg
-                            .get(i as usize)
-                            .copied()
-                            .flatten()
-                            .filter(|_| {
+                        super::asm::AsmMemBase::Ref(i) => {
+                            match op_reg.get(i as usize).copied().flatten().filter(|_| {
                                 !matches!(asm.operands[i as usize].constraint, AsmConstraint::Fp)
                             }) {
-                            Some(r) => r,
-                            None => {
-                                return fail("inline asm: memory index must be a register operand");
+                                Some(r) => r,
+                                None => {
+                                    return fail(
+                                        "inline asm: memory index must be a register operand",
+                                    );
+                                }
                             }
-                        },
+                        }
                     };
                     Concrete::IndexMem {
                         index,

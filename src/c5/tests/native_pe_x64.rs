@@ -914,6 +914,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("builtin_bswap_expect.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),
+    ("zero_length_array_sizeof.c", 0),
     ("nested_compound_literal.c", 0),
     ("indirect_struct_return.c", 0),
     ("indirect_struct_return_outptr.c", 0),

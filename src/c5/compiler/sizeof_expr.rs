@@ -120,7 +120,8 @@ impl Compiler {
             while self.lex.tk == Token::Brak {
                 self.next()?;
                 let n = self.parse_constant_int()?;
-                if n <= 0 {
+                // n == 0 is a GCC zero-length array: `sizeof(T[0])` is 0.
+                if n < 0 {
                     return Err(self.compile_err("array dimension in sizeof must be positive"));
                 }
                 if self.lex.tk != ']' {

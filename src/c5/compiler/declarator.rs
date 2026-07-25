@@ -479,9 +479,16 @@ impl Compiler {
                         pointee_dims.push(1);
                     } else {
                         let m = self.parse_constant_int()?;
-                        if m > 0 {
-                            pointee_dims.push(m);
+                        if m < 0 {
+                            return Err(self.compile_err(format!(
+                                "array dimension must be positive (got {m})"
+                            )));
                         }
+                        // `T (*p)[0]` -- a GCC zero-length array pointee:
+                        // a complete type of zero size. The 0 dimension
+                        // rides into the aggregate tag so `sizeof(*p)`
+                        // folds to 0.
+                        pointee_dims.push(m);
                         self.accept(']')?;
                     }
                     // The aggregate-backed rebuild below carries the
@@ -525,10 +532,11 @@ impl Compiler {
                     inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
                         + inner_ptr_levels * (Ty::Ptr as i64))
                         | (inner_ty & super::types::VOLATILE_BIT);
-                } else if idx != usize::MAX {
+                } else if idx != usize::MAX && pointee_dims.iter().all(|&d| d > 0) {
                     // Redundant-paren shape `T (name)[N]`: keep the
                     // per-bracket level plus the leading-0 sentinel dims
-                    // the indexing paths expect.
+                    // the indexing paths expect. A zero dimension keeps
+                    // the pre-aggregate handling (same as `T name[0]`).
                     let mut dims = alloc::vec::Vec::with_capacity(pointee_dims.len() + 1);
                     dims.push(0);
                     dims.extend(pointee_dims);

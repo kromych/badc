@@ -108,6 +108,8 @@ impl LineScan {
     fn ends_in_open_block_comment(&mut self, joined: &[u8]) -> bool {
         let mut i = self.scanned;
         while i < joined.len() {
+            #[cfg(test)]
+            scan_step();
             let c = joined[i];
             match self.mode {
                 ScanMode::Normal => {
@@ -135,7 +137,11 @@ impl LineScan {
                     }
                 }
                 ScanMode::Str | ScanMode::Char => {
-                    let close = if self.mode == ScanMode::Str { b'"' } else { b'\'' };
+                    let close = if self.mode == ScanMode::Str {
+                        b'"'
+                    } else {
+                        b'\''
+                    };
                     if self.esc {
                         self.esc = false;
                     } else if c == b'\\' {
@@ -191,6 +197,124 @@ pub(super) fn unfold_line_continuations(source: &str) -> String {
             if joined.ends_with('\\') {
                 joined.pop();
             } else if !scan.ends_in_open_block_comment(joined.as_bytes()) {
+                break;
+            }
+            padding += 1;
+            match iter.next() {
+                Some(next) => joined.push_str(next),
+                None => break,
+            }
+        }
+        out.push_str(&joined);
+        out.push('\n');
+        for _ in 0..padding {
+            out.push('\n');
+        }
+    }
+    out
+}
+
+// Test-only scanner-work counter and full-rescan reference, retained to
+// prove the incremental scanner is byte-identical to the pre-incremental
+// code and to contrast their scan work. The counter is thread-local so
+// tests running in parallel do not interfere.
+#[cfg(test)]
+std::thread_local! {
+    static SCAN_STEPS: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn scan_step() {
+    SCAN_STEPS.with(|s| s.set(s.get() + 1));
+}
+
+/// Read and reset the scanner-work counter for the current thread.
+#[cfg(test)]
+pub(super) fn scan_steps_taken() -> usize {
+    SCAN_STEPS.with(|s| s.replace(0))
+}
+
+/// Fresh-state detector exposing the incremental scanner as a
+/// single-string predicate for the unit test.
+#[cfg(test)]
+pub(super) fn ends_in_open_block_comment_once(s: &str) -> bool {
+    let mut scan = LineScan::default();
+    scan.ends_in_open_block_comment(s.as_bytes())
+}
+
+/// Full-rescan reference detector: the pre-incremental implementation
+/// that re-reads the whole assembled buffer on each call.
+#[cfg(test)]
+fn ends_in_open_block_comment_ref(s: &str) -> bool {
+    let b = s.as_bytes();
+    let mut i = 0;
+    let mut in_str = false;
+    let mut in_char = false;
+    let mut in_block = false;
+    while i < b.len() {
+        scan_step();
+        let c = b[i];
+        if in_block {
+            if c == b'*' && b.get(i + 1) == Some(&b'/') {
+                in_block = false;
+                i += 2;
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+        if in_str {
+            if c == b'\\' {
+                i += 2;
+                continue;
+            }
+            if c == b'"' {
+                in_str = false;
+            }
+            i += 1;
+            continue;
+        }
+        if in_char {
+            if c == b'\\' {
+                i += 2;
+                continue;
+            }
+            if c == b'\'' {
+                in_char = false;
+            }
+            i += 1;
+            continue;
+        }
+        if c == b'/' && b.get(i + 1) == Some(&b'*') {
+            in_block = true;
+            i += 2;
+            continue;
+        }
+        if c == b'/' && b.get(i + 1) == Some(&b'/') {
+            return false;
+        }
+        if c == b'"' {
+            in_str = true;
+        } else if c == b'\'' {
+            in_char = true;
+        }
+        i += 1;
+    }
+    in_block
+}
+
+/// Full-rescan reference for `unfold_line_continuations`.
+#[cfg(test)]
+pub(super) fn unfold_ref(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut iter = source.lines();
+    while let Some(line) = iter.next() {
+        let mut joined = String::from(line);
+        let mut padding = 0;
+        loop {
+            if joined.ends_with('\\') {
+                joined.pop();
+            } else if !ends_in_open_block_comment_ref(&joined) {
                 break;
             }
             padding += 1;

@@ -149,6 +149,126 @@ fn route_single_tu_data_imports(build: &mut Build, target: Target) {
     build.user_extern_data_refs = remaining;
 }
 
+/// Place the executable inline-asm sections a single-TU final image
+/// references into its text stream. The relocatable path emits every
+/// section for a real link to place; a final image has no link step, so
+/// an `"x"` section defining a label the C code calls is appended to
+/// the text, its relocations resolved, and its labels returned so the
+/// call sites bind to them -- what the linker does for the object
+/// path's undefined symbols. Unreferenced sections keep the established
+/// final-image behavior (assembled and dropped).
+#[cfg(feature = "native-emit")]
+fn fold_exec_asm_sections(
+    build: &mut Build,
+    target: Target,
+) -> Result<alloc::collections::BTreeMap<String, usize>, C5Error> {
+    use crate::c5::codegen::ssa::emit_common::{AsmSectionTarget, align_fill_pattern};
+    let mut label_at: alloc::collections::BTreeMap<String, usize> =
+        alloc::collections::BTreeMap::new();
+    if build.output_kind == OutputKind::Relocatable || build.asm_sections.is_empty() {
+        return Ok(label_at);
+    }
+    // Names the image needs: the C code's extern call sites. (An extern
+    // DATA reference to a section label keeps its undefined-reference
+    // diagnostic; TODO fold those through the writers' address-load
+    // patching.) Folding a section can add needs of its own (its
+    // relocations), so iterate to a fixpoint.
+    let mut needed: alloc::collections::BTreeSet<String> = build
+        .user_extern_call_sites
+        .iter()
+        .map(|s| s.symbol_name.clone())
+        .collect();
+    let is_a64 = matches!(
+        target,
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
+    );
+    let err = |m: alloc::string::String| C5Error::Compile(crate::c5::error::fmt_link_err(&m));
+    let mut folded: Vec<usize> = Vec::new();
+    let mut bases: Vec<Option<usize>> = alloc::vec![None; build.asm_sections.len()];
+    loop {
+        let mut grew = false;
+        for (i, s) in build.asm_sections.iter().enumerate() {
+            if bases[i].is_some()
+                || !s.flags.contains('x')
+                || !s.labels.iter().any(|l| needed.contains(&l.name))
+            {
+                continue;
+            }
+            let align = s.align.max(1) as usize;
+            let (pat, plen) = align_fill_pattern(None, true, is_a64);
+            while !build.text.len().is_multiple_of(align) {
+                build.text.push(pat[build.text.len() % plen]);
+            }
+            let base = build.text.len();
+            build.text.extend_from_slice(&s.bytes);
+            bases[i] = Some(base);
+            folded.push(i);
+            for l in &s.labels {
+                label_at.insert(l.name.clone(), base + l.offset as usize);
+            }
+            for r in &s.relocs {
+                if let AsmSectionTarget::Symbol(name) = &r.target {
+                    needed.insert(name.clone());
+                }
+            }
+            grew = true;
+        }
+        if !grew {
+            break;
+        }
+    }
+    // A defined function's text offset, for a section's call into the C code.
+    let func_off = |name: &str| -> Option<usize> {
+        let i = build.func_names.iter().position(|n| n == name)?;
+        build.pc_to_native.get(*build.func_ent_pcs.get(i)?).copied()
+    };
+    for &i in &folded {
+        let s = &build.asm_sections[i];
+        let base = bases[i].expect("folded section has a base");
+        for r in &s.relocs {
+            let at = base + r.offset as usize;
+            let target_off = match &r.target {
+                AsmSectionTarget::Text(off) => *off,
+                AsmSectionTarget::Symbol(name) => match label_at
+                    .get(name.as_str())
+                    .copied()
+                    .or_else(|| func_off(name))
+                {
+                    Some(o) => o,
+                    None => {
+                        return Err(err(alloc::format!(
+                            "undefined reference to `{name}` (inline-asm section `{}`)",
+                            s.name
+                        )));
+                    }
+                },
+                other => {
+                    return Err(err(alloc::format!(
+                        "inline-asm section `{}`: relocation target {other:?} is not \
+                         supported in a single-file image; compile with `-c` and link",
+                        s.name
+                    )));
+                }
+            };
+            // The folded code and its targets share the text stream, so a
+            // PC-relative field folds to a constant: S + A - P.
+            if !(r.pcrel && r.width == 4) {
+                return Err(err(alloc::format!(
+                    "inline-asm section `{}`: only 4-byte PC-relative relocations are \
+                     supported in a single-file image; compile with `-c` and link",
+                    s.name
+                )));
+            }
+            let val = target_off as i64 + r.addend - at as i64;
+            build.text[at..at + 4].copy_from_slice(&(val as i32).to_le_bytes());
+        }
+    }
+    // The folded sections are placed; remove them so no writer emits a copy.
+    let mut keep = bases.iter().map(|b| b.is_none());
+    build.asm_sections.retain(|_| keep.next().unwrap());
+    Ok(label_at)
+}
+
 /// Resolve or diagnose the external references still recorded on a
 /// single-TU final image. Such an image has no link step to bind them,
 /// so leaving them as the codegen's zero-displacement placeholders
@@ -165,6 +285,7 @@ fn resolve_single_tu_extern_refs(
     program: &Program,
     build: &mut Build,
     target: Target,
+    asm_labels: &alloc::collections::BTreeMap<String, usize>,
 ) -> Result<(), C5Error> {
     if build.output_kind == OutputKind::Relocatable
         || (build.user_extern_data_refs.is_empty() && build.user_extern_call_sites.is_empty())
@@ -222,6 +343,27 @@ fn resolve_single_tu_extern_refs(
     build.user_extern_data_refs = kept_data;
 
     for site in core::mem::take(&mut build.user_extern_call_sites) {
+        // A callee defined as a label in a folded executable asm section:
+        // bind the call directly, as the linker binds the object path's
+        // undefined symbol against the section's label.
+        if let Some(&target_off) = asm_labels.get(site.symbol_name.as_str()) {
+            let at = site.instr_offset;
+            match machine {
+                // `call`/`jmp` rel32: the displacement field is at +1.
+                Machine::X86_64 => {
+                    let rel = target_off as i64 - (at as i64 + 5);
+                    build.text[at + 1..at + 5].copy_from_slice(&(rel as i32).to_le_bytes());
+                }
+                // `bl`/`b` imm26, word-aligned.
+                Machine::Aarch64 => {
+                    let word = u32::from_le_bytes(build.text[at..at + 4].try_into().unwrap());
+                    let imm = (((target_off as i64 - at as i64) >> 2) as u32) & 0x03FF_FFFF;
+                    let patched = (word & 0xFC00_0000) | imm;
+                    build.text[at..at + 4].copy_from_slice(&patched.to_le_bytes());
+                }
+            }
+            continue;
+        }
         if !weak_names.contains(site.symbol_name.as_str()) {
             return Err(undefined(&site.symbol_name));
         }
@@ -275,7 +417,8 @@ pub fn emit_native_with_options_named(
     let mut build = lower_for(program, target, options)?;
     build.bss_size = bss_size;
     route_single_tu_data_imports(&mut build, target);
-    resolve_single_tu_extern_refs(program, &mut build, target)?;
+    let asm_labels = fold_exec_asm_sections(&mut build, target)?;
+    resolve_single_tu_extern_refs(program, &mut build, target, &asm_labels)?;
     if options.output_kind == OutputKind::SharedLibrary {
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
     }

@@ -868,6 +868,18 @@ pub(crate) enum AsmSectionItem {
         bytes: alloc::vec::Vec<u8>,
         relocs: alloc::vec::Vec<AsmSectionReloc>,
     },
+    /// `.weak name`: weak symbol binding. The materializer marks a label
+    /// defined in this statement's sections; a name defined elsewhere in the
+    /// unit (or nowhere) is returned to the caller as a unit-level weak name.
+    Weak(alloc::string::String),
+    /// `.set name, sym` / `.equ name, sym`: `name` aliases the symbol `sym`.
+    /// Constant assignments are consumed by the macro expander; only the
+    /// symbol-valued form reaches the section parser. Returned to the caller;
+    /// the object writer emits the alias at the target's definition.
+    SymSet {
+        name: alloc::string::String,
+        target: alloc::string::String,
+    },
 }
 
 /// A parsed `.pushsection` / `.section` block of a template.
@@ -992,6 +1004,8 @@ pub(crate) struct AsmSectionLabel {
     pub offset: u32,
     /// `.globl`-declared: external rather than local binding.
     pub global: bool,
+    /// `.weak`-declared: weak rather than global or local binding.
+    pub weak: bool,
     /// Symbol type from a `.type` directive (`STT_NOTYPE` when absent).
     pub sym_type: AsmSymType,
     /// `st_size` from a `.size` directive; `None` leaves it zero.
@@ -1334,11 +1348,24 @@ fn expand_gas_statements(
                     continue;
                 };
                 let table = &*equ;
-                let v = eval_asm_expr_with_labels(expr.trim(), &|t| table.get(t).copied())
-                    .ok_or_else(|| {
-                        alloc::format!("inline asm: `{tok} {}` value is not constant", sym.trim())
-                    })?;
-                equ.insert(alloc::string::String::from(sym.trim()), v);
+                match eval_asm_expr_with_labels(expr.trim(), &|t| table.get(t).copied()) {
+                    Some(v) => {
+                        equ.insert(alloc::string::String::from(sym.trim()), v);
+                    }
+                    // A symbol-valued assignment (`.set alias, target`) is an
+                    // object-level alias, not an assembler constant; pass it
+                    // through for the section parser.
+                    None if is_asm_symbol_name(expr.trim()) => {
+                        out.push_str(s);
+                        out.push('\n');
+                    }
+                    None => {
+                        return Err(alloc::format!(
+                            "inline asm: `{tok} {}` value is not constant",
+                            sym.trim()
+                        ));
+                    }
+                }
             }
             ".inst" | ".inst.n" | ".inst.w" => {
                 for arg in split_top_commas(rest) {
@@ -2343,6 +2370,29 @@ fn parse_section_item(
             }
             Ok(AsmSectionItem::Global(alloc::string::String::from(name)))
         }
+        ".weak" => {
+            let name = rest.trim();
+            if !is_asm_symbol_name(name) {
+                return Err(alloc::format!("inline asm: bad `{tok}` operand `{rest}`"));
+            }
+            Ok(AsmSectionItem::Weak(alloc::string::String::from(name)))
+        }
+        // A `.set` / `.equ` with a constant value is consumed by the macro
+        // expander; the symbol-valued form (`.set alias, target`) survives it.
+        ".set" | ".equ" => {
+            let (name, target) = rest
+                .split_once(',')
+                .map(|(n, t)| (n.trim(), t.trim()))
+                .filter(|(n, t)| is_asm_symbol_name(n) && is_asm_symbol_name(t))
+                .ok_or_else(|| {
+                    alloc::format!("inline asm: `{tok} {rest}` is not `name, symbol`")
+                })?;
+            Ok(AsmSectionItem::SymSet {
+                name: alloc::string::String::from(name),
+                target: alloc::string::String::from(target),
+            })
+        }
+        ".incbin" => parse_incbin_directive(rest),
         ".type" => parse_type_directive(rest),
         ".size" => parse_size_directive(rest),
         // A non-directive token is an instruction: the ALTERNATIVE replacement
@@ -2408,6 +2458,43 @@ fn parse_size_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::Str
         name: alloc::string::String::from(name),
         expr: alloc::string::String::from(expr),
     })
+}
+
+/// `.incbin "path"[, skip[, count]]`: splice the named file's raw bytes at
+/// this point in the section image. The path resolves as GNU as resolves it,
+/// against the assembler's working directory; badc compiles from the same
+/// directory, so a relative path reads relative to the compile cwd.
+fn parse_incbin_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
+    let rest = rest.trim();
+    let (path, args) = rest
+        .strip_prefix('"')
+        .and_then(|r| r.split_once('"'))
+        .ok_or_else(|| {
+            alloc::format!("inline asm: `.incbin` expects a quoted path, got `{rest}`")
+        })?;
+    let args = args.trim().trim_start_matches(',').trim();
+    if !args.is_empty() {
+        // TODO `.incbin` skip / count arguments.
+        return Err(alloc::format!(
+            "inline asm: `.incbin` skip/count arguments are not supported (`{rest}`)"
+        ));
+    }
+    #[cfg(feature = "std")]
+    {
+        let bytes = std::fs::read(path).map_err(|e| {
+            let resolved = std::env::current_dir()
+                .map(|d| d.join(path).display().to_string())
+                .unwrap_or_else(|_| alloc::string::String::from(path));
+            alloc::format!("inline asm: `.incbin \"{path}\"`: cannot read `{resolved}`: {e}")
+        })?;
+        Ok(AsmSectionItem::Bytes(bytes))
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        Err(alloc::format!(
+            "inline asm: `.incbin \"{path}\"` needs host filesystem access"
+        ))
+    }
 }
 
 /// If `s` is a single parenthesised group (the leading `(` matches the
@@ -3048,7 +3135,9 @@ pub(crate) fn measure_asm_section_offsets(
                 // Symbol attributes, not layout: no bytes.
                 AsmSectionItem::Global(_)
                 | AsmSectionItem::Type { .. }
-                | AsmSectionItem::Size { .. } => {}
+                | AsmSectionItem::Size { .. }
+                | AsmSectionItem::Weak(_)
+                | AsmSectionItem::SymSet { .. } => {}
                 AsmSectionItem::Data { width, values } => {
                     at += *width as i64 * values.len() as i64;
                 }
@@ -3158,6 +3247,7 @@ pub(crate) fn materialize_asm_sections(
     // the earlier `.altinstructions`) folds to a constant.
     let measured = measure_asm_section_offsets(blocks, const_of, align_is_p2)?;
     let mut defined: alloc::vec::Vec<MaterializedLabel> = alloc::vec::Vec::new();
+    let mut weak_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
     for b in blocks {
         let sec_idx = match sink
             .iter()
@@ -3271,6 +3361,7 @@ pub(crate) fn materialize_asm_sections(
                             name: alloc::string::String::from(name),
                             offset: at,
                             global: false,
+                            weak: false,
                             sym_type: AsmSymType::NoType,
                             size: None,
                         }),
@@ -3281,6 +3372,13 @@ pub(crate) fn materialize_asm_sections(
                         offset: at,
                     });
                 }
+                // `.weak` binding applies to whatever definition the name has
+                // (a section label here, or a symbol defined elsewhere in the
+                // unit); resolved against the sink once all blocks are laid
+                // out. `.set name, sym` is a unit-level alias; the file-scope
+                // parse records both, the operand emit paths reject them.
+                AsmSectionItem::Weak(name) => weak_names.push(name.clone()),
+                AsmSectionItem::SymSet { .. } => {}
                 AsmSectionItem::Global(name) => {
                     match sec.labels.iter_mut().find(|l| l.name == *name) {
                         // `.globl` may precede its label; record the pending name
@@ -3290,6 +3388,7 @@ pub(crate) fn materialize_asm_sections(
                             name: name.clone(),
                             offset: PENDING_LABEL,
                             global: true,
+                            weak: false,
                             sym_type: AsmSymType::NoType,
                             size: None,
                         }),
@@ -3307,6 +3406,7 @@ pub(crate) fn materialize_asm_sections(
                             name: alloc::string::String::from(lname),
                             offset: PENDING_LABEL,
                             global: false,
+                            weak: false,
                             sym_type: *sym_type,
                             size: None,
                         }),
@@ -3555,6 +3655,15 @@ pub(crate) fn materialize_asm_sections(
             }
         }
     }
+    // `.weak` binds a matching section label weak; a name defined in no
+    // section is a unit-level weak symbol the file-scope parse records.
+    for name in &weak_names {
+        for s in sink.iter_mut() {
+            for l in s.labels.iter_mut().filter(|l| l.name == *name) {
+                l.weak = true;
+            }
+        }
+    }
     // A `.globl` naming no label in the section declares an external symbol,
     // not a definition here; it defines no section symbol. A `.type` / `.size`
     // that stays pending named a label the section never defines -- rejected
@@ -3571,6 +3680,50 @@ pub(crate) fn materialize_asm_sections(
         s.labels.retain(|l| l.offset != PENDING_LABEL);
     }
     Ok(defined)
+}
+
+/// Reject unit-level symbol directives in an operand statement's sections.
+/// `.weak` and `.set name, sym` change the unit's symbol table; the
+/// file-scope parse records them, the operand emit paths do not.
+/// TODO accept them in function-scope asm.
+pub(crate) fn reject_unit_symbol_items(
+    blocks: &[AsmSectionBlock],
+) -> Result<(), alloc::string::String> {
+    for item in blocks.iter().flat_map(|b| &b.items) {
+        match item {
+            AsmSectionItem::Weak(n) => {
+                return Err(alloc::format!(
+                    "inline asm: `.weak {n}` outside file-scope asm"
+                ));
+            }
+            AsmSectionItem::SymSet { name, .. } => {
+                return Err(alloc::format!(
+                    "inline asm: `.set {name}, ...` outside file-scope asm"
+                ));
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// Prepare a file-scope template for section extraction: strip comments,
+/// expand GNU as macro directives (file scope has no operands to
+/// substitute), and rename numeric labels defined more than once to
+/// per-definition unique names, each `Nb` / `Nf` reference binding to the
+/// nearest definition in its direction (GNU as redefinable local labels).
+/// The parse stores the prepared text, so the codegen materialization and
+/// the parse-time validation see identical statements.
+pub(crate) fn prepare_file_asm_text(
+    text: &str,
+    comments: AsmComments,
+) -> Result<alloc::string::String, alloc::string::String> {
+    let stripped = strip_asm_comments(text, comments);
+    let text = stripped.as_deref().unwrap_or(text);
+    let expanded = expand_asm_gas_macros(text, 4, &|_| None)?;
+    let text = expanded.as_deref().unwrap_or(text);
+    let renamed = rewrite_multidef_local_labels(text);
+    Ok(renamed.unwrap_or_else(|| alloc::string::String::from(text)))
 }
 
 /// Materialize a unit's file-scope `asm("...")` templates into `sink`.
@@ -4181,6 +4334,11 @@ fn const_literal(b: &[u8], i: &mut usize) -> Option<i64> {
     }
     let text = core::str::from_utf8(&b[digits_at..j]).ok()?;
     let v = i64::from_str_radix(text, radix).ok()?;
+    // GNU as accepts C-style integer suffixes (`1U`, `1UL`); the value is
+    // unaffected. `b` / `f` stay: those are numeric label references.
+    while j < b.len() && matches!(b[j], b'u' | b'U' | b'l' | b'L') {
+        j += 1;
+    }
     *i = j;
     Some(v)
 }
@@ -5273,6 +5431,7 @@ mod asm_section_tests {
                     name: alloc::string::String::from("first"),
                     offset: 0,
                     global: false,
+                    weak: false,
                     sym_type: AsmSymType::NoType,
                     size: None,
                 },
@@ -5280,6 +5439,7 @@ mod asm_section_tests {
                     name: alloc::string::String::from("second"),
                     offset: 8,
                     global: true,
+                    weak: false,
                     sym_type: AsmSymType::NoType,
                     size: None,
                 },
@@ -5625,6 +5785,11 @@ mod const_expr_tests {
         assert_eq!(eval_const_expr("17/5"), Some(3));
         assert_eq!(eval_const_expr("1<<3|2"), Some(10));
         assert_eq!(eval_const_expr("64>>2"), Some(16));
+        // C-style integer suffixes, as GNU as accepts (`mov $(1U << 8)`);
+        // a numeric label reference (`1b` / `2f`) stays a non-constant.
+        assert_eq!(eval_const_expr("(1U << 8)"), Some(256));
+        assert_eq!(eval_const_expr("2UL"), Some(2));
+        assert_eq!(eval_const_expr("3ull + 1"), Some(4));
     }
 
     /// Anything that is not a self-contained constant yields `None`, which is

@@ -2235,7 +2235,7 @@ fn run_inline_asm(
             // The interpreter is not a CPU emulator: a mnemonic reached through
             // the catalogue is refused rather than modelled. Such inline asm is
             // an ahead-of-time / JIT construct, executed natively there.
-            Mnemonic::Table(name) => {
+            Mnemonic::Table(name) | Mnemonic::ExtMov { name, .. } => {
                 return Err(C5Error::Runtime(alloc::format!(
                     "inline asm: `{name}` is not supported under --interp"
                 )));
@@ -2320,6 +2320,7 @@ fn run_inline_asm(
             // forms have no register-model equivalent. Rejecting keeps the VM
             // from silently skipping a memory effect the caller depends on.
             Mnemonic::Fixed(_)
+            | Mnemonic::Fsubp
             | Mnemonic::StringOp { .. }
             | Mnemonic::MemExt { .. }
             | Mnemonic::MemExt0F { .. }

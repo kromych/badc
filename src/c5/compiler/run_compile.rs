@@ -133,11 +133,23 @@ impl Compiler {
         self.consume(b';', "`;` expected after file-scope `asm`")?;
         let text = core::str::from_utf8(&template)
             .map_err(|_| self.compile_err("file-scope asm template is not valid UTF-8"))?;
+        // Comment stripping, GNU as macro expansion, and the per-definition
+        // rename of redefined numeric labels, once; the stored text is the
+        // prepared form so the codegen materialization sees the same
+        // statements the validation below does.
+        let aarch64 = self.target.is_aarch64();
+        let comments = if aarch64 {
+            engine::AsmComments::A64
+        } else {
+            engine::AsmComments::X86
+        };
+        let prepared =
+            engine::prepare_file_asm_text(text, comments).map_err(|m| self.compile_err(m))?;
+        let text = prepared.as_str();
         // The stream outside pushed sections is either linkage directives only
         // (`.globl name`, applied to a C symbol) or a trampoline body (labels +
         // instructions in the default `.text` section). The first routes through
         // `.globl` collection; the second is assembled as a `.text` section.
-        let aarch64 = self.target.is_aarch64();
         let mut blocks = match engine::extract_asm_sections(text, aarch64) {
             Err(m) => return Err(self.compile_err(m)),
             Ok(Some((code, blocks))) => {
@@ -158,14 +170,34 @@ impl Compiler {
         };
         for b in &blocks {
             for item in &b.items {
-                if let engine::AsmSectionItem::Data { values, .. } = item
-                    && values
-                        .iter()
-                        .any(|v| matches!(v, engine::AsmSectionValue::OperandConst(_)))
-                {
-                    return Err(self.compile_err(
-                        "operand reference in file-scope asm (no operands at file scope)",
-                    ));
+                match item {
+                    engine::AsmSectionItem::Data { values, .. }
+                        if values
+                            .iter()
+                            .any(|v| matches!(v, engine::AsmSectionValue::OperandConst(_))) =>
+                    {
+                        return Err(self.compile_err(
+                            "operand reference in file-scope asm (no operands at file scope)",
+                        ));
+                    }
+                    // Unit-level symbol directives: `.weak name` binds the
+                    // symbol weak wherever it is defined; `.set name, target`
+                    // is an object-level alias emitted at the target's
+                    // definition.
+                    engine::AsmSectionItem::Weak(name) => {
+                        if !self.asm_weak_names.contains(name) {
+                            self.asm_weak_names.push(name.clone());
+                        }
+                    }
+                    engine::AsmSectionItem::SymSet { name, target } => {
+                        // A later assignment to the same name wins, as in
+                        // GNU as.
+                        match self.asm_sym_sets.iter_mut().find(|(n, _)| n == name) {
+                            Some(e) => e.1 = target.clone(),
+                            None => self.asm_sym_sets.push((name.clone(), target.clone())),
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -192,7 +224,7 @@ impl Compiler {
             &mut scratch,
         )
         .map_err(|m| self.compile_err(m))?;
-        self.file_asm.push(String::from(text));
+        self.file_asm.push(prepared);
         Ok(())
     }
 

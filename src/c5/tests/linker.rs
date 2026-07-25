@@ -4494,6 +4494,238 @@ fn file_scope_asm_pushsection_lands_in_relocatable_object() {
     }
 }
 
+/// The `-c` object's `.symtab` entries as `(name, info, shndx, value, size)`.
+fn elf_symbols(bytes: &[u8]) -> alloc::vec::Vec<(String, u8, u16, u64, u64)> {
+    let sections = elf_sections(bytes);
+    let symtab = &sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".symtab")
+        .unwrap()
+        .3;
+    let strtab = &sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".strtab")
+        .unwrap()
+        .3;
+    symtab
+        .chunks_exact(24)
+        .map(|e| {
+            let st_name = u32::from_le_bytes(e[0..4].try_into().unwrap()) as usize;
+            let end = strtab[st_name..].iter().position(|&b| b == 0).unwrap();
+            (
+                String::from_utf8_lossy(&strtab[st_name..st_name + end]).into_owned(),
+                e[4],
+                u16::from_le_bytes(e[6..8].try_into().unwrap()),
+                u64::from_le_bytes(e[8..16].try_into().unwrap()),
+                u64::from_le_bytes(e[16..24].try_into().unwrap()),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn single_tu_image_folds_called_asm_section_code() {
+    // A single-TU final image has no link step, so an executable pushed
+    // section whose label the C code calls is folded into the text stream:
+    // the emit must succeed (not report the callee undefined), the wrapper
+    // body must be present in the image, and its inner call must be
+    // resolved to a nonzero displacement. The execution round-trip is
+    // covered by the ELF fixture-parity suites on a matching host.
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    let src = "\
+        int cs_inner(int x);\n\
+        __asm__(\".pushsection .spinlock.text, \\\"ax\\\"\\n\"\n\
+                \".globl cs_wrapper\\n\"\n\
+                \".type cs_wrapper, @function\\n\"\n\
+                \"cs_wrapper:push %rcx;\"\n\
+                \"push %rdx;\"\n\
+                \"push %rsi;\"\n\
+                \"call cs_inner;\"\n\
+                \"pop %rsi;\"\n\
+                \"pop %rdx;\"\n\
+                \"pop %rcx;\"\n\
+                \"ret\\n\"\n\
+                \".size cs_wrapper, .-cs_wrapper\\n\"\n\
+                \".popsection\");\n\
+        int cs_inner(int x) { return x + 5; }\n\
+        int cs_wrapper(int x);\n\
+        int main(void) { return cs_wrapper(37); }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("a called asm-section label must resolve in a single-TU image");
+    // push %rcx; push %rdx; push %rsi; call rel32 ... pop %rsi; pop %rdx;
+    // pop %rcx; ret.
+    let head = [0x51u8, 0x52, 0x56, 0xE8];
+    let at = bytes
+        .windows(head.len())
+        .position(|w| w == head)
+        .expect("the folded wrapper body must be in the image");
+    let rel = i32::from_le_bytes(bytes[at + 4..at + 8].try_into().unwrap());
+    assert_ne!(
+        rel, 0,
+        "the inner call must be resolved, not left a placeholder"
+    );
+    assert_eq!(
+        &bytes[at + 8..at + 12],
+        &[0x5E, 0x5A, 0x59, 0xC3],
+        "the wrapper tail follows the call"
+    );
+}
+
+#[test]
+fn file_scope_asm_numeric_labels_bind_per_definition() {
+    // GNU as numeric labels are redefinable: each `10:` is a new instance
+    // and a `10b` reference binds to the nearest definition backward,
+    // across a nested pushed section. Each definition gets its own
+    // per-instance local symbol, so the two table entries relocate
+    // against distinct labels at their own offsets.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        asm(\".pushsection .tbl,\\\"a\\\"\\n\"\n\
+            \"10: .byte 1\\n\"\n\
+            \"11: .byte 2\\n\"\n\
+            \".pushsection .refs,\\\"a\\\"\\n\"\n\
+            \".long (10b) - .\\n.long (11b) - .\\n\"\n\
+            \".popsection\\n\"\n\
+            \"10: .byte 3\\n\"\n\
+            \"11: .byte 4\\n\"\n\
+            \".pushsection .refs,\\\"a\\\"\\n\"\n\
+            \".long (10b) - .\\n.long (11b) - .\\n\"\n\
+            \".popsection\\n\"\n\
+            \".popsection\");\n\
+        int main(void) { return 0; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let tbl = &sections.iter().find(|(n, _, _, _)| n == ".tbl").unwrap().3;
+        assert_eq!(tbl, &[1u8, 2, 3, 4], "{target:?}: label bytes");
+        let rela = &sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.refs")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.refs missing"))
+            .3;
+        assert_eq!(rela.len(), 4 * 24, "{target:?}: four relocations");
+        let symbols = elf_symbols(&bytes);
+        // Each reloc's symbol is a distinct per-instance label whose value
+        // is that definition's offset in `.tbl` (1, 2, 3, 4 -> 0, 1, 2, 3).
+        let mut names = alloc::vec::Vec::new();
+        for (i, r) in rela.chunks_exact(24).enumerate() {
+            let r_info = u64::from_le_bytes(r[8..16].try_into().unwrap());
+            let sym = &symbols[(r_info >> 32) as usize];
+            assert_eq!(
+                sym.3, i as u64,
+                "{target:?}: entry {i} binds the nearest-backward definition"
+            );
+            names.push(sym.0.clone());
+        }
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), 4, "{target:?}: four distinct label symbols");
+    }
+}
+
+#[test]
+fn file_scope_asm_weak_and_set_emit_weak_symbols() {
+    // `.set alias, target` + `.weak alias` is a weak alias of a function
+    // in the unit (the conditional-syscall shape): FUNC, WEAK, the
+    // target's value and size. `.weak` on a section label binds the label
+    // weak; `.weak` of an undefined name yields a weak UNDEF entry.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        long ni_syscall(void) { return -38; }\n\
+        asm(\".weak sys_alias\\n\\t.set  sys_alias,ni_syscall\");\n\
+        asm(\".pushsection .rodata,\\\"a\\\"\\n\"\n\
+            \".weak weak_marker\\n\"\n\
+            \"weak_marker:\\n.long 7\\n\"\n\
+            \".popsection\");\n\
+        asm(\".weak optional_hook\");\n\
+        int main(void) { return 0; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let symbols = elf_symbols(&bytes);
+        let by_name = |n: &str| {
+            symbols
+                .iter()
+                .find(|s| s.0 == n)
+                .unwrap_or_else(|| panic!("{target:?}: symbol `{n}` missing"))
+        };
+        const STB_WEAK: u8 = 2;
+        const STT_FUNC: u8 = 2;
+        let tgt = by_name("ni_syscall");
+        let alias = by_name("sys_alias");
+        assert_eq!(
+            alias.1,
+            (STB_WEAK << 4) | STT_FUNC,
+            "{target:?}: alias info"
+        );
+        assert_eq!(alias.2, tgt.2, "{target:?}: alias section");
+        assert_eq!(alias.3, tgt.3, "{target:?}: alias value");
+        assert_eq!(alias.4, tgt.4, "{target:?}: alias size");
+        let marker = by_name("weak_marker");
+        assert_eq!(marker.1 >> 4, STB_WEAK, "{target:?}: weak label binding");
+        assert_ne!(marker.2, 0, "{target:?}: weak label is defined");
+        let hook = by_name("optional_hook");
+        assert_eq!(hook.1 >> 4, STB_WEAK, "{target:?}: weak undef binding");
+        assert_eq!(hook.2, 0, "{target:?}: weak undef is SHN_UNDEF");
+    }
+}
+
+#[test]
+fn file_scope_asm_incbin_embeds_file_bytes() {
+    // `.incbin "path"` splices the file's raw bytes at that point in the
+    // section image; the path resolves as GNU as resolves it, against the
+    // working directory (an absolute path here, so the test is
+    // cwd-independent). A missing file is a compile error naming the path.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let payload = b"\x00\x01binary\xffpayload";
+    let path = std::env::temp_dir().join("badc_incbin_test.bin");
+    std::fs::write(&path, payload).expect("write payload");
+    let src = alloc::format!(
+        "asm(\".pushsection .blob,\\\"a\\\"\\n\"\n\
+             \".byte 0x5a\\n\"\n\
+             \".incbin \\\"{}\\\"\\n\"\n\
+             \".byte 0xa5\\n\"\n\
+             \".popsection\");\n\
+         int main(void) {{ return 0; }}\n",
+        path.display()
+    );
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(src.clone()).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let blob = &sections.iter().find(|(n, _, _, _)| n == ".blob").unwrap().3;
+        let mut expect = alloc::vec![0x5au8];
+        expect.extend_from_slice(payload);
+        expect.push(0xa5);
+        assert_eq!(blob, &expect, "{target:?}: spliced bytes");
+    }
+    let missing = "asm(\".pushsection .blob,\\\"a\\\"\\n.incbin \\\"badc_no_such_payload.bin\\\"\\n.popsection\");";
+    let err = Compiler::new(String::from(missing))
+        .compile()
+        .expect_err("missing file must be a compile error");
+    let msg = alloc::format!("{err:?}");
+    assert!(
+        msg.contains("badc_no_such_payload.bin") && msg.contains("cannot read"),
+        "diagnostic names the path: {msg}"
+    );
+}
+
 #[test]
 fn inline_asm_pushsection_lands_in_relocatable_object() {
     // A `.pushsection` data block must appear as a named section of the

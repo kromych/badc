@@ -220,6 +220,8 @@ tests/perf/build/
 # belong under version control.
 /tests/fixtures/c/*
 !/tests/fixtures/c/*.c
+# The `.incbin` fixture's committed payload.
+!/tests/fixtures/c/file_scope_asm_incbin.bin
 
 badc-*-rsync/
 

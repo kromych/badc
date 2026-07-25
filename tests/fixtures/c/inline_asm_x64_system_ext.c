@@ -21,6 +21,36 @@ static void invalidate_vpid(unsigned long ext, struct desc128 *desc) {
     __asm__ volatile("invvpid %[d], %[e]" ::[d] "m"(*desc), [e] "r"(ext) : "memory");
 }
 
+static void invalidate_ept(unsigned long ext, struct desc128 *desc) {
+    __asm__ volatile("invept %[d], %[e]" ::[d] "m"(*desc), [e] "r"(ext) : "memory");
+}
+
+static void x87_div_check(const double *p, int *out) {
+    // The FDIV-bug probe sequence, plus fnclex and the extending moves.
+    __asm__ volatile("fnclex\n\t"
+                     "fldl %1\n\t"
+                     "fdivl %1\n\t"
+                     "fmull %1\n\t"
+                     "fldl %1\n\t"
+                     "fsubp %%st,%%st(1)\n\t"
+                     "fistpl %0\n\t"
+                     "fwait\n\t"
+                     "fninit"
+                     : "=m"(*out)
+                     : "m"(*p));
+}
+
+static unsigned long extend_moves(const unsigned char *p, unsigned long i) {
+    unsigned long r;
+    __asm__("movzbl (%1,%2), %k0\n\t"
+            "movsbq (%1), %0\n\t"
+            "movzwl 2(%1), %k0\n\t"
+            "movslq %k0, %0"
+            : "=&r"(r)
+            : "r"(p), "r"(i));
+    return r;
+}
+
 static void invalidate_guest_page(unsigned long addr, unsigned int asid) {
     // rAX carries the address and ECX the ASID; the template spells those
     // implicit operands, which carry no encoding of their own.
@@ -70,6 +100,11 @@ int main(int argc, char **argv) {
         unsigned int m = 0;
         invalidate_pcid(0, &d);
         invalidate_vpid(0, &d);
+        int fdiv_out = 0;
+        unsigned char bytes[4] = {1, 2, 3, 4};
+        invalidate_ept(0, &d);
+        x87_div_check(&dv, &fdiv_out);
+        (void)extend_moves(bytes, 1);
         invalidate_guest_page(0, 0);
         cmpxchg_128(&d);
         load_x87_double(&dv);

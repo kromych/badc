@@ -159,6 +159,9 @@ pub(crate) enum Mnemonic {
     Prefix(u8),
     /// An operandless instruction with a fixed encoding, such as `fninit`.
     Fixed(&'static [u8]),
+    /// x87 subtract-and-pop: `fsubp [%st, %st(i)]` encodes DE E0+i under
+    /// GNU as operand order; the bare form is `%st, %st(1)`.
+    Fsubp,
     /// A string primitive (`movs` / `cmps` / `stos` / `lods` / `scas`). Its
     /// operands are the fixed `%rsi` / `%rdi` / accumulator pair, so the AT&T
     /// size suffix alone picks the opcode and the operand-size prefix.
@@ -236,6 +239,15 @@ pub(crate) enum Mnemonic {
     /// a generic AT&T-to-Intel operand transpose. This is what lets inline asm
     /// reach every instruction the table encodes without a per-mnemonic arm.
     Table(&'static str),
+    /// An AT&T zero/sign-extending move spelling source and destination
+    /// widths (`movzbl` = `movzx r32, r/m8`, `movslq` = `movsxd r64,
+    /// r/m32`). `name` is the catalogue's Intel mnemonic; the source width
+    /// is applied to the r/m operand before the table encode, since AT&T
+    /// syntax carries it only in the mnemonic.
+    ExtMov {
+        name: &'static str,
+        src: AsmRegSize,
+    },
 }
 
 /// One symbolic operand of a template instruction.
@@ -518,6 +530,16 @@ pub(crate) fn reg_by_name(name: &str) -> Option<(u8, AsmRegSize)> {
     {
         return Some((16 + i, Quad));
     }
+    if n == "st" {
+        return Some((ST_BASE, Quad));
+    }
+    if let Some(rest) = n.strip_prefix("st(")
+        && let Some(d) = rest.strip_suffix(')')
+        && let Ok(i) = d.parse::<u8>()
+        && i < 8
+    {
+        return Some((ST_BASE + i, Quad));
+    }
     // Control (cr0..cr15) and debug (db0..db7) registers, marked with the
     // bases below so they never collide with the GPRs. Only `mov` reads /
     // writes them, masking the mark back to the 0..16 ModRM.reg field. They
@@ -559,6 +581,9 @@ pub(crate) const YMM_BASE: u8 = 96;
 /// Control / debug / segment registers occupy the ranges below; each is
 /// marked so it never collides with the 0..16 GPRs or the MMX marks.
 const CR_BASE: u8 = 24;
+/// x87 stack registers st / st(0)..st(7), marked so they never collide
+/// with the GPR/MMX codes; only the x87 register-form arms read them.
+const ST_BASE: u8 = 128;
 const DR_BASE: u8 = 40;
 const SEG_BASE: u8 = 48;
 
@@ -711,6 +736,7 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         // into a register (66 0F 38 82 / 81 /r).
         "invpcid" => Mnemonic::InvMem { opcode: 0x82 },
         "invvpid" => Mnemonic::InvMem { opcode: 0x81 },
+        "invept" => Mnemonic::InvMem { opcode: 0x80 },
         "rdmsr" => Mnemonic::Rdmsr,
         "wrmsr" => Mnemonic::Wrmsr,
         "rdpmc" => Mnemonic::Rdpmc,
@@ -721,6 +747,14 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "rep" | "repe" | "repz" => Mnemonic::Prefix(0xF3),
         "repne" | "repnz" => Mnemonic::Prefix(0xF2),
         "fninit" => Mnemonic::Fixed(&[0xDB, 0xE3]),
+        // x87 wait-for-pending-exceptions (WAIT/FWAIT) and clear-exceptions.
+        "fwait" | "wait" => Mnemonic::Fixed(&[0x9B]),
+        "fnclex" => Mnemonic::Fixed(&[0xDB, 0xE2]),
+        // MMX state clear.
+        "emms" => Mnemonic::Fixed(&[0x0F, 0x77]),
+        // x87 subtract-and-pop register form; AT&T operand order (GNU as
+        // encodes `fsubp %st, %st(i)` as DE E0+i).
+        "fsubp" => Mnemonic::Fsubp,
         // x87 store status / control word to memory (DD /7, D9 /7).
         "fnstsw" => Mnemonic::MemExt {
             opcode: 0xDD,
@@ -731,6 +765,32 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "fnstcw" => Mnemonic::MemExt {
             opcode: 0xD9,
             ext: 7,
+            osz: false,
+            rex_w: false,
+        },
+        // x87 divide / multiply by a 64-bit float in memory (DC /6, DC /1)
+        // and integer store-and-pop to a 32-bit memory slot (DB /3).
+        "fdivl" => Mnemonic::MemExt {
+            opcode: 0xDC,
+            ext: 6,
+            osz: false,
+            rex_w: false,
+        },
+        "fmull" => Mnemonic::MemExt {
+            opcode: 0xDC,
+            ext: 1,
+            osz: false,
+            rex_w: false,
+        },
+        "fistpl" => Mnemonic::MemExt {
+            opcode: 0xDB,
+            ext: 3,
+            osz: false,
+            rex_w: false,
+        },
+        "fildl" => Mnemonic::MemExt {
+            opcode: 0xDB,
+            ext: 0,
             osz: false,
             rex_w: false,
         },
@@ -1091,6 +1151,52 @@ fn movq_xmm(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
     true
 }
 
+/// If `movq src, dst` involves an MMX register, encode the MMX quadword move
+/// and return true. The forms: mm<->mm and mem->mm load (0F 6F), mm->mem
+/// store (0F 7F), GP64<->mm (REX.W 0F 6E/7E). The mm register is always
+/// ModRM.reg; the other operand is r/m.
+fn movq_mmx(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
+    let mm = |c: &Concrete| match c {
+        Concrete::Reg { reg, .. } if (MMX_BASE..MMX_BASE + 8).contains(reg) => {
+            Some(*reg - MMX_BASE)
+        }
+        _ => None,
+    };
+    match (mm(&src), mm(&dst), src, dst) {
+        // mm -> mm and mem -> mm use the load opcode with dst in ModRM.reg.
+        (Some(s), Some(d), _, _) => {
+            code.extend_from_slice(&[0x0F, 0x6F]);
+            code.push(modrm_reg(d, s));
+        }
+        (None, Some(d), Concrete::Mem { base, disp, .. }, _) => {
+            if base >= 8 {
+                code.push(rex(false, false, false, true));
+            }
+            code.extend_from_slice(&[0x0F, 0x6F]);
+            modrm_mem(code, d, base, disp);
+        }
+        (Some(s), None, _, Concrete::Mem { base, disp, .. }) => {
+            if base >= 8 {
+                code.push(rex(false, false, false, true));
+            }
+            code.extend_from_slice(&[0x0F, 0x7F]);
+            modrm_mem(code, s, base, disp);
+        }
+        (None, Some(d), Concrete::Reg { reg: g, .. }, _) if g < MMX_BASE => {
+            code.push(rex(true, false, false, g >= 8));
+            code.extend_from_slice(&[0x0F, 0x6E]);
+            code.push(modrm_reg(d, g & 7));
+        }
+        (Some(s), None, _, Concrete::Reg { reg: g, .. }) if g < MMX_BASE => {
+            code.push(rex(true, false, false, g >= 8));
+            code.extend_from_slice(&[0x0F, 0x7E]);
+            code.push(modrm_reg(s, g & 7));
+        }
+        _ => return false,
+    }
+    true
+}
+
 /// The catalogue mnemonic matching `name`, as a `'static` string, or `None`.
 /// Lets a mnemonic the table encodes but that has no bespoke [`Mnemonic`]
 /// variant still be parsed and routed through the table.
@@ -1122,6 +1228,31 @@ fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
         _ => None,
     } {
         return Some((Mnemonic::Table(table_mnemonic(sized)?), None));
+    }
+    // AT&T zero/sign-extending moves; the second width letter is the
+    // operation width, the first rides the mnemonic to the r/m operand.
+    {
+        use AsmRegSize::{Byte, Long, Quad, Word};
+        let ext = |name: &'static str, src: AsmRegSize, dst: AsmRegSize| {
+            Some((Mnemonic::ExtMov { name, src }, Some(dst)))
+        };
+        let m = match tok {
+            "movzbw" => ext("movzx", Byte, Word),
+            "movzbl" => ext("movzx", Byte, Long),
+            "movzbq" => ext("movzx", Byte, Quad),
+            "movzwl" => ext("movzx", Word, Long),
+            "movzwq" => ext("movzx", Word, Quad),
+            "movsbw" => ext("movsx", Byte, Word),
+            "movsbl" => ext("movsx", Byte, Long),
+            "movsbq" => ext("movsx", Byte, Quad),
+            "movswl" => ext("movsx", Word, Long),
+            "movswq" => ext("movsx", Word, Quad),
+            "movslq" => ext("movsxd", Long, Quad),
+            _ => None,
+        };
+        if m.is_some() {
+            return m;
+        }
     }
     let (base, suffix) = match tok.as_bytes().last() {
         Some(b'b') => (&tok[..tok.len() - 1], Some(AsmRegSize::Byte)),
@@ -1179,6 +1310,14 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
             return Ok(AsmOpnd::ImmLabel { num, forward });
         }
         return Err(format!("inline asm: bad immediate `{tok}`"));
+    }
+    // x87 stack registers spell an index in parentheses (`%%st(1)`):
+    // register syntax, not a memory reference.
+    if let Some(body) = tok.strip_prefix("%%").or_else(|| tok.strip_prefix('%'))
+        && body.starts_with("st(")
+        && let Some((reg, size)) = reg_by_name(body)
+    {
+        return Ok(AsmOpnd::Reg { reg, size });
     }
     // `prefix(inner)`: a memory reference (displacement off a base register)
     // or, with an `(%rip)` base, the address of a template-local label.
@@ -2199,6 +2338,22 @@ pub(crate) fn encode(
     suffix: Option<AsmRegSize>,
     ops: &[Concrete],
 ) -> Result<(), String> {
+    // An AT&T extending move: the spelled source width lands on the r/m
+    // operand (AT&T first), then the catalogue encodes the Intel form.
+    if let Mnemonic::ExtMov { name, src } = mnemonic {
+        let mut ops = ops.to_vec();
+        if let Some(o) = ops.first_mut() {
+            match o {
+                Concrete::Reg { size, .. }
+                | Concrete::Mem { size, .. }
+                | Concrete::AbsMem { size, .. }
+                | Concrete::IndexMem { size, .. }
+                | Concrete::RipRel { size, .. } => *size = src,
+                Concrete::Imm(_) => {}
+            }
+        }
+        return encode(code, Mnemonic::Table(name), suffix, &ops);
+    }
     // Mnemonics the table encoder covers route through it; the operands are
     // resolved to Intel order first.
     if let Some((name, width, tops)) = to_table(mnemonic, suffix, ops) {
@@ -2259,6 +2414,22 @@ pub(crate) fn encode(
         }
         Mnemonic::Fixed(bytes) => {
             code.extend_from_slice(bytes);
+            Ok(())
+        }
+        Mnemonic::Fsubp => {
+            let i = match ops {
+                [] => Some(1),
+                [Concrete::Reg { reg: s, .. }, Concrete::Reg { reg: d, .. }] if *s == ST_BASE => {
+                    d.checked_sub(ST_BASE).filter(|&i| i < 8)
+                }
+                _ => None,
+            };
+            let Some(i) = i else {
+                return Err(String::from(
+                    "inline asm: `fsubp` takes `%st, %st(i)` or no operands",
+                ));
+            };
+            code.extend_from_slice(&[0xDE, 0xE0 + i]);
             Ok(())
         }
         Mnemonic::StringOp { opcode, osz, rex_w } => {
@@ -2870,8 +3041,9 @@ pub(crate) fn encode(
         //   write gpr -> cr/dr/seg : 0F 22 / 0F 23 / 8E
         Mnemonic::Mov => {
             let [src, dst] = two(ops)?;
-            // `movq` with an XMM operand is the SSE quadword move, not a GP mov.
-            if movq_xmm(code, src, dst) {
+            // `movq` with an XMM operand is the SSE quadword move, with an
+            // MMX operand the MMX quadword move; neither is a GP mov.
+            if movq_xmm(code, src, dst) || movq_mmx(code, src, dst) {
                 return Ok(());
             }
             {
@@ -3799,6 +3971,36 @@ mod tests {
     }
 
     #[test]
+    fn movq_mmx_forms() {
+        // Byte-exact vs GNU as: mm<->mem (0F 7F / 6F), mm<->mm (0F 6F),
+        // GP64<->mm (REX.W 0F 6E/7E), and the WAIT prefix byte.
+        assert_eq!(asm_bytes(b"movq %%mm0, (%%rdi)"), [0x0F, 0x7F, 0x07]);
+        assert_eq!(asm_bytes(b"movq (%%rdi), %%mm1"), [0x0F, 0x6F, 0x0F]);
+        assert_eq!(asm_bytes(b"movq %%mm2, %%mm3"), [0x0F, 0x6F, 0xDA]);
+        assert_eq!(asm_bytes(b"movq %%mm4, %%rax"), [0x48, 0x0F, 0x7E, 0xE0]);
+        assert_eq!(asm_bytes(b"movq %%rax, %%mm5"), [0x48, 0x0F, 0x6E, 0xE8]);
+        assert_eq!(
+            asm_bytes(b"movq %%mm0, 8(%%r10)"),
+            [0x41, 0x0F, 0x7F, 0x42, 0x08]
+        );
+        assert_eq!(asm_bytes(b"fwait"), [0x9B]);
+        assert_eq!(asm_bytes(b"fninit"), [0xDB, 0xE3]);
+    }
+
+    #[test]
+    fn x87_and_invept_forms() {
+        // Byte-exact vs GNU as: fnclex (DB E2), fdivl m64 (DC /6), and
+        // invept r64, m128 (66 0F 38 80 /r).
+        assert_eq!(asm_bytes(b"fnclex"), [0xDB, 0xE2]);
+        assert_eq!(asm_bytes(b"fdivl (%%rax)"), [0xDC, 0x30]);
+        assert_eq!(asm_bytes(b"fdivl 8(%%rbx)"), [0xDC, 0x73, 0x08]);
+        assert_eq!(
+            asm_bytes(b"invept (%%rdi), %%rax"),
+            [0x66, 0x0F, 0x38, 0x80, 0x07]
+        );
+    }
+
+    #[test]
     fn port_io_variable_form() {
         // `in`/`out` DX-port form: width from the AT&T suffix; word takes
         // the 0x66 prefix. Registers are implicit (accumulator + DX).
@@ -4515,16 +4717,52 @@ mod string_and_prefix_tests {
     }
 
     /// A string primitive names its own size, so a further AT&T suffix does
-    /// not apply: `movsbl` stays a sign-extending move rather than parsing
-    /// as `movsb` widened to long.
+    /// not apply: `movsbl` is a sign-extending move rather than `movsb`
+    /// widened to long.
     #[test]
     fn string_primitive_takes_no_further_suffix() {
         assert!(matches!(
             split_mnemonic("movsb"),
             Some((Mnemonic::StringOp { .. }, None))
         ));
-        assert_eq!(split_mnemonic("movsbl"), None);
-        assert_eq!(split_mnemonic("movswl"), None);
+        assert!(matches!(
+            split_mnemonic("movsbl"),
+            Some((Mnemonic::ExtMov { name: "movsx", .. }, _))
+        ));
+        assert!(matches!(
+            split_mnemonic("movswl"),
+            Some((Mnemonic::ExtMov { name: "movsx", .. }, _))
+        ));
+    }
+
+    /// The FDIV-bug probe's x87 sequence, byte-exact vs GNU as.
+    #[test]
+    fn x87_fdiv_bug_probe_forms() {
+        assert_eq!(asm_bytes(b"fmull (%%rax)"), [0xDC, 0x08]);
+        assert_eq!(asm_bytes(b"fistpl (%%rax)"), [0xDB, 0x18]);
+        assert_eq!(asm_bytes(b"fistpl 4(%%rbx)"), [0xDB, 0x5B, 0x04]);
+        assert_eq!(asm_bytes(b"fsubp %%st,%%st(1)"), [0xDE, 0xE1]);
+        assert_eq!(asm_bytes(b"fsubp"), [0xDE, 0xE1]);
+        assert_eq!(asm_bytes(b"fildl (%%rax)"), [0xDB, 0x00]);
+        assert_eq!(asm_bytes(b"emms"), [0x0F, 0x77]);
+    }
+
+    /// AT&T extending moves, byte-exact vs GNU as.
+    #[test]
+    fn extending_move_forms() {
+        assert_eq!(
+            asm_bytes(b"movzbl (%%rdi,%%rax), %%ecx"),
+            [0x0F, 0xB6, 0x0C, 0x07]
+        );
+        assert_eq!(asm_bytes(b"movzbl (%%rdi), %%eax"), [0x0F, 0xB6, 0x07]);
+        assert_eq!(asm_bytes(b"movsbl %%al, %%edx"), [0x0F, 0xBE, 0xD0]);
+        assert_eq!(
+            asm_bytes(b"movzwl 2(%%rsi), %%eax"),
+            [0x0F, 0xB7, 0x46, 0x02]
+        );
+        assert_eq!(asm_bytes(b"movslq %%ecx, %%rax"), [0x48, 0x63, 0xC1]);
+        assert_eq!(asm_bytes(b"movzbq %%dl, %%r9"), [0x4C, 0x0F, 0xB6, 0xCA]);
+        assert_eq!(asm_bytes(b"movswq %%ax, %%rbx"), [0x48, 0x0F, 0xBF, 0xD8]);
     }
 
     /// The template shapes the sweep reported, end to end.

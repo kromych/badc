@@ -269,6 +269,14 @@ pub(crate) struct Symbol {
     /// the unsigned (zero-extending) extraction.
     pub is_enum_typedef: bool,
 
+    /// Alignment declared on a typedef via `__attribute__((aligned(N)))`
+    /// (GNU: sets the aliased type's alignment, and may lower it below
+    /// the natural alignment). 0 when the typedef carries no explicit
+    /// alignment. A direct use of the typedef -- as a struct member or
+    /// in `_Alignof` -- takes this alignment; a pointer through it keeps
+    /// the pointer's own alignment.
+    pub typedef_align: i64,
+
     /// C99 6.2.2 linkage class of a file-scope identifier.
     /// `Linkage::None` for block-scope names; `Linkage::Internal`
     /// for `static`-qualified file-scope names; `Linkage::External`

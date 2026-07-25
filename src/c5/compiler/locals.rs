@@ -606,6 +606,31 @@ impl Compiler {
                     if inner_dim > 1 {
                         let mut row: i64 = 0;
                         while self.lex.tk != '}' {
+                            // C99 6.7.8p7 array designator naming a row:
+                            // `[N] = { ... }` moves the cursor to row N;
+                            // subsequent positional rows continue at N+1.
+                            if self.lex.tk == Token::Brak {
+                                self.next()?;
+                                let idx = self.parse_constant_int()?;
+                                if idx < 0 || idx >= count {
+                                    return Err(self.compile_err(format!(
+                                        "row designator index {idx} out of bounds [0, {count})"
+                                    )));
+                                }
+                                if self.lex.tk != ']' {
+                                    return Err(self.compile_err(
+                                        "`]` expected after row designator index",
+                                    ));
+                                }
+                                self.next()?;
+                                if self.lex.tk != Token::Assign {
+                                    return Err(self.compile_err(
+                                        "`=` expected after `[N]` row designator",
+                                    ));
+                                }
+                                self.next()?;
+                                row = idx;
+                            }
                             if self.lex.tk != '{' {
                                 return Err(self.compile_err(
                                     "row of a 2D struct array must be brace-enclosed",

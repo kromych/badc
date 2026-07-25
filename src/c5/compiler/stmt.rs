@@ -389,6 +389,9 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
+            // GNU `__attribute__((aligned(N)))` on the typedef sets the aliased
+            // type's alignment; mirror the file-scope path.
+            self.symbols[id_idx].typedef_align = self.pending.attr_align;
             // Preserve an array / vector typedef's element count (C99 6.7.7):
             // the file-scope path stores this (run_compile), but the block-scope
             // path dropped it, so a second declaration using the typedef

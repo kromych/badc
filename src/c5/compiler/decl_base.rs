@@ -1318,6 +1318,7 @@ impl Compiler {
         // consumer, so clear here to keep the channel scoped to
         // this one base-type parse.
         self.pending.typedef_base_array_size = 0;
+        self.pending.typedef_base_align = 0;
         self.pending.typedef_fn_proto = None;
         self.pending.fn_ptr_param_types = None;
         // Leading modifier soup -- the order doesn't matter; we
@@ -1455,6 +1456,9 @@ impl Compiler {
                 self.pending.typedef_base_array_dims =
                     self.symbols[self.lex.curr_id_idx].array_dims.clone();
             }
+            // GNU typedef `aligned(N)`: carry the declared alignment so a
+            // direct (non-pointer) use in `_Alignof` reports it.
+            self.pending.typedef_base_align = self.symbols[self.lex.curr_id_idx].typedef_align;
             self.next()?;
             aliased
         } else if m.saw_int_mod {

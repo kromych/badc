@@ -20,8 +20,8 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::decl_base;
 use super::types::{
-    UNSIGNED_BIT, is_decl_modifier, is_struct_ty, round_up, struct_id_of, struct_ptr_depth,
-    struct_ty_for,
+    UNSIGNED_BIT, is_decl_modifier, is_pointer_ty, is_struct_ty, round_up, struct_id_of,
+    struct_ptr_depth, struct_ty_for,
 };
 use super::{Compiler, StructDef, StructField};
 
@@ -218,6 +218,10 @@ impl Compiler {
             // unsigned, so a value with the field's high bit set
             // zero-extends rather than sign-extends.
             let mut field_base_is_enum = false;
+            // Alignment declared on the field's base typedef via
+            // `__attribute__((aligned(N)))`; applied at placement when the
+            // field is a direct (non-pointer) use of the typedef.
+            let mut typedef_member_align: i64 = 0;
             let field_base_tok = self.lex.tk;
             let mut field_base = if let Some(inner) = atomic_field_base {
                 inner
@@ -329,6 +333,7 @@ impl Compiler {
                 if self.symbols[self.lex.curr_id_idx].is_enum_typedef {
                     field_base_is_enum = true;
                 }
+                typedef_member_align = self.symbols[self.lex.curr_id_idx].typedef_align;
                 let aliased = self.symbols[self.lex.curr_id_idx].type_;
                 // C99 6.7.7 paragraph 3: a typedef name carries
                 // through any array dimension on its alias. Stash
@@ -764,6 +769,11 @@ impl Compiler {
                     // `pack(1)`). A pack request above 16 packs nothing.
                     let natural_align = if is_empty_aggregate || attr_packed {
                         1
+                    } else if typedef_member_align > 0 && !is_pointer_ty(field_ty) {
+                        // GNU typedef `aligned(N)` sets the aliased type's
+                        // alignment, which may be below its natural alignment; a
+                        // pointer through the typedef keeps pointer alignment.
+                        typedef_member_align as usize
                     } else {
                         self.align_of_type(field_ty)
                     };

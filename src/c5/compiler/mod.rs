@@ -539,6 +539,11 @@ pub(in crate::c5::compiler) struct Pending {
     /// the array length. Cleared by every base-type parse
     /// (`0` means "not from an array typedef").
     pub typedef_base_array_size: i64,
+    /// Alignment declared on a base typedef via
+    /// `__attribute__((aligned(N)))`, captured when the typedef name is
+    /// resolved as a base type so a direct (non-pointer) use in `_Alignof`
+    /// reports the declared alignment. 0 when absent.
+    pub typedef_base_align: i64,
     /// Dimension list (outermost first) accompanying
     /// `typedef_base_array_size` when the typedef alias is a
     /// multi-dimensional array; empty for a 1-D alias. Written by the
@@ -844,6 +849,7 @@ impl Default for Pending {
             init_inner_dims: alloc::vec::Vec::new(),
             init_target_array_size: 0,
             typedef_base_array_size: 0,
+            typedef_base_align: 0,
             typedef_base_array_dims: alloc::vec::Vec::new(),
             declarator_leading_ptr_count: 0,
             vla_allowed: false,

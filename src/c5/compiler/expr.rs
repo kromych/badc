@@ -3933,9 +3933,14 @@ impl Compiler {
                 }
                 self.ty = common;
             } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {
-                if let Some((lv, ety)) = self.direct_inc_lvalue()
-                    && self.is_int128_ty(ety)
-                {
+                // A bitfield member or a 128-bit integer cannot use the
+                // generic trailing-load rewrite (its load is not one
+                // scalar load); build `Expr::PostInc` directly. The
+                // member-parse path handles `s.f++` when the `++` abuts
+                // the member; a parenthesized operand (`(s.f)++`) reaches
+                // here as an already-read lvalue, matching the pre-inc
+                // path.
+                if let Some((lv, ety)) = self.direct_inc_lvalue() {
                     let by = if self.lex.tk == Token::Inc { 1 } else { -1 };
                     let src = self.ast_src_pos();
                     self.next()?;
@@ -4400,6 +4405,15 @@ impl Compiler {
                             // "no array hint"), mirroring the zero-length
                             // array variable path.
                             self.pending.last_array_decay_size = -1;
+                            // A multi-dim flexible member (`T xs[][M]...`)
+                            // records its inner dims in `array_dims` with a 0
+                            // placeholder for the deferred outer dim; the inner
+                            // dims still give the row strides so `s.xs[i][j]`
+                            // scales each level. `seed_multi_dim_strides` reads
+                            // only `dims[k+1..]`, so the placeholder is inert.
+                            let dims = field.array_dims.clone();
+                            let elem_size = self.size_of_type(field.ty) as i64;
+                            self.seed_multi_dim_strides(&dims, elem_size);
                         }
                     } else if !field_is_struct_value {
                         self.mark_emit_scalar_load();

@@ -24,6 +24,7 @@
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::types::is_pointer_ty;
 
 impl Compiler {
     /// Parse the operand of a `sizeof` and return its byte
@@ -425,6 +426,11 @@ impl Compiler {
         let saved_ty = self.ty;
         self.ty = self.parse_decl_base_type()?;
         let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
+        // GNU typedef `aligned(N)`: a direct (non-pointer) type-name operand
+        // takes the declared alignment (C11 6.2.8 array alignment is its
+        // element's, so an array of the typedef keeps it); a pointer through
+        // the typedef takes the pointer's alignment.
+        let typedef_base_align = core::mem::take(&mut self.pending.typedef_base_align);
         while self.lex.tk == Token::MulOp {
             self.next()?;
             self.ty += Ty::Ptr as i64;
@@ -450,7 +456,11 @@ impl Compiler {
             return Err(self.compile_err("`)` expected to close `_Alignof`"));
         }
         self.next()?;
-        let align = self.align_of_type(self.ty) as i64;
+        let align = if typedef_base_align > 0 && !is_pointer_ty(self.ty) {
+            typedef_base_align
+        } else {
+            self.align_of_type(self.ty) as i64
+        };
         self.ty = saved_ty;
         Ok(align)
     }

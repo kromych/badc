@@ -2309,12 +2309,16 @@ fn run_inline_asm(
                 // the VM's register model.
             }
             // The string primitives step %rsi / %rdi and access guest memory,
-            // and the x87 / far-call memory forms have no register-model
-            // equivalent. Rejecting keeps the VM from silently skipping a
-            // memory effect the caller depends on.
-            Mnemonic::Fixed(_) | Mnemonic::StringOp { .. } | Mnemonic::MemExt { .. } => {
+            // and the x87 / far-branch / SSE-control / invalidation memory
+            // forms have no register-model equivalent. Rejecting keeps the VM
+            // from silently skipping a memory effect the caller depends on.
+            Mnemonic::Fixed(_)
+            | Mnemonic::StringOp { .. }
+            | Mnemonic::MemExt { .. }
+            | Mnemonic::MemExt0F { .. }
+            | Mnemonic::InvMem { .. } => {
                 return Err(C5Error::Runtime(alloc::string::String::from(
-                    "inline asm: string / x87 / far-call instruction is not supported under the VM",
+                    "inline asm: string / x87 / far-branch / system instruction is not supported under the VM",
                 )));
             }
             Mnemonic::Inc | Mnemonic::Dec => {

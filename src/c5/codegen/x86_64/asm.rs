@@ -178,6 +178,22 @@ pub(crate) enum Mnemonic {
         osz: bool,
         rex_w: bool,
     },
+    /// A single-memory-operand instruction on the 0F map, the ModR/M reg field
+    /// carrying the opcode extension: `cmpxchg16b` (REX.W 0F C7 /1), `ldmxcsr`
+    /// / `stmxcsr` (0F AE /2, /3). REX.W comes from `rex_w`, REX.B from the
+    /// base register.
+    MemExt0F {
+        opcode: u8,
+        ext: u8,
+        rex_w: bool,
+    },
+    /// A 0F38-map instruction reading a 128-bit memory operand into a general
+    /// register held in ModR/M.reg: `invpcid` / `invvpid` (66 0F 38 82 / 81
+    /// /r). The 0x66 prefix is mandatory and the operand size fixed, so there
+    /// is no REX.W; REX.R extends the register, REX.B the base.
+    InvMem {
+        opcode: u8,
+    },
     /// `xadd r, r/m` (0F C0/C1): exchange-and-add, the atomic primitive of
     /// the interlocked increment / decrement.
     Xadd,
@@ -651,6 +667,10 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "sti" => Mnemonic::Sti,
         "invd" => Mnemonic::Invd,
         "wbinvd" => Mnemonic::Wbinvd,
+        // TLB / PCID / VPID invalidation reading a 128-bit descriptor in memory
+        // into a register (66 0F 38 82 / 81 /r).
+        "invpcid" => Mnemonic::InvMem { opcode: 0x82 },
+        "invvpid" => Mnemonic::InvMem { opcode: 0x81 },
         "rdmsr" => Mnemonic::Rdmsr,
         "wrmsr" => Mnemonic::Wrmsr,
         "rdpmc" => Mnemonic::Rdpmc,
@@ -674,6 +694,31 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
             osz: false,
             rex_w: false,
         },
+        // x87 load / store-and-pop of a 64-bit float in memory (DD /0, DD /3);
+        // the AT&T `l` suffix selects the m64 operand.
+        "fldl" => Mnemonic::MemExt {
+            opcode: 0xDD,
+            ext: 0,
+            osz: false,
+            rex_w: false,
+        },
+        "fstpl" => Mnemonic::MemExt {
+            opcode: 0xDD,
+            ext: 3,
+            osz: false,
+            rex_w: false,
+        },
+        // SSE control/status register load / store (0F AE /2, /3).
+        "ldmxcsr" => Mnemonic::MemExt0F {
+            opcode: 0xAE,
+            ext: 2,
+            rex_w: false,
+        },
+        "stmxcsr" => Mnemonic::MemExt0F {
+            opcode: 0xAE,
+            ext: 3,
+            rex_w: false,
+        },
         // Far indirect call (FF /3); the AT&T suffix sets the operand size.
         "lcallw" => Mnemonic::MemExt {
             opcode: 0xFF,
@@ -693,8 +738,33 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
             osz: false,
             rex_w: true,
         },
+        // Far indirect jump (FF /5); the AT&T suffix sets the operand size.
+        "ljmpw" => Mnemonic::MemExt {
+            opcode: 0xFF,
+            ext: 5,
+            osz: true,
+            rex_w: false,
+        },
+        "ljmp" | "ljmpl" => Mnemonic::MemExt {
+            opcode: 0xFF,
+            ext: 5,
+            osz: false,
+            rex_w: false,
+        },
+        "ljmpq" => Mnemonic::MemExt {
+            opcode: 0xFF,
+            ext: 5,
+            osz: false,
+            rex_w: true,
+        },
         "xadd" => Mnemonic::Xadd,
         "cmpxchg" => Mnemonic::Cmpxchg,
+        // 128-bit compare-and-exchange against rDX:rAX (REX.W 0F C7 /1).
+        "cmpxchg16b" => Mnemonic::MemExt0F {
+            opcode: 0xC7,
+            ext: 1,
+            rex_w: true,
+        },
         "inc" => Mnemonic::Inc,
         "dec" => Mnemonic::Dec,
         _ => {
@@ -2050,6 +2120,44 @@ pub(crate) fn encode(
             modrm_mem(code, ext, *base, *disp);
             Ok(())
         }
+        Mnemonic::MemExt0F { opcode, ext, rex_w } => {
+            let Some(Concrete::Mem { base, disp, .. }) = ops.first() else {
+                return Err(String::from(
+                    "inline asm: this instruction takes a memory operand",
+                ));
+            };
+            if rex_w || *base >= 8 {
+                code.push(rex(rex_w, false, false, *base >= 8));
+            }
+            code.push(0x0F);
+            code.push(opcode);
+            modrm_mem(code, ext, *base, *disp);
+            Ok(())
+        }
+        Mnemonic::InvMem { opcode } => {
+            // AT&T `<op> m128, r64`: the register in ModR/M.reg, the 128-bit
+            // descriptor in memory the r/m. 66-prefixed with the operand size
+            // fixed, so no REX.W.
+            let [mem, reg] = two(ops)?;
+            let (gpr, _) = as_reg(reg)?;
+            if gpr >= MMX_BASE {
+                return Err(String::from(
+                    "inline asm: general register expected for this instruction",
+                ));
+            }
+            let Concrete::Mem { base, disp, .. } = mem else {
+                return Err(String::from(
+                    "inline asm: this instruction takes a memory operand",
+                ));
+            };
+            code.push(0x66);
+            if gpr >= 8 || base >= 8 {
+                code.push(rex(false, gpr >= 8, false, base >= 8));
+            }
+            code.extend_from_slice(&[0x0F, 0x38, opcode]);
+            modrm_mem(code, gpr & 7, base, disp);
+            Ok(())
+        }
         Mnemonic::Pushfq => {
             code.push(0x9C);
             Ok(())
@@ -2643,14 +2751,49 @@ pub(crate) fn encode(
         }
         // The delegated general-purpose / system mnemonics are handled by the
         // table encoder above; reaching here means the catalogue has no form
-        // matching these operands, so report the mnemonic as written.
-        Mnemonic::Table(name) => Err(format!(
-            "inline asm: `{name}` has no x86-64 encoding for these operands"
-        )),
+        // matching these operands. A push / pop of a segment register is the
+        // one such form with a fixed encoding, so try it before reporting the
+        // mnemonic as written.
+        Mnemonic::Table(name) => segment_stack_op(code, name, suffix, ops).unwrap_or_else(|| {
+            Err(format!(
+                "inline asm: `{name}` has no x86-64 encoding for these operands"
+            ))
+        }),
         _ => Err(format!(
             "inline asm: unsupported instruction `{mnemonic:?}`"
         )),
     }
+}
+
+/// Push / pop of a segment register (`pushw %fs`, `popw %gs`), the one stack
+/// form the table's general-register / memory / immediate push / pop do not
+/// carry. Only FS/GS have a 64-bit-mode encoding: 0F A0 / A1 (FS) and 0F A8 /
+/// A9 (GS); the ES/CS/SS/DS one-byte forms are invalid in 64-bit mode, so the
+/// assembler rejects them and this does too. A `w` mnemonic or size suffix
+/// adds the 0x66 operand-size prefix. Returns `None` when the mnemonic is not
+/// push / pop or the operand is not an FS/GS register, leaving the caller to
+/// report the mnemonic unencodable.
+fn segment_stack_op(
+    code: &mut Vec<u8>,
+    name: &str,
+    suffix: Option<AsmRegSize>,
+    ops: &[Concrete],
+) -> Option<Result<(), String>> {
+    let is_pop = match name {
+        "push" | "pushw" | "pushq" => false,
+        "pop" | "popw" | "popq" => true,
+        _ => return None,
+    };
+    let [Concrete::Reg { reg, .. }] = ops else {
+        return None;
+    };
+    // FS is Sreg 4, GS is Sreg 5; the lower codes have no 64-bit encoding.
+    let sreg = reg.checked_sub(SEG_BASE).filter(|&s| s == 4 || s == 5)?;
+    if name.ends_with('w') || suffix == Some(AsmRegSize::Word) {
+        code.push(0x66);
+    }
+    code.extend_from_slice(&[0x0F, 0xA0 + (sreg - 4) * 8 + u8::from(is_pop)]);
+    Some(Ok(()))
 }
 
 fn as_reg(op: Concrete) -> Result<(u8, AsmRegSize), String> {
@@ -3932,6 +4075,105 @@ mod string_and_prefix_tests {
         assert_eq!(asm_bytes(b"lcall *(%rax)"), [0xFF, 0x18]);
         assert_eq!(asm_bytes(b"lcalll *(%rax)"), [0xFF, 0x18]);
         assert_eq!(asm_bytes(b"lcallq *(%rax)"), [0x48, 0xFF, 0x18]);
+        // x87 load / store-and-pop of a 64-bit float (DD /0, DD /3).
+        assert_eq!(asm_bytes(b"fldl (%rax)"), [0xDD, 0x00]);
+        assert_eq!(asm_bytes(b"fldl 8(%rbx)"), [0xDD, 0x43, 0x08]);
+        assert_eq!(asm_bytes(b"fldl (%r14)"), [0x41, 0xDD, 0x06]);
+        assert_eq!(asm_bytes(b"fstpl (%rax)"), [0xDD, 0x18]);
+        assert_eq!(asm_bytes(b"fstpl 8(%rbx)"), [0xDD, 0x5B, 0x08]);
+        assert_eq!(asm_bytes(b"fstpl (%r14)"), [0x41, 0xDD, 0x1E]);
+        // Far indirect jump (FF /5); the AT&T suffix sets the operand size.
+        assert_eq!(asm_bytes(b"ljmpl *(%rax)"), [0xFF, 0x28]);
+        assert_eq!(asm_bytes(b"ljmpq *(%rax)"), [0x48, 0xFF, 0x28]);
+        assert_eq!(asm_bytes(b"ljmpl *(%r13)"), [0x41, 0xFF, 0x6D, 0x00]);
+        assert_eq!(asm_bytes(b"ljmpw *(%rax)"), [0x66, 0xFF, 0x28]);
+    }
+
+    /// System / SSE-control / invalidation memory forms on the 0F and 0F38
+    /// maps. Byte-verified against clang.
+    #[test]
+    fn system_memory_extension_forms() {
+        // 128-bit compare-and-exchange (REX.W 0F C7 /1), bare and lock-prefixed.
+        assert_eq!(asm_bytes(b"cmpxchg16b (%rax)"), [0x48, 0x0F, 0xC7, 0x08]);
+        assert_eq!(
+            asm_bytes(b"cmpxchg16b (%r12)"),
+            [0x49, 0x0F, 0xC7, 0x0C, 0x24]
+        );
+        assert_eq!(
+            asm_bytes(b"cmpxchg16b 8(%rbx)"),
+            [0x48, 0x0F, 0xC7, 0x4B, 0x08]
+        );
+        assert_eq!(
+            asm_bytes(b"lock; cmpxchg16b (%rax)"),
+            [0xF0, 0x48, 0x0F, 0xC7, 0x08]
+        );
+        // SSE control/status register load / store (0F AE /2, /3).
+        assert_eq!(asm_bytes(b"ldmxcsr (%rax)"), [0x0F, 0xAE, 0x10]);
+        assert_eq!(asm_bytes(b"ldmxcsr (%r13)"), [0x41, 0x0F, 0xAE, 0x55, 0x00]);
+        assert_eq!(asm_bytes(b"stmxcsr (%rax)"), [0x0F, 0xAE, 0x18]);
+        assert_eq!(
+            asm_bytes(b"stmxcsr 128(%rdx)"),
+            [0x0F, 0xAE, 0x9A, 0x80, 0x00, 0x00, 0x00]
+        );
+        // PCID / VPID invalidation reading a 128-bit descriptor (66 0F 38 82 /
+        // 81 /r): the register in ModR/M.reg, the descriptor the r/m.
+        assert_eq!(
+            asm_bytes(b"invpcid (%rax), %rbx"),
+            [0x66, 0x0F, 0x38, 0x82, 0x18]
+        );
+        assert_eq!(
+            asm_bytes(b"invpcid (%r10), %r11"),
+            [0x66, 0x45, 0x0F, 0x38, 0x82, 0x1A]
+        );
+        assert_eq!(
+            asm_bytes(b"invpcid 16(%rbp), %rsi"),
+            [0x66, 0x0F, 0x38, 0x82, 0x75, 0x10]
+        );
+        assert_eq!(
+            asm_bytes(b"invvpid (%rax), %rbx"),
+            [0x66, 0x0F, 0x38, 0x81, 0x18]
+        );
+        assert_eq!(
+            asm_bytes(b"invvpid (%r10), %r11"),
+            [0x66, 0x45, 0x0F, 0x38, 0x81, 0x1A]
+        );
+    }
+
+    /// Segment-register push / pop. Only FS/GS have a 64-bit-mode encoding
+    /// (0F A0 / A1, 0F A8 / A9); a `w` suffix adds the 0x66 operand-size
+    /// prefix. Byte-verified against clang. The ES/CS/SS/DS forms are invalid
+    /// in 64-bit mode, so the assembler rejects them and so does this.
+    #[test]
+    fn segment_register_push_pop() {
+        assert_eq!(asm_bytes(b"push %fs"), [0x0F, 0xA0]);
+        assert_eq!(asm_bytes(b"pop %fs"), [0x0F, 0xA1]);
+        assert_eq!(asm_bytes(b"push %gs"), [0x0F, 0xA8]);
+        assert_eq!(asm_bytes(b"pop %gs"), [0x0F, 0xA9]);
+        assert_eq!(asm_bytes(b"pushw %fs"), [0x66, 0x0F, 0xA0]);
+        assert_eq!(asm_bytes(b"popw %fs"), [0x66, 0x0F, 0xA1]);
+        assert_eq!(asm_bytes(b"pushw %gs"), [0x66, 0x0F, 0xA8]);
+        assert_eq!(asm_bytes(b"popw %gs"), [0x66, 0x0F, 0xA9]);
+        // A `q` suffix is the 64-bit default: no operand-size prefix.
+        assert_eq!(asm_bytes(b"pushq %fs"), [0x0F, 0xA0]);
+        // ES(0) / CS(1) / SS(2) / DS(3) have no 64-bit push / pop encoding.
+        let rejects = |tok: &str, sreg: u8| {
+            let (m, sfx) = split_mnemonic(tok).unwrap();
+            let mut c = Vec::new();
+            encode(
+                &mut c,
+                m,
+                sfx,
+                &[Concrete::Reg {
+                    reg: SEG_BASE + sreg,
+                    size: AsmRegSize::Word,
+                }],
+            )
+            .is_err()
+        };
+        assert!(rejects("pushw", 0));
+        assert!(rejects("popw", 3));
+        assert!(rejects("push", 2));
+        assert!(rejects("pop", 1));
     }
 
     /// A string primitive names its own size, so a further AT&T suffix does

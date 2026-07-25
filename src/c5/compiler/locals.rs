@@ -605,13 +605,16 @@ impl Compiler {
                         let slots = self.struct_flat_init_slots(sid).max(1);
                         items.div_ceil(slots) as i64
                     };
-                    self.next()?;
+                    // Reserve before consuming `{`: lexing the first element
+                    // token may append a string literal's bytes, whose
+                    // parser-added NUL must land right after them.
                     self.align_data_to_8();
                     let off = self.data.len() as i64;
                     self.symbols[loc_idx].val = off;
                     for _ in 0..(count * inner_dim * elem_size as i64) {
                         self.data.push(0);
                     }
+                    self.next()?;
                     // 2D struct array: each top-level brace is a row of
                     // `inner_dim` fully-braced structs; the 1D loop below would
                     // misread a row as one struct.
@@ -1158,6 +1161,10 @@ impl Compiler {
     fn count_struct_array_init_elems(&mut self, sid: usize) -> Result<Option<i64>, C5Error> {
         debug_assert!(self.lex.tk == '{');
         let snap = self.lex.snapshot();
+        // The token walk appends string-literal bytes to `data`; rewind
+        // them on exit as `designated_array_count` does.
+        let saved_data = self.data.len();
+        let saved_pc = self.next_ent_pc;
         let slots = self.struct_flat_init_slots(sid).max(1) as i64;
         self.next()?; // `{`
         let mut elems: i64 = 0;
@@ -1193,6 +1200,8 @@ impl Compiler {
         if fields > 0 {
             elems += 1;
         }
+        self.data.truncate(saved_data);
+        self.next_ent_pc = saved_pc;
         self.lex.restore(snap);
         Ok(walked.map(|_| elems))
     }
@@ -1391,11 +1400,16 @@ impl Compiler {
                     self.next()?; // consume outer `}`
                     return Ok(());
                 }
+                // Reserve the staged block before consuming `{`: lexing the
+                // first element token may append a string literal's bytes,
+                // whose parser-added NUL must land right after them, not
+                // inside or past the block.
+                self.align_data_to_8();
                 let staged_off = self.data.len();
-                self.next()?;
                 for _ in 0..(count * elem_size as i64) {
                     self.data.push(0);
                 }
+                self.next()?;
                 let mut i: i64 = 0;
                 while self.lex.tk != '}' {
                     // C99 6.7.8p7 `[N] =` (or GNU `[lo ... hi] =`)

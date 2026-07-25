@@ -452,6 +452,14 @@ fn deferred_array_designator() {
 }
 
 #[test]
+fn deferred_struct_array_string_field() {
+    // Staged storage is reserved before `{` is consumed, so a leading
+    // string literal's bytes and parser-added NUL stay contiguous
+    // instead of aliasing element 0's slot; every end alignment.
+    assert_eq!(run_fixture("deferred_struct_array_string_field.c"), 0);
+}
+
+#[test]
 fn struct_array_init_from_elem_values() {
     // Initializer entries that are expressions of the element type
     // count one element each (C99 6.7.8p13); mixed and flat lists

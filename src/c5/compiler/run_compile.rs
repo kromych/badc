@@ -2054,7 +2054,6 @@ impl Compiler {
                                     positional
                                 }
                             };
-                            self.next()?;
                             // C99 6.9.2: a prior tentative definition already
                             // reserved storage; reuse it so references emitted
                             // before this definition -- which baked in the
@@ -2079,6 +2078,11 @@ impl Compiler {
                                 fresh
                             };
                             self.symbols[id_idx].val = off;
+                            // Reserve before consuming `{`: lexing the first
+                            // element token may append a string literal's
+                            // bytes, whose parser-added NUL must land right
+                            // after them.
+                            self.next()?;
                             // 2D struct array `T xs[][M] = { { {...}, ... }, ...
                             // }`: each top-level brace is a row of `inner_dim`
                             // structs. The 1D loop below fills one struct per

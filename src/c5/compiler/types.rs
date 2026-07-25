@@ -91,6 +91,17 @@ pub(crate) const SEG_GS_BIT: i64 = 1 << 31;
 pub(crate) const SEG_FS_BIT: i64 = 1 << 32;
 const SEG_MASK: i64 = SEG_GS_BIT | SEG_FS_BIT;
 
+/// High-bit flag marking a type tag whose base type was spelled `void`.
+/// `void` keeps `unsigned char`'s representation (1-byte `sizeof` under
+/// the GNU extension, +1 `void *` arithmetic stride, U8 access width),
+/// so the tag stays in the char band and this orthogonal bit carries
+/// the distinct-incomplete-type identity C99 6.2.5p19 gives `void`.
+/// Stripped by [`strip_unsigned`] like the other qualifier bits, so
+/// band classifiers and codegen are unaffected; identity-sensitive
+/// sites ([`is_void_ty`], [`is_void_ptr_ty`], the 6.5.15p6 conditional
+/// rule, `_Generic` matching) test the bit.
+pub(crate) const VOID_BIT: i64 = 1 << 28;
+
 /// The x86 named address space a type tag carries.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Segment {
@@ -134,29 +145,30 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
     }
 }
 
-/// Drop the qualifier bits (`UNSIGNED_BIT`, `VOLATILE_BIT`, the segment
-/// bits). Use to recover the bare band-encoded type before consulting a
-/// helper that classifies by band. Most of the helpers in this module
-/// call this at their entry; outside callers only need it when storing a
-/// type tag where a non-bit-flagged tag is expected (e.g., switch-table
-/// comparisons against `Ty::Int as i64`).
+/// Drop the qualifier bits (`UNSIGNED_BIT`, `VOLATILE_BIT`, `VOID_BIT`,
+/// the segment bits). Use to recover the bare band-encoded type before
+/// consulting a helper that classifies by band. Most of the helpers in
+/// this module call this at their entry; outside callers only need it
+/// when storing a type tag where a non-bit-flagged tag is expected
+/// (e.g., switch-table comparisons against `Ty::Int as i64`).
 pub(crate) fn strip_unsigned(ty: i64) -> i64 {
-    ty & !(UNSIGNED_BIT | VOLATILE_BIT | SEG_MASK)
+    ty & !(UNSIGNED_BIT | VOLATILE_BIT | SEG_MASK | VOID_BIT)
 }
 
-/// True for a depth-1 `void *`. `void` shares the `Ty::Char |
-/// UNSIGNED_BIT` encoding (see `Token::Void`), so an `unsigned char *`
-/// also answers true; callers that must not confuse the two pair this
-/// with [`is_char_band_ptr_ty`] to exclude a character-pointer operand.
+/// The scalar `void` type tag.
+pub(crate) fn void_ty() -> i64 {
+    Ty::Char as i64 | UNSIGNED_BIT | VOID_BIT
+}
+
+/// True for scalar `void`, at any qualification.
+pub(crate) fn is_void_ty(ty: i64) -> bool {
+    (ty & VOID_BIT) != 0 && strip_unsigned(ty) == Ty::Char as i64
+}
+
+/// True for a depth-1 `void *`, at any qualification. Exact: character
+/// pointers carry no [`VOID_BIT`] and answer false.
 pub(crate) fn is_void_ptr_ty(ty: i64) -> bool {
-    ty & !VOLATILE_BIT == (Ty::Char as i64 | UNSIGNED_BIT) + Ty::Ptr as i64
-}
-
-/// True for a depth-1 pointer to any character type, of either
-/// signedness. `void *` answers true as well, for the encoding reason
-/// above.
-pub(crate) fn is_char_band_ptr_ty(ty: i64) -> bool {
-    strip_unsigned(ty) == Ty::Char as i64 + Ty::Ptr as i64
+    (ty & VOID_BIT) != 0 && strip_unsigned(ty) == Ty::Char as i64 + Ty::Ptr as i64
 }
 
 /// Round `x` up to the nearest multiple of `alignment` (which must
@@ -183,6 +195,9 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
     let unsigned = (ty & UNSIGNED_BIT) != 0;
     let bare = strip_unsigned(ty);
     let prefix = if unsigned { "unsigned " } else { "" };
+    if (ty & VOID_BIT) != 0 && (0..100).contains(&bare) {
+        return format!("void{}", "*".repeat((bare / 2) as usize));
+    }
     if bare >= STRUCT_BASE {
         let id = struct_id_of(bare);
         let depth = struct_ptr_depth(bare) as usize;
@@ -727,7 +742,7 @@ mod ty_tag {
     // `is_pointer_ty`. The base band ([0, 100): char / int) admits any
     // offset >= Ty::Ptr; every other band reserves even offsets.
     fn pointer_by_even_stride(ty: i64) -> bool {
-        let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+        let stripped = strip_unsigned(ty);
         let base = stripped - (stripped % 100);
         let off = stripped - base;
         if base == 0 {
@@ -767,9 +782,29 @@ mod ty_tag {
     }
 
     #[test]
+    fn void_identity_is_exact() {
+        let uchar = Ty::Char as i64 | UNSIGNED_BIT;
+        let ptr = Ty::Ptr as i64;
+        assert!(is_void_ty(void_ty()));
+        assert!(is_void_ty(void_ty() | VOLATILE_BIT));
+        assert!(!is_void_ty(uchar));
+        assert!(!is_void_ty(void_ty() + ptr));
+        assert!(is_void_ptr_ty(void_ty() + ptr));
+        assert!(is_void_ptr_ty((void_ty() + ptr) | VOLATILE_BIT));
+        assert!(!is_void_ptr_ty(uchar + ptr));
+        assert!(!is_void_ptr_ty(Ty::Char as i64 + ptr));
+        assert!(!is_void_ptr_ty(void_ty() + 2 * ptr));
+        // Representation: strips to unsigned char, so size / load /
+        // arithmetic classifiers are unaffected.
+        assert_eq!(strip_unsigned(void_ty()), Ty::Char as i64);
+        assert!(is_unsigned_ty(void_ty()));
+        assert_eq!(pointee_size_no_struct(strip_unsigned(void_ty() + ptr)), 1);
+    }
+
+    #[test]
     fn is_pointer_ty_matches_producible_tags() {
         for &ty in &producible_tags() {
-            for u in [0i64, UNSIGNED_BIT] {
+            for u in [0i64, UNSIGNED_BIT, UNSIGNED_BIT | VOID_BIT] {
                 let t = ty | u;
                 assert_eq!(
                     is_pointer_ty(t),

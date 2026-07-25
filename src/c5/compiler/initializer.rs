@@ -40,8 +40,7 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::const_expr::ConstVal;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, is_unsigned_ty, struct_id_of,
-    struct_ptr_depth,
+    is_pointer_ty, is_struct_ty, is_unsigned_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
 /// Relocation kind for one initializer-element value. Tracks
@@ -273,7 +272,7 @@ impl Compiler {
     /// slots (Data / Code relocs) pass through unchanged. Callers
     /// write `size_of_type(elem_ty)` low bytes of the result.
     pub(super) fn to_storage_bits(&self, value: i128, reloc: InitElemReloc, elem_ty: i64) -> i128 {
-        let stripped = elem_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+        let stripped = strip_unsigned(elem_ty);
         let is_float = stripped == Ty::Float as i64;
         let is_double = stripped == Ty::Double as i64;
         if !is_float && !is_double {
@@ -406,7 +405,7 @@ impl Compiler {
             // wide case mirrors the char case: the element is a scalar of the
             // wide-char width, not a pointer whose value happens to be a
             // string literal.
-            let is_char_array = (elem_ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64;
+            let is_char_array = strip_unsigned(elem_ty) == Ty::Char as i64;
             let is_wchar_array = self.lex.str_is_wide
                 && !is_pointer_ty(elem_ty)
                 && self.size_of_type(elem_ty) == self.lex.str_elem_bytes;
@@ -430,7 +429,7 @@ impl Compiler {
                 depth += 1;
                 self.next()?;
             }
-            let is_char_array = (elem_ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64;
+            let is_char_array = strip_unsigned(elem_ty) == Ty::Char as i64;
             if self.lex.tk == '"' && (self.lex.str_is_wide || is_char_array) {
                 paren_depth = depth;
             } else {
@@ -474,7 +473,7 @@ impl Compiler {
             self.expect_close_parens(paren_depth)?;
             return Ok(elems);
         }
-        if self.lex.tk == '"' && (elem_ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64 {
+        if self.lex.tk == '"' && strip_unsigned(elem_ty) == Ty::Char as i64 {
             let start_addr = self.take_concat_string_literal()?;
             let char_count = self.data.len() - start_addr;
             // C99 6.7.8p14: a string-literal initializer for a
@@ -629,7 +628,7 @@ impl Compiler {
             if self.lex.tk == '"'
                 && !self.lex.str_is_wide
                 && inner_dims.len() == 1
-                && (elem_ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64
+                && strip_unsigned(elem_ty) == Ty::Char as i64
             {
                 let row = inner_dims[0] as usize;
                 let start_addr = self.take_concat_string_literal()?;
@@ -2329,7 +2328,7 @@ impl Compiler {
             self.flex_array_measured_count = Some(elems.len());
             return Ok(());
         }
-        if self.lex.tk == '"' && (elem_ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64 {
+        if self.lex.tk == '"' && strip_unsigned(elem_ty) == Ty::Char as i64 {
             let start_addr = self.take_concat_string_literal()?;
             self.data.push(0); // ensure NUL terminator in the literal's bytes
             let mut idx = 0usize;
@@ -2959,7 +2958,7 @@ impl Compiler {
         let mut char_array_brace_string = false;
         if field.array_size > 0
             && field.inner_array_size == 0
-            && (field.ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64
+            && strip_unsigned(field.ty) == Ty::Char as i64
             && self.lex.tk == '{'
         {
             let snap = self.lex.snapshot();
@@ -2985,7 +2984,7 @@ impl Compiler {
         let mut char_array_paren_depth = 0usize;
         if field.array_size > 0
             && field.inner_array_size == 0
-            && (field.ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64
+            && strip_unsigned(field.ty) == Ty::Char as i64
             && self.lex.tk == '('
         {
             let snap = self.lex.snapshot();
@@ -3002,9 +3001,7 @@ impl Compiler {
                 self.data.truncate(data_snap);
             }
         }
-        if field.array_size > 0
-            && self.lex.tk == '"'
-            && (field.ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64
+        if field.array_size > 0 && self.lex.tk == '"' && strip_unsigned(field.ty) == Ty::Char as i64
         {
             // `struct S { char a[N]; } x = { "..." };` -- copy the
             // string bytes (including the trailing NUL) into the
@@ -3341,7 +3338,7 @@ impl Compiler {
             // emit a per-byte constant store, remainder zero-filled.
             if self.lex.tk == '"'
                 && !self.lex.str_is_wide
-                && (field.ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64
+                && strip_unsigned(field.ty) == Ty::Char as i64
             {
                 let start_addr = self.take_concat_string_literal()?;
                 self.data.push(0); // ensure NUL terminator
@@ -3696,9 +3693,9 @@ impl Compiler {
         self.pending_local_init_ast = self.ast_acc;
         if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
             self.mark_emit_other();
-        } else if (ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Char as i64 {
+        } else if strip_unsigned(ty) == Ty::Char as i64 {
             self.ast_assign();
-        } else if (ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Float as i64 {
+        } else if strip_unsigned(ty) == Ty::Float as i64 {
             // `float`-typed local: narrow the accumulator (an f64
             // bit pattern from the RHS) to single-precision and
             // store 4 bytes. The slot reserved by

@@ -4789,6 +4789,29 @@ fn conditional_void_pointer() {
 }
 
 #[test]
+fn conditional_pointer_result_identity() {
+    // C99 6.5.15p6 result types observed through _Generic: the `void *`
+    // arm wins over character pointers too, and `void *` never matches
+    // a character-pointer association (6.2.5p19 distinct-type identity).
+    assert_eq!(run_fixture("conditional_pointer_result_identity.c"), 0);
+}
+
+#[test]
+fn sizeof_result_size_t() {
+    // C99 6.5.3.4p4: sizeof / _Alignof results are size_t (unsigned),
+    // visible through the usual arithmetic conversions and typeof.
+    assert_eq!(run_fixture("sizeof_result_size_t.c"), 0);
+}
+
+#[test]
+fn minmax_signedness_chain() {
+    // choose_expr + conditional-based constant detection + signedness
+    // static_assert, over size_t-typed operands: the composed macro
+    // chain selects the correct arm and the assertion stays quiet.
+    assert_eq!(run_fixture("minmax_signedness_chain.c"), 0);
+}
+
+#[test]
 fn empty_declaration() {
     // A stray `;` declares nothing: accepted in a struct/union member
     // list and at file scope (gcc/clang extension), without opening a

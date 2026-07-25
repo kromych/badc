@@ -13,8 +13,8 @@ use alloc::string::String;
 use super::super::codegen::Target;
 use super::super::codegen::ssa::build::SsaBuilder;
 use super::super::compiler::types::{
-    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty,
-    is_vector_ty, is_volatile_ty, load_kind, segment_of_ty, strip_unsigned, struct_ptr_depth,
+    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_pointer_ty, is_struct_ty, is_vector_ty,
+    is_volatile_ty, load_kind, segment_of_ty, strip_unsigned, struct_ptr_depth,
 };
 use super::super::ir::{AsmSeg, AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind, ValueId};
 use super::super::symbol::Symbol;
@@ -737,7 +737,7 @@ impl<'a> Walker<'a> {
     /// struct id is out of range (defensive -- the parser
     /// shouldn't emit such a type).
     fn struct_size(&self, ty: i64) -> i64 {
-        let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+        let stripped = strip_unsigned(ty);
         if stripped < STRUCT_BASE {
             return 0;
         }
@@ -753,7 +753,7 @@ impl<'a> Walker<'a> {
     /// from a scalar converts the 128-bit value, unlike a plain struct
     /// whose value in a scalar context is just its address.
     fn is_int128_value_ty(&self, ty: i64) -> bool {
-        let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+        let stripped = strip_unsigned(ty);
         if stripped < STRUCT_BASE || struct_ptr_depth(ty) != 0 {
             return false;
         }
@@ -1628,7 +1628,7 @@ impl<'a> Walker<'a> {
                 // sign-extend when signed. Same-unit callers read the result
                 // register directly and do not re-narrow. `_Bool` is excluded:
                 // 6.3.1.2 already normalized it to 0/1.
-                let stripped = self.scalar_return_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+                let stripped = strip_unsigned(self.scalar_return_ty);
                 let rs = type_size_bytes(self.scalar_return_ty, self.target);
                 if !is_floating_scalar(self.scalar_return_ty)
                     && !is_pointer_ty(self.scalar_return_ty)
@@ -5201,7 +5201,7 @@ impl<'a> Walker<'a> {
             // range, where the signed convert yields a negative result,
             // so it takes the unsigned converter. Narrower unsigned
             // types fit the signed range zero-extended.
-            let stripped = src_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+            let stripped = strip_unsigned(src_ty);
             let unsigned_64 = (src_ty & UNSIGNED_BIT) != 0
                 && (stripped == Ty::Long as i64 || stripped == Ty::LongLong as i64);
             let to_float = is_float_ty(to_ty);
@@ -5238,7 +5238,7 @@ impl<'a> Walker<'a> {
             // unsigned 64-bit target can hold a value in [2^63, 2^64),
             // which the signed truncate would saturate, so it takes the
             // unsigned converter (a `float` source widens to f64 for it).
-            let stripped_to = to_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+            let stripped_to = strip_unsigned(to_ty);
             let target_unsigned_64 = (to_ty & UNSIGNED_BIT) != 0
                 && (stripped_to == Ty::Long as i64 || stripped_to == Ty::LongLong as i64);
             if target_unsigned_64 {
@@ -5781,7 +5781,7 @@ pub(crate) fn is_comparison_op(op: BinOp) -> bool {
 
 /// Test for floating-point scalar types.
 fn is_floating_scalar(ty: i64) -> bool {
-    let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+    let stripped = strip_unsigned(ty);
     stripped == Ty::Float as i64 || stripped == Ty::Double as i64
 }
 
@@ -5789,14 +5789,14 @@ fn is_floating_scalar(ty: i64) -> bool {
 /// float` at type `float` (single precision); the walker tags the
 /// result and feeds the single-precision codegen path.
 fn is_float_ty(ty: i64) -> bool {
-    (ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Float as i64
+    strip_unsigned(ty) == Ty::Float as i64
 }
 
 /// True for the scalar `_Bool` type (not a pointer to one). Used by
 /// the cast lowering to apply the C99 6.3.1.2 conversion (any
 /// nonzero scalar becomes 1).
 fn is_bool_scalar(ty: i64) -> bool {
-    (ty & !(UNSIGNED_BIT | VOLATILE_BIT)) == Ty::Bool as i64
+    strip_unsigned(ty) == Ty::Bool as i64
 }
 
 /// Sign- or zero-extend a scalar call result to the full 64-bit
@@ -5818,7 +5818,7 @@ fn extend_scalar_call_result(
     target: Target,
 ) -> super::super::ir::ValueId {
     use super::super::ir::BinOp;
-    let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+    let stripped = strip_unsigned(ty);
     let rs = type_size_bytes(ty, target);
     if is_floating_scalar(ty) || is_pointer_ty(ty) || !(rs == 1 || rs == 2 || rs == 4) {
         return v;
@@ -6027,7 +6027,7 @@ pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
 /// the walker can't compute (struct types, function types -- the
 /// walker doesn't currently consume those in cast positions).
 fn type_size_bytes(ty: i64, target: Target) -> usize {
-    let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+    let stripped = strip_unsigned(ty);
     if is_pointer_ty(ty) {
         return 8;
     }
@@ -6054,7 +6054,7 @@ fn type_size_bytes(ty: i64, target: Target) -> usize {
 /// signed type. Takes only the common type tag and lets the
 /// walker apply the mask through `BinopI(And, _, mask)`.
 fn unsigned_narrow_mask(ty: i64) -> i64 {
-    let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+    let stripped = strip_unsigned(ty);
     let unsigned = (ty & UNSIGNED_BIT) != 0;
     if !unsigned {
         return 0;

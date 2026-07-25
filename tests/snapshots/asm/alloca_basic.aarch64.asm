@@ -57,7 +57,6 @@ Disassembly of section .text:
                	mov	x5, x0
                	sxtw	x5, w5
                	lsl	x0, x5, #2
-               	sxtw	x0, w0
                	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x2, sp

@@ -15,7 +15,7 @@ use super::super::ir::BinOp;
 use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, is_floating_scalar, is_pointer_ty, is_struct_ty, struct_ptr_depth,
+    VOLATILE_BIT, is_floating_scalar, is_pointer_ty, is_struct_ty, strip_unsigned, struct_ptr_depth,
 };
 
 impl Compiler {
@@ -467,9 +467,8 @@ impl Compiler {
         // are all interchangeable here -- the compatibility rule
         // is "is this any kind of byte pointer?", not "do the
         // signedness tags line up".
-        let decl_is_char_ptr =
-            decl_is_ptr && (declared & !(UNSIGNED_BIT | VOLATILE_BIT)) == char_ptr;
-        let act_is_char_ptr = act_is_ptr && (actual & !(UNSIGNED_BIT | VOLATILE_BIT)) == char_ptr;
+        let decl_is_char_ptr = decl_is_ptr && strip_unsigned(declared) == char_ptr;
+        let act_is_char_ptr = act_is_ptr && strip_unsigned(actual) == char_ptr;
         if decl_is_char_ptr && act_is_ptr {
             return None;
         }

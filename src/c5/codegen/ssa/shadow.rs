@@ -215,31 +215,21 @@ enum Node {
     Data(usize),
 }
 
-/// Joint function + data reachability for one translation unit. C99
-/// 6.2.2: an internal-linkage definition nothing reachable references
-/// is unobservable; gcc omits it from the object at -O, and so does
-/// badc at every level.
-///
-/// Nodes are functions (by ent_pc) and data objects (intervals of the
-/// sorted union of `Program::data_object_starts` and the named-global
-/// offsets; an unrecorded start glues an object to its predecessor,
-/// kept conservatively, never splitting a live one).
-/// Roots: external-linkage definitions, `used` / alias / named-section
-/// definitions (kept by declared intent -- section protocols resolve
-/// them at link time), constructors / destructors, exports, the entry
-/// function, internal names spelled in file-scope asm, and the leading
-/// NULL guard (object 0). Edges: a live function keeps its callees
-/// (`Inst::Call`), address-taken functions (`Inst::ImmCode`), the data
-/// it addresses (`Inst::ImmData`), and any internal symbol named in its
-/// asm templates; a live data object keeps the targets of the
-/// relocations whose slots it holds (`code_relocs` / `data_relocs`).
-/// A relocation in a dead object keeps nothing: the slot drops with the
-/// object, so neither its target nor -- for an extern target -- an
-/// undefined-symbol reference reaches the emitted object.
-///
-/// `assume_data_live` marks every data object live up front, for
-/// callers running after the `.data` image is final (the post-inline
-/// function-only rerun): every remaining relocation keeps its target.
+/// Joint function + data reachability for one translation unit (C99
+/// 6.2.2: an unreferenced internal-linkage definition is unobservable
+/// and dropped from the object, as gcc -O does). Nodes are functions
+/// (by ent_pc) and data objects (intervals over the sorted union of
+/// `data_object_starts` and the named-global offsets; an unrecorded
+/// start glues an object to its predecessor, kept conservatively).
+/// Roots: external-linkage / `used` / alias / named-section
+/// definitions, constructors / destructors, exports, the entry, names
+/// spelled in file-scope asm, and the NULL guard. Edges: a live
+/// function keeps its callees, address-taken functions, addressed
+/// data, and symbols named in its asm templates; a live data object
+/// keeps its relocation targets. A relocation in a dead object keeps
+/// nothing -- neither its target nor an extern undefined reference
+/// reaches the emitted object. `assume_data_live` pre-marks all data
+/// live for callers running after the `.data` image is final.
 pub(crate) fn compute_live_sets(
     funcs: &[FunctionSsa],
     program: &Program,

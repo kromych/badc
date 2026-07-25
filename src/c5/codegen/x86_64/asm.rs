@@ -289,6 +289,17 @@ pub(crate) enum AsmOpnd {
         disp: i32,
         sym: bool,
     },
+    /// `sym(%%base)` / `disp+sym(%%base, %%index, scale)`: a based memory
+    /// reference whose displacement is a link-time symbol address plus a
+    /// constant (the symbol name in the instruction's `sym_target`, `disp`
+    /// the addend). Taken as an absolute reference through a disp32
+    /// relocation.
+    SymMem {
+        base: AsmMemBase,
+        index: Option<AsmMemBase>,
+        scale: u8,
+        disp: i32,
+    },
     /// `%cN(%%rip)` / `%PN(%%rip)`: a RIP-relative memory reference whose
     /// displacement is an `i`-class operand substituted as a bare constant
     /// (`%c`) or a symbol / constant address (`%P`). The emitter resolves a
@@ -1605,35 +1616,91 @@ fn parse_int(s: &str) -> Option<i64> {
     crate::c5::codegen::ssa::emit_common::eval_const_expr(s.trim())
 }
 
-/// Parse `sym(,%index,scale)`: a no-base scaled-index memory reference whose
-/// displacement is a bare symbol name. Returns the symbol, its index base, and
-/// the scale. `None` for any other shape (a numeric or operand displacement, a
-/// present base register, a non-symbol prefix).
-fn parse_index_mem_sym<'a>(tok: &'a str, labels: &[&str]) -> Option<(&'a str, AsmMemBase, u8)> {
+/// Split a memory-operand displacement expression whose terms are one symbol
+/// name plus integer constants (`sym`, `16+sym`, `sym-4`) into the symbol and
+/// the folded integer addend. `None` when there is no symbol term, more than
+/// one, a leading `-` on the symbol, or a non-integer term. A whole-expression
+/// integer, a template label, and a register name are not symbol
+/// displacements.
+fn parse_sym_disp<'a>(prefix: &'a str, labels: &[&str]) -> Option<(&'a str, i64)> {
+    if prefix.is_empty() || parse_int(prefix).is_some() {
+        return None;
+    }
+    let mut sym: Option<&str> = None;
+    let mut addend: i64 = 0;
+    let mut rest = prefix;
+    let mut neg = false;
+    loop {
+        let end = rest.find(['+', '-']).unwrap_or(rest.len());
+        let term = rest[..end].trim();
+        if let Some(v) = parse_int(term) {
+            addend += if neg { -v } else { v };
+        } else if !neg
+            && sym.is_none()
+            && parse_label_ref(term, labels).is_none()
+            && reg_by_name(term).is_none()
+            && super::super::ssa::emit_common::is_asm_symbol_template(term)
+        {
+            sym = Some(term);
+        } else {
+            return None;
+        }
+        if end == rest.len() {
+            break;
+        }
+        neg = rest.as_bytes()[end] == b'-';
+        rest = &rest[end + 1..];
+    }
+    sym.map(|s| (s, addend))
+}
+
+/// Parse a memory reference whose displacement carries a link-time symbol:
+/// the no-base `sym(,%index,scale)` and the based `disp+sym(%base[, %index,
+/// scale])` forms. Returns the symbol and the operand (its addend in `disp`);
+/// `None` for any other shape.
+fn parse_sym_mem<'a>(tok: &'a str, labels: &[&str]) -> Option<(&'a str, AsmOpnd)> {
     let open = matching_open_paren(tok)?;
     let prefix = tok[..open].trim();
     let inner = tok[open + 1..tok.len() - 1].trim();
-    if prefix.is_empty()
-        || parse_int(prefix).is_some()
-        || parse_label_ref(prefix, labels).is_some()
-        || reg_by_name(prefix).is_some()
-        || !super::super::ssa::emit_common::is_asm_symbol_template(prefix)
-    {
-        return None;
-    }
+    let (sym, addend) = parse_sym_disp(prefix, labels)?;
+    let disp = i32::try_from(addend).ok()?;
     let parts = split_asm_operands(inner);
-    if parts.len() < 2 || parts.len() > 3 || !parts[0].trim().is_empty() {
+    if parts.len() > 3 {
         return None;
     }
-    let index = parse_mem_base(parts[1])?;
-    let scale = match parts.get(2) {
-        Some(s) => match parse_int(s)? {
-            v @ (1 | 2 | 4 | 8) => v as u8,
-            _ => return None,
-        },
-        None => 1,
+    let (base, index_scale) = if parts.len() >= 2 {
+        let index = parse_mem_base(parts[1])?;
+        let scale = match parts.get(2) {
+            Some(s) => match parse_int(s)? {
+                v @ (1 | 2 | 4 | 8) => v as u8,
+                _ => return None,
+            },
+            None => 1,
+        };
+        let base = match parts[0].trim() {
+            "" => None,
+            b => Some(parse_mem_base(b)?),
+        };
+        (base, Some((index, scale)))
+    } else {
+        (Some(parse_mem_base(inner)?), None)
     };
-    Some((prefix, index, scale))
+    let opnd = match (base, index_scale) {
+        (None, Some((index, scale))) => AsmOpnd::IndexMem {
+            index,
+            scale,
+            disp,
+            sym: true,
+        },
+        (Some(base), index_scale) => AsmOpnd::SymMem {
+            base,
+            index: index_scale.map(|(i, _)| i),
+            scale: index_scale.map(|(_, s)| s).unwrap_or(1),
+            disp,
+        },
+        (None, None) => return None,
+    };
+    Some((sym, opnd))
 }
 
 /// Parse a `.align` / `.p2align` / `.balign` directive body to a byte
@@ -1978,23 +2045,19 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                     operands.push(AsmOpnd::ImmSym);
                     continue;
                 }
-                // `sym(,%index,scale)`: a no-base scaled-index memory reference
-                // whose displacement is a link-time symbol address. The name
-                // rides in `sym_target` (one such operand per instruction); the
-                // operand marks where its disp32 field goes.
-                if let Some((sym, index, scale)) = parse_index_mem_sym(tok, &names) {
+                // `sym(,%index,scale)` / `disp+sym(%base)`: a memory reference
+                // whose displacement is a link-time symbol address plus a
+                // constant. The name rides in `sym_target` (one such operand
+                // per instruction); the operand marks where its disp32 field
+                // goes.
+                if let Some((sym, opnd)) = parse_sym_mem(tok, &names) {
                     if sym_target.is_some() {
                         return Err(String::from(
                             "inline asm: more than one symbol reference per instruction",
                         ));
                     }
                     sym_target = Some(String::from(sym));
-                    operands.push(AsmOpnd::IndexMem {
-                        index,
-                        scale,
-                        disp: 0,
-                        sym: true,
-                    });
+                    operands.push(opnd);
                     continue;
                 }
                 operands.push(parse_operand(tok, &names)?);

@@ -2020,6 +2020,7 @@ pub(crate) fn lower(
     // Function name -> entry PC, so an inline-asm `call`/`jmp` to a bare symbol
     // resolves to a relocation the fixup pass patches like any other call.
     let mut asm_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
+    let mut text_align: usize = 16;
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
@@ -2083,6 +2084,7 @@ pub(crate) fn lower(
                 prologue_native: &mut func_prologue_native,
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
+                text_align: &mut text_align,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2320,6 +2322,7 @@ pub(crate) fn lower(
         text: code,
         data: program.data.clone(),
         data_align: program.data_align,
+        text_align,
         bss_size: 0,
         init_fini_arrays: Default::default(),
         entry_offset,

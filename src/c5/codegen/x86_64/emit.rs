@@ -1566,6 +1566,7 @@ pub(crate) fn emit_function(
     let prologue_native = &mut *cx.prologue_native;
     let asm_sections = &mut *cx.asm_sections;
     let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
+    let text_align = &mut *cx.text_align;
     let snapshot = code.len();
     let fixups_snapshot = fixups.len();
     let plt_call_fixups_snapshot = plt_call_fixups.len();
@@ -1867,6 +1868,7 @@ pub(crate) fn emit_function(
                         user_extern_data_refs,
                         asm_section_text_refs,
                         asm_text_abs_refs,
+                        text_align,
                         Some(AsmGotoCtx {
                             row: &func.jump_tables[table as usize],
                             branch_fixups: &mut branch_fixups,
@@ -1892,6 +1894,7 @@ pub(crate) fn emit_function(
                         prologue_native: &mut *prologue_native,
                         asm_sections: &mut *asm_sections,
                         asm_extern_call_sites: &mut *asm_extern_call_sites,
+                        text_align: &mut *text_align,
                     };
                     let fcx = FnCtx {
                         func,
@@ -3300,6 +3303,7 @@ fn emit_inst(
             user_extern_data_refs,
             asm_section_text_refs,
             asm_text_abs_refs,
+            cx.text_align,
             None,
         ),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
@@ -6674,6 +6678,50 @@ fn encode_one_x86_section_insn(
                     });
                 }
             }
+            // `disp+sym(%base[, %index, scale])`: a based reference whose
+            // symbol displacement (name in `sym_target`) takes an absolute
+            // reloc. The probe displacement forces the disp32 form; the field
+            // is zeroed once located.
+            AsmOpnd::SymMem {
+                base,
+                index,
+                scale,
+                disp,
+            } => {
+                let size = mem_size(insn);
+                let base = base_reg(base).ok_or_else(|| {
+                    alloc::format!("inline asm: replacement `{text}` memory base is not a register")
+                })?;
+                let index = match index {
+                    Some(i) => Some(base_reg(i).ok_or_else(|| {
+                        alloc::format!(
+                            "inline asm: replacement `{text}` memory index is not a register"
+                        )
+                    })?),
+                    None => None,
+                };
+                let name = insn.sym_target.clone().ok_or_else(|| {
+                    alloc::format!("inline asm: replacement `{text}` memory symbol is missing")
+                })?;
+                if sym_disp.is_some() {
+                    return Err(alloc::format!(
+                        "inline asm: replacement `{text}` has more than one memory operand"
+                    ));
+                }
+                sym_disp = Some((
+                    AsmSectionTarget::Symbol(name),
+                    disp as i64,
+                    concrete.len(),
+                    false,
+                ));
+                concrete.push(Concrete::Mem {
+                    base,
+                    index,
+                    scale,
+                    disp: RIPREL_PROBE_DISP,
+                    size,
+                });
+            }
             _ => {
                 return Err(alloc::format!(
                     "inline asm: replacement instruction `{text}` operand is not a \
@@ -6709,6 +6757,21 @@ fn encode_one_x86_section_insn(
                 disp: RIPREL_PROBE_DISP,
                 size,
             },
+            // The body already carries the first probe displacement (which
+            // forces the disp32 form); vary every field byte again.
+            Concrete::Mem {
+                base,
+                index,
+                scale,
+                size,
+                ..
+            } => Concrete::Mem {
+                base,
+                index,
+                scale,
+                disp: RIPREL_PROBE_DISP2,
+                size,
+            },
             other => other,
         };
         let mut probe_bytes = alloc::vec::Vec::new();
@@ -6717,6 +6780,7 @@ fn encode_one_x86_section_insn(
         let field = riprel_disp32_field(&body, &probe_bytes).ok_or_else(|| {
             alloc::format!("inline asm: replacement `{text}` disp32 field is not a 4-byte run")
         })?;
+        body[field..field + 4].fill(0);
         // A PC-relative field's addend is the symbol offset less the 4-byte
         // end skew and any bytes trailing the field (the immediate of
         // `testb $imm, sym(%rip)`), matching gcc. An absolute `R_X86_64_32S`
@@ -6791,6 +6855,7 @@ fn emit_inline_asm(
     user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
+    text_align: &mut usize,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
 ) -> bool {
     use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg, Inst};
@@ -7112,16 +7177,16 @@ fn emit_inline_asm(
         }
         // `.align` / `.p2align` / `.balign`: pad `code` (the unit's whole
         // text stream, so its length is a section offset) to the boundary, as
-        // GNU as does section-relative. The boundary holds absolutely only up
-        // to the fixed `.text` section alignment (TODO: raise the section
-        // alignment from the largest directive instead of rejecting).
+        // GNU as does section-relative. A boundary above the section default
+        // raises the section alignment, so the padding holds absolutely; the
+        // default fill is the GNU as multi-byte NOP sequence.
         if let super::asm::Mnemonic::Align { n, fill, max } = insn.mnemonic {
-            if n > 16 {
-                return fail("inline asm: alignment beyond 16 exceeds the section alignment");
-            }
+            *text_align = (*text_align).max(n as usize);
             let gap = super::ssa::emit_common::align_gap(code.len() as i64, n as i64, max) as usize;
-            let (pat, _) = super::ssa::emit_common::align_fill_pattern(fill, true, false);
-            code.resize(code.len() + gap, pat[0]);
+            match fill {
+                Some(b) => code.resize(code.len() + gap, b),
+                None => super::ssa::emit_common::push_x86_exec_align_fill(code, gap),
+            }
             continue;
         }
         // A data directive with operand references (`.long %c0`): each

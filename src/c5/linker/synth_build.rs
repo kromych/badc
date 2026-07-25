@@ -350,6 +350,7 @@ fn synth_program_and_build(
         copy_relocs,
         dynamic_exports,
         text: merged.text.clone(),
+        text_align: merged.text_align,
         data: merged.data.clone(),
         data_align: merged.data_align,
         bss_size: merged.bss_size as i64,
@@ -996,6 +997,7 @@ mod tests {
             },
         );
         MergedNative {
+            text_align: 16,
             // aarch64: `mov w0, #42; ret`.
             text: alloc::vec![0x40, 0x05, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6],
             data: alloc::vec![],

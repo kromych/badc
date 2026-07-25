@@ -460,6 +460,10 @@ pub enum ElfTpoffTarget {
 pub struct NativeObject {
     pub machine: NativeMachine,
     pub text: Vec<u8>,
+    /// Largest sh_addralign among the text-family sections, at least 16.
+    /// The linker aligns this object's base in the merged `.text` to it
+    /// and the image writers keep the merged stream's base alignment.
+    pub text_align: usize,
     pub data: Vec<u8>,
     /// Largest sh_addralign among the data-family sections. The linker
     /// aligns this object's base in the merged `.data` to it and the
@@ -761,6 +765,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     // bss. Empty merged sections are allowed -- a translation
     // unit with no functions and no globals is rare but valid.
     let mut text_bytes: Vec<u8> = Vec::new();
+    let mut text_align: usize = 16;
     let mut text_base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(text_section_indices.len());
     for &sh_i in &text_section_indices {
         let sh = &shdrs[sh_i];
@@ -774,6 +779,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         // marker, so a following named text section would otherwise
         // land misaligned.
         let align = (sh.sh_addralign.max(4)) as usize;
+        text_align = text_align.max(align);
         let padded = text_bytes.len().div_ceil(align) * align;
         text_bytes.resize(padded, 0);
         let base = text_bytes.len() as u64;
@@ -1244,6 +1250,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     Ok(NativeObject {
         machine,
         text: text_bytes,
+        text_align,
         data: data_bytes,
         data_align,
         bss_size,

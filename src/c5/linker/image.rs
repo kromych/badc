@@ -1030,6 +1030,7 @@ mod tests {
             },
         );
         MergedNative {
+            text_align: 16,
             // x86_64: `mov eax, 42; ret` -- minimal main body.
             text: alloc::vec![0xb8, 0x2a, 0x00, 0x00, 0x00, 0xc3],
             data: alloc::vec![],

@@ -1884,6 +1884,7 @@ pub(crate) fn lower(
     // Function name -> entry PC, so an inline-asm `bl` / `b` to a bare
     // identifier resolves to the target's fixup like a compiler-emitted call.
     let mut asm_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
+    let mut text_align: usize = 16;
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
@@ -1922,6 +1923,7 @@ pub(crate) fn lower(
                 prologue_native: &mut func_prologue_native,
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
+                text_align: &mut text_align,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2147,6 +2149,7 @@ pub(crate) fn lower(
         asm_text_abs_refs: Vec::new(),
         copy_relocs: Vec::new(),
         text: code,
+        text_align,
         data: program.data.clone(),
         data_align: program.data_align,
         bss_size: 0,

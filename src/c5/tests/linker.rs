@@ -3419,6 +3419,7 @@ fn unrouted_weak_undef_resolves_to_zero() {
               text_relocs: alloc::vec::Vec<NativeReloc>,
               data_relocs: alloc::vec::Vec<NativeReloc>| {
         crate::c5::linker::NativeObject {
+            text_align: 16,
             machine,
             text,
             data,

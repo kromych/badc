@@ -63,6 +63,10 @@ pub struct MergedNative {
     /// imports stay at their raw placeholder value -- they're
     /// recorded in [`Self::pending_imports`].
     pub text: Vec<u8>,
+    /// Base alignment the merged `.text` requires: the largest input
+    /// section alignment, at least 16. The image writers place the
+    /// text stream at a multiple of this.
+    pub text_align: usize,
     /// Concatenated `.data` bytes.
     pub data: Vec<u8>,
     /// Base alignment the merged `.data` requires: the largest input
@@ -433,8 +437,10 @@ pub fn link_native_objects_with_shared_libs(
     let mut data: Vec<u8> = Vec::new();
     let mut bss_size: usize = 0;
     let mut data_align: usize = 8;
+    let mut text_align: usize = 16;
     for obj in objs {
-        align_up(&mut text, 16);
+        align_up(&mut text, obj.text_align.max(16));
+        text_align = text_align.max(obj.text_align);
         text_bases.push(text.len());
         text.extend_from_slice(&obj.text);
         align_up(&mut data, obj.data_align.max(8));
@@ -1546,6 +1552,7 @@ pub fn link_native_objects_with_shared_libs(
 
     Ok(MergedNative {
         text,
+        text_align,
         data,
         data_align,
         bss_size,
@@ -2739,6 +2746,7 @@ mod tests {
     #[test]
     fn common_symbols_coalesce_to_single_bss_slot() {
         let mk_unit = |size: u64, align: u64| NativeObject {
+            text_align: 16,
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),
@@ -2810,6 +2818,7 @@ mod tests {
     #[test]
     fn common_yields_to_strong_definition() {
         let unit_common = NativeObject {
+            text_align: 16,
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),
@@ -2856,6 +2865,7 @@ mod tests {
             debug_line_relocs: alloc::vec::Vec::new(),
         };
         let unit_strong = NativeObject {
+            text_align: 16,
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec![0u8; 4],
@@ -2932,6 +2942,7 @@ mod tests {
                   text_relocs: alloc::vec::Vec<NativeReloc>|
          -> NativeObject {
             NativeObject {
+                text_align: 16,
                 machine: NativeMachine::X86_64,
                 text,
                 data,
@@ -3091,6 +3102,7 @@ mod tests {
     #[test]
     fn conflicting_import_dylib_routing_errors() {
         let mk = |dylib: &str| NativeObject {
+            text_align: 16,
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),
@@ -3166,6 +3178,7 @@ mod tests {
         // may abort the link.
         use super::super::object::{NativeReloc, NativeSymbol};
         let base = || NativeObject {
+            text_align: 16,
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),

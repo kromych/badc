@@ -25,7 +25,7 @@ Disassembly of section .text:
                	incq	%rax
                	movl	%eax, -0x8(%rbp)
                	leaq	<rip>, %rcx
-               	movslq	-0x8(%rbp), %rax
+               	movslq	%eax, %rax
                	movl	%eax, (%rcx)
                	movslq	%eax, %rax
                	subq	$0x2a, %rax

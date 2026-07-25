@@ -118,10 +118,10 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("file_scope_asm_local_labels.c", "linux-aarch64"), // x86-64 div/ret fastop fragments
     ("file_scope_asm_local_label_branch.c", "linux-aarch64"), // x86-64 lock cmpxchg + jcc to a section label
     ("inline_asm_x64_align_above_section.c", "linux-aarch64"), // x86-64 alignment above the section default
-    ("inline_asm_x64_mmx_fpu.c", "linux-aarch64"),    // x86-64 MMX movq + fwait
-    ("inline_asm_x64_bug_table_org.c", "linux-aarch64"), // x86-64 ud2 bug-table entry
-    ("inline_asm_x64_jump_label.c", "linux-aarch64"), // x86-64 jmp %l jump-table entry
-    ("inline_asm_a64_bug_table_labels.c", "linux-x64"), // aarch64 brk bug-table entry
+    ("inline_asm_x64_mmx_fpu.c", "linux-aarch64"),             // x86-64 MMX movq + fwait
+    ("inline_asm_x64_bug_table_org.c", "linux-aarch64"),       // x86-64 ud2 bug-table entry
+    ("inline_asm_x64_jump_label.c", "linux-aarch64"),          // x86-64 jmp %l jump-table entry
+    ("inline_asm_a64_bug_table_labels.c", "linux-x64"),        // aarch64 brk bug-table entry
 ];
 
 #[test]

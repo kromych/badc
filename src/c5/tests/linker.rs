@@ -2021,9 +2021,7 @@ fn file_scope_asm_jcc_to_section_label_and_lock_prefix() {
     let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     assert!(
-        obj.text
-            .windows(4)
-            .any(|w| w == [0xf0, 0x0f, 0xb0, 0x17]),
+        obj.text.windows(4).any(|w| w == [0xf0, 0x0f, 0xb0, 0x17]),
         "`lock cmpxchg %dl,(%rdi)` must encode as `f0 0f b0 17`"
     );
     let jne = obj

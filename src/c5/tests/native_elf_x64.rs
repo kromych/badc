@@ -919,7 +919,9 @@ fn inline_asm_align_beyond_section_default_raises_text_alignment() {
     // followed by the `ret`-tail of the program. Structural stand-in:
     // the image must contain at least one 11-byte GNU as NOP or the
     // 64-aligned point; assert the align fill pattern is present.
-    let nop11: &[u8] = &[0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00];
+    let nop11: &[u8] = &[
+        0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ];
     assert!(
         bytes.windows(nop11.len()).any(|w| w == nop11),
         "align fill NOPs missing"

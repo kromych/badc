@@ -93,7 +93,7 @@ Disassembly of section .text:
                	retq
                	movq	%rbx, -0x28(%rbp)
                	movl	$0x4, %edi
-               	movq	-0x28(%rbp), %rax
+               	movq	%rbx, %rax
                	callq	*%rax
                	movq	%rax, -0x78(%rbp)
                	movq	%rdx, -0x70(%rbp)

@@ -16,10 +16,10 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movl	$0x1, %eax
                	movl	%eax, -0x8(%rbp)
-               	movl	$0x2, %eax
-               	movl	%eax, -0x10(%rbp)
-               	movl	$0x3, %eax
-               	movl	%eax, -0x18(%rbp)
+               	movl	$0x2, %ecx
+               	movl	%ecx, -0x10(%rbp)
+               	movl	$0x3, %edx
+               	movl	%edx, -0x18(%rbp)
                	leaq	-0x18(%rbp), %rax
                	movslq	(%rax), %rcx
                	leaq	<rip>, %rdx

@@ -61,11 +61,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
   block 9  start_pc=0
     v41  Imm(-7)                                          -> x0
     v42  StoreLocal { off=-6, value=v41, kind=I32 }       -> -
-    v43  Imm(99)                                          -> x0
-    v44  Imm(0)                                           -> x0
-    v45  Imm(13)                                          -> x0
+    v43  Imm(99)                                          -> x1
+    v44  Imm(0)                                           -> x1
+    v45  Imm(13)                                          -> x1
     v46  StoreLocal { off=-8, value=v45, kind=I16, volatile } -> -
-    v47  LoadLocal { off=-6, kind=I32 }                   -> x0
+    v47  Extend { value=v41, kind=I32 }                   -> x0
     v48  BinopI { op=ne, lhs=v47, rhs_imm=-7 }            -> x0
     terminator Bz { cond=v48, target=b11, fall=b10 }   (exit_acc=v48)
   block 10  start_pc=0

@@ -48,9 +48,9 @@ Disassembly of section .text:
                	retq
                	movabsq	$-0x7, %rax
                	movl	%eax, -0x30(%rbp)
-               	movl	$0xd, %eax
-               	movw	%ax, -0x40(%rbp)
-               	movslq	-0x30(%rbp), %rax
+               	movl	$0xd, %ecx
+               	movw	%cx, -0x40(%rbp)
+               	movslq	%eax, %rax
                	cmpq	$-0x7, %rax
                	je	<addr>
                	movl	$0x7, %eax

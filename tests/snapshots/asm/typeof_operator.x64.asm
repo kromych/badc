@@ -23,10 +23,10 @@ Disassembly of section .text:
                	subq	$0x50, %rsp
                	movl	$0x5, %eax
                	movl	%eax, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rax
+               	movslq	%eax, %rax
                	addq	$0x3, %rax
                	movl	%eax, -0x10(%rbp)
-               	movslq	-0x10(%rbp), %rax
+               	movslq	%eax, %rax
                	cmpq	$0x8, %rax
                	je	<addr>
                	movl	$0x1, %eax

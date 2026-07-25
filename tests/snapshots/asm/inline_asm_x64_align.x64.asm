@@ -18,10 +18,7 @@ Disassembly of section .text:
                	movq	%rax, -0x30(%rbp)
                	movq	%rax, -0x28(%rbp)
                	movl	$0x1, %eax
-               	nop
-               	nop
-               	nop
-               	nop
+               	nopl	(%rax)
                	addl	$0x2, %eax
                	movq	-0x28(%rbp), %r10
                	movl	%eax, (%r10)
@@ -37,15 +34,7 @@ Disassembly of section .text:
                	movq	%rax, -0x30(%rbp)
                	movq	%rax, -0x28(%rbp)
                	movl	$0x5, %eax
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
+               	nopw	(%rax,%rax)
                	addl	$0x6, %eax
                	movq	-0x28(%rbp), %r10
                	movl	%eax, (%r10)
@@ -61,15 +50,7 @@ Disassembly of section .text:
                	movq	%rax, -0x30(%rbp)
                	movq	%rax, -0x28(%rbp)
                	movl	$0x7, %eax
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
+               	nopw	(%rax,%rax)
                	addl	$0x8, %eax
                	movq	-0x28(%rbp), %r10
                	movl	%eax, (%r10)

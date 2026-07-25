@@ -172,8 +172,18 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x25, %edi
-               	callq	<addr>
+               	movl	$0x25, %eax
+               	movl	%eax, -0x30(%rbp)
+               	leaq	-0x30(%rbp), %rax
+               	movq	%rax, -0x60(%rbp)
+               	movq	%rax, -0x58(%rbp)
+               	movq	-0x58(%rbp), %r10
+               	movl	(%r10), %eax
+               	addl	$0x5, %eax
+               	movq	-0x58(%rbp), %r10
+               	movl	%eax, (%r10)
+               	movq	-0x60(%rbp), %rax
+               	movslq	-0x30(%rbp), %rax
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x4, %eax

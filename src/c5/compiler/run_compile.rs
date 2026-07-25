@@ -2091,6 +2091,9 @@ impl Compiler {
                                     // C99 6.7.8p7 array designator naming a row:
                                     // `[N] = { ... }` moves the cursor to row N;
                                     // subsequent positional rows continue at N+1.
+                                    // TODO: `[lo ... hi]` row replication and
+                                    // `[N][M]`/`[N].field` chains, as the
+                                    // known-size path supports.
                                     if self.lex.tk == Token::Brak {
                                         self.next()?;
                                         let idx = self.parse_constant_int()?;

@@ -452,6 +452,14 @@ fn deferred_array_designator() {
 }
 
 #[test]
+fn deferred_struct_array_row_designator() {
+    // A `[N] =` designator naming a row of a deferred-size 2-D struct
+    // array sets the cursor and the outer size (C99 6.7.8p7+p22), with
+    // positional rows continuing after it; file- and block-scope statics.
+    assert_eq!(run_fixture("deferred_struct_array_row_designator.c"), 0);
+}
+
+#[test]
 fn outer_range_designator_replicates_subarray() {
     // A GCC range designator on the outer dimension of an array of
     // aggregates (`[a ... b] = { ... }`) replicates the brace-enclosed

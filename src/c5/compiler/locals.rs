@@ -621,27 +621,18 @@ impl Compiler {
                             // C99 6.7.8p7 array designator naming a row:
                             // `[N] = { ... }` moves the cursor to row N;
                             // subsequent positional rows continue at N+1.
-                            if self.lex.tk == Token::Brak {
-                                self.next()?;
-                                let idx = self.parse_constant_int()?;
-                                if idx < 0 || idx >= count {
-                                    return Err(self.compile_err(format!(
-                                        "row designator index {idx} out of bounds [0, {count})"
-                                    )));
+                            // TODO: `[lo ... hi]` row replication and
+                            // `[N][M]`/`[N].field` chains, as the
+                            // known-size path supports.
+                            if let Some((lo, hi, chain)) =
+                                self.take_array_element_designator(count)?
+                            {
+                                if chain || hi > lo {
+                                    return Err(
+                                        self.compile_err("row designator must be a single `[N] =`")
+                                    );
                                 }
-                                if self.lex.tk != ']' {
-                                    return Err(self.compile_err(
-                                        "`]` expected after row designator index",
-                                    ));
-                                }
-                                self.next()?;
-                                if self.lex.tk != Token::Assign {
-                                    return Err(self.compile_err(
-                                        "`=` expected after `[N]` row designator",
-                                    ));
-                                }
-                                self.next()?;
-                                row = idx;
+                                row = lo;
                             }
                             if self.lex.tk != '{' {
                                 return Err(self.compile_err(

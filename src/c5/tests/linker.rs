@@ -1612,9 +1612,12 @@ fn used_and_section_statics_survive_dce() {
             .any(|w| w == 0x33445566778899aau64.to_le_bytes()),
         "named-section static data must survive"
     );
+    // gcc parity: a named section alone does not retain a function
+    // (`static inline` helpers headers pull in are section-attributed
+    // wholesale via `__init`-style macros).
     assert!(
-        bytes.windows(7).any(|w| w == b"sect_fn"),
-        "named-section static function must survive"
+        !bytes.windows(7).any(|w| w == b"sect_fn"),
+        "unreferenced section-only static function must drop"
     );
 }
 
@@ -1728,6 +1731,34 @@ fn automatic_initializer_materializes_addresses_without_data_relocs() {
             "automatic initializers must not emit .data relocations (optimize={optimize})"
         );
     }
+}
+
+#[test]
+fn fam_struct_definition_survives_extern_redeclaration() {
+    // C99 6.2.2p4 / 6.9.2p2: `extern struct S s;` after a tentative
+    // definition of a flexible-array-member struct redeclares the same
+    // object; the definition stands. The incomplete-struct extern arm
+    // used to flip the symbol undefined, dropping the definition and
+    // its initializer relocations from the object.
+    use crate::c5::linker::{NativeSymSection, parse_native_elf};
+    let src = "\
+        struct SK { struct SK *next; };\n\
+        struct Q { void (*fn)(void); struct SK gso; long priv[]; };\n\
+        static void noop_fn(void) {}\n\
+        struct Q nq = { .fn = noop_fn, .gso = { .next = (struct SK *)&nq.gso } };\n\
+        extern struct Q nq;\n\
+        int keep(int x) { return x; }\n";
+    let bytes = reloc_tu(src, crate::c5::Target::LinuxX64, false);
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        obj.symbols.iter().any(|s| s.name == "nq"
+            && matches!(s.section, NativeSymSection::Data | NativeSymSection::Bss)),
+        "the definition must survive the extern redeclaration"
+    );
+    assert!(
+        bytes.windows(7).any(|w| w == b"noop_fn"),
+        "the initializer's callee must stay reachable through the live table"
+    );
 }
 
 #[test]

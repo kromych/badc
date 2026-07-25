@@ -320,11 +320,12 @@ pub(crate) fn compute_live_sets(
     let mut owner_deps: BTreeMap<usize, alloc::vec::Vec<usize>> = BTreeMap::new();
 
     for s in &program.symbols {
+        // A named section does not retain a function (gcc parity: the
+        // section-attributed `static inline` helpers headers pull in
+        // are dropped when unreferenced; a kept one is still placed in
+        // its section). `used` and alias do.
         if s.class == Token::Fun as i64
-            && (matches!(s.linkage, Linkage::External)
-                || s.is_used
-                || s.is_alias
-                || s.section_name.is_some())
+            && (matches!(s.linkage, Linkage::External) || s.is_used || s.is_alias)
             && by_ent.contains_key(&(s.val as usize))
         {
             work.push(Node::Func(s.val as usize));

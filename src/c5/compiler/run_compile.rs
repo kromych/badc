@@ -1973,7 +1973,11 @@ impl Compiler {
                     // wrong-sized slot, and either the next global overlaps
                     // it (fixed part too small) or the definition allocating
                     // fresh strands references emitted against the slot.
+                    // C99 6.2.2p4: after a prior definition (tentative or
+                    // initialized) the extern redeclares the same object;
+                    // flipping it undefined here would drop the symbol.
                     if was_extern_only_decl
+                        && !self.symbols[id_idx].defined_here
                         && is_struct_ty(ty)
                         && struct_ptr_depth(ty) == 0
                         && (self.structs[struct_id_of(ty)].fields.is_empty()

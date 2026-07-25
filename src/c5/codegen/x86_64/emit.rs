@@ -6344,7 +6344,7 @@ fn encode_one_x86_section_insn(
     goto_block: &dyn Fn(u8) -> Option<u32>,
     refs: &SectionOperandRefs<'_>,
 ) -> Result<super::ssa::emit_common::AsmSectionItem, alloc::string::String> {
-    use super::super::ir::{AsmConstraint, AsmRegSize};
+    use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg};
     use super::asm::{AsmMemBase, AsmOpnd, Concrete, Mnemonic};
     use super::ssa::emit_common::{AsmSectionItem, AsmSectionReloc, AsmSectionTarget};
     let insns = super::asm::parse_template(text.as_bytes())
@@ -6498,6 +6498,9 @@ fn encode_one_x86_section_insn(
     // offset added to the symbol, and the operand's index in `concrete` (the
     // disp32 field is located by re-encoding). At most one per instruction.
     let mut riprel: Option<(AsmSectionTarget, i64, usize)> = None;
+    // A `__seg_gs` / `__seg_fs` memory operand's segment override; a template
+    // `%%gs:` rides `insn.seg` instead, and the two never conflict.
+    let mut operand_seg: Option<u8> = None;
     for o in &insn.operands {
         match *o {
             AsmOpnd::Imm(v) => concrete.push(Concrete::Imm(v)),
@@ -6517,6 +6520,11 @@ fn encode_one_x86_section_insn(
                         let width = op.map(|o| o.width).unwrap_or(8);
                         let size = asm_mem_size(size, insn, refs.operands, refs.op_reg)
                             .unwrap_or(AsmRegSize::from_width(width));
+                        operand_seg = match op.map(|o| o.seg) {
+                            Some(AsmSeg::Gs) => Some(0x65),
+                            Some(AsmSeg::Fs) => Some(0x64),
+                            _ => operand_seg,
+                        };
                         concrete.push(Concrete::Mem {
                             base,
                             index: None,
@@ -6593,7 +6601,7 @@ fn encode_one_x86_section_insn(
     super::asm::encode(&mut body, insn.mnemonic, insn.suffix, &concrete)
         .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
     let mut bytes = alloc::vec::Vec::new();
-    if let Some(seg) = insn.seg {
+    if let Some(seg) = insn.seg.or(operand_seg) {
         bytes.push(seg);
     }
     let seg_len = bytes.len() as u32;

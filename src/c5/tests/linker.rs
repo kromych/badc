@@ -1650,6 +1650,50 @@ fn asm_replacement_lea_of_mem_operand_uses_register_indirect() {
 }
 
 #[test]
+fn asm_replacement_seg_qualified_mem_operand_keeps_prefix() {
+    // A `__seg_gs`-qualified `m` operand inside a replacement section keeps
+    // its segment override: the 0x65 prefix precedes the encoded body, as in
+    // the main code stream.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+        static unsigned long __seg_gs *gp;
+        unsigned long f(void) {
+            unsigned long r;
+            __asm__(".pushsection .altinstr_replacement,\"ax\"\n"
+                "movq %[mem], %0\n"
+                ".popsection\n"
+                "movq %[mem], %0\n"
+                : "=r"(r) : [mem] "m"(*gp));
+            return r;
+        }
+        int main(void) { return 0; }
+    "#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let repl = &sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".altinstr_replacement")
+        .expect(".altinstr_replacement present")
+        .3;
+    // `movq %gs:(%reg), %rax` is `65 REX.W 8B ModRM` with mod=00.
+    assert!(
+        repl.len() >= 4
+            && repl[0] == 0x65
+            && repl[1] == 0x48
+            && repl[2] == 0x8b
+            && repl[3] >> 6 == 0,
+        "replacement must keep the gs override (65 48 8B /r, mod=00): {repl:02x?}"
+    );
+}
+
+#[test]
 fn asm_main_stream_reference_binds_label_in_pushed_section() {
     // A GNU-as local label defined inside a `.pushsection ...,"ax"` block is
     // in scope for the surrounding asm's main instruction stream: `jmp 6f`

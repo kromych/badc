@@ -147,6 +147,23 @@ fn global_member_array_decay_pointer_init() {
 }
 
 #[test]
+fn global_self_referential_init() {
+    // C99 6.6p9: a file-scope object's initializer may take the object's
+    // own address (directly, via a member, and cast); the object stays a
+    // defined symbol when an extern redeclaration follows the definition,
+    // including a struct with a flexible array member.
+    assert_eq!(run_fixture("global_self_referential_init.c"), 0);
+}
+
+#[test]
+fn global_mutual_reference_init() {
+    // C99 6.6p9 / 6.9.2: two file-scope objects holding each other's
+    // addresses; a reference recorded against the extern declaration binds
+    // to the definition the same unit provides later.
+    assert_eq!(run_fixture("global_mutual_reference_init.c"), 0);
+}
+
+#[test]
 fn nested_block_shadow_restore() {
     // C99 6.2.1: a nested-block declaration that shadows an outer name must
     // restore the outer binding's full array / VLA shape at block exit, in

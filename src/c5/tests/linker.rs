@@ -4904,6 +4904,60 @@ fn file_scope_asm_weak_and_set_emit_weak_symbols() {
 }
 
 #[test]
+fn self_referential_global_stays_defined_in_object() {
+    // C99 6.6p9 + 6.2.2p4: a file-scope object whose initializer takes its
+    // own address, referenced through a prior extern declaration and
+    // redeclared extern after the definition, is still one defined symbol
+    // in the relocatable object -- never an undefined reference, never
+    // dropped -- with `st_size` = sizeof (the flexible array member
+    // contributes nothing).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        struct queue;\n\
+        struct sched {\n\
+            struct sched *self;\n\
+            struct queue *dq;\n\
+            int id;\n\
+            long priv[];\n\
+        };\n\
+        struct queue { struct sched *sd; struct sched *sleeping; };\n\
+        extern struct sched s_obj;\n\
+        static struct queue q_obj = {\n\
+            .sd = (typeof(*(&s_obj)) *)(&s_obj),\n\
+            .sleeping = &s_obj,\n\
+        };\n\
+        struct sched s_obj = { .self = &s_obj, .dq = &q_obj, .id = 9 };\n\
+        extern typeof(s_obj) s_obj;\n\
+        struct queue *keep = &q_obj;\n\
+        int main(void) { return 0; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let symbols = elf_symbols(&bytes);
+        let entries: alloc::vec::Vec<_> = symbols.iter().filter(|s| s.0 == "s_obj").collect();
+        assert_eq!(
+            entries.len(),
+            1,
+            "{target:?}: one `s_obj` symbol, no import twin"
+        );
+        let s = entries[0];
+        const STB_GLOBAL: u8 = 1;
+        const STT_OBJECT: u8 = 1;
+        assert_eq!(
+            s.1,
+            (STB_GLOBAL << 4) | STT_OBJECT,
+            "{target:?}: global object"
+        );
+        assert_ne!(s.2, 0, "{target:?}: defined, not SHN_UNDEF");
+        assert_eq!(s.4, 24, "{target:?}: st_size = sizeof(struct sched)");
+    }
+}
+
+#[test]
 fn file_scope_asm_incbin_embeds_file_bytes() {
     // `.incbin "path"` splices the file's raw bytes at that point in the
     // section image; the path resolves as GNU as resolves it, against the

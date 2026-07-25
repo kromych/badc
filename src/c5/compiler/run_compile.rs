@@ -1977,9 +1977,13 @@ impl Compiler {
                                 .iter()
                                 .any(|f| f.array_size < 0))
                     {
-                        self.symbols[id_idx].is_extern_decl = true;
-                        self.symbols[id_idx].defined_here = false;
-                        self.symbols[id_idx].type_ = ty;
+                        // C99 6.2.2p4 + 6.9.2p2: after a prior definition in
+                        // this unit the extern redeclaration is a pure
+                        // redeclaration; the definition and its storage stand.
+                        if !self.symbols[id_idx].defined_here {
+                            self.symbols[id_idx].is_extern_decl = true;
+                            self.symbols[id_idx].type_ = ty;
+                        }
                         self.accept_declarator_separator()?;
                         continue;
                     }

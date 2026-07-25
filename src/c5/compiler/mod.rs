@@ -2061,6 +2061,51 @@ impl Compiler {
                     sym.val = 0;
                 }
             }
+            // A pointer-to-data initializer parsed while its target was an
+            // undefined extern was recorded by name. When this unit later
+            // defines the object, rewrite the entry as a direct data
+            // relocation: the reference must bind to the definition, not
+            // surface as an import of a symbol the unit itself defines.
+            let mut still_extern = alloc::vec::Vec::new();
+            for r in core::mem::take(&mut self.extern_data_relocs) {
+                let defined = self.symbols.iter().position(|s| {
+                    s.class == Token::Glo as i64
+                        && s.defined_here
+                        && !s.is_thread_local
+                        && s.name == r.symbol_name
+                });
+                let Some(sym_idx) = defined else {
+                    still_extern.push(r);
+                    continue;
+                };
+                let target = self.symbols[sym_idx].val + r.addend;
+                let off = r.data_offset as usize;
+                self.data[off..off + 8].copy_from_slice(&(target as u64).to_le_bytes());
+                self.data_relocs.push(crate::c5::program::DataReloc {
+                    data_offset: r.data_offset,
+                    target_offset: target as u64,
+                    target_anchor: self.symbols[sym_idx].val as u64,
+                });
+                self.data_reloc_sym_idx.push(sym_idx);
+            }
+            self.extern_data_relocs = still_extern;
+            // Record each defined object's byte size for the object
+            // writers' symbol tables; the writers have no type layout.
+            for i in 0..self.symbols.len() {
+                let s = &self.symbols[i];
+                if s.class != Token::Glo as i64 || !s.defined_here || s.is_alias {
+                    continue;
+                }
+                let elem = self.size_of_type(s.type_) as i64;
+                let s = &mut self.symbols[i];
+                s.data_byte_size = if s.is_zero_len_array {
+                    0
+                } else if s.array_size > 0 {
+                    elem * s.array_size
+                } else {
+                    elem
+                };
+            }
             // Function-pointer initializers (`int (*const fp)
             // (...) = some_fn;`) recorded a `code_relocs` row
             // whose `target_ent_pc` was the symbol's val at

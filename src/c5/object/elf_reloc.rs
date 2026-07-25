@@ -364,16 +364,18 @@ fn build_init_array_sections(
 }
 
 /// Byte size of a defined data global, for the symbol table's
-/// `st_size`. Pointers and scalars resolve by width (ELF targets are
-/// LP64, so `long` is 8); an array multiplies by its element count. A
-/// struct / union global returns 0 -- its storage size needs the type
-/// layout machinery the object writer doesn't carry, and a zero
-/// `st_size` matches the prior behavior. A correct size matters for a
-/// COPY-relocated data import (`environ`), whose `st_size` the loader
-/// compares against the host symbol's.
+/// `st_size`. The compiler records `sizeof` on the symbol at unit
+/// finalize (`data_byte_size`), covering aggregates; the width-based
+/// fallback below serves symbols that predate that record (synthetic
+/// builds). A correct size matters for a COPY-relocated data import
+/// (`environ`), whose `st_size` the loader compares against the host
+/// symbol's.
 fn data_global_byte_size(sym: &crate::c5::symbol::Symbol) -> u64 {
     use crate::c5::compiler::types::{is_pointer_ty, strip_unsigned};
     use crate::c5::token::Ty;
+    if sym.data_byte_size > 0 {
+        return sym.data_byte_size as u64;
+    }
     let ty = sym.type_;
     let elem: u64 = if is_pointer_ty(ty) {
         8

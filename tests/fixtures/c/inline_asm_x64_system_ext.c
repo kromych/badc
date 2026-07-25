@@ -1,9 +1,9 @@
 // x86-64 system / privileged, x87, and wide inline-asm encodings: PCID / VPID
-// and guest-page TLB invalidation, 128-bit compare-exchange, x87 double load,
-// MXCSR load / store, far indirect jump, and segment-register stack ops. Each
-// form is mode- or privilege-restricted (a far jump, a segment push, a TLB
-// flush), so this fixture is compile-checked for native x86-64 and not run;
-// the exact byte encodings are locked in the x86-64 asm unit tests.
+// and guest-page TLB invalidation, 128-bit compare-exchange, x87 double load
+// and store, MXCSR load / store, far indirect jump, and FS/GS segment stack
+// ops. Each form is mode- or privilege-restricted (a far jump, a TLB flush),
+// so this fixture is compile-checked for native x86-64 and not run; the exact
+// byte encodings are locked in the x86-64 asm unit tests.
 
 struct desc128 {
     unsigned long lo, hi;
@@ -38,6 +38,10 @@ static void load_x87_double(const double *p) {
     __asm__ volatile("fldl %0" ::"m"(*p));
 }
 
+static void store_x87_double(double *p) {
+    __asm__ volatile("fstpl %0" : "=m"(*p));
+}
+
 static void load_mxcsr(const unsigned int *p) {
     __asm__ volatile("ldmxcsr %0" ::"m"(*p));
 }
@@ -51,7 +55,8 @@ static void far_jump(const struct farptr *p) {
 }
 
 static void push_pop_segment(void) {
-    __asm__ volatile("pushw %%es\n\tpushw %%ds\n\tpopw %%ds\n\tpopw %%es");
+    // ES/CS/SS/DS segment push / pop have no 64-bit encoding; only FS/GS do.
+    __asm__ volatile("pushw %%fs\n\tpushw %%gs\n\tpopw %%gs\n\tpopw %%fs");
 }
 
 int main(int argc, char **argv) {
@@ -68,6 +73,7 @@ int main(int argc, char **argv) {
         invalidate_guest_page(0, 0);
         cmpxchg_128(&d);
         load_x87_double(&dv);
+        store_x87_double(&dv);
         load_mxcsr(&m);
         store_mxcsr(&m);
         far_jump(&fp);

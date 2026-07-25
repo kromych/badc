@@ -95,6 +95,12 @@ Disassembly of section .text:
                	movq	-0x88(%rbp), %rax
                	fldl	(%rax)
                	movq	-0x90(%rbp), %rax
+               	leaq	-0x20(%rbp), %rax
+               	movq	%rax, -0x90(%rbp)
+               	movq	%rax, -0x88(%rbp)
+               	movq	-0x88(%rbp), %rax
+               	fstpl	(%rax)
+               	movq	-0x90(%rbp), %rax
                	leaq	-0x28(%rbp), %rax
                	movq	%rax, -0x90(%rbp)
                	movq	%rax, -0x88(%rbp)
@@ -113,10 +119,10 @@ Disassembly of section .text:
                	movq	-0x88(%rbp), %rax
                	ljmpl	*(%rax)
                	movq	-0x90(%rbp), %rax
-               	<unknown>
-               	<unknown>
-               	<unknown>
-               	<unknown>
+               	pushw	%fs
+               	pushw	%gs
+               	popw	%gs
+               	popw	%fs
                	movl	$0x2a, %eax
                	addq	$0x90, %rsp
                	popq	%rbp

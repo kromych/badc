@@ -671,10 +671,6 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         // into a register (66 0F 38 82 / 81 /r).
         "invpcid" => Mnemonic::InvMem { opcode: 0x82 },
         "invvpid" => Mnemonic::InvMem { opcode: 0x81 },
-        // `invlpga` (0F 01 DF) takes its address in rAX and ASID in ECX; a
-        // template may still spell those implicit operands, which carry no
-        // encoding of their own.
-        "invlpga" => Mnemonic::Fixed(&[0x0F, 0x01, 0xDF]),
         "rdmsr" => Mnemonic::Rdmsr,
         "wrmsr" => Mnemonic::Wrmsr,
         "rdpmc" => Mnemonic::Rdpmc,
@@ -698,11 +694,17 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
             osz: false,
             rex_w: false,
         },
-        // x87 load of a 64-bit float from memory (DD /0); the AT&T `l` suffix
-        // selects the m64 operand.
+        // x87 load / store-and-pop of a 64-bit float in memory (DD /0, DD /3);
+        // the AT&T `l` suffix selects the m64 operand.
         "fldl" => Mnemonic::MemExt {
             opcode: 0xDD,
             ext: 0,
+            osz: false,
+            rex_w: false,
+        },
+        "fstpl" => Mnemonic::MemExt {
+            opcode: 0xDD,
+            ext: 3,
             osz: false,
             rex_w: false,
         },
@@ -2763,13 +2765,14 @@ pub(crate) fn encode(
     }
 }
 
-/// Push / pop of a segment register (`pushw %es`, `popw %fs`), the one stack
+/// Push / pop of a segment register (`pushw %fs`, `popw %gs`), the one stack
 /// form the table's general-register / memory / immediate push / pop do not
-/// carry. ES/CS/SS/DS use the one-byte opcodes 0x06 + Sreg*8 (push) and +1
-/// (pop); FS/GS use the two-byte 0F A0 / A1 (FS) and 0F A8 / A9 (GS). A `w`
-/// mnemonic or size suffix adds the 0x66 operand-size prefix. Returns `None`
-/// when the mnemonic is not push / pop or the operand is not a segment
-/// register, leaving the caller to report the mnemonic unencodable.
+/// carry. Only FS/GS have a 64-bit-mode encoding: 0F A0 / A1 (FS) and 0F A8 /
+/// A9 (GS); the ES/CS/SS/DS one-byte forms are invalid in 64-bit mode, so the
+/// assembler rejects them and this does too. A `w` mnemonic or size suffix
+/// adds the 0x66 operand-size prefix. Returns `None` when the mnemonic is not
+/// push / pop or the operand is not an FS/GS register, leaving the caller to
+/// report the mnemonic unencodable.
 fn segment_stack_op(
     code: &mut Vec<u8>,
     name: &str,
@@ -2784,18 +2787,12 @@ fn segment_stack_op(
     let [Concrete::Reg { reg, .. }] = ops else {
         return None;
     };
-    let sreg = reg.checked_sub(SEG_BASE).filter(|&s| s < 6)?;
-    // `pop %cs` would be 0x0F, the two-byte opcode escape, so it has none.
-    if is_pop && sreg == 1 {
-        return Some(Err(String::from("inline asm: `pop %cs` has no encoding")));
-    }
+    // FS is Sreg 4, GS is Sreg 5; the lower codes have no 64-bit encoding.
+    let sreg = reg.checked_sub(SEG_BASE).filter(|&s| s == 4 || s == 5)?;
     if name.ends_with('w') || suffix == Some(AsmRegSize::Word) {
         code.push(0x66);
     }
-    match sreg {
-        0..=3 => code.push(0x06 + sreg * 8 + u8::from(is_pop)),
-        _ => code.extend_from_slice(&[0x0F, 0xA0 + (sreg - 4) * 8 + u8::from(is_pop)]),
-    }
+    code.extend_from_slice(&[0x0F, 0xA0 + (sreg - 4) * 8 + u8::from(is_pop)]);
     Some(Ok(()))
 }
 
@@ -3640,16 +3637,16 @@ mod tests {
             width: 8,
             seg: crate::c5::ir::AsmSeg::None,
         };
-        // Pool order is rax(0) rbx(3) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9).
-        // With rax/rbx/rcx/rdx clobbered, three `r` operands skip them and land
-        // on rsi/rdi/r8 rather than reusing a clobbered register.
+        // Pool order is rax(0) rbx(3) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9)
+        // r12(12) r13(13) r14(14) r15(15). With rax/rbx/rcx/rdx clobbered,
+        // three `r` operands skip them and land on rsi/rdi/r8.
         let clob = (1 << 0) | (1 << 3) | (1 << 1) | (1 << 2);
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
         let a = assign_operand_regs(&gp, clob, 0).unwrap();
         assert_eq!(a, [Some(6), Some(7), Some(8)]);
         // A clobber list covering every pool register leaves nothing to assign;
         // reject rather than reuse a clobbered register.
-        let all = [0u8, 3, 1, 2, 6, 7, 8, 9]
+        let all = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15]
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
         assert!(assign_operand_regs(&[op(C::Reg)], all, 0).is_err());
@@ -4067,10 +4064,13 @@ mod string_and_prefix_tests {
         assert_eq!(asm_bytes(b"lcall *(%rax)"), [0xFF, 0x18]);
         assert_eq!(asm_bytes(b"lcalll *(%rax)"), [0xFF, 0x18]);
         assert_eq!(asm_bytes(b"lcallq *(%rax)"), [0x48, 0xFF, 0x18]);
-        // x87 load of a 64-bit float (DD /0).
+        // x87 load / store-and-pop of a 64-bit float (DD /0, DD /3).
         assert_eq!(asm_bytes(b"fldl (%rax)"), [0xDD, 0x00]);
         assert_eq!(asm_bytes(b"fldl 8(%rbx)"), [0xDD, 0x43, 0x08]);
         assert_eq!(asm_bytes(b"fldl (%r14)"), [0x41, 0xDD, 0x06]);
+        assert_eq!(asm_bytes(b"fstpl (%rax)"), [0xDD, 0x18]);
+        assert_eq!(asm_bytes(b"fstpl 8(%rbx)"), [0xDD, 0x5B, 0x08]);
+        assert_eq!(asm_bytes(b"fstpl (%r14)"), [0x41, 0xDD, 0x1E]);
         // Far indirect jump (FF /5); the AT&T suffix sets the operand size.
         assert_eq!(asm_bytes(b"ljmpl *(%rax)"), [0xFF, 0x28]);
         assert_eq!(asm_bytes(b"ljmpq *(%rax)"), [0x48, 0xFF, 0x28]);
@@ -4126,46 +4126,43 @@ mod string_and_prefix_tests {
             asm_bytes(b"invvpid (%r10), %r11"),
             [0x66, 0x45, 0x0F, 0x38, 0x81, 0x1A]
         );
-        // `invlpga` (0F 01 DF) takes rAX / ECX implicitly; a template may spell
-        // those operands, which carry no encoding.
-        assert_eq!(asm_bytes(b"invlpga"), [0x0F, 0x01, 0xDF]);
-        assert_eq!(asm_bytes(b"invlpga %rax, %ecx"), [0x0F, 0x01, 0xDF]);
     }
 
-    /// Segment-register push / pop: the one-byte ES/CS/SS/DS opcodes and the
-    /// two-byte FS/GS forms, `w` adding the 0x66 prefix. Byte-verified against
-    /// clang (32-bit mode, where these are valid). `pop %cs` has no encoding.
+    /// Segment-register push / pop. Only FS/GS have a 64-bit-mode encoding
+    /// (0F A0 / A1, 0F A8 / A9); a `w` suffix adds the 0x66 operand-size
+    /// prefix. Byte-verified against clang. The ES/CS/SS/DS forms are invalid
+    /// in 64-bit mode, so the assembler rejects them and so does this.
     #[test]
     fn segment_register_push_pop() {
-        assert_eq!(asm_bytes(b"pushw %es"), [0x66, 0x06]);
-        assert_eq!(asm_bytes(b"popw %es"), [0x66, 0x07]);
-        assert_eq!(asm_bytes(b"pushw %ss"), [0x66, 0x16]);
-        assert_eq!(asm_bytes(b"popw %ss"), [0x66, 0x17]);
-        assert_eq!(asm_bytes(b"pushw %ds"), [0x66, 0x1E]);
-        assert_eq!(asm_bytes(b"popw %ds"), [0x66, 0x1F]);
+        assert_eq!(asm_bytes(b"push %fs"), [0x0F, 0xA0]);
+        assert_eq!(asm_bytes(b"pop %fs"), [0x0F, 0xA1]);
+        assert_eq!(asm_bytes(b"push %gs"), [0x0F, 0xA8]);
+        assert_eq!(asm_bytes(b"pop %gs"), [0x0F, 0xA9]);
         assert_eq!(asm_bytes(b"pushw %fs"), [0x66, 0x0F, 0xA0]);
         assert_eq!(asm_bytes(b"popw %fs"), [0x66, 0x0F, 0xA1]);
         assert_eq!(asm_bytes(b"pushw %gs"), [0x66, 0x0F, 0xA8]);
         assert_eq!(asm_bytes(b"popw %gs"), [0x66, 0x0F, 0xA9]);
-        assert_eq!(asm_bytes(b"pushw %cs"), [0x66, 0x0E]);
-        // Word-suffixed pop routes as `pop` + suffix; push keeps the `pushw`
-        // spelling. The 64-bit-default spelling omits the size prefix.
-        assert_eq!(asm_bytes(b"push %es"), [0x06]);
-        // `pop %cs` is the two-byte opcode escape, so it is rejected.
-        let mut c = Vec::new();
-        let insns = parse_template(b"popw %cs").unwrap();
-        assert!(
+        // A `q` suffix is the 64-bit default: no operand-size prefix.
+        assert_eq!(asm_bytes(b"pushq %fs"), [0x0F, 0xA0]);
+        // ES(0) / CS(1) / SS(2) / DS(3) have no 64-bit push / pop encoding.
+        let rejects = |tok: &str, sreg: u8| {
+            let (m, sfx) = split_mnemonic(tok).unwrap();
+            let mut c = Vec::new();
             encode(
                 &mut c,
-                insns[0].mnemonic,
-                insns[0].suffix,
+                m,
+                sfx,
                 &[Concrete::Reg {
-                    reg: SEG_BASE + 1,
+                    reg: SEG_BASE + sreg,
                     size: AsmRegSize::Word,
-                }]
+                }],
             )
             .is_err()
-        );
+        };
+        assert!(rejects("pushw", 0));
+        assert!(rejects("popw", 3));
+        assert!(rejects("push", 2));
+        assert!(rejects("pop", 1));
     }
 
     /// A string primitive names its own size, so a further AT&T suffix does

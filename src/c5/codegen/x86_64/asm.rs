@@ -3494,16 +3494,17 @@ mod tests {
             width: 8,
             seg: crate::c5::ir::AsmSeg::None,
         };
-        // Pool order is rax(0) rbx(3) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9).
-        // With rax/rbx/rcx/rdx clobbered, three `r` operands skip them and land
-        // on rsi/rdi/r8 rather than reusing a clobbered register.
+        // Pool order is rax(0) rbx(3) rcx(1) rdx(2) rsi(6) rdi(7) r8(8)
+        // r9(9) r12(12) r13(13) r14(14) r15(15). With rax/rbx/rcx/rdx
+        // clobbered, three `r` operands skip them and land on rsi/rdi/r8
+        // rather than reusing a clobbered register.
         let clob = (1 << 0) | (1 << 3) | (1 << 1) | (1 << 2);
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
         let a = assign_operand_regs(&gp, clob, 0).unwrap();
         assert_eq!(a, [Some(6), Some(7), Some(8)]);
         // A clobber list covering every pool register leaves nothing to assign;
         // reject rather than reuse a clobbered register.
-        let all = [0u8, 3, 1, 2, 6, 7, 8, 9]
+        let all = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15]
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
         assert!(assign_operand_regs(&[op(C::Reg)], all, 0).is_err());

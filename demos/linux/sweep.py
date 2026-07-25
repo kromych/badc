@@ -152,6 +152,9 @@ def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
             i += 1
         elif a in DROP_ARG:
             i += 2
+        elif a == "-mno-sse":
+            out.append(a)  # badc implements it; kernel code must stay off XMM
+            i += 1
         elif a.startswith("-O"):
             opt = a  # last one wins, as with gcc
             i += 1

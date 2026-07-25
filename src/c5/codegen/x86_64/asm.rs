@@ -592,29 +592,33 @@ pub(crate) fn assign_operand_regs(
 }
 
 /// Known base mnemonic for a template token, if any.
-/// The string primitives as `(base name, byte-form opcode)`. Their operands
-/// are the fixed `%rsi` / `%rdi` / `%al` pair, so the whole encoding is the
-/// opcode plus an operand-size prefix: the byte form is the opcode itself,
-/// and the wider forms are `opcode + 1` under 0x66 (word) or REX.W (quad).
-/// The size always comes from the AT&T suffix, which is part of the name
-/// here rather than a separate suffix, so `movsbl` stays a sign-extending
-/// move and never parses as `movsb` plus a long suffix.
-const STRING_OPS: &[(&str, u8)] = &[
-    ("movs", 0xA4),
-    ("cmps", 0xA6),
-    ("stos", 0xAA),
-    ("lods", 0xAC),
-    ("scas", 0xAE),
+/// The string primitives as `(base name, byte-form opcode, has-quad-form)`.
+/// Their operands are the fixed string-pointer, accumulator, and `%dx` port
+/// registers, so the whole encoding is the opcode plus an operand-size prefix:
+/// the byte form is the opcode itself, and the wider forms are `opcode + 1`
+/// under 0x66 (word) or REX.W (quad). The size always comes from the AT&T
+/// suffix, which is part of the name here rather than a separate suffix, so
+/// `movsbl` stays a sign-extending move and never parses as `movsb` plus a
+/// long suffix. The port-I/O members `ins` / `outs` have no 64-bit form (port
+/// width is at most 32 bits), hence no quad suffix.
+const STRING_OPS: &[(&str, u8, bool)] = &[
+    ("movs", 0xA4, true),
+    ("cmps", 0xA6, true),
+    ("stos", 0xAA, true),
+    ("lods", 0xAC, true),
+    ("scas", 0xAE, true),
+    ("ins", 0x6C, false),
+    ("outs", 0x6E, false),
 ];
 
 fn string_op(name: &str) -> Option<Mnemonic> {
     let (base, suffix) = name.split_at(name.len().checked_sub(1)?);
-    let op = STRING_OPS.iter().find(|(n, _)| *n == base)?.1;
+    let &(_, op, quad) = STRING_OPS.iter().find(|(n, ..)| *n == base)?;
     let (opcode, osz, rex_w) = match suffix {
         "b" => (op, false, false),
         "w" => (op + 1, true, false),
         "l" => (op + 1, false, false),
-        "q" => (op + 1, false, true),
+        "q" if quad => (op + 1, false, true),
         _ => return None,
     };
     Some(Mnemonic::StringOp { opcode, osz, rex_w })
@@ -3884,6 +3888,32 @@ mod string_and_prefix_tests {
         ] {
             assert_eq!(asm_bytes(tmpl.as_bytes()), want, "{tmpl}");
         }
+    }
+
+    /// The string port-I/O primitives over their AT&T size suffixes, plain and
+    /// under `rep`. Byte and dword are the bare opcode; the word form takes
+    /// `opcode + 1` under 0x66. There is no 64-bit form (port width is at most
+    /// 32 bits). Byte-verified against clang.
+    #[test]
+    fn string_io_primitives() {
+        for (tmpl, want) in [
+            ("insb", &[0x6C][..]),
+            ("insw", &[0x66, 0x6D]),
+            ("insl", &[0x6D]),
+            ("outsb", &[0x6E]),
+            ("outsw", &[0x66, 0x6F]),
+            ("outsl", &[0x6F]),
+            ("rep insb", &[0xF3, 0x6C]),
+            ("rep insw", &[0xF3, 0x66, 0x6D]),
+            ("rep insl", &[0xF3, 0x6D]),
+            ("rep outsb", &[0xF3, 0x6E]),
+            ("rep outsw", &[0xF3, 0x66, 0x6F]),
+            ("rep outsl", &[0xF3, 0x6F]),
+        ] {
+            assert_eq!(asm_bytes(tmpl.as_bytes()), want, "{tmpl}");
+        }
+        assert_eq!(split_mnemonic("insq"), None);
+        assert_eq!(split_mnemonic("outsq"), None);
     }
 
     /// A prefix stands alone as a statement or leads its instruction on the

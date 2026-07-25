@@ -1370,11 +1370,23 @@ fn variadic_prologue_no_sse_omits_xmm_save() {
     let contains = |hay: &[u8], needle: &[u8]| hay.windows(needle.len()).any(|w| w == needle);
 
     let default_obj = emit(false);
-    assert!(contains(&default_obj, &[0xf2, 0x0f, 0x11]), "default object lacks the movsd XMM spill");
-    assert!(contains(&default_obj, &[0x84, 0xc0, 0x0f, 0x84]), "default object lacks the al gate");
+    assert!(
+        contains(&default_obj, &[0xf2, 0x0f, 0x11]),
+        "default object lacks the movsd XMM spill"
+    );
+    assert!(
+        contains(&default_obj, &[0x84, 0xc0, 0x0f, 0x84]),
+        "default object lacks the al gate"
+    );
     let no_sse_obj = emit(true);
-    assert!(!contains(&no_sse_obj, &[0xf2, 0x0f, 0x11]), "no_sse object still contains movsd XMM stores");
-    assert!(!contains(&no_sse_obj, &[0x84, 0xc0, 0x0f, 0x84]), "no_sse object still contains the al gate");
+    assert!(
+        !contains(&no_sse_obj, &[0xf2, 0x0f, 0x11]),
+        "no_sse object still contains movsd XMM stores"
+    );
+    assert!(
+        !contains(&no_sse_obj, &[0x84, 0xc0, 0x0f, 0x84]),
+        "no_sse object still contains the al gate"
+    );
 }
 
 /// driver, so it exercises the real ABI boundary the c5-to-c5 lanes

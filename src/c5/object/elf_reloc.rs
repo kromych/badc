@@ -426,9 +426,6 @@ struct CarvePlan {
     table: super::section_table::SectionTable,
     /// Sorted by `old_lo`; a contiguous tail run of `.text`.
     text_ranges: Vec<CarveRange>,
-    /// Sorted by `old_lo`; absolute offsets in the unified
-    /// `.data`-then-`.bss` space.
-    data_ranges: Vec<CarveRange>,
     /// `.text` prefix length that stays in place.
     text_keep_len: usize,
     /// Per-entry section index / STT_SECTION symbol index.
@@ -437,85 +434,119 @@ struct CarvePlan {
 }
 
 impl CarvePlan {
-    fn is_empty(&self) -> bool {
-        self.table.is_empty()
-    }
-
-    fn map_in(ranges: &[CarveRange], off: u64) -> Option<(usize, u64)> {
-        let i = ranges.partition_point(|r| r.old_lo <= off);
+    /// New (entry, offset) for a pre-carve `.text` offset, when moved.
+    fn map_text(&self, off: u64) -> Option<(usize, u64)> {
+        let i = self.text_ranges.partition_point(|r| r.old_lo <= off);
         if i == 0 {
             return None;
         }
-        let r = &ranges[i - 1];
+        let r = &self.text_ranges[i - 1];
         if off < r.old_hi {
             Some((r.entry, r.new_base + (off - r.old_lo)))
         } else {
             None
         }
     }
+}
 
-    /// New (entry, offset) for a pre-carve `.text` offset, when moved.
-    fn map_text(&self, off: u64) -> Option<(usize, u64)> {
-        Self::map_in(&self.text_ranges, off)
-    }
+/// Placement of a unified data offset in the relocatable output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DataHome {
+    /// `.data`, section-relative.
+    Data(u64),
+    /// `.bss`, section-relative.
+    Bss(u64),
+    /// Named section (table entry index), section-relative.
+    Named(usize, u64),
+}
 
-    /// New (entry, offset) for a pre-carve unified data offset, when
-    /// moved.
-    fn map_data(&self, off: u64) -> Option<(usize, u64)> {
-        Self::map_in(&self.data_ranges, off)
-    }
-
-    /// Rewrite one relocation row: a reference through a default
-    /// section symbol whose addend falls in a moved range switches to
-    /// the named section's symbol and rebased addend.
-    fn retarget(
-        &self,
-        info: &mut u64,
-        addend: &mut i64,
-        text_sym: u64,
-        data_sym: u64,
-        bss_sym: u64,
-        data_file_len: u64,
-    ) {
-        let sym = *info >> 32;
-        let rtype = *info & 0xffff_ffff;
-        // `R_X86_64_PC32` rows store the target offset skewed by the
-        // pc-relative correction; every other section-relative row
-        // stores it directly. (The aarch64 types all sit above 0x100,
-        // so the numeric check cannot misfire.)
-        let skew: i64 = if rtype == R_X86_64_PC32 as u64 { -4 } else { 0 };
-        let real = (*addend - skew) as u64;
-        let mapped = if sym == text_sym {
-            self.map_text(real)
-        } else if sym == data_sym {
-            self.map_data(real)
-        } else if sym == bss_sym {
-            self.map_data(real + data_file_len)
-        } else {
-            None
-        };
-        if let Some((e, new_off)) = mapped {
-            *info = (self.sym_idx[e] << 32) | rtype;
-            *addend = new_off as i64 + skew;
+impl DataHome {
+    fn add(self, delta: u64) -> DataHome {
+        match self {
+            DataHome::Data(b) => DataHome::Data(b + delta),
+            DataHome::Bss(b) => DataHome::Bss(b + delta),
+            DataHome::Named(e, b) => DataHome::Named(e, b + delta),
         }
     }
 }
 
-/// Partition a serialized `.rela` payload against the carve plan:
-/// every row is retargeted (section-symbol + addend rewrite), and a
-/// row whose `r_offset` sits in a moved range is drained into the
-/// owning named section's relocation list with a rebased offset.
-/// `applies_to_text` selects which offset space `r_offset` lives in.
-fn carve_partition_relas(
-    bytes: &mut Vec<u8>,
-    plan: &mut CarvePlan,
-    applies_to_text: bool,
-    text_sym: u64,
-    data_sym: u64,
-    bss_sym: u64,
+/// One span of the unified `.data`-then-`.bss` offset space and the
+/// output position of its first byte. Spans are sorted and tile the
+/// space. `pad` marks dropped alignment padding: its offsets all map
+/// to the span's base, one past the preceding object's end.
+#[derive(Debug, Clone, Copy)]
+struct DataSpan {
+    old_lo: u64,
+    old_hi: u64,
+    home: DataHome,
+    pad: bool,
+}
+
+/// Data layout of the relocatable object. Without named-section data
+/// objects the plan is the identity: `.data` / `.bss` keep the unified
+/// layout. Otherwise each named object moves to its section at its
+/// recorded alignment, the alignment padding around the moves is
+/// dropped, and the remaining content packs in order -- a global at
+/// its recorded alignment, anonymous data at its 8-byte residue -- so
+/// `.data` / `.bss` hold only the default-placement objects.
+struct DataPlan {
+    spans: Vec<DataSpan>,
     data_file_len: u64,
-) {
-    if plan.is_empty() || bytes.is_empty() {
+    data_len: u64,
+    bss_len: u64,
+    data_align: u64,
+    bss_align: u64,
+}
+
+impl DataPlan {
+    fn identity(data_file_len: u64, bss_size: u64, data_align: u64) -> Self {
+        DataPlan {
+            spans: Vec::new(),
+            data_file_len,
+            data_len: data_file_len,
+            bss_len: bss_size,
+            data_align: data_align.max(8),
+            bss_align: data_align.max(8).max(16),
+        }
+    }
+
+    fn map(&self, off: u64) -> DataHome {
+        if self.spans.is_empty() {
+            return if off < self.data_file_len {
+                DataHome::Data(off)
+            } else {
+                DataHome::Bss(off - self.data_file_len)
+            };
+        }
+        let i = self.spans.partition_point(|s| s.old_lo <= off);
+        if i == 0 {
+            return DataHome::Data(0);
+        }
+        let s = &self.spans[i - 1];
+        let delta = if s.pad {
+            0
+        } else {
+            (off - s.old_lo).min(s.old_hi - s.old_lo)
+        };
+        s.home.add(delta)
+    }
+
+    /// Map a data reference through its object anchor so a
+    /// one-past-the-end target (C99 6.5.6p8) follows its own object
+    /// rather than the next span.
+    fn map_ref(&self, target: u64, anchor: u64) -> DataHome {
+        let a = anchor.min(target);
+        self.map(a).add(target - a)
+    }
+}
+
+/// Partition the serialized `.rela.text` payload: a text-section
+/// addend moved by the carve is retargeted (data-section addends were
+/// built through the plan already), and a row whose `r_offset` sits in
+/// a carved text range is drained into the owning named section's
+/// relocation list with a rebased offset.
+fn carve_partition_relas(bytes: &mut Vec<u8>, carve: &mut CarvePlan, text_sym: u64) {
+    if carve.table.is_empty() || bytes.is_empty() {
         return;
     }
     let mut kept: Vec<u8> = Vec::with_capacity(bytes.len());
@@ -523,21 +554,22 @@ fn carve_partition_relas(
         let r_offset = u64::from_le_bytes(row[0..8].try_into().unwrap());
         let mut r_info = u64::from_le_bytes(row[8..16].try_into().unwrap());
         let mut r_addend = i64::from_le_bytes(row[16..24].try_into().unwrap());
-        plan.retarget(
-            &mut r_info,
-            &mut r_addend,
-            text_sym,
-            data_sym,
-            bss_sym,
-            data_file_len,
-        );
-        let home = if applies_to_text {
-            plan.map_text(r_offset)
-        } else {
-            plan.map_data(r_offset)
-        };
-        if let Some((e, new_off)) = home {
-            plan.table.entries[e]
+        let sym = r_info >> 32;
+        let rtype = r_info & 0xffff_ffff;
+        // `R_X86_64_PC32` rows store the target offset skewed by the
+        // pc-relative correction; every other section-relative row
+        // stores it directly. (The aarch64 types all sit above 0x100,
+        // so the numeric check cannot misfire.)
+        let skew: i64 = if rtype == R_X86_64_PC32 as u64 { -4 } else { 0 };
+        let real = (r_addend - skew) as u64;
+        if sym == text_sym
+            && let Some((e, new_off)) = carve.map_text(real)
+        {
+            r_info = (carve.sym_idx[e] << 32) | rtype;
+            r_addend = new_off as i64 + skew;
+        }
+        if let Some((e, new_off)) = carve.map_text(r_offset) {
+            carve.table.entries[e]
                 .relas
                 .push(super::section_table::SectionRela {
                     offset: new_off,
@@ -552,6 +584,206 @@ fn carve_partition_relas(
         kept.extend_from_slice(&r_addend.to_le_bytes());
     }
     *bytes = kept;
+}
+
+/// A section-attributed data object: unified offset, its own byte
+/// size (`copy`), its unified storage extent including the 8-byte-slot
+/// rounding (`extent`), placement alignment, and section-table entry.
+#[derive(Debug, Clone, Copy)]
+struct NamedDataObj {
+    val: u64,
+    copy: u64,
+    extent: u64,
+    align: u64,
+    entry: usize,
+}
+
+/// Build the data placement plan. `named_objs` is in declaration
+/// order; each object's in-section base is packed here at its
+/// alignment, advancing `sizes` so following inline-asm payloads
+/// append past the attribute content. The remaining unified content
+/// splits at each global's start and at the recorded padding ranges,
+/// and repacks in order.
+fn plan_data_layout(
+    program: &Program,
+    build: &Build,
+    named_objs: &[NamedDataObj],
+    sizes: &mut Vec<u64>,
+    internal: impl Fn(alloc::string::String) -> C5Error,
+) -> Result<DataPlan, C5Error> {
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    let data_file_len = build.data.len() as u64;
+    let bss_size = build.bss_size.max(0) as u64;
+    let base_align = build.data_align.max(1) as u64;
+    if named_objs.is_empty() {
+        return Ok(DataPlan::identity(data_file_len, bss_size, base_align));
+    }
+    let unified_len = data_file_len + bss_size;
+
+    // Recorded placement alignment per object start: kept content
+    // splits at these offsets so every object repacks at its own
+    // alignment. Above-8 boundaries additionally come from the layout
+    // marks, which cover objects the symbol table cannot surface at
+    // write time (a block-scope static's entry is restored at scope
+    // exit).
+    let mut split_align: alloc::collections::BTreeMap<u64, u64> =
+        alloc::collections::BTreeMap::new();
+    for sym in &program.symbols {
+        if sym.class == Token::Glo as i64
+            && sym.defined_here
+            && !sym.is_alias
+            && !sym.is_thread_local
+            && matches!(sym.linkage, Linkage::External | Linkage::Internal)
+            && (sym.val as u64) < unified_len
+        {
+            let a = sym.data_align.max(1) as u64;
+            let e = split_align.entry(sym.val as u64).or_insert(a);
+            *e = (*e).max(a);
+        }
+    }
+    for &(off, a) in &program.data_align_marks {
+        if (0..unified_len as i64).contains(&off) && a > 0 {
+            let e = split_align.entry(off as u64).or_insert(a as u64);
+            *e = (*e).max(a as u64);
+        }
+    }
+
+    // In-section base per named object, packed in declaration order at
+    // the member's alignment. Removal ranges leave the default
+    // sections: the object bytes, the slot-rounding slack past them,
+    // and the recorded alignment padding (`entry == usize::MAX` marks
+    // dropped padding).
+    let mut named_home: alloc::collections::BTreeMap<u64, (usize, u64)> =
+        alloc::collections::BTreeMap::new();
+    let mut removals: Vec<(u64, u64, usize)> = Vec::new();
+    for o in named_objs {
+        if sizes.len() <= o.entry {
+            sizes.resize(o.entry + 1, 0);
+        }
+        let base = round_up(sizes[o.entry], o.align.max(1));
+        sizes[o.entry] = base + o.copy;
+        named_home.insert(o.val, (o.entry, base));
+        removals.push((o.val, o.val + o.copy, o.entry));
+        if o.extent > o.copy {
+            removals.push((o.val + o.copy, o.val + o.extent, usize::MAX));
+        }
+    }
+    for &(lo, hi) in &program.data_pad_ranges {
+        let lo = (lo.max(0) as u64).min(unified_len);
+        let hi = (hi.max(0) as u64).min(unified_len);
+        if lo < hi {
+            removals.push((lo, hi, usize::MAX));
+        }
+    }
+    removals.sort_by_key(|&(lo, ..)| lo);
+    for w in removals.windows(2) {
+        if w[0].1 > w[1].0 {
+            return Err(internal(alloc::format!(
+                "named-section data ranges and padding overlap at offset {}",
+                w[1].0
+            )));
+        }
+    }
+
+    let mut spans: Vec<DataSpan> = Vec::new();
+    let mut cursor_data: u64 = 0;
+    let mut cursor_bss: u64 = 0;
+    let mut data_align: u64 = 8;
+    let mut bss_align: u64 = 16;
+    // One past the previously placed content; padding offsets map here
+    // so a one-past-the-end address stays adjacent to its object.
+    let mut last_end = DataHome::Data(0);
+    let mut pos: u64 = 0;
+    let mut ri = 0usize;
+    while pos < unified_len {
+        if ri < removals.len() && removals[ri].0 == pos {
+            let (lo, hi, e) = removals[ri];
+            ri += 1;
+            if e == usize::MAX {
+                spans.push(DataSpan {
+                    old_lo: lo,
+                    old_hi: hi,
+                    home: last_end,
+                    pad: true,
+                });
+            } else {
+                let &(entry, base) = named_home
+                    .get(&lo)
+                    .expect("named removal range has a planned base");
+                spans.push(DataSpan {
+                    old_lo: lo,
+                    old_hi: hi,
+                    home: DataHome::Named(entry, base),
+                    pad: false,
+                });
+                last_end = DataHome::Named(entry, base + (hi - lo));
+            }
+            pos = hi;
+            continue;
+        }
+        let next_removal = removals.get(ri).map(|r| r.0).unwrap_or(unified_len);
+        let mut hi = next_removal.max(pos + 1);
+        if pos < data_file_len && hi > data_file_len {
+            hi = data_file_len;
+        }
+        if let Some((&s, _)) = split_align.range((pos + 1)..hi).next() {
+            hi = s;
+        }
+        let in_file = pos < data_file_len;
+        let cursor = if in_file {
+            &mut cursor_data
+        } else {
+            &mut cursor_bss
+        };
+        let base = if let Some(&a) = split_align.get(&pos) {
+            let a = a.max(8);
+            if in_file {
+                data_align = data_align.max(a);
+            } else {
+                bss_align = bss_align.max(a);
+            }
+            round_up(*cursor, a)
+        } else {
+            // Anonymous content keeps its 8-byte residue.
+            *cursor + (pos as i64 - *cursor as i64).rem_euclid(8) as u64
+        };
+        let home = if in_file {
+            DataHome::Data(base)
+        } else {
+            DataHome::Bss(base)
+        };
+        spans.push(DataSpan {
+            old_lo: pos,
+            old_hi: hi,
+            home,
+            pad: false,
+        });
+        *cursor = base + (hi - pos);
+        last_end = home.add(hi - pos);
+        pos = hi;
+    }
+    #[cfg(feature = "std")]
+    if std::env::var("BADC_DEBUG_DATA_PLAN").is_ok() {
+        for s in &spans {
+            std::eprintln!(
+                "span [{:#x},{:#x}) pad={} home={:?}",
+                s.old_lo,
+                s.old_hi,
+                s.pad,
+                s.home
+            );
+        }
+        std::eprintln!("data_len={cursor_data:#x} bss_len={cursor_bss:#x}");
+    }
+    Ok(DataPlan {
+        spans,
+        data_file_len,
+        data_len: cursor_data,
+        bss_len: cursor_bss,
+        data_align,
+        bss_align,
+    })
 }
 
 pub(super) fn write_relocatable(
@@ -629,18 +861,17 @@ pub(super) fn write_relocatable(
     // into its named section, and `.text` keeps only the default
     // prefix (plus the trailing version marker). Data objects with a
     // section attribute move their `.data` / `.bss` byte range into
-    // the named section; the vacated file bytes are zeroed in place so
-    // no other data offset shifts. Symbols and relocations touching a
-    // moved range are retargeted below. Named sections take one index
-    // each right after the fixed set; `.rela` companions and
-    // `.init_array` groups follow.
+    // the named section; the data plan repacks the remaining default
+    // content and every data offset surface is remapped through it.
+    // Named sections take one index each right after the fixed set;
+    // `.rela` companions and `.init_array` groups follow.
     // TODO: `.debug_info` / `.debug_line` still describe carved
     // functions at their pre-carve `.text` offsets.
     let mut carve = CarvePlan::default();
     // Planned content length per table entry; asm payloads append past
     // the attribute content recorded here.
     let mut sizes: Vec<u64> = Vec::new();
-    {
+    let plan: DataPlan = {
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
         let fn_section: alloc::collections::BTreeMap<&str, &str> = program
@@ -723,8 +954,13 @@ pub(super) fn write_relocatable(
         } else {
             carve.text_keep_len = build.text.len();
         }
-        // Data objects. Zero-sized records are skipped -- there is
-        // nothing to place.
+        // Data objects, in declaration order so the in-section packing
+        // matches the emission order a toolchain assembler produces.
+        // Zero-sized records are skipped -- there is nothing to place.
+        // `copy` is the object's own byte size; `extent` additionally
+        // covers the 8-byte-slot rounding of its unified storage, which
+        // the plan drops like alignment padding.
+        let mut named_objs: Vec<NamedDataObj> = Vec::new();
         for sym in &program.symbols {
             if sym.class != Token::Glo as i64
                 || !sym.defined_here
@@ -735,44 +971,53 @@ pub(super) fn write_relocatable(
             {
                 continue;
             }
-            let size = (sym.reserved_data_bytes as u64).max(data_global_byte_size(sym));
-            if size == 0 {
+            let computed = data_global_byte_size(sym);
+            let extent = (sym.reserved_data_bytes as u64).max(computed);
+            if extent == 0 {
                 continue;
             }
+            let copy = if computed > 0 {
+                computed.min(extent)
+            } else {
+                extent
+            };
             let sec = sym.section_name.as_deref().unwrap_or("");
+            let align = sym.data_align.max(1) as u64;
             let e = carve
                 .table
-                .get_or_insert(sec, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8)
+                .get_or_insert(sec, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, align)
                 .map_err(internal)?;
-            carve.data_ranges.push(CarveRange {
-                old_lo: sym.val as u64,
-                old_hi: sym.val as u64 + size,
-                new_base: 0,
+            named_objs.push(NamedDataObj {
+                val: sym.val as u64,
+                copy,
+                extent,
+                align,
                 entry: e,
             });
         }
-        carve.data_ranges.sort_by_key(|r| r.old_lo);
-        // Assign packed in-section bases: text groups keep their
-        // internal layout wholesale; data objects pack 8-aligned.
-        sizes.resize(carve.table.entries.len(), 0);
-        for r in carve
-            .text_ranges
-            .iter_mut()
-            .chain(carve.data_ranges.iter_mut())
         {
+            let mut by_val: Vec<(u64, u64)> =
+                named_objs.iter().map(|o| (o.val, o.extent)).collect();
+            by_val.sort_unstable();
+            for w in by_val.windows(2) {
+                if w[0].0 + w[0].1 > w[1].0 {
+                    return Err(internal(format!(
+                        "named-section data ranges overlap at offset {}",
+                        w[1].0
+                    )));
+                }
+            }
+        }
+        // Text groups keep their internal layout wholesale, 8-aligned
+        // within their entry.
+        sizes.resize(carve.table.entries.len(), 0);
+        for r in carve.text_ranges.iter_mut() {
             let base = (sizes[r.entry] + 7) & !7;
             r.new_base = base;
             sizes[r.entry] = base + (r.old_hi - r.old_lo);
         }
-        for w in carve.data_ranges.windows(2) {
-            if w[0].old_hi > w[1].old_lo {
-                return Err(internal(format!(
-                    "named-section data ranges overlap at offset {}",
-                    w[1].old_lo
-                )));
-            }
-        }
-    }
+        plan_data_layout(program, build, &named_objs, &mut sizes, internal)?
+    };
     // Inline-asm `.pushsection` payloads join the same table. Letter
     // flags and the `@type` argument map to sh_flags / sh_type; a
     // block sharing a name with an attribute placement merges into the
@@ -1488,29 +1733,32 @@ pub(super) fn write_relocatable(
     let debug_line_sym_idx: u64 = 5;
     let debug_abbrev_sym_idx: u64 = 6;
 
-    // A data offset at or past the file image names a byte in the
-    // zero-fill `.bss` section; map it to that section symbol and the
-    // offset within it. `build.data` holds only the file-backed bytes
-    // after zero-object segregation.
-    let data_file_len = build.data.len() as i64;
-    let data_section_ref = |off: i64| -> (u64, i64) {
-        if off >= data_file_len {
-            (bss_sym_idx, off - data_file_len)
-        } else {
-            (data_sym_idx, off)
+    // Every unified data offset resolves through the plan: `.data` /
+    // `.bss` (a `.bss` offset names a byte in the zero-fill region past
+    // the file-backed bytes) or a named section. `home_sym` yields the
+    // relocation (symbol, section-relative offset) for a home. The
+    // named-section symbol indices are copied out so the closures do
+    // not hold a borrow of `carve` across its later mutations.
+    let named_sym_idx: Vec<u64> = carve.sym_idx.clone();
+    let named_shndx: Vec<u16> = carve.shndx.clone();
+    let home_sym = move |h: DataHome| -> (u64, i64) {
+        match h {
+            DataHome::Data(o) => (data_sym_idx, o as i64),
+            DataHome::Bss(o) => (bss_sym_idx, o as i64),
+            DataHome::Named(e, o) => (named_sym_idx[e], o as i64),
         }
     };
+    let data_section_ref = |off: i64| -> (u64, i64) { home_sym(plan.map(off.max(0) as u64)) };
 
-    // Defined data globals: STB_GLOBAL + STT_OBJECT, in `.data` or, for
-    // a wholly-zero object, `.bss`. C99 6.2.2: external-linkage objects
-    // surface by name so sibling TUs can resolve `extern T x;`.
+    // Defined data globals: STB_GLOBAL + STT_OBJECT, in `.data`, in
+    // `.bss` for a wholly-zero object, or in the named section the
+    // plan moved them to. C99 6.2.2: external-linkage objects surface
+    // by name so sibling TUs can resolve `extern T x;`.
     for (i, (name, val, size)) in defined_data_globals.iter().enumerate() {
-        let (shndx, value) = match carve.map_data(*val as u64) {
-            Some((e, new_off)) => (carve.shndx[e], new_off),
-            None => {
-                let (sym_sec, value) = data_section_ref(*val);
-                (sym_sec as u16, value as u64)
-            }
+        let (shndx, value) = match plan.map((*val).max(0) as u64) {
+            DataHome::Data(o) => (SHIDX_DATA, o),
+            DataHome::Bss(o) => (SHIDX_BSS, o),
+            DataHome::Named(e, o) => (named_shndx[e], o),
         };
         symbols.push(Elf64Sym {
             st_name: name_offs[defined_data_globals_start + i],
@@ -1873,17 +2121,9 @@ pub(super) fn write_relocatable(
         .collect();
 
     // Route `.rela.text` rows applying within a carved range into the
-    // owning named section, and retarget rows whose section-symbol
-    // addend points into one.
-    carve_partition_relas(
-        &mut rela_bytes,
-        &mut carve,
-        true,
-        text_sym_idx,
-        data_sym_idx,
-        bss_sym_idx,
-        data_file_len as u64,
-    );
+    // owning named section, and retarget rows whose text-section
+    // addend the carve moved.
+    carve_partition_relas(&mut rela_bytes, &mut carve, text_sym_idx);
 
     // Inline-asm section relocations join the owning table entry,
     // offset by the block's placement base. A text-offset target in a
@@ -1899,13 +2139,10 @@ pub(super) fn write_relocatable(
                         Some((te, new_off)) => (carve.sym_idx[te], new_off as i64 + r.addend),
                         None => (text_sym_idx, *off as i64 + r.addend),
                     },
-                    AsmSectionTarget::Data(off) => match carve.map_data(*off) {
-                        Some((de, new_off)) => (carve.sym_idx[de], new_off as i64 + r.addend),
-                        None => {
-                            let (sym, o) = data_section_ref(*off as i64);
-                            (sym, o + r.addend)
-                        }
-                    },
+                    AsmSectionTarget::Data(off) => {
+                        let (sym, o) = home_sym(plan.map(*off));
+                        (sym, o + r.addend)
+                    }
                     AsmSectionTarget::TextBlock(_) => {
                         // Rewritten to `Text` after block layout; an unresolved
                         // one here means the emit skipped resolve_asm_goto_relocs.
@@ -1927,15 +2164,8 @@ pub(super) fn write_relocatable(
                         } else if let Some(&idx) = func_symidx_by_name.get(name.as_str()) {
                             (idx as u64, r.addend)
                         } else if let Some(&val) = defined_data_by_name.get(name.as_str()) {
-                            match carve.map_data(val as u64) {
-                                Some((de, new_off)) => {
-                                    (carve.sym_idx[de], new_off as i64 + r.addend)
-                                }
-                                None => {
-                                    let (sym, off) = data_section_ref(val);
-                                    (sym, off + r.addend)
-                                }
-                            }
+                            let (sym, off) = data_section_ref(val);
+                            (sym, off + r.addend)
                         } else if let Some(pos) =
                             user_extern_names.iter().position(|n| *n == name.as_str())
                         {
@@ -1986,26 +2216,53 @@ pub(super) fn write_relocatable(
     // pointer-to-global initializers. `Build::data_relocs` carries
     // `(slot_data_offset, target_data_offset)`; each becomes a
     // `R_X86_64_64` / `R_AARCH64_ABS64` reloc at `slot_data_offset`
-    // against the `.data` section symbol with
-    // `r_addend = target_data_offset`. The linker resolves to
-    // `data_vaddr + target_offset`, the runtime VA of the
-    // pointed-at global. Built ahead of the section-count planning so
-    // the carve partition below settles every named section's
-    // relocation list first.
+    // against the section symbol its target's home resolves to, with
+    // the home-relative addend (the target maps through its object
+    // anchor so a one-past-the-end address follows its object). A row
+    // whose slot the plan moved into a named section joins that
+    // section's relocation list instead. Built ahead of the
+    // section-count planning so every named section's relocation list
+    // settles first.
     let rtype_abs64 = match machine_for_rela {
         Machine::X86_64 => R_X86_64_64,
         Machine::Aarch64 => R_AARCH64_ABS64,
     };
     let mut rela_data_bytes: Vec<u8> =
         Vec::with_capacity((build.data_relocs.len() + build.code_relocs.len()) * ELF64_RELA_SIZE);
-    for r in &build.data_relocs {
-        let (sym, addend) = data_section_ref(r.target_offset as i64);
-        let rela = Elf64Rela {
-            r_offset: r.data_offset,
-            r_info: (sym << 32) | rtype_abs64 as u64,
-            r_addend: addend,
+    let push_data_row =
+        |carve: &mut CarvePlan, bytes: &mut Vec<u8>, slot: u64, sym: u64, addend: i64| {
+            match plan.map(slot) {
+                DataHome::Named(e, off) => {
+                    carve.table.entries[e]
+                        .relas
+                        .push(super::section_table::SectionRela {
+                            offset: off,
+                            sym,
+                            rtype: rtype_abs64,
+                            addend,
+                        });
+                }
+                home => {
+                    // A relocated slot is file-backed by construction;
+                    // a `.bss` home cannot carry one.
+                    let r_offset = match home {
+                        DataHome::Data(o) => o,
+                        _ => slot,
+                    };
+                    write_struct(
+                        bytes,
+                        &Elf64Rela {
+                            r_offset,
+                            r_info: (sym << 32) | rtype_abs64 as u64,
+                            r_addend: addend,
+                        },
+                    );
+                }
+            }
         };
-        write_struct(&mut rela_data_bytes, &rela);
+    for r in &build.data_relocs {
+        let (sym, addend) = home_sym(plan.map_ref(r.target_offset, r.target_anchor));
+        push_data_row(&mut carve, &mut rela_data_bytes, r.data_offset, sym, addend);
     }
     // Pointer-to-extern-data initializers: the reloc targets the named
     // undefined-data symbol so the linker resolves it against the
@@ -2017,19 +2274,20 @@ pub(super) fn write_relocatable(
             .position(|n| *n == r.symbol_name.as_str())
             .expect("user_extern_data_names contains every extern_data_reloc name");
         let sym_idx = user_extern_data_sym_idx[pos] as u64;
-        let rela = Elf64Rela {
-            r_offset: r.data_offset,
-            r_info: (sym_idx << 32) | rtype_abs64 as u64,
-            r_addend: r.addend,
-        };
-        write_struct(&mut rela_data_bytes, &rela);
+        push_data_row(
+            &mut carve,
+            &mut rela_data_bytes,
+            r.data_offset,
+            sym_idx,
+            r.addend,
+        );
     }
     // Function-pointer initializers: same `R_*_64` shape as
     // pointer-to-global, but the addend is the target
     // function's native byte offset within `.text` (looked up
     // via `pc_to_native`) and the reloc points at the
-    // `.text` section symbol. The linker resolves to
-    // `text_vaddr + target_offset`.
+    // `.text` section symbol -- or the named section's when the
+    // carve moved the target function.
     for r in &build.code_relocs {
         let ent_pc = r.target_ent_pc as usize;
         // Cross-TU target: emit against the named UNDEF
@@ -2043,12 +2301,7 @@ pub(super) fn write_relocatable(
                 .position(|n| *n == name)
                 .expect("user_extern_names contains every code-reloc extern callee");
             let sym_idx = user_extern_sym_idx[pos] as u64;
-            let rela = Elf64Rela {
-                r_offset: r.data_offset,
-                r_info: (sym_idx << 32) | rtype_abs64 as u64,
-                r_addend: 0,
-            };
-            write_struct(&mut rela_data_bytes, &rela);
+            push_data_row(&mut carve, &mut rela_data_bytes, r.data_offset, sym_idx, 0);
             continue;
         }
         let native_off = build
@@ -2061,25 +2314,12 @@ pub(super) fn write_relocatable(
                 &format!("elf_reloc: code reloc references missing ent_pc {ent_pc}",),
             )));
         }
-        let rela = Elf64Rela {
-            r_offset: r.data_offset,
-            r_info: (text_sym_idx << 32) | rtype_abs64 as u64,
-            r_addend: native_off as i64,
+        let (sym, addend) = match carve.map_text(native_off as u64) {
+            Some((te, new_off)) => (carve.sym_idx[te], new_off as i64),
+            None => (text_sym_idx, native_off as i64),
         };
-        write_struct(&mut rela_data_bytes, &rela);
+        push_data_row(&mut carve, &mut rela_data_bytes, r.data_offset, sym, addend);
     }
-    // Rows applying within a carved data range move to the owning
-    // named section; section-symbol targets into carved ranges are
-    // retargeted (both directions already handled for `.rela.text`).
-    carve_partition_relas(
-        &mut rela_data_bytes,
-        &mut carve,
-        false,
-        text_sym_idx,
-        data_sym_idx,
-        bss_sym_idx,
-        data_file_len as u64,
-    );
 
     // `.init_array` / `.fini_array` groups. C99 has no such attribute;
     // GNU practice (matched by every mainstream toolchain) lowers each
@@ -2282,25 +2522,46 @@ pub(super) fn write_relocatable(
         ..Default::default()
     });
 
-    // .data -- `sh_addralign` carries the unit's base data alignment
-    // so the linker places this unit's data at a multiple of it.
-    // Objects moved into a named section copy their bytes there and
-    // leave zeroed file bytes behind, so no other offset shifts.
-    let mut data_body = build.data.clone();
-    for r in &carve.data_ranges {
-        let ent = &mut carve.table.entries[r.entry];
-        if (ent.bytes.len() as u64) < r.new_base {
-            ent.bytes.resize(r.new_base as usize, 0);
+    // .data -- `sh_addralign` carries the alignment of the content the
+    // plan keeps here. Objects moved into a named section copy their
+    // bytes there (a `.bss`-resident wholly-zero object contributes
+    // zeros); the remaining content packs at the planned positions and
+    // the dropped alignment padding leaves no file bytes behind.
+    let data_body: Vec<u8> = if plan.spans.is_empty() {
+        build.data.clone()
+    } else {
+        let mut body = alloc::vec![0u8; plan.data_len as usize];
+        for s in &plan.spans {
+            if s.pad {
+                continue;
+            }
+            let file_lo = (s.old_lo as usize).min(build.data.len());
+            let file_hi = (s.old_hi as usize).min(build.data.len());
+            match s.home {
+                DataHome::Data(b) => {
+                    let b = b as usize;
+                    body[b..b + (file_hi - file_lo)].copy_from_slice(&build.data[file_lo..file_hi]);
+                }
+                DataHome::Named(e, b) => {
+                    // Written at the planned base: spans arrive in
+                    // unified order, which zero-object segregation may
+                    // have permuted relative to the declaration-order
+                    // bases. A `.bss`-resident span keeps the zero fill
+                    // the resize provides.
+                    let ent = &mut carve.table.entries[e];
+                    let b = b as usize;
+                    let size = (s.old_hi - s.old_lo) as usize;
+                    if ent.bytes.len() < b + size {
+                        ent.bytes.resize(b + size, 0);
+                    }
+                    ent.bytes[b..b + (file_hi - file_lo)]
+                        .copy_from_slice(&build.data[file_lo..file_hi]);
+                }
+                DataHome::Bss(_) => {}
+            }
         }
-        let size = (r.old_hi - r.old_lo) as usize;
-        let file_lo = (r.old_lo as usize).min(data_body.len());
-        let file_hi = (r.old_hi as usize).min(data_body.len());
-        ent.bytes.extend_from_slice(&data_body[file_lo..file_hi]);
-        // A `.bss`-resident (wholly zero) object contributes zeros.
-        ent.bytes
-            .resize(ent.bytes.len() + (size - (file_hi - file_lo)), 0);
-        data_body[file_lo..file_hi].fill(0);
-    }
+        body
+    };
     // Inline-asm payloads follow the attribute content of their entry
     // at the placement bases planned above.
     for (&(e, base), s) in asm_placements.iter().zip(build.asm_sections.iter()) {
@@ -2310,7 +2571,7 @@ pub(super) fn write_relocatable(
         }
         ent.bytes.extend_from_slice(&s.bytes);
     }
-    let data_align = build.data_align.max(8) as u64;
+    let data_align = plan.data_align;
     let data_off = round_up(out.len() as u64, data_align);
     out.resize(data_off as usize, 0);
     out.extend_from_slice(&data_body);
@@ -2325,17 +2586,16 @@ pub(super) fn write_relocatable(
     });
 
     // .bss (no file bytes) -- zero-init data segregated past the file
-    // image; the linker zero-fills it. It holds objects carved out of
-    // the same offset space as `.data`, so it carries the same
-    // alignment: an over-aligned object is as likely to be zero-init
-    // as not, and a fixed 16 would silently under-align it.
+    // image; the linker zero-fills it. Its alignment covers the
+    // zero-init objects the plan keeps in it; a fixed 16 would
+    // silently under-align an over-aligned one.
     sh.push(Elf64Shdr {
         sh_name: shstrtab_offs[3],
         sh_type: SHT_NOBITS,
         sh_flags: SHF_ALLOC | SHF_WRITE,
         sh_offset: out.len() as u64,
-        sh_size: build.bss_size as u64,
-        sh_addralign: data_align.max(16),
+        sh_size: plan.bss_len,
+        sh_addralign: plan.bss_align,
         ..Default::default()
     });
 
@@ -3112,6 +3372,8 @@ mod tests {
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
             data_object_starts: Vec::new(),
+            data_pad_ranges: Vec::new(),
+            data_align_marks: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
             tls_data: Vec::new(),

@@ -1936,6 +1936,7 @@ impl Compiler {
                         core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty)),
                         type_align,
                     );
+                    self.symbols[id_idx].data_align = want_align.max(1) as i64;
                     let decl_align: usize = if want_align > 8 {
                         if thread_local && (req_align > 8 || want_align > 16) {
                             return Err(self.compile_err(

@@ -141,6 +141,8 @@ fn synth_program_and_build(
         asm_weak_names: Vec::new(),
         data_align: 8,
         data_object_starts: Vec::new(),
+        data_pad_ranges: Vec::new(),
+        data_align_marks: Vec::new(),
         entry_pc: 0,
         warnings: Vec::new(),
         tls_data: merged.tls_data.clone(),

@@ -608,8 +608,12 @@ impl Compiler {
                     // multi-dimensional extern is already set on the symbol by
                     // the declarator parse. Only the freshly converted `Glo`
                     // needs this; an extern naming an existing file-scope
-                    // binding keeps that binding's dimension.
-                    self.symbols[loc_idx].array_size = array_size.max(0);
+                    // binding keeps that binding's dimension. `-1` (unsized
+                    // `extern T name[];`) is kept as at file scope: an
+                    // incomplete array still decays to a pointer; collapsing
+                    // it to 0 reads the name as a scalar and loads the
+                    // array's first bytes where its address belongs.
+                    self.symbols[loc_idx].array_size = array_size;
                     if extern_shadows_binding {
                         // Carry no in-unit offset; the prior binding's
                         // `is_extern_decl` / `linkage` stay untouched so the

@@ -496,6 +496,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("bitfields.c", 0),
     ("bound_import_arg_narrowing.c", 0),
     ("block_extern_shadows_local.c", 0),
+    ("block_extern_unsized_array_decay.c", 0),
     ("win64_xmm_scratch_callee_save.c", 0),
     ("variadic_fnptr_proto_erased.c", 0),
     ("union_bitfield_layout.c", 0),

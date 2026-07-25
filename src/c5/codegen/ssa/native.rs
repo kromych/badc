@@ -182,6 +182,7 @@ pub(crate) fn compile_function_to_bytes(
                     &alloc::collections::BTreeMap::new(),
                     &mut asm_section_text_refs,
                     &mut asm_text_abs_refs,
+                    false,
                 )
             };
             if !ok {

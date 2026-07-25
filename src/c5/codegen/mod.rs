@@ -1940,6 +1940,9 @@ pub struct NativeOptions {
     /// `.bss` region instead of packing them into the file image.
     /// On by default; `BADC_NO_BSS_SEGREGATE` forces it off.
     pub bss_segregate: bool,
+    /// `-mno-sse` (x86_64): keep compiler-generated code off the SSE
+    /// registers. See [`Abi::no_sse_varargs`], which this sets.
+    pub no_sse: bool,
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -1990,6 +1993,7 @@ impl NativeOptions {
             dump_ssa: false,
             inline_cap: 64,
             bss_segregate: true,
+            no_sse: false,
         }
     }
 
@@ -2346,6 +2350,16 @@ pub(crate) struct Abi {
     /// descending order or a later access faults. SysV / macOS grow the
     /// stack without a probe. Set for the Windows targets.
     pub stack_probe: bool,
+    /// `-mno-sse`: compiler-generated code must not touch SSE registers.
+    /// Freestanding x86_64 environments (OS kernels) run without
+    /// CR4.OSFXSR, where any XMM access is #UD, and their callers do not
+    /// maintain the System V `al` XMM-count convention. The variadic
+    /// callee prologue skips the XMM save area and `va_start` marks the
+    /// FP area exhausted so `va_arg` walks gp then overflow only.
+    /// Floating-point argument codegen is unaffected: such environments
+    /// pass no FP varargs. Per-run (from [`NativeOptions::no_sse`]), not
+    /// a `Target::abi` row property.
+    pub no_sse_varargs: bool,
 }
 
 impl Abi {
@@ -2426,6 +2440,7 @@ impl Target {
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
                 stack_probe: false,
+                no_sse_varargs: false,
             },
             Target::LinuxAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -2436,6 +2451,7 @@ impl Target {
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
                 stack_probe: false,
+                no_sse_varargs: false,
             },
             Target::LinuxX64 => Abi {
                 arch: Arch::X86_64,
@@ -2446,6 +2462,7 @@ impl Target {
                 position_indexed_args: false,
                 variadic_zero_xmm_count: true,
                 stack_probe: false,
+                no_sse_varargs: false,
             },
             Target::WindowsX64 => Abi {
                 arch: Arch::X86_64,
@@ -2456,6 +2473,7 @@ impl Target {
                 position_indexed_args: true,
                 variadic_zero_xmm_count: false,
                 stack_probe: true,
+                no_sse_varargs: false,
             },
             Target::WindowsAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -2466,6 +2484,7 @@ impl Target {
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
                 stack_probe: true,
+                no_sse_varargs: false,
             },
         }
     }

@@ -1307,6 +1307,50 @@ int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
 /// corrupt the caller's r13. The cc caller pins a sentinel in r13 across
 /// the call via inline asm and checks it survives. Links a badc
 /// relocatable object with a cc-compiled `main` through the system
+/// `-mno-sse` (`NativeOptions::no_sse`): a System V variadic callee's
+/// prologue normally spills xmm0..xmm7 behind a `test al, al` gate.
+/// Freestanding x86_64 environments fault on any XMM access and their
+/// callers do not maintain the `al` convention, so under `no_sse` the
+/// object must contain neither the `movsd` stores (f2 0f 11) nor the
+/// gate (84 c0 0f 84); the default object contains both.
+#[test]
+fn variadic_prologue_no_sse_omits_xmm_save() {
+    use crate::{CompileOptions, OutputKind};
+
+    const SRC: &str = "int sum(int n, ...) {\n\
+         \t__builtin_va_list ap;\n\
+         \t__builtin_va_start(ap, n);\n\
+         \tint t = 0;\n\
+         \tfor (int i = 0; i < n; i++) t += __builtin_va_arg(ap, int);\n\
+         \t__builtin_va_end(ap);\n\
+         \treturn t;\n\
+         }\n";
+    let emit = |no_sse: bool| -> Vec<u8> {
+        let prog = Compiler::with_options(
+            SRC.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile variadic callee: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            no_sse,
+            ..NativeOptions::default()
+        };
+        emit_native_with_options(&prog, Target::LinuxX64, opts)
+            .unwrap_or_else(|e| panic!("emit object (no_sse={no_sse}): {e}"))
+    };
+    let contains = |hay: &[u8], needle: &[u8]| hay.windows(needle.len()).any(|w| w == needle);
+
+    let default_obj = emit(false);
+    assert!(contains(&default_obj, &[0xf2, 0x0f, 0x11]), "default object lacks the movsd XMM spill");
+    assert!(contains(&default_obj, &[0x84, 0xc0, 0x0f, 0x84]), "default object lacks the al gate");
+    let no_sse_obj = emit(true);
+    assert!(!contains(&no_sse_obj, &[0xf2, 0x0f, 0x11]), "no_sse object still contains movsd XMM stores");
+    assert!(!contains(&no_sse_obj, &[0x84, 0xc0, 0x0f, 0x84]), "no_sse object still contains the al gate");
+}
+
 /// driver, so it exercises the real ABI boundary the c5-to-c5 lanes
 /// cannot.
 #[test]

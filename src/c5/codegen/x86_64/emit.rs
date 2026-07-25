@@ -1549,6 +1549,7 @@ pub(crate) fn emit_function(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
+    no_sse: bool,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -1599,7 +1600,11 @@ pub(crate) fn emit_function(
             bail_rollback!();
         }};
     }
-    let abi = target.abi();
+    let abi = {
+        let mut a = target.abi();
+        a.no_sse_varargs = no_sse;
+        a
+    };
     let frame = compute_frame(func, alloc, abi);
 
     // A per-inst `Inst::ParamRef` materialises its parameter from the
@@ -2678,20 +2683,25 @@ fn emit_prologue(
         for (i, &reg) in abi.int_arg_regs.iter().enumerate() {
             emit_mov_mem_r(code, Reg::RBP, reg_save + (i as i32) * 8, Reg(reg));
         }
-        // test al, al ; je past_fp_save
-        super::encode::emit_test_al_al(code);
-        super::encode::emit_jcc_rel32(code, Cc::E, 0);
-        // The rel32 operand occupies the four bytes just emitted; the
-        // jump is relative to the end of the je instruction (which is
-        // where the XMM stores begin).
-        let rel32_at = code.len() - 4;
-        let fp_save_start = code.len();
-        for i in 0..8u32 {
-            let off = reg_save + SYSV_GP_SAVE_BYTES as i32 + (i as i32) * 16;
-            emit_movsd_mem_xmm(code, Reg::RBP, off, Reg(i as u8));
+        // Under `-mno-sse` the XMM save is omitted entirely: the target
+        // environment faults on any XMM access and its callers do not
+        // maintain the `al` count, so even the guarded form is unsafe.
+        if !abi.no_sse_varargs {
+            // test al, al ; je past_fp_save
+            super::encode::emit_test_al_al(code);
+            super::encode::emit_jcc_rel32(code, Cc::E, 0);
+            // The rel32 operand occupies the four bytes just emitted; the
+            // jump is relative to the end of the je instruction (which is
+            // where the XMM stores begin).
+            let rel32_at = code.len() - 4;
+            let fp_save_start = code.len();
+            for i in 0..8u32 {
+                let off = reg_save + SYSV_GP_SAVE_BYTES as i32 + (i as i32) * 16;
+                emit_movsd_mem_xmm(code, Reg::RBP, off, Reg(i as u8));
+            }
+            let rel = (code.len() - fp_save_start) as i32;
+            code[rel32_at..rel32_at + 4].copy_from_slice(&rel.to_le_bytes());
         }
-        let rel = (code.len() - fp_save_start) as i32;
-        code[rel32_at..rel32_at + 4].copy_from_slice(&rel.to_le_bytes());
     }
     // The allocator's FP register pool (`callee_fprs`) is empty for both
     // SysV and Win64, so it never assigns an SSA value to a non-volatile
@@ -7749,7 +7759,13 @@ fn emit_intrinsic(
             // FP) so a callee whose named parameters fill or overflow a bank
             // sends `va_arg` straight to the overflow area.
             let gp_offset = named_int.min(6) * 8;
-            let fp_offset = SYSV_GP_SAVE_BYTES + named_fp.min(8) * 16;
+            // With the XMM save area unpopulated (`-mno-sse`), report the
+            // FP bank exhausted so `va_arg` walks gp then overflow only.
+            let fp_offset = if abi.no_sse_varargs {
+                SYSV_REG_SAVE_BYTES
+            } else {
+                SYSV_GP_SAVE_BYTES + named_fp.min(8) * 16
+            };
             let Some(ap_place) = alloc.places.get(args[0] as usize).copied() else {
                 return fail("VaStart: &ap value id out of range");
             };

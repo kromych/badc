@@ -71,6 +71,9 @@ def rewrite(argv: list[str]) -> list[str]:
         elif a.startswith("-O"):
             opt = a  # last one wins, as with gcc
             i += 1
+        elif a == "-mno-sse":
+            out.append(a)  # badc keeps generated code off the SSE registers
+            i += 1
         elif a.startswith("-"):
             i += 1
         else:

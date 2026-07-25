@@ -4440,6 +4440,15 @@ impl Compiler {
                             // "no array hint"), mirroring the zero-length
                             // array variable path.
                             self.pending.last_array_decay_size = -1;
+                            // A multi-dim flexible member (`T xs[][M]...`)
+                            // records its inner dims in `array_dims` with a 0
+                            // placeholder for the deferred outer dim; the inner
+                            // dims still give the row strides so `s.xs[i][j]`
+                            // scales each level. `seed_multi_dim_strides` reads
+                            // only `dims[k+1..]`, so the placeholder is inert.
+                            let dims = field.array_dims.clone();
+                            let elem_size = self.size_of_type(field.ty) as i64;
+                            self.seed_multi_dim_strides(&dims, elem_size);
                         }
                     } else if !field_is_struct_value {
                         self.mark_emit_scalar_load();
@@ -4672,6 +4681,31 @@ impl Compiler {
         self.lex.restore(chosen);
         self.next()?; // the `:` -> the expression's first token
         Ok(after)
+    }
+
+    /// Parse one assignment-expression for its type only. The lexer
+    /// position and every emitted artifact (code, data, relocs, AST)
+    /// are rewound, as for a `_Generic` controlling expression (C99
+    /// 6.5.1.1p2 unevaluated semantics).
+    pub(super) fn peek_expr_type(&mut self) -> Result<i64, C5Error> {
+        let snap = self.lex.snapshot();
+        let data_start = self.data.len();
+        let saved_text_len = self.next_ent_pc;
+        let saved_reloc = self.code_reloc_sym_idx.len();
+        let saved_ast_acc = self.ast_acc;
+        let saved_vstack = self.ast_vstack.len();
+        let saved_ty = self.ty;
+        let result = self.expr(Token::Assign as i64);
+        let ty = self.ty;
+        self.ty = saved_ty;
+        self.next_ent_pc = saved_text_len;
+        self.clear_recent_emits();
+        self.code_reloc_sym_idx.truncate(saved_reloc);
+        self.ast_acc = saved_ast_acc;
+        self.ast_vstack.truncate(saved_vstack);
+        self.data.truncate(data_start);
+        self.lex.restore(snap);
+        result.map(|_| ty)
     }
 
     /// Parse `__builtin_types_compatible_p ( type-name , type-name )`

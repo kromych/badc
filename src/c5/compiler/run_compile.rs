@@ -96,7 +96,7 @@ impl Compiler {
     /// Advance past one initializer element's value to the next top-level `,`
     /// or the closing `}`, tracking bracket depth so a comma nested inside a
     /// brace / paren / bracket group does not end the element early.
-    fn skip_init_element_value(&mut self) -> Result<(), C5Error> {
+    pub(super) fn skip_init_element_value(&mut self) -> Result<(), C5Error> {
         let mut depth: i32 = 0;
         while self.lex.tk != 0 {
             if depth == 0 && (self.lex.tk == ',' || self.lex.tk == '}') {
@@ -2054,7 +2054,6 @@ impl Compiler {
                                     positional
                                 }
                             };
-                            self.next()?;
                             // C99 6.9.2: a prior tentative definition already
                             // reserved storage; reuse it so references emitted
                             // before this definition -- which baked in the
@@ -2079,6 +2078,11 @@ impl Compiler {
                                 fresh
                             };
                             self.symbols[id_idx].val = off;
+                            // Reserve before consuming `{`: lexing the first
+                            // element token may append a string literal's
+                            // bytes, whose parser-added NUL must land right
+                            // after them.
+                            self.next()?;
                             // 2D struct array `T xs[][M] = { { {...}, ... }, ...
                             // }`: each top-level brace is a row of `inner_dim`
                             // structs. The 1D loop below fills one struct per
@@ -2088,6 +2092,34 @@ impl Compiler {
                             if inner_dim > 1 {
                                 let mut row: i64 = 0;
                                 while self.lex.tk != '}' {
+                                    // C99 6.7.8p7 array designator naming a row:
+                                    // `[N] = { ... }` moves the cursor to row N;
+                                    // subsequent positional rows continue at N+1.
+                                    // TODO: `[lo ... hi]` row replication and
+                                    // `[N][M]`/`[N].field` chains, as the
+                                    // known-size path supports.
+                                    if self.lex.tk == Token::Brak {
+                                        self.next()?;
+                                        let idx = self.parse_constant_int()?;
+                                        if idx < 0 || idx >= count {
+                                            return Err(self.compile_err(format!(
+                                                "row designator index {idx} out of bounds [0, {count})"
+                                            )));
+                                        }
+                                        if self.lex.tk != ']' {
+                                            return Err(self.compile_err(
+                                                "`]` expected after row designator index",
+                                            ));
+                                        }
+                                        self.next()?;
+                                        if self.lex.tk != Token::Assign {
+                                            return Err(self.compile_err(
+                                                "`=` expected after `[N]` row designator",
+                                            ));
+                                        }
+                                        self.next()?;
+                                        row = idx;
+                                    }
                                     if self.lex.tk != '{' {
                                         return Err(self.compile_err(
                                             "row of a 2D struct array must be brace-enclosed",

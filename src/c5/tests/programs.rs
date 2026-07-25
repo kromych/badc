@@ -463,6 +463,30 @@ fn deferred_array_designator() {
 }
 
 #[test]
+fn deferred_struct_array_string_field() {
+    // Staged storage is reserved before `{` is consumed, so a leading
+    // string literal's bytes and parser-added NUL stay contiguous
+    // instead of aliasing element 0's slot; every end alignment.
+    assert_eq!(run_fixture("deferred_struct_array_string_field.c"), 0);
+}
+
+#[test]
+fn struct_array_init_from_elem_values() {
+    // Initializer entries that are expressions of the element type
+    // count one element each (C99 6.7.8p13); mixed and flat lists
+    // keep the field-slot walk (6.7.8p20).
+    assert_eq!(run_fixture("struct_array_init_from_elem_values.c"), 0);
+}
+
+#[test]
+fn deferred_struct_array_row_designator() {
+    // A `[N] =` designator naming a row of a deferred-size 2-D struct
+    // array sets the cursor and the outer size (C99 6.7.8p7+p22), with
+    // positional rows continuing after it; file- and block-scope statics.
+    assert_eq!(run_fixture("deferred_struct_array_row_designator.c"), 0);
+}
+
+#[test]
 fn outer_range_designator_replicates_subarray() {
     // A GCC range designator on the outer dimension of an array of
     // aggregates (`[a ... b] = { ... }`) replicates the brace-enclosed
@@ -1389,6 +1413,14 @@ fn flexible_array_member() {
     // A flexible array member contributes no storage but decays to a
     // pointer-to-element at the field offset for `p->v[i]`.
     assert_eq!(run_fixture("flexible_array_member.c"), 0);
+}
+
+#[test]
+fn flex_2d_member_index() {
+    // A multi-dimensional flexible array member (`T v[][M]`) scales the
+    // outer subscript by the inner row size; rows decay and keep their
+    // array type under sizeof.
+    assert_eq!(run_fixture("flex_2d_member_index.c"), 0);
 }
 
 #[test]

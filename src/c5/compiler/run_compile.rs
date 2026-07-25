@@ -25,8 +25,8 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, format_signature, is_decl_modifier, is_struct_ty, struct_id_of,
-    struct_ptr_depth,
+    UNSIGNED_BIT, VOLATILE_BIT, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty,
+    struct_id_of, struct_ptr_depth,
 };
 
 impl Compiler {
@@ -266,6 +266,7 @@ impl Compiler {
             self.pending.attr_thread_local = false;
             self.pending.attr_dllexport = false;
             self.pending.attr_align = 0;
+            self.pending.type_align = 0;
             self.pending.attr_vector_size = 0;
             self.pending.attr_constructor = false;
             self.pending.attr_destructor = false;
@@ -404,6 +405,13 @@ impl Compiler {
                     self.pending.typedef_base_array_size = typedef_array;
                     self.pending.typedef_base_array_dims =
                         self.symbols[self.lex.curr_id_idx].array_dims.clone();
+                }
+                // Carry the typedef's explicit type alignment (GNU
+                // `aligned(N)`) so a declaration through it -- including a
+                // typedef of a typedef -- honors the requested boundary.
+                let typedef_align = self.symbols[self.lex.curr_id_idx].type_align;
+                if typedef_align > 0 {
+                    self.pending.type_align = typedef_align;
                 }
                 self.next()?;
             } else if m.saw_int_mod {
@@ -754,6 +762,15 @@ impl Compiler {
                     self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
                     self.symbols[id_idx].is_enum_typedef = base_is_enum;
                     self.symbols[id_idx].is_function_type = typedef_is_fn_type;
+                    // A GNU `aligned(N)` type attribute on the typedef
+                    // (its own declaration's attribute, else propagated
+                    // from an aligned typedef base) becomes the alias's
+                    // type alignment.
+                    self.symbols[id_idx].type_align = if self.pending.attr_align > 0 {
+                        self.pending.attr_align
+                    } else {
+                        self.pending.type_align
+                    };
                     if typedef_fpi > 0 {
                         self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
                     }
@@ -1845,8 +1862,20 @@ impl Compiler {
                     // requires: an `aligned(64)` member raises its whole
                     // aggregate, so `struct S g;` needs a 64-aligned slot
                     // with no attribute in sight.
-                    let want_align =
-                        core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty));
+                    // A GNU `aligned(N)` type attribute on the object's
+                    // typedef base raises its placement like an explicit
+                    // request; a reducing one is absorbed by the type's
+                    // natural alignment. A pointer object keeps pointer
+                    // alignment.
+                    let type_align = if is_pointer_ty(ty) {
+                        0
+                    } else {
+                        self.pending.type_align.max(0) as usize
+                    };
+                    let want_align = core::cmp::max(
+                        core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty)),
+                        type_align,
+                    );
                     let decl_align: usize = if want_align > 8 {
                         if thread_local && (req_align > 8 || want_align > 16) {
                             return Err(self.compile_err(

@@ -1161,11 +1161,11 @@ impl Compiler {
     }
 
     /// The value type of a statement expression: the type of its
-    /// last expression-statement, or `Ty::Int` when the trailing
-    /// block-item is not an expression statement.
+    /// final expression-statement, labels stripped, or `Ty::Int`
+    /// when the trailing block-item is not an expression statement.
     fn stmt_expr_result_ty(&self, block: super::super::ast::StmtId) -> i64 {
         use super::super::ast::{BlockItem, Stmt};
-        let last = match self.ast.stmt(block) {
+        let mut last = match self.ast.stmt(block) {
             // A single-item block yields the bare statement (see
             // `ast_wrap_block_items`); a multi-item block yields a
             // `Stmt::Compound` whose last item carries the value.
@@ -1175,6 +1175,11 @@ impl Compiler {
             },
             _ => block,
         };
+        // A label wrapping the final statement does not change its
+        // value role (`out: expr;` still supplies the value).
+        while let Stmt::Labeled { body, .. } = self.ast.stmt(last) {
+            last = *body;
+        }
         if let Stmt::Expr(e) = self.ast.stmt(last) {
             return self.ast.expr_value_ty(*e);
         }

@@ -204,6 +204,15 @@ pub(crate) enum Mnemonic {
     /// expression text is carried in [`AsmInsn::sym_target`] and the fill byte
     /// in [`AsmInsn::bytes`].
     Skip,
+    /// `.align n` / `.p2align e` / `.balign n` inside the code stream: pad to
+    /// an alignment boundary. `n` is the resolved byte alignment, `fill` the
+    /// pad byte (the target NOP when absent), `max` the most bytes the pad may
+    /// add. The padding is placed relative to the enclosing function's start.
+    Align {
+        n: u32,
+        fill: Option<u8>,
+        max: Option<u32>,
+    },
     /// A general-purpose / system mnemonic recognized straight from the
     /// catalogue, not one of the bespoke forms above. The string is the
     /// catalogue mnemonic; [`encode`] routes it through the table encoder with
@@ -241,6 +250,22 @@ pub(crate) enum AsmOpnd {
     /// `seg:disp` with no base register (`%%gs:0x28`): an absolute
     /// displacement, meaningful under the instruction's segment override.
     AbsMem { disp: i32 },
+    /// `disp(,%%index,scale)`: a scaled-index memory reference with no base
+    /// register (SIB base=101, mod=00, disp32). `sym` marks a link-time symbol
+    /// displacement (its name in the instruction's `sym_target`, `disp` the
+    /// addend, taken as an absolute reference); otherwise `disp` is a literal.
+    IndexMem {
+        index: AsmMemBase,
+        scale: u8,
+        disp: i32,
+        sym: bool,
+    },
+    /// `%cN(%%rip)` / `%PN(%%rip)`: a RIP-relative memory reference whose
+    /// displacement is an `i`-class operand substituted as a bare constant
+    /// (`%c`) or a symbol / constant address (`%P`). The emitter resolves a
+    /// compile-time constant to the disp32 literal and a link-time address to
+    /// a RIP-relative relocation.
+    RipRelRef { idx: u8, symbolic: bool },
     /// `disp(%%rip)` with a literal numeric displacement (`lea 0(%%rip), %0`
     /// in `_THIS_IP_`): the effective address is `rip + disp`, a self-relative
     /// computation the CPU performs at run time with no relocation. Distinct
@@ -329,6 +354,16 @@ pub(crate) enum Concrete {
     /// An absolute displacement (`%%gs:0x28`), addressed with no base
     /// register; meaningful under a segment override.
     AbsMem {
+        disp: i32,
+        size: AsmRegSize,
+    },
+    /// A scaled-index memory reference with no base register
+    /// (`disp(,%index,scale)`): SIB base=101, mod=00, disp32. `disp` is a
+    /// literal or a relocation-patched symbol offset (the reloc rides the
+    /// emitter side, not this operand).
+    IndexMem {
+        index: u8,
+        scale: u8,
         disp: i32,
         size: AsmRegSize,
     },
@@ -1251,7 +1286,6 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
         } else {
             i32::try_from(parse_int(prefix)?).ok()?
         };
-        let base = parse_mem_base(parts[0])?;
         let index = parse_mem_base(parts[1])?;
         let scale = match parts.get(2) {
             Some(s) => match parse_int(s)? {
@@ -1260,8 +1294,18 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
             },
             None => 1,
         };
+        // An empty base field (`disp(,%index,scale)`) is the no-base
+        // scaled-index form: SIB base=101, mod=00, disp32.
+        if parts[0].trim().is_empty() {
+            return Some(AsmOpnd::IndexMem {
+                index,
+                scale,
+                disp,
+                sym: false,
+            });
+        }
         return Some(AsmOpnd::Mem {
-            base,
+            base: parse_mem_base(parts[0])?,
             index: Some(index),
             scale,
             disp,
@@ -1270,6 +1314,15 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
     let reg_body = inner
         .strip_prefix("%%")
         .or_else(|| inner.strip_prefix('%'))?;
+    // `(%dx)`: the variable I/O port of in/out/ins/outs. dx is the only
+    // register the port parentheses name; it denotes the same port as the bare
+    // `%dx` spelling, so it resolves to that register operand.
+    if prefix.is_empty() && reg_by_name(reg_body) == Some((2, AsmRegSize::Word)) {
+        return Some(AsmOpnd::Reg {
+            reg: 2,
+            size: AsmRegSize::Word,
+        });
+    }
     if reg_body == "rip" {
         // The address of a template-local label (named or `Nf` / `Nb`).
         if let Some(idx) = labels.iter().position(|&n| n == prefix) {
@@ -1288,6 +1341,20 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
             return Some(AsmOpnd::LabelAddr {
                 num: digits.parse().ok()?,
                 forward,
+            });
+        }
+        // `%cN(%%rip)` / `%PN(%%rip)`: the displacement is an operand
+        // reference, resolved at emit (a constant becomes the disp32 literal,
+        // an address a RIP-relative relocation).
+        if let Some(body) = prefix.strip_prefix('%')
+            && let Some(&m) = body.as_bytes().first()
+            && matches!(m, b'c' | b'P')
+            && body.len() > 1
+            && body[1..].bytes().all(|c| c.is_ascii_digit())
+        {
+            return Some(AsmOpnd::RipRelRef {
+                idx: body[1..].parse().ok()?,
+                symbolic: m == b'P',
             });
         }
         // A literal-displacement RIP-relative reference `disp(%rip)`: the
@@ -1318,6 +1385,54 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
 /// Parse a decimal or `0x`-hex integer, optionally signed.
 fn parse_int(s: &str) -> Option<i64> {
     crate::c5::codegen::ssa::emit_common::eval_const_expr(s.trim())
+}
+
+/// Parse `sym(,%index,scale)`: a no-base scaled-index memory reference whose
+/// displacement is a bare symbol name. Returns the symbol, its index base, and
+/// the scale. `None` for any other shape (a numeric or operand displacement, a
+/// present base register, a non-symbol prefix).
+fn parse_index_mem_sym<'a>(tok: &'a str, labels: &[&str]) -> Option<(&'a str, AsmMemBase, u8)> {
+    let open = matching_open_paren(tok)?;
+    let prefix = tok[..open].trim();
+    let inner = tok[open + 1..tok.len() - 1].trim();
+    if prefix.is_empty()
+        || parse_int(prefix).is_some()
+        || parse_label_ref(prefix, labels).is_some()
+        || reg_by_name(prefix).is_some()
+        || !super::super::ssa::emit_common::is_asm_symbol_template(prefix)
+    {
+        return None;
+    }
+    let parts = split_asm_operands(inner);
+    if parts.len() < 2 || parts.len() > 3 || !parts[0].trim().is_empty() {
+        return None;
+    }
+    let index = parse_mem_base(parts[1])?;
+    let scale = match parts.get(2) {
+        Some(s) => match parse_int(s)? {
+            v @ (1 | 2 | 4 | 8) => v as u8,
+            _ => return None,
+        },
+        None => 1,
+    };
+    Some((prefix, index, scale))
+}
+
+/// Parse a `.align` / `.p2align` / `.balign` directive body to a byte
+/// alignment, pad byte, and max-skip. On x86 `.align` / `.balign` take a byte
+/// count; `.p2align` takes a power-of-two exponent. `None` for a malformed or
+/// out-of-range spec.
+fn parse_align_directive(name: &str, rest: &str) -> Option<(u32, Option<u8>, Option<u32>)> {
+    let (spec, fill, max) =
+        super::super::ssa::emit_common::parse_align_operands(rest.trim())?;
+    let n = match name {
+        ".p2align" => (0..=12).contains(&spec).then(|| 1u32 << spec)?,
+        ".align" | ".balign" => u32::try_from(spec)
+            .ok()
+            .filter(|&n| n > 0 && n <= 4096 && n.is_power_of_two())?,
+        _ => return None,
+    };
+    Some((n, fill, max))
 }
 
 /// Literal machine bytes for a raw-byte template piece, or `None` when the
@@ -1530,6 +1645,27 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             });
             continue;
         }
+        // `.align n` / `.p2align e` / `.balign n` inside the code stream pad to
+        // an alignment boundary (a `.pushsection` block handles these on its own
+        // path).
+        let (dir_tok, dir_rest) = match piece.split_once(char::is_whitespace) {
+            Some((t, r)) => (t, r.trim()),
+            None => (piece, ""),
+        };
+        if matches!(dir_tok, ".align" | ".p2align" | ".balign") {
+            let (n, fill, max) = parse_align_directive(dir_tok, dir_rest)
+                .ok_or_else(|| format!("inline asm: bad alignment `{piece}`"))?;
+            insns.push(AsmInsn {
+                mnemonic: Mnemonic::Align { n, fill, max },
+                suffix: None,
+                seg: None,
+                operands: Vec::new(),
+                bytes: Vec::new(),
+                sym_target: None,
+                label_def: None,
+            });
+            continue;
+        }
         // Mnemonic is the first whitespace-delimited token; the operand
         // list is the remainder, comma-separated.
         let (mut mnem_tok, mut rest) = match piece.find(char::is_whitespace) {
@@ -1623,6 +1759,25 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                     }
                     sym_target = Some(String::from(sym));
                     operands.push(AsmOpnd::ImmSym);
+                    continue;
+                }
+                // `sym(,%index,scale)`: a no-base scaled-index memory reference
+                // whose displacement is a link-time symbol address. The name
+                // rides in `sym_target` (one such operand per instruction); the
+                // operand marks where its disp32 field goes.
+                if let Some((sym, index, scale)) = parse_index_mem_sym(tok, &names) {
+                    if sym_target.is_some() {
+                        return Err(String::from(
+                            "inline asm: more than one symbol reference per instruction",
+                        ));
+                    }
+                    sym_target = Some(String::from(sym));
+                    operands.push(AsmOpnd::IndexMem {
+                        index,
+                        scale,
+                        disp: 0,
+                        sym: true,
+                    });
                     continue;
                 }
                 operands.push(parse_operand(tok, &names)?);
@@ -1917,6 +2072,17 @@ fn table_opnd(c: &Concrete) -> super::table::Opnd {
             disp,
             width: size.bytes(),
         },
+        Concrete::IndexMem {
+            index,
+            scale,
+            disp,
+            size,
+        } => Opnd::IndexMem {
+            index,
+            scale,
+            disp,
+            width: size.bytes(),
+        },
         Concrete::RipRel { disp, size } => Opnd::RipRel {
             disp,
             width: size.bytes(),
@@ -1987,10 +2153,12 @@ pub(crate) fn encode(
     // The bespoke arms below address memory through `modrm_mem` (base +
     // displacement only); a scaled index reaches them only on an
     // unmodelled shape.
-    if ops
-        .iter()
-        .any(|o| matches!(o, Concrete::Mem { index: Some(_), .. }))
-    {
+    if ops.iter().any(|o| {
+        matches!(
+            o,
+            Concrete::Mem { index: Some(_), .. } | Concrete::IndexMem { .. }
+        )
+    }) {
         return Err(String::from(
             "inline asm: scaled-index memory operand unsupported for this instruction",
         ));
@@ -2102,7 +2270,10 @@ pub(crate) fn encode(
                     code.extend_from_slice(&[0x0F, opcode]);
                     modrm_mem(code, v_field & 7, base, disp);
                 }
-                Concrete::Imm(_) | Concrete::AbsMem { .. } | Concrete::RipRel { .. } => {
+                Concrete::Imm(_)
+                | Concrete::AbsMem { .. }
+                | Concrete::RipRel { .. }
+                | Concrete::IndexMem { .. } => {
                     return Err(String::from(
                         "inline asm: `movd` operand must be a register or memory",
                     ));
@@ -2568,7 +2739,10 @@ pub(crate) fn encode(
                     code.push(op_cl);
                     code.push(modrm_reg(src_reg, dst_reg));
                 }
-                Concrete::Mem { .. } | Concrete::AbsMem { .. } | Concrete::RipRel { .. } => {
+                Concrete::Mem { .. }
+                | Concrete::AbsMem { .. }
+                | Concrete::RipRel { .. }
+                | Concrete::IndexMem { .. } => {
                     return Err(String::from("inline asm: double-shift count in memory"));
                 }
             }
@@ -2652,7 +2826,10 @@ pub(crate) fn encode(
 fn as_reg(op: Concrete) -> Result<(u8, AsmRegSize), String> {
     match op {
         Concrete::Reg { reg, size } => Ok((reg, size)),
-        Concrete::Mem { .. } | Concrete::AbsMem { .. } | Concrete::RipRel { .. } => {
+        Concrete::Mem { .. }
+        | Concrete::AbsMem { .. }
+        | Concrete::RipRel { .. }
+        | Concrete::IndexMem { .. } => {
             Err(String::from("inline asm: unexpected memory operand"))
         }
         Concrete::Imm(_) => Err(String::from("inline asm: register operand expected")),

@@ -169,6 +169,15 @@ pub(crate) enum Opnd {
         disp: i32,
         width: u8,
     },
+    /// Scaled-index memory with no base register (`disp(,%index,scale)`):
+    /// ModRM mod=00 rm=100, SIB base=101 + disp32. The small/kernel code-model
+    /// per-CPU form; `disp` is a literal or a relocation-patched symbol offset.
+    IndexMem {
+        index: u8,
+        scale: u8,
+        disp: i32,
+        width: u8,
+    },
     Imm(i64),
 }
 
@@ -178,7 +187,8 @@ impl Opnd {
             Opnd::Reg { width, .. }
             | Opnd::Mem { width, .. }
             | Opnd::RipRel { width, .. }
-            | Opnd::AbsMem { width, .. } => Some(width),
+            | Opnd::AbsMem { width, .. }
+            | Opnd::IndexMem { width, .. } => Some(width),
             Opnd::Imm(_) => None,
         }
     }
@@ -201,14 +211,19 @@ fn pat_matches(p: OpPat, o: Opnd, opw: u8) -> bool {
         (OpPat::Reg(w), Opnd::Reg { width, .. }) => wbytes(w, opw) == Some(width),
         (OpPat::Rm(w), Opnd::Reg { width, .. }) => wbytes(w, opw) == Some(width),
         (OpPat::Rm(w), Opnd::Mem { width, .. }) => wbytes(w, opw) == Some(width),
-        (OpPat::Rm(w), Opnd::RipRel { width, .. } | Opnd::AbsMem { width, .. }) => {
-            wbytes(w, opw) == Some(width)
-        }
+        (
+            OpPat::Rm(w),
+            Opnd::RipRel { width, .. } | Opnd::AbsMem { width, .. } | Opnd::IndexMem { width, .. },
+        ) => wbytes(w, opw) == Some(width),
         (OpPat::Mem(w), Opnd::Mem { width, .. }) => wbytes(w, opw) == Some(width),
-        (OpPat::Mem(w), Opnd::RipRel { width, .. } | Opnd::AbsMem { width, .. }) => {
-            wbytes(w, opw) == Some(width)
-        }
-        (OpPat::MemAny, Opnd::Mem { .. } | Opnd::RipRel { .. } | Opnd::AbsMem { .. }) => true,
+        (
+            OpPat::Mem(w),
+            Opnd::RipRel { width, .. } | Opnd::AbsMem { width, .. } | Opnd::IndexMem { width, .. },
+        ) => wbytes(w, opw) == Some(width),
+        (
+            OpPat::MemAny,
+            Opnd::Mem { .. } | Opnd::RipRel { .. } | Opnd::AbsMem { .. } | Opnd::IndexMem { .. },
+        ) => true,
         (OpPat::Fixed(num, w), Opnd::Reg { num: n, width }) => {
             n == num && wbytes(w, opw) == Some(width)
         }
@@ -298,8 +313,9 @@ fn reg_num(o: Opnd) -> u8 {
     match o {
         Opnd::Reg { num, .. } => num,
         Opnd::Mem { base, .. } => base,
-        // RIP-relative / absolute have no base register: no REX.B.
-        Opnd::RipRel { .. } | Opnd::AbsMem { .. } | Opnd::Imm(_) => 0,
+        // RIP-relative / absolute / no-base scaled index have no base
+        // register: no REX.B (REX.X for the index is computed separately).
+        Opnd::RipRel { .. } | Opnd::AbsMem { .. } | Opnd::IndexMem { .. } | Opnd::Imm(_) => 0,
     }
 }
 
@@ -576,7 +592,8 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<InsnBuf, String> {
     let reg_hi = reg_op.map(|o| reg_num(o) >= 8).unwrap_or(false);
     let rm_hi = rm_op.map(|o| reg_num(o) >= 8).unwrap_or(false);
     // REX.X extends a SIB index register.
-    let index_hi = matches!(rm_op, Some(Opnd::Mem { index: Some(i), .. }) if i >= 8);
+    let index_hi = matches!(rm_op, Some(Opnd::Mem { index: Some(i), .. }) if i >= 8)
+        || matches!(rm_op, Some(Opnd::IndexMem { index, .. }) if index >= 8);
     // A byte register spl/bpl/sil/dil (4..8) needs a REX to be named at all,
     // otherwise those encodings mean ah/ch/dh/bh. The requirement is a
     // property of the operand, not of the operation width: movsx/movzx mix a
@@ -630,6 +647,20 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<InsnBuf, String> {
                 // mod=00 rm=100, SIB base=101 index=100: absolute disp32.
                 code.push(((regfield & 7) << 3) | 4);
                 code.push(0x25);
+                code.extend_from_slice(&disp.to_le_bytes());
+            }
+            Some(Opnd::IndexMem {
+                index, scale, disp, ..
+            }) => {
+                // mod=00 rm=100, SIB base=101 (no base) + disp32, scaled index.
+                let scale_bits = match scale {
+                    2 => 1,
+                    4 => 2,
+                    8 => 3,
+                    _ => 0,
+                };
+                code.push(((regfield & 7) << 3) | 4);
+                code.push((scale_bits << 6) | ((index & 7) << 3) | 5);
                 code.extend_from_slice(&disp.to_le_bytes());
             }
             _ => return Err(String::from("inline asm: form needs an r/m operand")),

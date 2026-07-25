@@ -2195,7 +2195,9 @@ fn run_inline_asm(
             | AsmOpnd::GotoLabel(_)
             | AsmOpnd::Mem { .. }
             | AsmOpnd::AbsMem { .. }
-            | AsmOpnd::RipRel { .. } => (0, AsmRegSize::Long),
+            | AsmOpnd::IndexMem { .. }
+            | AsmOpnd::RipRel { .. }
+            | AsmOpnd::RipRelRef { .. } => (0, AsmRegSize::Long),
         }
     };
     // The model register a destination operand writes into.
@@ -2214,17 +2216,20 @@ fn run_inline_asm(
             | AsmOpnd::GotoLabel(_)
             | AsmOpnd::Mem { .. }
             | AsmOpnd::AbsMem { .. }
-            | AsmOpnd::RipRel { .. } => None,
+            | AsmOpnd::IndexMem { .. }
+            | AsmOpnd::RipRel { .. }
+            | AsmOpnd::RipRelRef { .. } => None,
         }
     };
 
     for insn in &insns {
         let ops = &insn.operands;
         match insn.mnemonic {
-            // Literal machine bytes, emit-time data directives, and `.skip`
-            // padding are opaque to the register model, like the privileged /
-            // port ops below: no modelled effect under the VM.
-            Mnemonic::RawBytes | Mnemonic::Data(_) | Mnemonic::Skip => {}
+            // Literal machine bytes, emit-time data directives, `.skip`
+            // padding, and `.align` padding are opaque to the register model,
+            // like the privileged / port ops below: no modelled effect under
+            // the VM.
+            Mnemonic::RawBytes | Mnemonic::Data(_) | Mnemonic::Skip | Mnemonic::Align { .. } => {}
             // The interpreter is not a CPU emulator: a mnemonic reached through
             // the catalogue is refused rather than modelled. Such inline asm is
             // an ahead-of-time / JIT construct, executed natively there.

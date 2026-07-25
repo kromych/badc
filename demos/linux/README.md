@@ -138,9 +138,47 @@ asserted once. Each file states the evidence for its own existence -- the
 the qualifier as the declarator name, while rejecting the qualifier-leading
 form the percpu headers use.
 
+## Hybrid build (link + boot)
+
+`buildcc.py` is a kbuild CC shim that turns the sweep's compile-only claim
+into a linked, bootable kernel before coverage reaches 100%: badc compiles
+every unit it can, gcc fills the known gaps, and the kernel's own link and
+boot become the correctness test for the badc objects.
+
+Named as `CC=`, the shim classifies each invocation. A kernel C compile
+(`-c`, `-D__KERNEL__`, a `.c` source, not `-m16`/`-m32`) runs the real gcc
+first with the original argv -- kbuild's object and `.d` bookkeeping stay
+authoritative -- then, unless the source is on the fallback list, badc
+recompiles the unit with the sweep's flag rewrite and replaces the object.
+Everything else (probes, `-E`, `-S`, `.S` units, links, 16/32-bit units)
+goes to gcc untouched, so the configuration and object population match
+the reference corpus. A badc failure leaves gcc's object standing and is
+recorded; since the fallback list is exactly the sweep's fail set, every
+recorded failure is a compiler bug candidate.
+
+```sh
+cp <reference>/.config <tree>/ && make -C <tree> olddefconfig CC=$PWD/demos/linux/buildcc.py
+BADC=<badc> BADC_FALLBACK=fails.txt BADC_MANIFEST=manifest.txt \
+    make -C <tree> -j12 CC=$PWD/demos/linux/buildcc.py vmlinux bzImage
+```
+
+`fails.txt` holds one kernel-relative source path per line (the `ok: false`
+entries of a sweep JSON report). The manifest gets one line per kernel
+unit: `badc`, `fallback`, or `fail` plus the source and first diagnostic.
+Environment: `BADC` (required), `BADC_REAL_CC` (default `gcc`),
+`BADC_TARGET` (default `linux-x64`), `BADC_TIMEOUT` (default 300s).
+
+Objects must survive more than the link: with `CONFIG_OBJTOOL=y` kbuild
+runs objtool (`--orc`, jump-label and static-call rewriting) over every
+object, the vmlinux script asserts an empty `.got` (badc's GOTPCRELX
+relocs must relax), and the boot exercises the asm-emitted metadata
+sections (`__jump_table`, `.altinstructions`, `__ex_table`, `.smp_locks`).
+A minimal initramfs whose `/init` prints a marker and powers off makes the
+boot a pass/fail check under `qemu-system-x86_64 -nographic`.
+
 ## Scope
 
 The sweep gates nothing; it is a measurement. A unit that gcc compiles and
 badc rejects is a candidate gap; crashes and timeouts get their own buckets
 and are bugs by definition. Passing units prove nothing about runtime
-correctness -- linking and booting a badc-built kernel is follow-on work.
+correctness; the hybrid build above is the link-and-boot check.

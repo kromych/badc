@@ -132,6 +132,8 @@ fn sysreg_field(name: &str) -> Option<u16> {
             "id_aa64isar0_el1" => (3, 0, 0, 6, 0),
             "id_aa64mmfr1_el1" => (3, 0, 0, 7, 1),
             "mdscr_el1" => (2, 0, 0, 2, 2),
+            "osdlr_el1" => (2, 0, 1, 3, 4),
+            "pmccntr_el0" => (3, 3, 9, 13, 0),
             "ctr_el0" => (3, 3, 0, 0, 1),
             "dczid_el0" => (3, 3, 0, 0, 7),
             "fpcr" => (3, 3, 4, 4, 0),
@@ -2013,6 +2015,8 @@ mod tests {
             ("clidr_el1", 0xC801),        // mrs x0 -> 0xD5390020
             ("mdscr_el1", 0x8012),        // mrs x1 -> 0xD5300241
             ("id_aa64mmfr1_el1", 0xC039), // mrs x2 -> 0xD5380722
+            ("osdlr_el1", 0x809C),        // mrs x0 -> 0xD5301380
+            ("pmccntr_el0", 0xDCE8),      // mrs x1 -> 0xD53B9D01
             // Debug breakpoint/watchpoint families, index in CRm (0 and 15).
             ("dbgbvr0_el1", 0x8004),
             ("dbgbvr15_el1", 0x807C),

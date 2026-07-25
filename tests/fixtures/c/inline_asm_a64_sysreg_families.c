@@ -45,7 +45,15 @@ unsigned long read_pmu_and_generic(void) {
     v ^= t;
     __asm__ volatile("mrs %0, s0_3_c1_c0_1" : "=r"(t));
     v ^= t;
+    __asm__ volatile("mrs %0, pmccntr_el0" : "=r"(t));
+    v ^= t;
     return v;
+}
+
+void os_lock_ops(unsigned long v) {
+    unsigned long t;
+    __asm__ volatile("mrs %0, osdlr_el1" : "=r"(t));
+    __asm__ volatile("msr osdlr_el1, %0" : : "r"(v | t));
 }
 
 int main(void) { return 42; }

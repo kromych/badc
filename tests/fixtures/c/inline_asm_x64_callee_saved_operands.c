@@ -39,12 +39,36 @@ static long many_operands(void) {
     return a + b + c + d + e + f + g + h + i; /* each input + 1 */
 }
 
+static long id(long v) { return v; }
+/* Opaque call target: a volatile pointer load keeps every call real, so
+   the values below stay live across calls. */
+static long (*volatile idp)(long) = id;
+
+/* Values live across calls sit in callee-saved registers; the asm block
+   below then takes callee-saved registers for its own operands (the
+   caller-saved pool is clobbered). The block's register save / restore
+   must keep the live values intact; distinct weights catch a wrong or
+   crossed restore. */
+static long live_across_asm(void) {
+    long p = idp(3), q = idp(5), r = idp(7), s = idp(11), t = idp(13);
+    long x = 1000, y = 2000;
+    __asm__ volatile("addq %1, %0\n\t"
+                     "addq $17, %0"
+                     : "+r"(x)
+                     : "r"(y)
+                     : "cc", "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9");
+    return idp(p) + q * 2 + r * 3 + s * 4 + t * 5 + x + y;
+}
+
 int main(void) {
     if (heavy_clobber() != 165) {
         return 1;
     }
     if (many_operands() != 54) {
         return 2;
+    }
+    if (live_across_asm() != 5160) {
+        return 3;
     }
     return 0;
 }

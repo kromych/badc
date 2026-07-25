@@ -578,11 +578,15 @@ pub(crate) fn assign_operand_regs(
             used[r as usize] = true;
         }
     }
-    // `r` operands take free pool registers (rax rbx rcx rdx rsi rdi r8 r9);
-    // a memory operand takes one too, to hold its address, and a flag output
-    // one to receive its `setcc` result. Every pool register is byte
-    // addressable under REX, as `setcc` requires.
-    let pool = [0u8, 3, 1, 2, 6, 7, 8, 9];
+    // `r` operands take free pool registers; a memory operand takes one too, to
+    // hold its address, and a flag output one to receive its `setcc` result.
+    // Every pool register is byte addressable under REX, as `setcc` requires.
+    // rbx and r12..r15 are callee-saved but usable: the emitter saves and
+    // restores every operand register in the frame's asm scratch region, so a
+    // callee-saved register is preserved across the block. rsp / rbp / r10 /
+    // r11 are excluded (stack pointer, frame pointer the scratch region is
+    // addressed through, and the emitter's own bridge scratch).
+    let pool = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15];
     for (i, op) in operands.iter().enumerate() {
         if matches!(op.constraint, C::Reg | C::Mem | C::Flags(_)) {
             let r = pool

@@ -443,7 +443,10 @@ fn encode_best(mnem: Mnem, opw: u8, ops: &[Opnd]) -> (Option<InsnBuf>, bool) {
 /// address the VMCB through an implicit `rax`; the database lists only the
 /// operandless spelling, so the explicit-`%rax` form the compilers emit
 /// (`vmsave %rax`) is supplemented, encoding identically since `rax` is not
-/// named in the opcode.
+/// named in the opcode. `invlpga` is the two-operand member of the same class:
+/// the address rides an implicit `rax` and the ASID an implicit `ecx`, so the
+/// compilers emit `invlpga %rax, %ecx` (Intel-ordered `ecx, rax` here); like
+/// `vmsave` the registers are not named in the opcode.
 static FORMS_SUPPLEMENT: &[Form] = &[
     Form {
         mnem: Mnem::Lsl,
@@ -536,6 +539,20 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         pp: &[],
         map: Map::Op0F,
         opcode: &[0x01, 0xD8],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Invlpga,
+        mnemonic: "invlpga",
+        ops: &[OpPat::Fixed(1, W::L), OpPat::Fixed(0, W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x01, 0xDF],
         plus_r: false,
         rexw: RexW::W0,
         reg: RegField::NoReg,

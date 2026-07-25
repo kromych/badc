@@ -285,7 +285,11 @@ impl Compiler {
                     // so a subscript decays it to a pointer (6.7.6.2) rather
                     // than seeing a scalar. The declarator parse has already
                     // set `inner_array_size` for a multi-dimensional extern.
-                    self.symbols[loc_idx].array_size = array_size.max(0);
+                    // `-1` (unsized `extern T name[];`) is kept as at file
+                    // scope: an incomplete array still decays to a pointer;
+                    // collapsing it to 0 reads the name as a scalar and loads
+                    // the array's first bytes where its address belongs.
+                    self.symbols[loc_idx].array_size = array_size;
                     self.symbols[loc_idx].is_extern_decl = true;
                     // External linkage is what routes `&name` through
                     // `live_glo_addr`'s `GloAddr::Extern` arm to a

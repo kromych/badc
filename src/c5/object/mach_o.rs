@@ -2003,7 +2003,11 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     const CODESIGN_LC_PAD: u64 = 64;
 
     let header_plus_lcs = mh_size + sizeofcmds;
-    let entry_file_offset = round_up(header_plus_lcs + CODESIGN_LC_PAD, 16);
+    // An asm alignment request above the section default raises the
+    // code placement past 16 so the section-relative padding holds
+    // absolutely (file offset == vmaddr modulo the page size).
+    let text_align = build.text_align.max(16) as u64;
+    let entry_file_offset = round_up(header_plus_lcs + CODESIGN_LC_PAD, text_align);
     let lc_pad_bytes = (entry_file_offset - header_plus_lcs) as usize;
     let code_size = code.len() as u64;
     let text_filesize = round_up(entry_file_offset + code_size, PAGE_SIZE);

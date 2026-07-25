@@ -54,6 +54,14 @@ const COMPILE_SKIPLIST: &[&str] = &[
     "vla_multidim_rejected.c",
     "vla_file_scope_rejected.c",
     "vla_initializer_rejected.c",
+    // An `i`-class asm operand fed through an always_inline helper
+    // resolves only under -O (gcc parity); the -O run lives in
+    // native_elf_x64.
+    "inline_asm_x64_riprel_param.c",
+    // Absolute symbol-displacement section relocations assemble only
+    // on the `-c` object path (a single-file image folds only
+    // PC-relative section relocs); locked by a linker test.
+    "file_scope_asm_sym_mem.c",
 ];
 
 /// Fixtures whose body carries inline asm specific to one ISA. The
@@ -108,6 +116,8 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_a64_sysreg_families.c", "linux-x64"), // aarch64 named/indexed sysregs + S-form
     ("inline_asm_a64_at_sys.c", "linux-x64"),         // aarch64 `at` / generic `sys`
     ("file_scope_asm_local_labels.c", "linux-aarch64"), // x86-64 div/ret fastop fragments
+    ("file_scope_asm_local_label_branch.c", "linux-aarch64"), // x86-64 lock cmpxchg + jcc to a section label
+    ("inline_asm_x64_align_above_section.c", "linux-aarch64"), // x86-64 alignment above the section default
     ("inline_asm_x64_mmx_fpu.c", "linux-aarch64"),    // x86-64 MMX movq + fwait
     ("inline_asm_x64_bug_table_org.c", "linux-aarch64"), // x86-64 ud2 bug-table entry
     ("inline_asm_x64_jump_label.c", "linux-aarch64"), // x86-64 jmp %l jump-table entry

@@ -1259,12 +1259,13 @@ pub(crate) struct Build {
     /// data section at a multiple of it.
     pub data_align: usize,
     /// Base alignment `text` requires in the image, at least 16.
-    /// Raised past 16 by an inline-asm alignment directive above the
-    /// section default (`.p2align 6`) and by linked objects with a
-    /// larger `.text` sh_addralign. The relocatable ELF writer places
-    /// `.text` at a multiple of it so section-relative padding holds
-    /// absolutely; the final-image writers keep their stub-relative
-    /// placement (TODO: align `text` past the entry stub).
+    /// Raised past 16 only by an inline-asm alignment directive above
+    /// the section default (`.p2align 6`) or a linked object with a
+    /// larger `.text` sh_addralign; a raise makes every writer place
+    /// `text[0]` at a multiple of it (relocatable ELF via sh_addralign,
+    /// the image writers past their entry stub) so section-relative
+    /// alignment padding holds absolutely. At the default 16 the
+    /// writers keep their established placement byte-identically.
     pub text_align: usize,
     /// Bytes of zero-initialised data placed past the file image, in the
     /// `[data.len(), data.len() + bss_size)` offset range. Carries no file

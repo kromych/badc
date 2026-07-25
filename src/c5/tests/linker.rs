@@ -1956,6 +1956,94 @@ fn file_scope_asm_push_symbol_address_relocates_32s() {
     assert_eq!(reloc.addend, 0, "gcc folds no addend into a `$symbol` push");
 }
 
+#[test]
+fn file_scope_asm_symbol_displacement_memory_relocates_32s() {
+    // A no-base scaled-index reference with a symbol displacement
+    // (`sym(,%rdi,8)`) and a based reference with a constant+symbol
+    // displacement (`16+sym(%rax)`) each take an absolute `R_X86_64_32S`
+    // in their disp32 field, byte-identical to gcc:
+    //   48 8b 04 fd <disp32>    mov sym(,%rdi,8),%rax
+    //   80 b8 <disp32> 00       cmpb $0, 16+sym(%rax)
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_32S: u32 = 11;
+    let src = super::load_fixture("file_scope_asm_sym_mem.c");
+    let program = Compiler::with_target(src, Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let movq = obj
+        .text
+        .windows(8)
+        .position(|w| w == [0x48, 0x8b, 0x04, 0xfd, 0, 0, 0, 0])
+        .expect("`mov sym(,%rdi,8),%rax` must encode as `48 8b 04 fd <disp32>`");
+    let r1 = obj
+        .text_relocs
+        .iter()
+        .find(|r| r.offset == (movq + 4) as u64)
+        .expect("the scaled-index disp32 field must carry a relocation");
+    assert_eq!(r1.rtype, R_X86_64_32S, "index-form displacement is 32S");
+    let cmpb = obj
+        .text
+        .windows(7)
+        .position(|w| w == [0x80, 0xb8, 0, 0, 0, 0, 0])
+        .expect("`cmpb $0, 16+sym(%rax)` must encode as `80 b8 <disp32> 00`");
+    let r2 = obj
+        .text_relocs
+        .iter()
+        .find(|r| r.offset == (cmpb + 2) as u64)
+        .expect("the based disp32 field must carry a relocation");
+    assert_eq!(r2.rtype, R_X86_64_32S, "based displacement is 32S");
+}
+
+#[test]
+fn file_scope_asm_jcc_to_section_label_and_lock_prefix() {
+    // `jne .slowpath` inside a pushed section branches to a label defined
+    // later in the same section: the rel32 `0f 85` form with a branch
+    // relocation the linker resolves against the local label symbol. The
+    // `lock cmpxchg` line encodes with the `f0` prefix in front.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_PLT32: u32 = 4;
+    let src = super::load_fixture("file_scope_asm_local_label_branch.c");
+    let program = Compiler::with_target(src, Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        obj.text
+            .windows(4)
+            .any(|w| w == [0xf0, 0x0f, 0xb0, 0x17]),
+        "`lock cmpxchg %dl,(%rdi)` must encode as `f0 0f b0 17`"
+    );
+    let jne = obj
+        .text
+        .windows(6)
+        .position(|w| w == [0x0f, 0x85, 0, 0, 0, 0])
+        .expect("`jne .slowpath` must encode as `0f 85 <rel32>`");
+    let r = obj
+        .text_relocs
+        .iter()
+        .find(|r| r.offset == (jne + 2) as u64)
+        .expect("the rel32 field must carry a relocation");
+    assert_eq!(r.rtype, R_X86_64_PLT32, "a branch relocates as PLT32");
+    assert_eq!(
+        obj.symbols[r.sym_idx].name, ".slowpath",
+        "the reloc targets the section-local label"
+    );
+    assert_eq!(r.addend, -4, "rel32 branch addend is -4");
+}
+
 /// `sh_flags` of the first section named `want` in an ELF64 object, or 0.
 fn elf_section_flags(bytes: &[u8], want: &[u8]) -> u64 {
     let u16a = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;

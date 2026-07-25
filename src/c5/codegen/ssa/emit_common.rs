@@ -3857,19 +3857,21 @@ fn split_operand_ref(s: &str) -> Option<(Option<u8>, u8, &str)> {
 /// Whether each reference is substitutable is settled at emit time, once the
 /// operands' constants are known.
 pub(crate) fn is_asm_symbol_template(s: &str) -> bool {
+    // GNU as symbol names take letters, digits, `_` and `.`; the first
+    // character must not be a digit. A name of dots alone is the
+    // location counter (`.`), not a symbol.
+    let sym_char = |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b'.';
     if !s
         .bytes()
         .next()
-        .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_')
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_' || c == b'.')
+        || s.bytes().all(|c| c == b'.')
     {
         return false;
     }
     let mut rest = s;
     while let Some(p) = rest.find('%') {
-        if !rest[..p]
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || c == b'_')
-        {
+        if !rest[..p].bytes().all(sym_char) {
             return false;
         }
         match split_operand_ref(&rest[p + 1..]) {
@@ -3877,7 +3879,7 @@ pub(crate) fn is_asm_symbol_template(s: &str) -> bool {
             None => return false,
         }
     }
-    rest.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+    rest.bytes().all(sym_char)
 }
 
 /// Substitute the operand references in a branch-target symbol name, so the

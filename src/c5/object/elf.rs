@@ -1715,7 +1715,17 @@ pub(super) fn write(
         0
     };
     let rela_size = (n_imports as u64 + n_relative as u64 + n_copy as u64) * ELF64_RELA_SIZE;
-    let code_off = round_up(rela_off + rela_size, 16);
+    // An asm alignment request above the section default places
+    // `build.text[0]` (which follows the entry stub) at that alignment,
+    // so the section-relative padding holds absolutely; p_offset ==
+    // p_vaddr modulo the page size. Without such a request the code
+    // blob keeps its established 16-aligned placement.
+    let text_align = build.text_align.max(16) as u64;
+    let code_off = if text_align > 16 {
+        round_up(rela_off + rela_size + stub_len, text_align) - stub_len
+    } else {
+        round_up(rela_off + rela_size, 16)
+    };
 
     // Build the code blob: _start stub + build.text (with shifted
     // fixup offsets at write time). For shared-library output

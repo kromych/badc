@@ -6363,15 +6363,39 @@ fn encode_one_x86_section_insn(
     use super::ssa::emit_common::{AsmSectionItem, AsmSectionReloc, AsmSectionTarget};
     let insns = super::asm::parse_template(text.as_bytes())
         .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
-    let [insn] = insns.as_slice() else {
-        return Err(alloc::format!(
-            "inline asm: replacement `{text}` is not a single instruction"
-        ));
+    // A leading `lock` / `rep` prefix parses as its own entry; it rides in
+    // front of the instruction's bytes.
+    let (prefix, insn) = match insns.as_slice() {
+        [insn] => (None, insn),
+        [
+            super::asm::AsmInsn {
+                mnemonic: Mnemonic::Prefix(b),
+                ..
+            },
+            insn,
+        ] => (Some(*b), insn),
+        _ => {
+            return Err(alloc::format!(
+                "inline asm: replacement `{text}` is not a single instruction"
+            ));
+        }
     };
     let mnem = match insn.mnemonic {
         Mnemonic::Table(n) => n,
         _ => "",
     };
+    // A prefixed branch or symbol push has no meaning; the prefix applies
+    // on the general operand path below.
+    if prefix.is_some()
+        && (matches!(
+            insn.operands.first(),
+            Some(AsmOpnd::GotoLabel(_) | AsmOpnd::ImmSym)
+        ) || (insn.sym_target.is_some() && insn.operands.is_empty()))
+    {
+        return Err(alloc::format!(
+            "inline asm: replacement `{text}` prefix on a branch"
+        ));
+    }
     // A `jmp` / `jcc` to an `asm goto` label (`%lK`): the replacement leaves
     // the alternative for a caller block (`jmp %l[t_no]` in `_static_cpu_has`).
     // Emit the rel32 form with a zero displacement and a `PC32` relocation to
@@ -6439,6 +6463,34 @@ fn encode_one_x86_section_insn(
             branch: true,
             signed: false,
             target,
+            addend: -4,
+        };
+        return Ok(AsmSectionItem::CodeBytes {
+            bytes,
+            relocs: alloc::vec![reloc],
+        });
+    }
+    // A `jcc` to a symbol -- a section-local label (this or another
+    // statement of the section) or an external name: the rel32 form with a
+    // branch relocation the writer resolves against the label's symbol.
+    if let Some(cc) = jcc_cond(mnem)
+        && insn.operands.is_empty()
+        && let Some(name) = &insn.sym_target
+    {
+        if name.contains('%') {
+            return Err(alloc::format!(
+                "inline asm: replacement `{text}` branch target embeds an operand"
+            ));
+        }
+        let mut bytes = alloc::vec::Vec::new();
+        super::encode::emit_jcc_rel32(&mut bytes, cc, 0);
+        let reloc = AsmSectionReloc {
+            offset: 2,
+            width: 4,
+            pcrel: true,
+            branch: true,
+            signed: false,
+            target: AsmSectionTarget::Symbol(name.clone()),
             addend: -4,
         };
         return Ok(AsmSectionItem::CodeBytes {
@@ -6735,6 +6787,9 @@ fn encode_one_x86_section_insn(
     super::asm::encode(&mut body, insn.mnemonic, insn.suffix, &concrete)
         .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
     let mut bytes = alloc::vec::Vec::new();
+    if let Some(b) = prefix {
+        bytes.push(b);
+    }
     if let Some(seg) = insn.seg.or(operand_seg) {
         bytes.push(seg);
     }
@@ -6808,6 +6863,10 @@ fn encode_one_x86_section_insn(
 /// A distinctive displacement for locating a RIP-relative disp32 field by
 /// re-encoding: every byte differs from a zero field.
 const RIPREL_PROBE_DISP: i32 = 0x5B3D_71A7u32 as i32;
+
+/// The byte-wise complement of [`RIPREL_PROBE_DISP`], for locating a field
+/// that already carries the first probe: every byte differs again.
+const RIPREL_PROBE_DISP2: i32 = 0xA4C2_8E58u32 as i32;
 
 /// Byte offset of the four-byte run that differs between two encodings that
 /// vary only in a RIP-relative displacement. Returns `None` unless exactly
@@ -7402,6 +7461,16 @@ fn emit_inline_asm(
             code.extend_from_slice(&[0u8; 4]);
             continue;
         }
+        // A `jcc` to a bare symbol resolves against a section label; only
+        // file-scope section code carries that resolution.
+        if insn.sym_target.is_some()
+            && insn.operands.is_empty()
+            && matches!(insn.mnemonic, super::asm::Mnemonic::Table(n) if jcc_cond(n).is_some())
+        {
+            return fail(
+                "inline asm: a conditional branch to a symbol is only supported in file-scope asm",
+            );
+        }
         let mut concrete: alloc::vec::Vec<Concrete> = alloc::vec::Vec::new();
         // A `__seg_gs` / `__seg_fs`-qualified memory operand references its
         // object through a segment override; the prefix rides the enclosing
@@ -7621,6 +7690,13 @@ fn emit_inline_asm(
                         disp,
                         size,
                     }
+                }
+                // `disp+sym(%base)`: a symbol displacement, as for the
+                // no-base form above.
+                AsmOpnd::SymMem { .. } => {
+                    return fail(
+                        "inline asm: a symbol-displacement memory operand is only supported in file-scope asm",
+                    );
                 }
                 // A `$symbol` absolute-address immediate needs a symbol
                 // relocation the function-body stream does not carry; it is
@@ -7920,7 +7996,7 @@ fn emit_inline_asm(
 /// Map a conditional-jump mnemonic to its condition code, folding the
 /// synonym spellings (`jc`==`jb`, `jnae`==`jb`, ...). `None` for `jmp` and
 /// for any non-jcc mnemonic.
-fn jcc_cond(name: &str) -> Option<super::encode::Cc> {
+pub(super) fn jcc_cond(name: &str) -> Option<super::encode::Cc> {
     use super::encode::Cc;
     Some(match name {
         "je" | "jz" => Cc::E,

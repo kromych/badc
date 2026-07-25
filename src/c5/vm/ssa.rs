@@ -2198,6 +2198,7 @@ fn run_inline_asm(
             | AsmOpnd::Mem { .. }
             | AsmOpnd::AbsMem { .. }
             | AsmOpnd::IndexMem { .. }
+            | AsmOpnd::SymMem { .. }
             | AsmOpnd::RipRel { .. }
             | AsmOpnd::RipRelRef { .. } => (0, AsmRegSize::Long),
         }
@@ -2219,6 +2220,7 @@ fn run_inline_asm(
             | AsmOpnd::Mem { .. }
             | AsmOpnd::AbsMem { .. }
             | AsmOpnd::IndexMem { .. }
+            | AsmOpnd::SymMem { .. }
             | AsmOpnd::RipRel { .. }
             | AsmOpnd::RipRelRef { .. } => None,
         }

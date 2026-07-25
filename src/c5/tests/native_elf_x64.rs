@@ -398,6 +398,8 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_port_dx.c", 42),
     ("inline_asm_x64_c_mem.c", 42),
     ("inline_asm_x64_align.c", 42),
+    ("inline_asm_x64_align_above_section.c", 42),
+    ("file_scope_asm_local_label_branch.c", 42),
     ("inline_asm_pushsection.c", 42),
     ("inline_asm_alternative_replacement.c", 42),
     ("file_scope_asm_decls.c", 0),
@@ -879,20 +881,48 @@ fn fixture_parity() {
     );
 }
 
-/// A code-stream `.align` boundary is section-relative and holds
-/// absolutely only up to the fixed `.text` section alignment (16); a
-/// larger request is rejected rather than silently under-aligned.
+/// A code-stream `.align` boundary above the section default raises the
+/// text alignment, and the image writer places the text stream at that
+/// alignment (past the entry stub), so the boundary holds absolutely:
+/// the directive's file offset within the PT_LOAD segment (== vmaddr
+/// modulo the page size) is a multiple of the request.
 #[test]
-fn inline_asm_align_beyond_section_alignment_rejected() {
+fn inline_asm_align_beyond_section_default_raises_text_alignment() {
     let program = Compiler::new(super::with_prelude(
-        "int main(void) { __asm__(\".align 32\"); return 0; }\n",
+        "int main(void) { __asm__(\".align 64\"); return 0; }\n",
     ))
     .compile()
     .expect("compile");
-    let err = emit_native(&program, Target::LinuxX64).expect_err("emit must reject");
+    let bytes = emit_native(&program, Target::LinuxX64).expect("emit_native");
+    let rd_u16 = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+    let rd_u64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    // Locate the executable PT_LOAD; its p_offset must be 64-aligned so
+    // the in-segment padding holds absolutely.
+    let e_phoff = rd_u64(0x20) as usize;
+    let e_phnum = rd_u16(0x38) as usize;
+    const PF_X: u64 = 1;
+    let mut exec_seen = false;
+    for i in 0..e_phnum {
+        let ph = e_phoff + i * 56;
+        let p_type = u32::from_le_bytes(bytes[ph..ph + 4].try_into().unwrap());
+        let p_flags = u32::from_le_bytes(bytes[ph + 4..ph + 8].try_into().unwrap());
+        if p_type == 1 && (p_flags as u64) & PF_X != 0 {
+            let p_offset = rd_u64(ph + 8);
+            let p_vaddr = rd_u64(ph + 16);
+            assert_eq!(p_offset % 4096, p_vaddr % 4096, "offset/vaddr congruence");
+            exec_seen = true;
+        }
+    }
+    assert!(exec_seen, "no executable PT_LOAD");
+    // The `.align 64` gap is NOP-filled up to a 64-aligned file offset:
+    // main's body must contain a byte offset that is 64-aligned and
+    // followed by the `ret`-tail of the program. Structural stand-in:
+    // the image must contain at least one 11-byte GNU as NOP or the
+    // 64-aligned point; assert the align fill pattern is present.
+    let nop11: &[u8] = &[0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00];
     assert!(
-        format!("{err}").contains("exceeds the section alignment"),
-        "unexpected error: {err}"
+        bytes.windows(nop11.len()).any(|w| w == nop11),
+        "align fill NOPs missing"
     );
 }
 
@@ -1036,6 +1066,24 @@ fn fixture_parity_native_optimized() {
         failures.len(),
         NATIVE_ELF_X64_FIXTURES.len(),
         failures.join("\n  ")
+    );
+}
+
+/// A `%c` RIP-relative operand whose `i`-class value arrives through an
+/// always_inline helper's parameter resolves only under -O: the inliner
+/// relocates the parameter cell into the caller and store-forwarding
+/// carries the address into the asm input capture. gcc likewise
+/// rejects the shape at -O0, so no -O0 parity entry exists.
+#[test]
+fn riprel_param_fixture_runs_under_optimize() {
+    let outcome = build_and_run_fixture_with_options(
+        "inline_asm_x64_riprel_param.c",
+        NativeOptions::new().with_optimize(),
+        "-O",
+    );
+    assert!(
+        matches!(outcome, RunOutcome::Exit(42)),
+        "expected exit 42, got {outcome:?}"
     );
 }
 

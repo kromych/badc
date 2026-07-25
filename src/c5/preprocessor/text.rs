@@ -1,5 +1,4 @@
 use alloc::string::String;
-use alloc::string::ToString;
 
 /// Phase-3 comment removal: strip `/* ... */` block comments and
 /// `// ...` line comments from the entire source. Each comment is
@@ -73,18 +72,187 @@ pub(super) fn strip_c_comments(source: &str) -> String {
     out
 }
 
-/// Report whether `s` (a partially assembled logical line with its
-/// newlines already removed) ends inside an unterminated `/* */` block
-/// comment. String and character literals and `//` line comments are
-/// tracked so a `/*` appearing inside one of them does not count as a
-/// comment opener.
-pub(super) fn ends_in_open_block_comment(s: &str) -> bool {
+/// Lexical context of a logical line at a given byte, used to decide
+/// whether it ends inside an open `/* */` block comment. `Line` is a
+/// `//` comment, which runs to the end of the assembled line.
+#[derive(Clone, Copy, Default, PartialEq)]
+enum ScanMode {
+    #[default]
+    Normal,
+    Str,
+    Char,
+    Block,
+    Line,
+}
+
+/// Incremental scan state for `unfold_line_continuations`. It advances
+/// byte by byte with no 2-byte lookahead, so the state carries cleanly
+/// across a physical-line join and the assembled buffer is scanned only
+/// once overall. `esc` is a pending backslash escape inside a literal;
+/// `slash` a half-seen top-level `/`; `star` a half-seen `*` inside a
+/// block comment. `scanned` is the buffer length already consumed.
+#[derive(Clone, Copy, Default)]
+struct LineScan {
+    mode: ScanMode,
+    esc: bool,
+    slash: bool,
+    star: bool,
+    scanned: usize,
+}
+
+impl LineScan {
+    /// Consume `joined[self.scanned..]`, advance the state, and report
+    /// whether the assembled line now ends inside an open block
+    /// comment. String and char literals and `//` line comments are
+    /// tracked so a `/*` inside one of them is not a comment opener.
+    fn ends_in_open_block_comment(&mut self, joined: &[u8]) -> bool {
+        let mut i = self.scanned;
+        while i < joined.len() {
+            #[cfg(test)]
+            scan_step();
+            let c = joined[i];
+            match self.mode {
+                ScanMode::Normal => {
+                    if self.slash {
+                        self.slash = false;
+                        match c {
+                            b'*' => {
+                                self.mode = ScanMode::Block;
+                                i += 1;
+                                continue;
+                            }
+                            b'/' => {
+                                self.mode = ScanMode::Line;
+                                i += 1;
+                                continue;
+                            }
+                            _ => {}
+                        }
+                    }
+                    match c {
+                        b'/' => self.slash = true,
+                        b'"' => self.mode = ScanMode::Str,
+                        b'\'' => self.mode = ScanMode::Char,
+                        _ => {}
+                    }
+                }
+                ScanMode::Str | ScanMode::Char => {
+                    let close = if self.mode == ScanMode::Str {
+                        b'"'
+                    } else {
+                        b'\''
+                    };
+                    if self.esc {
+                        self.esc = false;
+                    } else if c == b'\\' {
+                        self.esc = true;
+                    } else if c == close {
+                        self.mode = ScanMode::Normal;
+                    }
+                }
+                ScanMode::Block => {
+                    if self.star {
+                        self.star = false;
+                        if c == b'/' {
+                            self.mode = ScanMode::Normal;
+                            i += 1;
+                            continue;
+                        }
+                    }
+                    if c == b'*' {
+                        self.star = true;
+                    }
+                }
+                // A `//` comment runs to the end of the assembled line,
+                // so nothing after it can leave a block comment open.
+                ScanMode::Line => break,
+            }
+            i += 1;
+        }
+        self.scanned = i;
+        self.mode == ScanMode::Block
+    }
+}
+
+/// Phase-2 line-continuation collapse: every line ending in `\\`
+/// joins with the next, preserving total line count by emitting
+/// blank padding lines. The c99 spec runs this before all other
+/// preprocessing passes.
+///
+/// A physical line whose logical line ends inside an open `/* */`
+/// block comment also joins with the next line even without a trailing
+/// `\\`: a newline inside a block comment is comment white space, not a
+/// directive terminator (C99 5.1.1.2), so a multi-line comment embedded
+/// in a `\\`-continued macro definition must not split the definition.
+pub(super) fn unfold_line_continuations(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut iter = source.lines();
+    let mut joined = String::new();
+    while let Some(line) = iter.next() {
+        joined.clear();
+        joined.push_str(line);
+        let mut padding = 0;
+        let mut scan = LineScan::default();
+        loop {
+            if joined.ends_with('\\') {
+                joined.pop();
+            } else if !scan.ends_in_open_block_comment(joined.as_bytes()) {
+                break;
+            }
+            padding += 1;
+            match iter.next() {
+                Some(next) => joined.push_str(next),
+                None => break,
+            }
+        }
+        out.push_str(&joined);
+        out.push('\n');
+        for _ in 0..padding {
+            out.push('\n');
+        }
+    }
+    out
+}
+
+// Test-only scanner-work counter and full-rescan reference, retained to
+// prove the incremental scanner is byte-identical to the pre-incremental
+// code and to contrast their scan work. The counter is thread-local so
+// tests running in parallel do not interfere.
+#[cfg(test)]
+std::thread_local! {
+    static SCAN_STEPS: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn scan_step() {
+    SCAN_STEPS.with(|s| s.set(s.get() + 1));
+}
+
+/// Read and reset the scanner-work counter for the current thread.
+#[cfg(test)]
+pub(super) fn scan_steps_taken() -> usize {
+    SCAN_STEPS.with(|s| s.replace(0))
+}
+
+/// Fresh-state detector exposing the incremental scanner as a
+/// single-string predicate for the unit test.
+#[cfg(test)]
+pub(super) fn ends_in_open_block_comment_once(s: &str) -> bool {
+    let mut scan = LineScan::default();
+    scan.ends_in_open_block_comment(s.as_bytes())
+}
+
+/// Full-rescan reference detector: the pre-incremental implementation
+/// that re-reads the whole assembled buffer on each call.
+#[cfg(test)]
+fn ends_in_open_block_comment_ref(s: &str) -> bool {
     let b = s.as_bytes();
     let mut i = 0;
     let mut in_str = false;
     let mut in_char = false;
     let mut in_block = false;
     while i < b.len() {
+        scan_step();
         let c = b[i];
         if in_block {
             if c == b'*' && b.get(i + 1) == Some(&b'/') {
@@ -123,8 +291,6 @@ pub(super) fn ends_in_open_block_comment(s: &str) -> bool {
             continue;
         }
         if c == b'/' && b.get(i + 1) == Some(&b'/') {
-            // A line comment runs to the end of the assembled line, so
-            // nothing after it can leave a block comment open.
             return false;
         }
         if c == b'"' {
@@ -137,26 +303,18 @@ pub(super) fn ends_in_open_block_comment(s: &str) -> bool {
     in_block
 }
 
-/// Phase-2 line-continuation collapse: every line ending in `\\`
-/// joins with the next, preserving total line count by emitting
-/// blank padding lines. The c99 spec runs this before all other
-/// preprocessing passes.
-///
-/// A physical line whose logical line ends inside an open `/* */`
-/// block comment also joins with the next line even without a trailing
-/// `\\`: a newline inside a block comment is comment white space, not a
-/// directive terminator (C99 5.1.1.2), so a multi-line comment embedded
-/// in a `\\`-continued macro definition must not split the definition.
-pub(super) fn unfold_line_continuations(source: &str) -> String {
+/// Full-rescan reference for `unfold_line_continuations`.
+#[cfg(test)]
+pub(super) fn unfold_ref(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
-    let mut iter = source.lines().peekable();
+    let mut iter = source.lines();
     while let Some(line) = iter.next() {
-        let mut joined = line.to_string();
+        let mut joined = String::from(line);
         let mut padding = 0;
         loop {
             if joined.ends_with('\\') {
                 joined.pop();
-            } else if !ends_in_open_block_comment(&joined) {
+            } else if !ends_in_open_block_comment_ref(&joined) {
                 break;
             }
             padding += 1;

@@ -461,6 +461,25 @@ mod differential {
                         alloc::format!("{sz} ptr [{b}{idx} {sign} {}]", disp.unsigned_abs())
                     }
                 }
+                Opnd::IndexMem {
+                    index,
+                    scale,
+                    disp,
+                    width,
+                } => {
+                    let sz = match width {
+                        1 => "byte",
+                        2 => "word",
+                        4 => "dword",
+                        _ => "qword",
+                    };
+                    let sign = if disp < 0 { "-" } else { "+" };
+                    alloc::format!(
+                        "{sz} ptr [{}*{scale} {sign} {}]",
+                        REG64[index as usize],
+                        disp.unsigned_abs()
+                    )
+                }
                 Opnd::RipRel { disp, width } => {
                     let sz = match width {
                         1 => "byte",

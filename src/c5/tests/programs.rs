@@ -221,6 +221,17 @@ fn inline_asm_memory_operand() {
 }
 
 #[test]
+fn inline_asm_x64_callee_saved_operands() {
+    // An inline asm whose clobber list names the caller-saved integer bank
+    // (what an asm that calls out must declare) forces its `r` operands into
+    // the callee-saved registers. The operand allocator must offer the whole
+    // usable GP file, including rbx / r12..r15, not just the caller-saved
+    // half, or it reports a spurious "out of registers"; the emitter already
+    // saves and restores each operand register around the block.
+    assert_eq!(run_fixture("inline_asm_x64_callee_saved_operands.c"), 0);
+}
+
+#[test]
 fn init_2d_struct_array() {
     // A 2D array of structs with an inferred outer dimension
     // (`struct T xs[][M] = { { {...}, ... }, ... }`, OpenSSL's OSSL_PARAM
@@ -2187,6 +2198,20 @@ fn inline_asm_raw_bytes() {
     // bare hex-byte run) encode a no-op per target; the interpreter models
     // them as opaque and the surrounding computation is unaffected.
     assert_eq!(run_fixture("inline_asm_raw_bytes.c"), 0);
+}
+
+#[test]
+fn inline_asm_x64_align_padding_opaque() {
+    // `.align` / `.p2align` / `.balign` padding in the code stream has no
+    // modelled effect; the surrounding computation is unaffected.
+    assert_eq!(run_fixture("inline_asm_x64_align.c"), 42);
+}
+
+#[test]
+fn inline_asm_x64_port_dx_parses() {
+    // The `(%dx)` port spelling parses to the same operand as bare `%dx`;
+    // the guarded port accesses stay unexecuted.
+    assert_eq!(run_fixture("inline_asm_x64_port_dx.c"), 42);
 }
 
 #[test]

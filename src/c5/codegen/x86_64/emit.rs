@@ -6344,7 +6344,7 @@ fn encode_one_x86_section_insn(
     goto_block: &dyn Fn(u8) -> Option<u32>,
     refs: &SectionOperandRefs<'_>,
 ) -> Result<super::ssa::emit_common::AsmSectionItem, alloc::string::String> {
-    use super::super::ir::{AsmConstraint, AsmRegSize};
+    use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg};
     use super::asm::{AsmMemBase, AsmOpnd, Concrete, Mnemonic};
     use super::ssa::emit_common::{AsmSectionItem, AsmSectionReloc, AsmSectionTarget};
     let insns = super::asm::parse_template(text.as_bytes())
@@ -6494,19 +6494,54 @@ fn encode_one_x86_section_insn(
         }
     };
     let mut concrete = alloc::vec::Vec::new();
-    // A `%a` operand's RIP-relative reference: its reloc target, the byte
-    // offset added to the symbol, and the operand's index in `concrete` (the
-    // disp32 field is located by re-encoding). At most one per instruction.
-    let mut riprel: Option<(AsmSectionTarget, i64, usize)> = None;
+    // A symbolic disp32 operand: its reloc target, the symbol addend, the
+    // operand's index in `concrete`, and whether the reference is PC-relative
+    // (a RIP-relative `%a` / `%c`) or absolute (a no-base scaled-index
+    // `sym(,%index,scale)`). The disp32 field is located by re-encoding. At
+    // most one such operand per instruction.
+    let mut sym_disp: Option<(AsmSectionTarget, i64, usize, bool)> = None;
+    // A `__seg_gs` / `__seg_fs` memory operand's segment override; a template
+    // `%%gs:` rides `insn.seg` instead, and the two never conflict.
+    let mut operand_seg: Option<u8> = None;
     for o in &insn.operands {
         match *o {
             AsmOpnd::Imm(v) => concrete.push(Concrete::Imm(v)),
             AsmOpnd::Reg { reg, size } => concrete.push(Concrete::Reg { reg, size }),
-            AsmOpnd::Ref { idx, size } => concrete.push(reg_of(idx, size).ok_or_else(|| {
-                alloc::format!(
-                    "inline asm: replacement `{text}` operand `%{idx}` is not a register or constant"
-                )
-            })?),
+            AsmOpnd::Ref { idx, size } => {
+                // A memory-constraint (`m`) operand holds its address in the
+                // assigned register; `%N` is the register-indirect reference
+                // `(%r)`, the same lowering the code stream uses (a `lea %N`
+                // then computes the address). Any other operand resolves to a
+                // register or an `i`-class constant.
+                let op = refs.operands.get(idx as usize);
+                let mem = matches!(op.map(|o| o.constraint), Some(AsmConstraint::Mem))
+                    .then(|| refs.op_reg.get(idx as usize).copied().flatten())
+                    .flatten();
+                match mem {
+                    Some(base) => {
+                        let width = op.map(|o| o.width).unwrap_or(8);
+                        let size = asm_mem_size(size, insn, refs.operands, refs.op_reg)
+                            .unwrap_or(AsmRegSize::from_width(width));
+                        operand_seg = match op.map(|o| o.seg) {
+                            Some(AsmSeg::Gs) => Some(0x65),
+                            Some(AsmSeg::Fs) => Some(0x64),
+                            _ => operand_seg,
+                        };
+                        concrete.push(Concrete::Mem {
+                            base,
+                            index: None,
+                            scale: 1,
+                            disp: 0,
+                            size,
+                        });
+                    }
+                    None => concrete.push(reg_of(idx, size).ok_or_else(|| {
+                        alloc::format!(
+                            "inline asm: replacement `{text}` operand `%{idx}` is not a register or constant"
+                        )
+                    })?),
+                }
+            }
             AsmOpnd::Mem {
                 base,
                 index,
@@ -6540,12 +6575,12 @@ fn encode_one_x86_section_insn(
                         });
                     }
                     (None, Some((target, off))) => {
-                        if riprel.is_some() {
+                        if sym_disp.is_some() {
                             return Err(alloc::format!(
                                 "inline asm: replacement `{text}` has more than one memory operand"
                             ));
                         }
-                        riprel = Some((target, off + disp as i64, concrete.len()));
+                        sym_disp = Some((target, off + disp as i64, concrete.len(), true));
                         concrete.push(Concrete::RipRel { disp: 0, size });
                     }
                     (None, None) => {
@@ -6553,6 +6588,80 @@ fn encode_one_x86_section_insn(
                             "inline asm: replacement `{text}` memory base is not a register operand"
                         ));
                     }
+                }
+            }
+            // `%cN(%%rip)` / `%PN(%%rip)`: a constant becomes the disp32
+            // literal; a link-time address takes a RIP-relative relocation.
+            AsmOpnd::RipRelRef { idx, .. } => {
+                let size = mem_size(insn);
+                match (refs.imm_of)(idx) {
+                    Some(v) => concrete.push(Concrete::RipRel {
+                        disp: i32::try_from(v).map_err(|_| {
+                            alloc::format!(
+                                "inline asm: replacement `{text}` RIP-relative displacement out of range"
+                            )
+                        })?,
+                        size,
+                    }),
+                    None => {
+                        let (target, off) = (refs.addr_of)(idx).ok_or_else(|| {
+                            alloc::format!(
+                                "inline asm: replacement `{text}` `%c`/`%P` operand is not a constant or address"
+                            )
+                        })?;
+                        if sym_disp.is_some() {
+                            return Err(alloc::format!(
+                                "inline asm: replacement `{text}` has more than one memory operand"
+                            ));
+                        }
+                        sym_disp = Some((target, off, concrete.len(), true));
+                        concrete.push(Concrete::RipRel { disp: 0, size });
+                    }
+                }
+            }
+            // `disp(,%index,scale)`: a no-base scaled-index reference. A symbol
+            // displacement (name in `sym_target`) takes an absolute reloc; a
+            // literal encodes directly.
+            AsmOpnd::IndexMem {
+                index,
+                scale,
+                disp,
+                sym,
+            } => {
+                let size = mem_size(insn);
+                let index = base_reg(index).ok_or_else(|| {
+                    alloc::format!(
+                        "inline asm: replacement `{text}` memory index is not a register"
+                    )
+                })?;
+                if sym {
+                    let name = insn.sym_target.clone().ok_or_else(|| {
+                        alloc::format!("inline asm: replacement `{text}` memory symbol is missing")
+                    })?;
+                    if sym_disp.is_some() {
+                        return Err(alloc::format!(
+                            "inline asm: replacement `{text}` has more than one memory operand"
+                        ));
+                    }
+                    sym_disp = Some((
+                        AsmSectionTarget::Symbol(name),
+                        disp as i64,
+                        concrete.len(),
+                        false,
+                    ));
+                    concrete.push(Concrete::IndexMem {
+                        index,
+                        scale,
+                        disp: 0,
+                        size,
+                    });
+                } else {
+                    concrete.push(Concrete::IndexMem {
+                        index,
+                        scale,
+                        disp,
+                        size,
+                    });
                 }
             }
             _ => {
@@ -6568,45 +6677,54 @@ fn encode_one_x86_section_insn(
     super::asm::encode(&mut body, insn.mnemonic, insn.suffix, &concrete)
         .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
     let mut bytes = alloc::vec::Vec::new();
-    if let Some(seg) = insn.seg {
+    if let Some(seg) = insn.seg.or(operand_seg) {
         bytes.push(seg);
     }
     let seg_len = bytes.len() as u32;
     let mut relocs = alloc::vec::Vec::new();
-    if let Some((target, off, idx)) = riprel {
-        // Locate the disp32 field: re-encode with a distinct displacement; the
-        // RIP disp32 is the only value that varies, so exactly those four bytes
-        // differ. The `PC32` addend is the operand offset less the 4-byte
-        // PC-relative end skew and any bytes trailing the field (the immediate
-        // of `testb $imm, sym(%rip)`), matching gcc.
+    if let Some((target, off, idx, pcrel)) = sym_disp {
+        // Locate the disp32 field: re-encode with a distinct displacement in
+        // that operand, keeping its form; exactly those four bytes differ.
         let mut probe = concrete.clone();
-        // Keep the operand width so the probe selects the same encoding form;
-        // only its displacement varies.
-        let size = match concrete[idx] {
-            Concrete::RipRel { size, .. } => size,
-            _ => AsmRegSize::Quad,
-        };
-        probe[idx] = Concrete::RipRel {
-            disp: RIPREL_PROBE_DISP,
-            size,
+        probe[idx] = match concrete[idx] {
+            Concrete::RipRel { size, .. } => Concrete::RipRel {
+                disp: RIPREL_PROBE_DISP,
+                size,
+            },
+            Concrete::IndexMem {
+                index, scale, size, ..
+            } => Concrete::IndexMem {
+                index,
+                scale,
+                disp: RIPREL_PROBE_DISP,
+                size,
+            },
+            other => other,
         };
         let mut probe_bytes = alloc::vec::Vec::new();
         super::asm::encode(&mut probe_bytes, insn.mnemonic, insn.suffix, &probe)
             .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
         let field = riprel_disp32_field(&body, &probe_bytes).ok_or_else(|| {
-            alloc::format!(
-                "inline asm: replacement `{text}` RIP-relative field is not a 4-byte run"
-            )
+            alloc::format!("inline asm: replacement `{text}` disp32 field is not a 4-byte run")
         })?;
+        // A PC-relative field's addend is the symbol offset less the 4-byte
+        // end skew and any bytes trailing the field (the immediate of
+        // `testb $imm, sym(%rip)`), matching gcc. An absolute `R_X86_64_32S`
+        // field is patched with the symbol value plus the offset directly.
         let trailing = body.len() - (field + 4);
+        let addend = if pcrel {
+            off - 4 - trailing as i64
+        } else {
+            off
+        };
         relocs.push(AsmSectionReloc {
             offset: seg_len + field as u32,
             width: 4,
-            pcrel: true,
+            pcrel,
             branch: false,
-            signed: false,
+            signed: !pcrel,
             target,
-            addend: off - 4 - trailing as i64,
+            addend,
         });
     }
     bytes.extend_from_slice(&body);
@@ -6976,6 +7094,20 @@ fn emit_inline_asm(
             code.resize(code.len() + count as usize, fill);
             continue;
         }
+        // `.align` / `.p2align` / `.balign`: pad `code` (the unit's whole
+        // text stream, so its length is a section offset) to the boundary, as
+        // GNU as does section-relative. The boundary holds absolutely only up
+        // to the fixed `.text` section alignment (TODO: raise the section
+        // alignment from the largest directive instead of rejecting).
+        if let super::asm::Mnemonic::Align { n, fill, max } = insn.mnemonic {
+            if n > 16 {
+                return fail("inline asm: alignment beyond 16 exceeds the section alignment");
+            }
+            let gap = super::ssa::emit_common::align_gap(code.len() as i64, n as i64, max) as usize;
+            let (pat, _) = super::ssa::emit_common::align_fill_pattern(fill, true, false);
+            code.resize(code.len() + gap, pat[0]);
+            continue;
+        }
         // A data directive with operand references (`.long %c0`): each
         // argument must resolve to a compile-time constant, emitted
         // little-endian at the directive width.
@@ -7148,8 +7280,12 @@ fn emit_inline_asm(
         }
         // A direct `call` / `jmp` to a symbol: resolve the name to its entry
         // and emit the E8/E9 opcode plus a rel32 the fixup pass patches once
-        // every function's address is final.
-        if let Some(name) = &insn.sym_target {
+        // every function's address is final. Other instructions also carry a
+        // `sym_target` (a `$symbol` immediate, a symbol-displacement memory
+        // operand); those resolve through their operand arms below.
+        if let Some(name) = &insn.sym_target
+            && matches!(insn.mnemonic, super::asm::Mnemonic::Table("call" | "jmp"))
+        {
             let is_call =
                 matches!(insn.mnemonic, super::asm::Mnemonic::Table(n) if n.starts_with("call"));
             // The name may embed operand references; substituting them first
@@ -7335,6 +7471,74 @@ fn emit_inline_asm(
                     Concrete::RipRel {
                         disp,
                         size: size.unwrap_or(AsmRegSize::Quad),
+                    }
+                }
+                // `%cN(%%rip)` / `%PN(%%rip)`: a compile-time constant becomes
+                // the disp32 literal; a link-time address takes a RIP-relative
+                // relocation, as for `%a`.
+                AsmOpnd::RipRelRef { idx, .. } => {
+                    let size = asm_mem_size(None, insn, &asm.operands, &op_reg)
+                        .unwrap_or(AsmRegSize::Quad);
+                    match const_of(idx) {
+                        Some(v) => match i32::try_from(v) {
+                            Ok(disp) => Concrete::RipRel { disp, size },
+                            Err(_) => {
+                                return fail("inline asm: RIP-relative displacement out of range");
+                            }
+                        },
+                        None => match args
+                            .get(idx as usize)
+                            .and_then(|a| asm_riprel_target(func, extern_data_names, *a))
+                        {
+                            Some(sym) => {
+                                riprel_reloc = Some((sym, 0));
+                                Concrete::RipRel { disp: 0, size }
+                            }
+                            None => {
+                                return fail(
+                                    "inline asm: `%c`/`%P` RIP-relative operand is not a constant or address",
+                                );
+                            }
+                        },
+                    }
+                }
+                // `disp(,%index,scale)`: a no-base scaled-index reference. A
+                // symbol displacement needs an absolute relocation the
+                // function-body stream does not carry (as for `$symbol`); it is
+                // assembled only in file-scope asm.
+                AsmOpnd::IndexMem {
+                    index,
+                    scale,
+                    disp,
+                    sym,
+                } => {
+                    if sym {
+                        return fail(
+                            "inline asm: a symbol-displacement memory operand is only supported in file-scope asm",
+                        );
+                    }
+                    let size = asm_mem_size(None, insn, &asm.operands, &op_reg)
+                        .unwrap_or(AsmRegSize::Quad);
+                    let index = match index {
+                        super::asm::AsmMemBase::Reg(r) => r,
+                        super::asm::AsmMemBase::Ref(i) => {
+                            match op_reg.get(i as usize).copied().flatten().filter(|_| {
+                                !matches!(asm.operands[i as usize].constraint, AsmConstraint::Fp)
+                            }) {
+                                Some(r) => r,
+                                None => {
+                                    return fail(
+                                        "inline asm: memory index must be a register operand",
+                                    );
+                                }
+                            }
+                        }
+                    };
+                    Concrete::IndexMem {
+                        index,
+                        scale,
+                        disp,
+                        size,
                     }
                 }
                 // A `$symbol` absolute-address immediate needs a symbol

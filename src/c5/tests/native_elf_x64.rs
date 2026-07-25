@@ -373,6 +373,8 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_const_expr.c", 0),
     ("inline_asm_x64_constraint_a.c", 0),
     ("inline_asm_x64_string_ops.c", 42),
+    ("inline_asm_x64_callee_saved_operands.c", 0),
+    ("inline_asm_x64_callee_saved_preserved.c", 0),
     ("inline_asm_goto.c", 42),
     ("inline_asm_reg_var.c", 42),
     ("inline_asm_sp_reg_var.c", 42),

@@ -2804,7 +2804,9 @@ fn asm_operand_const_rec(func: &crate::c5::ir::FunctionSsa, arg: u32, depth: u32
             let reachable = {
                 let mut seen = alloc::vec![false; func.blocks.len()];
                 let mut stack = alloc::vec![0usize];
-                seen.get_mut(0).map(|s| *s = true);
+                if let Some(s) = seen.get_mut(0) {
+                    *s = true;
+                }
                 while let Some(b) = stack.pop() {
                     for s in super::mem2reg::successors(
                         &func.blocks[b].terminator,

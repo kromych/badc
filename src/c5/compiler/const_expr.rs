@@ -1619,16 +1619,14 @@ impl Compiler {
         }
         if self.lex.tk == Token::Id && self.symbols[self.lex.curr_id_idx].class == Token::Num as i64
         {
-            // Enumeration constants have type `int` (C99 6.7.2.2p3);
-            // a value past `int`'s range (accepted as an extension)
-            // keeps 64-bit rank so arithmetic doesn't truncate it.
+            // Enumeration constants carry the type stamped at their
+            // registration: `int` (C99 6.7.2.2p3) normally, unsigned /
+            // wider for values past `int`'s range (GCC extension). The
+            // type drives the fold's signedness, e.g. shifts and
+            // divides.
             let v = self.symbols[self.lex.curr_id_idx].val;
+            let ty = self.symbols[self.lex.curr_id_idx].type_;
             self.next()?;
-            let ty = if v as i32 as i64 == v {
-                Ty::Int as i64
-            } else {
-                Ty::LongLong as i64
-            };
             return Ok(ConstVal::Int { val: v as i128, ty });
         }
         // C99 6.6 leaves it implementation-defined, but GCC and common

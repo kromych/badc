@@ -1618,7 +1618,12 @@ impl Compiler {
             } else if self.symbols[id_idx].class == Token::Num as i64 {
                 let val = self.symbols[id_idx].val;
                 self.emit_imm(val);
-                self.ty = Ty::Int as i64;
+                // The registration typed the constant: `int` normally,
+                // wider / unsigned for enum values outside `int`'s range
+                // (GCC extension). Typing such a value `int` would break
+                // the invariant that a value's register pattern is its
+                // type's extension, and comparisons then misread it.
+                self.ty = self.symbols[id_idx].type_;
                 // Dual-emit the resolved constant so a wrapping
                 // expression (assignment, call argument, binop)
                 // captures the value on `ast_acc`. Enum

@@ -695,6 +695,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("ssa_c5_internal_fp_arg.c", 0),
     ("struct_initializers.c", 0),
     ("enum_tag_types.c", 0),
+    ("enum_unsigned_value_cmp.c", 0),
     ("bitfields.c", 0),
     ("bound_import_arg_narrowing.c", 0),
     ("block_extern_shadows_local.c", 0),

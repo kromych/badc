@@ -4243,6 +4243,14 @@ fn enum_tag_types() {
 }
 
 #[test]
+fn enum_unsigned_value_cmp() {
+    // Enum constants outside int's range take the enum's compatible
+    // type (unsigned int / long long), so `int != BIAS` with
+    // BIAS = -1U<<31 compares at 32-bit unsigned per C99 6.3.1.8.
+    assert_eq!(run_fixture("enum_unsigned_value_cmp.c"), 0);
+}
+
+#[test]
 fn struct_initializers() {
     // struct initializers (designated + positional + mixed),
     // including function-pointer fields that need a CodeReloc so

@@ -15,6 +15,13 @@ pub(crate) struct Symbol {
     /// reserves one element, so a larger initializer must allocate
     /// fresh storage rather than overrun the following globals.
     pub reserved_data_bytes: i64,
+    /// `(previous offset, previous reserved bytes)` when a defining
+    /// declaration moved the object out of the storage a tentative
+    /// definition had reserved. C99 6.9.2 makes both declarations
+    /// denote one object, so references that baked the old offset --
+    /// identifier snapshots in the AST and pointer initializers already
+    /// written into the data segment -- are rebased onto `val`.
+    pub relocated_from: Option<(i64, i64)>,
     /// For a defined file-scope object, `sizeof` the object in bytes,
     /// filled at unit finalize. The object writers emit it as the symbol
     /// size (`st_size`); 0 means unknown and keeps the size unset.

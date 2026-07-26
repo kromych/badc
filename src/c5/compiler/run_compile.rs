@@ -126,6 +126,17 @@ impl Compiler {
         Ok(max_count)
     }
 
+    /// Record that a defining declaration moved a file-scope object off the
+    /// storage its tentative definition reserved. C99 6.9.2 makes both
+    /// declarations denote one object, so the old placement is kept for the
+    /// finalize-time rebase of references that already baked it in.
+    fn note_global_relocated(&mut self, id_idx: usize, was_tentative: bool, fresh: i64) {
+        let s = &mut self.symbols[id_idx];
+        if was_tentative && s.reserved_data_bytes > 0 && s.val != fresh {
+            s.relocated_from = Some((s.val, s.reserved_data_bytes));
+        }
+    }
+
     /// Advance past one initializer element's value to the next top-level `,`
     /// or the closing `}`, tracking bracket depth so a comma nested inside a
     /// brace / paren / bracket group does not end the element early.
@@ -2132,10 +2143,9 @@ impl Compiler {
                             // before this definition -- which baked in the
                             // tentative's offset -- observe the initialized
                             // object, not the tentative's separate zero copy.
-                            // Reuse only when the initializer fits the reserved
-                            // bytes: a deferred-size tentative (`T x[];`)
-                            // reserves one element, so a larger initializer must
-                            // allocate fresh rather than overrun later globals.
+                            // A deferred-size tentative (`T x[];`) reserves one
+                            // element, so a larger initializer takes fresh
+                            // storage and records the move for rebasing.
                             let needed = count * inner_dim * elem_size as i64;
                             let off = if was_tentative_glo
                                 && needed <= self.symbols[id_idx].reserved_data_bytes
@@ -2144,6 +2154,7 @@ impl Compiler {
                             } else {
                                 self.align_data_to(decl_align);
                                 let fresh = self.data.len() as i64;
+                                self.note_global_relocated(id_idx, was_tentative_glo, fresh);
                                 self.symbols[id_idx].reserved_data_bytes = needed;
                                 for _ in 0..needed {
                                     self.data.push(0);
@@ -2350,11 +2361,10 @@ impl Compiler {
                         // C99 6.9.2: a prior tentative definition already
                         // reserved storage; reuse it so references emitted
                         // before this definition observe the initialized object,
-                        // not the tentative's separate zero copy. Reuse only
-                        // when the initializer fits the reserved bytes: a
+                        // not the tentative's separate zero copy. A
                         // deferred-size tentative (`T x[];`) reserves one
-                        // element, so a larger initializer must allocate fresh
-                        // rather than overrun later globals.
+                        // element, so a larger initializer takes fresh storage
+                        // and records the move for rebasing.
                         let off = if was_tentative_glo
                             && aligned <= self.symbols[id_idx].reserved_data_bytes
                         {
@@ -2366,6 +2376,7 @@ impl Compiler {
                                 self.align_data_to_8();
                             }
                             let fresh = self.data.len() as i64;
+                            self.note_global_relocated(id_idx, was_tentative_glo, fresh);
                             self.symbols[id_idx].reserved_data_bytes = aligned;
                             for _ in 0..aligned {
                                 self.data.push(0);

@@ -2103,6 +2103,32 @@ impl Compiler {
                 self.data_reloc_sym_idx.push(sym_idx);
             }
             self.extern_data_relocs = still_extern;
+            // A pointer initializer written into the data segment before a
+            // defining declaration moved its target off the tentative
+            // definition's storage still holds the abandoned offset. C99
+            // 6.9.2 makes the two declarations one object, so rebase the
+            // slot -- and the preferred bytes the writers ship -- onto the
+            // definition.
+            for i in 0..self.data_relocs.len() {
+                let Some(&sym_idx) = self.data_reloc_sym_idx.get(i) else {
+                    break;
+                };
+                let Some((old_off, _)) =
+                    self.symbols.get(sym_idx).and_then(|s| s.relocated_from)
+                else {
+                    continue;
+                };
+                let new_off = self.symbols[sym_idx].val;
+                let r = &mut self.data_relocs[i];
+                if r.target_anchor != old_off as u64 {
+                    continue;
+                }
+                let target = r.target_offset as i64 - old_off + new_off;
+                r.target_offset = target as u64;
+                r.target_anchor = new_off as u64;
+                let off = r.data_offset as usize;
+                self.data[off..off + 8].copy_from_slice(&(target as u64).to_le_bytes());
+            }
             // Record each defined object's byte size for the object
             // writers' symbol tables; the writers have no type layout.
             for i in 0..self.symbols.len() {

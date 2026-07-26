@@ -47,7 +47,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::super::ssa::mem2reg::{dominators, predecessors};
-use super::inline::{map_v, remap_caller_inst, remap_terminator};
+use super::inline::{map_v, remap_inst_operands, remap_terminator};
 use super::layout::{natural_loops, rpo_numbers};
 use crate::c5::ir::{Block, BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 use crate::c5::vm::eval;
@@ -446,7 +446,7 @@ fn expand(func: &mut FunctionSsa, shape: &LoopShape) {
                             new_inst_src: &mut Vec<(u32, u32)>,
                             new_f32: &mut Vec<bool>| {
                 let mut inst = func.insts[pc as usize].clone();
-                remap_caller_inst(&mut inst, cur);
+                remap_inst_operands(&mut inst, cur);
                 let id = new_insts.len() as u32;
                 cur[pc as usize] = id;
                 if let Some(k) = copy {

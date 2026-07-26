@@ -23,20 +23,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	retq
 
-<apply>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movslq	%esi, %rsi
-               	movslq	%edx, %rdx
-               	movq	%rdi, %rax
-               	movq	%rsi, %rdi
-               	movq	%rdx, %rsi
-               	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -50,10 +36,12 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	leaq	-<rip>, %rdi       # <addr>
-               	movl	$0x9, %esi
-               	movl	$0x2, %edx
-               	callq	<addr>
+               	leaq	-<rip>, %rax       # <addr>
+               	movl	$0x9, %edi
+               	movl	$0x2, %esi
+               	callq	*%rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x4, %eax

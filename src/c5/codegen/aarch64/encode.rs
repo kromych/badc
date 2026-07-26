@@ -1688,6 +1688,14 @@ pub(crate) fn lower(
                 }
             }
         });
+        // Simplify each body before the inliner reads it; see x86_64.rs's
+        // matching block for the rationale.
+        super::ssa::emit_common::time_pass(
+            "passes::simplify_branches::pre_inline (aarch64)",
+            || {
+                crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs, false);
+            },
+        );
         // Unroll constant-trip loops before the inliner so a helper
         // whose body was a short loop becomes a single-block inline
         // candidate; see x86_64.rs's matching block for the rationale.

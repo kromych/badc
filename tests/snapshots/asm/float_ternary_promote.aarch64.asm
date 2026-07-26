@@ -74,10 +74,6 @@ Disassembly of section .text:
                	str	s16, [x17]
                	sub	x16, x29, #0x8
                	ldr	s0, [x16]
-               	sub	x17, x29, #0x8
-               	str	s0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	mov	x0, #0x41a00000         // =1101004800
                	fmov	s17, w0
                	fcmp	s0, s17

@@ -24,31 +24,29 @@ Disassembly of section .text:
                	movl	$0x7, %edx
                	movl	%edx, 0x8(%rax)
                	leaq	-0x18(%rbp), %rax
-               	leaq	<rip>, %rdx
-               	movq	%rdx, 0x10(%rax)
+               	leaq	<rip>, %rsi
+               	movq	%rsi, 0x10(%rax)
                	leaq	-0x18(%rbp), %rax
-               	leaq	-0x28(%rbp), %rsi
-               	movl	(%rax), %edx
-               	movl	0x4(%rax), %edi
-               	cmpq	%rdi, %rdx
+               	leaq	-0x28(%rbp), %rdi
+               	xorq	%rdx, %rdx
+               	movl	0x4(%rax), %edx
+               	cmpq	$0x4, %rdx
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	sete	%dl
                	movzbq	%dl, %rdx
-               	movl	%edx, %edi
-               	testq	%rdi, %rdi
+               	movl	%edx, %r8d
+               	testq	%r8, %r8
                	je	<addr>
-               	movq	0x10(%rax), %rdi
                	movl	0x4(%rax), %r8d
-               	movl	0x8(%rax), %r9d
-               	andq	%r9, %r8
-               	addq	%r8, %rdi
-               	movzbq	(%rdi), %rdi
-               	movb	%dil, (%rsi)
-               	movl	0x4(%rax), %esi
-               	incq	%rsi
-               	movl	%esi, 0x4(%rax)
+               	andq	$0x7, %r8
+               	addq	%rsi, %r8
+               	movzbq	(%r8), %r8
+               	movb	%r8b, (%rdi)
+               	movl	0x4(%rax), %edi
+               	incq	%rdi
+               	movl	%edi, 0x4(%rax)
                	movl	%edx, %eax
                	testq	%rax, %rax
                	je	<addr>

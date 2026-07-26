@@ -24,19 +24,6 @@ Disassembly of section .text:
                	sxtw	x0, w1
                	ret
 
-<run>:
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	sxtw	x0, w0
-               	mov	x9, x1
-               	blr	x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
-               	ret
-
 <cb_impl>:
                	fcvtzs	x1, s0
                	add	x0, x0, x1
@@ -79,12 +66,16 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x30
                	ret
-               	mov	x0, #0xa                // =10
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x2, #0x40200000         // =1075838976
-               	fmov	d0, x2
-               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x40200000         // =1075838976
+               	mov	x2, #0xa                // =10
+               	mov	x9, x0
+               	fmov	d0, x1
+               	mov	x0, x2
+               	blr	x9
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	cmp	x0, #0xc
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

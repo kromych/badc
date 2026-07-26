@@ -389,17 +389,32 @@ pub(crate) fn compute_live_sets(
                     }
                 }
                 let Some(f) = by_ent.get(&pc) else { continue };
-                for_each_block_inst(f, |inst| match inst {
-                    Inst::Call { target_pc, .. } => work.push(Node::Func(*target_pc)),
-                    Inst::ImmCode(t) => work.push(Node::Func(*t)),
-                    Inst::ImmData(off) if (0..data_len).contains(off) => {
-                        work.push(Node::Data(interval_of(*off)));
+                // An address materialised for an argument a callee then
+                // ignores is dead once that callee inlines, and the emit
+                // drops it. Following it anyway would keep the object it
+                // names -- and everything that object references -- in the
+                // image. Address edges therefore come only from values the
+                // body still consumes.
+                let consumed = consumed_values(f);
+                for blk in &f.blocks {
+                    for i in blk.inst_range.clone() {
+                        match &f.insts[i as usize] {
+                            Inst::Call { target_pc, .. } => work.push(Node::Func(*target_pc)),
+                            Inst::ImmCode(t) if consumed[i as usize] => {
+                                work.push(Node::Func(*t));
+                            }
+                            Inst::ImmData(off)
+                                if consumed[i as usize] && (0..data_len).contains(off) =>
+                            {
+                                work.push(Node::Data(interval_of(*off)));
+                            }
+                            Inst::InlineAsm { asm, .. } => {
+                                push_asm_names(&asm.template, &named, &mut work);
+                            }
+                            _ => {}
+                        }
                     }
-                    Inst::InlineAsm { asm, .. } => {
-                        push_asm_names(&asm.template, &named, &mut work);
-                    }
-                    _ => {}
-                });
+                }
             }
             Node::Data(i) => {
                 if data_live[i] {
@@ -420,6 +435,73 @@ pub(crate) fn compute_live_sets(
         starts,
         data_live,
     }
+}
+
+/// Which instruction values the body still consumes.
+///
+/// An instruction that can have an effect of its own -- a store, a call,
+/// asm, anything outside the pure set below -- counts as consumed, and so
+/// does anything its operands reach. A pure instruction counts only when
+/// something consumed reads it, so a chain of arithmetic ending in an
+/// unread value drops out. Conservative in the keep direction: only the
+/// listed forms can ever be found dead.
+fn consumed_values(f: &FunctionSsa) -> alloc::vec::Vec<bool> {
+    use crate::c5::ir::{Inst, Terminator};
+    let n = f.insts.len();
+    let mut consumed = alloc::vec![false; n];
+    let mut work: Vec<crate::c5::ir::ValueId> = Vec::new();
+    let push = |v: crate::c5::ir::ValueId, work: &mut Vec<_>| {
+        if v != crate::c5::ir::NO_VALUE && (v as usize) < n {
+            work.push(v);
+        }
+    };
+    let pure = |inst: &Inst| {
+        matches!(
+            inst,
+            Inst::Imm(_)
+                | Inst::ImmData(_)
+                | Inst::ImmCode(_)
+                | Inst::ImmExtCode(_)
+                | Inst::LocalAddr(_)
+                | Inst::TlsAddr(_)
+                | Inst::BlockAddr(_)
+                | Inst::Binop { .. }
+                | Inst::BinopI { .. }
+                | Inst::Extend { .. }
+                | Inst::Phi { .. }
+        )
+    };
+    for blk in &f.blocks {
+        for i in blk.inst_range.clone() {
+            if !pure(&f.insts[i as usize]) {
+                work.push(i);
+            }
+        }
+        match blk.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => push(cond, &mut work),
+            Terminator::Return(v) => push(v, &mut work),
+            Terminator::JumpTable { idx, .. } => push(idx, &mut work),
+            Terminator::GotoIndirect { target } => push(target, &mut work),
+            _ => {}
+        }
+        push(blk.exit_acc, &mut work);
+    }
+    while let Some(v) = work.pop() {
+        let idx = v as usize;
+        if consumed[idx] {
+            continue;
+        }
+        consumed[idx] = true;
+        let mut ops: Vec<crate::c5::ir::ValueId> = Vec::new();
+        super::reg_alloc::for_each_operand(&f.insts[idx], |op| ops.push(op));
+        if let Inst::CallIndirect { target, .. } = &f.insts[idx] {
+            ops.push(*target);
+        }
+        for op in ops {
+            push(op, &mut work);
+        }
+    }
+    consumed
 }
 
 /// Push the nodes of internal symbols whose names appear as identifier
@@ -448,19 +530,6 @@ fn push_asm_names(
             && let Some(node) = named.get(tok)
         {
             work.push(*node);
-        }
-    }
-}
-
-/// Visit the instructions belonging to a function's blocks. The
-/// unreachable-block prune drops a dead block from `blocks` but leaves
-/// its instructions in the flat `insts` array, so a liveness scan over
-/// `insts` would resurrect call targets only dead code names; the block
-/// ranges are the live view.
-fn for_each_block_inst(f: &FunctionSsa, mut visit: impl FnMut(&crate::c5::ir::Inst)) {
-    for blk in &f.blocks {
-        for v in blk.inst_range.clone() {
-            visit(&f.insts[v as usize]);
         }
     }
 }

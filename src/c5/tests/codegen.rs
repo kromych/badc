@@ -3498,6 +3498,55 @@ fn post_inline_orphaned_static_and_its_relocations_drop() {
     }
 }
 
+/// The post-inline recompaction lowers prebuilt bodies, so the import
+/// table has to come from those bodies rather than from the ASTs. An
+/// import whose only source reference is a static helper the inliner
+/// consumed survives only in the caller's inlined copy: resolving from
+/// the (now function-pruned) ASTs left the binding unresolved and the
+/// `Inst::ImmExtCode` emit with no import to relocate against.
+#[test]
+fn post_inline_recompaction_keeps_inlined_import() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "\
+        #include <string.h> \n\
+        struct dev; struct dev_ops { long long (*read)(struct dev *); }; \
+        extern long long dev_private(struct dev *d); \
+        static long long ops_read(struct dev *d) { return dev_private(d); } \
+        static const struct dev_ops dead_ops = { ops_read }; \
+        static unsigned long apply(const char *s, unsigned long (*fn)(const char *)) \
+            { return fn(s); } \
+        static unsigned long measure(const char *s) { return apply(s, strlen); } \
+        static struct dev *alloc_dev(void *p, const struct dev_ops *o) \
+            { (void)o; return (struct dev *)p; } \
+        unsigned long span(const char *s, void *p) \
+            { return measure(s) + (alloc_dev(p, &dead_ops) != 0); }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        assert!(
+            syms.iter().any(|(n, _)| n == "strlen"),
+            "{target:?}: the inlined import lost its symbol (symbols: {syms:?})"
+        );
+        assert!(
+            !syms.iter().any(|(n, _)| n == "ops_read" || n == "dev_private"),
+            "{target:?}: the orphaned table's function survived (symbols: {syms:?})"
+        );
+    }
+}
+
 /// `(st_value, st_size)` of the named `STT_OBJECT` symbol.
 fn elf_data_symbol_value_size(b: &[u8], name: &str) -> Option<(u64, u64)> {
     let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());

@@ -1020,6 +1020,19 @@ impl ResolvedImports {
     /// The two SSA vectors cover both fresh compiles (AST +
     /// synth) and archive reloads (round-tripped user SSA + synth).
     pub fn resolve(program: &Program) -> Result<Self, C5Error> {
+        Self::resolve_with(program, &[])
+    }
+
+    /// [`resolve`](Self::resolve) plus `bodies`, the SSA a caller is about
+    /// to lower in place of the AST walk. Those bodies are the authority
+    /// on which imports the object references: an inlined callee's
+    /// `Inst::CallExt` / `Inst::ImmExtCode` survives in its caller after
+    /// the callee itself is gone, so scanning only the ASTs would leave
+    /// the binding unresolved and the emit with nothing to point at.
+    pub fn resolve_with(
+        program: &Program,
+        bodies: &[crate::c5::ir::FunctionSsa],
+    ) -> Result<Self, C5Error> {
         let mut seen: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
         let mut used: Vec<i64> = Vec::new();
         for func in &program.finished_functions {
@@ -1046,6 +1059,7 @@ impl ResolvedImports {
             .synthetic_ssa_funcs
             .iter()
             .chain(program.user_ssa_funcs.iter())
+            .chain(bodies.iter())
         {
             for inst in &func.insts {
                 if let crate::c5::ir::Inst::CallExt { binding_idx, .. } = inst
@@ -2094,7 +2108,12 @@ pub(crate) fn lower_for_with_prebuilt(
     options: NativeOptions,
     prebuilt: Option<ssa::shadow::PrebuiltSsa>,
 ) -> Result<Build, C5Error> {
-    let mut imports = ResolvedImports::resolve(program)?;
+    // Prebuilt bodies replace the AST walk, so they -- not the ASTs --
+    // decide which imports the object references.
+    let mut imports = match &prebuilt {
+        Some(p) => ResolvedImports::resolve_with(program, &p.funcs)?,
+        None => ResolvedImports::resolve(program)?,
+    };
     // Linux ELF's `_start` always tail-calls libc `exit` so glibc
     // gets to flush stdio and run atexit before the kernel reaps us.
     // The SSA walk only finds bindings the user's code calls --

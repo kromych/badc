@@ -1340,6 +1340,7 @@ fn jit_fixture(name: &str) -> i32 {
 
 const JIT_FIXTURES: &[(&str, i32)] = &[
     ("post_inline_dead_data_repack.c", 0),
+    ("post_inline_import_survives_repack.c", 0),
     ("overaligned_data_placement.c", 0),
     ("overaligned_type_placement.c", 0),
     ("page_multiple_alignment.c", 0),

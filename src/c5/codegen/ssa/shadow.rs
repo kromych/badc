@@ -120,13 +120,12 @@ pub(crate) struct PrebuiltSsa {
 /// pre-inline call graph, so an object whose last reference the inliner
 /// removed is still in the image along with its relocations. The caller
 /// feeds this to [`recompact_after_inlining`] and lowers `ssa` against
-/// the result. It must lower `ssa` rather than re-walk: an AST still
-/// holds the pre-inline call that pinned the object, so a re-walk would
-/// call a function the recompaction drops.
+/// the result. It must lower `ssa` rather than re-walk: the ASTs describe
+/// the pre-inline program, which still materialises the address of the
+/// object the recompaction drops.
 #[derive(Debug)]
 pub(crate) struct OrphanedData {
     pub sets: LiveSets,
-    pub live_func_pcs: alloc::collections::BTreeSet<usize>,
     pub ssa: PrebuiltSsa,
 }
 
@@ -160,16 +159,14 @@ pub(crate) fn drop_unreachable_statics(
     }
     // `funcs` is left alone: this build's `.data` still holds the orphaned
     // objects, so their relocation targets must stay lowered. The reported
-    // copy is the pruned set the recompacted lowering uses.
+    // copy carries only the bodies the recompacted lowering emits.
     let kept: Vec<FunctionSsa> = funcs
         .iter()
         .filter(|f| sets.func_pcs.contains(&f.ent_pc))
         .cloned()
         .collect();
-    let live_func_pcs = kept.iter().map(|f| f.ent_pc).collect();
     Some(OrphanedData {
         sets,
-        live_func_pcs,
         ssa: PrebuiltSsa {
             funcs: kept,
             promoted_local_slots: alloc::collections::BTreeMap::new(),
@@ -659,6 +656,11 @@ impl DataMap {
 pub(crate) struct CompactionPlan {
     pub live: LiveSets,
     pub map: DataMap,
+    /// Functions the pass kept in `finished_functions`. A redo applies the
+    /// same set: the ASTs are not walked again, but everything else derived
+    /// from them -- the import table above all -- must still see every
+    /// function the first pass did.
+    pub func_pcs: alloc::collections::BTreeSet<usize>,
 }
 
 /// What [`compact_program_data`] produced. `plan` is absent when the
@@ -704,7 +706,11 @@ pub(crate) fn compact_program_data(
     Ok(Compaction {
         program: out,
         bss_size,
-        plan: Some(CompactionPlan { live: sets, map }),
+        plan: Some(CompactionPlan {
+            live: sets,
+            map,
+            func_pcs: live_func_pcs,
+        }),
     })
 }
 
@@ -739,7 +745,7 @@ pub(crate) fn recompact_after_inlining(
     let (out, bss_size, _) = apply_data_liveness(
         program,
         &sets,
-        &orphaned.live_func_pcs,
+        &plan.func_pcs,
         segregate,
         Some((&mut orphaned.ssa.funcs, &plan.map)),
     );

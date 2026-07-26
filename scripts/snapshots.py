@@ -71,8 +71,11 @@ BUILD_INFO_MARKER = b"BADC\n\tv"
 ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # `callq 0x4002dc <.text+0xbc>` and similar: branch / call operand
     # followed by an `<symbol+offset>` annotation. Both halves shift in
-    # lock-step on any earlier reflow.
-    (re.compile(r"0x[0-9a-fA-F]+\s+<[^>]+>"), "<addr>"),
+    # lock-step on any earlier reflow. Both halves sit on one line: the
+    # separator must not cross a newline, or an immediate at the end of
+    # one instruction plus the `<symbol>:` label opening the next
+    # function match as a pair and the label is dropped.
+    (re.compile(r"0x[0-9a-fA-F]+[ \t]+<[^>\n]+>"), "<addr>"),
     # `callq *0xfe89(%rip)           # 0x4100c0`: trailing absolute
     # annotation appended after a RIP-relative computation. objdump
     # tab-aligns the `#` past column 40, so 4-plus whitespace before

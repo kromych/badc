@@ -1,4 +1,4 @@
-//! Folds over the storage of a file-scope `const` object.
+//! Folds over the storage of a `const` object with static duration.
 //!
 //! C99 6.7.3p5 makes modifying an object defined with a const-qualified
 //! type undefined, so such an object holds what its initializer put there
@@ -24,7 +24,7 @@ use crate::c5::program::Program;
 use crate::c5::token::Token;
 
 /// Const-data view for folding loads of `const` objects: the `[lo, hi)`
-/// byte ranges of const-qualified, defined, initialized file-scope
+/// byte ranges of const-qualified, defined, initialized static-duration
 /// objects -- scalar, aggregate or array -- whose image already holds
 /// their value, the data-segment offsets a relocation patches (unknown
 /// until link, so never folded), and the data image itself.

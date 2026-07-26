@@ -22,19 +22,13 @@ use crate::c5::ir::FunctionSsa;
 use crate::c5::program::Program;
 
 /// What the fixed point may do beyond folding constant-condition
-/// branches and pruning what they orphan.
+/// branches and pruning what they orphan. All three are off for the
+/// post-walk cleanup: a deferred `__builtin_constant_p` must survive
+/// there for the inliner's later argument substitution, and the other
+/// two are `-O` capabilities.
 struct Opts<'a> {
-    /// Const-data view for folding loads of `const` objects. Absent
-    /// outside the `-O` pipeline.
     const_data: Option<&'a super::const_global_fold::ConstData<'a>>,
-    /// Resolve a surviving deferred `__builtin_constant_p` to 0. False
-    /// for the post-walk cleanup, where such a node must survive for
-    /// the inliner's later argument substitution.
     resolve_constant_p: bool,
-    /// Fold a consumer of a runtime select whose result is the same for
-    /// every value the select can produce. `-O` only: the value is not a
-    /// constant expression, and both reference compilers keep the
-    /// consumer at `-O0`.
     fold_selects: bool,
 }
 

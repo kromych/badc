@@ -690,15 +690,12 @@ impl Compiler {
                 self.symbols[id_idx].is_const_qualified = self.pending.base_is_const
                     && array_size == 0
                     && super::types::is_integer_scalar_ty(ty);
-                // The declared object's own storage is const-qualified, so
-                // C99 6.7.3p5 makes any modification of it undefined and the
-                // initializer's bytes are its value for the whole execution.
-                // That holds for a scalar (`static const T x = k`), an
-                // aggregate, and an array (sized or deferred). It does not
-                // hold when the declarator adds pointer indirection: in
-                // `const char *p` and `const char *t[2]` the qualifier
-                // reaches the pointee, and `p` / `t[0]` are writable
-                // objects.
+                // The declared object's own storage is const-qualified (C99
+                // 6.7.3p5 then makes modifying it undefined, so its
+                // initializer is its value for the whole execution). A
+                // declarator that adds pointer indirection points the
+                // qualifier at the pointee instead: `p` and `t[0]` of
+                // `const char *p` / `const char *t[2]` are writable.
                 self.symbols[id_idx].storage_is_const =
                     self.pending.base_is_const && !super::types::is_pointer_ty(ty);
                 if fn_ptr_indirection > 0 {

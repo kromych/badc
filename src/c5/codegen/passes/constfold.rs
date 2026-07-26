@@ -133,17 +133,16 @@ fn user_lists(func: &FunctionSsa) -> Vec<Vec<ValueId>> {
 }
 
 /// Fold a consumer of a select whose result is the same for every value
-/// the select can produce. A `c ? 1 : 0` merges two immediates, so
-/// `> 3ul` on it is 0 and a mask selecting none of the bits the
-/// incomings differ in is that mask's value on either -- the condition
-/// stays unknown, the consumer does not depend on it. Walks forward from
-/// each select so the cost tracks the select's use chain, and folds a
-/// consumer any distance down that chain: an intermediate whose value
-/// does differ per incoming is walked through, not folded.
+/// the select can produce: `> 3ul` on a `c ? 1 : 0` is 0 either way, and
+/// so is a mask selecting none of the bits the incomings set. The
+/// condition stays unknown; the consumer does not depend on it. Walks
+/// forward from each select, so the cost tracks its use chain and a
+/// consumer folds at any distance down it -- an intermediate whose own
+/// value differs per incoming is walked through, not folded.
 ///
-/// -O only. A value produced by a runtime condition is not a constant
-/// expression (C99 6.6), so this cannot decide what the front end
-/// accepts; it is the optimizer proving the consumer invariant.
+/// -O only: such a value is not a constant expression (C99 6.6), so this
+/// is the optimizer proving the consumer invariant, never the front end
+/// widening what it accepts.
 pub(crate) fn fold_selects(func: &mut FunctionSsa) -> bool {
     let selects: Vec<(ValueId, Vec<i64>)> = (0..func.insts.len() as ValueId)
         .filter_map(|v| select_values(func, v).map(|values| (v, values)))

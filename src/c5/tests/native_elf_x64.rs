@@ -392,6 +392,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("register_var_asm_operand_r11.c", 0),
     ("attribute_weak_alias.c", 0),
     ("weak_definition_not_inlined.c", 42),
+    ("nested_block_decl_alignment.c", 42),
     ("attribute_alias_target_later.c", 0),
     ("attribute_section_placement.c", 0),
     ("inline_asm_named_operands.c", 42),

@@ -438,6 +438,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("nested_block_decl_alignment.c", 42),
     ("attribute_section_placement.c", 0),
     ("speculative_init_parse_data_rewind.c", 0),
+    ("zero_length_array_decay.c", 0),
     ("compound_literal_struct_field.c", 0),
     ("goto.c", 5),
     ("switch_statement.c", 25),

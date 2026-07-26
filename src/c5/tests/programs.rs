@@ -1741,6 +1741,13 @@ fn attribute_section_placement() {
 }
 
 #[test]
+fn zero_length_array_decay() {
+    // A zero-length array reads as its address, not as a load of the
+    // storage it does not have.
+    assert_eq!(run_fixture("zero_length_array_decay.c"), 0);
+}
+
+#[test]
 fn speculative_init_parse_data_rewind() {
     // A parenthesized initializer element parsed speculatively as a
     // conditional emits data and rewinds it; the padding and boundary

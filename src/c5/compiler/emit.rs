@@ -834,7 +834,15 @@ impl Compiler {
         let class = s.class;
         let val = s.val;
         let is_thread_local = s.is_thread_local;
-        let array_size = s.array_size;
+        // A zero-length array (`T x[] = {}`) is array-shaped with a zero
+        // element count, which the count alone cannot express. Record it
+        // with the sentinel an incomplete `extern T x[];` already uses so
+        // the walker consumes the object as its address (C99 6.3.2.1p3).
+        let array_size = if s.array_size == 0 && s.is_zero_len_array {
+            -1
+        } else {
+            s.array_size
+        };
         // A reference to a block-scope `extern` that shadows a bound name
         // (the slot is `Glo` and marked `block_extern_active`) must resolve
         // by name / same-TU offset regardless of the class restored at

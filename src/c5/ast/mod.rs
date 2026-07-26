@@ -218,8 +218,11 @@ pub(crate) enum Expr {
         is_thread_local: bool,
         /// Snapshot of `Symbol::array_size` at parse time. Non-zero
         /// for an array-shaped symbol (`T name[N];` -- the decay
-        /// happens in the rvalue path). Captured here so the walker
-        /// doesn't have to re-index the symbol table post-shadow.
+        /// happens in the rvalue path); `-1` covers the shapes with
+        /// no positive element count here, an incomplete `extern
+        /// T x[];` and a zero-length `T x[] = {}`. Captured so the
+        /// walker doesn't have to re-index the symbol table
+        /// post-shadow.
         array_size: i64,
     },
     /// `op child`, where `child` is the operand. Increment /

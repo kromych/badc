@@ -14,8 +14,9 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	-0x8(%rbp), %rax
-               	cmpq	%rax, %rax
+               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x8(%rbp), %rcx
+               	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x10, %rsp

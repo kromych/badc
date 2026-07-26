@@ -44,7 +44,8 @@ pub(super) struct DeclAlign {
     pub obj_is_pointer: bool,
     /// Required alignment of the object when it has automatic storage.
     pub auto_align: i64,
-    /// `auto_align` exceeds the frame's 16-byte guarantee.
+    /// `auto_align` exceeds the 8-byte frame slot, so the object needs the
+    /// prologue-realigned region.
     pub realign_auto: bool,
 }
 
@@ -131,10 +132,10 @@ impl Compiler {
     /// C11 6.7.5 alignment of a block-scope declarator, shared by the
     /// function-body-top and inside-block declaration paths. A static
     /// local's `.data` slot honors the request like a file-scope object; an
-    /// automatic object lives in 8-byte frame slots, and a requirement above
-    /// 16 exceeds the frame pointer's guarantee, so the prologue realigns sp
-    /// down to it. Consumes `pending.attr_align` either way, so a request
-    /// cannot leak onto the next declarator.
+    /// automatic object lives in 8-byte frame slots, so any wider requirement
+    /// goes to the region the prologue realigns sp down to. Consumes
+    /// `pending.attr_align` either way, so a request cannot leak onto the
+    /// next declarator.
     pub(super) fn resolve_decl_align(
         &mut self,
         ty: i64,
@@ -156,23 +157,19 @@ impl Compiler {
         } else {
             core::cmp::max(req_align.max(0), self.align_of_type(ty) as i64)
         };
-        let realign_auto = auto_align > 16;
-        if realign_auto && auto_align > super::MAX_FRAME_ALIGN {
+        let realign_auto = auto_align > 8;
+        if auto_align > super::MAX_FRAME_ALIGN {
             return Err(self.compile_err(format!(
                 "requested alignment {auto_align} exceeds the maximum for an \
                  automatic object ({}); use static storage",
                 super::MAX_FRAME_ALIGN
             )));
         }
-        // Requests at or below 16 the frame cannot place, and any request
-        // beyond the static ceiling, stay diagnostics.
-        if !realign_auto
-            && ((req_align > 8 && !is_static && !obj_is_pointer)
-                || req_align > super::MAX_STATIC_ALIGN as i64)
-        {
+        // A static local, or the pointee alignment a type-position attribute
+        // carries, is placed like a file-scope object.
+        if req_align > super::MAX_STATIC_ALIGN as i64 {
             return Err(self.compile_err(format!(
-                "requested alignment {req_align} is not supported here \
-                 (automatic objects align to 8, static objects to at most {})",
+                "requested alignment {req_align} exceeds the supported maximum of {}",
                 super::MAX_STATIC_ALIGN
             )));
         }

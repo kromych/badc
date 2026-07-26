@@ -83,6 +83,23 @@ const CALLER_FRAME_SLOTS: i64 = 256;
 /// Relative growth bound for the caller frame gate.
 const FRAME_GROWTH_FACTOR: i64 = 4;
 
+/// Local-slot count (one 4 KiB page, at 8 bytes per slot) a caller's
+/// relocated-slot region may not cross to absorb a size-driven callee.
+/// The `CALLER_FRAME_SLOTS` / `FRAME_GROWTH_FACTOR` pair is relative, so a
+/// caller that already declares a large frame may still multiply it, and
+/// neither bounds the frame itself; a frame that spans a page costs a
+/// noticeable fraction of the smallest stacks a target runs on (a 16 KiB
+/// kernel task stack), which is worth paying for a mandatory
+/// (`always_inline`) request and not for a size-driven candidate.
+///
+/// Checked per splice rather than per round: a splice exposes the callee's
+/// own call sites, so the sites a round will absorb cannot be counted
+/// before it runs. The bound is on the slots the splice relocates -- the
+/// allocator's spill and save regions sit outside it and are not
+/// predictable here -- so a frame can still end slightly past a page.
+/// What keeps that safe is the probing prologue, not this bound.
+const CALLER_FRAME_ABS_SLOTS: i64 = 512;
+
 #[derive(Clone, Copy)]
 enum RegionKey {
     Pool,
@@ -121,6 +138,36 @@ struct CallerRegions {
     pool: Option<(i64, i64)>,
     /// One region per call-bearing off-cycle callee, keyed by ent_pc.
     per_callee: BTreeMap<usize, Option<(i64, i64)>>,
+}
+
+/// Which region record backs a splice of `callee` into the caller at
+/// `caller_pc`, or `None` when the site must append its own. A cycle
+/// member appends, and so does any splice whose caller or callee can come
+/// to execute stack-pointer asm (`sp_asm_reachers`): a stack switch lets a
+/// spliced activation stay live -- suspended mid-body on another stack --
+/// while the caller proceeds to further sites, so no two sites may share.
+/// An indirect call's target is not in the static call graph, so `cyclic`
+/// cannot rule the body out of a cycle back into this caller; treat it as
+/// a cycle member. Read by the splice and by the frame budget, which
+/// charges an appending callee once per site.
+fn region_key(
+    caller_pc: usize,
+    callee: &FunctionSsa,
+    cyclic: &BTreeSet<usize>,
+    sp_tainted: &BTreeSet<usize>,
+) -> Option<RegionKey> {
+    let sp = sp_tainted.contains(&caller_pc) || sp_tainted.contains(&callee.ent_pc);
+    let indirect = callee
+        .insts
+        .iter()
+        .any(|i| matches!(i, Inst::CallIndirect { .. }));
+    if sp || indirect || cyclic.contains(&callee.ent_pc) {
+        None
+    } else if !callee.insts.iter().any(|i| matches!(i, Inst::Call { .. })) {
+        Some(RegionKey::Pool)
+    } else {
+        Some(RegionKey::Callee(callee.ent_pc))
+    }
 }
 
 impl CallerRegions {
@@ -1329,21 +1376,7 @@ fn splice_multi_block(
     // the caller proceeds to further sites, so no two sites may share.
     let needed = callee.locals + param_cells.len() as i64;
     let region_base = if needed > 0 {
-        let sp = sp_tainted.contains(&original.ent_pc) || sp_tainted.contains(&callee.ent_pc);
-        // An indirect call's target is not in the static call graph, so
-        // `cyclic` cannot rule the body out of a cycle back into this
-        // caller; treat it as a cycle member and never share its region.
-        let indirect = callee
-            .insts
-            .iter()
-            .any(|i| matches!(i, Inst::CallIndirect { .. }));
-        let key = if sp || indirect || cyclic.contains(&callee.ent_pc) {
-            None
-        } else if !callee.insts.iter().any(|i| matches!(i, Inst::Call { .. })) {
-            Some(RegionKey::Pool)
-        } else {
-            Some(RegionKey::Callee(callee.ent_pc))
-        };
+        let key = region_key(original.ent_pc, callee, cyclic, sp_tainted);
         regions.place(key, needed, original.locals)
     } else {
         original.locals
@@ -2532,6 +2565,13 @@ fn inline_caller(
     // `JumpTable` (switch) or `AsmGoto` terminator on the way out. So any
     // caller shape is spliceable.
     let mut steps = 0usize;
+    // Callees this caller can no longer afford: every splice through this
+    // loop relocates the callee's slots into the caller's frame, and the
+    // absolute frame bound is enforced here rather than on the round's
+    // candidate set, because a splice exposes the callee's own call sites
+    // and a pre-round count cannot see them. A mandatory request is
+    // exempt; the probed prologue keeps the result safe.
+    let mut unaffordable: BTreeSet<usize> = BTreeSet::new();
     while steps < MAX_MULTI_BLOCK_SPLICE_STEPS {
         let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>, i64)> = None;
         'find: for (b_idx, block) in caller.blocks.iter().enumerate() {
@@ -2543,6 +2583,7 @@ fn inline_caller(
                     ..
                 } = &caller.insts[pc as usize]
                     && let Some(c) = callees.get(target_pc)
+                    && !unaffordable.contains(target_pc)
                     && (c.blocks.len() > 1 || needs_reloc_splice(c))
                     // Same argument-count guard as the single-block path;
                     // an aggregate-returning callee also needs the site's
@@ -2550,6 +2591,12 @@ fn inline_caller(
                     && args.len() >= c.n_params
                     && (c.ret_agg.is_none() || *ret_slot_local != 0)
                 {
+                    if !c.is_always_inline
+                        && caller.locals + c.locals + c.n_params as i64 > CALLER_FRAME_ABS_SLOTS
+                    {
+                        unaffordable.insert(*target_pc);
+                        continue;
+                    }
                     hit = Some((b_idx, pc, *c, args.clone(), *ret_slot_local));
                     break 'find;
                 }
@@ -2676,6 +2723,11 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             {
                 local.retain(|_, c| c.is_inline);
             }
+            // Once a caller's frame has grown past CALLER_FRAME_SLOTS and
+            // multiplied its pre-inline size, keep only a mandatory
+            // request. The absolute bound is enforced per splice (see
+            // `inline_caller_multi_block`), where the growth is known
+            // exactly.
             if caller.locals > CALLER_FRAME_SLOTS
                 && caller.locals > orig_locals[fi].saturating_mul(FRAME_GROWTH_FACTOR)
             {
@@ -3016,6 +3068,51 @@ mod tests {
                 leaf_calls,
                 usize::from(!always),
                 "always={always}: gate must block exactly the optional case"
+            );
+        }
+    }
+
+    /// The absolute frame bound: a callee whose relocated slots would
+    /// carry the caller's region past one page is not spliced, even though
+    /// the caller's frame has not grown relative to its pre-inline size,
+    /// so the relative gate never fires. A mandatory request is still
+    /// honoured.
+    #[test]
+    fn caller_frame_absolute_bound_blocks_optional_inlining() {
+        let abi = Target::LinuxX64.abi();
+        for always in [false, true] {
+            // The same shape the relative-gate test uses, whose 400-slot
+            // callee is spliced in the first round; here the callee's own
+            // slots alone cross the absolute bound, so the caller's
+            // starting frame is irrelevant and the relative gate cannot be
+            // what blocks it.
+            let mut callee = calling_callee(500, CALLER_FRAME_ABS_SLOTS + 1, 600);
+            callee.is_inline = always;
+            callee.is_always_inline = always;
+            let leaf = FunctionSsa {
+                ent_pc: 600,
+                insts: alloc::vec![Inst::Imm(7)],
+                inst_src: alloc::vec![(0, 0)],
+                f32_values: alloc::vec![false],
+                blocks: alloc::vec![Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator: Terminator::Return(0),
+                    exit_acc: 0,
+                }],
+                ..Default::default()
+            };
+            let mut funcs = alloc::vec![multi_call_caller(1, 2, 500, 1), callee, leaf];
+            run(&mut funcs, 32, abi);
+            let calls = funcs[0]
+                .insts
+                .iter()
+                .filter(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 500))
+                .count();
+            assert_eq!(
+                calls,
+                usize::from(!always),
+                "always={always}: absolute bound must block exactly the optional case"
             );
         }
     }

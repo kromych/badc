@@ -46,6 +46,8 @@ mod pointer_tracking;
 mod programs;
 #[cfg(feature = "full")]
 mod reloc_golden;
+#[cfg(feature = "full")]
+mod stack_guard;
 mod types;
 mod vla;
 

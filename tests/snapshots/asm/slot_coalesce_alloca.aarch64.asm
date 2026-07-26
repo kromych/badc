@@ -21,6 +21,12 @@ Disassembly of section .text:
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x3, sp
                	sub	x3, x3, x17
+               	lsr	x17, x17, #12
+               	cbz	x17, <addr>
+               	sub	sp, sp, #0x1, lsl #12   // =0x1000
+               	str	xzr, [sp]
+               	subs	x17, x17, #0x1
+               	b.ne	<addr>
                	mov	sp, x3
                	add	x0, x3, #0x0
                	mov	x1, #0x74               // =116

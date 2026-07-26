@@ -22,6 +22,13 @@ Disassembly of section .text:
                	andq	$-0x10, %r11
                	movq	%rsp, %rdx
                	subq	%r11, %rdx
+               	shrq	$0xc, %r11
+               	testq	%r11, %r11
+               	je	<addr>
+               	subq	$0x1000, %rsp           # imm = 0x1000
+               	movq	$0x0, (%rsp)
+               	subq	$0x1, %r11
+               	jne	<addr>
                	movq	%rdx, %rsp
                	xorq	%rax, %rax
                	jmp	<addr>

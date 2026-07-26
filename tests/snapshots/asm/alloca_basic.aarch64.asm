@@ -21,6 +21,12 @@ Disassembly of section .text:
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x20, sp
                	sub	x20, x20, x17
+               	lsr	x17, x17, #12
+               	cbz	x17, <addr>
+               	sub	sp, sp, #0x1, lsl #12   // =0x1000
+               	str	xzr, [sp]
+               	subs	x17, x17, #0x1
+               	b.ne	<addr>
                	mov	sp, x20
                	mov	x1, #0x55               // =85
                	mov	x0, x20
@@ -63,6 +69,12 @@ Disassembly of section .text:
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x2, sp
                	sub	x2, x2, x17
+               	lsr	x17, x17, #12
+               	cbz	x17, <addr>
+               	sub	sp, sp, #0x1, lsl #12   // =0x1000
+               	str	xzr, [sp]
+               	subs	x17, x17, #0x1
+               	b.ne	<addr>
                	mov	sp, x2
                	mov	x0, #0x0                // =0
                	mov	x3, x0
@@ -101,11 +113,23 @@ Disassembly of section .text:
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x20, sp
                	sub	x20, x20, x17
+               	lsr	x17, x17, #12
+               	cbz	x17, <addr>
+               	sub	sp, sp, #0x1, lsl #12   // =0x1000
+               	str	xzr, [sp]
+               	subs	x17, x17, #0x1
+               	b.ne	<addr>
                	mov	sp, x20
                	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x21, sp
                	sub	x21, x21, x17
+               	lsr	x17, x17, #12
+               	cbz	x17, <addr>
+               	sub	sp, sp, #0x1, lsl #12   // =0x1000
+               	str	xzr, [sp]
+               	subs	x17, x17, #0x1
+               	b.ne	<addr>
                	mov	sp, x21
                	cmp	x20, x21
                	b.ne	<addr>
@@ -191,6 +215,12 @@ Disassembly of section .text:
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x3, sp
                	sub	x3, x3, x17
+               	lsr	x17, x17, #12
+               	cbz	x17, <addr>
+               	sub	sp, sp, #0x1, lsl #12   // =0x1000
+               	str	xzr, [sp]
+               	subs	x17, x17, #0x1
+               	b.ne	<addr>
                	mov	sp, x3
                	str	x1, [x3]
                	add	x2, x2, x1
@@ -217,6 +247,12 @@ Disassembly of section .text:
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x21, sp
                	sub	x21, x21, x17
+               	lsr	x17, x17, #12
+               	cbz	x17, <addr>
+               	sub	sp, sp, #0x1, lsl #12   // =0x1000
+               	str	xzr, [sp]
+               	subs	x17, x17, #0x1
+               	b.ne	<addr>
                	mov	sp, x21
                	mov	x0, x21
                	mov	x1, x20

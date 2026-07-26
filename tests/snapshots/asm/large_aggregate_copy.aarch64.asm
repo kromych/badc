@@ -14,7 +14,11 @@ Disassembly of section .text:
 <check>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x8, lsl #12   // =0x8000
+               	mov	x16, #0x8               // =8
+               	sub	sp, sp, #0x1, lsl #12   // =0x1000
+               	str	xzr, [sp]
+               	subs	x16, x16, #0x1
+               	b.ne	<addr>
                	sub	sp, sp, #0x9a0
                	sub	x0, x29, #0x2, lsl #12  // =0x2000
                	sub	x0, x0, #0x328

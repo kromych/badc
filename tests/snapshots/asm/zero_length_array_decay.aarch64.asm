@@ -18,11 +18,15 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	cmp	x0, x0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	cmp	x1, x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	cmp	x0, x0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	cmp	x1, x1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
@@ -36,16 +40,25 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret
-               	cmp	x0, x0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	cmp	x1, x1
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	cmp	x0, x1
+               	b.ne	<addr>
+               	mov	x0, #0x8                // =8
+               	ret
+               	mov	x0, #0x0                // =0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
                	cmp	x0, #0x5a
                	b.eq	<addr>
-               	mov	x0, #0x8                // =8
+               	mov	x0, #0xa                // =10
                	ret
                	mov	x0, #0x0                // =0
                	ret

@@ -16,6 +16,11 @@ static struct e s_zero[0];
 static int i_zero[0];
 static int guard = 0x5a;
 
+// A named-section object right after a zero-length array: two objects
+// must not share a start offset, or the reference to the array resolves
+// into the section the other one was carved into.
+__attribute__((section(".t.zl"), used)) static const char tagged[] = "T";
+
 static const void *pass(const void *p) { return p; }
 
 int main(void) {
@@ -43,8 +48,14 @@ int main(void) {
     if (pass(i_brace) != (const void *)&i_brace) {
         return 7;
     }
-    if (guard != 0x5a) {
+    if ((const void *)s_brace == (const void *)tagged) {
         return 8;
+    }
+    if (tagged[0] != 'T' || tagged[1] != 0) {
+        return 9;
+    }
+    if (guard != 0x5a) {
+        return 10;
     }
     return 0;
 }

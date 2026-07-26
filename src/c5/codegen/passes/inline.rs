@@ -83,6 +83,18 @@ const CALLER_FRAME_SLOTS: i64 = 256;
 /// Relative growth bound for the caller frame gate.
 const FRAME_GROWTH_FACTOR: i64 = 4;
 
+/// Local-slot count (one 4 KiB page, at 8 bytes per slot) past which
+/// optional inlining into a caller stops regardless of how the caller's
+/// frame compares to its pre-inline size. The
+/// `CALLER_FRAME_SLOTS` / `FRAME_GROWTH_FACTOR` pair is relative, so a
+/// caller that already declares a large frame may still multiply it; a
+/// frame that spans a page costs a noticeable fraction of the smallest
+/// stacks a target runs on (a 16 KiB kernel task stack), which is worth
+/// paying for a mandatory (`always_inline`) request and not for a
+/// size-driven candidate. Absolute rather than relative so it bounds the
+/// frame itself.
+const CALLER_FRAME_ABS_SLOTS: i64 = 512;
+
 #[derive(Clone, Copy)]
 enum RegionKey {
     Pool,
@@ -2676,10 +2688,22 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             {
                 local.retain(|_, c| c.is_inline);
             }
+            // Two frame gates, both honouring a mandatory request. The
+            // relative one stops a caller from multiplying a frame that
+            // is already past CALLER_FRAME_SLOTS. The absolute one caps
+            // the frame itself: a candidate is admitted only while its
+            // own slots (plus the parameter cells the splice
+            // materializes) still fit under CALLER_FRAME_ABS_SLOTS, so
+            // one fixpoint round cannot carry the frame past the bound
+            // by more than the largest admitted callee, and a caller
+            // already past it takes nothing optional at all.
             if caller.locals > CALLER_FRAME_SLOTS
                 && caller.locals > orig_locals[fi].saturating_mul(FRAME_GROWTH_FACTOR)
             {
                 local.retain(|_, c| c.is_always_inline);
+            } else {
+                let budget = CALLER_FRAME_ABS_SLOTS - caller.locals;
+                local.retain(|_, c| c.is_always_inline || c.locals + (c.n_params as i64) <= budget);
             }
             if local.is_empty() {
                 continue;
@@ -3016,6 +3040,50 @@ mod tests {
                 leaf_calls,
                 usize::from(!always),
                 "always={always}: gate must block exactly the optional case"
+            );
+        }
+    }
+
+    /// The absolute frame bound: a caller whose declared frame already
+    /// spans a page takes no optional candidate, even though its frame
+    /// has not grown relative to its pre-inline size, so the relative
+    /// gate never fires. A mandatory request is still honoured.
+    #[test]
+    fn caller_frame_absolute_bound_blocks_optional_inlining() {
+        let abi = Target::LinuxX64.abi();
+        for always in [false, true] {
+            let leaf = FunctionSsa {
+                ent_pc: 600,
+                is_inline: always,
+                is_always_inline: always,
+                insts: alloc::vec![Inst::Imm(7)],
+                inst_src: alloc::vec![(0, 0)],
+                f32_values: alloc::vec![false],
+                blocks: alloc::vec![Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator: Terminator::Return(0),
+                    exit_acc: 0,
+                }],
+                ..Default::default()
+            };
+            // The caller declares CALLER_FRAME_ABS_SLOTS + 1 slots up
+            // front, so `locals > FRAME_GROWTH_FACTOR * orig` is false at
+            // every round and only the absolute bound can block.
+            let mut funcs = alloc::vec![
+                multi_call_caller(1, CALLER_FRAME_ABS_SLOTS + 1, 600, 1),
+                leaf,
+            ];
+            run(&mut funcs, 32, abi);
+            let leaf_calls = funcs[0]
+                .insts
+                .iter()
+                .filter(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 600))
+                .count();
+            assert_eq!(
+                leaf_calls,
+                usize::from(!always),
+                "always={always}: absolute bound must block exactly the optional case"
             );
         }
     }

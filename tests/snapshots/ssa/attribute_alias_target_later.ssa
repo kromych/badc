@@ -82,17 +82,14 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Return(v41)   (exit_acc=v41)
   block 6  start_pc=0
     v42  ImmData(16)                                      -> x0
-    v43  Load { addr=v42, disp=0, kind=I32 }              -> x0
-    v44  BinopI { op=ne, lhs=v43, rhs_imm=41 }            -> x0
-    terminator Bz { cond=v44, target=b8, fall=b7 }   (exit_acc=v44)
+    v43  Imm(41)                                          -> x0
+    v44  Imm(0)                                           -> x0
+    terminator Jmp(b7)   (exit_acc=v44)
   block 7  start_pc=0
-    v45  Imm(4)                                           -> x0
-    terminator Return(v45)   (exit_acc=v45)
-  block 8  start_pc=0
     v46  Imm(5)                                           -> x0
     v47  Imm(0)                                           -> x0
-    terminator Jmp(b9)   (exit_acc=v47)
-  block 9  start_pc=0
+    terminator Jmp(b8)   (exit_acc=v47)
+  block 8  start_pc=0
     v49  Imm(0)                                           -> x0
     terminator Return(v49)   (exit_acc=v49)
 ; --- SSA dump (ok=true) ent_pc=0 ---

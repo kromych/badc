@@ -141,6 +141,111 @@ fn struct_returning_always_inline_folds_parameter_guards() {
 }
 
 #[test]
+fn select_of_two_constants_folds_its_guard() {
+    // A value produced by a runtime `?:` between two constants keeps a
+    // guard on it live unless the guard is evaluated per incoming: the
+    // comparison `> 3ul` is false for both 1 and 0, and the mask selects
+    // neither the bit the two arms differ in nor any bit either sets, so
+    // the build-time asserts are unreachable whichever arm runs -- also
+    // through a nested `?:`, whose value set is the union of both levels.
+    // The undefined `bug` would fail the JIT load if any survived.
+    let src = "
+        extern void bug(void);
+        #define BUILD_BUG_ON(c) do { if (!(!(c))) bug(); } while (0)
+        static __attribute__((always_inline)) unsigned long
+        encode(unsigned long page, unsigned long flags) {
+            BUILD_BUG_ON(flags > 3ul);
+            return flags | page;
+        }
+        static int delay_rmap;
+        unsigned long add_page(unsigned long page);
+        unsigned long add_page(unsigned long page) {
+            return encode(page, delay_rmap ? 1ul : 0ul);
+        }
+        static unsigned long personality;
+        #define DATA_FLAGS (0x1ul | 0x2ul | ((personality & 0x400000ul) ? 0x4ul : 0ul) \
+                            | 0x10ul | 0x20ul | 0x40ul)
+        #define STACK_FLAGS (0x100ul | DATA_FLAGS | 0x100000ul)
+        static unsigned long stack_flags(void) {
+            BUILD_BUG_ON(STACK_FLAGS & (0x10000ul | 0x8000ul));
+            return STACK_FLAGS;
+        }
+        static int tier;
+        static unsigned long tier_bits(void) {
+            unsigned long v = tier ? (delay_rmap ? 1ul : 2ul) : 3ul;
+            BUILD_BUG_ON(v > 3ul);
+            BUILD_BUG_ON(v == 0ul);
+            return v;
+        }
+        int main(void) {
+            delay_rmap = 0;
+            if (add_page(0x1000ul) != 0x1000ul) return 1;
+            delay_rmap = 1;
+            if (add_page(0x1000ul) != 0x1001ul) return 2;
+            personality = 0ul;
+            if (stack_flags() != 0x100173ul) return 3;
+            personality = 0x400000ul;
+            if (stack_flags() != 0x100177ul) return 4;
+            tier = 1;
+            if (tier_bits() != 1ul) return 5;
+            delay_rmap = 0;
+            if (tier_bits() != 2ul) return 7;
+            tier = 0;
+            if (tier_bits() != 3ul) return 8;
+            return 6;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-select-guard"]), 6);
+}
+
+#[test]
+fn const_scalar_load_folds_to_its_initializer() {
+    // C99 6.7.3p5: modifying an object defined with a const-qualified
+    // type is undefined, so a file-scope `const` scalar's load folds to
+    // its initializer and a guard on it resolves -- including the
+    // zero-initialized flag, whose object the data compaction moves to
+    // the zero-filled bss region, and a block-scope static, whose object
+    // model is the same. The qualifier must reach the object:
+    // `const char *names[2]` has writable elements, so `names[0]` keeps
+    // its load and observes the store. The undefined `bug` would fail
+    // the JIT load if any guard survived.
+    let src = "
+        extern void bug(void);
+        #define BUILD_BUG_ON(c) do { if (!(!(c))) bug(); } while (0)
+        static const _Bool is_conditional = 1;
+        static const _Bool is_unconditional = 0;
+        static const int depth = 3;
+        static const unsigned char kind = 200;
+        static const long mask = -4;
+        static int guard(void) {
+            BUILD_BUG_ON(!is_conditional);
+            BUILD_BUG_ON(is_unconditional);
+            BUILD_BUG_ON(depth != 3);
+            BUILD_BUG_ON(kind != 200);
+            BUILD_BUG_ON(mask >= 0);
+            return depth;
+        }
+        static int block_guard(void) {
+            static const _Bool outer = 1;
+            { static const int inner = 5; BUILD_BUG_ON(inner != 5); }
+            BUILD_BUG_ON(!outer);
+            return 5;
+        }
+        static const char *names[2] = {(const char *)1, (const char *)2};
+        static long first(void) { return (long)names[0]; }
+        int main(void) {
+            if (guard() != 3) return 1;
+            if (block_guard() != 5) return 2;
+            if (first() != 1) return 3;
+            names[0] = (const char *)99;
+            if (first() != 99) return 4;
+            return 8;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-const-scalar"]), 8);
+}
+
+#[test]
 fn return_zero() {
     assert_eq!(jit_exit("int main() { return 0; }", &["jit-ret0"]), 0);
 }

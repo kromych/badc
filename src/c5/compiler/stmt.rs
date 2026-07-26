@@ -654,6 +654,11 @@ impl Compiler {
                 self.symbols[loc_idx].is_const_qualified = self.pending.base_is_const
                     && array_size == 0
                     && super::types::is_integer_scalar_ty(ty);
+                // As at file scope: a const-qualified object with static
+                // storage holds its initializer for the whole execution,
+                // unless the qualifier only reaches a pointee.
+                self.symbols[loc_idx].storage_is_const =
+                    self.pending.base_is_const && !super::types::is_pointer_ty(ty);
                 self.allocate_static_local(loc_idx, ty, array_size)?;
                 self.push_block_static_record(loc_idx, ty);
                 self.ast_emit_static_local_decl(loc_idx as u32);

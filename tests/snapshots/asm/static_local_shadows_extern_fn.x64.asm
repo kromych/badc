@@ -25,22 +25,10 @@ Disassembly of section .text:
                	cmpq	$0x1, %rdi
                	je	<addr>
                	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movzbq	(%rax), %rcx
-               	movzbq	0x1(%rax), %rax
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movl	$0x2a, %eax
                	jmp	<addr>
 
 <main>:
-               	leaq	<rip>, %rax
-               	movzbq	(%rax), %rcx
-               	movzbq	0x1(%rax), %rax
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	movslq	%eax, %rax
+               	movl	$0x2a, %eax
+               	movl	$0x2a, %eax
                	retq

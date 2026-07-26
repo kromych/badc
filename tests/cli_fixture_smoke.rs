@@ -70,6 +70,8 @@ const COMPILE_SKIPLIST: &[&str] = &[
     "dead_arm_short_circuit_undefined.c",
     "always_inline_indirect_call_guard.c",
     "dead_arm_config_predicate_undefined.c",
+    "select_operand_guard_folds.c",
+    "const_scalar_load_folds.c",
 ];
 
 /// Fixtures whose body carries inline asm specific to one ISA. The
@@ -268,6 +270,8 @@ fn dead_branch_calls_are_eliminated_under_optimize() {
         "dead_arm_short_circuit_undefined.c",
         "always_inline_indirect_call_guard.c",
         "dead_arm_config_predicate_undefined.c",
+        "select_operand_guard_folds.c",
+        "const_scalar_load_folds.c",
     ] {
         let src = root.join(name);
         let stem = name.trim_end_matches(".c");

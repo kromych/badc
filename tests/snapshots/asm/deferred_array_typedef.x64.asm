@@ -57,11 +57,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	0xc(%rax), %rax
-               	cmpq	$0x63, %rax
-               	setne	%al
-               	movzbq	%al, %rax
+               	xorq	%rax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x7, %eax

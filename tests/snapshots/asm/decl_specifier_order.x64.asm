@@ -18,20 +18,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rax
-               	movl	(%rax), %eax
-               	xorq	$0x5, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x9, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	retq
-               	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	leaq	<rip>, %rax
                	movl	(%rax), %eax

@@ -11,25 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <check_const>:
-               	leaq	<rip>, %rcx
-               	movzbq	(%rcx), %rax
-               	xorq	$0x58, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movzbq	0xf(%rcx), %rax
-               	xorq	$0x42, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	retq
+               	xorq	%rax, %rax
                	xorq	%rax, %rax
                	xorq	%rax, %rax
                	xorq	%rax, %rax
@@ -55,7 +37,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
                	jmp	<addr>
 
 <check_runtime>:

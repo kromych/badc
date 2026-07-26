@@ -31,9 +31,7 @@ Disassembly of section .text:
                	cmp	x1, #0x7
                	cset	x1, ne
                	cbnz	x1, <addr>
-               	ldrsw	x0, [x0, #0x8]
-               	cmp	x0, #0x9
-               	cset	x1, ne
+               	mov	x1, #0x0                // =0
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
                	ret

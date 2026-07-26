@@ -673,6 +673,35 @@ pub(crate) struct AsmBlock {
     pub volatile: bool,
 }
 
+impl AsmBlock {
+    /// True when the template names the stack pointer (`rsp` / `esp` /
+    /// `sp` / `wsp` as a token). Such asm can capture or switch the stack
+    /// -- the setjmp / longjmp / stack-switch idioms -- so an activation
+    /// of the surrounding frame may stay live while later code in the
+    /// same frame runs, and may be resumed afterwards. Lifetimes are then
+    /// not bounded by the CFG or the C block structure, and frame-storage
+    /// sharing decisions must exclude the function.
+    pub fn references_sp(&self) -> bool {
+        let is_word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+        let t = &self.template;
+        let mut i = 0;
+        while i < t.len() {
+            if !is_word(t[i]) {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i < t.len() && is_word(t[i]) {
+                i += 1;
+            }
+            if matches!(&t[start..i], b"sp" | b"wsp" | b"rsp" | b"esp") {
+                return true;
+            }
+        }
+        false
+    }
+}
+
 /// A basic block's terminator. Drives the block's control-flow
 /// successor edges.
 #[derive(Debug, Clone, Copy)]
@@ -987,6 +1016,52 @@ pub(crate) struct FunctionSsa {
     /// saw (the slot did not exist then), so the re-run promotes it. False
     /// for every function the inliner left unchanged.
     pub did_inline: bool,
+}
+
+impl FunctionSsa {
+    /// True when any inline-asm template in the body names the stack
+    /// pointer (`AsmBlock::references_sp`).
+    pub fn has_sp_asm(&self) -> bool {
+        self.insts.iter().any(|i| match i {
+            Inst::InlineAsm { asm, .. } => asm.references_sp(),
+            _ => false,
+        })
+    }
+}
+
+/// Functions that contain stack-pointer asm or reach one through the
+/// unit's direct `Inst::Call` graph, by ent_pc. A caller of such a
+/// function may acquire the asm by inlining, and its frame may then host
+/// an activation that stays live across CFG-sequential code (a
+/// stack-switch parks it, a saved context resumes it), so frame regions
+/// in every such function must stay per-site. Inlining only moves bodies
+/// along existing call edges, so membership computed on pre-inline
+/// bodies is stable for a whole inline run.
+pub(crate) fn sp_asm_reachers(funcs: &[FunctionSsa]) -> alloc::collections::BTreeSet<usize> {
+    let idx_of: alloc::collections::BTreeMap<usize, usize> =
+        funcs.iter().enumerate().map(|(i, f)| (f.ent_pc, i)).collect();
+    let n = funcs.len();
+    let mut preds: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
+    for (v, f) in funcs.iter().enumerate() {
+        for inst in &f.insts {
+            if let Inst::Call { target_pc, .. } = inst
+                && let Some(&w) = idx_of.get(target_pc)
+            {
+                preds[w].push(v);
+            }
+        }
+    }
+    let mut tainted: Vec<bool> = funcs.iter().map(|f| f.has_sp_asm()).collect();
+    let mut work: Vec<usize> = (0..n).filter(|&v| tainted[v]).collect();
+    while let Some(v) = work.pop() {
+        for &p in &preds[v] {
+            if !tainted[p] {
+                tainted[p] = true;
+                work.push(p);
+            }
+        }
+    }
+    (0..n).filter(|&v| tainted[v]).map(|v| funcs[v].ent_pc).collect()
 }
 
 /// External functions that may return twice into the caller's frame:

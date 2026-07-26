@@ -68,6 +68,13 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
     if f.has_returns_twice_call {
         return BTreeMap::new();
     }
+    // Stack-pointer asm (setjmp / longjmp / stack-switch idioms) creates
+    // resume points and parked activations the CFG does not model, so
+    // liveness under-approximates slot lifetime the same way; every slot
+    // stays dedicated.
+    if f.has_sp_asm() {
+        return BTreeMap::new();
+    }
     // `synthetic_base > 0` marks a walker-built function with declared
     // locals; hand-built SSA (sys-trampolines, CRT entry) carries 0 and is
     // left alone -- its slot model is not the walker's.
@@ -595,6 +602,49 @@ mod tests {
         let mut f = build();
         assert!(coalesce(&mut f, false).is_empty());
         assert_eq!(f.locals, 10);
+    }
+
+    /// Stack-pointer asm pins every slot: resume points and parked
+    /// activations make CFG liveness under-approximate lifetime, so the
+    /// function is left untouched in both modes.
+    #[test]
+    fn sp_asm_function_not_coalesced() {
+        use super::super::super::ir::AsmBlock;
+        let build = || {
+            one_block(
+                alloc::vec![
+                    Inst::InlineAsm {
+                        asm: alloc::boxed::Box::new(AsmBlock {
+                            template: b"mov %%rsp, (%%rdx)".to_vec(),
+                            operands: alloc::vec![],
+                            clobber_regs: 0,
+                            clobber_fp_regs: 0,
+                            clobber_memory: true,
+                            volatile: true,
+                        }),
+                        args: alloc::vec![],
+                    },
+                    Inst::LoadLocal {
+                        off: -9,
+                        kind: LoadKind::I64,
+                        volatile: false,
+                    },
+                    Inst::StoreLocal {
+                        off: -8,
+                        value: 1,
+                        kind: StoreKind::I64,
+                        volatile: false,
+                    },
+                ],
+                1,
+                10,
+            )
+        };
+        for compact in [false, true] {
+            let mut f = build();
+            assert!(coalesce(&mut f, compact).is_empty());
+            assert_eq!(f.locals, 10);
+        }
     }
 
     /// An access left in the tape by block deletion (covered by no block)

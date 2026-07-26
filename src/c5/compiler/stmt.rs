@@ -473,6 +473,7 @@ impl Compiler {
         self.pending.attr_used = false;
         self.pending.attr_section = None;
         self.pending.attr_weak = false;
+        self.pending.attr_hidden = false;
         while self.lex.tk == Token::Extern
             || self.lex.tk == Token::Static
             || self.lex.tk == Token::ThreadLocal
@@ -634,6 +635,15 @@ impl Compiler {
                         self.symbols[loc_idx].is_extern_decl = true;
                         self.symbols[loc_idx].linkage = crate::c5::symbol::Linkage::External;
                     }
+                }
+                // Carry `weak` / `visibility("hidden")` onto the symbol. The
+                // block shadow snapshot does not save these, so they persist
+                // to the object symbol table (the `symbol_get` idiom is a
+                // nested-block extern redeclaring a file-scope name). The
+                // shadowing case restores a bound local, which never reaches
+                // the symbol table, so skip it.
+                if !extern_shadows_binding {
+                    self.apply_symbol_attributes(loc_idx);
                 }
             } else if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;

@@ -13,8 +13,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	andq	$-0x10, %rsp
                	subq	$0x10, %rsp
+               	andq	$-0x10, %rsp
                	xorq	%rax, %rax
                	leaq	(%rbp), %rsp
                	popq	%rbp

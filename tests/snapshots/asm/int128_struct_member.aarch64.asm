@@ -62,9 +62,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x2a0
                	stp	x20, x21, [sp]
+               	sub	sp, sp, #0xd0
                	mov	x16, sp
                	and	sp, x16, #0xfffffffffffffff0
-               	sub	sp, sp, #0xd0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x2, [x0]

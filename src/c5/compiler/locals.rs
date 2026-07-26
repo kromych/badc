@@ -132,7 +132,7 @@ impl Compiler {
     /// C11 6.7.5 alignment of a block-scope declarator, shared by the
     /// function-body-top and inside-block declaration paths. A static
     /// local's `.data` slot honors the request like a file-scope object; an
-    /// automatic object lives in 8-byte frame slots, so any wider requirement
+    /// automatic object lives in 8-byte frame slots, so a wider requirement
     /// goes to the region the prologue realigns sp down to. Consumes
     /// `pending.attr_align` either way, so a request cannot leak onto the
     /// next declarator.
@@ -157,7 +157,17 @@ impl Compiler {
         } else {
             core::cmp::max(req_align.max(0), self.align_of_type(ty) as i64)
         };
-        let realign_auto = auto_align > 8;
+        // A declarator's own request is placed exactly, from 16 up; so is a
+        // type whose alignment no frame slot can offer under any layout.
+        // A type alignment of exactly 16 with no request on the declarator
+        // (`__int128`, an `aligned(16)` aggregate) stays on the 8-byte slots:
+        // the region is reserved by moving sp, which makes the frame dynamic-sp
+        // and cannot coexist with `alloca` / a VLA, and that would cost every
+        // such object a realigning frame where the host ABI's 16-byte entry
+        // alignment already suffices.
+        // TODO: place the region at a static frame offset when 16 is enough,
+        // then this case joins the others.
+        let realign_auto = req_align > 8 || auto_align > 16;
         if auto_align > super::MAX_FRAME_ALIGN {
             return Err(self.compile_err(format!(
                 "requested alignment {auto_align} exceeds the maximum for an \

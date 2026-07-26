@@ -14,8 +14,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	andq	$-0x10, %rsp
                	subq	$0x20, %rsp
+               	andq	$-0x10, %rsp
                	leaq	<rip>, %rax
                	leaq	(%rsp), %rcx
                	pushq	%rdx
@@ -57,8 +57,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	andq	$-0x10, %rsp
                	subq	$0x40, %rsp
+               	andq	$-0x10, %rsp
                	callq	<addr>
                	movslq	%eax, %rax
                	leaq	(%rbp), %rsp

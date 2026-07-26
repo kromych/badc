@@ -509,9 +509,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x90
                	stp	x20, x21, [sp]
+               	sub	sp, sp, #0x20
                	mov	x16, sp
                	and	sp, x16, #0xfffffffffffffff0
-               	sub	sp, sp, #0x20
                	mov	x8, x0
                	mov	x6, x2
                	mov	x9, x1
@@ -727,9 +727,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x50
                	str	x20, [sp]
+               	sub	sp, sp, #0x10
                	mov	x16, sp
                	and	sp, x16, #0xfffffffffffffff0
-               	sub	sp, sp, #0x10
                	mov	x12, x0
                	mov	x7, x2
                	mov	x13, x1

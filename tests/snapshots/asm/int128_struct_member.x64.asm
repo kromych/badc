@@ -65,8 +65,8 @@ Disassembly of section .text:
                	subq	$0x2a0, %rsp            # imm = 0x2A0
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	andq	$-0x10, %rsp
                	subq	$0xd0, %rsp
+               	andq	$-0x10, %rsp
                	leaq	<rip>, %rax
                	movq	(%rax), %rdx
                	xorq	%rcx, %rcx

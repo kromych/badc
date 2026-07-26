@@ -108,9 +108,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x270
                	stp	x20, x21, [sp]
                	stp	x22, x23, [sp, #0x10]
+               	sub	sp, sp, #0x90
                	mov	x16, sp
                	and	sp, x16, #0xfffffffffffffff0
-               	sub	sp, sp, #0x90
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x2, [x0]

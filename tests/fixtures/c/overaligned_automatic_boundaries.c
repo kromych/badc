@@ -34,18 +34,18 @@ static int alignas16(void) {
     return aligned_to(q, 16) && q[0] == 7 && q[3] == 8 && lead == 5 && tail == 6;
 }
 
-/* A type whose alignment is 16 with no attribute on the declarator. */
-struct __attribute__((aligned(16))) pair16 {
+/* A type that raises the requirement with no attribute on the declarator. */
+struct __attribute__((aligned(32))) pair32 {
     int a;
     int b;
 };
 
-static int type16(void) {
-    struct pair16 p;
+static int type32(void) {
+    struct pair32 p;
     sink(&p);
     p.a = 9;
     p.b = 10;
-    return aligned_to(&p, 16) && p.a == 9 && p.b == 10;
+    return aligned_to(&p, 32) && p.a == 9 && p.b == 10;
 }
 
 /* Several boundaries in one frame: the region packs widest first. */
@@ -97,7 +97,7 @@ int main(void) {
         return 1;
     if (!alignas16())
         return 2;
-    if (!type16())
+    if (!type32())
         return 3;
     if (!mixed())
         return 4;

@@ -44,13 +44,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x7, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	leaq	<rip>, %rax
                	addq	$0x4, %rax
                	leaq	<rip>, %rcx
                	movsbq	(%rax), %rdx
@@ -240,5 +233,4 @@ Disassembly of section .text:
                	addq	$0x130, %rsp            # imm = 0x130
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	jmp	<addr>

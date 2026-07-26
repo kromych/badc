@@ -690,16 +690,17 @@ impl Compiler {
                 self.symbols[id_idx].is_const_qualified = self.pending.base_is_const
                     && array_size == 0
                     && super::types::is_integer_scalar_ty(ty);
-                // A `const`-element array (`static const T x[]`, sized or
-                // deferred: `array_size` is `> 0` or `-1` here, the
-                // initializer fixes a deferred count). Its elements and
-                // their members cannot be written (C99 6.7.3), so a
-                // relocation the initializer planted in the storage holds
-                // for the object's lifetime. Scalars (`array_size == 0`)
-                // stay excluded: a `const char *p` has a const pointee but
-                // a writable object, so its stored address is not fixed.
+                // The declared object's own storage is const-qualified, so
+                // C99 6.7.3p5 makes any modification of it undefined and the
+                // initializer's bytes are its value for the whole execution.
+                // That holds for a scalar (`static const T x = k`), an
+                // aggregate, and an array (sized or deferred). It does not
+                // hold when the declarator adds pointer indirection: in
+                // `const char *p` and `const char *t[2]` the qualifier
+                // reaches the pointee, and `p` / `t[0]` are writable
+                // objects.
                 self.symbols[id_idx].storage_is_const =
-                    self.pending.base_is_const && array_size != 0;
+                    self.pending.base_is_const && !super::types::is_pointer_ty(ty);
                 if fn_ptr_indirection > 0 {
                     self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
                 }

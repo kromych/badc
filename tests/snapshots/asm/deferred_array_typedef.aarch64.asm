@@ -59,11 +59,7 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0xc]
-               	cmp	x0, #0x63
-               	cset	x0, ne
+               	mov	x0, #0x0                // =0
                	cbz	x0, <addr>
                	mov	x0, #0x7                // =7
                	ret

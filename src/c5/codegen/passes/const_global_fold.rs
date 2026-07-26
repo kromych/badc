@@ -1,19 +1,20 @@
-//! Fold a null comparison of a const global's relocated pointer field.
+//! Folds over the storage of a file-scope `const` object.
 //!
-//! A `const`-element file-scope array whose initializer stores the address
-//! of another object carries a data relocation at that member: the member
-//! holds a runtime address, which is never null. Guards such as qemu's
-//! `device_class_set_props` read such a member and call an
-//! `__attribute__((error))` build-time-unreachable helper when it is null,
-//! expecting the optimizer to prove it non-null and drop the call.
+//! C99 6.7.3p5 makes modifying an object defined with a const-qualified
+//! type undefined, so such an object holds what its initializer put there
+//! for the whole execution. Two folds follow, both `-O` only (a `const`
+//! object is not a constant expression, C99 6.6):
 //!
-//! This pass performs that proof: `load(member) == 0` becomes `0` and
-//! `load(member) != 0` becomes `1` when `member` is a relocated pointer
-//! inside a const, defined, initialized array, so `constfold_branch` then
-//! deletes the unreachable arm. It leaves the load in place and rewrites
-//! only the comparison, so any other use of the loaded value is unaffected.
-//! A `const` array's elements cannot be modified (C99 6.7.3), so the
-//! relocated address the initializer stored is what the member holds.
+//!   * [`fold_loads`] replaces a non-volatile integer load from the
+//!     object's image with the initializer's value.
+//!   * [`run`] replaces `load(member) == 0` with `0` and `!= 0` with `1`
+//!     when `member` carries a data relocation: the member holds a
+//!     link-time address, which is never null. The load stays, so any
+//!     other use of the loaded value is unaffected.
+//!
+//! Both feed `constfold_branch`, which then deletes the arm a guard on
+//! the value makes unreachable -- the shape a build-time assertion, or a
+//! call to an `__attribute__((error))` helper, is compiled into.
 
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
@@ -23,10 +24,10 @@ use crate::c5::program::Program;
 use crate::c5::token::Token;
 
 /// Const-data view for folding loads of `const` objects: the `[lo, hi)`
-/// byte ranges of const, defined, initialized file-scope arrays whose
-/// image already holds their value, the data-segment offsets a
-/// relocation patches (unknown until link, so never folded), and the
-/// data image itself.
+/// byte ranges of const-qualified, defined, initialized file-scope
+/// objects -- scalar, aggregate or array -- whose image already holds
+/// their value, the data-segment offsets a relocation patches (unknown
+/// until link, so never folded), and the data image itself.
 pub(crate) struct ConstData<'a> {
     intervals: Vec<(i64, i64)>,
     reloc_offsets: Vec<i64>,
@@ -76,9 +77,13 @@ impl<'a> ConstData<'a> {
         }
     }
 
-    /// The image bytes of `[off, off + width)` when the whole read sits
-    /// inside one const interval and overlaps no relocation slot.
-    fn read(&self, off: i64, width: i64) -> Option<&[u8]> {
+    /// The value of `[off, off + width)`, zero-extended to eight bytes,
+    /// when the whole read sits inside one const interval and overlaps no
+    /// relocation slot. An offset at or past the image end belongs to a
+    /// wholly-zero, relocation-free object the data compaction moved to
+    /// the `.bss` region, which every writer maps to a zero-filled vaddr
+    /// range; its value is zero.
+    fn read(&self, off: i64, width: i64) -> Option<[u8; 8]> {
         if !self
             .intervals
             .iter()
@@ -92,7 +97,13 @@ impl<'a> ConstData<'a> {
         if self.reloc_offsets.get(i).is_some_and(|&r| r < off + width) {
             return None;
         }
-        self.data.get(off as usize..(off + width) as usize)
+        let mut raw = [0u8; 8];
+        if off >= self.data.len() as i64 {
+            return Some(raw);
+        }
+        let bytes = self.data.get(off as usize..(off + width) as usize)?;
+        raw[..width as usize].copy_from_slice(bytes);
+        Some(raw)
     }
 }
 
@@ -167,11 +178,9 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
         let Some(off) = data_addr(func, &ext, addr, disp as i64) else {
             continue;
         };
-        let Some(bytes) = cd.read(off, width) else {
+        let Some(raw) = cd.read(off, width) else {
             continue;
         };
-        let mut raw = [0u8; 8];
-        raw[..width as usize].copy_from_slice(bytes);
         let u = u64::from_le_bytes(raw);
         let value = match kind {
             LoadKind::I8 => u as u8 as i8 as i64,

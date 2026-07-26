@@ -30,7 +30,7 @@
 //! `Imm`s made dead are reaped by the emit's use-count DCE.
 
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
 use crate::c5::vm::eval;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -53,6 +53,143 @@ pub(crate) fn run_one(func: &mut FunctionSsa) {
             return;
         }
     }
+}
+
+/// Node budget for one per-incoming evaluation. A shared operand is
+/// re-evaluated per use, so the budget caps a wide expression tree
+/// rather than its depth alone; it also terminates the recursion.
+const SELECT_EVAL_BUDGET: u32 = 96;
+
+/// Evaluate `v` with `pivot` bound to `bind`, over the same integer
+/// `Extend` / `BinopI` / `Binop` set [`fold_round`] folds. Any other
+/// def, and any operand the shared resolver cannot pin to an integer
+/// immediate, makes the value unknown.
+fn eval_with(
+    func: &FunctionSsa,
+    v: ValueId,
+    pivot: ValueId,
+    bind: i64,
+    budget: &mut u32,
+) -> Option<i64> {
+    *budget = budget.checked_sub(1)?;
+    if v == pivot {
+        return Some(bind);
+    }
+    if let Some(k) = imm_of(func, v) {
+        return Some(k);
+    }
+    if matches!(func.f32_values.get(v as usize), Some(true)) {
+        return None;
+    }
+    match *func.insts.get(v as usize)? {
+        Inst::Extend { value, kind } => Some(eval::eval_extend(
+            eval_with(func, value, pivot, bind, budget)?,
+            kind,
+        )),
+        Inst::BinopI { op, lhs, rhs_imm } => {
+            eval::fold_binop(op, eval_with(func, lhs, pivot, bind, budget)?, rhs_imm)
+        }
+        Inst::Binop { op, lhs, rhs } => {
+            let l = eval_with(func, lhs, pivot, bind, budget)?;
+            let r = eval_with(func, rhs, pivot, bind, budget)?;
+            eval::fold_binop(op, l, r)
+        }
+        _ => None,
+    }
+}
+
+/// The set of integer constants a phi can produce, when every incoming
+/// resolves to one and they do not all agree. An all-agreeing phi is
+/// already a constant to [`imm_of`], and an FP-kind phi carries a bit
+/// pattern the integer evaluator must not compute on.
+fn select_values(func: &FunctionSsa, v: ValueId) -> Option<Vec<i64>> {
+    let Some(Inst::Phi { incoming, kind }) = func.insts.get(v as usize) else {
+        return None;
+    };
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+        return None;
+    }
+    let mut values = Vec::with_capacity(incoming.len());
+    for &(_, iv) in incoming {
+        values.push(imm_of(func, iv)?);
+    }
+    let differs = values.iter().any(|k| Some(k) != values.first());
+    differs.then_some(values)
+}
+
+/// Per-value list of the instruction indices that read it. Terminator
+/// and `exit_acc` references are left out: neither is a foldable
+/// consumer.
+fn user_lists(func: &FunctionSsa) -> Vec<Vec<ValueId>> {
+    let mut users: Vec<Vec<ValueId>> = vec![Vec::new(); func.insts.len()];
+    for (i, inst) in func.insts.iter().enumerate() {
+        for_each_operand(inst, |op| {
+            if let Some(slot) = users.get_mut(op as usize) {
+                slot.push(i as ValueId);
+            }
+        });
+    }
+    users
+}
+
+/// Fold a consumer of a select whose result is the same for every value
+/// the select can produce. A `c ? 1 : 0` merges two immediates, so
+/// `> 3ul` on it is 0 and a mask selecting none of the bits the
+/// incomings differ in is that mask's value on either -- the condition
+/// stays unknown, the consumer does not depend on it. Walks forward from
+/// each select so the cost tracks the select's use chain, and folds a
+/// consumer any distance down that chain: an intermediate whose value
+/// does differ per incoming is walked through, not folded.
+///
+/// -O only. A value produced by a runtime condition is not a constant
+/// expression (C99 6.6), so this cannot decide what the front end
+/// accepts; it is the optimizer proving the consumer invariant.
+pub(crate) fn fold_selects(func: &mut FunctionSsa) -> bool {
+    let selects: Vec<(ValueId, Vec<i64>)> = (0..func.insts.len() as ValueId)
+        .filter_map(|v| select_values(func, v).map(|values| (v, values)))
+        .collect();
+    if selects.is_empty() {
+        return false;
+    }
+    let users = user_lists(func);
+    let mut seen = vec![false; func.insts.len()];
+    let mut queue: Vec<ValueId> = Vec::new();
+    let mut changed = false;
+    for (pivot, values) in &selects {
+        seen.iter_mut().for_each(|s| *s = false);
+        queue.clear();
+        queue.extend_from_slice(&users[*pivot as usize]);
+        while let Some(u) = queue.pop() {
+            if core::mem::replace(&mut seen[u as usize], true) {
+                continue;
+            }
+            if !matches!(
+                func.insts[u as usize],
+                Inst::Extend { .. } | Inst::BinopI { .. } | Inst::Binop { .. }
+            ) {
+                continue;
+            }
+            if !matches!(func.f32_values.get(u as usize), Some(true)) {
+                let mut uniform = None;
+                for &bind in values {
+                    let mut budget = SELECT_EVAL_BUDGET;
+                    match eval_with(func, u, *pivot, bind, &mut budget) {
+                        Some(k) if uniform.is_none_or(|prev| prev == k) => uniform = Some(k),
+                        _ => {
+                            uniform = None;
+                            break;
+                        }
+                    }
+                }
+                if let Some(k) = uniform {
+                    func.insts[u as usize] = Inst::Imm(k);
+                    changed = true;
+                }
+            }
+            queue.extend_from_slice(&users[u as usize]);
+        }
+    }
+    changed
 }
 
 /// Resolve every remaining deferred `__builtin_constant_p` to 0. Called

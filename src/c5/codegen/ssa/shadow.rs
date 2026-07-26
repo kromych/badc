@@ -102,7 +102,7 @@ pub(crate) fn walk_program(
     // and relocations against symbols the program never references.
     // The fixed point also resolves a merge phi that a pruned branch
     // collapses to one incoming. The -O pipeline reruns this post-inline.
-    crate::c5::codegen::passes::simplify_branches::run(&mut out, false);
+    crate::c5::codegen::passes::simplify_branches::run(&mut out);
     Ok(out)
 }
 

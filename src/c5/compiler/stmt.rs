@@ -604,6 +604,16 @@ impl Compiler {
                 block_symbols.push(snap);
             }
 
+            // C11 6.7.5 applies to a declaration inside any block, not just
+            // the one opening a function body; resolve it through the same
+            // helper that path uses. A block-scope `extern` allocates no
+            // storage, so it skips the resolution there and here.
+            let decl_align = if is_extern {
+                None
+            } else {
+                Some(self.resolve_decl_align(ty, is_static)?)
+            };
+
             if is_extern {
                 if convert_extern {
                     self.symbols[loc_idx].class = Token::Glo as i64;
@@ -659,6 +669,9 @@ impl Compiler {
                 // unless the qualifier only reaches a pointee.
                 self.symbols[loc_idx].storage_is_const =
                     self.pending.base_is_const && !super::types::is_pointer_ty(ty);
+                if let Some(a) = &decl_align {
+                    self.apply_static_local_align(loc_idx, ty, a);
+                }
                 self.allocate_static_local(loc_idx, ty, array_size)?;
                 self.push_block_static_record(loc_idx, ty);
                 self.ast_emit_static_local_decl(loc_idx as u32);
@@ -687,6 +700,9 @@ impl Compiler {
                 }
                 self.restore_pending_local_carriers(saved);
                 r?;
+                if let Some(a) = decl_align.as_ref().filter(|a| a.realign_auto) {
+                    self.record_over_aligned_local(loc_idx, ty, a.auto_align)?;
+                }
             }
             // A deferred-size local (`T x[]`) whose initializer resolved to
             // zero elements keeps its array-ness (decay, sizeof 0) through

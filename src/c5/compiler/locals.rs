@@ -33,6 +33,21 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{apply_qual_bits, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
+/// Alignment facts a block-scope declarator carries into its storage
+/// allocation. Produced once per declarator by
+/// [`Compiler::resolve_decl_align`].
+pub(super) struct DeclAlign {
+    /// The declarator's own `aligned(N)` / `_Alignas` request, 0 when absent.
+    pub req_align: i64,
+    /// The declared object is a pointer, so a type-position alignment
+    /// attribute applies to the pointee rather than to the object.
+    pub obj_is_pointer: bool,
+    /// Required alignment of the object when it has automatic storage.
+    pub auto_align: i64,
+    /// `auto_align` exceeds the frame's 16-byte guarantee.
+    pub realign_auto: bool,
+}
+
 impl Compiler {
     /// Drain the three pending local-initializer carriers into a single
     /// `LocalInit`: a scalar AST expression, a runtime per-element store
@@ -111,6 +126,105 @@ impl Compiler {
             self.pending_local_aggregate_ast = None;
             self.pending_local_runtime_elements.clear();
         }
+    }
+
+    /// C11 6.7.5 alignment of a block-scope declarator, shared by the
+    /// function-body-top and inside-block declaration paths. A static
+    /// local's `.data` slot honors the request like a file-scope object; an
+    /// automatic object lives in 8-byte frame slots, and a requirement above
+    /// 16 exceeds the frame pointer's guarantee, so the prologue realigns sp
+    /// down to it. Consumes `pending.attr_align` either way, so a request
+    /// cannot leak onto the next declarator.
+    pub(super) fn resolve_decl_align(
+        &mut self,
+        ty: i64,
+        is_static: bool,
+    ) -> Result<DeclAlign, C5Error> {
+        let req_align = core::mem::take(&mut self.pending.attr_align);
+        if req_align > 8 && !(req_align as usize).is_power_of_two() {
+            return Err(self.compile_err(format!(
+                "requested alignment {req_align} is not a power of two"
+            )));
+        }
+        // An over-alignment attribute in the type-specifier position
+        // (`struct {...} __attribute__((aligned(16))) *p`) raises the pointee
+        // type's alignment; a pointer object holds its own pointer-aligned
+        // value, so the request does not apply to it.
+        let obj_is_pointer = is_pointer_ty(ty);
+        let auto_align = if is_static || obj_is_pointer {
+            0
+        } else {
+            core::cmp::max(req_align.max(0), self.align_of_type(ty) as i64)
+        };
+        let realign_auto = auto_align > 16;
+        if realign_auto && auto_align > super::MAX_FRAME_ALIGN {
+            return Err(self.compile_err(format!(
+                "requested alignment {auto_align} exceeds the maximum for an \
+                 automatic object ({}); use static storage",
+                super::MAX_FRAME_ALIGN
+            )));
+        }
+        // Requests at or below 16 the frame cannot place, and any request
+        // beyond the static ceiling, stay diagnostics.
+        if !realign_auto
+            && ((req_align > 8 && !is_static && !obj_is_pointer)
+                || req_align > super::MAX_STATIC_ALIGN as i64)
+        {
+            return Err(self.compile_err(format!(
+                "requested alignment {req_align} is not supported here \
+                 (automatic objects align to 8, static objects to at most {})",
+                super::MAX_STATIC_ALIGN
+            )));
+        }
+        Ok(DeclAlign {
+            req_align,
+            obj_is_pointer,
+            auto_align,
+            realign_auto,
+        })
+    }
+
+    /// Placement alignment of a block-scope static: the widest of the
+    /// declarator request, the type's natural alignment, and an
+    /// `aligned(N)` type attribute on the base. Records it on the symbol
+    /// and raises the unit's `.data` alignment to match.
+    pub(super) fn apply_static_local_align(&mut self, loc_idx: usize, ty: i64, a: &DeclAlign) {
+        let type_align = if a.obj_is_pointer {
+            0
+        } else {
+            self.pending.type_align.max(0) as usize
+        };
+        let want_align = core::cmp::max(
+            core::cmp::max(a.req_align.max(0) as usize, self.align_of_type(ty)),
+            type_align,
+        );
+        self.symbols[loc_idx].data_align = want_align.max(1) as i64;
+        if want_align > 8 {
+            self.align_data_to(want_align);
+            self.data_align = self.data_align.max(want_align);
+        }
+    }
+
+    /// Record an over-aligned automatic object's frame slot so the prologue
+    /// places it in the realigned region. Rejects the VLA combination: a
+    /// variable-length array moves sp itself and cannot share the region.
+    pub(super) fn record_over_aligned_local(
+        &mut self,
+        loc_idx: usize,
+        ty: i64,
+        auto_align: i64,
+    ) -> Result<(), C5Error> {
+        if self.symbols[loc_idx].is_vla {
+            return Err(self.compile_err(
+                "an over-aligned variable-length array is not supported; \
+                 use static storage or a fixed size",
+            ));
+        }
+        let slot = self.symbols[loc_idx].val;
+        let asz = self.symbols[loc_idx].array_size;
+        let size = self.local_storage_slots(ty, asz) * 8;
+        self.func_over_aligned.push((slot, auto_align, size));
+        Ok(())
     }
 
     pub(super) fn parse_function_body_local_decl(
@@ -328,51 +442,12 @@ impl Compiler {
 
             self.shadow_symbol(loc_idx);
 
-            // C11 6.7.5 on block-scope objects: a static local's `.data` slot
-            // honors the requested alignment like a file-scope object. An
-            // automatic object lives in 8-byte frame slots; a request above 16
-            // exceeds the frame pointer's guarantee, so the prologue realigns
-            // sp down to it (recorded once the slot is reserved). The
-            // attribute requires a power of two.
-            let req_align = core::mem::take(&mut self.pending.attr_align);
-            if req_align > 8 && !(req_align as usize).is_power_of_two() {
-                return Err(self.compile_err(format!(
-                    "requested alignment {req_align} is not a power of two"
-                )));
-            }
-            // An over-alignment attribute in the type-specifier position
-            // (`struct {...} __attribute__((aligned(16))) *p`) raises the
-            // pointee type's alignment; a pointer object holds its own
-            // pointer-aligned value, so the request does not apply to it.
-            let obj_is_pointer = is_pointer_ty(ty);
-            // Required alignment of an automatic object: the larger of the
-            // declarator request and the type's own alignment. Above 16 the
-            // frame is realigned; a pointer object is excluded.
-            let auto_align = if is_static || obj_is_pointer {
-                0
-            } else {
-                core::cmp::max(req_align.max(0), self.align_of_type(ty) as i64)
-            };
-            let realign_auto = auto_align > 16;
-            if realign_auto && auto_align > super::MAX_FRAME_ALIGN {
-                return Err(self.compile_err(format!(
-                    "requested alignment {auto_align} exceeds the maximum for an \
-                     automatic object ({}); use static storage",
-                    super::MAX_FRAME_ALIGN
-                )));
-            }
-            // Requests at or below 16 the frame cannot place, and any request
-            // beyond the static ceiling, stay diagnostics.
-            if !realign_auto
-                && ((req_align > 8 && !is_static && !obj_is_pointer)
-                    || req_align > super::MAX_STATIC_ALIGN as i64)
-            {
-                return Err(self.compile_err(format!(
-                    "requested alignment {req_align} is not supported here \
-                     (automatic objects align to 8, static objects to at most {})",
-                    super::MAX_STATIC_ALIGN
-                )));
-            }
+            let DeclAlign {
+                req_align,
+                obj_is_pointer,
+                auto_align,
+                realign_auto,
+            } = self.resolve_decl_align(ty, is_static)?;
 
             if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;
@@ -400,25 +475,18 @@ impl Compiler {
                 // counts even when the declarator carries no attribute. A
                 // block-scope static shares the `.data` / `.bss` placement of
                 // a file-scope object, so the type's alignment holds up to
-                // MAX_STATIC_ALIGN.
-                // A GNU `aligned(N)` type attribute on the typedef base
-                // raises the static object's placement like an explicit
-                // request (a reducing one is absorbed by the natural
-                // alignment); a pointer object keeps pointer alignment.
-                let type_align = if obj_is_pointer {
-                    0
-                } else {
-                    self.pending.type_align.max(0) as usize
-                };
-                let want_align = core::cmp::max(
-                    core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty)),
-                    type_align,
+                // MAX_STATIC_ALIGN. A GNU `aligned(N)` type attribute on the
+                // typedef base raises the placement like an explicit request.
+                self.apply_static_local_align(
+                    loc_idx,
+                    ty,
+                    &DeclAlign {
+                        req_align,
+                        obj_is_pointer,
+                        auto_align,
+                        realign_auto,
+                    },
                 );
-                self.symbols[loc_idx].data_align = want_align.max(1) as i64;
-                if want_align > 8 {
-                    self.align_data_to(want_align);
-                    self.data_align = self.data_align.max(want_align);
-                }
                 self.allocate_static_local(loc_idx, ty, array_size)?;
                 self.push_block_static_record(loc_idx, ty);
                 self.ast_emit_static_local_decl(loc_idx as u32);
@@ -447,16 +515,7 @@ impl Compiler {
                 // combination is rejected (here for the VLA, at function close
                 // for a separate `alloca`).
                 if realign_auto {
-                    if self.symbols[loc_idx].is_vla {
-                        return Err(self.compile_err(
-                            "an over-aligned variable-length array is not supported; \
-                             use static storage or a fixed size",
-                        ));
-                    }
-                    let slot = self.symbols[loc_idx].val;
-                    let asz = self.symbols[loc_idx].array_size;
-                    let size = self.local_storage_slots(ty, asz) * 8;
-                    self.func_over_aligned.push((slot, auto_align, size));
+                    self.record_over_aligned_local(loc_idx, ty, auto_align)?;
                 }
                 // Dual-emit: push `Decl::Local { sym, slot_off,
                 // init }`. The init flavour comes from whichever

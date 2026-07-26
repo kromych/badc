@@ -1,68 +1,44 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
-; name=real_fn
+; name=weak_answer
 fn ent_pc=0 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   Imm(41)                                          -> x0
-    terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=1 ---
-; name=keep_me
-fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x0
     terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=2 ---
-; name=weak_def
-fn ent_pc=2 n_params=0 variadic=false locals=0
+; --- SSA dump (ok=true) ent_pc=1 ---
+; name=weak_scale
+fn ent_pc=1 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(2)                                           -> x0
-    terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=3 ---
-; name=main
-fn ent_pc=3 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   Imm(41)                                          -> x0
+    v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v2)
-  block 1  start_pc=0
-    v4   Imm(41)                                          -> x0
-    v5   Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v5)
-  block 2  start_pc=0
-    v7   Call { target_pc=2, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v8   BinopI { op=ne, lhs=v7, rhs_imm=2 }              -> x0
-    terminator Bz { cond=v8, target=b4, fall=b3 }   (exit_acc=v8)
-  block 3  start_pc=0
-    v9   Imm(3)                                           -> x0
-    terminator Return(v9)   (exit_acc=v9)
-  block 4  start_pc=0
-    v10  ImmData(8)                                       -> x0
-    v11  Load { addr=v10, disp=0, kind=I32 }              -> x0
-    v12  BinopI { op=ne, lhs=v11, rhs_imm=7 }             -> x0
-    terminator Bz { cond=v12, target=b6, fall=b5 }   (exit_acc=v12)
-  block 5  start_pc=0
-    v13  Imm(4)                                           -> x0
-    terminator Return(v13)   (exit_acc=v13)
-  block 6  start_pc=0
-    v14  ImmData(8)                                       -> x1
-    v15  Imm(9)                                           -> x0
-    v16  Store { addr=v14, disp=0, value=v15, kind=I32 }  -> -
-    v17  Extend { value=v15, kind=I32 }                   -> x0
-    v18  BinopI { op=ne, lhs=v17, rhs_imm=9 }             -> x0
-    terminator Bz { cond=v18, target=b8, fall=b7 }   (exit_acc=v18)
-  block 7  start_pc=0
-    v19  Imm(5)                                           -> x0
-    terminator Return(v19)   (exit_acc=v19)
-  block 8  start_pc=0
-    v20  Imm(0)                                           -> x0
-    terminator Return(v20)   (exit_acc=v20)
+    v3   LoadLocal { off=2, kind=I32 }                    -> x0
+    v4   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x0
+    v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x1
+    v6   Extend { value=v4, kind=I32 }                    -> x1
+    v7   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x0
+    v8   Extend { value=v6, kind=I32 }                    -> x0
+    terminator Return(v8)   (exit_acc=v8)
+; --- SSA dump (ok=true) ent_pc=2 ---
+; name=main
+fn ent_pc=2 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Call { target_pc=0, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x3
+    v2   Imm(20)                                          -> x7
+    v3   Call { target_pc=1, args=[v2], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v4   Binop { op=add, lhs=v1, rhs=v3 }                 -> x0
+    v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x1
+    v6   Extend { value=v4, kind=I32 }                    -> x1
+    v7   BinopI { op=add, lhs=v4, rhs_imm=1 }             -> x0
+    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
+    v9   Extend { value=v7, kind=I32 }                    -> x1
+    v10  BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x0
+    v11  Extend { value=v9, kind=I32 }                    -> x0
+    terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

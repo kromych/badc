@@ -1063,6 +1063,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("syslimits_path_max.c", 0),
     ("libc_atoll_wcsrtombs.c", 0),
     ("gcc_atomics.c", 0),
+    ("atomic_lock_free_widths.c", 0),
     ("inline_linkage.c", 0),
     ("msvc_callconv.c", 0),
     ("anon_struct_init.c", 0),

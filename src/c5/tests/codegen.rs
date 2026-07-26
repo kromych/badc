@@ -1519,25 +1519,38 @@ fn atomic_compare_exchange_emits_cmpxchg_x86_64() {
     );
 }
 
-/// A 128-bit `__int128` atomic compare-exchange has no single-instruction
-/// lock form in the current emit. The SSA walk must reject it, not lower
-/// the zero-width access `type_size_bytes` yields for the struct-backed
-/// __int128 (which faults / miscompiles at run time; clang gets it right).
-/// TODO: lower 16-byte objects via cmpxchg16b / ldxp-stxp.
+/// No atomic form on a 16-byte object lowers: the paired
+/// compare-exchange (x86-64 `cmpxchg16b`, aarch64 `casp` / `ldxp`-`stxp`)
+/// is not emitted, and two 8-byte accesses would tear. Every form must
+/// be rejected with that diagnostic rather than lowered through the
+/// zero-width access `type_size_bytes` yields for the struct-backed
+/// __int128. `__atomic_is_lock_free` reports the same limit, so a
+/// caller can test for it (`atomic_lock_free_widths.c`).
+/// TODO: lower 16-byte objects via the paired compare-exchange.
 #[test]
-fn atomic128_compare_exchange_is_rejected_not_miscompiled() {
+fn atomic128_is_rejected_not_miscompiled() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    let program = super::compile_str_bare(
-        "int f(unsigned __int128 *p, unsigned __int128 *e, unsigned __int128 n){ \
-             return __atomic_compare_exchange_n(p, e, n, 0, 5, 5); } \
-         int main(){ return 0; }",
-    );
-    let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
-        .expect_err("128-bit atomic compare-exchange must be rejected, not miscompiled");
-    assert!(
-        err.to_string().contains("1/2/4/8-byte scalar object"),
-        "expected the wide-atomic rejection, got: {err}",
-    );
+    let bodies = [
+        "return __atomic_compare_exchange_n(p, e, n, 0, 5, 5);",
+        "__atomic_store_n(p, n, 5); return 0;",
+        "return (int)__atomic_load_n(p, 5);",
+        "return (int)__atomic_fetch_add(p, n, 5);",
+        "__atomic_load(p, e, 5); return 0;",
+        "__atomic_store(p, e, 5); return 0;",
+    ];
+    for body in bodies {
+        let src = alloc::format!(
+            "int f(unsigned __int128 *p, unsigned __int128 *e, unsigned __int128 n){{ {body} }} \
+             int main(){{ return 0; }}"
+        );
+        let program = super::compile_str_bare(&src);
+        let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("16-byte atomic object"),
+            "expected the wide-atomic rejection for `{body}`, got: {err}",
+        );
+    }
 }
 
 /// `__builtin_*_overflow` with a 128-bit operand or result lowers over

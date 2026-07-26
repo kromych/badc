@@ -486,6 +486,14 @@ fn builtin_return_address() {
 }
 
 #[test]
+fn atomic_lock_free_widths() {
+    // C11 7.17.5: the lock-free predicates report the widths the emit
+    // backs. A 16-byte object reports false, matching gcc and clang
+    // where no 16-byte compare-exchange is enabled.
+    assert_eq!(run_fixture("atomic_lock_free_widths.c"), 0);
+}
+
+#[test]
 fn atomic_op_fetch() {
     // C11 __atomic_*_fetch builtins (add/sub/and/or/xor) return the updated
     // value, unlike the __atomic_fetch_* family; the older __sync_*_and_fetch

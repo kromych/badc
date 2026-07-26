@@ -999,6 +999,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("va_arg_composite_straddle.c", 0),
     ("variadic_hfa_struct_arg.c", 0),
     ("variadic_cast_fnptr_dispatch.c", 0),
+    ("builtin_constant_p_deferred.c", 0),
 ];
 
 #[test]

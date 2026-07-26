@@ -4577,6 +4577,13 @@ fn emit_intrinsic(
         }
     };
     match intrinsic {
+        // Resolved to an `Imm` before lowering, by the SSA folds under
+        // `-O` and by the walker otherwise; reaching here is a pass-
+        // ordering bug.
+        I::ConstantP => {
+            bail_msg("Intrinsic::ConstantP must be resolved before lowering");
+            false
+        }
         I::VaStart if aarch64_host_variadic_callee(func, abi) => {
             // AAPCS64 `va_start` (Appendix B). args[0] = the `__va_list`
             // pointer (the array-form `va_list` decayed to `&ap[0]`);
@@ -8891,7 +8898,7 @@ mod tests {
 
     fn lift_and_alloc(src: &str, target: Target) -> (crate::c5::ir::FunctionSsa, Allocation) {
         let program = Compiler::new(src.into()).compile().expect("compile");
-        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target)
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false)
             .expect("produce_ssa_funcs");
         let main = funcs.into_iter().next().expect("at least one function");
         let alloc = super::super::ssa::reg_alloc::allocate(&main, target);
@@ -8996,8 +9003,8 @@ mod tests {
         )
         .compile()
         .expect("compile");
-        let mut funcs =
-            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target).expect("ssa");
+        let mut funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false)
+            .expect("ssa");
         // StoreIndexed is produced by the index fold, which the lowering
         // runs after `produce_ssa_funcs`.
         crate::c5::codegen::passes::index_fold::run(&mut funcs);

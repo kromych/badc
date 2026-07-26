@@ -55,6 +55,21 @@ pub(crate) fn run_one(func: &mut FunctionSsa) {
     }
 }
 
+/// Resolve every remaining deferred `__builtin_constant_p` to 0. Called
+/// once the branch-fold fixed point stalls: no later pass discovers new
+/// constants, so an operand still not an immediate never becomes one.
+pub(crate) fn resolve_constant_p(func: &mut FunctionSsa) -> bool {
+    let kind_id = crate::c5::op::Intrinsic::ConstantP as i64;
+    let mut changed = false;
+    for inst in &mut func.insts {
+        if matches!(inst, Inst::Intrinsic { kind, .. } if *kind == kind_id) {
+            *inst = Inst::Imm(0);
+            changed = true;
+        }
+    }
+    changed
+}
+
 /// Ops both per-arch emitters lower in `BinopI` form. The x86_64
 /// `emit_binop_imm` panics on Div / Divu / Mod / Modu; the aarch64
 /// one bails on Mod / Modu (no third scratch register). FP ops keep
@@ -227,6 +242,16 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
                 }
                 _ => None,
             },
+            // Deferred `__builtin_constant_p`: the operand folded to an
+            // integer immediate, so the answer is 1. `imm_of` refuses
+            // address-bearing immediates, which are not constants here.
+            Inst::Intrinsic { kind, args }
+                if *kind == crate::c5::op::Intrinsic::ConstantP as i64 =>
+            {
+                args.first()
+                    .and_then(|&a| imm_of(func, a))
+                    .map(|_| Inst::Imm(1))
+            }
             _ => None,
         };
         if let Some(inst) = new_inst {

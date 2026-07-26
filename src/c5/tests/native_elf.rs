@@ -967,6 +967,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("call_sp_adjust_imm12_overflow.c", 0),
     ("indirect_call_target_scratch_exhausted.c", 0),
     ("fp_load_folded_disp.c", 0),
+    ("builtin_constant_p_deferred.c", 0),
 ];
 
 #[test]

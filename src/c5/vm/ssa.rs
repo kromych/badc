@@ -2607,6 +2607,11 @@ fn run_intrinsic(
         Intrinsic::Fma | Intrinsic::Fmaf => Err(C5Error::Runtime(format!(
             "vm_ssa: Intrinsic::{intr:?} lowers to Inst::Fma, not Inst::Intrinsic",
         ))),
+        // The walker answers 0 on the unoptimized SSA the interpreter
+        // runs; the node exists only inside the `-O` pass pipeline.
+        Intrinsic::ConstantP => Err(C5Error::Runtime(
+            "vm_ssa: Intrinsic::ConstantP is resolved before execution".to_string(),
+        )),
         Intrinsic::Sqrt | Intrinsic::Sqrtf => {
             let x = f64::from_bits(frame.regs[args[0] as usize] as u64);
             let r = if matches!(intr, Intrinsic::Sqrtf) {
@@ -3114,6 +3119,7 @@ mod tests {
         let funcs = super::super::super::codegen::ssa::shadow::produce_ssa_funcs(
             &program,
             super::super::super::Target::MacOSAarch64,
+            false,
         )
         .expect("ssa lift");
         // The first walker-produced function is the user's
@@ -3129,6 +3135,7 @@ mod tests {
         let funcs = super::super::super::codegen::ssa::shadow::produce_ssa_funcs(
             &program,
             super::super::super::Target::MacOSAarch64,
+            false,
         )
         .expect("ssa lift");
         let binding_names: alloc::vec::Vec<alloc::string::String> = program
@@ -3196,6 +3203,7 @@ mod tests {
         let funcs = super::super::super::codegen::ssa::shadow::produce_ssa_funcs(
             &program,
             super::super::super::Target::MacOSAarch64,
+            false,
         )
         .expect("ssa lift");
         let mut host = super::super::super::host::StdHost::default();
@@ -3400,6 +3408,7 @@ mod tests {
         let funcs = super::super::super::codegen::ssa::shadow::produce_ssa_funcs(
             &program,
             super::super::super::Target::MacOSAarch64,
+            false,
         )
         .expect("ssa lift");
         let binding_names: alloc::vec::Vec<alloc::string::String> = program
@@ -3482,6 +3491,7 @@ mod tests {
         let funcs = super::super::super::codegen::ssa::shadow::produce_ssa_funcs(
             &program,
             super::super::super::Target::MacOSAarch64,
+            false,
         )
         .expect("ssa lift");
         let binding_names: alloc::vec::Vec<alloc::string::String> = program

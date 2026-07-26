@@ -968,7 +968,7 @@ fn dense_switch_lowers_to_jump_table_sparse_keeps_tree() {
              case 18: return 7; case 21: return 8; default: return 0; } } \
          int main(void) { return dense8(3) + dense7(0) + half8(0) + sparse8(0); }",
     );
-    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host())
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false)
         .expect("produce_ssa_funcs");
     let table_of = |name: &str| -> Option<(u32, u32)> {
         let f: &FunctionSsa = funcs.iter().find(|f| f.name == name).unwrap();
@@ -2401,7 +2401,8 @@ fn constant_condition_drops_dead_branch_call() {
     )
     .compile()
     .expect("compile");
-    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target).expect("ssa");
+    let funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false).expect("ssa");
     let has_call = |name: &str| -> bool {
         let f = funcs
             .iter()
@@ -2457,7 +2458,7 @@ fn aarch64_fp_access_folds_constant_displacement() {
     .compile()
     .expect("compile");
     let mut funcs =
-        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target).expect("ssa");
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false).expect("ssa");
     crate::c5::codegen::passes::index_fold::run(&mut funcs);
     let mut f32_load = false;
     let mut f64_load = false;
@@ -2598,7 +2599,7 @@ fn ssa_func_named(src: &str, name: &str) -> crate::c5::ir::FunctionSsa {
     let program = crate::Compiler::new(super::with_prelude(&src))
         .compile()
         .expect("compile");
-    let funcs = produce_ssa_funcs(&program, Target::host()).expect("produce_ssa_funcs");
+    let funcs = produce_ssa_funcs(&program, Target::host(), false).expect("produce_ssa_funcs");
     funcs
         .into_iter()
         .find(|f| f.name == name)

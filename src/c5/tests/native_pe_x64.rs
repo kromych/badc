@@ -1013,6 +1013,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("variable_shift_rcx_loop.c", 0),
     ("va_arg_composite_straddle.c", 0),
     ("variadic_cast_fnptr_dispatch.c", 0),
+    ("builtin_constant_p_deferred.c", 0),
 ];
 
 #[test]

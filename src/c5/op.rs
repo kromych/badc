@@ -289,6 +289,13 @@ pub enum Intrinsic {
     /// The interpreter returns the frame's arena base (the same proxy
     /// `FrameAddress` uses); native code reads rsp / sp directly.
     StackPointer = 81,
+    /// Deferred `__builtin_constant_p(x)` whose operand did not fold at
+    /// parse time. `args[0]` is the operand. The constant folder rewrites
+    /// the node to `Imm(1)` once that operand becomes an integer
+    /// immediate; the branch-fold fixed point resolves every survivor to
+    /// `Imm(0)`. Produced only under `-O` -- the walker answers 0 itself
+    /// otherwise -- so no emitter or the interpreter ever sees one.
+    ConstantP = 82,
 }
 
 impl Intrinsic {
@@ -375,6 +382,7 @@ impl Intrinsic {
             79 => Some(Intrinsic::X86Clflush),
             80 => Some(Intrinsic::X86Lldt),
             81 => Some(Intrinsic::StackPointer),
+            82 => Some(Intrinsic::ConstantP),
             _ => None,
         }
     }

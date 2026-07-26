@@ -4716,6 +4716,72 @@ fn divmod_constant_branch_drops_its_dead_callee() {
 }
 
 #[test]
+fn constant_p_inline_param_folds_assert_call_at_o() {
+    // GCC defers a non-constant `__builtin_constant_p` under `-O` until
+    // after inlining and constant propagation. The build-time-assert
+    // idiom `if (!__builtin_constant_p(p) || (p & M)) undefined_fn();`
+    // inside an always-inline helper called with a literal must fold
+    // away entirely at `-O` so the undefined reference never reaches
+    // the object; without `-O` the early conservative 0 keeps the
+    // reference (gcc -O0 fails that link too).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         extern void compiletime_assert_11(void);\n\
+         extern void compiletime_assert_22(void);\n\
+         extern unsigned long long rt_fallback(unsigned long long v);\n\
+         static inline __attribute__((always_inline)) void check(unsigned long long req) {{\n\
+             if (!__builtin_constant_p(req) || (req & 0xff00ULL))\n\
+                 compiletime_assert_11();\n\
+         }}\n\
+         static inline int width_ok(int sz) {{\n\
+             if (!(__builtin_constant_p(sz) && (sz == 1 || sz == 2 || sz == 4 || sz == 8)))\n\
+                 compiletime_assert_22();\n\
+             return sz;\n\
+         }}\n\
+         static inline unsigned long long sel(unsigned long long n) {{\n\
+             return __builtin_constant_p(n) ? n + 1 : rt_fallback(n);\n\
+         }}\n\
+         int main(void) {{\n\
+             check(0x12ULL);\n\
+             return (int)sel(3ULL) + width_ok(4) - 8;\n\
+         }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit -O");
+        let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+        assert!(has(b"main"), "{target:?}: main must survive");
+        assert!(
+            !has(b"compiletime_assert_11") && !has(b"compiletime_assert_22"),
+            "{target:?}: the constant_p-guarded assert calls must fold away at -O"
+        );
+        assert!(
+            !has(b"rt_fallback"),
+            "{target:?}: the constant_p-false runtime arm is dead at -O"
+        );
+    }
+    // Without -O the early conservative 0 keeps the references, as gcc
+    // -O0 does.
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit -O0");
+    let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+    assert!(
+        has(b"compiletime_assert_11") && has(b"rt_fallback"),
+        "without -O the early 0 keeps the assert reference and the runtime arm"
+    );
+}
+
+#[test]
 fn weak_alias_used_bindings_in_relocatable() {
     // `weak` binds STB_WEAK on definitions and declarations;
     // `alias("target")` emits an additional symbol at the target's

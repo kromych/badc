@@ -364,16 +364,113 @@ impl Compiler {
     }
 
     /// GCC `__builtin_constant_p(x)`: an `int`, 1 when the unevaluated
-    /// operand folds to a constant expression, else 0. The operand is
-    /// not evaluated (no emission), so this yields a plain integer
-    /// constant like the `__builtin_types_compatible_p` result.
+    /// operand folds to a constant expression. A parse-time constant
+    /// answers 1, which no later phase revises. A non-constant operand
+    /// can still become one after inlining and constant propagation, so
+    /// where deferring is sound it becomes an `Intrinsic::ConstantP` for
+    /// the SSA folds; otherwise the conservative 0 stands.
     pub(super) fn parse_constant_p_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_constant_p (`.
-        let v = self.eval_constant_p_operand()?;
-        self.emit_imm(v);
+        let snap = self.lex.snapshot();
+        if self.eval_constant_p_operand()? == 1 {
+            self.emit_imm(1);
+            self.ty = Ty::Int as i64;
+            self.ast_emit_int_lit(1, self.ty);
+            return Ok(());
+        }
+        self.restore_lex(snap);
+        self.expr(Token::Assign as i64)?;
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected to close `__builtin_constant_p`"));
+        }
+        self.next()?;
+        let operand = self.ast_acc.take();
         self.ty = Ty::Int as i64;
-        self.ast_emit_int_lit(v, self.ty);
+        match operand {
+            Some(id) if self.constant_p_operand_defers(id) => {
+                let pos = self.ast_src_pos();
+                let node = self.ast.push_expr(
+                    super::super::ast::Expr::Intrinsic {
+                        kind: crate::c5::op::Intrinsic::ConstantP as i64,
+                        args: alloc::vec![id],
+                        ty: self.ty,
+                    },
+                    pos,
+                );
+                self.ast_acc = Some(node);
+                self.mark_emit_other();
+            }
+            _ => {
+                // The parsed operand is dropped unreferenced: its side
+                // effects are never walked, matching GCC's unevaluated
+                // operand.
+                self.emit_imm(0);
+                self.ast_emit_int_lit(0, self.ty);
+            }
+        }
         Ok(())
+    }
+
+    /// Whether a non-constant `__builtin_constant_p` operand may defer to
+    /// the SSA folds. Deferring lowers the operand so the inliner's
+    /// argument substitution can reach it, which is sound only when that
+    /// lowering neither has side effects nor traps: scalar locals and
+    /// parameters qualify; calls, pointer loads, volatile and
+    /// address-space-qualified accesses, and division do not.
+    fn constant_p_operand_defers(&self, id: super::super::ast::ExprId) -> bool {
+        use super::super::ast::{Expr, UnOp};
+        use super::super::ir::BinOp;
+        use super::types::{is_struct_ty, is_volatile_ty, segment_of_ty, struct_ptr_depth};
+        let struct_value = |ty: i64| is_struct_ty(ty) && struct_ptr_depth(ty) == 0;
+        match self.ast.expr(id) {
+            Expr::IntLit { .. } | Expr::FloatLit { .. } | Expr::Sizeof(_) => true,
+            Expr::Ident {
+                sym,
+                ty,
+                class,
+                array_size,
+                is_thread_local,
+                ..
+            } => {
+                *class == Token::Loc as i64
+                    && *array_size == 0
+                    && !*is_thread_local
+                    && !is_volatile_ty(*ty)
+                    && segment_of_ty(*ty).is_none()
+                    && !struct_value(*ty)
+                    && !self
+                        .symbols
+                        .get(*sym as usize)
+                        .is_some_and(|s| s.is_global_register)
+            }
+            Expr::Unary {
+                op: UnOp::Neg | UnOp::BitNot | UnOp::LogNot,
+                child,
+                ..
+            } => self.constant_p_operand_defers(*child),
+            Expr::Binary { op, lhs, rhs, .. } => {
+                !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)
+                    && self.constant_p_operand_defers(*lhs)
+                    && self.constant_p_operand_defers(*rhs)
+            }
+            Expr::ShortCircuit { lhs, rhs, .. } => {
+                self.constant_p_operand_defers(*lhs) && self.constant_p_operand_defers(*rhs)
+            }
+            Expr::Ternary {
+                cond,
+                then_e,
+                else_e,
+                ..
+            } => {
+                self.constant_p_operand_defers(*cond)
+                    && self.constant_p_operand_defers(*then_e)
+                    && self.constant_p_operand_defers(*else_e)
+            }
+            Expr::Cast { child, to_ty } => {
+                !struct_value(*to_ty) && self.constant_p_operand_defers(*child)
+            }
+            _ => false,
+        }
     }
 
     /// C11 6.5.3.4: `_Alignof ( type-name )`. The operand is always a

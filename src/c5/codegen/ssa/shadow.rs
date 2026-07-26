@@ -15,7 +15,11 @@ use alloc::vec::Vec;
 /// trampolines and the synthetic CRT entry don't go through
 /// the AST walker; the caller layers them on from
 /// `program.synthetic_ssa_funcs` after this returns.
-pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<FunctionSsa>, C5Error> {
+pub(crate) fn walk_program(
+    program: &Program,
+    target: Target,
+    optimize: bool,
+) -> Result<Vec<FunctionSsa>, C5Error> {
     // Walker entries from AST snapshots, keyed by ent_pc.
     let mut walker_pcs: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
     let mut out: Vec<FunctionSsa> = Vec::with_capacity(program.finished_functions.len());
@@ -41,6 +45,7 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
             f.return_ty,
             f.alloca_top_slot,
             &f.over_aligned_slots,
+            optimize,
         )
         .map_err(|e| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
@@ -97,7 +102,7 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
     // and relocations against symbols the program never references.
     // The fixed point also resolves a merge phi that a pruned branch
     // collapses to one incoming. The -O pipeline reruns this post-inline.
-    crate::c5::codegen::passes::simplify_branches::run(&mut out);
+    crate::c5::codegen::passes::simplify_branches::run(&mut out, false);
     Ok(out)
 }
 
@@ -141,9 +146,10 @@ pub(crate) fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &P
 pub(crate) fn produce_ssa_funcs(
     program: &Program,
     target: Target,
+    optimize: bool,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
     if !program.finished_functions.is_empty() {
-        let mut funcs = walk_program(program, target)?;
+        let mut funcs = walk_program(program, target, optimize)?;
         // C99 6.2.2: a function with internal linkage that no reachable
         // code or data references is unobservable; drop it before codegen
         // so the unused `static inline` helpers headers pull into every
@@ -491,6 +497,7 @@ pub(crate) fn compact_program_data(
     program: &Program,
     target: Target,
     segregate: bool,
+    optimize: bool,
 ) -> Result<(Program, i64), C5Error> {
     use crate::c5::token::Token;
 
@@ -502,7 +509,7 @@ pub(crate) fn compact_program_data(
     if std::env::var("BADC_NO_DATA_DCE").is_ok() {
         return Ok((program.clone(), 0));
     }
-    let funcs = produce_ssa_funcs(program, target)?;
+    let funcs = produce_ssa_funcs(program, target, optimize)?;
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
         funcs.iter().map(|f| f.ent_pc).collect();
     let sets = compute_live_sets(&funcs, program, false);
@@ -833,10 +840,11 @@ mod tests {
                    int main(void) { return gp == &g[3] ? 0 : 1; }";
         let program = compile(src, target);
 
-        let (_, bss_off) = compact_program_data(&program, target, false).expect("compact");
+        let (_, bss_off) = compact_program_data(&program, target, false, false).expect("compact");
         assert_eq!(bss_off, 0, "no bss region when segregation is off");
 
-        let (compacted, bss_size) = compact_program_data(&program, target, true).expect("compact");
+        let (compacted, bss_size) =
+            compact_program_data(&program, target, true, false).expect("compact");
         assert!(bss_size > 0, "the zero global must occupy the bss region");
         assert_eq!(
             compacted.data.len() % 16,
@@ -872,7 +880,7 @@ mod tests {
         let program = Compiler::with_target(src.to_string(), target)
             .compile()
             .expect("compile");
-        let (compacted, _) = compact_program_data(&program, target, true).expect("compact");
+        let (compacted, _) = compact_program_data(&program, target, true, false).expect("compact");
 
         // `arr` has external linkage, so its symbol survives with its remapped
         // `.data` offset. It must keep all 24 bytes, disjoint from the literal.

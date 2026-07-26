@@ -87,6 +87,7 @@ pub(crate) fn walk_function(
     return_ty: i64,
     alloca_top_slot: i64,
     over_aligned_slots: &[(i64, i64, i64)],
+    optimize: bool,
 ) -> Result<FunctionSsa, WalkError> {
     let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
     b.set_end_pc(end_pc);
@@ -454,6 +455,7 @@ pub(crate) fn walk_function(
         ret_indirect,
         indirect_result_slot,
         scalar_return_ty: return_ty,
+        optimize,
     };
     // Walk the function body's root statement (a Compound built
     // at function-end by the parser's `parse_block_stmt` /
@@ -547,6 +549,12 @@ struct Walker<'a> {
     /// Body-local slot holding the saved x8 indirect-result pointer
     /// when `ret_indirect` is true; zero otherwise.
     indirect_result_slot: i64,
+    /// True when the SSA optimization passes will run on this walk's
+    /// output. A deferred `__builtin_constant_p` then lowers to
+    /// `Intrinsic::ConstantP` for the post-inline folds; otherwise it
+    /// resolves to 0 here, keeping the front-end constant-condition
+    /// fold (and the emitted code) identical to the early answer.
+    optimize: bool,
 }
 
 impl<'a> Walker<'a> {
@@ -4613,6 +4621,16 @@ impl<'a> Walker<'a> {
             Expr::ShortCircuit { .. } => self.walk_short_circuit(b, id, true),
             Expr::Intrinsic { kind, args, .. } => {
                 let intr_kind = *kind;
+                // Deferred `__builtin_constant_p`: under `-O` lower the
+                // side-effect-free operand for the SSA folds; otherwise
+                // the answer is 0 and the operand stays unevaluated.
+                if intr_kind == super::super::op::Intrinsic::ConstantP as i64 {
+                    if !self.optimize {
+                        return Ok(b.imm(0));
+                    }
+                    let v = self.walk_expr_rvalue(b, args[0])?;
+                    return Ok(b.intrinsic(intr_kind, alloc::vec![v]));
+                }
                 // The va_* intrinsics receive the ADDRESS of the va_list
                 // storage. The `__va_list_self(ap)` macro spells this as
                 // `(ap)` on System V / AAPCS64 (the array decays to its
@@ -5192,6 +5210,14 @@ impl<'a> Walker<'a> {
                     return None;
                 }
                 Some(narrow_const_to_ty(v, to, self.target))
+            }
+            // Without the SSA folds the answer is 0, so the front-end
+            // dead-branch fold sees it as a constant condition. Under `-O`
+            // it is not known yet and the branch stays.
+            Expr::Intrinsic { kind, .. }
+                if *kind == super::super::op::Intrinsic::ConstantP as i64 && !self.optimize =>
+            {
+                Some(0)
             }
             _ => None,
         }
@@ -6324,6 +6350,7 @@ mod tests {
             Ty::Int as i64,
             0,
             &[],
+            false,
         )
         .expect("walk");
         let immediates: alloc::vec::Vec<i64> = func
@@ -6390,6 +6417,7 @@ mod tests {
             0,
             0,
             &[],
+            false,
         )
         .expect("walk");
         let loads: alloc::vec::Vec<_> = func
@@ -6464,6 +6492,7 @@ mod tests {
             0,
             0,
             &[],
+            false,
         )
         .expect("walk");
         let store_kinds: alloc::vec::Vec<_> = func
@@ -6530,6 +6559,7 @@ mod tests {
             0,
             0,
             &[],
+            false,
         )
         .expect("walk");
         let binops: alloc::vec::Vec<BinOp> = func
@@ -6576,6 +6606,7 @@ mod tests {
             0,
             0,
             &[],
+            false,
         )
         .expect_err("Asm must surface as unsupported");
         assert!(matches!(

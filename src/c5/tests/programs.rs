@@ -794,10 +794,18 @@ fn max_alignment_placement() {
 
 #[test]
 fn overaligned_automatic() {
-    // An automatic object whose alignment exceeds the 16-byte frame guarantee
-    // (C11 6.7.5) lands on its boundary via prologue stack realignment. The VM
-    // run agrees with the native / JIT runs the fixture lists exercise.
+    // An automatic object whose alignment exceeds the 8-byte frame slot (C11
+    // 6.7.5) lands on its boundary via prologue stack realignment. The VM run
+    // agrees with the native / JIT runs the fixture lists exercise.
     assert_eq!(run_fixture("overaligned_automatic.c"), 0);
+}
+
+#[test]
+fn overaligned_automatic_boundaries() {
+    // Every boundary an automatic object may request: 16 (the narrowest the
+    // frame slots cannot place), the intermediate ones, a page, and an object
+    // larger than a page, whose region reservation descends in probed steps.
+    assert_eq!(run_fixture("overaligned_automatic_boundaries.c"), 0);
 }
 
 #[test]

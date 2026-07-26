@@ -69,14 +69,51 @@ fn address_taken_static_survives_dce() {
     );
 }
 
-/// Source with one over-aligned automatic object; its address is taken so the
-/// object stays in the frame (C11 6.7.5).
+/// Source with one over-aligned automatic object at `align`; its address is
+/// taken so the object stays in the frame (C11 6.7.5).
+#[cfg(test)]
+fn overaligned_source_at(align: u32) -> String {
+    alloc::format!(
+        "int use(void *);\n\
+         int f(int n) {{ _Alignas({align}) char buf[64]; buf[0] = (char)n; return use(buf); }}\n\
+         int main(void) {{ return f(0); }}\n"
+    )
+}
+
 #[cfg(test)]
 fn overaligned_source() -> String {
-    "int use(void *);\n\
-     int f(int n) { _Alignas(64) char buf[64]; buf[0] = (char)n; return use(buf); }\n\
-     int main(void) { return f(0); }\n"
-        .to_string()
+    overaligned_source_at(64)
+}
+
+/// Emitted text of `src` as a relocatable object for `target`.
+#[cfg(test)]
+fn overaligned_text(src: &str, target: crate::c5::Target) -> Vec<u8> {
+    use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
+    let program = Compiler::new(src.to_string()).compile().expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    emit_native_with_options(&program, target, opts).expect("emit")
+}
+
+#[test]
+fn overaligned_automatic_realigns_at_the_16_byte_boundary() {
+    // 16 is the narrowest boundary the 8-byte frame slots cannot place, so it
+    // realigns like the wider ones: `and rsp, -16` is 48 83 E4 F0, and
+    // `and sp, x16, #-16` is the word 0x927CEE1F.
+    use crate::c5::Target;
+    let src = overaligned_source_at(16);
+    let x64 = overaligned_text(&src, Target::LinuxX64);
+    assert!(
+        x64.windows(4).any(|w| w == [0x48, 0x83, 0xE4, 0xF0]),
+        "x86_64 realigning prologue `and rsp, -0x10` not emitted"
+    );
+    let a64 = overaligned_text(&src, Target::LinuxAarch64);
+    assert!(
+        a64.windows(4).any(|w| w == [0x1F, 0xEE, 0x7C, 0x92]),
+        "aarch64 realigning prologue `and sp, x16, #-16` not emitted"
+    );
 }
 
 #[test]
@@ -4302,10 +4339,20 @@ fn alignas_places_objects_at_requested_alignment() {
         big.section,
         big.value
     );
-    // Diagnostics: automatic objects above 8, and non-power-of-two requests.
+    // An automatic object's own request is placed from 16 up, in the
+    // prologue-realigned region (the overaligned_automatic fixtures check the
+    // resulting addresses at run time).
+    assert!(
+        Compiler::new("int main(void) { _Alignas(16) char buf[8]; return buf[0]; }\n".to_string())
+            .compile()
+            .is_ok(),
+        "an automatic object's aligned(16) request must be honored"
+    );
+    // Diagnostics: a non-power-of-two request, and one past what the frame
+    // can align to.
     for src in [
-        "int main(void) { _Alignas(16) char buf[8]; return buf[0]; }\n",
         "__attribute__((aligned(24))) static char weird[8];\nint main(void) { return 0; }\n",
+        "int main(void) { _Alignas(8192) char buf[8]; return buf[0]; }\n",
     ] {
         assert!(
             Compiler::new(src.to_string()).compile().is_err(),

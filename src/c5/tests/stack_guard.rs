@@ -26,6 +26,11 @@ struct Decrement {
 /// form the prologue and the call-argument lowering emit; `48 83 EC ib`
 /// is the sign-extended imm8 form the table-driven path can pick. A
 /// following `48 C7 04 24 id` is the probe store (`movq $0, (%rsp)`).
+///
+/// `and rsp, -A` (`48 83 E4 ib` / `48 81 E4 id`), the over-aligned-object
+/// realignment, is counted as a decrement of its worst case `A - 1` bytes:
+/// it moves the pointer down by an unknown amount within that bound, so the
+/// guard rule applies to it exactly as to an explicit decrement.
 fn x86_64_decrements(text: &[u8]) -> Vec<Decrement> {
     const PROBE: &[u8] = &[0x48, 0xC7, 0x04, 0x24, 0x00, 0x00, 0x00, 0x00];
     let mut out = Vec::new();
@@ -37,6 +42,13 @@ fn x86_64_decrements(text: &[u8]) -> Vec<Decrement> {
                 7,
             ),
             [0x48, 0x83, 0xEC, imm8, ..] => (imm8 as i8 as i32 as u32, 4),
+            [0x48, 0x81, 0xE4, ..] if i + 7 <= text.len() => {
+                let mask = i32::from_le_bytes([text[i + 3], text[i + 4], text[i + 5], text[i + 6]]);
+                (mask.unsigned_abs().saturating_sub(1), 7)
+            }
+            [0x48, 0x83, 0xE4, imm8, ..] => {
+                (((imm8 as i8).unsigned_abs() as u32).saturating_sub(1), 4)
+            }
             _ => {
                 i += 1;
                 continue;
@@ -56,6 +68,9 @@ fn x86_64_decrements(text: &[u8]) -> Vec<Decrement> {
 /// Decode every `sub sp, sp, #imm{, lsl #12}` in `text`. A64 is
 /// fixed-width and the text stream is 4-byte aligned, so the scan is
 /// exact. A following `str xzr, [sp]` (`0xF90003FF`) is the probe store.
+///
+/// `and sp, <Xn>, #-A`, the over-aligned-object realignment, is counted as
+/// a decrement of its worst case `A - 1` bytes, as on x86_64.
 fn aarch64_decrements(text: &[u8]) -> Vec<Decrement> {
     const PROBE: u32 = 0xF900_03FF;
     let word = |at: usize| -> Option<u32> {
@@ -65,6 +80,21 @@ fn aarch64_decrements(text: &[u8]) -> Vec<Decrement> {
     let mut out = Vec::new();
     for at in (0..text.len().saturating_sub(3)).step_by(4) {
         let insn = word(at).unwrap();
+        // AND (immediate), 64-bit, into sp: sf=1 opc=00 N=1 -> 0x92400000,
+        // Rd = 31. The mask is `-A`, encoded as immr = 64 - log2(A).
+        if insn & 0xFFC0_0000 == 0x9240_0000 && (insn & 0x1F) == 31 {
+            let log2 = 64 - ((insn >> 16) & 0x3F);
+            // Only a power-of-two mask `-A` is emitted here; anything else is
+            // a byte pattern the linear scan mistook for one.
+            if (1..32).contains(&log2) {
+                out.push(Decrement {
+                    at,
+                    bytes: (1u32 << log2) - 1,
+                    probed: word(at + 4) == Some(PROBE),
+                });
+            }
+            continue;
+        }
         // SUB (immediate), 64-bit: sf=1 op=1 S=0 -> 0xD1, Rd = Rn = 31.
         if insn & 0xFF00_0000 != 0xD100_0000 || (insn & 0x3FF) != 0x3FF {
             continue;

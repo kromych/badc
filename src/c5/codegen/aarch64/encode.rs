@@ -423,8 +423,8 @@ pub(crate) fn enc_and_imm_neg16(rd: Reg, rn: Reg) -> u32 {
 /// automatic-object prologue realignment (C11 6.7.5).
 pub(crate) fn enc_and_sp_pow2(rn: Reg, log2_align: u32) -> u32 {
     debug_assert!(
-        (5..=12).contains(&log2_align),
-        "over-alignment is 32..=4096"
+        (4..=12).contains(&log2_align),
+        "over-alignment is 16..=4096"
     );
     let immr = 64 - log2_align;
     let imms = 63 - log2_align;

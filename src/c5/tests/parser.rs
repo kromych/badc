@@ -28,10 +28,29 @@ fn empty_source_has_no_main() {
 }
 
 #[test]
+fn overaligned_automatic_beside_a_vla_is_diagnosed() {
+    // The realigned region and a variable-length array (C99 6.7.6.2) both move
+    // sp, so they cannot share a frame. The rejection is a source-level
+    // diagnostic, not the walker's internal error.
+    expect_compile_error(
+        "int use(void *, void *);\n\
+         int f(int n) { int v[n]; _Alignas(16) char c[16]; return use(v, c); }",
+        "cannot share a function with `alloca` or a variable-length array",
+    );
+    // An over-aligned VLA itself has no fixed extent to place in the region.
+    expect_compile_error(
+        "int use(void *);\n\
+         int f(int n) { _Alignas(32) char v[n]; return use(v); }",
+        "over-aligned variable-length array",
+    );
+}
+
+#[test]
 fn overaligned_automatic_above_cap_is_rejected() {
-    // An automatic object's alignment above 16 is honored by realigning the
-    // stack in the prologue (C11 6.7.5), up to a one-page cap. A request past
-    // the cap must use static storage rather than a page-sized frame slack.
+    // An automatic object's alignment above the 8-byte frame slot is honored by
+    // realigning the stack in the prologue (C11 6.7.5), up to a one-page cap. A
+    // request past the cap must use static storage rather than a page-sized
+    // frame slack.
     expect_compile_error(
         "int main(void) { int __attribute__((aligned(8192))) a; return (int)(long)&a; }",
         "exceeds the maximum for an automatic object",

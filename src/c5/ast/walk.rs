@@ -92,8 +92,8 @@ pub(crate) fn walk_function(
 ) -> Result<FunctionSsa, WalkError> {
     let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
     b.set_end_pc(end_pc);
-    // C11 6.7.5: automatic objects whose alignment exceeds the 16-byte frame
-    // guarantee live in a prologue-realigned region. Pack them (widest
+    // C11 6.7.5: automatic objects whose alignment exceeds the 8-byte frame
+    // slot live in a prologue-realigned region. Pack them (widest
     // alignment first) into that region; every backend addresses these slots
     // as `region_base + region_off`. The region and `alloca` both move sp, so
     // the combination is rejected.

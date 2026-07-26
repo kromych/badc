@@ -93,6 +93,15 @@ int main(void) {
     if (pcpu_read8(v_eight, 23) != 0x99U)
         return 7;
 
+    /* A non-volatile read whose result is unused is dead, so the whole
+     * access must disappear: emitting it while its address operand is
+     * dropped as unread would read through whatever the register holds.
+     * The live read after them must still address offset 8. */
+    (void)pcpu_read64(v_zero, v_eight);
+    (void)pcpu_read8(v_eight, 23);
+    if (pcpu_read64(v_zero, v_eight) != 0x1122334455667788ULL)
+        return 13;
+
     pcpu_write64(v_eight, 32, 0x0f1e2d3c4b5a6978ULL);
     pcpu_write64(v_zero, v_eight * 2, 0xfeedfacecafebeefULL);
     pcpu_add64(v_eight, 40, 0x1111111111111111ULL);

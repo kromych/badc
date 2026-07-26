@@ -4521,33 +4521,7 @@ pub(crate) fn is_dead_pure(
     v: super::super::ir::ValueId,
     alloc: &super::reg_alloc::Allocation,
 ) -> bool {
-    use super::super::ir::Inst::*;
-    // A volatile load is never pure: the access itself is the side
-    // effect (C99 5.1.2.3p2 / 6.7.3p6), so it is emitted even with no
-    // consumers, at every optimization level.
-    let pure = matches!(
-        inst,
-        Imm(_)
-            | ImmData(_)
-            | ImmCode(_)
-            | LocalAddr(_)
-            | TlsAddr(_)
-            | Load {
-                volatile: false,
-                ..
-            }
-            | LoadLocal {
-                volatile: false,
-                ..
-            }
-            | LoadIndexed { .. }
-            | Binop { .. }
-            | BinopI { .. }
-            | Fneg(_)
-            | FpCast { .. }
-            | Extend { .. }
-    );
-    if !pure {
+    if !inst.is_pure() {
         return false;
     }
     let idx = v as usize;

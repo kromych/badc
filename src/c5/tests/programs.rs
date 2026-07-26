@@ -382,6 +382,10 @@ fn int128_arithmetic() {
     //   128-bit operand or result, including mixed operand signedness
     //   and a destination of a different width
     assert_eq!(run_fixture("int128_overflow_builtin.c"), 0);
+    //   bitfields of the type: 16-byte storage units, widths past 64
+    //   bits, sign extension, the operators, and the C99 6.3.1.1p2
+    //   promotion of a field narrow enough to read as `int`
+    assert_eq!(run_fixture("int128_bitfield.c"), 0);
 }
 
 #[test]

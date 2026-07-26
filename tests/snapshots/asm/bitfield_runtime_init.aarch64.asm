@@ -57,9 +57,9 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	and	x6, x6, x17
-               	lsl	x5, x5, #8
-               	orr	x5, x6, x5
-               	str	w5, [x0]
+               	lsl	x7, x5, #8
+               	orr	x6, x6, x7
+               	str	w6, [x0]
                	sub	x0, x29, #0x8
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xf, lsl #16

@@ -2862,6 +2862,7 @@ mod tests {
             asm_sections: Vec::new(),
             asm_section_text_refs: Vec::new(),
             asm_text_abs_refs: Vec::new(),
+            asm_text_labels: Vec::new(),
             copy_relocs: Default::default(),
             // movz x0, #42 ; ret
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],

@@ -2205,6 +2205,9 @@ pub(crate) fn lower(
         asm_section_text_refs: Vec::new(),
         // No aarch64 form takes a label address as an absolute immediate.
         asm_text_abs_refs: Vec::new(),
+        // The A64 template parser accepts numeric local labels only, so no
+        // main-stream label can carry a name a C reference spells.
+        asm_text_labels: Vec::new(),
         copy_relocs: Vec::new(),
         text: code,
         text_align,

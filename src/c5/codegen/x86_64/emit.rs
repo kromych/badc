@@ -1549,6 +1549,7 @@ pub(crate) fn emit_function(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
+    asm_text_labels: &mut Vec<super::AsmTextLabel>,
     no_sse: bool,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
@@ -1573,6 +1574,8 @@ pub(crate) fn emit_function(
     let data_fixups_snapshot = data_fixups.len();
     let user_extern_data_refs_snapshot = user_extern_data_refs.len();
     let asm_section_text_refs_snapshot = asm_section_text_refs.len();
+    let asm_text_abs_refs_snapshot = asm_text_abs_refs.len();
+    let asm_text_labels_snapshot = asm_text_labels.len();
     let asm_extern_call_sites_snapshot = asm_extern_call_sites.len();
     let asm_sections_snapshot = super::ssa::emit_common::snapshot_asm_sections(asm_sections);
     // A cross-unit `extern _Thread_local` access (`extern_tls_names` maps
@@ -1591,6 +1594,8 @@ pub(crate) fn emit_function(
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             asm_section_text_refs.truncate(asm_section_text_refs_snapshot);
+            asm_text_abs_refs.truncate(asm_text_abs_refs_snapshot);
+            asm_text_labels.truncate(asm_text_labels_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
             super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
@@ -1773,6 +1778,8 @@ pub(crate) fn emit_function(
     let body_data = data_fixups.len();
     let body_uext = user_extern_data_refs.len();
     let body_asm_xsec = asm_section_text_refs.len();
+    let body_asm_abs = asm_text_abs_refs.len();
+    let body_asm_labels = asm_text_labels.len();
     let body_pending = pending_func_fixups.len();
     let body_tls = tls_index_fixups.len();
     let body_elf_tpoff = elf_tpoff_fixups.len();
@@ -1868,6 +1875,7 @@ pub(crate) fn emit_function(
                         user_extern_data_refs,
                         asm_section_text_refs,
                         asm_text_abs_refs,
+                        asm_text_labels,
                         text_align,
                         Some(AsmGotoCtx {
                             row: &func.jump_tables[table as usize],
@@ -1921,6 +1929,7 @@ pub(crate) fn emit_function(
                         fixups,
                         asm_section_text_refs,
                         asm_text_abs_refs,
+                        asm_text_labels,
                     )
                 };
                 if !inst_ok {
@@ -2218,6 +2227,8 @@ pub(crate) fn emit_function(
                 data_fixups.truncate(body_data);
                 user_extern_data_refs.truncate(body_uext);
                 asm_section_text_refs.truncate(body_asm_xsec);
+                asm_text_abs_refs.truncate(body_asm_abs);
+                asm_text_labels.truncate(body_asm_labels);
                 pending_func_fixups.truncate(body_pending);
                 tls_index_fixups.truncate(body_tls);
                 elf_tpoff_fixups.truncate(body_elf_tpoff);
@@ -2898,6 +2909,7 @@ fn emit_inst(
     fixups: &mut Vec<Fixup>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
+    asm_text_labels: &mut Vec<super::AsmTextLabel>,
 ) -> bool {
     // Unpack the read-only per-function context into the per-field names the
     // lowering below uses, so the body is unchanged.
@@ -3303,6 +3315,7 @@ fn emit_inst(
             user_extern_data_refs,
             asm_section_text_refs,
             asm_text_abs_refs,
+            asm_text_labels,
             cx.text_align,
             None,
         ),
@@ -6948,6 +6961,7 @@ fn emit_inline_asm(
     user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
+    asm_text_labels: &mut Vec<super::AsmTextLabel>,
     text_align: &mut usize,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
 ) -> bool {
@@ -7871,6 +7885,27 @@ fn emit_inline_asm(
             }),
             None => return fail("inline asm: `$LABEL` address immediate names no local label"),
         }
+    }
+    // A named label defined in the main stream is a definition of the unit,
+    // as it is for GNU as: record it so the writers emit a local `.text`
+    // symbol and bind a same-name C reference to it. `.L`-prefixed names are
+    // assembler-local (and the renames this emit generates for multiply
+    // defined numeric labels carry that prefix), so no C reference spells one.
+    for &(num, off) in &label_defs {
+        if num < super::asm::NAMED_LABEL_BASE {
+            continue;
+        }
+        let Some(&name) = code_label_names.get((num - super::asm::NAMED_LABEL_BASE) as usize)
+        else {
+            continue;
+        };
+        if name.starts_with(".L") {
+            continue;
+        }
+        asm_text_labels.push(super::AsmTextLabel {
+            name: alloc::string::String::from(name),
+            text_offset: off,
+        });
     }
     // Materialize the `.pushsection` blocks now that every label's text
     // offset is known. A reference that names a template label resolves

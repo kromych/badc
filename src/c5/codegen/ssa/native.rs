@@ -145,6 +145,7 @@ pub(crate) fn compile_function_to_bytes(
             let mut asm_sections: Vec<super::emit_common::AsmSection> = Vec::new();
             let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
             let mut asm_text_abs_refs: Vec<super::AsmTextAbsRef> = Vec::new();
+            let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
             let mut asm_extern_call_sites = Vec::new();
             let mut text_align: usize = 16;
             // The JIT single-function path builds no PE; the unwind
@@ -186,6 +187,7 @@ pub(crate) fn compile_function_to_bytes(
                     &alloc::collections::BTreeMap::new(),
                     &mut asm_section_text_refs,
                     &mut asm_text_abs_refs,
+                    &mut asm_text_labels,
                     false,
                 )
             };
@@ -199,6 +201,7 @@ pub(crate) fn compile_function_to_bytes(
                 + data_fixups.len()
                 + asm_section_text_refs.len()
                 + asm_text_abs_refs.len()
+                + asm_text_labels.len()
                 + pending_func_fixups.len()
                 + tls_index_fixups.len();
             if outer != 0 {

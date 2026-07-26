@@ -10,37 +10,24 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<host_ticks>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	leaq	-0x10(%rbp), %rcx
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rax, %r10
-               	pushq	%r10
-               	movq	%rcx, %r10
-               	pushq	%r10
-               	rdtsc
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rax
-               	movl	-0x10(%rbp), %eax
-               	shlq	$0x20, %rax
-               	movl	-0x8(%rbp), %ecx
-               	orq	%rcx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	callq	<addr>
+               	subq	$0x40, %rsp
+               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x18(%rbp), %rcx
+               	movq	%rax, -0x40(%rbp)
+               	movq	%rdx, -0x38(%rbp)
+               	movq	%rax, -0x30(%rbp)
+               	movq	%rcx, -0x28(%rbp)
+               	rdtsc
+               	movq	-0x30(%rbp), %r10
+               	movl	%eax, (%r10)
+               	movq	-0x28(%rbp), %r10
+               	movl	%edx, (%r10)
+               	movq	-0x40(%rbp), %rax
+               	movq	-0x38(%rbp), %rdx
                	xorq	%rax, %rax
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq

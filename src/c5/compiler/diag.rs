@@ -15,7 +15,8 @@ use super::super::ir::BinOp;
 use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
-    VOLATILE_BIT, is_floating_scalar, is_pointer_ty, is_struct_ty, strip_unsigned, struct_ptr_depth,
+    VOLATILE_MASK, is_floating_scalar, is_pointer_ty, is_struct_ty, strip_unsigned,
+    struct_ptr_depth,
 };
 
 impl Compiler {
@@ -429,8 +430,8 @@ impl Compiler {
     ) -> Option<&'static str> {
         // C99 6.5.16.1p1: the target may add qualifiers; volatility
         // never affects assignment compatibility.
-        let declared = declared & !VOLATILE_BIT;
-        let actual = actual & !VOLATILE_BIT;
+        let declared = declared & !VOLATILE_MASK;
+        let actual = actual & !VOLATILE_MASK;
         if declared == actual {
             return None;
         }

@@ -31,7 +31,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{apply_qual_bits, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     /// Drain the three pending local-initializer carriers into a single
@@ -202,7 +202,7 @@ impl Compiler {
         if is_thread_local && !is_extern {
             is_static = true;
         }
-        let lbt = base | qual_bits;
+        let lbt = apply_qual_bits(base, qual_bits);
         // A function-pointer typedef base type contributes its lineage to
         // every declarator in the list (`fn_t a, b;` makes both a and b
         // function pointers). The per-declarator symbol creation consumes

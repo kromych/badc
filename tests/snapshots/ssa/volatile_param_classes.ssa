@@ -5,19 +5,18 @@ fn ent_pc=0 n_params=2 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
-    v2   StoreLocal { off=2, value=v1, kind=I64 }         -> -
+    v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=F64)                            -> d0
     v4   StoreLocal { off=3, value=v3, kind=F64 }         -> -
-    v5   LoadLocal { off=2, kind=I64, volatile }          -> x0
-    v6   Load { addr=v5, disp=0, kind=F64, volatile }     -> d0
+    v5   LoadLocal { off=2, kind=I64 }                    -> x0
+    v6   Load { addr=v1, disp=0, kind=F64, volatile }     -> d0
     v7   StoreLocal { off=-1, value=v6, kind=F64, volatile } -> -
-    v8   LoadLocal { off=2, kind=I64, volatile }          -> x0
-    v9   LoadLocal { off=-1, kind=F64, volatile }         -> d0
-    v10  LoadLocal { off=3, kind=F64, volatile }          -> d1
-    v11  Binop { op=fadd, lhs=v9, rhs=v10 }               -> d0
-    v12  Store { addr=v8, disp=0, value=v11, kind=F64 }   -> -
-    v13  Imm(0)                                           -> x0
-    terminator Return(v13)   (exit_acc=v13)
+    v8   LoadLocal { off=-1, kind=F64, volatile }         -> d0
+    v9   LoadLocal { off=3, kind=F64, volatile }          -> d1
+    v10  Binop { op=fadd, lhs=v8, rhs=v9 }                -> d0
+    v11  Store { addr=v1, disp=0, value=v10, kind=F64 }   -> -
+    v12  Imm(0)                                           -> x0
+    terminator Return(v12)   (exit_acc=v12)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=half
 fn ent_pc=1 n_params=1 variadic=false locals=1

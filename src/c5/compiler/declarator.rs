@@ -30,7 +30,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::is_decl_modifier;
+use super::types::{add_ptr_level, apply_qual_bits, is_decl_modifier, strip_unsigned};
 
 impl Compiler {
     /// Speculatively parse a block-scope function prototype
@@ -246,7 +246,7 @@ impl Compiler {
         // Consume either here so neither stands in for the declarator name.
         loop {
             if self.lex.tk == Token::TypeQual {
-                ty |= self.lex_qualifier_bits();
+                ty = apply_qual_bits(ty, self.lex_qualifier_bits());
                 self.next()?;
             } else if self.at_attribute_specifier() {
                 self.skip_attribute_specifiers()?;
@@ -257,16 +257,17 @@ impl Compiler {
         let mut leading_ptr_count: i64 = 0;
         while self.lex.tk == Token::MulOp {
             self.next()?;
-            ty += Ty::Ptr as i64;
+            ty = add_ptr_level(ty);
             leading_ptr_count += 1;
             // Pointer-level qualifiers: `int *const p`, `int *volatile p`,
-            // `char *restrict s`. A pointer-level `volatile` sets the
-            // tag's qualifier bit (C99 6.7.3; the single bit does not
-            // record the level). An attribute may sit here too
+            // `char *restrict s`. A `volatile` here qualifies the pointer
+            // object, which is what `apply_qual_bits` records by clearing
+            // the inner-only marker `add_ptr_level` just set (C99
+            // 6.7.5.1p1). An attribute may sit here too
             // (`void * __attribute__((malloc)) p`).
             loop {
                 if self.lex.tk == Token::TypeQual {
-                    ty |= self.lex_qualifier_bits();
+                    ty = apply_qual_bits(ty, self.lex_qualifier_bits());
                     self.next()?;
                 } else if self.at_attribute_specifier() {
                     self.skip_attribute_specifiers()?;
@@ -374,7 +375,10 @@ impl Compiler {
             // `(args)` (fn-ptr) or by `[N]` (pointer-to-array, not a
             // fn-ptr). Set the indirection unconditionally here and clear
             // it back to None if the shape resolves to an array.
-            let ty_delta = inner_ty - outer_ty_before_inner;
+            // Band arithmetic: a qualifier bit the inner declarator
+            // added (`T (*volatile name)(args)`) would otherwise land in
+            // the difference and make the quotient garbage.
+            let ty_delta = strip_unsigned(inner_ty) - strip_unsigned(outer_ty_before_inner);
             let inner_ptr_levels = ty_delta / (Ty::Ptr as i64);
             // The inner declarator may have stopped on `(` if it
             // was a function-returning-fp shape like
@@ -531,7 +535,7 @@ impl Compiler {
                     // the abstract form `T (*)[N]` (no symbol).
                     inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
                         + inner_ptr_levels * (Ty::Ptr as i64))
-                        | (inner_ty & super::types::VOLATILE_BIT);
+                        | (inner_ty & super::types::VOLATILE_MASK);
                 } else if idx != usize::MAX && pointee_dims.iter().all(|&d| d > 0) {
                     // Redundant-paren shape `T (name)[N]`: keep the
                     // per-bracket level plus the leading-0 sentinel dims

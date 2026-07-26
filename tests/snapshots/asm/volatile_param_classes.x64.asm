@@ -13,22 +13,18 @@ Disassembly of section .text:
 <step>:
                	popq	%r10
                	subq	$0x20, %rsp
-               	movq	%rdi, (%rsp)
                	movsd	%xmm0, 0x10(%rsp)
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	%rdi, 0x10(%rbp)
                	movsd	%xmm0, 0x20(%rbp,%riz)
-               	movq	0x10(%rbp), %rax
-               	movsd	(%rax,%riz), %xmm0
+               	movsd	(%rdi,%riz), %xmm0
                	movsd	%xmm0, -0x8(%rbp,%riz)
-               	movq	0x10(%rbp), %rax
                	movsd	-0x8(%rbp,%riz), %xmm0
                	movsd	0x20(%rbp,%riz), %xmm1
                	addsd	%xmm1, %xmm0
-               	movsd	%xmm0, (%rax,%riz)
+               	movsd	%xmm0, (%rdi,%riz)
                	xorq	%rax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp

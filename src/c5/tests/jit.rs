@@ -1895,6 +1895,10 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("volatile_ptr_alias_loop.c", 0),
     ("volatile_unused_read.c", 0),
     ("volatile_param_classes.c", 0),
+    ("volatile_pointee_not_pointer_cell.c", 0),
+    ("volatile_pointer_object_cell.c", 0),
+    ("volatile_fn_pointer_declarator.c", 0),
+    ("generic_selection_volatile.c", 0),
     // `thread_local_*.c` aren't here -- the JIT path's host is
     // macOS arm64 in this repo, where TLS lowering isn't
     // implemented yet (Mach-O __thread_data + dyld

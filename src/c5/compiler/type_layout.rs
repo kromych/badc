@@ -16,7 +16,7 @@ use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, is_type_start_token,
+    UNSIGNED_BIT, VOLATILE_MASK, is_pointer_ty, is_struct_ty, is_type_start_token,
     pointee_size_no_struct, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
     usual_arith_common_ty,
 };
@@ -468,7 +468,7 @@ impl Compiler {
             alloc::vec![self.pending.typedef_base_array_size]
         };
         let agg = self.array_agg_type(elem_ty, &dims);
-        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & VOLATILE_BIT)
+        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & VOLATILE_MASK)
     }
 
     /// True when the current lexer position starts a type. The free

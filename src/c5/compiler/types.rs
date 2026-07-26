@@ -71,15 +71,67 @@ pub(crate) fn is_unsigned_ty(ty: i64) -> bool {
 /// [`strip_unsigned`] before any band classifier consults the tag. The
 /// single bit does not record which indirection level carries the
 /// qualifier, so `volatile T *`, `T * volatile`, and `volatile T`
-/// all set it; every access through such a tag is treated as a
+/// all set it; every access *through* such a tag is treated as a
 /// volatile access (a conservative over-approximation -- extra
 /// volatility only inhibits optimization, per 5.1.2.3p2 an access to
-/// a volatile object may not be elided or coalesced).
+/// a volatile object may not be elided or coalesced). Whether the
+/// declared object itself is volatile is the separate question
+/// [`VOLATILE_INNER_BIT`] answers.
 pub(crate) const VOLATILE_BIT: i64 = 1 << 29;
 
 /// `true` if `ty` carries the volatile qualifier at any level.
 pub(crate) fn is_volatile_ty(ty: i64) -> bool {
     (ty & VOLATILE_BIT) != 0
+}
+
+/// High-bit flag recording that [`VOLATILE_BIT`] came from a derivation
+/// below the outermost one: `volatile T *p` qualifies the pointee, not
+/// `p` (C99 6.7.5.1p1). Set by [`add_ptr_level`] when a declarator adds
+/// a pointer level, cleared by [`apply_qual_bits`] when a qualifier
+/// applies to the type built so far. Absence is the conservative
+/// answer, so a tag that never passed through the declarator keeps the
+/// whole-tag reading; only [`is_volatile_object_ty`] consults it.
+pub(crate) const VOLATILE_INNER_BIT: i64 = 1 << 33;
+
+/// `true` if the object a declaration gives this tag is itself
+/// volatile-qualified (`volatile T x`, `T *volatile p`), as opposed to
+/// one that merely points at volatile data (`volatile T *p`). Governs
+/// whether the object's own storage is a volatile lvalue; accesses
+/// *through* the tag stay on [`is_volatile_ty`].
+pub(crate) fn is_volatile_object_ty(ty: i64) -> bool {
+    is_volatile_ty(ty) && (ty & VOLATILE_INNER_BIT) == 0
+}
+
+/// Both volatile markers. Sites that move the qualifier onto a
+/// rebuilt tag, or that must ignore volatility entirely, take the pair
+/// as a unit -- splitting them would make two spellings of the same
+/// qualified type compare unequal.
+pub(crate) const VOLATILE_MASK: i64 = VOLATILE_BIT | VOLATILE_INNER_BIT;
+
+/// Add one pointer derivation level. The pointer object is unqualified
+/// until a post-`*` qualifier says otherwise, so any volatile already
+/// on the tag becomes inner-only. The marker qualifies
+/// [`VOLATILE_BIT`] and is never set without it, which keeps every
+/// unqualified tag numerically identical to what plain `+ Ty::Ptr`
+/// produced.
+pub(crate) fn add_ptr_level(ty: i64) -> i64 {
+    let ty = ty + Ty::Ptr as i64;
+    if ty & VOLATILE_BIT != 0 {
+        ty | VOLATILE_INNER_BIT
+    } else {
+        ty
+    }
+}
+
+/// Fold type-qualifier bits into a tag. A `volatile` among them
+/// qualifies the outermost derivation built so far, which is what
+/// [`VOLATILE_INNER_BIT`] denies.
+pub(crate) fn apply_qual_bits(ty: i64, bits: i64) -> i64 {
+    if bits & VOLATILE_BIT != 0 {
+        (ty | bits) & !VOLATILE_INNER_BIT
+    } else {
+        ty | bits
+    }
 }
 
 /// High-bit flags marking a type tag qualified by an x86 named address
@@ -145,14 +197,15 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
     }
 }
 
-/// Drop the qualifier bits (`UNSIGNED_BIT`, `VOLATILE_BIT`, `VOID_BIT`,
-/// the segment bits). Use to recover the bare band-encoded type before
+/// Drop the qualifier bits (`UNSIGNED_BIT`, `VOLATILE_BIT`,
+/// `VOLATILE_INNER_BIT`, `VOID_BIT`, the segment bits). Use to recover
+/// the bare band-encoded type before
 /// consulting a helper that classifies by band. Most of the helpers in
 /// this module call this at their entry; outside callers only need it
 /// when storing a type tag where a non-bit-flagged tag is expected
 /// (e.g., switch-table comparisons against `Ty::Int as i64`).
 pub(crate) fn strip_unsigned(ty: i64) -> i64 {
-    ty & !(UNSIGNED_BIT | VOLATILE_BIT | SEG_MASK | VOID_BIT)
+    ty & !(UNSIGNED_BIT | VOLATILE_BIT | VOLATILE_INNER_BIT | SEG_MASK | VOID_BIT)
 }
 
 /// The scalar `void` type tag.
@@ -799,6 +852,39 @@ mod ty_tag {
         assert_eq!(strip_unsigned(void_ty()), Ty::Char as i64);
         assert!(is_unsigned_ty(void_ty()));
         assert_eq!(pointee_size_no_struct(strip_unsigned(void_ty() + ptr)), 1);
+    }
+
+    /// The declarator's qualifier algebra: `add_ptr_level` demotes a
+    /// volatile to inner-only, `apply_qual_bits` promotes it back.
+    #[test]
+    fn volatile_object_tracks_the_outermost_derivation() {
+        let int = Ty::Int as i64;
+        let vol = VOLATILE_BIT;
+        // `volatile T x` -- the object is volatile.
+        assert!(is_volatile_object_ty(apply_qual_bits(int, vol)));
+        // `volatile T *p` -- the pointee is, `p` is not.
+        let pointee_vol = add_ptr_level(apply_qual_bits(int, vol));
+        assert!(is_volatile_ty(pointee_vol));
+        assert!(!is_volatile_object_ty(pointee_vol));
+        // `T *volatile p` -- the pointer object is.
+        let obj_vol = apply_qual_bits(add_ptr_level(int), vol);
+        assert!(is_volatile_object_ty(obj_vol));
+        // `volatile T *volatile p` -- both.
+        assert!(is_volatile_object_ty(apply_qual_bits(pointee_vol, vol)));
+        // `volatile T **p` -- neither pointer level is qualified.
+        assert!(!is_volatile_object_ty(add_ptr_level(pointee_vol)));
+        // `volatile T *volatile *p` -- the inner pointer is, `p` is not.
+        assert!(!is_volatile_object_ty(add_ptr_level(apply_qual_bits(
+            pointee_vol,
+            vol
+        ))));
+        // The marker never appears without the qualifier it modifies, so
+        // an unqualified tag keeps the value plain `+ Ty::Ptr` produced.
+        assert_eq!(add_ptr_level(int), int + Ty::Ptr as i64);
+        assert_eq!(strip_unsigned(pointee_vol), int + Ty::Ptr as i64);
+        // Band classifiers see through both markers.
+        assert!(is_pointer_ty(pointee_vol));
+        assert!(is_pointer_ty(obj_vol));
     }
 
     #[test]

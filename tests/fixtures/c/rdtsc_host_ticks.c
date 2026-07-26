@@ -1,7 +1,7 @@
-/* x86-64 `rdtsc` inline-asm shape (a common host-tick counter) as
-   Intrinsic::Rdtsc: two 32-bit register-tied outputs, no inputs. Native
-   x86-64 emits `rdtsc`; the VM zeroes the outputs (no host clock), so the
-   assembled 64-bit value is 0 here. Other native targets gate it out. */
+/* x86-64 `rdtsc` inline-asm shape (a common host-tick counter): two 32-bit
+   register-tied outputs, no inputs. Native x86-64 emits `rdtsc`; the VM
+   zeroes the outputs (no host clock), so the assembled 64-bit value is 0
+   here. Other native targets gate it out. */
 
 static long long host_ticks(void) {
     unsigned low, high;

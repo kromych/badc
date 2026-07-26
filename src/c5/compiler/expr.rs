@@ -39,9 +39,9 @@ use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, format_type, fp_result_ty, integer_promote, is_bool_ty,
-    is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty, is_vector_ty,
-    is_void_ptr_ty, struct_id_of, struct_ptr_depth,
+    UNSIGNED_BIT, VOLATILE_BIT, apply_qual_bits, format_type, fp_result_ty, integer_promote,
+    is_bool_ty, is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty,
+    is_vector_ty, is_void_ptr_ty, struct_id_of, struct_ptr_depth,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -1998,7 +1998,7 @@ impl Compiler {
                         }
                     }
                     while self.lex.tk == Token::TypeQual {
-                        t |= self.lex_qualifier_bits();
+                        t = apply_qual_bits(t, self.lex_qualifier_bits());
                         self.next()?;
                     }
                 }
@@ -2151,7 +2151,7 @@ impl Compiler {
                         };
                         let agg = self.array_agg_type(cast_array_elem_ty, &dims);
                         t = (agg + cast_ptr_levels * (Ty::Ptr as i64))
-                            | (t & super::types::VOLATILE_BIT);
+                            | (t & super::types::VOLATILE_MASK);
                     }
                     self.ty = t;
                     // A cast yields a value of the cast type, not a
@@ -5017,7 +5017,7 @@ impl Compiler {
 /// pointer level / aggregate identity stay significant so
 /// `unsigned int` and `T *` select distinct associations.
 fn generic_type_match(ctrl: i64, assoc: i64) -> bool {
-    (ctrl & !super::types::VOLATILE_BIT) == (assoc & !super::types::VOLATILE_BIT)
+    (ctrl & !super::types::VOLATILE_MASK) == (assoc & !super::types::VOLATILE_MASK)
 }
 
 /// A function type named by a type name. The flat type tag carries only

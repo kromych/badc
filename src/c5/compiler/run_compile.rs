@@ -339,6 +339,7 @@ impl Compiler {
             self.pending.attr_cleanup = None;
             self.pending.attr_weak = false;
             self.pending.attr_used = false;
+            self.pending.attr_hidden = false;
             self.pending.attr_section = None;
             self.pending.attr_alias = None;
             self.pending.saw_register_storage = false;
@@ -2888,16 +2889,19 @@ impl Compiler {
         }
     }
 
-    /// Move the `weak` / `used` / `section("name")` attribute carriers
-    /// collected for the current declarator onto its symbol. Shared by
-    /// the function and file-scope-object paths; the object writers
-    /// read the fields off the symbol.
+    /// Move the `weak` / `used` / `visibility` / `section("name")` attribute
+    /// carriers collected for the current declarator onto its symbol. Shared
+    /// by the function and file-scope-object paths; the object writers read
+    /// the fields off the symbol.
     pub(super) fn apply_symbol_attributes(&mut self, id_idx: usize) {
         if self.pending.attr_weak {
             self.symbols[id_idx].is_weak = true;
         }
         if self.pending.attr_used {
             self.symbols[id_idx].is_used = true;
+        }
+        if self.pending.attr_hidden {
+            self.symbols[id_idx].is_hidden = true;
         }
         if let Some(sec) = self.pending.attr_section.take() {
             self.symbols[id_idx].section_name = Some(sec);

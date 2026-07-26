@@ -92,6 +92,13 @@ pub(crate) struct Symbol {
     /// when nothing in the unit references it.
     pub is_used: bool,
 
+    /// `__attribute__((visibility("hidden")))` (or `"internal"`): the
+    /// symbol is not preemptible, so the object writer marks it STV_HIDDEN
+    /// and addresses it PC-relative directly rather than through the GOT.
+    /// An undefined hidden reference resolves within the linked image, to 0
+    /// when it stays undefined, with no GOT entry.
+    pub is_hidden: bool,
+
     /// `__attribute__((section("name")))`: the named object section the
     /// symbol's bytes go to instead of the default `.text` / `.data` /
     /// `.bss` placement.

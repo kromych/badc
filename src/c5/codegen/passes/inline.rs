@@ -105,6 +105,15 @@ enum RegionKey {
 /// activation of itself only through a call cycle, so one off every cycle
 /// (`call_cycle_members`) reuses a single per-callee region across its
 /// sites, and a cycle member appends per site.
+/// Where a spliced body's relocated locals may live: the caller's region
+/// records plus the two sets that force a fresh region per site -- callees
+/// on a call cycle, and functions that can reach stack-pointer asm.
+struct SlotPlacement<'a> {
+    regions: &'a mut CallerRegions,
+    cyclic: &'a BTreeSet<usize>,
+    sp_tainted: &'a BTreeSet<usize>,
+}
+
 #[derive(Default)]
 struct CallerRegions {
     /// Shared region for call-free bodies: `(base, size)` slot-magnitude
@@ -1151,9 +1160,13 @@ fn splice_multi_block(
     call_pc: u32,
     call_args: &[ValueId],
     ret_slot: i64,
-    regions: &mut CallerRegions,
-    cyclic: &BTreeSet<usize>,
+    placement: &mut SlotPlacement<'_>,
 ) {
+    let SlotPlacement {
+        regions,
+        cyclic,
+        sp_tainted,
+    } = placement;
     let n_caller = caller.blocks.len();
     let n_callee = callee.blocks.len();
     let prefix_id = splice_block_idx as u32;
@@ -1272,15 +1285,20 @@ fn splice_multi_block(
         .filter(|s| spilled.contains(s))
         .collect();
     // Region backing the callee's relocated slots, shared across call
-    // sites when sound (see `CallerRegions`); a cycle member appends.
+    // sites when sound (see `CallerRegions`). A cycle member appends, and
+    // so does any splice whose caller or callee can come to execute
+    // stack-pointer asm (`sp_asm_reachers`): a stack switch lets a spliced
+    // activation stay live -- suspended mid-body on another stack -- while
+    // the caller proceeds to further sites, so no two sites may share.
     let needed = callee.locals + param_cells.len() as i64;
     let region_base = if needed > 0 {
-        let key = if !callee.insts.iter().any(|i| matches!(i, Inst::Call { .. })) {
-            Some(RegionKey::Pool)
-        } else if !cyclic.contains(&callee.ent_pc) {
-            Some(RegionKey::Callee(callee.ent_pc))
-        } else {
+        let sp = sp_tainted.contains(&original.ent_pc) || sp_tainted.contains(&callee.ent_pc);
+        let key = if sp || cyclic.contains(&callee.ent_pc) {
             None
+        } else if !callee.insts.iter().any(|i| matches!(i, Inst::Call { .. })) {
+            Some(RegionKey::Pool)
+        } else {
+            Some(RegionKey::Callee(callee.ent_pc))
         };
         regions.place(key, needed, original.locals)
     } else {
@@ -2043,8 +2061,7 @@ fn needs_reloc_splice(c: &FunctionSsa) -> bool {
 fn inline_caller(
     caller: &mut FunctionSsa,
     callees: &BTreeMap<usize, &FunctionSsa>,
-    regions: &mut CallerRegions,
-    cyclic: &BTreeSet<usize>,
+    placement: &mut SlotPlacement<'_>,
 ) {
     let mut new_insts: Vec<Inst> = Vec::with_capacity(caller.insts.len());
     let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(caller.inst_src.len());
@@ -2434,7 +2451,7 @@ fn inline_caller(
                 n = caller.name
             );
         }
-        splice_multi_block(caller, callee, b_idx, pc, &args, ret_slot, regions, cyclic);
+        splice_multi_block(caller, callee, b_idx, pc, &args, ret_slot, placement);
         steps += 1;
     }
 }
@@ -2479,10 +2496,11 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
         return;
     }
     // Pre-inline state driving the frame gates and region reuse: the
-    // per-caller locals snapshot, call-cycle membership, and the
-    // per-caller region records.
+    // per-caller locals snapshot, call-cycle membership, stack-pointer-asm
+    // taint, and the per-caller region records.
     let orig_locals: Vec<i64> = funcs.iter().map(|f| f.locals).collect();
     let cyclic = call_cycle_members(funcs);
+    let sp_tainted = crate::c5::ir::sp_asm_reachers(funcs);
     let mut regions: BTreeMap<usize, CallerRegions> = BTreeMap::new();
     // Iterate to a fixed point: each pass re-evaluates candidacy on
     // the now-substituted function bodies, so a helper that became a
@@ -2564,8 +2582,11 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             inline_caller(
                 caller,
                 &local,
-                regions.entry(caller.ent_pc).or_default(),
-                &cyclic,
+                &mut SlotPlacement {
+                    regions: regions.entry(caller.ent_pc).or_default(),
+                    cyclic: &cyclic,
+                    sp_tainted: &sp_tainted,
+                },
             );
             if caller.insts.len() != before {
                 changed = true;
@@ -2652,12 +2673,16 @@ mod tests {
     /// Single-block asm callee writing an output through an own local
     /// (reloc-splice shape) with `locals` frame slots.
     fn asm_callee(ent_pc: usize, locals: i64) -> FunctionSsa {
+        asm_callee_with_template(ent_pc, locals, b"mov %0, 1")
+    }
+
+    fn asm_callee_with_template(ent_pc: usize, locals: i64, template: &[u8]) -> FunctionSsa {
         use crate::c5::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
         let insts = alloc::vec![
             Inst::LocalAddr(-1),
             Inst::InlineAsm {
                 asm: alloc::boxed::Box::new(AsmBlock {
-                    template: b"mov %0, 1".to_vec(),
+                    template: template.to_vec(),
                     operands: alloc::vec![AsmOperand {
                         constraint: AsmConstraint::Reg,
                         is_output: true,
@@ -2876,6 +2901,77 @@ mod tests {
                 usize::from(!always),
                 "always={always}: gate must block exactly the optional case"
             );
+        }
+    }
+
+    /// A callee whose asm names the stack pointer appends a region per
+    /// site: a stack switch can park one activation -- suspended mid-body
+    /// on another stack -- while a later site runs, so sites never share.
+    #[test]
+    fn sp_asm_callee_regions_append_per_site() {
+        let abi = Target::LinuxX64.abi();
+        let mut funcs = alloc::vec![
+            multi_call_caller(1, 2, 100, 2),
+            asm_callee_with_template(100, 4, b"mov %%rsp, (%0)"),
+        ];
+        run(&mut funcs, 32, abi);
+        assert_eq!(
+            funcs[0].locals, 10,
+            "2 sites of a 4-slot sp-asm callee append"
+        );
+    }
+
+    /// A caller that can come to execute stack-pointer asm -- here through
+    /// a call to a non-candidate holding one -- gets no region sharing for
+    /// any callee.
+    #[test]
+    fn sp_tainted_caller_disables_region_reuse() {
+        let abi = Target::LinuxX64.abi();
+        let mut caller = multi_call_caller(1, 2, 100, 2);
+        caller.insts.insert(0, call_to(999));
+        caller.inst_src.push((0, 0));
+        caller.f32_values.push(false);
+        let end = caller.insts.len() as u32;
+        caller.blocks[0].inst_range = 0..end;
+        caller.blocks[0].terminator = Terminator::Return(end - 1);
+        caller.blocks[0].exit_acc = end - 1;
+        let mut sw = asm_callee_with_template(999, 1, b"mov %%rsp, (%0)");
+        sw.is_variadic = true; // keep it out of the candidate set
+        let mut funcs = alloc::vec![caller, asm_callee(100, 4), sw];
+        run(&mut funcs, 32, abi);
+        assert_eq!(funcs[0].locals, 10, "sp-tainted caller: sites append");
+    }
+
+    /// Stack-pointer template detection: x86 and arm64 spellings match;
+    /// mnemonics merely containing the letters do not.
+    #[test]
+    fn sp_template_detection() {
+        use crate::c5::ir::AsmBlock;
+        let blk = |t: &[u8]| AsmBlock {
+            template: t.to_vec(),
+            operands: alloc::vec![],
+            clobber_regs: 0,
+            clobber_fp_regs: 0,
+            clobber_memory: false,
+            volatile: false,
+        };
+        for t in [
+            b"mov %%rsp, 24(%%rdx)".as_slice(),
+            b"mov %0, %%rsp",
+            b"mov x9, sp",
+            b"add sp, sp, #16",
+            b"mov w9, wsp",
+            b"mov %esp, %eax",
+        ] {
+            assert!(blk(t).references_sp());
+        }
+        for t in [
+            b"casp x0, x1, x2, x3, [x5]".as_slice(),
+            b"stp x29, x30, [x8]",
+            b"mov %0, 1",
+            b"cpuid",
+        ] {
+            assert!(!blk(t).references_sp());
         }
     }
 

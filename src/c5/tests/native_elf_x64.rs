@@ -364,6 +364,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_movnti.c", 42),
     ("inline_asm_x64_clflush.c", 42),
     ("inline_asm_x64_setjmp_label.c", 42),
+    ("inline_asm_x64_sp_callee_regions.c", 0),
     ("inline_asm_x64_mem_disp.c", 42),
     ("cpuid_partial_outputs.c", 0),
     ("get_cpuid_leaf_checks.c", 0),
@@ -1646,4 +1647,28 @@ fn undefined_weak_function_guard() {
         "undef_weak_guard",
     );
     assert_eq!(code, 0, "undefined weak must read as a null pointer");
+}
+
+/// The kernel `symbol_get(x)` idiom: a block-scope `extern typeof(x) x
+/// __attribute__((weak, visibility("hidden")))` redeclaration takes the
+/// address of an already-known name. Undefined, it must read as null so the
+/// guard skips the call. Locks the block-scope carry of weak+hidden that a
+/// file-scope `__attribute__((weak))` already exercised above.
+#[test]
+fn symbol_get_weak_hidden_undef_reads_null() {
+    let code = build_and_run(
+        "extern void optional_hook(void);\n\
+         #define symbol_get(x) \
+         ({ extern typeof(x) x __attribute__((weak, visibility(\"hidden\"))); &(x); })\n\
+         int main(void) {\n\
+             void (*fn)(void) = symbol_get(optional_hook);\n\
+             if (fn) {\n\
+                 fn();\n\
+                 return 1;\n\
+             }\n\
+             return 0;\n\
+         }\n",
+        "symbol_get_weak_hidden",
+    );
+    assert_eq!(code, 0, "weak hidden undefined address must read as null");
 }

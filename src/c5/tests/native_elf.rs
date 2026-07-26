@@ -152,6 +152,29 @@ fn return_zero() {
     assert_eq!(build_and_run("int main() { return 0; }", "elf-ret0"), 0);
 }
 
+/// aarch64 twin of `native_elf_x64::symbol_get_weak_hidden_undef_reads_null`.
+/// The kernel `symbol_get(x)` idiom takes the address of a block-scope
+/// `extern typeof(x) x __attribute__((weak, visibility("hidden")))`
+/// redeclaration; undefined, it reads as null and the guard skips the call.
+#[test]
+fn symbol_get_weak_hidden_undef_reads_null() {
+    let code = build_and_run(
+        "extern void optional_hook(void);\n\
+         #define symbol_get(x) \
+         ({ extern typeof(x) x __attribute__((weak, visibility(\"hidden\"))); &(x); })\n\
+         int main(void) {\n\
+             void (*fn)(void) = symbol_get(optional_hook);\n\
+             if (fn) {\n\
+                 fn();\n\
+                 return 1;\n\
+             }\n\
+             return 0;\n\
+         }\n",
+        "symbol_get_weak_hidden",
+    );
+    assert_eq!(code, 0, "weak hidden undefined address must read as null");
+}
+
 #[test]
 fn return_value_truncates_to_byte() {
     // Linux exit ABI returns the low 8 bits of main's return; same as

@@ -25,8 +25,8 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::types::{
-    format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty, is_void_ty, strip_unsigned,
-    struct_id_of, struct_ptr_depth,
+    apply_qual_bits, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty, is_void_ty,
+    strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
 impl Compiler {
@@ -570,7 +570,7 @@ impl Compiler {
                     break;
                 }
             }
-            bt |= qual_bits;
+            bt = apply_qual_bits(bt, qual_bits);
 
             // A function-pointer typedef base type contributes its lineage
             // to every declarator in the list (`fn_t a, b;`). The

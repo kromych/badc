@@ -32,7 +32,8 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, is_decl_modifier, struct_ty_for,
+    SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, VOLATILE_INNER_BIT, apply_qual_bits,
+    is_decl_modifier, struct_ty_for,
 };
 
 /// Accumulator for the int-modifier soup that prefixes a C base
@@ -359,7 +360,10 @@ impl Compiler {
             self.pending.typeof_operand_was_array = self.pending.typedef_base_array_size != 0;
             inner
         } else {
-            let mut inner = self.parse_unevaluated_expr_ty(true)?;
+            // Pointer peels leave the inner-only marker describing a
+            // derivation the operand no longer has; drop it so a
+            // declaration through the specifier reads the whole tag.
+            let mut inner = self.parse_unevaluated_expr_ty(true)? & !VOLATILE_INNER_BIT;
             // A 1D array expression operand decayed to a pointer to its
             // element; recover the element type and put the element count
             // on the carrier like an array typedef base, so a declarator
@@ -1401,7 +1405,7 @@ impl Compiler {
             // A qualifier may trail the specifier, as after any base type
             // (`typeof(x) __seg_gs *`, `typeof(x) const`); fold it in.
             while self.lex.tk == Token::TypeQual {
-                ty |= self.lex_qualifier_bits();
+                ty = apply_qual_bits(ty, self.lex_qualifier_bits());
                 self.next()?;
             }
             return Ok(ty);
@@ -1527,7 +1531,7 @@ impl Compiler {
             bt = self.make_vector_type(bt, n);
         }
 
-        Ok(bt | qual_bits)
+        Ok(apply_qual_bits(bt, qual_bits))
     }
 
     /// Consume the specifiers that may trail the base-type keyword:

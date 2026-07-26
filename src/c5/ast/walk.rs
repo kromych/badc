@@ -14,7 +14,8 @@ use super::super::codegen::Target;
 use super::super::codegen::ssa::build::SsaBuilder;
 use super::super::compiler::types::{
     STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_pointer_ty, is_struct_ty, is_vector_ty,
-    is_volatile_ty, load_kind, segment_of_ty, strip_unsigned, struct_ptr_depth,
+    is_volatile_object_ty, is_volatile_ty, load_kind, segment_of_ty, strip_unsigned,
+    struct_ptr_depth,
 };
 use super::super::ir::{AsmSeg, AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind, ValueId};
 use super::super::symbol::Symbol;
@@ -772,6 +773,17 @@ impl<'a> Walker<'a> {
     /// qualifier (C99 6.7.3); `false` for node shapes without a type.
     fn expr_is_volatile(&self, id: ExprId) -> bool {
         expr_ty(self.ast.expr(id)).is_some_and(is_volatile_ty)
+    }
+
+    /// Volatility of a read-modify-write access. A slot is the object's
+    /// own storage, so its top-level qualifier governs (C99 6.7.5.1p1);
+    /// a place reached through an address keeps the whole-tag reading,
+    /// which over-approximates the level the qualifier sits at.
+    fn rmw_is_volatile(&self, place: &RmwPlace, ty: i64, lvalue: ExprId) -> bool {
+        match place {
+            RmwPlace::Slot(_) => is_volatile_object_ty(ty),
+            _ => is_volatile_ty(ty) || self.expr_is_volatile(lvalue),
+        }
     }
 
     /// Lower a bitwise operator (`^`/`&`/`|`) on two same-width GCC vector
@@ -2325,7 +2337,7 @@ impl<'a> Walker<'a> {
                 // A direct `StoreLocal` keeps the slot mem2reg-promotable.
                 // The `F32` s-view store is narrowed by the per-arch emit
                 // when the value is still double.
-                b.store_local_vol(slot, v, kind, is_volatile_ty(ty));
+                b.store_local_vol(slot, v, kind, is_volatile_object_ty(ty));
                 Ok(())
             }
             super::super::ast::LocalInit::Aggregate {
@@ -3545,6 +3557,10 @@ impl<'a> Walker<'a> {
                     && *class == Token::Loc as i64
                 {
                     let slot = *val;
+                    // The destination is the object's own storage, so its
+                    // top-level qualifier governs, not one that sits on a
+                    // pointee below it.
+                    let vol = is_volatile_object_ty(*ty);
                     let mut value = self.walk_expr_rvalue(b, *rhs)?;
                     // C99 6.5.16.1 + 6.3.1.5: a `double` value assigned
                     // to a `float` object is narrowed to single precision;
@@ -4704,8 +4720,8 @@ impl<'a> Walker<'a> {
                 }
                 let load_kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
-                let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lhs);
                 let place = self.rmw_place(b, *lhs)?;
+                let vol = self.rmw_is_volatile(&place, *ty, *lhs);
                 let old = place.load(b, load_kind, vol);
                 // Constant-rhs short-circuit (mirror of the
                 // `Expr::Binary` path): an integer-literal rhs
@@ -4826,8 +4842,8 @@ impl<'a> Walker<'a> {
                 }
                 let kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
-                let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lvalue);
                 let place = self.rmw_place(b, *lvalue)?;
+                let vol = self.rmw_is_volatile(&place, *ty, *lvalue);
                 let old = place.load(b, kind, vol);
                 let stepped = self.increment_value(b, old, *by, *ty);
                 place.store(b, stepped, store_kind, vol);
@@ -4856,8 +4872,8 @@ impl<'a> Walker<'a> {
                 }
                 let kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
-                let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lvalue);
                 let place = self.rmw_place(b, *lvalue)?;
+                let vol = self.rmw_is_volatile(&place, *ty, *lvalue);
                 let old = place.load(b, kind, vol);
                 let stepped = self.increment_value(b, old, *by, *ty);
                 place.store(b, stepped, store_kind, vol);
@@ -4898,7 +4914,7 @@ impl<'a> Walker<'a> {
                     Ok(b.local_addr(slot))
                 } else {
                     let kind = load_kind_for(ty, self.target);
-                    Ok(b.load_local_vol(slot, kind, is_volatile_ty(ty)))
+                    Ok(b.load_local_vol(slot, kind, is_volatile_object_ty(ty)))
                 }
             }
             Expr::Comma { lhs, rhs, .. } => {
@@ -5969,7 +5985,7 @@ impl<'a> Walker<'a> {
                 });
             }
         }
-        let vol = is_volatile_ty(ty);
+        let vol = is_volatile_object_ty(ty);
         if class == Token::Loc as i64 {
             let kind = load_kind_for(ty, self.target);
             Ok(b.load_local_vol(val, kind, vol))

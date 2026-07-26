@@ -24,6 +24,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::types::{add_ptr_level, apply_qual_bits};
 
 /// Bundle returned from `parse_function_params` -- keeps the per-param
 /// symbol indices (needed by the function-body binding step) together
@@ -113,10 +114,10 @@ impl Compiler {
             let mut leading_ptr_count = 0;
             while self.lex.tk == Token::MulOp {
                 self.next()?;
-                ty += Ty::Ptr as i64;
+                ty = add_ptr_level(ty);
                 leading_ptr_count += 1;
                 while self.lex.tk == Token::TypeQual {
-                    ty |= self.lex_qualifier_bits();
+                    ty = apply_qual_bits(ty, self.lex_qualifier_bits());
                     self.next()?;
                 }
             }

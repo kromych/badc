@@ -1566,7 +1566,7 @@ pub(super) fn bitfield_value_ty(bit_width: u32, field_ty: i64) -> i64 {
     // The promotion changes the type but not the member's qualifiers,
     // which drive the access's volatility and address space.
     let quals = field_ty
-        & (super::types::VOLATILE_BIT | super::types::SEG_GS_BIT | super::types::SEG_FS_BIT);
+        & (super::types::VOLATILE_MASK | super::types::SEG_GS_BIT | super::types::SEG_FS_BIT);
     let unsigned = is_unsigned_ty(field_ty) && !is_bool_ty(field_ty);
     if bit_width == 32 && unsigned {
         return Ty::Int as i64 | super::types::UNSIGNED_BIT | quals;

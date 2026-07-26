@@ -682,18 +682,6 @@ impl<'a> Walker<'a> {
             {
                 return GloAddr::Resolved(s.val);
             }
-            // C99 6.9.2: a tentative definition and the later defining
-            // declaration denote one object. When the definition needed more
-            // storage than the tentative reserved it moved, so an identifier
-            // snapshot taken before the move carries the abandoned offset;
-            // rebase it onto the definition's storage.
-            if s.class == Token::Glo as i64 && s.defined_here && !s.is_extern_decl {
-                if let Some((old_off, old_bytes)) = s.relocated_from {
-                    if fallback_val >= old_off && fallback_val < old_off + old_bytes {
-                        return GloAddr::Resolved(s.val + (fallback_val - old_off));
-                    }
-                }
-            }
             // Forward reference: a block-scope `extern int g;` parsed
             // before the same-TU `int g = ...;` definition (C99 6.2.2p4)
             // snapshots a stale 0 offset into the `Expr::Ident`, so the

@@ -341,6 +341,160 @@ fn x86_seg_qualified_memory_operand_rides_a_segment_prefix() {
     );
 }
 
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_c_operand_memory_reference_is_never_an_immediate() {
+    use crate::{NativeOptions, Target};
+    // A bare `%c` / `%P` operand is a memory reference in AT&T syntax. Taking
+    // it for an immediate turns the percpu load `movq %%gs:%c1, %0` into
+    // `movq $imm, %reg` under a stray segment prefix -- the same value the
+    // template asked to dereference, silently. Whatever the emitter does with
+    // these shapes, it must never encode the immediate form: `c7 /0` (mov
+    // imm32 to r/m) and `b8+r` (mov imm to reg) are the two spellings.
+    let emit = |body: &str| -> Option<alloc::vec::Vec<u8>> {
+        let src = alloc::format!(
+            "long g; long f(void){{ long v; {body} return v; }} int main(void){{ return 0; }}"
+        );
+        let program =
+            crate::Compiler::with_options(src, Target::LinuxX64, crate::CompileOptions::default())
+                .compile()
+                .expect("compile");
+        crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            Target::LinuxX64,
+            NativeOptions::default(),
+        )
+        .ok()
+    };
+    // The displacements are distinctive so the scan cannot collide with an
+    // unrelated constant load elsewhere in the image.
+    let cases = [
+        (
+            "__asm__ volatile(\"movq %%gs:%c1, %0\" : \"=r\"(v) : \"i\"(0x1234));",
+            0x1234u32,
+        ),
+        (
+            "__asm__ volatile(\"movq %%fs:%c1, %0\" : \"=r\"(v) : \"i\"(0x5678));",
+            0x5678,
+        ),
+        (
+            "__asm__ volatile(\"movq %c1, %0\" : \"=r\"(v) : \"i\"(0x2468));",
+            0x2468,
+        ),
+    ];
+    for (body, disp) in cases {
+        let Some(bytes) = emit(body) else { continue };
+        // `REX.W c7 /0 imm32` (mov imm32 to r/m) carrying the displacement as
+        // its immediate: the shape the miscompile produced.
+        let imm_move = bytes.windows(8).any(|w| {
+            (0x48..=0x4f).contains(&w[0])
+                && w[1] == 0xC7
+                && w[2] & 0xF8 == 0xC0
+                && u32::from_le_bytes([w[3], w[4], w[5], w[6]]) == disp
+        });
+        assert!(!imm_move, "`{body}` must not encode as an immediate move");
+    }
+}
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_c_operand_memory_reference_encodings_match_the_assembler() {
+    use crate::{NativeOptions, Target};
+    // The absolute no-base form: mod=00 rm=100 with SIB 0x25 (base=101,
+    // index=100) and a disp32, under the instruction's segment override.
+    // Byte sequences taken from `clang -target x86_64-linux-gnu -c`.
+    let emit = |body: &str| -> alloc::vec::Vec<u8> {
+        let src = alloc::format!(
+            "long f(void){{ long v = 0; unsigned w = 0; {body} return v + w; }} \
+             int main(void){{ return 0; }}"
+        );
+        let program =
+            crate::Compiler::with_options(src, Target::LinuxX64, crate::CompileOptions::default())
+                .compile()
+                .expect("compile");
+        crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            Target::LinuxX64,
+            NativeOptions::default(),
+        )
+        .expect("emit")
+    };
+    let cases: &[(&str, &[u8])] = &[
+        // movq %gs:0x10, %rax
+        (
+            "__asm__ volatile(\"movq %%gs:%c1, %0\" : \"=r\"(v) : \"i\"(16));",
+            &[0x65, 0x48, 0x8B, 0x04, 0x25, 0x10, 0x00, 0x00, 0x00],
+        ),
+        // movq %fs:0x28, %rax
+        (
+            "__asm__ volatile(\"movq %%fs:%c1, %0\" : \"=r\"(v) : \"i\"(40));",
+            &[0x64, 0x48, 0x8B, 0x04, 0x25, 0x28, 0x00, 0x00, 0x00],
+        ),
+        // movq 0x10, %rax -- no override, still a memory reference
+        (
+            "__asm__ volatile(\"movq %c1, %0\" : \"=r\"(v) : \"i\"(16));",
+            &[0x48, 0x8B, 0x04, 0x25, 0x10, 0x00, 0x00, 0x00],
+        ),
+        // movq %rax, %gs:0x18
+        (
+            "__asm__ volatile(\"movq %0, %%gs:%c1\" : : \"r\"(v), \"i\"(24) : \"memory\");",
+            &[0x65, 0x48, 0x89, 0x04, 0x25, 0x18, 0x00, 0x00, 0x00],
+        ),
+        // movl %gs:0x10, %eax -- the access width follows the suffix
+        (
+            "__asm__ volatile(\"movl %%gs:%c1, %0\" : \"=r\"(w) : \"i\"(16));",
+            &[0x65, 0x8B, 0x04, 0x25, 0x10, 0x00, 0x00, 0x00],
+        ),
+        // incq %gs:0x30 -- read-modify-write through the override
+        (
+            "__asm__ volatile(\"incq %%gs:%c0\" : : \"i\"(48) : \"memory\", \"cc\");",
+            &[0x65, 0x48, 0xFF, 0x04, 0x25, 0x30, 0x00, 0x00, 0x00],
+        ),
+    ];
+    for (body, want) in cases {
+        let bytes = emit(body);
+        assert!(
+            bytes.windows(want.len()).any(|w| w == *want),
+            "`{body}` did not encode as {want:02x?}"
+        );
+    }
+}
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_unencodable_c_memory_operand_is_diagnosed() {
+    use crate::{NativeOptions, Target};
+    // A displacement that is neither a compile-time constant nor a link-time
+    // address, and one that does not fit the disp32 field, have no encoding.
+    // Both must be reported rather than truncated or approximated.
+    let cases = [
+        (
+            "long f(long x){ long v; __asm__ volatile(\"movq %%gs:%c1, %0\" \
+             : \"=r\"(v) : \"r\"(x)); return v; } int main(void){ return 0; }",
+            "not a constant or address",
+        ),
+        (
+            "long f(void){ long v; __asm__ volatile(\"movq %%gs:%c1, %0\" \
+             : \"=r\"(v) : \"i\"(0x100000000L)); return v; } int main(void){ return 0; }",
+            "displacement out of range",
+        ),
+    ];
+    for (src, want) in cases {
+        let program = super::compile_str(src);
+        let err = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            Target::LinuxX64,
+            NativeOptions::default(),
+        )
+        .expect_err("the operand has no encoding");
+        let msg = alloc::format!("{err}");
+        assert!(msg.contains(want), "expected `{want}`, got {msg}");
+    }
+}
+
 #[test]
 fn x86_range_immediate_constraints_are_immediates() {
     // The x86 range-restricted immediate letters classify as immediates,

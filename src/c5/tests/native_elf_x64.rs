@@ -398,6 +398,8 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_sib_nobase.c", 42),
     ("inline_asm_x64_port_dx.c", 42),
     ("inline_asm_x64_c_mem.c", 42),
+    ("inline_asm_x64_seg_c_mem.c", 42),
+    ("inline_asm_x64_seg_c_percpu.c", 42),
     ("inline_asm_x64_align.c", 42),
     ("inline_asm_x64_align_above_section.c", 42),
     ("file_scope_asm_local_label_branch.c", 42),

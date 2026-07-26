@@ -279,6 +279,12 @@ pub(crate) enum AsmOpnd {
     /// `seg:disp` with no base register (`%%gs:0x28`): an absolute
     /// displacement, meaningful under the instruction's segment override.
     AbsMem { disp: i32 },
+    /// `%cN` / `%PN` as a bare instruction operand (`%%gs:%c1`, `movq %c1, %0`):
+    /// a memory reference whose displacement is the substituted operand -- AT&T
+    /// marks an immediate with `$`. The emitter resolves a compile-time constant
+    /// to the absolute disp32 form and a link-time address to a RIP-relative
+    /// relocation.
+    AbsMemRef { idx: u8, symbolic: bool },
     /// `disp(,%%index,scale)`: a scaled-index memory reference with no base
     /// register (SIB base=101, mod=00, disp32). `sym` marks a link-time symbol
     /// displacement (its name in the instruction's `sym_target`, `disp` the
@@ -1440,6 +1446,16 @@ fn split_asm_operands(rest: &str) -> Vec<&str> {
     out
 }
 
+/// Mnemonics whose bare (non-`$`) operand is the address itself rather than a
+/// reference to be dereferenced: `lea` computes it, the branches transfer to
+/// it.
+fn takes_bare_address(mnem: &str) -> bool {
+    matches!(
+        mnem,
+        "lea" | "leaw" | "leal" | "leaq" | "call" | "callq" | "jmp" | "jmpq"
+    ) || super::emit::jcc_cond(mnem).is_some()
+}
+
 /// Segment-override prefix byte for a leading `%%fs:` / `%%gs:` (or the
 /// single-`%` basic-asm spelling), with the remainder of the token.
 fn split_seg_prefix(tok: &str) -> Option<(u8, &str)> {
@@ -2064,7 +2080,14 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                     operands.push(opnd);
                     continue;
                 }
-                operands.push(parse_operand(tok, &names)?);
+                // A bare `%cN` / `%PN` dereferences, except where the
+                // instruction consumes the value as an address.
+                operands.push(match parse_operand(tok, &names)? {
+                    AsmOpnd::RefConst { idx, symbolic } if !takes_bare_address(mnem_tok) => {
+                        AsmOpnd::AbsMemRef { idx, symbolic }
+                    }
+                    o => o,
+                });
             }
         }
         insns.push(AsmInsn {

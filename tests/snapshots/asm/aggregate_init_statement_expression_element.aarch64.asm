@@ -9,7 +9,9 @@ Disassembly of section .text:
                	mov	x1, #0x270              // =624
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#<addr>:
+               	brk	#0x1
+
+<check_nested_aggregate>:
                	sxtw	x0, w0
                	add	x1, x0, #0x1
                	sxtw	x2, w1

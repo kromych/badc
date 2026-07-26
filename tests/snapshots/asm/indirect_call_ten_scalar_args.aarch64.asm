@@ -9,7 +9,9 @@ Disassembly of section .text:
                	mov	x1, #0x270              // =624
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#<addr>:
+               	brk	#0x1
+
+<weight10>:
                	sub	sp, sp, #0x20
                	ldr	x16, [sp, #0x20]
                	str	x16, [sp]
@@ -49,7 +51,7 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x20, x21, [sp, #-0x30]!
+               	str	x20, [sp, #-0x30]!
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
@@ -74,13 +76,12 @@ Disassembly of section .text:
                	mov	x0, x20
                	blr	x10
                	add	sp, sp, #0x10
-               	mov	x21, x0
-               	cmp	x21, #0x181
+               	cmp	x0, #0x181
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
+               	ldr	x20, [sp], #0x30
                	ret
                	add	x1, x20, #0x1
                	add	x2, x20, #0x2
@@ -89,23 +90,41 @@ Disassembly of section .text:
                	add	x5, x20, #0x5
                	add	x6, x20, #0x6
                	add	x7, x20, #0x7
-               	add	x0, x20, #0x8
-               	add	x8, x20, #0x9
-               	sub	sp, sp, #0x10
-               	str	x0, [sp]
-               	str	x8, [sp, #0x8]
-               	mov	x0, x20
-               	bl	<addr>
-               	add	sp, sp, #0x10
-               	cmp	x21, x0
+               	add	x8, x20, #0x8
+               	add	x9, x20, #0x9
+               	lsl	x1, x1, #1
+               	add	x1, x20, x1
+               	mov	x17, #0x3               // =3
+               	mul	x2, x2, x17
+               	add	x1, x1, x2
+               	lsl	x2, x3, #2
+               	add	x1, x1, x2
+               	mov	x17, #0x5               // =5
+               	mul	x2, x4, x17
+               	add	x1, x1, x2
+               	mov	x17, #0x6               // =6
+               	mul	x2, x5, x17
+               	add	x1, x1, x2
+               	mov	x17, #0x7               // =7
+               	mul	x2, x6, x17
+               	add	x1, x1, x2
+               	lsl	x2, x7, #3
+               	add	x1, x1, x2
+               	mov	x17, #0x9               // =9
+               	mul	x2, x8, x17
+               	add	x1, x1, x2
+               	mov	x17, #0xa               // =10
+               	mul	x2, x9, x17
+               	add	x1, x1, x2
+               	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
+               	ldr	x20, [sp], #0x30
                	ret
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
+               	ldr	x20, [sp], #0x30
                	ret

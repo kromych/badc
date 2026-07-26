@@ -461,6 +461,9 @@ fn is_inline_candidate(
     // accesses are admissible.
     let used = value_use_mask(func);
     let spilled = spilled_param_cells(func);
+    // Parameter cells the splice reads straight from the call-site
+    // argument (a parameter past the ABI's argument registers).
+    let forwarded = forwarded_param_cells(func, &used);
     // Frame slots holding a register-passed struct parameter's bytes. A
     // body `LocalAddr` of one of these redirects to the caller's
     // argument address at the splice; any other `LocalAddr` names a
@@ -676,13 +679,14 @@ fn is_inline_candidate(
             }
             Inst::LoadLocal { off, volatile, .. } => {
                 // A relocated slot read (own local or spilled parameter cell
-                // on the reloc path) is kept by the splice. Otherwise the
-                // splice drops the read, which is safe only when the result
-                // is dead in the callee body and the access is not volatile
-                // (C99 5.1.2.3p2: a volatile read is a side effect even when
-                // the value is unused).
+                // on the reloc path) is kept by the splice, and a forwarded
+                // parameter cell's read resolves to the call-site argument on
+                // either path. Otherwise the splice drops the read, which is
+                // safe only when the result is dead in the callee body and
+                // the access is not volatile (C99 5.1.2.3p2: a volatile read
+                // is a side effect even when the value is unused).
                 let relocated = reloc && (*off < 0 || spilled.contains(off));
-                if !relocated && (used[idx] || *volatile) {
+                if !relocated && !forwarded.contains(off) && (used[idx] || *volatile) {
                     say(format_args!("live or volatile LoadLocal at v{}", idx));
                     return false;
                 }
@@ -794,6 +798,56 @@ fn spilled_param_cells(func: &FunctionSsa) -> BTreeSet<i64> {
         }
     }
     spilled
+}
+
+/// Parameter cells (slots >= 2) whose reads the splice resolves to the
+/// call-site argument, the way it resolves a `ParamRef`.
+///
+/// A parameter past the ABI's argument registers has no prologue spill:
+/// the caller stores the argument's full 8-byte value into its outgoing
+/// stack slot (System V AMD64 3.2.3 / AAPCS64 6.4.2) and the prologue
+/// restripes those eight bytes into the cell, so the cell holds the
+/// argument. Cell `k` holds argument `k - 2` -- the walker lays the cells
+/// out in argument order and counts the hidden out-pointer of a
+/// by-address struct return in `n_params`, which bounds the index because
+/// every splice site passes at least that many arguments.
+///
+/// Read-only shapes only: a `LocalAddr` has no frame slot to point at
+/// after the splice, and a `StoreLocal` has no reproducible caller
+/// storage (it also keeps this set disjoint from `spilled_param_cells`,
+/// whose spill is such a store). A floating-point read is out -- the body
+/// reads the walker's entry conversion, not the raw cell. A cell whose
+/// reads are all dead keeps the established drop. `used` is
+/// `value_use_mask(func)`.
+fn forwarded_param_cells(func: &FunctionSsa, used: &[bool]) -> BTreeSet<i64> {
+    let mut live: BTreeSet<i64> = BTreeSet::new();
+    let mut barred: BTreeSet<i64> = BTreeSet::new();
+    for (idx, inst) in func.insts.iter().enumerate() {
+        match inst {
+            Inst::LocalAddr(s) if *s >= 2 => {
+                barred.insert(*s);
+            }
+            Inst::StoreLocal { off, .. } if *off >= 2 => {
+                barred.insert(*off);
+            }
+            Inst::LoadLocal {
+                off,
+                kind,
+                volatile,
+            } if *off >= 2 => {
+                if *volatile
+                    || matches!(kind, LoadKind::F32 | LoadKind::F64)
+                    || *off - 2 >= func.n_params as i64
+                {
+                    barred.insert(*off);
+                } else if used[idx] {
+                    live.insert(*off);
+                }
+            }
+            _ => {}
+        }
+    }
+    live.difference(&barred).copied().collect()
 }
 
 /// Which instructions a block actually contains. Folding a constant
@@ -1264,6 +1318,9 @@ fn splice_multi_block(
         })
         .filter(|s| spilled.contains(s))
         .collect();
+    // Parameter cells whose reads resolve to the call-site argument
+    // instead of a frame slot; disjoint from `param_cells`.
+    let forwarded = forwarded_param_cells(callee, &callee_used);
     // Region backing the callee's relocated slots, shared across call
     // sites when sound (see `CallerRegions`). A cycle member appends, and
     // so does any splice whose caller or callee can come to execute
@@ -1396,12 +1453,25 @@ fn splice_multi_block(
                 match &callee.insts[ce_pc as usize] {
                     Inst::ParamRef { idx, kind } => {
                         let arg = counted_args.get(*idx as usize).copied().unwrap_or(NO_VALUE);
-                        callee_remap[ce_pc as usize] = match kind {
-                            LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => {
-                                at += 1;
-                                at - 1
-                            }
-                            _ => arg,
+                        callee_remap[ce_pc as usize] = if param_read_insts(*kind) == 0 {
+                            arg
+                        } else {
+                            at += 1;
+                            at - 1
+                        };
+                    }
+                    // A forwarded parameter cell's read takes the same
+                    // width conversion against the call-site argument.
+                    Inst::LoadLocal { off, kind, .. } if forwarded.contains(off) => {
+                        let arg = counted_args
+                            .get((*off - 2) as usize)
+                            .copied()
+                            .unwrap_or(NO_VALUE);
+                        callee_remap[ce_pc as usize] = if param_read_insts(*kind) == 0 {
+                            arg
+                        } else {
+                            at += 1;
+                            at - 1
                         };
                     }
                     // A struct-parameter slot's address is the caller's
@@ -1668,6 +1738,24 @@ fn splice_multi_block(
                         } else {
                             NO_VALUE
                         };
+                        callee_remap[ce_pc as usize] = splice_param_ref(
+                            *kind,
+                            arg,
+                            (0, 0),
+                            &mut new_insts,
+                            &mut new_inst_src,
+                            &mut new_f32,
+                        );
+                        continue;
+                    }
+                    // A forwarded parameter cell: the argument value the
+                    // caller would have placed in its outgoing stack slot,
+                    // taking the read's width conversion.
+                    Inst::LoadLocal { off, kind, .. } if forwarded.contains(off) => {
+                        let arg = remapped_args
+                            .get((*off - 2) as usize)
+                            .copied()
+                            .unwrap_or(NO_VALUE);
                         callee_remap[ce_pc as usize] = splice_param_ref(
                             *kind,
                             arg,
@@ -2005,17 +2093,17 @@ fn splice_multi_block(
     };
 }
 
-/// Resolve a callee `ParamRef(idx, kind)` to a caller value, mirroring
-/// the parameter load a non-inlined call performs at entry. That load
-/// sign-extends a signed narrow parameter (`movsx` / `sxtw`); every
-/// other kind is a plain register copy -- the unsigned base types and
-/// `long` / pointer parameters arrive full-width (the walker emits a
-/// `ParamRef(I64)` and the body re-narrows unsigned uses with a mask the
-/// splice preserves), and FP arguments are converted at the call site.
-/// So sign-extend the signed narrow kinds and pass everything else
-/// through unchanged. `arg` may be `NO_VALUE` on an early flat-splice
-/// fixpoint pass and resolves on a later one, so the `Extend` is emitted
-/// unconditionally to keep emission structurally identical across passes.
+/// Resolve a callee parameter read of `kind` -- a `ParamRef(idx, kind)`
+/// or a forwarded parameter cell's `LoadLocal { kind }` -- to a caller
+/// value, reproducing the width conversion the non-inlined read performs
+/// on the caller's full-width argument value. A signed narrow read
+/// sign-extends (`movsx` / `sxtw`), an unsigned narrow read zero-extends
+/// (`movzx` / `ldrb`), and the 64-bit and FP kinds take the value
+/// unchanged (an FP argument is converted at the call site). `arg` may be
+/// `NO_VALUE` on an early flat-splice fixpoint pass and resolves on a
+/// later one, so the conversion is emitted unconditionally to keep
+/// emission structurally identical across passes -- `param_read_insts`
+/// reports how many instructions that is.
 fn splice_param_ref(
     kind: LoadKind,
     arg: ValueId,
@@ -2024,20 +2112,32 @@ fn splice_param_ref(
     new_inst_src: &mut Vec<(u32, u32)>,
     new_f32: &mut Vec<bool>,
 ) -> ValueId {
+    let inst = match kind {
+        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Inst::Extend { value: arg, kind },
+        LoadKind::U8 | LoadKind::U16 | LoadKind::U32 => Inst::BinopI {
+            op: BinOp::And,
+            lhs: arg,
+            rhs_imm: match kind {
+                LoadKind::U8 => 0xff,
+                LoadKind::U16 => 0xffff,
+                _ => 0xffff_ffff,
+            },
+        },
+        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 => return arg,
+    };
+    let id = new_insts.len() as u32;
+    new_insts.push(inst);
+    new_inst_src.push(src_pos);
+    new_f32.push(false);
+    id
+}
+
+/// Instructions `splice_param_ref` emits for `kind`; the multi-block
+/// splice's value-id counting pass reserves exactly this many.
+fn param_read_insts(kind: LoadKind) -> u32 {
     match kind {
-        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => {
-            let id = new_insts.len() as u32;
-            new_insts.push(Inst::Extend { value: arg, kind });
-            new_inst_src.push(src_pos);
-            new_f32.push(false);
-            id
-        }
-        LoadKind::I64
-        | LoadKind::U8
-        | LoadKind::U16
-        | LoadKind::U32
-        | LoadKind::F32
-        | LoadKind::F64 => arg,
+        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 => 0,
+        _ => 1,
     }
 }
 
@@ -2063,6 +2163,13 @@ fn inline_caller(
     let mut new_insts: Vec<Inst> = Vec::with_capacity(caller.insts.len());
     let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(caller.inst_src.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(caller.insts.len());
+    // Per-callee parameter cells whose reads resolve to the call-site
+    // argument. A property of the callee body, so it is computed once
+    // here rather than per call site inside the emission fixpoint.
+    let forwarded_cells: BTreeMap<usize, BTreeSet<i64>> = callees
+        .iter()
+        .map(|(&pc, c)| (pc, forwarded_param_cells(c, &value_use_mask(c))))
+        .collect();
     // `remap[old_id]` is the new ValueId in the spliced caller. An
     // inlined Call's slot maps to the callee's translated Return value.
     let mut remap: Vec<ValueId> = vec![NO_VALUE; caller.insts.len()];
@@ -2167,6 +2274,10 @@ fn inline_caller(
                         .filter_map(|(i, _)| callee.param_local_slots.get(i).map(|&s| (s, i)))
                         .filter(|&(s, _)| s != 0)
                         .collect();
+                    // Parameter cells whose reads resolve to the call-site
+                    // argument rather than being dropped with the rest of
+                    // the cell traffic.
+                    let forwarded = &forwarded_cells[&callee.ent_pc];
                     for ce_pc in callee_block.inst_range.start..callee_block.inst_range.end {
                         let cinst = &callee.insts[ce_pc as usize];
                         match cinst {
@@ -2196,6 +2307,24 @@ fn inline_caller(
                                 } else {
                                     NO_VALUE
                                 };
+                                callee_remap[ce_pc as usize] = splice_param_ref(
+                                    *kind,
+                                    arg,
+                                    src_pos,
+                                    &mut new_insts,
+                                    &mut new_inst_src,
+                                    &mut new_f32,
+                                );
+                                continue;
+                            }
+                            // A forwarded parameter cell: the argument value
+                            // the caller would have placed in its outgoing
+                            // stack slot, taking the read's width conversion.
+                            Inst::LoadLocal { off, kind, .. } if forwarded.contains(off) => {
+                                let arg = remapped_args
+                                    .get((*off - 2) as usize)
+                                    .copied()
+                                    .unwrap_or(NO_VALUE);
                                 callee_remap[ce_pc as usize] = splice_param_ref(
                                     *kind,
                                     arg,
@@ -3440,5 +3569,131 @@ mod tests {
         let (idx, reason) = &hits[0];
         assert_eq!(funcs[*idx].name, "va");
         assert_eq!(reason, "variadic");
+    }
+    /// A parameter past the ABI's argument registers has no prologue
+    /// spill, so its cell read is resolved to the call-site argument
+    /// rather than relocated. The read's own width conversion carries
+    /// over: signed narrow sign-extends, unsigned narrow masks. A write
+    /// to the cell, or its address being taken, keeps the rejection --
+    /// neither has a reproducible initialization in the caller frame.
+    #[test]
+    fn stack_passed_parameter_cell_is_read_from_the_argument() {
+        let abi = Target::LinuxX64.abi();
+        // Two declared parameters; the second reads its cell (slot 3).
+        let cell_read = |kind: LoadKind, extra: Option<Inst>| {
+            let mut insts = alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::StoreLocal {
+                    off: 2,
+                    value: 0,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+                Inst::LoadLocal {
+                    off: 3,
+                    kind,
+                    volatile: false,
+                },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs: 2,
+                },
+            ];
+            if let Some(e) = extra {
+                insts.push(e);
+            }
+            let n = insts.len() as u32;
+            FunctionSsa {
+                n_params: 2,
+                inst_src: alloc::vec![(0, 0); n as usize],
+                f32_values: alloc::vec![false; n as usize],
+                blocks: alloc::vec![Block {
+                    start_pc: 0,
+                    inst_range: 0..n,
+                    terminator: Terminator::Return(3),
+                    exit_acc: 3,
+                }],
+                insts,
+                ..Default::default()
+            }
+        };
+        for kind in [
+            LoadKind::I64,
+            LoadKind::I32,
+            LoadKind::I16,
+            LoadKind::I8,
+            LoadKind::U32,
+            LoadKind::U16,
+            LoadKind::U8,
+        ] {
+            let f = cell_read(kind, None);
+            let mut reason = alloc::string::String::new();
+            assert!(
+                is_inline_candidate(&f, 32, abi, Some(&mut reason)),
+                "{kind:?}: {reason}"
+            );
+            assert_eq!(
+                forwarded_param_cells(&f, &value_use_mask(&f)),
+                BTreeSet::from([3])
+            );
+        }
+        // The conversion the splice emits for each kind.
+        let emit = |kind: LoadKind| {
+            let (mut i, mut s, mut f) = (
+                alloc::vec::Vec::new(),
+                alloc::vec::Vec::new(),
+                alloc::vec::Vec::new(),
+            );
+            let v = splice_param_ref(kind, 5, (0, 0), &mut i, &mut s, &mut f);
+            assert_eq!(i.len(), param_read_insts(kind) as usize);
+            (v, i)
+        };
+        let (v, insts) = emit(LoadKind::I64);
+        assert_eq!((v, insts.len()), (5, 0));
+        let (v, insts) = emit(LoadKind::I32);
+        assert_eq!(v, 0);
+        assert!(matches!(
+            insts[0],
+            Inst::Extend {
+                value: 5,
+                kind: LoadKind::I32
+            }
+        ));
+        let (v, insts) = emit(LoadKind::U16);
+        assert_eq!(v, 0);
+        assert!(matches!(
+            insts[0],
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs: 5,
+                rhs_imm: 0xffff
+            }
+        ));
+        // A cell the body writes, or whose address it takes, stays out.
+        let written = cell_read(
+            LoadKind::I64,
+            Some(Inst::StoreLocal {
+                off: 3,
+                value: 3,
+                kind: StoreKind::I64,
+                volatile: false,
+            }),
+        );
+        assert!(forwarded_param_cells(&written, &value_use_mask(&written)).is_empty());
+        let mut reason = alloc::string::String::new();
+        assert!(!is_inline_candidate(&written, 32, abi, Some(&mut reason)));
+        assert_eq!(reason, "live or volatile LoadLocal at v2");
+        let addressed = cell_read(LoadKind::I64, Some(Inst::LocalAddr(3)));
+        assert!(forwarded_param_cells(&addressed, &value_use_mask(&addressed)).is_empty());
+        assert!(!is_inline_candidate(&addressed, 32, abi, None));
+        // A cell index past the declared parameters has no argument.
+        let mut past = cell_read(LoadKind::I64, None);
+        past.n_params = 1;
+        assert!(forwarded_param_cells(&past, &value_use_mask(&past)).is_empty());
+        assert!(!is_inline_candidate(&past, 32, abi, None));
     }
 }

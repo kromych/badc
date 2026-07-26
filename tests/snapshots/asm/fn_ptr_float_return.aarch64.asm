@@ -9,7 +9,9 @@ Disassembly of section .text:
                	mov	x1, #0x270              // =624
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#<addr>:
+               	brk	#0x1
+
+<f_void>:
                	mov	x0, #0x40200000         // =1075838976
                	fmov	d0, x0
                	ret

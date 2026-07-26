@@ -9,7 +9,9 @@ Disassembly of section .text:
                	mov	x1, #0x300              // =768
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#<addr>:
+               	brk	#0x1
+
+<check_static>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x1, [x0]
@@ -31,9 +33,7 @@ Disassembly of section .text:
                	cmp	x1, #0x7
                	cset	x1, ne
                	cbnz	x1, <addr>
-               	ldrsw	x0, [x0, #0x8]
-               	cmp	x0, #0x9
-               	cset	x1, ne
+               	mov	x1, #0x0                // =0
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
                	ret

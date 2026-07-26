@@ -9,7 +9,9 @@ Disassembly of section .text:
                	mov	x1, #0x270              // =624
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#<addr>:
+               	brk	#0x1
+
+<driver>:
                	mov	x1, x0
                	sxtw	x1, w1
                	mov	x0, #0x0                // =0
@@ -28,24 +30,10 @@ Disassembly of section .text:
                	cmp	x1, #0x1
                	b.eq	<addr>
                	b	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w1, [x0]
-               	ldrb	w0, [x0, #0x1]
-               	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	mov	x0, #0x2a               // =42
                	b	<addr>
 
 <main>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w1, [x0]
-               	ldrb	w0, [x0, #0x1]
-               	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	sxtw	x0, w0
+               	mov	x0, #0x2a               // =42
+               	mov	x0, #0x2a               // =42
                	ret

@@ -1710,7 +1710,7 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass(
             "passes::simplify_branches::pre_inline (aarch64)",
             || {
-                crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs, false);
+                crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs);
             },
         );
         // Unroll constant-trip loops before the inliner so a helper

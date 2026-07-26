@@ -109,9 +109,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     terminator Bnz { cond=v72, target=b28, fall=b16 }   (exit_acc=v72)
   block 16  start_pc=0
     v74  ImmData(80)                                      -> x0
-    v75  BinopI { op=add, lhs=v74, rhs_imm=12 }           -> x1
-    v76  Load { addr=v74, disp=12, kind=I32 }             -> x0
-    v77  BinopI { op=ne, lhs=v76, rhs_imm=99 }            -> x0
+    v75  BinopI { op=add, lhs=v74, rhs_imm=12 }           -> x0
+    v76  Imm(99)                                          -> x0
+    v77  Imm(0)                                           -> x0
     v78  Imm(0)                                           -> x1
     terminator Jmp(b17)   (exit_acc=v77)
   block 17  start_pc=0

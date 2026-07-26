@@ -1844,7 +1844,7 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass(
             "passes::simplify_branches::pre_inline (x86_64)",
             || {
-                crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs, false);
+                crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs);
             },
         );
         // Unroll constant-trip loops after mem2reg (the loop-carried

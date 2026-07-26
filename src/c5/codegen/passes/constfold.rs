@@ -30,7 +30,7 @@
 //! `Imm`s made dead are reaped by the emit's use-count DCE.
 
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
 use crate::c5::vm::eval;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -53,6 +53,169 @@ pub(crate) fn run_one(func: &mut FunctionSsa) {
             return;
         }
     }
+}
+
+/// Node budget for one per-incoming evaluation. A shared operand is
+/// re-evaluated per use, so the budget caps a wide expression tree
+/// rather than its depth alone; it also terminates the recursion.
+const SELECT_EVAL_BUDGET: u32 = 96;
+
+/// Evaluate `v` with `pivot` bound to `bind`, over the same integer
+/// `Extend` / `BinopI` / `Binop` set [`fold_round`] folds. Any other
+/// def, and any operand the shared resolver cannot pin to an integer
+/// immediate, makes the value unknown.
+fn eval_with(
+    func: &FunctionSsa,
+    v: ValueId,
+    pivot: ValueId,
+    bind: i64,
+    budget: &mut u32,
+) -> Option<i64> {
+    *budget = budget.checked_sub(1)?;
+    if v == pivot {
+        return Some(bind);
+    }
+    if let Some(k) = imm_of(func, v) {
+        return Some(k);
+    }
+    if matches!(func.f32_values.get(v as usize), Some(true)) {
+        return None;
+    }
+    match *func.insts.get(v as usize)? {
+        Inst::Extend { value, kind } => Some(eval::eval_extend(
+            eval_with(func, value, pivot, bind, budget)?,
+            kind,
+        )),
+        Inst::BinopI { op, lhs, rhs_imm } => {
+            eval::fold_binop(op, eval_with(func, lhs, pivot, bind, budget)?, rhs_imm)
+        }
+        Inst::Binop { op, lhs, rhs } => {
+            let l = eval_with(func, lhs, pivot, bind, budget)?;
+            let r = eval_with(func, rhs, pivot, bind, budget)?;
+            eval::fold_binop(op, l, r)
+        }
+        _ => None,
+    }
+}
+
+/// Nesting budget and value-set cap for [`select_values`]. Nested `?:`
+/// merges a phi into a phi, so the walk crosses a few levels; the cap
+/// bounds the per-consumer evaluation count. The budget also terminates
+/// the walk over a loop phi, which reaches itself.
+const SELECT_SET_DEPTH: u32 = 4;
+const SELECT_SET_MAX: usize = 8;
+
+/// Accumulate the distinct integer constants `v` can produce: an
+/// immediate, or the union over a phi's incomings. False when any
+/// incoming is not one of those, when the set exceeds the cap, or on an
+/// FP-kind phi, whose incomings are bit patterns the integer evaluator
+/// must not compute on.
+fn collect_select_values(func: &FunctionSsa, v: ValueId, depth: u32, out: &mut Vec<i64>) -> bool {
+    if let Some(k) = imm_of(func, v) {
+        if !out.contains(&k) {
+            out.push(k);
+        }
+        return out.len() <= SELECT_SET_MAX;
+    }
+    let Some(Inst::Phi { incoming, kind }) = func.insts.get(v as usize) else {
+        return false;
+    };
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) || depth == 0 {
+        return false;
+    }
+    incoming
+        .iter()
+        .all(|&(_, iv)| collect_select_values(func, iv, depth - 1, out))
+}
+
+/// The set of integer constants a phi can produce, when it can produce
+/// more than one. An all-agreeing phi resolves through [`imm_of`]
+/// already, so it is left to [`fold_round`].
+fn select_values(func: &FunctionSsa, v: ValueId) -> Option<Vec<i64>> {
+    if !matches!(func.insts.get(v as usize), Some(Inst::Phi { .. })) {
+        return None;
+    }
+    let mut values = Vec::new();
+    if !collect_select_values(func, v, SELECT_SET_DEPTH, &mut values) {
+        return None;
+    }
+    (values.len() > 1).then_some(values)
+}
+
+/// Per-value list of the instruction indices that read it. Terminator
+/// and `exit_acc` references are left out: neither is a foldable
+/// consumer.
+fn user_lists(func: &FunctionSsa) -> Vec<Vec<ValueId>> {
+    let mut users: Vec<Vec<ValueId>> = vec![Vec::new(); func.insts.len()];
+    for (i, inst) in func.insts.iter().enumerate() {
+        for_each_operand(inst, |op| {
+            if let Some(slot) = users.get_mut(op as usize) {
+                slot.push(i as ValueId);
+            }
+        });
+    }
+    users
+}
+
+/// Fold a consumer of a select whose result is the same for every value
+/// the select can produce: `> 3ul` on a `c ? 1 : 0` is 0 either way, and
+/// so is a mask selecting none of the bits the incomings set. The
+/// condition stays unknown; the consumer does not depend on it. Walks
+/// forward from each select, so the cost tracks its use chain and a
+/// consumer folds at any distance down it -- an intermediate whose own
+/// value differs per incoming is walked through, not folded.
+///
+/// -O only: such a value is not a constant expression (C99 6.6), so this
+/// is the optimizer proving the consumer invariant, never the front end
+/// widening what it accepts.
+pub(crate) fn fold_selects(func: &mut FunctionSsa) -> bool {
+    let selects: Vec<(ValueId, Vec<i64>)> = (0..func.insts.len() as ValueId)
+        .filter_map(|v| select_values(func, v).map(|values| (v, values)))
+        .collect();
+    if selects.is_empty() {
+        return false;
+    }
+    let users = user_lists(func);
+    // Per-walk visited marks, stamped with the walk's index so the reset
+    // between selects is free rather than a scan of the whole tape.
+    let mut seen = vec![0u32; func.insts.len()];
+    let mut queue: Vec<ValueId> = Vec::new();
+    let mut changed = false;
+    for (walk, (pivot, values)) in selects.iter().enumerate() {
+        let stamp = walk as u32 + 1;
+        queue.clear();
+        queue.extend_from_slice(&users[*pivot as usize]);
+        while let Some(u) = queue.pop() {
+            if core::mem::replace(&mut seen[u as usize], stamp) == stamp {
+                continue;
+            }
+            if !matches!(
+                func.insts[u as usize],
+                Inst::Extend { .. } | Inst::BinopI { .. } | Inst::Binop { .. }
+            ) {
+                continue;
+            }
+            if !matches!(func.f32_values.get(u as usize), Some(true)) {
+                let mut uniform = None;
+                for &bind in values {
+                    let mut budget = SELECT_EVAL_BUDGET;
+                    match eval_with(func, u, *pivot, bind, &mut budget) {
+                        Some(k) if uniform.is_none_or(|prev| prev == k) => uniform = Some(k),
+                        _ => {
+                            uniform = None;
+                            break;
+                        }
+                    }
+                }
+                if let Some(k) = uniform {
+                    func.insts[u as usize] = Inst::Imm(k);
+                    changed = true;
+                }
+            }
+            queue.extend_from_slice(&users[u as usize]);
+        }
+    }
+    changed
 }
 
 /// Resolve every remaining deferred `__builtin_constant_p` to 0. Called
@@ -643,5 +806,165 @@ mod tests {
         ]);
         run_one(&mut f);
         assert!(matches!(f.insts[1], Inst::Imm(-32768)));
+    }
+
+    /// `phi(1, 0)` at index 2, with `insts[3..]` as the consumers under test.
+    fn with_select(mut consumers: Vec<Inst>) -> FunctionSsa {
+        let mut insts = vec![
+            Inst::Imm(1),
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::I64,
+            },
+        ];
+        insts.append(&mut consumers);
+        fresh(insts)
+    }
+
+    #[test]
+    fn select_invariant_comparison_folds() {
+        // Both incomings are <= 3, so `ugt 3` is 0 either way. The select
+        // itself is left alone: its value does depend on the condition.
+        let mut f = with_select(vec![Inst::BinopI {
+            op: BinOp::Ugt,
+            lhs: 2,
+            rhs_imm: 3,
+        }]);
+        assert!(fold_selects(&mut f));
+        assert!(matches!(f.insts[3], Inst::Imm(0)));
+        assert!(matches!(f.insts[2], Inst::Phi { .. }));
+    }
+
+    #[test]
+    fn select_variant_consumer_is_left_alone() {
+        // `+ 1` is 2 or 1: the consumer does depend on the condition.
+        let mut f = with_select(vec![Inst::BinopI {
+            op: BinOp::Add,
+            lhs: 2,
+            rhs_imm: 1,
+        }]);
+        assert!(!fold_selects(&mut f));
+        assert!(matches!(f.insts[3], Inst::BinopI { .. }));
+    }
+
+    #[test]
+    fn select_invariant_mask_folds_through_a_variant_chain() {
+        // The `or` intermediates differ per incoming (5 / 4), so they are
+        // walked through rather than folded; the mask over them selects
+        // no bit either can set, so it folds.
+        let mut f = with_select(vec![
+            Inst::BinopI {
+                op: BinOp::Or,
+                lhs: 2,
+                rhs_imm: 4,
+            },
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs: 3,
+                rhs_imm: 0x1_8000,
+            },
+        ]);
+        assert!(fold_selects(&mut f));
+        assert!(matches!(f.insts[3], Inst::BinopI { op: BinOp::Or, .. }));
+        assert!(matches!(f.insts[4], Inst::Imm(0)));
+    }
+
+    #[test]
+    fn nested_select_contributes_its_values_to_the_outer_set() {
+        // A nested `?:` merges a phi into a phi: the outer phi can produce
+        // 1, 2 or 3, so `ugt 3` is 0 for every one of them.
+        let mut f = fresh(vec![
+            Inst::Imm(1),
+            Inst::Imm(2),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::I64,
+            },
+            Inst::Imm(3),
+            Inst::Phi {
+                incoming: vec![(0, 2), (1, 3)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Ugt,
+                lhs: 4,
+                rhs_imm: 3,
+            },
+        ]);
+        assert_eq!(select_values(&f, 4), Some(vec![1, 2, 3]));
+        assert!(fold_selects(&mut f));
+        assert!(matches!(f.insts[5], Inst::Imm(0)));
+    }
+
+    #[test]
+    fn loop_counter_phi_is_not_a_select() {
+        // `phi(0, phi + 1)`: the back edge is not an immediate, so the set
+        // of values is unknown and a comparison on it must survive.
+        let mut f = fresh(vec![
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 2)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 1,
+                rhs_imm: 1,
+            },
+            Inst::BinopI {
+                op: BinOp::Ugt,
+                lhs: 1,
+                rhs_imm: 3,
+            },
+        ]);
+        assert_eq!(select_values(&f, 1), None);
+        assert!(!fold_selects(&mut f));
+    }
+
+    #[test]
+    fn select_with_a_non_constant_incoming_is_refused() {
+        // A loop-carried phi has an incoming that is not an immediate, so
+        // the set of values it can take is unknown.
+        let mut f = fresh(vec![
+            Inst::Imm(1),
+            Inst::Load {
+                addr: 0,
+                disp: 0,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Ugt,
+                lhs: 2,
+                rhs_imm: 3,
+            },
+        ]);
+        assert!(!fold_selects(&mut f));
+        assert!(matches!(f.insts[3], Inst::BinopI { .. }));
+    }
+
+    #[test]
+    fn fp_kind_select_is_refused() {
+        // An F64 phi merges bit patterns; the integer evaluator must not
+        // compute on them.
+        let mut f = fresh(vec![
+            Inst::Imm(1),
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::F64,
+            },
+            Inst::BinopI {
+                op: BinOp::Ugt,
+                lhs: 2,
+                rhs_imm: 3,
+            },
+        ]);
+        assert!(!fold_selects(&mut f));
     }
 }

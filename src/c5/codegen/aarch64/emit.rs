@@ -5167,12 +5167,6 @@ fn emit_intrinsic(
             bail_msg("divq intrinsic is x86-64 only");
             false
         }
-        I::Rdtsc => {
-            // `rdtsc` is x86-only; the source gates it on `__x86_64__`, so
-            // AArch64 never reaches it.
-            bail_msg("rdtsc intrinsic is x86-64 only");
-            false
-        }
         I::AArch64DsbIsh => {
             // `dsb ish` (0xD5033B9F): data synchronisation barrier over the
             // inner shareable domain. No operand, no result.

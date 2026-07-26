@@ -2817,15 +2817,6 @@ fn run_intrinsic(
             store_to_memory(mem, ptr + 8, (cur_h & !mh) | vh, StoreKind::I64)?;
             Ok(())
         }
-        Intrinsic::Rdtsc => {
-            // No host clock; zero the low/high output words so a caller
-            // reads a defined result rather than uninitialized data.
-            for &a in &args[0..2] {
-                let addr = frame.regs[a as usize] as usize;
-                store_to_memory(mem, addr, 0, StoreKind::I32)?;
-            }
-            Ok(())
-        }
         Intrinsic::AArch64DsbIsh | Intrinsic::AArch64Isb => {
             // Barriers have no observable effect in the single-threaded
             // interpreter.

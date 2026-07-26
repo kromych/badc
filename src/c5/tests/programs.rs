@@ -399,10 +399,18 @@ fn divq_udiv_qrnnd() {
 
 #[test]
 fn rdtsc_host_ticks() {
-    // The x86-64 `rdtsc` inline-asm shape (a common host-tick counter)
-    // as Intrinsic::Rdtsc: two register-tied outputs, no inputs. The VM
-    // zeroes the counter (no host clock); native x86-64 emits `rdtsc`.
+    // The x86-64 `rdtsc` inline-asm shape (a common host-tick counter):
+    // two register-tied outputs, no inputs. The VM zeroes the counter (no
+    // host clock); native x86-64 emits `rdtsc`.
     assert_eq!(run_fixture("rdtsc_host_ticks.c"), 0);
+}
+
+#[test]
+fn inline_asm_fixed_reg_output_width() {
+    // A fixed-register output stores back at the width of its C object:
+    // a `long` operand of a 32-bit instruction takes all eight bytes, a
+    // 16-bit operand takes two and leaves its neighbours alone.
+    assert_eq!(run_fixture("inline_asm_fixed_reg_output_width.c"), 0);
 }
 
 #[test]

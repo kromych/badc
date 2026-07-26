@@ -146,8 +146,9 @@ fn select_of_two_constants_folds_its_guard() {
     // guard on it live unless the guard is evaluated per incoming: the
     // comparison `> 3ul` is false for both 1 and 0, and the mask selects
     // neither the bit the two arms differ in nor any bit either sets, so
-    // both build-time asserts are unreachable whichever arm runs. The
-    // undefined `bug` would fail the JIT load if either survived.
+    // the build-time asserts are unreachable whichever arm runs -- also
+    // through a nested `?:`, whose value set is the union of both levels.
+    // The undefined `bug` would fail the JIT load if any survived.
     let src = "
         extern void bug(void);
         #define BUILD_BUG_ON(c) do { if (!(!(c))) bug(); } while (0)
@@ -169,6 +170,13 @@ fn select_of_two_constants_folds_its_guard() {
             BUILD_BUG_ON(STACK_FLAGS & (0x10000ul | 0x8000ul));
             return STACK_FLAGS;
         }
+        static int tier;
+        static unsigned long tier_bits(void) {
+            unsigned long v = tier ? (delay_rmap ? 1ul : 2ul) : 3ul;
+            BUILD_BUG_ON(v > 3ul);
+            BUILD_BUG_ON(v == 0ul);
+            return v;
+        }
         int main(void) {
             delay_rmap = 0;
             if (add_page(0x1000ul) != 0x1000ul) return 1;
@@ -178,6 +186,12 @@ fn select_of_two_constants_folds_its_guard() {
             if (stack_flags() != 0x100173ul) return 3;
             personality = 0x400000ul;
             if (stack_flags() != 0x100177ul) return 4;
+            tier = 1;
+            if (tier_bits() != 1ul) return 5;
+            delay_rmap = 0;
+            if (tier_bits() != 2ul) return 7;
+            tier = 0;
+            if (tier_bits() != 3ul) return 8;
             return 6;
         }
     ";

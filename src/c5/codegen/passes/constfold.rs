@@ -98,23 +98,48 @@ fn eval_with(
     }
 }
 
-/// The set of integer constants a phi can produce, when every incoming
-/// resolves to one and they do not all agree. An all-agreeing phi is
-/// already a constant to [`imm_of`], and an FP-kind phi carries a bit
-/// pattern the integer evaluator must not compute on.
-fn select_values(func: &FunctionSsa, v: ValueId) -> Option<Vec<i64>> {
+/// Nesting budget and value-set cap for [`select_values`]. Nested `?:`
+/// merges a phi into a phi, so the walk crosses a few levels; the cap
+/// bounds the per-consumer evaluation count. The budget also terminates
+/// the walk over a loop phi, which reaches itself.
+const SELECT_SET_DEPTH: u32 = 4;
+const SELECT_SET_MAX: usize = 8;
+
+/// Accumulate the distinct integer constants `v` can produce: an
+/// immediate, or the union over a phi's incomings. False when any
+/// incoming is not one of those, when the set exceeds the cap, or on an
+/// FP-kind phi, whose incomings are bit patterns the integer evaluator
+/// must not compute on.
+fn collect_select_values(func: &FunctionSsa, v: ValueId, depth: u32, out: &mut Vec<i64>) -> bool {
+    if let Some(k) = imm_of(func, v) {
+        if !out.contains(&k) {
+            out.push(k);
+        }
+        return out.len() <= SELECT_SET_MAX;
+    }
     let Some(Inst::Phi { incoming, kind }) = func.insts.get(v as usize) else {
-        return None;
+        return false;
     };
-    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) || depth == 0 {
+        return false;
+    }
+    incoming
+        .iter()
+        .all(|&(_, iv)| collect_select_values(func, iv, depth - 1, out))
+}
+
+/// The set of integer constants a phi can produce, when it can produce
+/// more than one. An all-agreeing phi resolves through [`imm_of`]
+/// already, so it is left to [`fold_round`].
+fn select_values(func: &FunctionSsa, v: ValueId) -> Option<Vec<i64>> {
+    if !matches!(func.insts.get(v as usize), Some(Inst::Phi { .. })) {
         return None;
     }
-    let mut values = Vec::with_capacity(incoming.len());
-    for &(_, iv) in incoming {
-        values.push(imm_of(func, iv)?);
+    let mut values = Vec::new();
+    if !collect_select_values(func, v, SELECT_SET_DEPTH, &mut values) {
+        return None;
     }
-    let differs = values.iter().any(|k| Some(k) != values.first());
-    differs.then_some(values)
+    (values.len() > 1).then_some(values)
 }
 
 /// Per-value list of the instruction indices that read it. Terminator
@@ -843,6 +868,58 @@ mod tests {
         assert!(fold_selects(&mut f));
         assert!(matches!(f.insts[3], Inst::BinopI { op: BinOp::Or, .. }));
         assert!(matches!(f.insts[4], Inst::Imm(0)));
+    }
+
+    #[test]
+    fn nested_select_contributes_its_values_to_the_outer_set() {
+        // A nested `?:` merges a phi into a phi: the outer phi can produce
+        // 1, 2 or 3, so `ugt 3` is 0 for every one of them.
+        let mut f = fresh(vec![
+            Inst::Imm(1),
+            Inst::Imm(2),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::I64,
+            },
+            Inst::Imm(3),
+            Inst::Phi {
+                incoming: vec![(0, 2), (1, 3)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Ugt,
+                lhs: 4,
+                rhs_imm: 3,
+            },
+        ]);
+        assert_eq!(select_values(&f, 4), Some(vec![1, 2, 3]));
+        assert!(fold_selects(&mut f));
+        assert!(matches!(f.insts[5], Inst::Imm(0)));
+    }
+
+    #[test]
+    fn loop_counter_phi_is_not_a_select() {
+        // `phi(0, phi + 1)`: the back edge is not an immediate, so the set
+        // of values is unknown and a comparison on it must survive.
+        let mut f = fresh(vec![
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 2)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 1,
+                rhs_imm: 1,
+            },
+            Inst::BinopI {
+                op: BinOp::Ugt,
+                lhs: 1,
+                rhs_imm: 3,
+            },
+        ]);
+        assert_eq!(select_values(&f, 1), None);
+        assert!(!fold_selects(&mut f));
     }
 
     #[test]

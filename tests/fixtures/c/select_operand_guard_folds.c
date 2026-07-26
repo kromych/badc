@@ -68,6 +68,17 @@ static unsigned long setup_stack_flags(void) {
     return VM_STACK_FLAGS;
 }
 
+// A nested `?:` merges a select into a select, so the guard sees the
+// union of what both levels can produce.
+static int tier_selector;
+
+static unsigned long tier_bits(void) {
+    unsigned long v = tier_selector ? (rmap_delay_requested ? 1ul : 2ul) : 3ul;
+    BUILD_BUG_ON(v > 3ul, 772);
+    BUILD_BUG_ON(v == 0ul, 773);
+    return v;
+}
+
 int main(void) {
     unsigned long base = VM_GROWSDOWN | VM_READ | VM_WRITE | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC |
                          VM_ACCOUNT;
@@ -85,5 +96,14 @@ int main(void) {
         return 4;
     if (batch[0] != (0x1000ul | 1ul))
         return 5;
+    tier_selector = 1;
+    if (tier_bits() != 1ul)
+        return 6;
+    rmap_delay_requested = 0;
+    if (tier_bits() != 2ul)
+        return 7;
+    tier_selector = 0;
+    if (tier_bits() != 3ul)
+        return 8;
     return 0;
 }

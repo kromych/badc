@@ -199,6 +199,70 @@ fn select_of_two_constants_folds_its_guard() {
 }
 
 #[test]
+fn const_trip_loop_unrolls_so_its_index_folds_a_guard() {
+    // A counted loop with a constant trip count hands its induction
+    // variable to an always_inline helper that asserts the index is in
+    // range. The guard resolves only once each iteration's index is a
+    // literal, which full unrolling produces. The body is wide enough
+    // (five member stores through an array-of-struct subscript reached
+    // via a pointer parameter, plus two calls) that gating on the
+    // rolled body size instead of on the expansion keeps it rolled and
+    // leaves the undefined `bug`, which would fail the JIT load. The
+    // exit code checks the values the copies compute, including the
+    // rolled loop's over a runtime bound.
+    let src = "
+        extern void bug(void);
+        #define BUILD_BUG_ON(c) do { if (!(!(c))) bug(); } while (0)
+        #define NR_FIXED 3
+        #define BASE_IDX 32
+        struct counter {
+            unsigned int kind; unsigned int idx; unsigned long long count;
+            unsigned long long eventsel; void *event; void *owner;
+            unsigned long long config;
+        };
+        struct bank { struct counter fixed[NR_FIXED]; };
+        static const int event_ids[NR_FIXED] = { 11, 22, 33 };
+        static __attribute__((always_inline)) unsigned long long sel_of(unsigned int i) {
+            BUILD_BUG_ON(i >= NR_FIXED);
+            return (unsigned long long)event_ids[i] << 8;
+        }
+        static __attribute__((always_inline)) unsigned int slot_of(unsigned int i) {
+            BUILD_BUG_ON(BASE_IDX + i >= 64u);
+            return i + BASE_IDX;
+        }
+        static void bank_init(struct bank *b, void *owner) {
+            int i;
+            for (i = 0; i < NR_FIXED; i++) {
+                b->fixed[i].kind = 2;
+                b->fixed[i].owner = owner;
+                b->fixed[i].idx = slot_of((unsigned int)i);
+                b->fixed[i].config = 0;
+                b->fixed[i].eventsel = sel_of((unsigned int)i);
+            }
+        }
+        static int runtime_bound = NR_FIXED;
+        static struct bank the_bank;
+        int main(void) {
+            int i; unsigned long long acc = 0, rolled = 0; static char token;
+            bank_init(&the_bank, &token);
+            for (i = 0; i < NR_FIXED; i++) {
+                if (the_bank.fixed[i].kind != 2) return 1;
+                if (the_bank.fixed[i].owner != &token) return 2;
+                if (the_bank.fixed[i].idx != (unsigned int)(i + BASE_IDX)) return 3;
+                if (the_bank.fixed[i].config != 0) return 4;
+                acc += the_bank.fixed[i].eventsel;
+            }
+            if (acc != ((11ull + 22ull + 33ull) << 8)) return 5;
+            for (i = 0; i < runtime_bound; i++)
+                rolled += (unsigned long long)event_ids[i] << 8;
+            if (rolled != acc) return 6;
+            return 9;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-unroll-guard"]), 9);
+}
+
+#[test]
 fn const_scalar_load_folds_to_its_initializer() {
     // C99 6.7.3p5: modifying an object defined with a const-qualified
     // type is undefined, so a file-scope `const` scalar's load folds to

@@ -23,29 +23,28 @@ Disassembly of section .text:
                	mov	x2, #0x7                // =7
                	str	w2, [x0, #0x8]
                	sub	x0, x29, #0x18
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	str	x2, [x0, #0x10]
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	str	x3, [x0, #0x10]
                	sub	x0, x29, #0x18
-               	sub	x3, x29, #0x28
-               	ldr	w2, [x0]
-               	ldr	w4, [x0, #0x4]
-               	cmp	x2, x4
+               	sub	x4, x29, #0x28
+               	mov	x2, #0x0                // =0
+               	ldr	w2, [x0, #0x4]
+               	cmp	x2, #0x4
                	cset	x2, eq
                	cmp	x2, #0x0
                	cset	x2, eq
-               	mov	w4, w2
-               	cbz	x4, <addr>
-               	ldr	x4, [x0, #0x10]
+               	mov	w5, w2
+               	cbz	x5, <addr>
                	ldr	w5, [x0, #0x4]
-               	ldr	w6, [x0, #0x8]
-               	and	x5, x5, x6
-               	add	x4, x4, x5
-               	ldrb	w4, [x4]
-               	strb	w4, [x3]
-               	ldr	w3, [x0, #0x4]
-               	add	x3, x3, #0x1
-               	str	w3, [x0, #0x4]
+               	mov	x17, #0x7               // =7
+               	and	x5, x5, x17
+               	add	x5, x3, x5
+               	ldrb	w5, [x5]
+               	strb	w5, [x4]
+               	ldr	w4, [x0, #0x4]
+               	add	x4, x4, #0x1
+               	str	w4, [x0, #0x4]
                	mov	w0, w2
                	cmp	x0, #0x0
                	b.eq	<addr>

@@ -51,9 +51,6 @@ fn push_successors(t: &Terminator, out: &mut Vec<BlockId>) {
 /// Delete blocks unreachable from the entry. Returns whether any block
 /// was removed, so a driver can iterate with the branch fold.
 pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
-    if !func.computed_goto_targets.is_empty() {
-        return false;
-    }
     let n = func.blocks.len();
     if n == 0 {
         return false;
@@ -68,10 +65,16 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     while let Some(b) = stack.pop() {
         succ.clear();
         push_successors(&func.blocks[b as usize].terminator, &mut succ);
-        if let Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } =
-            &func.blocks[b as usize].terminator
-        {
-            succ.extend_from_slice(&func.jump_tables[*table as usize]);
+        match &func.blocks[b as usize].terminator {
+            Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } => {
+                succ.extend_from_slice(&func.jump_tables[*table as usize]);
+            }
+            // An indirect goto reaches every block whose address was
+            // taken; the set rides the function, not the terminator.
+            Terminator::GotoIndirect { .. } => {
+                succ.extend_from_slice(&func.computed_goto_targets);
+            }
+            _ => {}
         }
         for &s in &succ {
             if !reachable[s as usize] {

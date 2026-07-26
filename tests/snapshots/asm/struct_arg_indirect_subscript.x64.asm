@@ -33,7 +33,7 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	xorq	%rax, %rax
-               	addq	%rax, %rcx
+               	addq	$0x0, %rcx
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x1, %eax
@@ -267,7 +267,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rax, %rax
-               	leaq	(%rsi,%rax), %rcx
+               	leaq	(%rsi), %rcx
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x1, %eax

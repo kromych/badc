@@ -153,17 +153,55 @@ fn mirror(op: BinOp) -> Option<BinOp> {
 /// `Inst::Imm` not flagged f32. Out-of-range ids (`NO_VALUE`) and
 /// address-bearing immediates resolve to `None`.
 fn imm_of(func: &FunctionSsa, v: ValueId) -> Option<i64> {
+    imm_through_phis(&func.insts, &func.f32_values, v)
+}
+
+/// Recursion budget for the multi-incoming phi merge. Each level
+/// multiplies by the operand count, so the bound keeps the walk cheap
+/// while still crossing the few merges a folded control-flow chain
+/// stacks up.
+const PHI_MERGE_DEPTH: u32 = 4;
+
+/// Shared constant resolver: names an `Inst::Imm`, or reaches one
+/// through phis. An empty `f32_values` accepts every `Imm`, for callers
+/// with no float-immediate distinction to make.
+pub(super) fn imm_through_phis(insts: &[Inst], f32_values: &[bool], v: ValueId) -> Option<i64> {
+    imm_through_phis_depth(insts, f32_values, v, PHI_MERGE_DEPTH)
+}
+
+fn imm_through_phis_depth(
+    insts: &[Inst],
+    f32_values: &[bool],
+    v: ValueId,
+    depth: u32,
+) -> Option<i64> {
     let mut i = v as usize;
     // Chase single-incoming (degenerate) phis to the constant they
     // collapse to: such a phi always takes its one predecessor's value.
     // prune_unreachable produces them when it drops a folded branch's
     // dead predecessor, so folding through them lets a chain built on the
     // survivor (an `Extend`, a `BinopI`) resolve on the next round.
-    for _ in 0..func.insts.len() {
-        match func.insts.get(i)? {
-            Inst::Imm(k) if !matches!(func.f32_values.get(i), Some(true)) => return Some(*k),
+    for _ in 0..insts.len() {
+        match insts.get(i)? {
+            Inst::Imm(k) if !matches!(f32_values.get(i), Some(true)) => return Some(*k),
             Inst::Phi { incoming, .. } if incoming.len() == 1 => {
                 i = incoming[0].1 as usize;
+            }
+            // Every predecessor supplying the same constant makes the
+            // merge that constant, whichever edge is taken. A `&&` / `||`
+            // whose arms decide the same way reaches the fold in this
+            // shape, as does any merge of equal constants an inline
+            // exposed. The depth bound also terminates a loop phi, whose
+            // back edge reaches itself.
+            Inst::Phi { incoming, .. } => {
+                if depth == 0 {
+                    return None;
+                }
+                let mut vals = incoming
+                    .iter()
+                    .map(|&(_, v)| imm_through_phis_depth(insts, f32_values, v, depth - 1));
+                let first = vals.next()??;
+                return vals.all(|k| k == Some(first)).then_some(first);
             }
             _ => return None,
         }

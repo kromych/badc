@@ -24,8 +24,6 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	mov	x0, #0x1                // =1
-               	mov	x0, #0xa                // =10
-               	mov	x0, #0x1                // =1
                	mov	x0, #0x1                // =1
                	mov	x0, #0x0                // =0
                	ret

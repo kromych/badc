@@ -16,40 +16,20 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	retq
 
-<dispatch>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movslq	%esi, %rsi
-               	movq	%rdi, %rax
-               	movq	%rsi, %rdi
-               	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	popq	%rbp
-               	retq
-
-<via_typedef>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
-               	leaq	-<rip>, %rax       # <addr>
-               	callq	*%rax
-               	movslq	%eax, %rax
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	leaq	-<rip>, %rdi       # <addr>
-               	movl	$0xa, %esi
-               	callq	<addr>
-               	movq	%rax, %rbx
+               	leaq	-<rip>, %rax       # <addr>
+               	movl	$0xa, %edi
+               	callq	*%rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rbx
                	movl	$0x14, %edi
-               	callq	<addr>
-               	movq	%rax, %rcx
+               	leaq	-<rip>, %rax       # <addr>
+               	callq	*%rax
+               	movslq	%eax, %rcx
                	movslq	%ebx, %rax
                	cmpq	$0xb, %rax
                	sete	%dl

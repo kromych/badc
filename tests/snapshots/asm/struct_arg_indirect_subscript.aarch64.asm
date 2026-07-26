@@ -35,7 +35,7 @@ Disassembly of section .text:
                	add	x3, x0, x3
                	cbz	x1, <addr>
                	mov	x0, #0x0                // =0
-               	add	x1, x3, x0
+               	add	x1, x3, #0x0
                	cbz	x2, <addr>
                	mov	x0, #0x1                // =1
                	add	x0, x1, x0
@@ -266,7 +266,7 @@ Disassembly of section .text:
                	add	x3, x0, #0x3
                	cbz	x1, <addr>
                	mov	x0, #0x0                // =0
-               	add	x1, x3, x0
+               	add	x1, x3, #0x0
                	cbz	x2, <addr>
                	mov	x0, #0x1                // =1
                	add	x0, x1, x0

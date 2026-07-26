@@ -567,7 +567,11 @@ fn is_inline_candidate(
             }
         }
     }
+    let in_block = in_block_mask(func);
     for (idx, inst) in func.insts.iter().enumerate() {
+        if !in_block[idx] {
+            continue;
+        }
         match inst {
             Inst::Imm(_)
             | Inst::ImmData(_)
@@ -702,6 +706,14 @@ fn is_inline_candidate(
             Inst::Call {
                 arg_aggs, ret_agg, ..
             } if arg_aggs.is_empty() && ret_agg.is_none() => {}
+            // A call through a function pointer in the same shape. The
+            // target is one more value operand for the splice to remap;
+            // because its callee is not known statically it cannot be
+            // ruled out of a call cycle, so the frame-region choice below
+            // gives such a body a fresh region per site.
+            Inst::CallIndirect {
+                arg_aggs, ret_agg, ..
+            } if arg_aggs.is_empty() && ret_agg.is_none() => {}
             // A phi merging values across the callee's own blocks. The
             // multi-block splice translates its incoming values through
             // `callee_remap` and shifts its predecessor block ids into the
@@ -777,6 +789,23 @@ fn spilled_param_cells(func: &FunctionSsa) -> BTreeSet<i64> {
     spilled
 }
 
+/// Which instructions a block actually contains. Folding a constant
+/// condition leaves the dead arm's instructions in the flat array with
+/// no block naming them; a scan over the raw array would read code that
+/// cannot execute -- as a body shape the splice must reproduce, or as a
+/// use keeping a value alive.
+fn in_block_mask(func: &FunctionSsa) -> Vec<bool> {
+    let mut mask = vec![false; func.insts.len()];
+    for blk in &func.blocks {
+        for v in blk.inst_range.clone() {
+            if let Some(slot) = mask.get_mut(v as usize) {
+                *slot = true;
+            }
+        }
+    }
+    mask
+}
+
 /// Per-value "referenced by an operand" mask: instruction operands,
 /// terminator values (Return payload, Bz / Bnz cond), block exit
 /// accumulators, and phi-incoming values all mark their value used.
@@ -787,7 +816,11 @@ fn value_use_mask(func: &FunctionSsa) -> Vec<bool> {
             used[v as usize] = true;
         }
     };
-    for inst in &func.insts {
+    let in_block = in_block_mask(func);
+    for (i, inst) in func.insts.iter().enumerate() {
+        if !in_block[i] {
+            continue;
+        }
         match inst {
             Inst::Load { addr, .. } => mark(*addr, &mut used),
             Inst::Store { addr, value, .. } => {
@@ -1031,6 +1064,15 @@ fn rewrite_callee_inst(inst: &Inst, args: &[ValueId], callee_remap: &[ValueId]) 
                         *a = map_v(*a, callee_remap);
                     }
                 }
+                // The same shape through a function pointer: the callee
+                // address is an ordinary value operand alongside the
+                // arguments.
+                Inst::CallIndirect { target, args, .. } => {
+                    *target = map_v(*target, callee_remap);
+                    for a in args.iter_mut() {
+                        *a = map_v(*a, callee_remap);
+                    }
+                }
                 // Inline-asm operand args (an asm-goto's `"i"` inputs among
                 // them) route through the callee remap like any operand.
                 Inst::InlineAsm { args, .. } => {
@@ -1243,14 +1285,14 @@ fn splice_multi_block(
             Terminator::GotoIndirect { target } => Terminator::GotoIndirect {
                 target: map_v(target, remap),
             },
-            // The caller's own asm-goto row (from a prior splice step) is
-            // shifted in `merged_jump_tables` with the table index kept, so
-            // pass the terminator through. Jump-table callers are skipped
-            // (`block_id_shift_unsafe`).
+            // The caller's own asm-goto and switch rows are shifted in
+            // `merged_jump_tables` with the table index kept, so both
+            // terminators carry their index through unchanged.
             Terminator::AsmGoto { table } => Terminator::AsmGoto { table },
-            Terminator::JumpTable { .. } => {
-                unreachable!("multi-block splice skips jump-table callers")
-            }
+            Terminator::JumpTable { idx, table } => Terminator::JumpTable {
+                idx: map_v(idx, remap),
+                table,
+            },
         }
     };
 
@@ -1291,7 +1333,14 @@ fn splice_multi_block(
     let needed = callee.locals + param_cells.len() as i64;
     let region_base = if needed > 0 {
         let sp = sp_tainted.contains(&original.ent_pc) || sp_tainted.contains(&callee.ent_pc);
-        let key = if sp || cyclic.contains(&callee.ent_pc) {
+        // An indirect call's target is not in the static call graph, so
+        // `cyclic` cannot rule the body out of a cycle back into this
+        // caller; treat it as a cycle member and never share its region.
+        let indirect = callee
+            .insts
+            .iter()
+            .any(|i| matches!(i, Inst::CallIndirect { .. }));
+        let key = if sp || indirect || cyclic.contains(&callee.ent_pc) {
             None
         } else if !callee.insts.iter().any(|i| matches!(i, Inst::Call { .. })) {
             Some(RegionKey::Pool)
@@ -1344,6 +1393,11 @@ fn splice_multi_block(
         // operand vectors.
         let mut mapped = core::mem::replace(&mut original.insts[pc as usize], Inst::Imm(0));
         remap_caller_inst(&mut mapped, remap);
+        // `&&label` names a block, not a value, so the value remap leaves
+        // it alone; it moves with the splice's block-id shift.
+        if let Inst::BlockAddr(b) = &mut mapped {
+            *b = shift_caller_bid(*b);
+        }
         let new_id = new_insts.len() as u32;
         debug_assert_eq!(remap[pc as usize], new_id);
         remap[pc as usize] = new_id;
@@ -1939,10 +1993,11 @@ fn splice_multi_block(
         }
     }
 
-    // Shift the caller's own asm-goto rows (from a prior splice step)
-    // across the block-id shift, then append the callee's, shifted into the
-    // caller's post-splice block space. The filter rejects JumpTable /
-    // GotoIndirect callees, so every callee row is an asm-goto edge list.
+    // Shift the caller's own rows -- switch tables and asm-goto edge
+    // lists alike -- across the block-id shift, then append the callee's,
+    // shifted into the caller's post-splice block space. The filter
+    // rejects JumpTable / GotoIndirect callees, so every callee row is an
+    // asm-goto edge list.
     let mut merged_jump_tables: Vec<Vec<BlockId>> = original
         .jump_tables
         .iter()
@@ -1987,7 +2042,11 @@ fn splice_multi_block(
         ret_is_fp: original.ret_is_fp,
         ret_type_tag: original.ret_type_tag,
         indirect_result_slot: original.indirect_result_slot,
-        computed_goto_targets: original.computed_goto_targets,
+        computed_goto_targets: original
+            .computed_goto_targets
+            .iter()
+            .map(|&b| shift_caller_bid(b))
+            .collect(),
         // The filter rejects JumpTable / GotoIndirect callees; only an
         // asm-goto callee's rows join the caller's own (`merged_jump_tables`).
         jump_tables: merged_jump_tables,
@@ -2398,23 +2457,13 @@ fn inline_caller(
     // Bounded by a generous step cap to keep runaway expansion in
     // check.
     // `splice_multi_block` shifts caller block ids > the splice point.
-    // Surviving caller phis are handled -- their incoming predecessor
-    // block ids are remapped inside the splice. Its `merged_jump_tables`
-    // shifts the caller's own asm-goto rows across that shift and
-    // `map_terminator_caller` carries an `AsmGoto` terminator through, so a
-    // caller that already holds asm-goto rows (from a prior fixpoint round
-    // or an earlier step of this loop) is spliceable. A computed-goto or a
-    // `JumpTable` (switch) caller is not: the shift would invalidate the
-    // block-id references in `Inst::BlockAddr` / `computed_goto_targets`,
-    // and `map_terminator_caller` has no `JumpTable` arm. Skip those; the
-    // flat single-block path above already ran and keeps block ids fixed.
-    let block_id_shift_unsafe = !caller.computed_goto_targets.is_empty()
-        || caller
-            .blocks
-            .iter()
-            .any(|b| matches!(b.terminator, Terminator::JumpTable { .. }));
+    // Every block-id reference the caller can hold moves with it: phi
+    // incoming predecessors and `Inst::BlockAddr` inside the splice,
+    // `computed_goto_targets` and the `jump_tables` rows behind a
+    // `JumpTable` (switch) or `AsmGoto` terminator on the way out. So any
+    // caller shape is spliceable.
     let mut steps = 0usize;
-    while steps < MAX_MULTI_BLOCK_SPLICE_STEPS && !block_id_shift_unsafe {
+    while steps < MAX_MULTI_BLOCK_SPLICE_STEPS {
         let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>, i64)> = None;
         'find: for (b_idx, block) in caller.blocks.iter().enumerate() {
             for pc in block.inst_range.start..block.inst_range.end {
@@ -2574,8 +2623,8 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             // A computed-goto caller is handled the same way: the flat
             // splice rebuilds the block array one-to-one, leaving every
             // block id, `Inst::BlockAddr`, and `computed_goto_targets`
-            // entry valid. Only multi-block splicing shifts block ids;
-            // `inline_caller` gates that path off for such callers.
+            // entry valid. Multi-block splicing shifts block ids and
+            // carries each of those reference sets across the shift.
             let before = caller.insts.len();
             inline_caller(
                 caller,

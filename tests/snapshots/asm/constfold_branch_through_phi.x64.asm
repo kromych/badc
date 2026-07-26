@@ -22,8 +22,6 @@ Disassembly of section .text:
                	movl	$0x64, %eax
                	movabsq	$-0x2, %rax
                	movl	$0x1, %eax
-               	movl	$0xa, %eax
-               	movl	$0x1, %eax
                	movl	$0x1, %eax
                	xorq	%rax, %rax
                	retq

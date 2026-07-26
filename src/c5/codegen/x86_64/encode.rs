@@ -1816,6 +1816,20 @@ pub(crate) fn lower(
                 }
             }
         });
+        // Simplify each body before the inliner reads it. A helper whose
+        // guard is constant -- a configuration predicate compiled to 0 --
+        // is a multi-block body with live parameter-cell reads until the
+        // dead arm is pruned, a shape the candidate filter rejects; folded
+        // first, it inlines and lets the caller's own guard fold in turn.
+        // `resolve_constant_p` stays false: a deferred
+        // `__builtin_constant_p` must survive for the inliner's argument
+        // substitution.
+        super::ssa::emit_common::time_pass(
+            "passes::simplify_branches::pre_inline (x86_64)",
+            || {
+                crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs, false);
+            },
+        );
         // Unroll constant-trip loops after mem2reg (the loop-carried
         // values are phis by then) and before the inliner, so a helper
         // whose body was a short loop becomes a single-block inline

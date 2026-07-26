@@ -37,20 +37,6 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	retq
 
-<apply>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movslq	%esi, %rsi
-               	movslq	%edx, %rdx
-               	movq	%rdi, %rax
-               	movq	%rsi, %rdi
-               	movq	%rdx, %rsi
-               	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -97,8 +83,8 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-<rip>, %rax      # <addr>
-               	leaq	-<rip>, %r12      # <addr>
+               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %r12       # <addr>
                	movl	$0x2, %edi
                	movl	$0x3, %esi
                	callq	*%rax
@@ -137,10 +123,12 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-<rip>, %rdi      # <addr>
-               	movl	$0x8, %esi
-               	movl	$0x9, %edx
-               	callq	<addr>
+               	leaq	-<rip>, %rax      # <addr>
+               	movl	$0x8, %edi
+               	movl	$0x9, %esi
+               	callq	*%rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rax
                	cmpq	$0x11, %rax
                	je	<addr>
                	movl	$0x7, %eax

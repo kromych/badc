@@ -94,8 +94,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movss	%xmm14, -0x8(%rbp,%riz)
                	movss	-0x8(%rbp,%riz), %xmm0
-               	movss	%xmm0, -0x8(%rbp,%riz)
-               	movss	-0x8(%rbp,%riz), %xmm0
                	movl	$0x41a00000, %eax       # imm = 0x41A00000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0

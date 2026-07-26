@@ -18,18 +18,6 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	retq
 
-<forward>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movslq	%ecx, %rcx
-               	movq	(%rdi), %rax
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -42,10 +30,12 @@ Disassembly of section .text:
                	movl	%edx, -0x8(%rbp)
                	leaq	-0x10(%rbp), %rdi
                	leaq	<rip>, %rsi
-               	movl	$0x1ffff, %ecx          # imm = 0x1FFFF
                	leaq	-0x8(%rbp), %r8
-               	callq	<addr>
-               	movq	%rax, %rbx
+               	movq	(%rdi), %rax
+               	movl	$0xffff, %ecx           # imm = 0xFFFF
+               	callq	*%rax
+               	movslq	%eax, %rcx
+               	movslq	%ecx, %rbx
                	leaq	<rip>, %rdi
                	movslq	%ebx, %rsi
                	movslq	-0x8(%rbp), %rdx

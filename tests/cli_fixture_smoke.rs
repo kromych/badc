@@ -62,6 +62,14 @@ const COMPILE_SKIPLIST: &[&str] = &[
     // on the `-c` object path (a single-file image folds only
     // PC-relative section relocs); locked by a linker test.
     "file_scope_asm_sym_mem.c",
+    // Each calls a declared-but-undefined function from a statically
+    // dead branch, so the link succeeds only once the fold deletes the
+    // call -- an -O capability. gcc likewise fails to link these at -O0
+    // and links them at -O2; the -O runs live in
+    // `dead_branch_calls_are_eliminated_under_optimize`.
+    "dead_arm_short_circuit_undefined.c",
+    "always_inline_indirect_call_guard.c",
+    "dead_arm_config_predicate_undefined.c",
 ];
 
 /// Fixtures whose body carries inline asm specific to one ISA. The
@@ -233,6 +241,72 @@ fn quoted_include_resolves_relative_to_including_file() {
         Some(42),
         "quoted-include program returned wrong value"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// The fixtures skiplisted above call a declared-but-undefined
+// function from a branch that is statically dead once the enclosing
+// helper inlines and its guard folds. Linking is the assertion: a
+// surviving call is an undefined reference. Both cross targets are
+// built so the fold is exercised independently of the host, and the
+// host-target build is executed to confirm the surviving code still
+// computes the right answers.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn dead_branch_calls_are_eliminated_under_optimize() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-deadbr-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let mut root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    root.push("tests");
+    root.push("fixtures");
+    root.push("c");
+
+    for name in [
+        "dead_arm_short_circuit_undefined.c",
+        "always_inline_indirect_call_guard.c",
+        "dead_arm_config_predicate_undefined.c",
+    ] {
+        let src = root.join(name);
+        let stem = name.trim_end_matches(".c");
+        for target in ["linux-aarch64", "linux-x64"] {
+            let out = dir.join(format!("{stem}-{target}"));
+            let res = Command::new(badc)
+                .arg(format!("--target={target}"))
+                .arg("-O")
+                .arg("-o")
+                .arg(&out)
+                .arg(&src)
+                .output()
+                .expect("run badc");
+            assert!(
+                res.status.success(),
+                "[{target}] {name}: a statically dead call survived -O: {}",
+                String::from_utf8_lossy(&res.stderr)
+            );
+        }
+
+        let exe = dir.join(format!("{stem}-host"));
+        let built = Command::new(badc)
+            .arg("-O")
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{name}: host build failed: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run fixture");
+        assert_eq!(
+            run.status.code(),
+            Some(0),
+            "{name}: fixture reported failure"
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 

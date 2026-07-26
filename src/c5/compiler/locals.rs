@@ -135,6 +135,7 @@ impl Compiler {
         self.pending.attr_used = false;
         self.pending.attr_section = None;
         self.pending.attr_weak = false;
+        self.pending.attr_hidden = false;
         while self.lex.tk == Token::Extern
             || self.lex.tk == Token::Static
             || self.lex.tk == Token::ThreadLocal
@@ -306,6 +307,13 @@ impl Compiler {
                     // `.data` base address.
                     self.symbols[loc_idx].linkage = crate::c5::symbol::Linkage::External;
                 }
+                // A block-scope `extern T x __attribute__((weak,
+                // visibility("hidden")));` carries binding/visibility onto
+                // the symbol whether it is new or an existing file-scope
+                // Glo/Fun (the `symbol_get` idiom redeclares an already-known
+                // name weak+hidden). Without this the reference stays
+                // STB_GLOBAL STV_DEFAULT and an undefined weak fails the link.
+                self.apply_symbol_attributes(loc_idx);
                 if self.lex.tk == ',' {
                     self.next()?;
                     continue;

@@ -956,6 +956,11 @@ impl Compiler {
                                 self.symbols[self.lex.curr_id_idx].name.as_str(),
                                 "alias" | "__alias__"
                             );
+                        let is_visibility = self.lex.tk == Token::Id
+                            && matches!(
+                                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                                "visibility" | "__visibility__"
+                            );
                         let mut saw_aligned = false;
                         let mut saw_constructor = false;
                         let mut saw_destructor = false;
@@ -1028,6 +1033,22 @@ impl Compiler {
                             self.pending.attr_alias = Some(name);
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err("`)` expected after `alias` operand"));
+                            }
+                            self.next()?;
+                        } else if is_visibility && self.lex.tk == '(' {
+                            // GCC `visibility("hidden"|"internal"|"protected"
+                            // |"default")`: `hidden` and `internal` make the
+                            // symbol non-preemptible (STV_HIDDEN); the other
+                            // two keep the default preemptible addressing.
+                            self.next()?; // `(`
+                            let vis = self.parse_attribute_string_operand("visibility")?;
+                            if vis == "hidden" || vis == "internal" {
+                                self.pending.attr_hidden = true;
+                            }
+                            if self.lex.tk != ')' {
+                                return Err(
+                                    self.compile_err("`)` expected after `visibility` operand")
+                                );
                             }
                             self.next()?;
                         } else if is_cleanup && self.lex.tk == '(' {

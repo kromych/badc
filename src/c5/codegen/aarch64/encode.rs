@@ -1688,6 +1688,9 @@ pub(crate) fn lower(
     // Data the -O pipeline orphans after the pre-inline compaction
     // packed `.data`; the caller recompacts and lowers again.
     let mut orphaned_data: Option<crate::c5::codegen::ssa::shadow::OrphanedData> = None;
+    // Written only under the `std` dump path; the Build field is
+    // unconditional.
+    #[cfg_attr(not(feature = "std"), allow(unused_mut))]
     let mut ssa_dump = alloc::string::String::new();
     // -O: promote address-free local slots to SSA values before
     // register allocation, dropping their frame load / store traffic.

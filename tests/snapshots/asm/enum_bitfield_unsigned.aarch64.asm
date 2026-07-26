@@ -13,60 +13,57 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sub	x0, x29, #0x10
-               	ldr	w1, [x0]
+               	sub	x1, x29, #0x10
+               	ldr	w0, [x1]
                	mov	x17, #0xfff8            // =65528
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
-               	mov	x17, #0x6               // =6
-               	orr	x1, x1, x17
-               	str	w1, [x0]
-               	sub	x0, x29, #0x10
-               	ldr	w0, [x0]
-               	mov	x17, #0x7               // =7
                	and	x0, x0, x17
-               	sxtw	x0, w0
-               	cmp	x0, #0x6
+               	mov	x17, #0x6               // =6
+               	orr	x0, x0, x17
+               	str	w0, [x1]
+               	mov	w1, w0
+               	mov	x17, #0x7               // =7
+               	and	x1, x1, x17
+               	sxtw	x1, w1
+               	cmp	x1, #0x6
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x10
-               	ldr	w1, [x0]
+               	sub	x1, x29, #0x10
+               	mov	w0, w0
                	mov	x17, #0xfff8            // =65528
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
-               	mov	x17, #0x4               // =4
-               	orr	x1, x1, x17
-               	str	w1, [x0]
-               	sub	x0, x29, #0x10
-               	ldr	w0, [x0]
-               	mov	x17, #0x7               // =7
                	and	x0, x0, x17
-               	sxtw	x0, w0
-               	cmp	x0, #0x4
+               	mov	x17, #0x4               // =4
+               	orr	x0, x0, x17
+               	str	w0, [x1]
+               	mov	w1, w0
+               	mov	x17, #0x7               // =7
+               	and	x1, x1, x17
+               	sxtw	x1, w1
+               	cmp	x1, #0x4
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x10
-               	ldr	w1, [x0]
+               	sub	x1, x29, #0x10
+               	mov	w0, w0
                	mov	x17, #0xfff8            // =65528
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
+               	and	x0, x0, x17
                	mov	x17, #0x2               // =2
-               	orr	x1, x1, x17
-               	str	w1, [x0]
-               	sub	x0, x29, #0x10
-               	ldr	w0, [x0]
+               	orr	x0, x0, x17
+               	str	w0, [x1]
+               	mov	w0, w0
                	mov	x17, #0x7               // =7
                	and	x0, x0, x17
                	sxtw	x0, w0
@@ -86,8 +83,7 @@ Disassembly of section .text:
                	mov	x17, #0x5               // =5
                	orr	x1, x1, x17
                	str	w1, [x0]
-               	sub	x0, x29, #0x8
-               	ldr	w0, [x0]
+               	mov	w0, w1
                	mov	x17, #0x7               // =7
                	and	x0, x0, x17
                	sxtw	x0, w0

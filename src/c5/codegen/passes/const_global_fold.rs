@@ -23,9 +23,10 @@ use crate::c5::program::Program;
 use crate::c5::token::Token;
 
 /// Const-data view for folding loads of `const` objects: the `[lo, hi)`
-/// byte ranges of const, defined, initialized file-scope arrays, the
-/// data-segment offsets holding relocated pointers (unknown until link,
-/// so never folded), and the data image itself.
+/// byte ranges of const, defined, initialized file-scope arrays whose
+/// image already holds their value, the data-segment offsets a
+/// relocation patches (unknown until link, so never folded), and the
+/// data image itself.
 pub(crate) struct ConstData<'a> {
     intervals: Vec<(i64, i64)>,
     reloc_offsets: Vec<i64>,
@@ -43,11 +44,30 @@ impl<'a> ConstData<'a> {
                     && s.has_initializer
                     && s.defined_here
                     && s.reserved_data_bytes > 0
+                    // A thread-local object's bytes live in `tls_data`;
+                    // `val` would index the wrong image here.
+                    && !s.is_thread_local
+                    // An object filled by stores at its declaration point
+                    // (a `&&label` element) leaves the image zeroed.
+                    && !s.runtime_initialized
             })
             .map(|s| (s.val, s.val + s.reserved_data_bytes))
             .collect();
-        let mut reloc_offsets: Vec<i64> =
-            program.data_relocs.iter().map(|r| r.data_offset as i64).collect();
+        // Every form of data relocation: a link-time address in this
+        // unit's data, an extern symbol's address, and a function
+        // address. The image bytes under any of them are a placeholder.
+        let mut reloc_offsets: Vec<i64> = program
+            .data_relocs
+            .iter()
+            .map(|r| r.data_offset as i64)
+            .chain(
+                program
+                    .extern_data_relocs
+                    .iter()
+                    .map(|r| r.data_offset as i64),
+            )
+            .chain(program.code_relocs.iter().map(|r| r.data_offset as i64))
+            .collect();
         reloc_offsets.sort_unstable();
         ConstData {
             intervals,

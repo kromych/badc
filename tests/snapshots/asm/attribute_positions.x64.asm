@@ -23,43 +23,12 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0xb, %ecx
-               	movl	%ecx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0x16, %ecx
-               	movl	%ecx, 0x4(%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0xb, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	leaq	-0x8(%rbp), %rax
-               	movslq	0x4(%rax), %rax
-               	cmpq	$0x16, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	xorq	%rax, %rax
                	retq
-               	jmp	<addr>

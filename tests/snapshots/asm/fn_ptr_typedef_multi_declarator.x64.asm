@@ -75,12 +75,7 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rbx, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rbx, 0x8(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %rax
+               	movq	%rbx, %rax
                	callq	*%rax
                	movabsq	$0x123456789, %r11      # imm = 0x123456789
                	cmpq	%r11, %rax
@@ -91,8 +86,7 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	movq	0x8(%rax), %rax
+               	movq	%rbx, %rax
                	callq	*%rax
                	movabsq	$0x123456789, %r11      # imm = 0x123456789
                	cmpq	%r11, %rax

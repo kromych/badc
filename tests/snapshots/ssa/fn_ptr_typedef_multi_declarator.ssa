@@ -68,15 +68,15 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     terminator Return(v29)   (exit_acc=v29)
   block 8  start_pc=0
     v30  LocalAddr(-2)                                    -> x0
-    v31  ImmCode(ent_pc=0)                                -> x1
-    v32  Store { addr=v30, disp=0, value=v1, kind=I64 }   -> -
+    v31  ImmCode(ent_pc=0)                                -> x0
+    v32  Imm(0)                                           -> x0
     v33  LocalAddr(-2)                                    -> x0
-    v34  BinopI { op=add, lhs=v33, rhs_imm=8 }            -> x1
-    v35  ImmCode(ent_pc=0)                                -> x1
-    v36  Store { addr=v33, disp=8, value=v1, kind=I64 }   -> -
+    v34  BinopI { op=add, lhs=v33, rhs_imm=8 }            -> x0
+    v35  ImmCode(ent_pc=0)                                -> x0
+    v36  Imm(0)                                           -> x0
     v37  LocalAddr(-2)                                    -> x0
     v38  Load { addr=v37, disp=0, kind=I64 }              -> x0
-    v39  CallIndirect { target=v38, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v39  CallIndirect { target=v1, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v40  BinopI { op=ne, lhs=v39, rhs_imm=4886718345 }    -> x0
     terminator Bz { cond=v40, target=b10, fall=b9 }   (exit_acc=v40)
   block 9  start_pc=0
@@ -86,7 +86,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     v42  LocalAddr(-2)                                    -> x0
     v43  BinopI { op=add, lhs=v42, rhs_imm=8 }            -> x1
     v44  Load { addr=v42, disp=8, kind=I64 }              -> x0
-    v45  CallIndirect { target=v44, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v45  CallIndirect { target=v1, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v46  BinopI { op=ne, lhs=v45, rhs_imm=4886718345 }    -> x0
     terminator Bz { cond=v46, target=b12, fall=b11 }   (exit_acc=v46)
   block 11  start_pc=0

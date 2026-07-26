@@ -102,6 +102,45 @@ fn dead_branch_call_to_undefined_symbol_is_pruned() {
 }
 
 #[test]
+fn struct_returning_always_inline_folds_parameter_guards() {
+    // A struct-returning always_inline helper is spliced at every call
+    // site, so its parameter-dependent guard folds per site and the
+    // never-taken call to the undefined `bug` leaves no reference. The
+    // returned fields then reach the caller as constants -- including
+    // `r.reg`, read past an intervening call and a branch, which decides
+    // a switch whose default arm also calls `bug`. Without either fold
+    // the JIT loader would fail to resolve `bug`.
+    let src = "
+        extern void bug(void);
+        struct R { unsigned function; int reg; };
+        static const struct R table[2] = { {1u, 3}, {7u, 1} };
+        static __attribute__((always_inline)) struct R reg_of(unsigned f) {
+            unsigned leaf = f / 32u;
+            if (leaf >= 2u) bug();
+            if (table[leaf].function == 0u) bug();
+            return table[leaf];
+        }
+        int pick(const int *e, int reg);
+        int pick(const int *e, int reg) { return e[reg & 3]; }
+        static __attribute__((always_inline)) int probe(const int *e, unsigned f) {
+            const struct R r = reg_of(f);
+            int slot = pick(e, (int)r.function);
+            if (slot < 0) return -1;
+            switch (r.reg) {
+            case 1: return slot + 1;
+            case 3: return slot + 3;
+            default: bug(); return 0;
+            }
+        }
+        int main(void) {
+            static const int e[4] = {10, 20, 30, 40};
+            return probe(e, 0u) + probe(e, 32u) == (20 + 3) + (40 + 1) ? 5 : 1;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-struct-ret-guard"]), 5);
+}
+
+#[test]
 fn return_zero() {
     assert_eq!(jit_exit("int main() { return 0; }", &["jit-ret0"]), 0);
 }
@@ -1691,6 +1730,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("inline_one_word_struct_return.c", 0),
     ("inline_struct_return_reg.c", 0),
     ("inline_two_word_struct_return.c", 0),
+    ("inline_struct_return_multi_block.c", 0),
     ("struct_return_reg_computed_goto.c", 0),
     ("store_forward_local_slot.c", 0),
     ("inline_struct_return_escape.c", 0),

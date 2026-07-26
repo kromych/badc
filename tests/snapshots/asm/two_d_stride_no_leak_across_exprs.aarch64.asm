@@ -13,22 +13,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x500
-               	sub	x0, x29, #0x500
-               	mov	x1, #0x7                // =7
-               	strh	w1, [x0]
-               	sub	x0, x29, #0x500
-               	mov	x1, #0xb                // =11
-               	strh	w1, [x0, #0x2]
-               	sub	x0, x29, #0x500
-               	ldrh	w0, [x0]
-               	sxtw	x0, w0
-               	sxtw	x0, w0
-               	cmp	x0, #0x7
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x500
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	b	<addr>
                	sub	x2, x29, #0x100

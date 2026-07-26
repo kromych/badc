@@ -720,6 +720,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_one_word_struct_return.c", 0),
     ("inline_struct_return_reg.c", 0),
     ("inline_two_word_struct_return.c", 0),
+    ("inline_struct_return_multi_block.c", 0),
     ("struct_return_reg_computed_goto.c", 0),
     ("store_forward_local_slot.c", 0),
     ("inline_struct_return_escape.c", 0),

@@ -136,12 +136,12 @@ fn ent_pc=12 n_params=0 variadic=false locals=108
     v83  Imm(10)                                          -> x0
     terminator Return(v83)   (exit_acc=v83)
   block 25  start_pc=0
-    v84  LocalAddr(-90)                                   -> x1
+    v84  LocalAddr(-90)                                   -> x0
     v85  BinopI { op=add, lhs=v84, rhs_imm=16 }           -> x0
     v86  Imm(0)                                           -> x0
-    v87  Store { addr=v84, disp=16, value=v86, kind=I64 } -> -
+    v87  Imm(0)                                           -> x1
     v88  LocalAddr(-90)                                   -> x1
-    v89  Store { addr=v88, disp=0, value=v86, kind=I64 }  -> -
+    v89  Imm(0)                                           -> x1
     v90  Imm(156)                                         -> x1
     v91  Imm(670014898176)                                -> x1
     v92  Imm(668)                                         -> x1
@@ -170,8 +170,8 @@ fn ent_pc=12 n_params=0 variadic=false locals=108
     terminator Jmp(b28)   (exit_acc=v116)
   block 28  start_pc=0
     v119 LocalAddr(-107)                                  -> x0
-    v120 Imm(0)                                           -> x1
-    v121 Store { addr=v119, disp=0, value=v120, kind=I32 } -> -
+    v120 Imm(0)                                           -> x0
+    v121 Imm(0)                                           -> x0
     v122 LocalAddr(-64)                                   -> x0
     v123 BinopI { op=eq, lhs=v122, rhs_imm=0 }            -> x0
     v124 Imm(1)                                           -> x1
@@ -202,8 +202,8 @@ fn ent_pc=12 n_params=0 variadic=false locals=108
     terminator Bnz { cond=v138, target=b37, fall=b33 }   (exit_acc=v138)
   block 33  start_pc=0
     v141 LocalAddr(-107)                                  -> x0
-    v142 Load { addr=v141, disp=0, kind=I32 }             -> x0
-    v143 BinopI { op=ne, lhs=v142, rhs_imm=0 }            -> x0
+    v142 Imm(0)                                           -> x0
+    v143 Imm(0)                                           -> x0
     v144 Imm(0)                                           -> x1
     terminator Jmp(b34)   (exit_acc=v143)
   block 34  start_pc=0

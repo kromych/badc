@@ -2092,6 +2092,14 @@ fn inline_two_word_struct_return() {
 }
 
 #[test]
+fn inline_struct_return_multi_block() {
+    // A branching struct-returning helper inlines, and its fields reach
+    // the caller through a whole-struct copy and across the block a
+    // later call and branch open.
+    assert_eq!(run_fixture("inline_struct_return_multi_block.c"), 0);
+}
+
+#[test]
 fn store_forward_local_slot() {
     // A frame-slot store immediately reloaded in one block forwards to
     // the stored value; volatile, address-taken, and cross-block pairs

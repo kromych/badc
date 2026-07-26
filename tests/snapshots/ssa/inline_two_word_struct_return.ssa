@@ -198,36 +198,36 @@ fn ent_pc=2 n_params=0 variadic=false locals=25
     v182 BinopI { op=add, lhs=v181, rhs_imm=8 }           -> x6
     v183 Load { addr=v181, disp=8, kind=I64 }             -> x0
     v184 Binop { op=add, lhs=v177, rhs=v183 }             -> x0
-    v185 Binop { op=add, lhs=v165, rhs=v184 }             -> x1
-    v186 Imm(0)                                           -> x0
-    v187 Imm(7)                                           -> x0
-    v188 Imm(8)                                           -> x0
-    v189 Imm(0)                                           -> x0
-    v190 Imm(8)                                           -> x0
-    v191 Imm(0)                                           -> x0
+    v185 Binop { op=add, lhs=v165, rhs=v184 }             -> x0
+    v186 Imm(0)                                           -> x1
+    v187 Imm(7)                                           -> x1
+    v188 Imm(8)                                           -> x1
+    v189 Imm(0)                                           -> x1
+    v190 Imm(8)                                           -> x1
+    v191 Imm(0)                                           -> x1
     terminator Jmp(b6)   (exit_acc=v191)
   block 6  start_pc=0
-    v192 Imm(43690)                                       -> x0
-    v193 Imm(48059)                                       -> x2
-    v194 Imm(0)                                           -> x6
-    v195 Imm(0)                                           -> x6
-    v196 LocalAddr(-4)                                    -> x6
-    v197 Store { addr=v196, disp=0, value=v192, kind=I64 } -> -
-    v198 LocalAddr(-4)                                    -> x0
-    v199 BinopI { op=add, lhs=v198, rhs_imm=8 }           -> x6
-    v200 Store { addr=v198, disp=8, value=v193, kind=I64 } -> -
-    v201 LocalAddr(-4)                                    -> x0
-    v202 LocalAddr(-4)                                    -> x0
-    v203 LocalAddr(-6)                                    -> x2
-    v204 Mcpy { dst=v203, src=v202, size=16 }             -> x0
-    v205 LoadLocal { off=-25, kind=I64 }                  -> x0
-    v206 LocalAddr(-6)                                    -> x0
-    v207 Load { addr=v206, disp=0, kind=I64 }             -> x2
-    v208 LocalAddr(-6)                                    -> x0
-    v209 BinopI { op=add, lhs=v208, rhs_imm=8 }           -> x6
-    v210 Load { addr=v208, disp=8, kind=I64 }             -> x0
-    v211 Binop { op=add, lhs=v207, rhs=v210 }             -> x0
-    v212 Binop { op=add, lhs=v185, rhs=v211 }             -> x0
+    v192 Imm(43690)                                       -> x1
+    v193 Imm(48059)                                       -> x1
+    v194 Imm(0)                                           -> x1
+    v195 Imm(0)                                           -> x1
+    v196 LocalAddr(-4)                                    -> x1
+    v197 Imm(0)                                           -> x1
+    v198 LocalAddr(-4)                                    -> x1
+    v199 BinopI { op=add, lhs=v198, rhs_imm=8 }           -> x1
+    v200 Imm(0)                                           -> x1
+    v201 LocalAddr(-4)                                    -> x1
+    v202 LocalAddr(-4)                                    -> x1
+    v203 Imm(0)                                           -> x1
+    v204 Imm(0)                                           -> x1
+    v205 LoadLocal { off=-25, kind=I64 }                  -> x1
+    v206 Imm(0)                                           -> x1
+    v207 LoadLocal { off=-6, kind=I64 }                   -> x1
+    v208 Imm(0)                                           -> x1
+    v209 Imm(0)                                           -> x1
+    v210 LoadLocal { off=-5, kind=I64 }                   -> x1
+    v211 Imm(91749)                                       -> x1
+    v212 BinopI { op=add, lhs=v185, rhs_imm=91749 }       -> x0
     v213 Imm(0)                                           -> x1
     v214 LoadLocal { off=-25, kind=I64 }                  -> x1
     v215 Imm(288)                                         -> x1

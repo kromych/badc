@@ -5,31 +5,31 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
-    v2   Imm(0)                                           -> x1
-    v3   Imm(10)                                          -> x1
-    v4   Store { addr=v1, disp=0, value=v3, kind=I8 }     -> -
+    v2   Imm(0)                                           -> x0
+    v3   Imm(10)                                          -> x0
+    v4   Imm(0)                                           -> x0
     v5   LocalAddr(-1)                                    -> x0
     v6   Imm(1)                                           -> x1
-    v7   BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x1
-    v8   Imm(100)                                         -> x1
-    v9   Store { addr=v5, disp=1, value=v8, kind=I8 }     -> -
+    v7   BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x0
+    v8   Imm(100)                                         -> x0
+    v9   Imm(0)                                           -> x0
     v10  LocalAddr(-1)                                    -> x0
     v11  Imm(2)                                           -> x1
-    v12  BinopI { op=add, lhs=v10, rhs_imm=2 }            -> x1
-    v13  Imm(200)                                         -> x1
-    v14  Store { addr=v10, disp=2, value=v13, kind=I8 }   -> -
+    v12  BinopI { op=add, lhs=v10, rhs_imm=2 }            -> x0
+    v13  Imm(200)                                         -> x0
+    v14  Imm(0)                                           -> x0
     v15  LocalAddr(-1)                                    -> x0
-    v16  Load { addr=v15, disp=0, kind=U8 }               -> x0
+    v16  Imm(10)                                          -> x0
     v17  FpCast { kind=IntToFp, value=v16 }               -> d0 [f32]
     v18  Imm(0)                                           -> x0
     v19  LocalAddr(-1)                                    -> x0
-    v20  BinopI { op=add, lhs=v19, rhs_imm=1 }            -> x1
-    v21  Load { addr=v19, disp=1, kind=U8 }               -> x0
+    v20  BinopI { op=add, lhs=v19, rhs_imm=1 }            -> x0
+    v21  Imm(100)                                         -> x0
     v22  FpCast { kind=IntToFp, value=v21 }               -> d2 [f32]
     v23  Imm(0)                                           -> x0
     v24  LocalAddr(-1)                                    -> x0
-    v25  BinopI { op=add, lhs=v24, rhs_imm=2 }            -> x1
-    v26  Load { addr=v24, disp=2, kind=U8 }               -> x0
+    v25  BinopI { op=add, lhs=v24, rhs_imm=2 }            -> x0
+    v26  Imm(200)                                         -> x0
     v27  FpCast { kind=IntToFp, value=v26 }               -> d1 [f32]
     v28  Imm(0)                                           -> x0
     v29  LoadLocal { off=-2, kind=F32 }                   -> d3 [f32]
@@ -66,8 +66,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   block 6  start_pc=0
     v49  LocalAddr(-1)                                    -> x0
     v50  Imm(1)                                           -> x1
-    v51  BinopI { op=add, lhs=v49, rhs_imm=1 }            -> x1
-    v52  Load { addr=v49, disp=1, kind=U8 }               -> x0
+    v51  BinopI { op=add, lhs=v49, rhs_imm=1 }            -> x0
+    v52  Imm(100)                                         -> x0
     v53  FpCast { kind=IntToFp, value=v52 }               -> d3 [f32]
     v54  Imm(0)                                           -> x0
     v55  LoadLocal { off=-2, kind=F32 }                   -> d4 [f32]

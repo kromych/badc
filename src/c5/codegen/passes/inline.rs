@@ -1109,9 +1109,7 @@ fn agg_pieces(d: &crate::c5::ir::AggDesc) -> Vec<(u32, u32)> {
     let mut fields: Vec<(u32, u32)> = d.fields.iter().map(|f| (f.offset, f.size)).collect();
     fields.sort_unstable();
     fields.dedup();
-    let overlap = fields
-        .windows(2)
-        .any(|w| w[0].0 + w[0].1 > w[1].0);
+    let overlap = fields.windows(2).any(|w| w[0].0 + w[0].1 > w[1].0);
     let ranges: Vec<(u32, u32)> = if overlap {
         // Merge into maximal covered ranges.
         let mut merged: Vec<(u32, u32)> = Vec::new();
@@ -3069,7 +3067,7 @@ mod tests {
             abi,
             Some(&mut reason)
         ));
-        assert_eq!(reason, "2 Return blocks (need 1)");
+        assert_eq!(reason, "2 FP Return blocks (need 1)");
     }
 
     /// A variadic always_inline callee cannot be inlined; the candidate

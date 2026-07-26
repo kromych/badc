@@ -45,45 +45,6 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x40(%rbp), %rax
-               	movq	0x8(%rax), %rax
-               	cmpq	$0xb, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x90, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x1234, %eax           # imm = 0x1234
-               	leaq	-0x20(%rbp), %rcx
-               	movl	%eax, (%rcx)
-               	leaq	-0x20(%rbp), %rax
-               	movl	$0x16, %ecx
-               	movq	%rcx, 0x8(%rax)
-               	leaq	-0x20(%rbp), %rax
-               	leaq	-0x60(%rbp), %rcx
-               	pushq	%rdx
-               	movq	(%rax), %rdx
-               	movq	%rdx, (%rcx)
-               	movq	0x8(%rax), %rdx
-               	movq	%rdx, 0x8(%rcx)
-               	popq	%rdx
-               	movq	%rcx, %rax
-               	leaq	-0x60(%rbp), %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x1234, %rax           # imm = 0x1234
-               	je	<addr>
-               	movl	$0x3, %eax
-               	addq	$0x90, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	-0x60(%rbp), %rax
-               	movq	0x8(%rax), %rax
-               	cmpq	$0x16, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x90, %rsp
-               	popq	%rbp
-               	retq
                	movabsq	$0x401e000000000000, %rax # imm = 0x401E000000000000
                	movq	%rax, %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
@@ -114,14 +75,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
-               	addq	$0x90, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	-0x80(%rbp), %rax
-               	movq	0x8(%rax), %rax
-               	cmpq	$0xb, %rax
-               	je	<addr>
-               	movl	$0x6, %eax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq

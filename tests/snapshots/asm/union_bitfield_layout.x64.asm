@@ -20,12 +20,11 @@ Disassembly of section .text:
                	orq	$0x5, %rcx
                	movl	%ecx, (%rax)
                	leaq	-0x8(%rbp), %rax
-               	movl	0x4(%rax), %ecx
-               	andq	$-0x10, %rcx
-               	orq	$0x3, %rcx
-               	movl	%ecx, 0x4(%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movl	(%rax), %eax
+               	movl	0x4(%rax), %edx
+               	andq	$-0x10, %rdx
+               	orq	$0x3, %rdx
+               	movl	%edx, 0x4(%rax)
+               	movl	%ecx, %eax
                	andq	$0xf, %rax
                	shlq	$0x3c, %rax
                	sarq	$0x3c, %rax
@@ -35,8 +34,7 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movl	0x4(%rax), %eax
+               	movl	%edx, %eax
                	andq	$0xf, %rax
                	shlq	$0x3c, %rax
                	sarq	$0x3c, %rax

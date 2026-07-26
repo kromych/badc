@@ -20,255 +20,255 @@ Disassembly of section .text:
                	andq	$-0x2, %rdx
                	orq	%rax, %rdx
                	movw	%dx, (%rcx)
+               	leaq	-0x8(%rbp), %rsi
+               	movq	%rdx, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	andq	$-0xf, %rcx
+               	orq	%rax, %rcx
+               	movw	%cx, (%rsi)
+               	leaq	-0x8(%rbp), %rdx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	andq	$-0xf1, %rcx
+               	orq	%rax, %rcx
+               	movw	%cx, (%rdx)
+               	leaq	-0x8(%rbp), %rdx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	andq	$-0xff01, %rcx          # imm = 0xFFFF00FF
+               	orq	%rcx, %rax
+               	movw	%ax, (%rdx)
                	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rdx
-               	andq	$-0xf, %rdx
-               	orq	%rax, %rdx
-               	movw	%dx, (%rcx)
-               	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rdx
-               	andq	$-0xf1, %rdx
-               	orq	%rax, %rdx
-               	movw	%dx, (%rcx)
-               	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rdx
-               	andq	$-0xff01, %rdx          # imm = 0xFFFF00FF
+               	movq	%rax, %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	sarq	%rdx
+               	andq	$0x7, %rdx
+               	orq	$0x5, %rdx
+               	andq	$0x7, %rdx
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	andq	$-0xf, %rax
+               	shlq	%rdx
                	orq	%rdx, %rax
                	movw	%ax, (%rcx)
-               	leaq	-0x8(%rbp), %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rcx
+               	movq	%rax, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
                	sarq	%rcx
                	andq	$0x7, %rcx
-               	orq	$0x5, %rcx
-               	andq	$0x7, %rcx
-               	movzwq	(%rax), %rdx
-               	andq	$-0xf, %rdx
-               	shlq	%rcx
-               	orq	%rdx, %rcx
-               	movw	%cx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rax
-               	sarq	%rax
-               	andq	$0x7, %rax
-               	cmpq	$0x5, %rax
+               	cmpq	$0x5, %rcx
                	je	<addr>
                	movl	$0xb, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rcx
+               	movq	%rax, %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	sarq	%rdx
+               	andq	$0x7, %rdx
+               	orq	$0x2, %rdx
+               	andq	$0x7, %rdx
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	andq	$-0xf, %rax
+               	shlq	%rdx
+               	orq	%rdx, %rax
+               	movw	%ax, (%rcx)
+               	movq	%rax, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
                	sarq	%rcx
                	andq	$0x7, %rcx
-               	orq	$0x2, %rcx
-               	andq	$0x7, %rcx
-               	movzwq	(%rax), %rdx
-               	andq	$-0xf, %rdx
-               	shlq	%rcx
-               	orq	%rdx, %rcx
-               	movw	%cx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rax
-               	sarq	%rax
-               	andq	$0x7, %rax
-               	cmpq	$0x7, %rax
+               	cmpq	$0x7, %rcx
                	je	<addr>
                	movl	$0xc, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rcx
+               	leaq	-0x8(%rbp), %rdx
+               	movq	%rax, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
                	sarq	%rcx
                	andq	$0x6, %rcx
-               	movzwq	(%rax), %rdx
-               	andq	$-0xf, %rdx
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	andq	$-0xf, %rax
                	shlq	%rcx
-               	orq	%rdx, %rcx
-               	movw	%cx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rax
-               	sarq	%rax
-               	andq	$0x7, %rax
-               	cmpq	$0x6, %rax
+               	orq	%rcx, %rax
+               	movw	%ax, (%rdx)
+               	movq	%rax, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	sarq	%rcx
+               	andq	$0x7, %rcx
+               	cmpq	$0x6, %rcx
                	je	<addr>
                	movl	$0xd, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rcx
+               	movq	%rax, %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	sarq	%rdx
+               	andq	$0x7, %rdx
+               	xorq	$0x7, %rdx
+               	andq	$0x7, %rdx
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	andq	$-0xf, %rax
+               	shlq	%rdx
+               	orq	%rdx, %rax
+               	movw	%ax, (%rcx)
+               	movq	%rax, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
                	sarq	%rcx
                	andq	$0x7, %rcx
-               	xorq	$0x7, %rcx
-               	andq	$0x7, %rcx
-               	movzwq	(%rax), %rdx
-               	andq	$-0xf, %rdx
-               	shlq	%rcx
-               	orq	%rdx, %rcx
-               	movw	%cx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rax
-               	sarq	%rax
-               	andq	$0x7, %rax
-               	cmpq	$0x1, %rax
+               	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0xe, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rcx
-               	andq	$-0x2, %rcx
-               	orq	$0x1, %rcx
-               	movw	%cx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rcx
-               	andq	$-0xf1, %rcx
-               	orq	$0xc0, %rcx
-               	movw	%cx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rcx
-               	andq	$-0xff01, %rcx          # imm = 0xFFFF00FF
-               	orq	$0xc800, %rcx           # imm = 0xC800
-               	movw	%cx, (%rax)
-               	leaq	-0x8(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rcx
-               	sarq	%rcx
-               	andq	$0x7, %rcx
-               	xorq	$0x7, %rcx
-               	andq	$0x7, %rcx
-               	movzwq	(%rax), %rdx
-               	andq	$-0xf, %rdx
-               	shlq	%rcx
-               	orq	%rdx, %rcx
-               	movw	%cx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rax
-               	andq	$0x1, %rax
-               	cmpq	$0x1, %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	andq	$-0x2, %rax
+               	orq	$0x1, %rax
+               	movw	%ax, (%rcx)
+               	leaq	-0x8(%rbp), %rcx
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	andq	$-0xf1, %rax
+               	orq	$0xc0, %rax
+               	movw	%ax, (%rcx)
+               	leaq	-0x8(%rbp), %rcx
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	andq	$-0xff01, %rax          # imm = 0xFFFF00FF
+               	orq	$0xc800, %rax           # imm = 0xC800
+               	movw	%ax, (%rcx)
+               	leaq	-0x8(%rbp), %rcx
+               	movq	%rax, %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	sarq	%rdx
+               	andq	$0x7, %rdx
+               	xorq	$0x7, %rdx
+               	andq	$0x7, %rdx
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	andq	$-0xf, %rax
+               	shlq	%rdx
+               	orq	%rdx, %rax
+               	movw	%ax, (%rcx)
+               	movq	%rax, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	andq	$0x1, %rcx
+               	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0xf, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rax
-               	sarq	%rax
-               	andq	$0x7, %rax
-               	cmpq	$0x6, %rax
+               	movq	%rax, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	sarq	%rcx
+               	andq	$0x7, %rcx
+               	cmpq	$0x6, %rcx
                	je	<addr>
                	movl	$0x10, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rax
-               	sarq	$0x4, %rax
-               	andq	$0xf, %rax
-               	cmpq	$0xc, %rax
+               	movq	%rax, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	sarq	$0x4, %rcx
+               	andq	$0xf, %rcx
+               	cmpq	$0xc, %rcx
                	je	<addr>
                	movl	$0x11, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rax
-               	sarq	$0x8, %rax
-               	andq	$0xff, %rax
-               	cmpq	$0xc8, %rax
+               	movq	%rax, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	sarq	$0x8, %rcx
+               	andq	$0xff, %rcx
+               	cmpq	$0xc8, %rcx
                	je	<addr>
                	movl	$0x12, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rcx
+               	movq	%rax, %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	sarq	$0x4, %rdx
+               	andq	$0xf, %rdx
+               	incq	%rdx
+               	andq	$0xf, %rdx
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	andq	$-0xf1, %rax
+               	shlq	$0x4, %rdx
+               	orq	%rdx, %rax
+               	movw	%ax, (%rcx)
+               	movq	%rax, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
                	sarq	$0x4, %rcx
                	andq	$0xf, %rcx
-               	incq	%rcx
-               	andq	$0xf, %rcx
-               	movzwq	(%rax), %rdx
-               	andq	$-0xf1, %rdx
-               	shlq	$0x4, %rcx
-               	orq	%rdx, %rcx
-               	movw	%cx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rax
-               	sarq	$0x4, %rax
-               	andq	$0xf, %rax
-               	cmpq	$0xd, %rax
+               	cmpq	$0xd, %rcx
                	je	<addr>
                	movl	$0x13, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rcx
+               	movq	%rax, %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	sarq	$0x4, %rdx
+               	andq	$0xf, %rdx
+               	subq	$0x4, %rdx
+               	andq	$0xf, %rdx
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	andq	$-0xf1, %rax
+               	shlq	$0x4, %rdx
+               	orq	%rdx, %rax
+               	movw	%ax, (%rcx)
+               	movq	%rax, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
                	sarq	$0x4, %rcx
                	andq	$0xf, %rcx
-               	subq	$0x4, %rcx
-               	andq	$0xf, %rcx
-               	movzwq	(%rax), %rdx
-               	andq	$-0xf1, %rdx
-               	shlq	$0x4, %rcx
-               	orq	%rdx, %rcx
-               	movw	%cx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rax
-               	sarq	$0x4, %rax
-               	andq	$0xf, %rax
-               	cmpq	$0x9, %rax
+               	cmpq	$0x9, %rcx
                	je	<addr>
                	movl	$0x14, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rcx
+               	movq	%rax, %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	sarq	$0x8, %rdx
+               	andq	$0xff, %rdx
+               	shlq	%rdx
+               	andq	$0xff, %rdx
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	andq	$-0xff01, %rax          # imm = 0xFFFF00FF
+               	shlq	$0x8, %rdx
+               	orq	%rdx, %rax
+               	movw	%ax, (%rcx)
+               	movq	%rax, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
                	sarq	$0x8, %rcx
                	andq	$0xff, %rcx
-               	shlq	%rcx
-               	andq	$0xff, %rcx
-               	movzwq	(%rax), %rdx
-               	andq	$-0xff01, %rdx          # imm = 0xFFFF00FF
-               	shlq	$0x8, %rcx
-               	orq	%rdx, %rcx
-               	movw	%cx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rax
-               	sarq	$0x8, %rax
-               	andq	$0xff, %rax
-               	xorq	$0x90, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	xorq	$0x90, %rcx
+               	movl	%ecx, %ecx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x15, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rcx
-               	sarq	$0x4, %rcx
-               	andq	$0xf, %rcx
-               	sarq	$0x2, %rcx
-               	andq	$0xf, %rcx
-               	movzwq	(%rax), %rdx
-               	andq	$-0xf1, %rdx
-               	shlq	$0x4, %rcx
-               	orq	%rdx, %rcx
-               	movw	%cx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rax
+               	movq	%rax, %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	sarq	$0x4, %rdx
+               	andq	$0xf, %rdx
+               	sarq	$0x2, %rdx
+               	andq	$0xf, %rdx
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	andq	$-0xf1, %rax
+               	shlq	$0x4, %rdx
+               	orq	%rdx, %rax
+               	movw	%ax, (%rcx)
+               	andq	$0xffff, %rax           # imm = 0xFFFF
                	sarq	$0x4, %rax
                	andq	$0xf, %rax
                	cmpq	$0x2, %rax

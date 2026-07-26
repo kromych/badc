@@ -122,7 +122,7 @@ const NO_BLOCK: BlockId = BlockId::MAX;
 
 /// Depth-first postorder of the blocks reachable from the entry
 /// (block 0). Blocks unreachable from the entry do not appear.
-fn postorder(func: &FunctionSsa) -> Vec<BlockId> {
+pub(crate) fn postorder(func: &FunctionSsa) -> Vec<BlockId> {
     let n = func.blocks.len();
     let mut order: Vec<BlockId> = Vec::with_capacity(n);
     let mut visited = alloc::vec![false; n];

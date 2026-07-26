@@ -77,13 +77,7 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	sub	x0, x29, #0x10
-               	str	x20, [x0]
-               	sub	x0, x29, #0x10
-               	str	x20, [x0, #0x8]
-               	sub	x0, x29, #0x10
-               	ldr	x0, [x0]
-               	mov	x9, x0
+               	mov	x9, x20
                	blr	x9
                	mov	x17, #0x6789            // =26505
                	movk	x17, #0x2345, lsl #16
@@ -95,9 +89,7 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	sub	x0, x29, #0x10
-               	ldr	x0, [x0, #0x8]
-               	mov	x9, x0
+               	mov	x9, x20
                	blr	x9
                	mov	x17, #0x6789            // =26505
                	movk	x17, #0x2345, lsl #16

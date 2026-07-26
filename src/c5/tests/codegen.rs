@@ -3541,7 +3541,9 @@ fn post_inline_recompaction_keeps_inlined_import() {
             "{target:?}: the inlined import lost its symbol (symbols: {syms:?})"
         );
         assert!(
-            !syms.iter().any(|(n, _)| n == "ops_read" || n == "dev_private"),
+            !syms
+                .iter()
+                .any(|(n, _)| n == "ops_read" || n == "dev_private"),
             "{target:?}: the orphaned table's function survived (symbols: {syms:?})"
         );
     }

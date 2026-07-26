@@ -402,20 +402,8 @@ pub fn emit_native_with_options_named(
     options: NativeOptions,
     shared_lib_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
-    // C99 6.2.2 / 6.7.8: drop static data no surviving function or
-    // relocation references, repacking `.data` and rewriting every offset
-    // surface (symbol values, AST data offsets, relocation slots). The one
-    // compaction feeds both the backend lowering (which bakes data-relative
-    // fixups) and the container writer (which emits the symbol table), so
-    // the emitted `.data` and its symbols stay consistent.
-    let (compacted, bss_size) = crate::c5::codegen::ssa::shadow::compact_program_data(
-        program,
-        target,
-        options.bss_segregate && !bss_segregation_disabled(),
-        options.optimize,
-    )?;
+    let (compacted, bss_size, mut build) = compact_and_lower(program, target, options)?;
     let program = &compacted;
-    let mut build = lower_for(program, target, options)?;
     build.bss_size = bss_size;
     route_single_tu_data_imports(&mut build, target);
     let asm_labels = fold_exec_asm_sections(&mut build, target)?;
@@ -424,6 +412,54 @@ pub fn emit_native_with_options_named(
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
     }
     write_for(program, &build, target)
+}
+
+/// C99 6.2.2 / 6.7.8: drop static data no surviving function or
+/// relocation references, repacking `.data` and rewriting every offset
+/// surface (symbol values, AST data offsets, relocation slots), then
+/// lower the result. The one compaction feeds both the backend lowering
+/// (which bakes data-relative fixups) and the container writer (which
+/// emits the symbol table), so the emitted `.data` and its symbols stay
+/// consistent.
+///
+/// The compaction runs before lowering, so its call graph is the
+/// pre-inline one. At -O the pipeline can orphan an object -- an address
+/// materialised only to pass to a callee that ignores the parameter dies
+/// with the call the inliner removed -- and the lowering reports it. The
+/// program is then compacted once more, from the original, with the
+/// sharper set, and the reported post-inline bodies lower against it, so
+/// the object, its relocations, and any symbol only they referenced stay
+/// out of the image. The second pass is the fixed point: the report is a
+/// joint function + data reachability result and the repack maps every
+/// reference one-to-one. The assertion below checks that.
+#[cfg(feature = "native-emit")]
+fn compact_and_lower(
+    program: &Program,
+    target: Target,
+    options: NativeOptions,
+) -> Result<(Program, i64, Build), C5Error> {
+    use crate::c5::codegen::ssa::shadow;
+    let segregate = options.bss_segregate && !bss_segregation_disabled();
+    let first = shadow::compact_program_data(program, target, segregate, options.optimize)?;
+    let mut build = lower_for(&first.program, target, options)?;
+    let (Some(mut orphaned), Some(plan)) = (build.orphaned_data.take(), first.plan.as_ref()) else {
+        crate::c5::codegen::emit_ssa_dump(&mut build);
+        return Ok((first.program, first.bss_size, build));
+    };
+    let (recompacted, bss_size) =
+        shadow::recompact_after_inlining(program, plan, &mut orphaned, segregate);
+    let mut build = crate::c5::codegen::lower_for_with_prebuilt(
+        &recompacted,
+        target,
+        options,
+        Some(orphaned.ssa),
+    )?;
+    crate::c5::codegen::emit_ssa_dump(&mut build);
+    debug_assert!(
+        build.orphaned_data.is_none(),
+        "data liveness did not converge after recompaction",
+    );
+    Ok((recompacted, bss_size, build))
 }
 
 /// Test-only: emit a complete native image for a single program,
@@ -438,14 +474,8 @@ pub(crate) fn emit_native_single_tu_for_test(
     target: Target,
     options: NativeOptions,
 ) -> Result<alloc::vec::Vec<u8>, C5Error> {
-    let (compacted, bss_size) = crate::c5::codegen::ssa::shadow::compact_program_data(
-        program,
-        target,
-        options.bss_segregate && !bss_segregation_disabled(),
-        options.optimize,
-    )?;
+    let (compacted, bss_size, mut build) = compact_and_lower(program, target, options)?;
     let program = &compacted;
-    let mut build = lower_for(program, target, options)?;
     build.bss_size = bss_size;
     let pc = build.pc_to_native.len();
     build.pc_to_native.push(build.entry_offset);

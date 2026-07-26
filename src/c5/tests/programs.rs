@@ -726,6 +726,16 @@ fn cacheline_aligned_member() {
     assert_eq!(run_fixture("cacheline_aligned_member.c"), 0);
 }
 
+/// C99 6.2.2: inlining a stub that ignores its `ops` argument orphans the
+/// table passed to it, so `.data` is packed a second time. Every surviving
+/// object must still be reachable at the address its references carry --
+/// a pointer initializer, an interior element, a literal, an over-aligned
+/// object, and a zero-initialized global are all read back.
+#[test]
+fn post_inline_dead_data_repack() {
+    assert_eq!(run_fixture("post_inline_dead_data_repack.c"), 0);
+}
+
 #[test]
 fn overaligned_data_placement() {
     // Objects with an explicit `aligned(N)` above 16 land on their

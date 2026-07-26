@@ -283,7 +283,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v83  ImmData(264)                                     -> x0
     v84  LocalAddr(-3)                                    -> x1
     v85  Imm(0)                                           -> x1
-    v86  ImmData(272)                                     -> x1
+    v86  Imm(0)                                           -> x1
     v87  LocalAddr(-3)                                    -> x1
     v88  BinopI { op=add, lhs=v87, rhs_imm=8 }            -> x1
     v89  Imm(0)                                           -> x1

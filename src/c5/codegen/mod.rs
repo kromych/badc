@@ -1494,6 +1494,18 @@ pub(crate) struct Build {
     /// against this in-image local symbol rather than getting
     /// lost in the dynamic linker's macro-expansion sites.
     pub plt_trampoline_offsets: Vec<Option<usize>>,
+    /// Data objects nothing reaches once the -O pipeline has inlined and
+    /// folded, reported by `ssa::shadow::drop_unreachable_statics`. `Some`
+    /// asks the caller to re-apply the set through
+    /// `ssa::shadow::recompact_after_inlining` and lower the reported
+    /// bodies; the build in hand stays self-consistent either way. `None`
+    /// at -O0, where the pipeline leaves the function set the compaction
+    /// saw untouched.
+    pub orphaned_data: Option<super::codegen::ssa::shadow::OrphanedData>,
+    /// `--dump-ssa` text for this lowering, buffered rather than written
+    /// straight to stderr: a build discarded by the recompaction retry
+    /// must not leave its dump behind next to the final one.
+    pub ssa_dump: alloc::string::String,
     /// Post-prologue native byte offset of each function, keyed by
     /// `ent_pc`. The SSA emit records `code.len()` right after the
     /// prologue; the DWARF CFI pass turns the value into the FDE's
@@ -2054,6 +2066,34 @@ pub(crate) fn lower_for(
     target: Target,
     options: NativeOptions,
 ) -> Result<Build, C5Error> {
+    lower_for_with_prebuilt(program, target, options, None)
+}
+
+/// Write out a build's buffered `--dump-ssa` text, once the build is known
+/// to be the one the caller keeps: the recompaction retry discards its
+/// first build, whose dump describes a layout the object never gets.
+#[cfg(feature = "std")]
+pub(crate) fn emit_ssa_dump(build: &mut Build) {
+    if !build.ssa_dump.is_empty() {
+        eprint!("{}", core::mem::take(&mut build.ssa_dump));
+    }
+}
+
+#[cfg(not(feature = "std"))]
+pub(crate) fn emit_ssa_dump(build: &mut Build) {
+    build.ssa_dump.clear();
+}
+
+/// [`lower_for`] with the SSA bodies supplied instead of walked. Used by
+/// the recompaction retry, whose bodies are the post-inline ones the
+/// dropped-data report was derived from; the ASTs still describe the
+/// pre-inline program and cannot be re-walked against the new `.data`.
+pub(crate) fn lower_for_with_prebuilt(
+    program: &Program,
+    target: Target,
+    options: NativeOptions,
+    prebuilt: Option<ssa::shadow::PrebuiltSsa>,
+) -> Result<Build, C5Error> {
     let mut imports = ResolvedImports::resolve(program)?;
     // Linux ELF's `_start` always tail-calls libc `exit` so glibc
     // gets to flush stdio and run atexit before the kernel reaps us.
@@ -2120,9 +2160,11 @@ pub(crate) fn lower_for(
     }
     let mut build = match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            aarch64::lower(program, target, options, &imports)?
+            aarch64::lower(program, target, options, &imports, prebuilt)?
         }
-        Target::LinuxX64 | Target::WindowsX64 => x86_64::lower(program, target, options, &imports)?,
+        Target::LinuxX64 | Target::WindowsX64 => {
+            x86_64::lower(program, target, options, &imports, prebuilt)?
+        }
     };
     build.imports = imports;
     build.abi = target.abi();

@@ -786,10 +786,10 @@ mod jit_impl {
         let imports = ResolvedImports::resolve(program)?;
         let mut build = match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-                aarch64::lower(program, target, options, &imports)?
+                aarch64::lower(program, target, options, &imports, None)?
             }
             Target::LinuxX64 | Target::WindowsX64 => {
-                x86_64::lower(program, target, options, &imports)?
+                x86_64::lower(program, target, options, &imports, None)?
             }
         };
         build.imports = imports;
@@ -797,6 +797,7 @@ mod jit_impl {
         build.data_relocs = program.data_relocs.clone();
         build.code_relocs = program.code_relocs.clone();
         build.extern_data_relocs = program.extern_data_relocs.clone();
+        crate::c5::codegen::emit_ssa_dump(&mut build);
         Ok(build)
     }
 

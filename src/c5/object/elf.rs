@@ -3136,6 +3136,8 @@ mod tests {
         use crate::c5::codegen::ResolvedDylib;
         Build {
             text_align: 16,
+            orphaned_data: None,
+            ssa_dump: alloc::string::String::new(),
             asm_sections: Vec::new(),
             asm_section_text_refs: Vec::new(),
             asm_text_abs_refs: Vec::new(),

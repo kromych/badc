@@ -1551,7 +1551,7 @@ impl<'a> Walker<'a> {
     ) -> Result<ValueId, WalkError> {
         // A bitfield target reads and writes its slice of the storage
         // unit rather than the whole 16 bytes.
-        if let Some((unit, bf)) = self.bitfield_place(b, lvalue)? {
+        if let Some((unit, bf)) = self.wide_bitfield_place(b, lvalue)? {
             let vol = self.expr_is_volatile(lvalue);
             let old = self.bitfield_extract_128(b, unit, bf, vol);
             let saved = postfix.then(|| self.bitfield_value_form(b, bf, old));
@@ -1591,7 +1591,7 @@ impl<'a> Walker<'a> {
     ) -> Result<ValueId, WalkError> {
         // A bitfield target reads and writes its slice of the storage
         // unit rather than the whole 16 bytes.
-        if let Some((unit, bf)) = self.bitfield_place(b, lhs)? {
+        if let Some((unit, bf)) = self.wide_bitfield_place(b, lhs)? {
             let vol = self.expr_is_volatile(lhs);
             let a = self.bitfield_extract_128(b, unit, bf, vol);
             let pair = self.int128_binary_pair(b, op, a, lhs, rhs)?;
@@ -2606,8 +2606,11 @@ impl<'a> Walker<'a> {
     }
 
     /// The storage-unit address and descriptor when `lvalue` names a
-    /// bitfield member. The object is evaluated once (C99 6.5.16.2p3).
-    fn bitfield_place(
+    /// bitfield in a 16-byte unit, which the 128-bit read-modify-write
+    /// path is the only caller of. The object is evaluated once (C99
+    /// 6.5.16.2p3). A narrower unit stays on the scalar `RmwPlace`
+    /// path, whose accesses match its width.
+    fn wide_bitfield_place(
         &mut self,
         b: &mut SsaBuilder,
         lvalue: ExprId,
@@ -2622,6 +2625,9 @@ impl<'a> Walker<'a> {
             return Ok(None);
         };
         let (bf, obj, field_off) = (*bf, *obj, *field_off);
+        if bf.unit_size != 16 {
+            return Ok(None);
+        }
         let base = self.walk_expr_rvalue(b, obj)?;
         let addr = if field_off != 0 {
             b.binop_imm(BinOp::Add, base, field_off)

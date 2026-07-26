@@ -12,11 +12,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	mov	x16, sp
-               	and	sp, x16, #0xfffffffffffffff0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x1, [x0]
@@ -193,8 +188,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	lsl	x1, x4, #1
                	lsl	x0, x6, #1
@@ -218,8 +211,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	lsl	x1, x4, #63
                	lsl	x0, x6, #63
@@ -240,8 +231,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x17, #0x6677            // =26231
                	movk	x17, #0x4455, lsl #16
@@ -254,8 +243,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	lsl	x1, x4, #1
                	mov	x17, #0xccee            // =52462
@@ -269,8 +256,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	lsl	x1, x4, #63
                	mov	x17, #-0x8000000000000000 // =-9223372036854775808
@@ -281,8 +266,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	lsr	x2, x6, #1
                	lsr	x0, x4, #1
@@ -306,8 +289,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x17, #0xeeff            // =61183
                	movk	x17, #0xccdd, lsl #16
@@ -322,8 +303,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	lsr	x1, x6, #63
                	cmp	x1, #0x1
@@ -335,8 +314,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
@@ -380,12 +357,8 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
                	b	<addr>
@@ -416,17 +389,11 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x0, w1
                	sxtw	x0, w0
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	sxtw	x0, w3
                	sxtw	x0, w0
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	sxtw	x0, w3
                	sxtw	x0, w0
-               	sub	sp, x29, #0x0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>

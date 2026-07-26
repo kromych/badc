@@ -505,13 +505,9 @@ Disassembly of section .text:
                	ret
 
 <chk_from_fp>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x90
-               	stp	x20, x21, [sp]
-               	sub	sp, sp, #0x20
-               	mov	x16, sp
-               	and	sp, x16, #0xfffffffffffffff0
+               	stp	x20, x21, [sp, #-0xa0]!
+               	stp	x29, x30, [sp, #0x90]
+               	add	x29, sp, #0x90
                	mov	x8, x0
                	mov	x6, x2
                	mov	x9, x1
@@ -519,7 +515,7 @@ Disassembly of section .text:
                	add	x5, x5, <lo12>
                	str	d0, [x5]
                	ldr	d0, [x5]
-               	sub	x0, x29, #0x38
+               	sub	x0, x29, #0x70
                	str	d0, [x0]
                	ldr	x0, [x0]
                	asr	x15, x0, #63
@@ -606,13 +602,11 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbz	x0, <addr>
                	sxtw	x0, w6
-               	sub	sp, x29, #0x90
-               	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x90
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x90]
+               	ldp	x20, x21, [sp], #0xa0
                	ret
                	ldr	d0, [x5]
-               	sub	x0, x29, #0x68
+               	sub	x0, x29, #0x38
                	str	d0, [x0]
                	ldr	x1, [x0]
                	asr	x0, x1, #63
@@ -708,28 +702,20 @@ Disassembly of section .text:
                	add	x0, x6, #0x1
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	sub	sp, x29, #0x90
-               	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x90
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x90]
+               	ldp	x20, x21, [sp], #0xa0
                	ret
                	mov	x0, #0x0                // =0
-               	sub	sp, x29, #0x90
-               	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x90
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x90]
+               	ldp	x20, x21, [sp], #0xa0
                	ret
                	b	<addr>
                	b	<addr>
 
 <chk_from_fp_neg>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x50
-               	str	x20, [sp]
-               	sub	sp, sp, #0x10
-               	mov	x16, sp
-               	and	sp, x16, #0xfffffffffffffff0
+               	str	x20, [sp, #-0x60]!
+               	stp	x29, x30, [sp, #0x50]
+               	add	x29, sp, #0x50
                	mov	x12, x0
                	mov	x7, x2
                	mov	x13, x1
@@ -831,16 +817,12 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbz	x0, <addr>
                	sxtw	x0, w7
-               	sub	sp, x29, #0x50
-               	ldr	x20, [sp]
-               	add	sp, sp, #0x50
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x50]
+               	ldr	x20, [sp], #0x60
                	ret
                	mov	x0, #0x0                // =0
-               	sub	sp, x29, #0x50
-               	ldr	x20, [sp]
-               	add	sp, sp, #0x50
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x50]
+               	ldr	x20, [sp], #0x60
                	ret
                	b	<addr>
 

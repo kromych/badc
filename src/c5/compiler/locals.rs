@@ -167,7 +167,9 @@ impl Compiler {
         // alignment already suffices.
         // TODO: place the region at a static frame offset when 16 is enough,
         // then this case joins the others.
-        let realign_auto = req_align > 8 || auto_align > 16;
+        // `auto_align` is already 0 for a static local and for a pointer
+        // object, so neither reaches the region however wide the attribute.
+        let realign_auto = auto_align > 16 || (auto_align > 8 && req_align > 8);
         if auto_align > super::MAX_FRAME_ALIGN {
             return Err(self.compile_err(format!(
                 "requested alignment {auto_align} exceeds the maximum for an \

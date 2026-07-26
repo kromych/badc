@@ -161,29 +161,29 @@ fn ent_pc=3 n_params=0 variadic=false locals=12
   block 12  start_pc=0
     terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=4 ---
-; name=type16
-fn ent_pc=4 n_params=0 variadic=false locals=6
+; name=type32
+fn ent_pc=4 n_params=0 variadic=false locals=8
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-2)                                    -> x0
+    v1   LocalAddr(-4)                                    -> x0
     v2   Imm(0)                                           -> x1
     v3   ImmData(24)                                      -> x1
     v4   Store { addr=v3, disp=0, value=v1, kind=I64 }    -> -
     v5   Imm(0)                                           -> x0
-    v6   LocalAddr(-2)                                    -> x0
+    v6   LocalAddr(-4)                                    -> x0
     v7   Imm(9)                                           -> x1
     v8   Store { addr=v6, disp=0, value=v7, kind=I32 }    -> -
-    v9   LocalAddr(-2)                                    -> x0
+    v9   LocalAddr(-4)                                    -> x0
     v10  BinopI { op=add, lhs=v9, rhs_imm=4 }             -> x1
     v11  Imm(10)                                          -> x1
     v12  Store { addr=v9, disp=4, value=v11, kind=I32 }   -> -
-    v13  LocalAddr(-2)                                    -> x0
-    v14  Imm(16)                                          -> x1
+    v13  LocalAddr(-4)                                    -> x0
+    v14  Imm(32)                                          -> x1
     v15  Imm(0)                                           -> x1
     v16  Imm(0)                                           -> x1
-    v17  Imm(15)                                          -> x1
-    v18  BinopI { op=and, lhs=v13, rhs_imm=15 }           -> x0
+    v17  Imm(31)                                          -> x1
+    v18  BinopI { op=and, lhs=v13, rhs_imm=31 }           -> x0
     v19  BinopI { op=eq, lhs=v18, rhs_imm=0 }             -> x0
     v20  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x1
     v21  Extend { value=v19, kind=I32 }                   -> x0
@@ -191,7 +191,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=6
     v23  Imm(0)                                           -> x2
     terminator Bz { cond=v21, target=b6, fall=b1 }   (exit_acc=v21)
   block 1  start_pc=0
-    v24  LocalAddr(-2)                                    -> x0
+    v24  LocalAddr(-4)                                    -> x0
     v25  Load { addr=v24, disp=0, kind=I32 }              -> x0
     v26  BinopI { op=eq, lhs=v25, rhs_imm=9 }             -> x0
     v27  BinopI { op=ne, lhs=v26, rhs_imm=0 }             -> x1
@@ -199,12 +199,12 @@ fn ent_pc=4 n_params=0 variadic=false locals=6
     terminator Jmp(b2)   (exit_acc=v27)
   block 2  start_pc=0
     v29  Phi { incoming=[b6:v22, b1:v27], kind=I64 }      -> x1
-    v30  LoadLocal { off=-6, kind=I64 }                   -> x0
+    v30  LoadLocal { off=-8, kind=I64 }                   -> x0
     v31  Imm(0)                                           -> x0
     v32  Imm(0)                                           -> x2
     terminator Bz { cond=v29, target=b5, fall=b3 }   (exit_acc=v29)
   block 3  start_pc=0
-    v33  LocalAddr(-2)                                    -> x0
+    v33  LocalAddr(-4)                                    -> x0
     v34  BinopI { op=add, lhs=v33, rhs_imm=4 }            -> x1
     v35  Load { addr=v33, disp=4, kind=I32 }              -> x0
     v36  BinopI { op=eq, lhs=v35, rhs_imm=10 }            -> x0
@@ -213,7 +213,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=6
     terminator Jmp(b4)   (exit_acc=v37)
   block 4  start_pc=0
     v39  Phi { incoming=[b5:v31, b3:v37], kind=I64 }      -> x0
-    v40  LoadLocal { off=-5, kind=I64 }                   -> x1
+    v40  LoadLocal { off=-7, kind=I64 }                   -> x1
     v41  BinopI { op=shl, lhs=v39, rhs_imm=32 }           -> x1
     v42  Extend { value=v39, kind=I32 }                   -> x0
     terminator Return(v42)   (exit_acc=v42)

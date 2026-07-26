@@ -122,12 +122,12 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
 
-<type16>:
+<type32>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	subq	$0x10, %rsp
-               	andq	$-0x10, %rsp
+               	subq	$0x40, %rsp
+               	subq	$0x20, %rsp
+               	andq	$-0x20, %rsp
                	leaq	(%rsp), %rax
                	leaq	<rip>, %rcx
                	movq	%rax, (%rcx)
@@ -138,7 +138,7 @@ Disassembly of section .text:
                	movl	$0xa, %ecx
                	movl	%ecx, 0x4(%rax)
                	leaq	(%rsp), %rax
-               	andq	$0xf, %rax
+               	andq	$0x1f, %rax
                	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -166,8 +166,8 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
-               	leaq	-0x30(%rbp), %rsp
-               	addq	$0x30, %rsp
+               	leaq	-0x40(%rbp), %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>

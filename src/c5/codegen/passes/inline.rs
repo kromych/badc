@@ -696,13 +696,6 @@ fn is_inline_candidate(
                     }
                 }
             }
-            // A load / store through an x86 named-address-space pointer.
-            // The access rides a `%gs:` / `%fs:` override, so it names
-            // per-CPU or per-thread memory rather than the frame: no
-            // callee slot is reachable through it and the segment base is
-            // not frame state, leaving nothing for the splice to relocate.
-            // Its value operands remap like any other access.
-            Inst::SegLoad { .. } | Inst::SegStore { .. } => {}
             Inst::Mcpy { dst, src, .. } => {
                 // For a reloc callee an Mcpy is reproducible: the splice
                 // remaps its dst / src operands (`rewrite_callee_inst`), and a
@@ -836,6 +829,15 @@ fn is_inline_candidate(
                     return false;
                 }
             }
+            // A segment-relative access reaches here. Splicing one is
+            // operand-correct (`remap_inst_operands` routes both variants),
+            // but the spliced access shares a register with the enclosing
+            // function's inline-asm operand handling: an accessor inlined
+            // ahead of an `"=rm"` block reloads the operand address into
+            // the register the access then uses as its segment base, so it
+            // reads through a frame address. TODO: admit these once the
+            // asm-operand register handling accounts for the spliced
+            // access.
             _ => {
                 say(format_args!("disallowed inst {:?}", inst));
                 return false;
@@ -3582,13 +3584,13 @@ mod tests {
         assert!(needs_reloc_splice(&input_only));
     }
 
-    /// An accessor whose body reads / writes through a `__seg_gs` /
-    /// `__seg_fs` pointer is inlinable, and the operand walk routes both
-    /// variants: an unrouted address operand would keep the callee's
-    /// `ValueId` and land the access at an unrelated offset from the
-    /// segment base.
+    /// The operand walk routes both segment-access variants: an unrouted
+    /// address operand would keep the callee's `ValueId` and land the
+    /// access at an unrelated offset from the segment base. The candidate
+    /// filter still keeps such a body out of line, so the routing is
+    /// checked directly.
     #[test]
-    fn segment_access_inlines_with_its_operands_routed() {
+    fn segment_access_operands_are_routed() {
         use crate::c5::ir::AsmSeg;
         let abi = Target::LinuxX64.abi();
         // v0/v1 params, v2 = v0 + v1, v3 = load through %gs:v2.
@@ -3625,7 +3627,9 @@ mod tests {
             }],
             ..Default::default()
         };
-        assert!(is_inline_candidate(&read, 32, abi, None));
+        let mut reason = alloc::string::String::new();
+        assert!(!is_inline_candidate(&read, 32, abi, Some(&mut reason)));
+        assert!(reason.starts_with("disallowed inst SegLoad"), "{reason}");
         // The same with a store: v3 = v0 + v1, %fs:v3 = v2.
         let write = FunctionSsa {
             n_params: 3,
@@ -3665,7 +3669,9 @@ mod tests {
             }],
             ..Default::default()
         };
-        assert!(is_inline_candidate(&write, 32, abi, None));
+        reason.clear();
+        assert!(!is_inline_candidate(&write, 32, abi, Some(&mut reason)));
+        assert!(reason.starts_with("disallowed inst SegStore"), "{reason}");
         // Operand routing, the half an allow-list entry cannot supply.
         let remap = alloc::vec![7, 8, 9, 10, 11];
         let mut load = read.insts[3].clone();

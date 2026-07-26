@@ -2716,9 +2716,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             }
             // Two frame gates, both honouring a mandatory request. The
             // relative one stops a caller from multiplying a frame that
-            // is already past CALLER_FRAME_SLOTS. The absolute one caps
-            // the frame itself: a candidate is admitted only while its
-            // own slots (plus the parameter cells the splice
+            // is already past CALLER_FRAME_SLOTS; it compares declared
+            // slots against the declared count it started from, so both
+            // sides of that ratio measure the same thing. The absolute
+            // one caps the frame itself and so reads the region the
+            // layout will actually emit: a candidate is admitted only
+            // while its own slots (plus the parameter cells the splice
             // materializes) still fit under CALLER_FRAME_ABS_SLOTS, so
             // one fixpoint round cannot carry the frame past the bound
             // by more than the largest admitted callee, and a caller

@@ -156,14 +156,18 @@ fn stack_decrements_cannot_step_over_a_guard_page() {
 
     assert!(
         violations.is_empty(),
-        "{} guard-unsafe stack decrement(s) of {decrements} scanned:\n{}",
+        "{} guard-unsafe of {decrements} stack decrement(s) in {scanned} unit(s):\n{}",
         violations.len(),
         violations.join("\n")
     );
-    // The corpus carries large-frame fixtures, so the scan must have
-    // seen the probed form at least once; otherwise it is decoding
-    // nothing and would pass on any output.
-    assert!(scanned > 1000, "too few units scanned: {scanned}");
+    // Guard the coverage itself: the corpus builds for nearly every
+    // fixture/target pair, and it carries large-frame fixtures, so a
+    // scan that stopped decoding or stopped compiling would otherwise
+    // pass on any output.
+    assert!(
+        scanned > 1900,
+        "too few units scanned: {scanned} ({decrements} decrements)"
+    );
     assert!(
         largest >= STACK_PROBE_PAGE,
         "no page-sized decrement found -- decoder or corpus regressed (largest {largest})"

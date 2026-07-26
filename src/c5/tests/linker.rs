@@ -2168,6 +2168,120 @@ fn asm_label_address_immediate_relocates_absolute() {
     );
 }
 
+/// Read `st_other` (visibility byte) of the first `.symtab` entry named
+/// `want` from a raw ELF64 object. `parse_native_elf` drops visibility, so
+/// the byte is read directly.
+#[cfg(test)]
+fn elf_symbol_st_other(bytes: &[u8], want: &str) -> u8 {
+    let rd16 = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd64(0x28) as usize;
+    let e_shentsize = rd16(0x3a) as usize;
+    let e_shnum = rd16(0x3c) as usize;
+    const SHT_SYMTAB: u32 = 2;
+    for i in 0..e_shnum {
+        let sh = e_shoff + i * e_shentsize;
+        if rd32(sh + 4) != SHT_SYMTAB {
+            continue;
+        }
+        let sym_off = rd64(sh + 0x18) as usize;
+        let sym_size = rd64(sh + 0x20) as usize;
+        let str_off = {
+            let strtab = rd32(sh + 0x28) as usize;
+            rd64(e_shoff + strtab * e_shentsize + 0x18) as usize
+        };
+        let mut p = sym_off;
+        while p + 24 <= sym_off + sym_size {
+            let name_start = str_off + rd32(p) as usize;
+            let name_len = bytes[name_start..].iter().position(|&b| b == 0).unwrap();
+            if &bytes[name_start..name_start + name_len] == want.as_bytes() {
+                return bytes[p + 5]; // st_other
+            }
+            p += 24;
+        }
+    }
+    panic!("symbol `{want}` not found in .symtab");
+}
+
+#[test]
+fn weak_hidden_undef_addressof_is_pc_relative_direct() {
+    // The `symbol_get(x)` kernel idiom (CONFIG_MODULES off):
+    //   ({ extern typeof(x) x __attribute__((weak,visibility("hidden"))); &(x); })
+    // A block-scope extern redeclaration marks an already-known name weak and
+    // hidden and takes its address. gcc emits the symbol WEAK HIDDEN UND and
+    // the address-of GOT-free -- a RIP-relative `lea` (R_X86_64_PC32) on
+    // x86_64, a direct adrp+add pair on aarch64 -- so a static link resolves
+    // the undefined weak to 0 with an empty GOT. Match that reloc form plus
+    // STB_WEAK binding and STV_HIDDEN visibility on both ELF targets.
+    use crate::CompileOptions;
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_PC32: u32 = 2;
+    const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
+    const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
+    const STB_WEAK: u8 = 2;
+    const STV_HIDDEN: u8 = 2;
+    let src = "extern int probe(void);\n\
+               #define symbol_get(x) \
+               ({ extern typeof(x) x __attribute__((weak, visibility(\"hidden\"))); &(x); })\n\
+               void *take(void) { return symbol_get(probe); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(String::from(src), target, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let sym_idx = obj
+            .symbols
+            .iter()
+            .position(|s| s.name == "probe")
+            .expect("probe symbol present");
+        assert!(
+            matches!(obj.symbols[sym_idx].section, NativeSymSection::Undef),
+            "probe stays undefined"
+        );
+        assert_eq!(
+            obj.symbols[sym_idx].binding, STB_WEAK,
+            "the weak attribute binds STB_WEAK"
+        );
+        assert_eq!(
+            elf_symbol_st_other(&bytes, "probe"),
+            STV_HIDDEN,
+            "visibility(\"hidden\") sets STV_HIDDEN"
+        );
+        let relocs: alloc::vec::Vec<_> = obj
+            .text_relocs
+            .iter()
+            .filter(|r| r.sym_idx == sym_idx)
+            .collect();
+        if target == Target::LinuxX64 {
+            assert_eq!(relocs.len(), 1, "one address-of reloc against probe");
+            assert_eq!(
+                relocs[0].rtype, R_X86_64_PC32,
+                "hidden address-of is a direct lea (PC32), not a GOT load"
+            );
+            assert_eq!(relocs[0].addend, -4, "PC32 end-of-field skew, matching gcc");
+        } else {
+            let types: alloc::vec::Vec<u32> = relocs.iter().map(|r| r.rtype).collect();
+            assert!(
+                types.contains(&R_AARCH64_ADR_PREL_PG_HI21)
+                    && types.contains(&R_AARCH64_ADD_ABS_LO12_NC),
+                "hidden address-of is a direct adrp+add pair, not a GOT page load, got {types:?}"
+            );
+        }
+    }
+}
+
 #[test]
 fn file_scope_asm_assembles_instructions_in_rodata() {
     // A file-scope asm whose `.pushsection .rodata` holds a trampoline body:

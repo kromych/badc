@@ -163,6 +163,9 @@ const R_AARCH64_TLSLE_ADD_TPREL_LO12_NC: u32 = 551;
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
 const STB_WEAK: u8 = 2;
+// st_other visibility (the low two bits of the byte).
+const STV_DEFAULT: u8 = 0;
+const STV_HIDDEN: u8 = 2;
 const STT_NOTYPE: u8 = 0;
 const STT_OBJECT: u8 = 1;
 const STT_FUNC: u8 = 2;
@@ -1198,6 +1201,29 @@ pub(super) fn write_relocatable(
             STB_GLOBAL
         }
     };
+    // `__attribute__((visibility("hidden")))` symbols: not preemptible, so
+    // the symtab entry carries STV_HIDDEN and, on x86_64, address-of sites
+    // resolve PC-relative directly instead of through the GOT (below).
+    let hidden_names: alloc::collections::BTreeSet<&str> = {
+        use crate::c5::token::Token;
+        program
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.is_hidden
+                    && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64)
+                    && !s.name.is_empty()
+            })
+            .map(|s| s.name.as_str())
+            .collect()
+    };
+    let vis_for = |name: &str| -> u8 {
+        if hidden_names.contains(name) {
+            STV_HIDDEN
+        } else {
+            STV_DEFAULT
+        }
+    };
     let mut local_func_idxs: Vec<usize> = Vec::new();
     let mut global_func_idxs: Vec<usize> = Vec::new();
     let mut func_strs: Vec<String> = Vec::with_capacity(build.func_ent_pcs.len());
@@ -1657,10 +1683,10 @@ pub(super) fn write_relocatable(
         symbols.push(Elf64Sym {
             st_name: name_offs[1 + i],
             st_info: pack_sym_info(bind_for(&func_strs[i]), STT_FUNC),
+            st_other: vis_for(&func_strs[i]),
             st_shndx: shndx,
             st_value: value,
             st_size: hi.saturating_sub(lo) as u64,
-            ..Default::default()
         });
     }
 
@@ -1719,6 +1745,7 @@ pub(super) fn write_relocatable(
         symbols.push(Elf64Sym {
             st_name: name_offs[user_extern_names_start + i],
             st_info: pack_sym_info(bind_for(name), STT_NOTYPE),
+            st_other: vis_for(name),
             st_shndx: SHN_UNDEF,
             ..Default::default()
         });
@@ -1765,10 +1792,10 @@ pub(super) fn write_relocatable(
         symbols.push(Elf64Sym {
             st_name: name_offs[defined_data_globals_start + i],
             st_info: pack_sym_info(bind_for(name), STT_OBJECT),
+            st_other: vis_for(name),
             st_shndx: shndx,
             st_value: value,
             st_size: *size,
-            ..Default::default()
         });
     }
 
@@ -1781,6 +1808,7 @@ pub(super) fn write_relocatable(
         symbols.push(Elf64Sym {
             st_name: name_offs[user_extern_data_names_start + i],
             st_info: pack_sym_info(bind_for(name), STT_OBJECT),
+            st_other: vis_for(name),
             st_shndx: SHN_UNDEF,
             ..Default::default()
         });
@@ -1794,6 +1822,7 @@ pub(super) fn write_relocatable(
         symbols.push(Elf64Sym {
             st_name: name_offs[asm_extern_names_start + i],
             st_info: pack_sym_info(bind_for(name), STT_NOTYPE),
+            st_other: vis_for(name),
             st_shndx: SHN_UNDEF,
             ..Default::default()
         });
@@ -2046,14 +2075,20 @@ pub(super) fn write_relocatable(
             );
             continue;
         }
+        // A hidden symbol is not preemptible: address it PC-relative
+        // directly (the codegen's `lea`, kept out of the GOT rewrite below),
+        // matching gcc and keeping the GOT empty. A default-visibility
+        // cross-TU ref goes through the relaxable GOT load on x86_64;
+        // aarch64 is always direct.
+        let hidden = hidden_names.contains(r.symbol_name.as_str());
         match machine_for_rela {
-            Machine::X86_64 => emit_got_ref_relocs(
+            Machine::X86_64 if !hidden => emit_got_ref_relocs(
                 machine_for_rela,
                 &mut rela_bytes,
                 r.instr_offset as u64,
                 sym_idx,
             ),
-            Machine::Aarch64 => emit_addr_fixup_relocs(
+            Machine::X86_64 | Machine::Aarch64 => emit_addr_fixup_relocs(
                 machine_for_rela,
                 &mut rela_bytes,
                 r.instr_offset as u64,
@@ -2453,12 +2488,14 @@ pub(super) fn write_relocatable(
     // aarch64 keeps those direct (see the reloc loop above). Same
     // length as `build.text`.
     // A `direct_pcrel` ref is already a `mov`/`op sym(%rip)` in the emitted
-    // text, not a `lea` to rewrite into a GOT load; skip those.
+    // text, not a `lea` to rewrite into a GOT load; skip those. A hidden
+    // symbol keeps its direct `lea` too (addressed PC-relative, not via the
+    // GOT -- see the reloc loop above).
     let mut got_site_offsets: alloc::vec::Vec<usize> = match machine_for_rela {
         Machine::X86_64 => build
             .user_extern_data_refs
             .iter()
-            .filter(|r| r.direct_pcrel.is_none())
+            .filter(|r| r.direct_pcrel.is_none() && !hidden_names.contains(r.symbol_name.as_str()))
             .map(|r| r.instr_offset)
             .collect(),
         Machine::Aarch64 => alloc::vec::Vec::new(),

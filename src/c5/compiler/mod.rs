@@ -820,6 +820,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// A consumed `__attribute__((used))`: keep the definition in the
     /// object even when nothing in the unit references it.
     pub attr_used: bool,
+    /// A consumed `__attribute__((visibility("hidden")))` (or `"internal"`):
+    /// the declared symbol is not preemptible, marked STV_HIDDEN and
+    /// addressed PC-relative directly rather than through the GOT.
+    pub attr_hidden: bool,
     /// A consumed `__attribute__((section("name")))`: the named object
     /// section the declared symbol's bytes go to.
     pub attr_section: Option<alloc::string::String>,
@@ -895,6 +899,7 @@ impl Default for Pending {
             attr_cleanup: None,
             attr_weak: false,
             attr_used: false,
+            attr_hidden: false,
             attr_section: None,
             attr_alias: None,
             saw_register_storage: false,

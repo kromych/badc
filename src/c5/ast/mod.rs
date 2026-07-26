@@ -135,17 +135,45 @@ pub(crate) enum AtomicKind {
 /// time; the walker emits the load + shift + mask sequence.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct BitfieldDesc {
-    /// Bit offset within the storage unit. Range `[0, 63]`.
+    /// Bit offset within the storage unit. Range `[0, 127]`.
     pub bit_offset: u8,
-    /// Bit width of the field. Range `[1, 64]`.
+    /// Bit width of the field. Range `[1, 128]`.
     pub bit_width: u8,
-    /// Storage-unit width in bytes (1, 2, 4, or 8). Drives the
-    /// load / store opcode pair per C99 6.7.2.1p11.
+    /// Storage-unit width in bytes (1, 2, 4, 8, or 16). Drives the
+    /// load / store opcode pair per C99 6.7.2.1p11; a 16-byte unit is
+    /// accessed as the two halves of a 128-bit value.
     pub unit_size: u8,
     /// True when the declared field type is signed -- C99
     /// 6.7.2.1p10 says the read sign-extends through the top of
     /// the storage word.
     pub signed: bool,
+}
+
+impl BitfieldDesc {
+    /// True when the access yields a 128-bit value: the field is stored
+    /// in a 16-byte unit and is too wide for the integer promotions to
+    /// narrow it (see [`bitfield_keeps_declared_ty`]).
+    pub(crate) fn is_wide_value(&self) -> bool {
+        self.unit_size == 16 && bitfield_keeps_declared_ty(self.bit_width as u32)
+    }
+}
+
+/// True when a bitfield of `width` keeps its declared type under the
+/// C99 6.3.1.1p2 integer promotions; a narrower field's value converts
+/// to `int`, or to `unsigned int` at exactly `int`'s width.
+pub(crate) fn bitfield_keeps_declared_ty(width: u32) -> bool {
+    width > 32
+}
+
+/// A bitfield's slice of its storage unit: `((1 << width) - 1) << offset`.
+/// A unit of 8 bytes or less keeps the whole result in the low 64 bits.
+pub(crate) fn bitfield_slice_mask(width: u32, offset: u32) -> u128 {
+    let m: u128 = if width >= 128 {
+        u128::MAX
+    } else {
+        (1u128 << width) - 1
+    };
+    m << offset
 }
 
 /// Operand of `sizeof`. C99 6.5.3.4p2 allows either a type-name or

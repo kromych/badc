@@ -4285,7 +4285,11 @@ impl Compiler {
                         signed: !is_unsigned_ty(field.ty) && !is_bool_ty(field.ty),
                     };
                     let bf_field_off = field.offset as i64;
-                    let bf_field_ty = field.ty;
+                    // The AST node carries the access's own type, which
+                    // the integer promotions may narrow (C99 6.3.1.1p2),
+                    // so the walker and the surrounding expression agree
+                    // on the value's width.
+                    let bf_field_ty = super::emit::bitfield_value_ty(field.bit_width, field.ty);
                     self.pending.bf_assign_rhs = None;
                     self.pending.bf_compound_assign = None;
                     // emit_bitfield_access drives the c5 stack

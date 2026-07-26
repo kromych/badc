@@ -9,6 +9,20 @@ use crate::c5::ir::FunctionSsa;
 use crate::c5::program::Program;
 use alloc::vec::Vec;
 
+/// Names that bind STB_WEAK as function definitions: `__attribute__((weak))`
+/// carriers and file-scope asm `.weak` names. Mirrors the set the object
+/// writers use to pick the symbol binding.
+fn weak_function_names(program: &Program) -> alloc::collections::BTreeSet<&str> {
+    use crate::c5::token::Token;
+    program
+        .symbols
+        .iter()
+        .filter(|s| s.is_weak && s.class == Token::Fun as i64 && !s.name.is_empty())
+        .map(|s| s.name.as_str())
+        .chain(program.asm_weak_names.iter().map(|s| s.as_str()))
+        .collect()
+}
+
 /// Walks every entry in `program.finished_functions` through
 /// [`crate::c5::ast::walk::walk_function`] and returns one
 /// `FunctionSsa` per source function in `ent_pc` order. Sys
@@ -22,6 +36,7 @@ pub(crate) fn walk_program(
 ) -> Result<Vec<FunctionSsa>, C5Error> {
     // Walker entries from AST snapshots, keyed by ent_pc.
     let mut walker_pcs: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
+    let weak_names = weak_function_names(program);
     let mut out: Vec<FunctionSsa> = Vec::with_capacity(program.finished_functions.len());
     let mut ordered: Vec<usize> = (0..program.finished_functions.len()).collect();
     ordered.sort_by_key(|&i| program.finished_functions[i].ent_pc);
@@ -59,6 +74,7 @@ pub(crate) fn walk_program(
         func.is_inline = f.is_inline;
         func.is_always_inline = f.is_always_inline;
         func.is_naked = f.is_naked;
+        func.is_weak = weak_names.contains(f.name.as_str());
         // Seed declared multi-cell extents alongside the synthetic ones the
         // walker recorded. Slot coalescing reserves every interior cell.
         func.multi_cell_slots.extend_from_slice(&f.multi_cell_slots);

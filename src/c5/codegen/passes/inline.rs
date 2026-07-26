@@ -367,6 +367,15 @@ fn is_inline_candidate(
         say(format_args!("naked function"));
         return false;
     }
+    // A weak definition is replaceable: the linker binds every reference to
+    // a strong definition of the same name when one exists in another
+    // object, so the body visible here need not be the one that runs.
+    // Splicing it in would commit the caller to this unit's copy. gcc and
+    // clang keep the out-of-line call for the same reason.
+    if func.is_weak {
+        say(format_args!("weak definition"));
+        return false;
+    }
     // An over-aligned automatic object lives in the callee's prologue-realigned
     // region; the splice cannot reproduce that region in the caller frame, so
     // the body stays out of line.
@@ -2078,6 +2087,7 @@ fn splice_multi_block(
         is_inline: original.is_inline,
         is_always_inline: original.is_always_inline,
         is_naked: original.is_naked,
+        is_weak: original.is_weak,
         insts: new_insts,
         inst_src: new_inst_src,
         blocks: new_blocks,

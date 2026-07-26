@@ -844,6 +844,12 @@ pub(crate) struct FunctionSsa {
     /// prologue/epilogue and no implicit return; the body (inline asm) is the
     /// function's entire machine code. Used for interrupt service routines.
     pub is_naked: bool,
+    /// True when the definition binds STB_WEAK: `__attribute__((weak))` on
+    /// the function or one of its declarations, or a file-scope asm `.weak`
+    /// naming it. A strong definition in another object replaces it at link
+    /// time, so the body this unit sees is not necessarily the one that runs
+    /// and every call has to reach it through the symbol.
+    pub is_weak: bool,
     /// Flat list of all SSA instructions in the function, indexed
     /// by [`ValueId`]. Each [`Block::inst_range`] is a contiguous
     /// slice of this list.

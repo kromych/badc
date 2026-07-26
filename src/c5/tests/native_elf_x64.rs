@@ -391,6 +391,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("register_var_asm_operand_split.c", 0),
     ("register_var_asm_operand_r11.c", 0),
     ("attribute_weak_alias.c", 0),
+    ("weak_definition_not_inlined.c", 42),
     ("attribute_alias_target_later.c", 0),
     ("attribute_section_placement.c", 0),
     ("inline_asm_named_operands.c", 42),
@@ -1636,6 +1637,52 @@ int main(void) { return pick(); }\n";
         output.status.code(),
         Some(2),
         "the strong definition must win over the weak one"
+    );
+}
+
+/// The same override under `-O`: the weak body is small enough to inline,
+/// but a weak definition is replaceable, so the call has to stay out of
+/// line for the linker to bind it to the strong definition. gcc and clang
+/// keep the call for the same reason.
+#[test]
+fn weak_definition_overridden_by_strong_under_optimize() {
+    use crate::{CompileOptions, Program};
+
+    const WEAK_UNIT: &str = "\
+int pick(void) __attribute__((weak));\n\
+int pick(void) { return 1; }\n\
+int main(void) { return pick(); }\n";
+    const STRONG_UNIT: &str = "int pick(void) { return 2; }\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_main = compile(WEAK_UNIT);
+    let prog_strong = compile(STRONG_UNIT);
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_main, &prog_strong],
+        Target::LinuxX64,
+        NativeOptions::default().with_optimize(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = unique_temp_path("badc-elf64-weak", "weak_override_opt");
+    {
+        use std::io::Write;
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "the inliner must not splice a weak body: the strong definition wins"
     );
 }
 

@@ -11,24 +11,12 @@ Disassembly of section .text:
                	ud2
 
 <from_volatile>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
-               	pushq	%r10
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	%rdi, 0x10(%rbp)
                	leaq	<rip>, %rax
-               	movq	0x10(%rbp), %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	popq	%rdx
+               	pushq	%rcx
+               	movq	(%rdi), %rcx
+               	movq	%rcx, (%rax)
+               	popq	%rcx
                	xorq	%rax, %rax
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
                	retq
 
 <from_const>:

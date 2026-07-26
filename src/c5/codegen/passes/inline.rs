@@ -95,6 +95,27 @@ const FRAME_GROWTH_FACTOR: i64 = 4;
 /// frame itself.
 const CALLER_FRAME_ABS_SLOTS: i64 = 512;
 
+/// Local slots that can reach the emitted frame. The layout drops the
+/// whole locals region when no instruction references a user local -- an
+/// object mem2reg promoted is never observed, so it needs no storage
+/// (C99 6.2.4p2) -- and the frame bound must read the same thing the
+/// layout will, or a function whose declared slots all evaporate is
+/// charged for a frame it does not have. Conservative next to the
+/// layout's own test, which additionally discounts accesses the
+/// allocator marks dead; that decision needs an allocation this pass
+/// does not have.
+fn frame_slots(f: &FunctionSsa) -> i64 {
+    let addresses_locals = f.indirect_result_slot < 0
+        || f.param_aggs
+            .iter()
+            .zip(f.param_local_slots.iter())
+            .any(|(agg, slot)| agg.is_some() && *slot < 0)
+        || f.insts
+            .iter()
+            .any(crate::c5::codegen::ssa::emit_common::inst_addresses_local);
+    if addresses_locals { f.locals } else { 0 }
+}
+
 #[derive(Clone, Copy)]
 enum RegionKey {
     Pool,
@@ -2637,9 +2658,14 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
     for iter in 0..INLINE_FIXPOINT_ITERS {
         let snapshot: Vec<FunctionSsa> = funcs.to_vec();
         let mut candidates: BTreeMap<usize, &FunctionSsa> = BTreeMap::new();
+        // Frame charge per candidate, computed once per round: the frame
+        // gate consults it for every caller, and the scan is over the
+        // candidate's whole body.
+        let mut cand_frame: BTreeMap<usize, i64> = BTreeMap::new();
         for f in &snapshot {
             if is_inline_candidate(f, cap, abi, None) {
                 candidates.insert(f.ent_pc, f);
+                cand_frame.insert(f.ent_pc, frame_slots(f) + f.n_params as i64);
             }
         }
         #[cfg(feature = "codegen_test")]
@@ -2702,8 +2728,10 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             {
                 local.retain(|_, c| c.is_always_inline);
             } else {
-                let budget = CALLER_FRAME_ABS_SLOTS - caller.locals;
-                local.retain(|_, c| c.is_always_inline || c.locals + (c.n_params as i64) <= budget);
+                let budget = CALLER_FRAME_ABS_SLOTS - frame_slots(caller);
+                local.retain(|pc, c| {
+                    c.is_always_inline || cand_frame.get(pc).copied().unwrap_or(0) <= budget
+                });
             }
             if local.is_empty() {
                 continue;
@@ -3068,12 +3096,10 @@ mod tests {
                 ..Default::default()
             };
             // The caller declares CALLER_FRAME_ABS_SLOTS + 1 slots up
-            // front, so `locals > FRAME_GROWTH_FACTOR * orig` is false at
-            // every round and only the absolute bound can block.
-            let mut funcs = alloc::vec![
-                multi_call_caller(1, CALLER_FRAME_ABS_SLOTS + 1, 600, 1),
-                leaf,
-            ];
+            // front and addresses one, so `locals > FRAME_GROWTH_FACTOR *
+            // orig` is false at every round and only the absolute bound
+            // can block.
+            let mut funcs = alloc::vec![calling_callee(1, CALLER_FRAME_ABS_SLOTS + 1, 600), leaf];
             run(&mut funcs, 32, abi);
             let leaf_calls = funcs[0]
                 .insts

@@ -51,6 +51,10 @@ impl<'a> ConstData<'a> {
                     // An object filled by stores at its declaration point
                     // (a `&&label` element) leaves the image zeroed.
                     && !s.runtime_initialized
+                    // A strong definition elsewhere replaces a weak one at
+                    // link time, so this image is not necessarily the
+                    // object's value.
+                    && !s.is_weak
             })
             .map(|s| (s.val, s.val + s.reserved_data_bytes))
             .collect();
@@ -195,8 +199,8 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
 }
 
 pub(crate) fn run(funcs: &mut [FunctionSsa], program: &Program) {
-    // [lo, hi) byte ranges of const-element, defined, initialized
-    // file-scope arrays in the data segment.
+    // [lo, hi) byte ranges of const, defined, initialized, non-preemptible
+    // static-duration objects in the data segment.
     let const_intervals: Vec<(i64, i64)> = program
         .symbols
         .iter()
@@ -206,6 +210,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], program: &Program) {
                 && s.has_initializer
                 && s.defined_here
                 && s.reserved_data_bytes > 0
+                && !s.is_weak
         })
         .map(|s| (s.val, s.val + s.reserved_data_bytes))
         .collect();

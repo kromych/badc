@@ -44,6 +44,14 @@ static int block_scope_guard(void) {
     return outer_depth;
 }
 
+// A strong definition elsewhere replaces a weak one at link time, so the
+// initializer here is not necessarily the object's value and the load
+// stays. The SSA snapshot is the lock: within one program nothing
+// overrides it, so the value is 11 either way.
+__attribute__((weak)) const int weak_depth = 11;
+
+static int weak_guard(void) { return weak_depth; }
+
 // `const` reaches `char`, so the array elements are writable objects and
 // keep their loads.
 static const char *names[2] = {(const char *)1, (const char *)2};
@@ -57,10 +65,12 @@ int main(void) {
         return 1;
     if (block_scope_guard() != 5)
         return 2;
-    if (first_name() != 1)
+    if (weak_guard() != 11)
         return 3;
+    if (first_name() != 1)
+        return 4;
     rename_first();
     if (first_name() != 99)
-        return 4;
+        return 5;
     return 0;
 }

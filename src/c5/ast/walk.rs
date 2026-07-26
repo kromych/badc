@@ -2475,7 +2475,11 @@ impl<'a> Walker<'a> {
         let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
         let masked = b.binop_imm(BinOp::And, value, mask_lo);
         let old = b.load_vol(addr, load_kind, vol);
-        let cleared = b.binop_imm(BinOp::And, old, !bitfield_mask_halves(bf.bit_width, bf.bit_offset).0);
+        let cleared = b.binop_imm(
+            BinOp::And,
+            old,
+            !bitfield_mask_halves(bf.bit_width, bf.bit_offset).0,
+        );
         let shifted = if bf.bit_offset > 0 {
             b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
         } else {

@@ -1767,7 +1767,7 @@ pub(crate) fn lower(
     // immediately.
     let mut ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
         super::ssa::emit_common::time_pass("ssa::produce_ssa_funcs (x86_64)", || {
-            super::ssa::shadow::produce_ssa_funcs(program, target)
+            super::ssa::shadow::produce_ssa_funcs(program, target, native.optimize)
         })?;
     // Frame slots mem2reg promoted to registers (-O) or that slot
     // coalescing moved onto shared storage: the debug-info emitter drops
@@ -1921,7 +1921,7 @@ pub(crate) fn lower(
         // folded branch's dead predecessor can collapse a merge phi and
         // expose a fresh constant condition one level down.
         super::ssa::emit_common::time_pass("passes::simplify_branches::run (x86_64)", || {
-            crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs);
+            crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs, true);
         });
         // Re-run static DCE: inlining a static callee into its last caller,
         // and the branch fold dropping calls in unreachable arms, can leave

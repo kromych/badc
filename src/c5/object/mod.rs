@@ -412,6 +412,7 @@ pub fn emit_native_with_options_named(
         program,
         target,
         options.bss_segregate && !bss_segregation_disabled(),
+        options.optimize,
     )?;
     let program = &compacted;
     let mut build = lower_for(program, target, options)?;
@@ -441,6 +442,7 @@ pub(crate) fn emit_native_single_tu_for_test(
         program,
         target,
         options.bss_segregate && !bss_segregation_disabled(),
+        options.optimize,
     )?;
     let program = &compacted;
     let mut build = lower_for(program, target, options)?;

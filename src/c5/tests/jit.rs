@@ -213,7 +213,8 @@ fn while_loop_promotes_counter_through_phi_under_phi_promote() {
         let program = Compiler::new(super::with_prelude(src))
             .compile()
             .expect("compile failed");
-        let mut funcs = produce_ssa_funcs(&program, Target::host()).expect("produce_ssa_funcs");
+        let mut funcs =
+            produce_ssa_funcs(&program, Target::host(), false).expect("produce_ssa_funcs");
         for f in &mut funcs {
             crate::c5::codegen::ssa::mem2reg::run(f);
         }
@@ -1881,6 +1882,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("variable_shift_rcx_loop.c", 0),
     ("va_arg_composite_straddle.c", 0),
     ("variadic_cast_fnptr_dispatch.c", 0),
+    ("builtin_constant_p_deferred.c", 0),
 ];
 
 #[test]
@@ -2057,7 +2059,7 @@ fn dead_strip_drops_unused_static_function() {
     let program = Compiler::new(src.to_string())
         .compile()
         .expect("compile failed");
-    let funcs = produce_ssa_funcs(&program, Target::host()).expect("produce_ssa_funcs");
+    let funcs = produce_ssa_funcs(&program, Target::host(), false).expect("produce_ssa_funcs");
     let names: Vec<&str> = funcs.iter().map(|f| f.name.as_str()).collect();
     assert!(names.contains(&"main"), "entry must survive: {names:?}");
     assert!(
@@ -2292,4 +2294,38 @@ fn struct_array_member_compound_literal_elements() {
                    return 0;\n\
                }\n";
     assert_eq!(jit_exit(src, &["jit-cl-array-member"]), 0);
+}
+
+/// GCC evaluates a non-constant `__builtin_constant_p` operand late
+/// under `-O`: after inlining and constant propagation a parameter fed
+/// a literal answers 1, while a runtime value still answers 0. Without
+/// `-O` the early conservative 0 stands (gcc -O0 parity). Locks the
+/// deferred `Intrinsic::ConstantP` resolution through the whole
+/// pipeline: walker -> inliner substitution -> constant fold -> the
+/// branch-fold fixed point's resolve-to-0.
+#[test]
+fn constant_p_defers_to_post_inline_fold() {
+    let src = "static inline int is_const(int x) { return __builtin_constant_p(x); }\n\
+               static inline int is_const2(int x) { return is_const(x); }\n\
+               static inline int arith_const(int x) { return __builtin_constant_p(x + 1); }\n\
+               int main(void) {\n\
+                   volatile int rt = 5;\n\
+                   int lit = __builtin_constant_p(3);\n\
+                   int run = __builtin_constant_p(rt);\n\
+                   int se = 1;\n\
+                   int sideeff = __builtin_constant_p(se++);\n\
+                   int local = 7;\n\
+                   return is_const(9) | (arith_const(9) << 1) | (is_const2(9) << 2)\n\
+                        | (__builtin_constant_p(local) << 3) | (lit << 4) | (run << 5)\n\
+                        | (sideeff << 6) | ((se == 1) << 7) | (is_const(rt) << 8);\n\
+               }\n";
+    // Unoptimized: only the literal answers 1; the operand of the
+    // side-effecting form is never evaluated (se stays 1).
+    assert_eq!(jit_exit(src, &["jit-constp-O0"]), (1 << 4) | (1 << 7));
+    // Optimized: the inlined parameters and the propagated local fold
+    // to 1; runtime and side-effecting operands stay 0 and unevaluated.
+    assert_eq!(
+        jit_exit_native_optimized(src, &["jit-constp-O"]),
+        1 | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 7)
+    );
 }

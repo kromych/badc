@@ -3544,7 +3544,7 @@ mod tests {
             .compile()
             .expect("compile");
         let (compacted, bss_size) =
-            crate::c5::codegen::ssa::shadow::compact_program_data(&program, target, true)
+            crate::c5::codegen::ssa::shadow::compact_program_data(&program, target, true, false)
                 .expect("compact");
         let mut build =
             super::super::lower_for(&compacted, target, super::super::NativeOptions::default())

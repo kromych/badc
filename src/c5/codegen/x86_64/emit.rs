@@ -8077,6 +8077,10 @@ fn emit_intrinsic(
             Some(scratch)
         };
     match intrinsic {
+        // Resolved to an `Imm` before lowering, by the SSA folds under
+        // `-O` and by the walker otherwise; reaching here is a pass-
+        // ordering bug.
+        I::ConstantP => fail("Intrinsic::ConstantP must be resolved before lowering"),
         I::VaStart if sysv_variadic_callee(func, abi) => {
             // System V AMD64 `va_start` (ABI 3.5.7). args[0] = the
             // `__va_list_tag` pointer (the array-form `va_list` decayed

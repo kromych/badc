@@ -14,7 +14,12 @@
 
 use crate::c5::ir::FunctionSsa;
 
-pub(crate) fn run(funcs: &mut [FunctionSsa]) {
+/// `resolve_constant_p` is false for the post-walk cleanup, where a
+/// deferred `__builtin_constant_p` must survive for the inliner's later
+/// argument substitution, and true for the post-inline `-O` pipeline,
+/// whose fixed point is the last chance to discover a constant: the
+/// survivors resolve to 0 so no such node reaches an emitter.
+pub(crate) fn run(funcs: &mut [FunctionSsa], resolve_constant_p: bool) {
     for func in funcs {
         // Each productive round folds at least one conditional terminator
         // or prunes at least one block; both counts decrease
@@ -23,12 +28,20 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
         // freshly degenerate phi exposes into the immediates the branch
         // fold reads.
         let mut bound = func.blocks.len() + 1;
+        let mut resolved = !resolve_constant_p;
         loop {
             super::constfold::run_one(func);
             let folded = super::constfold_branch::run_one(func);
             let pruned = super::prune_unreachable::run_one(func);
             bound -= 1;
             if (!folded && !pruned) || bound == 0 {
+                if !resolved {
+                    resolved = true;
+                    if super::constfold::resolve_constant_p(func) {
+                        bound = func.blocks.len() + 1;
+                        continue;
+                    }
+                }
                 break;
             }
         }

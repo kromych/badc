@@ -4907,6 +4907,15 @@ fn builtin_constant_p() {
     assert_eq!(run_fixture("builtin_constant_p.c"), 0);
 }
 
+#[test]
+fn builtin_constant_p_deferred() {
+    // The interpreter runs unoptimized SSA, where the walker answers a
+    // non-constant operand 0 directly, so `Intrinsic::ConstantP` never
+    // reaches it. The fixture's assertions hold in both modes; the
+    // native lanes run the same source under -O.
+    assert_eq!(run_fixture("builtin_constant_p_deferred.c"), 0);
+}
+
 // GCC extended inline asm with operand lists (x86_64 register-operand
 // forms). The interpreter evaluates the template semantics, so these
 // round-trip on any host; the native x86_64 encoding is checked by the

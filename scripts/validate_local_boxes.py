@@ -60,6 +60,12 @@ GATING_DEMOS = (
     "demos/libmill/smoke.py",
     "demos/libdill/smoke.py",
     "demos/coroutines/smoke.py",
+    # A badc-built interpreter runs its own test slice, so a wrong value
+    # in compiled code surfaces as a runtime failure rather than a bad
+    # object. Every other demo here compiled clean while these caught a
+    # stale-value miscompile, so they gate too.
+    "demos/python/smoke.py",
+    "demos/nasm/smoke.py",
 )
 
 

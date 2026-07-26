@@ -57,6 +57,32 @@ pub(crate) fn slots16(n_slots: u32) -> u32 {
     align16(n_slots * 8)
 }
 
+/// Page size the stack-allocation step assumes. 4 KiB is the smallest
+/// page any supported target uses, so stepping by it also touches every
+/// page of a target configured for a larger one.
+pub(crate) const STACK_PROBE_PAGE: u32 = 4096;
+
+/// Largest stack-pointer decrement that needs no probe. A stack whose
+/// end is protected by a guard region reports an overflow only when the
+/// access that oversteps the end lands inside that region; the smallest
+/// such region in practice is one page (a Windows thread's guard page, a
+/// pthread stack's default guard, a kernel vmap stack's unmapped page).
+/// Decrementing by at most `STACK_PROBE_PAGE - 16` from an address the
+/// stack still covers leaves the pointer at least 16 bytes above the
+/// guard region's base, so both the frame's own stores at non-negative
+/// offsets and a nested call's pushed return address fall inside the
+/// guard rather than below it. A larger allocation descends in
+/// `STACK_PROBE_PAGE` steps and stores through the stack pointer after
+/// each one, which is where the fault is taken.
+pub(crate) const MAX_UNPROBED_STACK_STEP: u32 = STACK_PROBE_PAGE - 16;
+
+/// Page-walk steps emitted straight-line before switching to a counted
+/// loop. A loop needs a scratch register; the straight-line form needs
+/// none, so it is the only option where every register is live. Two
+/// instructions per step against a loop's fixed overhead put the
+/// crossover at a handful of steps.
+pub(crate) const STACK_PROBE_UNROLL_MAX: u32 = 4;
+
 /// True when the emitted form of `inst` addresses the locals region
 /// (negative slot offset): slot loads / stores / address-takes, a
 /// non-zero `AllocaInit` (its reserved slot keeps the locals region

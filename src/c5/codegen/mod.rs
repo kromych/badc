@@ -2396,11 +2396,6 @@ pub(crate) struct Abi {
     /// SysV x86_64 requires `%al` to hold the count of XMM
     /// regs used at every variadic call site.
     pub variadic_zero_xmm_count: bool,
-    /// Windows commits thread stack on demand behind a guard page, so a
-    /// prologue allocating more than one page must touch each page in
-    /// descending order or a later access faults. SysV / macOS grow the
-    /// stack without a probe. Set for the Windows targets.
-    pub stack_probe: bool,
     /// `-mno-sse`: compiler-generated code must not touch SSE registers.
     /// Freestanding x86_64 environments (OS kernels) run without
     /// CR4.OSFXSR, where any XMM access is #UD, and their callers do not
@@ -2490,7 +2485,6 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
-                stack_probe: false,
                 no_sse_varargs: false,
             },
             Target::LinuxAarch64 => Abi {
@@ -2501,7 +2495,6 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
-                stack_probe: false,
                 no_sse_varargs: false,
             },
             Target::LinuxX64 => Abi {
@@ -2512,7 +2505,6 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: true,
-                stack_probe: false,
                 no_sse_varargs: false,
             },
             Target::WindowsX64 => Abi {
@@ -2523,7 +2515,6 @@ impl Target {
                 variadic_int_only: true,
                 position_indexed_args: true,
                 variadic_zero_xmm_count: false,
-                stack_probe: true,
                 no_sse_varargs: false,
             },
             Target::WindowsAarch64 => Abi {
@@ -2534,7 +2525,6 @@ impl Target {
                 variadic_int_only: true,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
-                stack_probe: true,
                 no_sse_varargs: false,
             },
         }

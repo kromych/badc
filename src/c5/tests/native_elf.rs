@@ -423,6 +423,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("vla_size_from_arg.c", 0),
     ("vla_scope_reclaim_loop.c", 0),
     ("alloca_large.c", 42),
+    ("stack_probe_large_frames.c", 42),
     ("alloca_spill_arith.c", 42),
     ("alloca_call_args.c", 42),
     ("vla_large_runtime.c", 42),

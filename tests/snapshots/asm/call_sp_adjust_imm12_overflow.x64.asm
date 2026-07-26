@@ -12,11 +12,15 @@ Disassembly of section .text:
 
 <sum_pairs>:
                	popq	%r10
-               	subq	$0x1050, %rsp           # imm = 0x1050
+               	subq	$0x1000, %rsp           # imm = 0x1000
+               	movq	$0x0, (%rsp)
+               	subq	$0x50, %rsp
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x1060, %rsp           # imm = 0x1060
+               	subq	$0x1000, %rsp           # imm = 0x1000
+               	movq	$0x0, (%rsp)
+               	subq	$0x60, %rsp
                	movq	%rdi, -0x10(%rbp)
                	movq	%rsi, -0x8(%rbp)
                	movq	%rdx, -0x20(%rbp)
@@ -2630,7 +2634,9 @@ Disassembly of section .text:
 
 <sum_longs>:
                	popq	%r10
-               	subq	$0x1040, %rsp           # imm = 0x1040
+               	subq	$0x1000, %rsp           # imm = 0x1000
+               	movq	$0x0, (%rsp)
+               	subq	$0x40, %rsp
                	movq	0x1040(%rsp), %rax
                	movq	%rax, 0x60(%rsp)
                	movq	0x1048(%rsp), %rax
@@ -4201,7 +4207,9 @@ Disassembly of section .text:
                	movq	%r10, 0x40(%rsp)
                	leaq	0x1040(%rdi), %r10
                	movq	%r10, 0x38(%rsp)
-               	subq	$0x1020, %rsp           # imm = 0x1020
+               	subq	$0x1000, %rsp           # imm = 0x1000
+               	movq	$0x0, (%rsp)
+               	subq	$0x20, %rsp
                	movq	%rcx, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
@@ -7058,7 +7066,9 @@ Disassembly of section .text:
                	movq	%r10, 0x40(%rsp)
                	subq	$0x10, %rsp
                	movq	%r12, (%rsp)
-               	subq	$0x1020, %rsp           # imm = 0x1020
+               	subq	$0x1000, %rsp           # imm = 0x1000
+               	movq	$0x0, (%rsp)
+               	subq	$0x20, %rsp
                	movq	%rcx, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)

@@ -20,6 +20,13 @@ Disassembly of section .text:
                	andq	$-0x10, %r11
                	movq	%rsp, %rsi
                	subq	%r11, %rsi
+               	shrq	$0xc, %r11
+               	testq	%r11, %r11
+               	je	<addr>
+               	subq	$0x1000, %rsp           # imm = 0x1000
+               	movq	$0x0, (%rsp)
+               	subq	$0x1, %r11
+               	jne	<addr>
                	movq	%rsi, %rsp
                	xorq	%rax, %rax
                	jmp	<addr>

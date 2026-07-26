@@ -465,7 +465,15 @@ pub(crate) fn emit_call_rel32(code: &mut Vec<u8>, rel32: i32) {
 
 /// `SUB rsp, imm32`. Used by the function prologue to reserve local
 /// stack space. Encoding: `REX.W + 81 /5 id`.
+///
+/// Capped at one page: moving rsp further without a probe can step over
+/// a guard region. Callers route larger amounts through the backend's
+/// `emit_stack_alloc`, which descends in probed steps.
 pub(crate) fn emit_sub_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
+    assert!(
+        imm <= super::super::ssa::emit_common::STACK_PROBE_PAGE,
+        "guard-unsafe single rsp decrement: {imm} bytes"
+    );
     emit_byte(code, rex(true, false, false, false));
     emit_byte(code, 0x81);
     // `/5` means ModR/M.reg = 5 (the opcode-extension digit for

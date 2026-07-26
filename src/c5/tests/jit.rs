@@ -1767,6 +1767,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("alloca_alignment.c", 0),
     ("alloca_arena_in_bounds.c", 0),
     ("alloca_large.c", 42),
+    ("stack_probe_large_frames.c", 42),
     ("alloca_spill_arith.c", 42),
     ("alloca_call_args.c", 42),
     ("vla_large_runtime.c", 42),

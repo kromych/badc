@@ -314,30 +314,26 @@ pub(crate) fn enc_add_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     0x9140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
-/// Subtract `bytes` from SP. AArch64's `SUB (immediate)` carries
-/// a 12-bit value optionally left-shifted by 12, so a single
-/// instruction can cover `bytes < 4096` directly or any
-/// multiple of 4096 up to ~16 MiB. For values that don't fit
-/// either single-instruction form we emit two: one for the
-/// shifted-12 portion (high bits, multiples of 4096) and one
-/// for the remainder. Anything beyond 24 bits would need a
-/// register-form `SUB` -- not seen in practice, so we panic
-/// with a clear message rather than silently truncating.
+/// Subtract `bytes` from SP in one instruction. AArch64's `SUB
+/// (immediate)` carries a 12-bit value optionally left-shifted by 12, so
+/// `bytes < 4096` encodes directly and a multiple of 4096 encodes
+/// shifted; the two-instruction split the wider forms would need is not
+/// available here, because moving SP by more than
+/// [`MAX_UNPROBED_STACK_STEP`] without a probe can step over a guard
+/// region. Callers route larger amounts through the backend's
+/// `emit_stack_alloc`, which descends in probed steps.
 pub(crate) fn emit_sub_sp_imm(code: &mut Vec<u8>, bytes: u32) {
     if bytes == 0 {
         return;
     }
     assert!(
-        bytes < (1 << 24),
-        "stack frame too large for 24-bit SUB immediate: {bytes} bytes"
+        bytes <= super::super::ssa::emit_common::STACK_PROBE_PAGE,
+        "guard-unsafe single SP decrement: {bytes} bytes"
     );
-    let high = bytes & !0xfff;
-    let low = bytes & 0xfff;
-    if high != 0 {
-        emit(code, enc_sub_imm_lsl12(Reg::SP, Reg::SP, high >> 12));
-    }
-    if low != 0 {
-        emit(code, enc_sub_imm(Reg::SP, Reg::SP, low));
+    if bytes == super::super::ssa::emit_common::STACK_PROBE_PAGE {
+        emit(code, enc_sub_imm_lsl12(Reg::SP, Reg::SP, 1));
+    } else {
+        emit(code, enc_sub_imm(Reg::SP, Reg::SP, bytes));
     }
 }
 

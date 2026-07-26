@@ -63,7 +63,10 @@ use super::encode::{
     enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm,
     enc_ucvtf_d_x, enc_ucvtf_s_x, enc_udiv, load_imm64,
 };
-use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
+use super::ssa::emit_common::{
+    MAX_UNPROBED_STACK_STEP, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX, build_arg_aggs,
+    place_same_loc,
+};
 use super::ssa::reg_alloc::{Allocation, Place};
 
 /// Compute the aarch64 stack-frame layout for `func`. Fills the shared
@@ -1706,37 +1709,58 @@ impl ScratchPool {
     }
 }
 
-/// Allocate `bytes` of stack frame. On the Windows targets a frame
-/// larger than one page is page-walked in descending order, touching
-/// each page so the guard page commits the next before the frame reaches
-/// it; a single subtract that skips the guard page faults on the first
-/// access. SysV / macOS grow the stack on demand and allocate with one
-/// subtract. `counter` is a scratch register the prologue does not need
-/// across the allocation.
-fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, abi: super::Abi, counter: Reg) {
-    const PAGE: u32 = 4096;
-    if !abi.stack_probe || bytes < PAGE {
+/// Store a word through sp to take the fault, if the stack ends here, on
+/// the page the allocation just entered. `xzr` is always readable and the
+/// store sets no flags, so the probe is usable at any point in the
+/// lowering without holding a register.
+fn emit_stack_probe(code: &mut Vec<u8>) {
+    emit(code, super::encode::enc_str_imm(Reg(31), Reg::SP, 0));
+}
+
+/// Lower `sp -= bytes`, descending in probed steps when the amount is
+/// larger than one step can safely cover.
+///
+/// A decrement of at most [`MAX_UNPROBED_STACK_STEP`] cannot place sp
+/// below the guard region, so it needs no probe. Past that the
+/// allocation walks down one page at a time and stores through sp after
+/// each step, so an overflow faults inside the guard region instead of
+/// writing into whatever mapping lies below it. `scratch` is a register
+/// the caller does not need across the allocation; given one, a step
+/// count above [`STACK_PROBE_UNROLL_MAX`] becomes a counted loop instead
+/// of straight-line steps.
+fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<Reg>) {
+    if bytes <= MAX_UNPROBED_STACK_STEP {
         emit_sub_sp_imm(code, bytes);
         return;
     }
-    let n_pages = bytes >> 12;
-    let remainder = bytes & 0xfff;
-    super::encode::load_imm64(code, counter, n_pages as u64);
-    // loop: sub sp, sp, #PAGE; str counter, [sp]; subs counter, #1; b.ne loop
-    let loop_start = code.len();
-    emit(code, super::encode::enc_sub_imm_lsl12(Reg::SP, Reg::SP, 1));
-    emit(code, super::encode::enc_str_imm(counter, Reg::SP, 0));
-    emit(code, super::encode::enc_subs_imm(counter, counter, 1));
-    let off = ((loop_start as i64) - (code.len() as i64)) / 4;
-    emit(
-        code,
-        super::encode::enc_b_cond(super::encode::Cond::Ne, off as i32),
-    );
-    if remainder != 0 {
-        emit(
-            code,
-            super::encode::enc_sub_imm(Reg::SP, Reg::SP, remainder),
-        );
+    let steps = bytes / STACK_PROBE_PAGE;
+    let residual = bytes % STACK_PROBE_PAGE;
+    let page_step = super::encode::enc_sub_imm_lsl12(Reg::SP, Reg::SP, 1);
+    match scratch {
+        Some(counter) if steps > STACK_PROBE_UNROLL_MAX => {
+            super::encode::load_imm64(code, counter, steps as u64);
+            let loop_start = code.len();
+            emit(code, page_step);
+            emit_stack_probe(code);
+            emit(code, super::encode::enc_subs_imm(counter, counter, 1));
+            let off = ((loop_start as i64) - (code.len() as i64)) / 4;
+            emit(
+                code,
+                super::encode::enc_b_cond(super::encode::Cond::Ne, off as i32),
+            );
+        }
+        _ => {
+            for _ in 0..steps {
+                emit(code, page_step);
+                emit_stack_probe(code);
+            }
+        }
+    }
+    if residual > 0 {
+        emit(code, super::encode::enc_sub_imm(Reg::SP, Reg::SP, residual));
+        if residual > MAX_UNPROBED_STACK_STEP {
+            emit_stack_probe(code);
+        }
     }
 }
 
@@ -1782,7 +1806,7 @@ fn emit_prologue(
         // Standard frame below the gr-save area. A variadic callee is
         // never a full leaf (`param_spill_bytes != 0`), so the frame
         // record always follows.
-        emit_frame_and_saves(code, alloc, frame, abi);
+        emit_frame_and_saves(code, alloc, frame);
         return;
     }
     // AAPCS64 variadic register save area (AAPCS64 Appendix B). Reserve
@@ -1818,7 +1842,7 @@ fn emit_prologue(
                 enc_str_d_imm(i as u8, Reg(31), AARCH64_GR_SAVE_BYTES + i * 16),
             );
         }
-        emit_frame_and_saves(code, alloc, frame, abi);
+        emit_frame_and_saves(code, alloc, frame);
         return;
     }
     // Host-arg-reg spill for non-variadic functions: spill each
@@ -1848,7 +1872,7 @@ fn emit_prologue(
             let placements = param_placements(func, abi);
             if n_stack > 0 {
                 let overflow_bytes = (n_stack as u32) * 16;
-                emit_sub_sp_imm(code, overflow_bytes);
+                emit_stack_alloc(code, overflow_bytes, None);
                 // Each scalar stack parameter's incoming offset is the
                 // planner's placement offset, which accounts for any by-value
                 // aggregate stack parameter (StructStack) that precedes it. A
@@ -1877,7 +1901,7 @@ fn emit_prologue(
                     pending_sub += 16;
                 } else {
                     if pending_sub > 0 {
-                        emit_sub_sp_imm(code, pending_sub);
+                        emit_stack_alloc(code, pending_sub, None);
                         pending_sub = 0;
                     }
                     // Source the incoming value from the parameter's
@@ -1918,7 +1942,7 @@ fn emit_prologue(
                 }
             }
             if pending_sub > 0 {
-                emit_sub_sp_imm(code, pending_sub);
+                emit_stack_alloc(code, pending_sub, None);
             }
         }
     }
@@ -1932,7 +1956,7 @@ fn emit_prologue(
     }
     // Standard frame: frame record, fp, frame allocation, callee
     // saves (folded into one pre-indexed group when the frame fits).
-    emit_frame_and_saves(code, alloc, frame, abi);
+    emit_frame_and_saves(code, alloc, frame);
     emit_struct_param_scatter(code, func, abi, frame);
     if func.indirect_result_slot != 0 {
         // AAPCS64 6.9: save the caller-supplied x8 indirect-result
@@ -1952,7 +1976,7 @@ fn emit_prologue(
             code,
             super::encode::enc_and_sp_pow2(Reg(16), frame.realign_align.trailing_zeros()),
         );
-        emit_sub_sp_imm(code, frame.realign_region_bytes);
+        emit_stack_alloc(code, frame.realign_region_bytes, Some(Reg(16)));
     }
 }
 
@@ -1973,7 +1997,9 @@ fn emit_prologue(
 fn emit_interleaved_param_cells(code: &mut Vec<u8>, func: &FunctionSsa, abi: super::Abi) {
     let placements = param_placements(func, abi);
     let cells = func.n_params as u32 * 16;
-    emit_sub_sp_imm(code, cells);
+    // The argument registers hold the incoming values, so the walk takes
+    // no scratch register.
+    emit_stack_alloc(code, cells, None);
     for (i, p) in placements.iter().enumerate() {
         let c5_off = (i as u32) * 16;
         match p {
@@ -2309,7 +2335,7 @@ fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
 /// identical to the unfolded `stp fp/lr; mov fp, sp; sub sp` shape;
 /// fp/lr restore first in the epilogue, so the `ret`-feeding lr load
 /// issues off an address that depends on no other restore.
-fn emit_frame_and_saves(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, abi: super::Abi) {
+fn emit_frame_and_saves(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
     let fold = frame_fold_bytes(alloc, frame);
     if fold != 0 {
         emit_prologue_saved_regs(code, alloc, frame, fold + 16);
@@ -2320,7 +2346,8 @@ fn emit_frame_and_saves(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, ab
     emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
     emit(code, enc_add_imm(Reg(29), Reg(31), 0));
     if frame.frame_bytes > 0 {
-        emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
+        // x16 is the emitter's reserved prologue scratch.
+        emit_stack_alloc(code, frame.frame_bytes, Some(Reg(16)));
     }
     emit_prologue_saved_regs(code, alloc, frame, 0);
 }
@@ -2974,7 +3001,7 @@ fn emit_inline_asm_aarch64(
     // Stack region: captures at [sp + i*8], then the saved GP registers, then
     // the saved FP registers. Kept 16-byte aligned per AAPCS64.
     let size = (((n + n_saved + n_fp_saved) * 8) as u32 + 15) & !15;
-    if size >= 4096 {
+    if size > MAX_UNPROBED_STACK_STEP {
         bail_msg("aarch64 inline asm: operand frame too large");
         return false;
     }
@@ -4941,25 +4968,25 @@ fn emit_intrinsic(
             // two never alias.
             emit(code, enc_add_imm(rd, Reg(31), 0));
             emit(code, enc_sub_reg(rd, rd, scratch.secondary));
-            if abi.stack_probe {
-                // Windows commits stack on demand behind a guard page:
-                // walk sp down page by page, touching each, before
-                // committing the final value (mirrors the prologue's
-                // `emit_stack_alloc` probe loop). x17 (the dead size)
-                // carries the page count.
-                emit(
-                    code,
-                    super::encode::enc_lsr_imm(scratch.secondary, scratch.secondary, 12),
-                );
-                emit(code, enc_cbz(scratch.secondary, 5));
-                emit(code, super::encode::enc_sub_imm_lsl12(Reg(31), Reg(31), 1));
-                emit(code, enc_str_imm(scratch.secondary, Reg(31), 0));
-                emit(
-                    code,
-                    super::encode::enc_subs_imm(scratch.secondary, scratch.secondary, 1),
-                );
-                emit(code, super::encode::enc_b_cond(super::encode::Cond::Ne, -3));
-            }
+            // Walk sp down page by page, touching each, before committing
+            // the final value: the same guard-region rule the prologue's
+            // `emit_stack_alloc` follows, over a size known only at run
+            // time. x17 (the dead size) carries the page count. The size
+            // is 16-aligned, so the amount the settling `mov` covers past
+            // the last probe is at most MAX_UNPROBED_STACK_STEP and needs
+            // no probe of its own.
+            emit(
+                code,
+                super::encode::enc_lsr_imm(scratch.secondary, scratch.secondary, 12),
+            );
+            emit(code, enc_cbz(scratch.secondary, 5));
+            emit(code, super::encode::enc_sub_imm_lsl12(Reg(31), Reg(31), 1));
+            emit_stack_probe(code);
+            emit(
+                code,
+                super::encode::enc_subs_imm(scratch.secondary, scratch.secondary, 1),
+            );
+            emit(code, super::encode::enc_b_cond(super::encode::Cond::Ne, -3));
             emit(code, enc_add_imm(Reg(31), rd, 0));
             spill_local_addr_to_dst(code, dst, rd, frame);
             true
@@ -5420,7 +5447,7 @@ fn emit_call_ext(
     // argument-register packing.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
-    emit_sub_sp_imm(code, plan.scratch_bytes);
+    emit_stack_alloc(code, plan.scratch_bytes, None);
     if !marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
     ) {
@@ -5621,7 +5648,7 @@ fn emit_call(
         //    the areas then the overflow stack.
         let plan =
             super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
-        emit_sub_sp_imm(code, plan.scratch_bytes);
+        emit_stack_alloc(code, plan.scratch_bytes, None);
         if !marshal_args(
             code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
         ) {
@@ -5668,7 +5695,7 @@ fn emit_call(
     // integer register as its `Imm` bit pattern. Feeding the mask to
     // the planner routes the FP args to d0..d7 instead of x0..x7.
     let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
-    emit_sub_sp_imm(code, plan.scratch_bytes);
+    emit_stack_alloc(code, plan.scratch_bytes, None);
     if !marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
     ) {
@@ -5918,7 +5945,7 @@ fn emit_call_indirect(
             scratch.primary
         }
     };
-    emit_sub_sp_imm(code, plan.scratch_bytes);
+    emit_stack_alloc(code, plan.scratch_bytes, None);
     if let Some(off) = staged_off {
         emit_sp_str_x_auto(code, target_reg, off);
     }

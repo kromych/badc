@@ -60,7 +60,10 @@ use super::encode::{
     emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd,
     emit_vfnmsub231ss, emit_xchg_mem_r, emit_xchg_rr, emit_xorpd, emit_xorps,
 };
-use super::ssa::emit_common::{build_arg_aggs, place_same_loc};
+use super::ssa::emit_common::{
+    MAX_UNPROBED_STACK_STEP, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX, build_arg_aggs,
+    place_same_loc,
+};
 use super::ssa::reg_alloc::{Allocation, Place};
 use super::table::Mnem;
 
@@ -2439,49 +2442,57 @@ fn relax_branches(
 /// before `call`, so the prologue needs to interleave the saved
 /// rbp with the param slots: pop the return address into r11,
 /// push each arg in caller order, push the return address back,
-/// Lower a `sub rsp, bytes` frame allocation, inserting a page-walk
-/// stack probe on Windows when the frame is at least one page.
+/// Store a word through rsp to take the fault, if the stack ends here,
+/// on the page the allocation just entered. Immediate source and
+/// `mov`'s flag transparency keep the probe usable at any point in the
+/// lowering: it needs no register and preserves the flags.
+fn emit_stack_probe(code: &mut Vec<u8>) {
+    super::encode::emit_mi(code, Mnem::Mov, 8, Reg::RSP, 0, 0);
+}
+
+/// Lower `rsp -= bytes`, descending in probed steps when the amount is
+/// larger than one step can safely cover.
 ///
-/// The Win64 ABI (and the OS guard-page mechanism) requires the
-/// prologue to touch every 4 KiB page it allocates, in descending
-/// order, so the kernel's guard page commits the next page before the
-/// frame reaches it. A single `sub rsp, bytes` that skips past the
-/// guard page faults on the first access into an uncommitted page.
-/// System V Linux grows the stack on demand and needs no probe.
-///
-/// The probe walks one page at a time, writing through `rsp` to fault
-/// in (commit) each page, then subtracts the sub-page remainder. r11 is
-/// caller-saved and carries no live value in the prologue, so it serves
-/// as the running counter.
-fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, abi: super::Abi) {
-    const PAGE: u32 = 4096;
-    // SysV (shadow_space 0) and any sub-page Win64 frame allocate with a
-    // single `sub rsp`. A guard page sits at most one page below rsp, so
-    // a frame smaller than a page cannot skip it.
-    if abi.shadow_space == 0 || bytes < PAGE {
+/// A decrement of at most [`MAX_UNPROBED_STACK_STEP`] cannot place rsp
+/// below the guard region, so it needs no probe. Past that the
+/// allocation walks down one page at a time and stores through rsp after
+/// each step, so an overflow faults inside the guard region instead of
+/// writing into whatever mapping lies below it. `scratch` is a register
+/// the caller does not need across the allocation; given one, a step
+/// count above [`STACK_PROBE_UNROLL_MAX`] becomes a counted loop instead
+/// of straight-line steps.
+fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<Reg>) {
+    if bytes <= MAX_UNPROBED_STACK_STEP {
         emit_sub_rsp_imm32(code, bytes);
         return;
     }
-    // r11 = bytes remaining to allocate.
-    super::encode::emit_mov_r_imm64(code, Reg::R11, bytes as i64);
-    // loop: while r11 >= PAGE { sub rsp, PAGE; touch [rsp]; r11 -= PAGE }
-    let loop_start = code.len();
-    emit_sub_rsp_imm32(code, PAGE);
-    // Touch the freshly-decremented page so the guard-page handler
-    // commits it and relocates the guard one page lower.
-    super::encode::emit_mov_mem_r(code, Reg::RSP, 0, Reg::R11);
-    super::encode::emit_ri(code, Mnem::Sub, 8, Reg::R11, PAGE as i32);
-    super::encode::emit_ri(code, Mnem::Cmp, 8, Reg::R11, PAGE as i32);
-    // jae loop_start (unsigned: r11 still at least one page).
-    let after_cmp = code.len();
-    super::encode::emit_jcc_rel32(code, super::encode::Cc::Ae, 0);
-    let rel = (loop_start as i64) - (code.len() as i64);
-    let rel32 = rel as i32;
-    let patch_at = code.len() - 4;
-    code[patch_at..patch_at + 4].copy_from_slice(&rel32.to_le_bytes());
-    let _ = after_cmp;
-    // Sub-page remainder left in r11.
-    emit_rr(code, Mnem::Sub, 8, Reg::RSP, Reg::R11);
+    let steps = bytes / STACK_PROBE_PAGE;
+    let residual = bytes % STACK_PROBE_PAGE;
+    match scratch {
+        Some(counter) if steps > STACK_PROBE_UNROLL_MAX => {
+            super::encode::emit_mov_r_imm64(code, counter, steps as i64);
+            let loop_start = code.len();
+            emit_sub_rsp_imm32(code, STACK_PROBE_PAGE);
+            emit_stack_probe(code);
+            super::encode::emit_ri(code, Mnem::Sub, 8, counter, 1);
+            super::encode::emit_jcc_rel32(code, super::encode::Cc::Ne, 0);
+            let rel = ((loop_start as i64) - (code.len() as i64)) as i32;
+            let patch_at = code.len() - 4;
+            code[patch_at..patch_at + 4].copy_from_slice(&rel.to_le_bytes());
+        }
+        _ => {
+            for _ in 0..steps {
+                emit_sub_rsp_imm32(code, STACK_PROBE_PAGE);
+                emit_stack_probe(code);
+            }
+        }
+    }
+    if residual > 0 {
+        emit_sub_rsp_imm32(code, residual);
+        if residual > MAX_UNPROBED_STACK_STEP {
+            emit_stack_probe(code);
+        }
+    }
 }
 
 /// then save rbp and proceed.
@@ -2568,7 +2579,9 @@ fn emit_prologue(
         // aggregate overflows past the four positional registers.
         let cells = frame.param_spill_bytes;
         debug_assert_eq!(cells, (func.n_params as u32) * 16);
-        emit_sub_rsp_imm32(code, cells);
+        // The argument registers hold the incoming values and r10 the
+        // popped return address, so the walk takes no scratch register.
+        emit_stack_alloc(code, cells, None);
         for i in 0..func.n_params {
             let cell = (i as i32) * 16;
             match placements.get(i).copied() {
@@ -2652,14 +2665,16 @@ fn emit_prologue(
     }
     if frame.frame_bytes > 0 {
         // A single `sub rsp,N` lowers to one instruction the unwinder
-        // can describe with `UWOP_ALLOC`; a Win64 frame >= one page
-        // lowers to a stack-probe loop with no single `sub` and is
-        // left undescribed (SizeOfProlog still covers it, and the
-        // frame-pointer rule recovers RSP exactly at any body fault,
-        // which is where the unwinder samples). `frame_alloc_end == 0`
-        // is the "no single sub" sentinel `build_unwind_codes` reads.
-        let single_sub = abi.shadow_space == 0 || frame.frame_bytes < 4096;
-        emit_stack_alloc(code, frame.frame_bytes, abi);
+        // can describe with `UWOP_ALLOC`; a probed frame lowers to a
+        // multi-step walk with no single `sub` and is left undescribed
+        // (SizeOfProlog still covers it, and the frame-pointer rule
+        // recovers RSP exactly at any body fault, which is where the
+        // unwinder samples). `frame_alloc_end == 0` is the "no single
+        // sub" sentinel `build_unwind_codes` reads.
+        let single_sub = frame.frame_bytes <= MAX_UNPROBED_STACK_STEP;
+        // r11 is caller-saved, is no target's argument register, and
+        // carries no live value in the prologue.
+        emit_stack_alloc(code, frame.frame_bytes, Some(Reg::R11));
         if single_sub {
             uw.frame_alloc_end = rel(code);
         }
@@ -2723,7 +2738,7 @@ fn emit_prologue(
     // restore_dynamic_sp puts rsp back); the objects live at [rsp + region_off].
     if frame.realign_align > 0 {
         super::encode::emit_ri(code, Mnem::And, 8, Reg::RSP, -(frame.realign_align as i32));
-        emit_sub_rsp_imm32(code, frame.realign_region_bytes);
+        emit_stack_alloc(code, frame.realign_region_bytes, Some(Reg::R11));
     }
     uw
 }
@@ -5583,7 +5598,7 @@ fn emit_call(
         let plan =
             super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         if plan.scratch_bytes > 0 {
-            emit_sub_rsp_imm32(code, plan.scratch_bytes);
+            emit_stack_alloc(code, plan.scratch_bytes, None);
         }
         if !marshal_args(code, &plan, args, alloc, frame, "Call (Win64 variadic)") {
             return false;
@@ -5624,7 +5639,7 @@ fn emit_call(
             super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         let xmm_used = xmm_arg_count(&plan);
         if plan.scratch_bytes > 0 {
-            emit_sub_rsp_imm32(code, plan.scratch_bytes);
+            emit_stack_alloc(code, plan.scratch_bytes, None);
         }
         if !marshal_args(code, &plan, args, alloc, frame, "Call (SysV variadic)") {
             return false;
@@ -5670,7 +5685,7 @@ fn emit_call(
     // register as its `Imm` bit pattern.
     let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
     if plan.scratch_bytes > 0 {
-        emit_sub_rsp_imm32(code, plan.scratch_bytes);
+        emit_stack_alloc(code, plan.scratch_bytes, None);
     }
     if !marshal_args(code, &plan, args, alloc, frame, "Call") {
         return false;
@@ -5743,7 +5758,7 @@ fn emit_call_ext(
     let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
     let xmm_used = xmm_arg_count(&plan);
     if plan.scratch_bytes > 0 {
-        emit_sub_rsp_imm32(code, plan.scratch_bytes);
+        emit_stack_alloc(code, plan.scratch_bytes, None);
     }
     if !marshal_args(code, &plan, args, alloc, frame, "CallExt") {
         return false;
@@ -5945,7 +5960,7 @@ fn emit_call_indirect(
             emit_mov_rr(code, target_scratch, target_r);
         }
         if plan.scratch_bytes > 0 {
-            emit_sub_rsp_imm32(code, plan.scratch_bytes);
+            emit_stack_alloc(code, plan.scratch_bytes, None);
         }
         if !marshal_args(code, &plan, args, alloc, frame, "CallIndirect") {
             return false;
@@ -5972,7 +5987,7 @@ fn emit_call_indirect(
         emit_sub_rsp_imm32(code, slot_bytes);
         emit_mov_mem_r(code, Reg::RSP, 0, target_r);
         if plan.scratch_bytes > 0 {
-            emit_sub_rsp_imm32(code, plan.scratch_bytes);
+            emit_stack_alloc(code, plan.scratch_bytes, None);
         }
         // rsp is now slot_bytes + scratch_bytes below the frame baseline.
         // marshal_args reloads spilled argument sources at
@@ -8457,27 +8472,26 @@ fn emit_intrinsic(
             // rd_phys = rsp - rounded_size, the final rsp value.
             emit_mov_rr(code, rd_phys, Reg::RSP);
             super::encode::emit_rr(code, Mnem::Sub, 8, rd_phys, size_reg);
-            if abi.stack_probe {
-                // Windows commits stack on demand behind a guard page:
-                // walk rsp down page by page, touching each, before
-                // committing the final value (mirrors the prologue's
-                // probe loop for frames of one page or more).
-                const PAGE: i32 = 4096;
-                super::encode::emit_shift_ri(code, Mnem::Shr, 8, size_reg, 12);
-                super::encode::emit_rr(code, Mnem::Test, 8, size_reg, size_reg);
-                super::encode::emit_jcc_rel32(code, Cc::E, 0);
-                let skip_at = code.len() - 4;
-                let loop_start = code.len();
-                emit_sub_rsp_imm32(code, PAGE as u32);
-                emit_mov_mem_r(code, Reg::RSP, 0, size_reg);
-                super::encode::emit_ri(code, Mnem::Sub, 8, size_reg, 1);
-                super::encode::emit_jcc_rel32(code, Cc::Ne, 0);
-                let back_at = code.len() - 4;
-                let back = (loop_start as i64 - code.len() as i64) as i32;
-                code[back_at..back_at + 4].copy_from_slice(&back.to_le_bytes());
-                let skip = (code.len() as i64 - (skip_at + 4) as i64) as i32;
-                code[skip_at..skip_at + 4].copy_from_slice(&skip.to_le_bytes());
-            }
+            // Walk rsp down page by page, touching each, before
+            // committing the final value: the same guard-region rule the
+            // prologue's `emit_stack_alloc` follows, over a size known
+            // only at run time. The size is 16-aligned, so the amount the
+            // settling `mov` covers past the last probe is at most
+            // MAX_UNPROBED_STACK_STEP and needs no probe of its own.
+            super::encode::emit_shift_ri(code, Mnem::Shr, 8, size_reg, 12);
+            super::encode::emit_rr(code, Mnem::Test, 8, size_reg, size_reg);
+            super::encode::emit_jcc_rel32(code, Cc::E, 0);
+            let skip_at = code.len() - 4;
+            let loop_start = code.len();
+            emit_sub_rsp_imm32(code, STACK_PROBE_PAGE);
+            emit_stack_probe(code);
+            super::encode::emit_ri(code, Mnem::Sub, 8, size_reg, 1);
+            super::encode::emit_jcc_rel32(code, Cc::Ne, 0);
+            let back_at = code.len() - 4;
+            let back = (loop_start as i64 - code.len() as i64) as i32;
+            code[back_at..back_at + 4].copy_from_slice(&back.to_le_bytes());
+            let skip = (code.len() as i64 - (skip_at + 4) as i64) as i32;
+            code[skip_at..skip_at + 4].copy_from_slice(&skip.to_le_bytes());
             emit_mov_rr(code, Reg::RSP, rd_phys);
             spill_dst_to_slot(code, dst, rd_phys, frame);
             true

@@ -26,6 +26,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -121,15 +122,31 @@ def main() -> int:
                         continue
 
                     expect = markers[arch]
-                    ok, _text, missing = qemu_efi.run(str(efi), expect, arch=arch, timeout=60)
+                    timeout = 60
+                    t0 = time.monotonic()
+                    ok, text, missing = qemu_efi.run(str(efi), expect, arch=arch,
+                                                     timeout=timeout)
+                    elapsed = time.monotonic() - t0
                     if ok:
                         log(f"[{tag}] boot OK under {os.path.basename(resolved)}: {expect}")
-                    elif os.environ.get("BADC_KERNEL_BOOT_OPTIONAL"):
+                        continue
+                    # A kernel that reaches its markers keeps running until the
+                    # timeout, so an early exit means QEMU stopped on its own:
+                    # under `-no-reboot` a guest reset (on x86_64, a fault with
+                    # no handler in the kernel's own IDT) does that. Report it
+                    # apart from a run that simply never printed the markers,
+                    # and carry the serial text -- without it the only record of
+                    # a failed boot is the list of markers that did not appear.
+                    why = (f"guest exited after {elapsed:.1f}s of a {timeout}s budget"
+                           if elapsed < timeout - 5 else
+                           f"ran the full {timeout}s")
+                    detail = f"{why}; missing {missing}\n--- serial ---\n{text[-2000:]}"
+                    if os.environ.get("BADC_KERNEL_BOOT_OPTIONAL"):
                         # Build is the hard gate; the boot is best-effort until
                         # observed green on a runner, then the flag is dropped.
-                        log(f"[{tag}] boot best-effort: missing {missing} (BADC_KERNEL_BOOT_OPTIONAL)")
+                        log(f"[{tag}] boot best-effort: {detail} (BADC_KERNEL_BOOT_OPTIONAL)")
                     else:
-                        log(f"[{tag}] FAIL: boot missing {missing}")
+                        log(f"[{tag}] FAIL: boot {detail}")
                         failures += 1
 
     if failures:

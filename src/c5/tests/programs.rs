@@ -378,6 +378,10 @@ fn int128_arithmetic() {
     //   round-to-nearest-even past the significand, truncation toward
     //   zero, and the 2^53 / 2^64 / 2^127 boundaries
     assert_eq!(run_fixture("int128_fp_convert.c"), 0);
+    //   `__builtin_{add,sub,mul}_overflow` in infinite precision with a
+    //   128-bit operand or result, including mixed operand signedness
+    //   and a destination of a different width
+    assert_eq!(run_fixture("int128_overflow_builtin.c"), 0);
 }
 
 #[test]

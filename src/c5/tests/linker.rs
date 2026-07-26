@@ -7878,11 +7878,10 @@ fn extern_data_ref_is_relaxable_got_load_x86_64() {
 
 #[test]
 fn extern_data_ref_is_direct_pair_aarch64() {
-    // Cross-TU data access must use the direct `adrp + add` pair
-    // (`ADR_PREL_PG_HI21` + `ADD_ABS_LO12_NC`), not the GOT forms no
-    // linker relaxes: a static image whose layout forbids a GOT could
-    // not link the GOT pair, while the direct pair resolves within any
-    // image, including a PIE.
+    // Cross-TU data access to a non-weak symbol uses the direct
+    // `adrp + add` pair (`ADR_PREL_PG_HI21` + `ADD_ABS_LO12_NC`): the
+    // definition is guaranteed, so the pair resolves within any image
+    // and keeps the GOT empty. The weak case takes the GOT pair below.
     use crate::c5::Target;
     let (obj, relocs) = relocs_against(EXTERN_DATA_SRC, Target::LinuxAarch64, "ext_var");
     assert!(!relocs.is_empty(), "extern data refs must reloc `ext_var`");
@@ -7904,6 +7903,39 @@ fn extern_data_ref_is_direct_pair_aarch64() {
     }
     assert!(relocs.iter().any(|r| r.rtype == 275));
     assert!(relocs.iter().any(|r| r.rtype == 277));
+}
+
+const WEAK_EXTERN_DATA_SRC: &str = "\
+    extern __attribute__((weak)) int weak_var;\n\
+    int *addr(void) { return &weak_var; }\n";
+
+#[test]
+fn weak_extern_data_ref_is_got_pair_aarch64() {
+    // A weak symbol this unit does not define may resolve to zero, which
+    // the page-relative pair cannot encode, so its address goes through
+    // the GOT (`ADR_GOT_PAGE` + `LD64_GOT_LO12_NC`) and the lo12 site is
+    // the `ldr`, not an `add`. Same forms gcc emits for the shape.
+    use crate::c5::Target;
+    let (obj, relocs) = relocs_against(WEAK_EXTERN_DATA_SRC, Target::LinuxAarch64, "weak_var");
+    assert!(!relocs.is_empty(), "&weak_var must reloc `weak_var`");
+    for r in &relocs {
+        assert!(
+            r.rtype == 311 || r.rtype == 312,
+            "weak extern data ref must be ADR_GOT_PAGE / LD64_GOT_LO12_NC, got {}",
+            r.rtype
+        );
+        if r.rtype == 312 {
+            let off = r.offset as usize;
+            let insn = u32::from_le_bytes(obj.text[off..off + 4].try_into().unwrap());
+            assert_eq!(
+                insn & 0xffc0_0000,
+                0xf940_0000,
+                "the lo12 site must be the GOT `ldr`, not an `add`"
+            );
+        }
+    }
+    assert!(relocs.iter().any(|r| r.rtype == 311));
+    assert!(relocs.iter().any(|r| r.rtype == 312));
 }
 
 #[test]

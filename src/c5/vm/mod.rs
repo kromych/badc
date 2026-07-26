@@ -64,7 +64,7 @@ pub struct Vm<H: Host> {
     extern_fn_names: alloc::collections::BTreeMap<usize, String>,
     /// `(name, defined_here)` per parser symbol, indexed by the
     /// sym idx the `FunctionSsa::extern_*_refs` tables carry.
-    symbol_defs: Vec<(String, bool)>,
+    symbol_defs: Vec<(String, bool, bool)>,
     /// Local names bound to host data (`#pragma binding(data ...)`).
     data_binding_locals: alloc::collections::BTreeSet<String>,
     /// `target_ent_pc` of every static-initializer function
@@ -117,7 +117,7 @@ impl<H: Host> Vm<H> {
         let symbol_defs = program
             .symbols
             .iter()
-            .map(|s| (s.name.clone(), s.defined_here))
+            .map(|s| (s.name.clone(), s.defined_here, s.is_weak))
             .collect();
         let data_binding_locals = program
             .dylibs
@@ -209,17 +209,19 @@ impl<H: Host> Vm<H> {
             // parser sym; the sentinel is ambiguous (the first
             // function's ent_pc is also 0), so consult the symbol.
             for &(_, sym) in f.extern_call_refs.iter().chain(&f.extern_imm_code_refs) {
-                if let Some((name, defined)) = self.symbol_defs.get(sym as usize)
+                if let Some((name, defined, _)) = self.symbol_defs.get(sym as usize)
                     && !defined
                 {
                     return Err(undef(name));
                 }
             }
             for &(_, sym) in f.extern_imm_data_refs.iter().chain(&f.extern_tls_refs) {
-                let Some((name, defined)) = self.symbol_defs.get(sym as usize) else {
+                let Some((name, defined, weak)) = self.symbol_defs.get(sym as usize) else {
                     continue;
                 };
-                if *defined {
+                // A weak reference with no definition is not an undefined
+                // symbol: the link resolves it to a null address.
+                if *defined || *weak {
                     continue;
                 }
                 if self.data_binding_locals.contains(name) {

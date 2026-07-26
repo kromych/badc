@@ -1741,6 +1741,13 @@ fn attribute_section_placement() {
 }
 
 #[test]
+fn weak_extern_data_address() {
+    // A weak symbol with no definition addresses as null; one with a
+    // definition addresses the object.
+    assert_eq!(run_fixture("weak_extern_data_address.c"), 0);
+}
+
+#[test]
 fn zero_length_array_decay() {
     // A zero-length array reads as its address, not as a load of the
     // storage it does not have.

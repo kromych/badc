@@ -1224,6 +1224,21 @@ pub(super) fn write_relocatable(
             STV_DEFAULT
         }
     };
+    // Whether a cross-TU address materialization resolves through the GOT.
+    // A hidden name never does: it is not preemptible, so the direct
+    // page-relative pair is correct and keeps the GOT empty. On x86_64
+    // every other name does, because the load relaxes back to a direct
+    // reference. On aarch64 the direct pair serves a plain extern, but a
+    // weak name may resolve to zero, which no page-relative pair encodes,
+    // so a link that forbids text relocations rejects the direct form;
+    // gcc emits the GOT pair for exactly that case.
+    let got_addressed = |name: &str| -> bool {
+        !hidden_names.contains(name)
+            && match machine {
+                Machine::X86_64 => true,
+                Machine::Aarch64 => weak_names.contains(name),
+            }
+    };
     let mut local_func_idxs: Vec<usize> = Vec::new();
     let mut global_func_idxs: Vec<usize> = Vec::new();
     let mut func_strs: Vec<String> = Vec::with_capacity(build.func_ent_pcs.len());
@@ -2123,26 +2138,21 @@ pub(super) fn write_relocatable(
             );
             continue;
         }
-        // A hidden symbol is not preemptible: address it PC-relative
-        // directly (the codegen's `lea`, kept out of the GOT rewrite below),
-        // matching gcc and keeping the GOT empty. A default-visibility
-        // cross-TU ref goes through the relaxable GOT load on x86_64;
-        // aarch64 is always direct.
-        let hidden = hidden_names.contains(r.symbol_name.as_str());
-        match machine_for_rela {
-            Machine::X86_64 if !hidden => emit_got_ref_relocs(
+        if got_addressed(r.symbol_name.as_str()) {
+            emit_got_ref_relocs(
                 machine_for_rela,
                 &mut rela_bytes,
                 r.instr_offset as u64,
                 sym_idx,
-            ),
-            Machine::X86_64 | Machine::Aarch64 => emit_addr_fixup_relocs(
+            );
+        } else {
+            emit_addr_fixup_relocs(
                 machine_for_rela,
                 &mut rela_bytes,
                 r.instr_offset as u64,
                 sym_idx,
                 0,
-            ),
+            );
         }
     }
 
@@ -2541,23 +2551,16 @@ pub(super) fn write_relocatable(
 
     // .text -- GOT-addressed extern materializations become GOT loads
     // (see `rewrite_extern_addr_loads_to_got`): import address-of sites
-    // (`reloc_call_sites` with `is_addr`) on both arches, and cross-TU
-    // data references (`user_extern_data_refs`) on x86_64 only --
-    // aarch64 keeps those direct (see the reloc loop above). Same
-    // length as `build.text`.
-    // A `direct_pcrel` ref is already a `mov`/`op sym(%rip)` in the emitted
-    // text, not a `lea` to rewrite into a GOT load; skip those. A hidden
-    // symbol keeps its direct `lea` too (addressed PC-relative, not via the
-    // GOT -- see the reloc loop above).
-    let mut got_site_offsets: alloc::vec::Vec<usize> = match machine_for_rela {
-        Machine::X86_64 => build
-            .user_extern_data_refs
-            .iter()
-            .filter(|r| r.direct_pcrel.is_none() && !hidden_names.contains(r.symbol_name.as_str()))
-            .map(|r| r.instr_offset)
-            .collect(),
-        Machine::Aarch64 => alloc::vec::Vec::new(),
-    };
+    // (`reloc_call_sites` with `is_addr`) on both arches, and the cross-TU
+    // data references (`user_extern_data_refs`) `got_addressed` selects.
+    // Same length as `build.text`. A `direct_pcrel` ref is already a
+    // `mov`/`op sym(%rip)` in the emitted text, not a `lea` to rewrite.
+    let mut got_site_offsets: alloc::vec::Vec<usize> = build
+        .user_extern_data_refs
+        .iter()
+        .filter(|r| r.direct_pcrel.is_none() && got_addressed(r.symbol_name.as_str()))
+        .map(|r| r.instr_offset)
+        .collect();
     got_site_offsets.extend(
         build
             .reloc_call_sites

@@ -604,6 +604,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("compound_assign_fp_int_rhs.c", 17),
     ("optimizer_fp_arg_mask_remap.c", 19),
     ("many_args_host_stack_overflow.c", 0),
+    ("inline_stack_passed_params.c", 42),
     ("variadic_optimizer_survives.c", 0),
     ("struct_2d_array_field.c", 27),
     ("struct_deref_va_arg.c", 0),

@@ -16,11 +16,16 @@ static long fill(char *p, long n, long seed) {
     return p[0] + p[n - 1];
 }
 
+/* The overflow arguments must be staged out of line, so the call goes
+   through a volatile function pointer rather than being inlined. */
+static long (*volatile p_sum10)(long, long, long, long, long, long, long, long,
+                                long, long) = sum10;
+
 int main(void) {
     long n = 1L << 20;
     char *p = (char *)alloca(n);
     long r1 = fill(p, n, 7);
-    long r2 = sum10(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+    long r2 = p_sum10(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
     if (r1 != 15) {
         return 1;
     }

@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x270              // =624
+               	mov	x1, #0x280              // =640
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
@@ -68,22 +68,31 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	add	x0, x0, x1
                	sxtw	x20, w0
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x2                // =2
-               	mov	x2, #0x3                // =3
-               	mov	x3, #0x4                // =4
-               	mov	x4, #0x5                // =5
-               	mov	x6, #0x6                // =6
-               	mov	x7, #0x8                // =8
-               	mov	x8, #0x9                // =9
-               	mov	x9, #0xa                // =10
+               	mov	x1, #0x1                // =1
+               	mov	x2, #0x2                // =2
+               	mov	x3, #0x3                // =3
+               	mov	x4, #0x4                // =4
+               	mov	x6, #0x5                // =5
+               	mov	x7, #0x6                // =6
+               	mov	x8, #0x8                // =8
+               	mov	x9, #0x9                // =9
+               	mov	x10, #0xa               // =10
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	mov	x11, x0
                	sub	sp, sp, #0x10
-               	str	x8, [sp]
-               	str	x9, [sp, #0x8]
-               	mov	x16, x6
+               	str	x9, [sp]
+               	str	x10, [sp, #0x8]
+               	mov	x0, x1
+               	mov	x1, x2
+               	mov	x2, x3
+               	mov	x3, x4
+               	mov	x4, x6
                	mov	x6, x5
-               	mov	x5, x16
-               	bl	<addr>
+               	mov	x5, x7
+               	mov	x7, x8
+               	blr	x11
                	add	sp, sp, #0x10
                	cmp	x20, #0xf
                	b.eq	<addr>

@@ -2015,14 +2015,12 @@ impl Compiler {
         if moves.is_empty() {
             return;
         }
-        let remap = |off: i64| {
-            match moves
-                .iter()
-                .find(|&&(old, bytes, _)| off >= old && off < old + bytes)
-            {
-                Some(&(old, _, new)) => new + (off - old),
-                None => off,
-            }
+        let remap = |off: i64| match moves
+            .iter()
+            .find(|&&(old, bytes, _)| off >= old && off < old + bytes)
+        {
+            Some(&(old, _, new)) => new + (off - old),
+            None => off,
         };
         for f in &mut self.finished_functions {
             f.ast.remap_data_offsets(&remap);

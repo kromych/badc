@@ -58,9 +58,21 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cset	x0, eq
+               	cbnz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	ldrb	w0, [x0]
+               	mov	x17, #0x61              // =97
+               	eor	x0, x0, x17
+               	mov	w0, w0
+               	cmp	x0, #0x0
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	ret
                	mov	x0, #0x0                // =0
                	ret
+               	b	<addr>
                	b	<addr>

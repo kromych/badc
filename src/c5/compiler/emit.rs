@@ -492,11 +492,12 @@ impl Compiler {
         bit_width: u32,
         field_ty: i64,
     ) -> Result<(), C5Error> {
-        let mask: i64 = if bit_width >= 64 {
-            -1
-        } else {
-            (1i64 << bit_width) - 1
-        };
+        let mask = super::super::ast::bitfield_slice_mask(bit_width, 0) as u64 as i64;
+        let placed = super::super::ast::bitfield_slice_mask(bit_width, bit_offset) as u64 as i64;
+        // C99 6.3.1.1p2: the access has type `int` when `int` represents
+        // every value of the field, `unsigned int` for a full-width
+        // unsigned one, and the declared type when it is wider.
+        let value_ty = bitfield_value_ty(bit_width, field_ty);
         if self.lex.tk == Token::Assign {
             // Bitfield write: `s.f = expr`. The storage address
             // must remain available for the final Si; push it now
@@ -506,7 +507,7 @@ impl Compiler {
             self.ast_psh(); // stack: [..., field_addr]; a = field_addr
             self.mark_emit_other(); // a = old_value; stack: [..., field_addr]
             self.ast_psh(); // stack: [..., field_addr, old_value]
-            self.emit_imm(!(mask << bit_offset)); // a = ~(mask << off)
+            self.emit_imm(!placed); // a = ~(mask << off)
             self.ast_binop(crate::c5::ir::BinOp::And); // a = old_value & ~(mask << off); stack: [..., field_addr]
             self.ast_psh(); // stack: [..., field_addr, cleared]
             self.expr(Token::Assign as i64)?; // a = new_value
@@ -530,7 +531,7 @@ impl Compiler {
             // field_addr as the destination.
             self.ast_binop(crate::c5::ir::BinOp::Or);
             self.ast_assign(); // pops field_addr, stores a (=combined).
-            self.ty = Ty::Int as i64;
+            self.ty = value_ty;
             Ok(())
         } else if self.lex.tk == Token::AssignOp {
             // Bitfield compound assignment: `s.f OP= expr` per C99
@@ -594,10 +595,10 @@ impl Compiler {
             // reload the cleared old_value into `a`.
             self.ast_psh(); // stack: [..., field_addr, shifted_new]
             self.mark_emit_other();
-            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, !(mask << bit_offset));
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, !placed);
             self.ast_binop(crate::c5::ir::BinOp::Or); // pops shifted_new; a = cleared | shifted_new
             self.ast_assign(); // pops field_addr, stores a
-            self.ty = Ty::Int as i64;
+            self.ty = value_ty;
             Ok(())
         } else {
             // Bitfield read: `s.f` in any non-assignment context.
@@ -625,7 +626,7 @@ impl Compiler {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, shift);
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, shift); // arithmetic Shr
             }
-            self.ty = Ty::Int as i64;
+            self.ty = value_ty;
             Ok(())
         }
     }
@@ -1552,6 +1553,25 @@ impl Compiler {
             .push_expr(super::super::ast::Expr::Assign { lhs, rhs, ty }, pos);
         self.ast_acc = Some(id);
     }
+}
+
+/// Type of a bitfield access per C99 6.3.1.1p2: the integer promotions
+/// apply, so a field `int` represents every value of reads as `int`, a
+/// full-width unsigned one as `unsigned int`, and a wider field keeps
+/// its declared type.
+pub(super) fn bitfield_value_ty(bit_width: u32, field_ty: i64) -> i64 {
+    if super::super::ast::bitfield_keeps_declared_ty(bit_width) {
+        return field_ty;
+    }
+    // The promotion changes the type but not the member's qualifiers,
+    // which drive the access's volatility and address space.
+    let quals = field_ty
+        & (super::types::VOLATILE_BIT | super::types::SEG_GS_BIT | super::types::SEG_FS_BIT);
+    let unsigned = is_unsigned_ty(field_ty) && !is_bool_ty(field_ty);
+    if bit_width == 32 && unsigned {
+        return Ty::Int as i64 | super::types::UNSIGNED_BIT | quals;
+    }
+    Ty::Int as i64 | quals
 }
 
 /// Recover the name as written from a label key. Keys minted for

@@ -3274,19 +3274,14 @@ impl Compiler {
             // the RMW span must match `bit_unit_size` so it does
             // not read or write outside the unit.
             let unit_bytes = field.bit_unit_size as usize;
-            let mut unit_value: i64 = 0;
+            let mut unit_value: u128 = 0;
             for i in 0..unit_bytes {
-                unit_value |= (self.data[field_base + i] as i64) << (i * 8);
+                unit_value |= (self.data[field_base + i] as u128) << (i * 8);
             }
-            let bit_width = field.bit_width;
-            let bit_offset = field.bit_offset;
-            let mask: i64 = if bit_width >= 64 {
-                -1
-            } else {
-                (1i64 << bit_width) - 1
-            };
-            let cleared = unit_value & !(mask << bit_offset);
-            let merged = cleared | (((value as i64) & mask) << bit_offset);
+            let mask = super::super::ast::bitfield_slice_mask(field.bit_width, 0);
+            let placed = super::super::ast::bitfield_slice_mask(field.bit_width, field.bit_offset);
+            let cleared = unit_value & !placed;
+            let merged = cleared | (((value as u128) & mask) << field.bit_offset);
             for i in 0..unit_bytes {
                 self.data[field_base + i] = ((merged >> (i * 8)) & 0xFF) as u8;
             }

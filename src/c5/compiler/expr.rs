@@ -365,12 +365,16 @@ impl Compiler {
             return Ok(());
         }
 
-        // `__atomic_is_lock_free(size, ptr)` -- a compile-time predicate;
-        // the supported targets provide lock-free atomics for the sizes
-        // used here.
-        if name == "__atomic_is_lock_free" {
+        // `__atomic_is_lock_free(size, ptr)` / `__atomic_always_lock_free`
+        // (C11 7.17.5): a compile-time predicate, true for the widths that
+        // lower to a lock-free instruction. A size that is not a constant,
+        // or one with no such form, reports false -- the caller then takes
+        // its locked path, which is correct for every width.
+        if matches!(name, "__atomic_is_lock_free" | "__atomic_always_lock_free") {
+            let size = args.first().and_then(|a| self.expr_const_int(*a));
+            let val = matches!(size, Some(1 | 2 | 4 | 8)) as i64;
             let pos = self.ast_src_pos();
-            let id = self.ast.push_expr(Expr::IntLit { val: 1, ty: int_ty }, pos);
+            let id = self.ast.push_expr(Expr::IntLit { val, ty: int_ty }, pos);
             self.ty = int_ty;
             self.ast_acc = Some(id);
             return Ok(());
@@ -4285,7 +4289,11 @@ impl Compiler {
                         signed: !is_unsigned_ty(field.ty) && !is_bool_ty(field.ty),
                     };
                     let bf_field_off = field.offset as i64;
-                    let bf_field_ty = field.ty;
+                    // The AST node carries the access's own type, which
+                    // the integer promotions may narrow (C99 6.3.1.1p2),
+                    // so the walker and the surrounding expression agree
+                    // on the value's width.
+                    let bf_field_ty = super::emit::bitfield_value_ty(field.bit_width, field.ty);
                     self.pending.bf_assign_rhs = None;
                     self.pending.bf_compound_assign = None;
                     // emit_bitfield_access drives the c5 stack

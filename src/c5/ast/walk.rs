@@ -836,17 +836,29 @@ impl<'a> Walker<'a> {
     /// Load the two 64-bit halves of the 128-bit object at `addr`
     /// (little-endian: low half first).
     fn int128_load(&mut self, b: &mut SsaBuilder, addr: ValueId) -> Halves {
-        let lo = b.load(addr, LoadKind::I64);
-        let hi_addr = b.binop_imm(BinOp::Add, addr, 8);
-        let hi = b.load(hi_addr, LoadKind::I64);
-        (lo, hi)
+        self.int128_load_vol(b, addr, false)
     }
 
     /// Store a lo/hi half pair into the 128-bit object at `addr`.
-    fn int128_store(&mut self, b: &mut SsaBuilder, addr: ValueId, (lo, hi): Halves) {
-        b.store(addr, lo, StoreKind::I64);
+    fn int128_store(&mut self, b: &mut SsaBuilder, addr: ValueId, pair: Halves) {
+        self.int128_store_vol(b, addr, pair, false);
+    }
+
+    /// [`Self::int128_load`] with the C99 6.7.3p6 volatile access rule
+    /// applied to both halves.
+    fn int128_load_vol(&mut self, b: &mut SsaBuilder, addr: ValueId, vol: bool) -> Halves {
+        let lo = b.load_vol(addr, LoadKind::I64, vol);
         let hi_addr = b.binop_imm(BinOp::Add, addr, 8);
-        b.store(hi_addr, hi, StoreKind::I64);
+        let hi = b.load_vol(hi_addr, LoadKind::I64, vol);
+        (lo, hi)
+    }
+
+    /// [`Self::int128_store`] with the C99 6.7.3p6 volatile access rule
+    /// applied to both halves.
+    fn int128_store_vol(&mut self, b: &mut SsaBuilder, addr: ValueId, (lo, hi): Halves, vol: bool) {
+        b.store_vol(addr, lo, StoreKind::I64, vol);
+        let hi_addr = b.binop_imm(BinOp::Add, addr, 8);
+        b.store_vol(hi_addr, hi, StoreKind::I64, vol);
     }
 
     /// Materialise a half pair as a fresh 16-byte object and return its
@@ -1545,6 +1557,23 @@ impl<'a> Walker<'a> {
         by: i64,
         postfix: bool,
     ) -> Result<ValueId, WalkError> {
+        // A bitfield target reads and writes its slice of the storage
+        // unit rather than the whole 16 bytes.
+        if let Some((unit, bf)) = self.wide_bitfield_place(b, lvalue)? {
+            let vol = self.expr_is_volatile(lvalue);
+            let old = self.bitfield_extract_128(b, unit, bf, vol);
+            let saved = postfix.then(|| self.bitfield_value_form(b, bf, old));
+            let step = {
+                let lo = b.imm(by);
+                (lo, b.imm(by >> 63))
+            };
+            let new = Self::int128_add(b, old, step);
+            let masked = Self::int128_and_imm(b, new, bitfield_mask_halves(bf.bit_width, 0));
+            self.bitfield_insert_128(b, unit, bf, masked, vol);
+            let stored = self.bitfield_sign_extend_128(b, bf, masked);
+            let stored = self.bitfield_value_form(b, bf, stored);
+            return Ok(saved.unwrap_or(stored));
+        }
         let addr = self.walk_expr_lvalue(b, lvalue)?;
         let old = self.int128_load(b, addr);
         let saved = postfix.then(|| self.int128_materialize(b, old));
@@ -1568,6 +1597,17 @@ impl<'a> Walker<'a> {
         lhs: ExprId,
         rhs: ExprId,
     ) -> Result<ValueId, WalkError> {
+        // A bitfield target reads and writes its slice of the storage
+        // unit rather than the whole 16 bytes.
+        if let Some((unit, bf)) = self.wide_bitfield_place(b, lhs)? {
+            let vol = self.expr_is_volatile(lhs);
+            let a = self.bitfield_extract_128(b, unit, bf, vol);
+            let pair = self.int128_binary_pair(b, op, a, lhs, rhs)?;
+            let masked = Self::int128_and_imm(b, pair, bitfield_mask_halves(bf.bit_width, 0));
+            self.bitfield_insert_128(b, unit, bf, masked, vol);
+            let stored = self.bitfield_sign_extend_128(b, bf, masked);
+            return Ok(self.bitfield_value_form(b, bf, stored));
+        }
         let addr = self.walk_expr_lvalue(b, lhs)?;
         let a = self.int128_load(b, addr);
         let pair = self.int128_binary_pair(b, op, a, lhs, rhs)?;
@@ -2349,7 +2389,10 @@ impl<'a> Walker<'a> {
                         }
                         super::super::ast::RuntimeInitValue::Expr(value) => value,
                     };
-                    let v = self.walk_expr_rvalue(b, value)?;
+                    let v = match elem.bitfield {
+                        Some(bf) => self.bitfield_store_value(b, bf, value)?,
+                        None => self.walk_expr_rvalue(b, value)?,
+                    };
                     let base = b.local_addr(slot);
                     let addr = if elem.offset == 0 {
                         base
@@ -2382,44 +2425,69 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Read the bitfield at `addr` as a value of its declared type (C99
+    /// 6.7.2.1p10: a signed field sign-extends from its width). A
+    /// 16-byte unit yields the address of a fresh 128-bit temporary,
+    /// the form a 128-bit value takes everywhere else.
+    fn load_from_bitfield(
+        &mut self,
+        b: &mut SsaBuilder,
+        addr: ValueId,
+        bf: super::super::ast::BitfieldDesc,
+        vol: bool,
+    ) -> ValueId {
+        let w = bf.bit_width as i64;
+        if bf.unit_size == 16 {
+            let v = self.bitfield_extract_128(b, addr, bf, vol);
+            return self.bitfield_value_form(b, bf, v);
+        }
+        let mut v = b.load_vol(addr, bitfield_load_kind(bf), vol);
+        if bf.bit_offset > 0 {
+            v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
+        }
+        v = b.binop_imm(BinOp::And, v, bitfield_mask_halves(bf.bit_width, 0).0);
+        if bf.signed && w < 64 {
+            v = b.binop_imm(BinOp::Shl, v, 64 - w);
+            v = b.binop_imm(BinOp::Shr, v, 64 - w);
+        }
+        v
+    }
+
     /// Store `value`'s low `bf.bit_width` bits into the bitfield at
     /// `addr` (C99 6.7.2.1): load the storage unit, clear the field's
     /// slice, shift + mask the value into place, OR, and store back.
+    /// Returns the assignment's value per C99 6.5.16p3 -- the stored
+    /// field converted to its declared type, not the storage word. A
+    /// 16-byte unit takes and returns a 128-bit object's address.
     fn store_into_bitfield(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        addr: super::super::ir::ValueId,
+        b: &mut SsaBuilder,
+        addr: ValueId,
         bf: super::super::ast::BitfieldDesc,
-        value: super::super::ir::ValueId,
+        value: ValueId,
         vol: bool,
-    ) {
-        let (load_kind, store_kind) = match bf.unit_size {
-            1 => (
-                super::super::ir::LoadKind::U8,
-                super::super::ir::StoreKind::I8,
-            ),
-            2 => (
-                super::super::ir::LoadKind::U16,
-                super::super::ir::StoreKind::I16,
-            ),
-            4 => (
-                super::super::ir::LoadKind::U32,
-                super::super::ir::StoreKind::I32,
-            ),
-            _ => (
-                super::super::ir::LoadKind::I64,
-                super::super::ir::StoreKind::I64,
-            ),
-        };
-        let mask: i64 = if bf.bit_width >= 64 {
-            -1
-        } else {
-            (1i64 << bf.bit_width) - 1
-        };
-        let clear_mask: i64 = !(mask << bf.bit_offset);
-        let masked = b.binop_imm(BinOp::And, value, mask);
+    ) -> ValueId {
+        let w = bf.bit_width as i64;
+        let (mask_lo, mask_hi) = bitfield_mask_halves(bf.bit_width, 0);
+        if bf.unit_size == 16 {
+            let src = if bf.is_wide_value() {
+                self.int128_load_vol(b, value, false)
+            } else {
+                (value, b.imm(0))
+            };
+            let masked = Self::int128_and_imm(b, src, (mask_lo, mask_hi));
+            self.bitfield_insert_128(b, addr, bf, masked, vol);
+            let out = self.bitfield_sign_extend_128(b, bf, masked);
+            return self.bitfield_value_form(b, bf, out);
+        }
+        let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
+        let masked = b.binop_imm(BinOp::And, value, mask_lo);
         let old = b.load_vol(addr, load_kind, vol);
-        let cleared = b.binop_imm(BinOp::And, old, clear_mask);
+        let cleared = b.binop_imm(
+            BinOp::And,
+            old,
+            !bitfield_mask_halves(bf.bit_width, bf.bit_offset).0,
+        );
         let shifted = if bf.bit_offset > 0 {
             b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
         } else {
@@ -2427,6 +2495,154 @@ impl<'a> Walker<'a> {
         };
         let combined = b.binop(BinOp::Or, cleared, shifted);
         b.store_vol(addr, combined, store_kind, vol);
+        if bf.signed && w < 64 {
+            let up = b.binop_imm(BinOp::Shl, masked, 64 - w);
+            b.binop_imm(BinOp::Shr, up, 64 - w)
+        } else {
+            masked
+        }
+    }
+
+    /// Walk the value written to a bitfield into the form
+    /// [`Self::store_into_bitfield`] expects: the address of a 128-bit
+    /// object when the access is 128-bit (widening a narrower source per
+    /// C99 6.3.1.3), a scalar otherwise.
+    fn bitfield_store_value(
+        &mut self,
+        b: &mut SsaBuilder,
+        bf: super::super::ast::BitfieldDesc,
+        rhs: ExprId,
+    ) -> Result<ValueId, WalkError> {
+        if bf.is_wide_value() {
+            let pair = self.int128_operand(b, rhs)?;
+            return Ok(self.int128_materialize(b, pair));
+        }
+        let is128 = self.expr_is_int128_value(rhs);
+        let v = self.walk_expr_rvalue(b, rhs)?;
+        // C99 6.3.1.3: a 128-bit source narrows to the field's type,
+        // which is its low half -- not the address the value is carried as.
+        Ok(if is128 { b.load(v, LoadKind::I64) } else { v })
+    }
+
+    /// The field's bits, right-aligned in a 128-bit storage unit and
+    /// converted to its declared type (C99 6.7.2.1p10 sign extension).
+    fn bitfield_extract_128(
+        &mut self,
+        b: &mut SsaBuilder,
+        addr: ValueId,
+        bf: super::super::ast::BitfieldDesc,
+        vol: bool,
+    ) -> Halves {
+        let unit = self.int128_load_vol(b, addr, vol);
+        let v = Self::int128_shift_const(b, BinOp::Shru, unit, bf.bit_offset as i64);
+        let v = Self::int128_and_imm(b, v, bitfield_mask_halves(bf.bit_width, 0));
+        self.bitfield_sign_extend_128(b, bf, v)
+    }
+
+    /// Merge a right-aligned, already width-masked value into the
+    /// field's slice of its 128-bit storage unit.
+    fn bitfield_insert_128(
+        &mut self,
+        b: &mut SsaBuilder,
+        addr: ValueId,
+        bf: super::super::ast::BitfieldDesc,
+        masked: Halves,
+        vol: bool,
+    ) {
+        let placed = Self::int128_shift_const(b, BinOp::Shl, masked, bf.bit_offset as i64);
+        let (keep_lo, keep_hi) = bitfield_mask_halves(bf.bit_width, bf.bit_offset);
+        let old = self.int128_load_vol(b, addr, vol);
+        let cleared = Self::int128_and_imm(b, old, (!keep_lo, !keep_hi));
+        let merged = (
+            b.binop(BinOp::Or, cleared.0, placed.0),
+            b.binop(BinOp::Or, cleared.1, placed.1),
+        );
+        self.int128_store_vol(b, addr, merged, vol);
+    }
+
+    /// Sign-extend a right-aligned signed field's value through all 128
+    /// bits (C99 6.7.2.1p10); an unsigned field is already zero-filled.
+    fn bitfield_sign_extend_128(
+        &mut self,
+        b: &mut SsaBuilder,
+        bf: super::super::ast::BitfieldDesc,
+        v: Halves,
+    ) -> Halves {
+        let w = bf.bit_width as i64;
+        if !bf.signed || w >= 128 {
+            return v;
+        }
+        let up = Self::int128_shift_const(b, BinOp::Shl, v, 128 - w);
+        Self::int128_shift_const(b, BinOp::Shr, up, 128 - w)
+    }
+
+    /// A 128-bit unit's extracted value in the form the access yields:
+    /// a fresh 128-bit object's address for a 128-bit access, the low
+    /// half for one the integer promotions narrow.
+    fn bitfield_value_form(
+        &mut self,
+        b: &mut SsaBuilder,
+        bf: super::super::ast::BitfieldDesc,
+        v: Halves,
+    ) -> ValueId {
+        if bf.is_wide_value() {
+            self.int128_materialize(b, v)
+        } else {
+            v.0
+        }
+    }
+
+    /// True when `lvalue` names a bitfield stored in a 16-byte unit.
+    /// Its read-modify-write operators go through the 128-bit path even
+    /// when the integer promotions narrow the value.
+    fn is_wide_unit_bitfield(&self, lvalue: ExprId) -> bool {
+        matches!(
+            self.ast.expr(lvalue),
+            Expr::Member {
+                bitfield: Some(bf),
+                ..
+            } if bf.unit_size == 16
+        )
+    }
+
+    /// Mask both halves of a 128-bit value with a constant pair.
+    fn int128_and_imm(b: &mut SsaBuilder, v: Halves, (lo, hi): (i64, i64)) -> Halves {
+        (
+            b.binop_imm(BinOp::And, v.0, lo),
+            b.binop_imm(BinOp::And, v.1, hi),
+        )
+    }
+
+    /// The storage-unit address and descriptor when `lvalue` names a
+    /// bitfield in a 16-byte unit, which the 128-bit read-modify-write
+    /// path is the only caller of. The object is evaluated once (C99
+    /// 6.5.16.2p3). A narrower unit stays on the scalar `RmwPlace`
+    /// path, whose accesses match its width.
+    fn wide_bitfield_place(
+        &mut self,
+        b: &mut SsaBuilder,
+        lvalue: ExprId,
+    ) -> Result<Option<(ValueId, super::super::ast::BitfieldDesc)>, WalkError> {
+        let Expr::Member {
+            obj,
+            field_off,
+            bitfield: Some(bf),
+            ..
+        } = self.ast.expr(lvalue)
+        else {
+            return Ok(None);
+        };
+        let (bf, obj, field_off) = (*bf, *obj, *field_off);
+        if bf.unit_size != 16 {
+            return Ok(None);
+        }
+        let base = self.walk_expr_rvalue(b, obj)?;
+        let addr = if field_off != 0 {
+            b.binop_imm(BinOp::Add, base, field_off)
+        } else {
+            base
+        };
+        Ok(Some((addr, bf)))
     }
 
     /// Allocate or reuse the SSA block reserved for the given AST
@@ -2612,7 +2828,8 @@ impl<'a> Walker<'a> {
     /// are already extended in the 64-bit register, so `a op b` is exact
     /// and overflow is exactly the case where truncation changes it; the
     /// 64-bit case uses the carry / sign-overflow formulas, with a
-    /// guarded division for the multiply.
+    /// guarded division for the multiply. A 128-bit operand or result
+    /// goes through [`Self::walk_checked_arith_128`].
     fn walk_checked_arith(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
@@ -2624,10 +2841,15 @@ impl<'a> Walker<'a> {
     ) -> Result<super::super::ir::ValueId, WalkError> {
         let store_kind = store_kind_for(elem_ty, self.target);
         let w = type_size_bytes(elem_ty, self.target);
+        if self.is_int128_value_ty(elem_ty)
+            || self.expr_is_int128_value(a_expr)
+            || self.expr_is_int128_value(b_expr)
+        {
+            return self.walk_checked_arith_128(b, op, a_expr, b_expr, dst_expr, elem_ty);
+        }
         // The wrapped-value and overflow-flag formulas below operate on a
         // 1/2/4/8-byte scalar in a 64-bit register; a wider or aggregate
-        // operand (a 128-bit `__int128`, sized 0 here) has no such form and
-        // would yield a wrong flag / value. Reject it. TODO: 128-bit.
+        // operand has no such form and would yield a wrong flag / value.
         if !matches!(w, 1 | 2 | 4 | 8) {
             return Err(WalkError::UnsupportedExpr {
                 id: dst_expr,
@@ -2711,6 +2933,159 @@ impl<'a> Walker<'a> {
             }
         };
         Ok(flag)
+    }
+
+    /// 128-bit multiply, returning the product mod 2^128 and whether the
+    /// exact product needs more than 128 bits. The exact product is
+    /// `a0*c0 + (a1*c0 + a0*c1) << 64 + a1*c1 << 128`, so it exceeds 128
+    /// bits iff both high halves are non-zero, a cross product exceeds 64
+    /// bits, or its sum with the low product's high half carries out.
+    fn int128_mul_ovf_u(b: &mut SsaBuilder, a: Halves, c: Halves) -> (Halves, ValueId) {
+        let lo = b.binop(BinOp::Mul, a.0, c.0);
+        let base = Self::int128_mulhi_u(b, a.0, c.0);
+        let cross0 = b.binop(BinOp::Mul, a.0, c.1);
+        let cross1 = b.binop(BinOp::Mul, a.1, c.0);
+        let mid = b.binop(BinOp::Add, base, cross0);
+        let carry0 = b.binop(BinOp::Ult, mid, base);
+        let hi = b.binop(BinOp::Add, mid, cross1);
+        let carry1 = b.binop(BinOp::Ult, hi, mid);
+        let zero = b.imm(0);
+        let a_hi_nz = b.binop(BinOp::Ne, a.1, zero);
+        let c_hi_nz = b.binop(BinOp::Ne, c.1, zero);
+        let both_hi = b.binop(BinOp::And, a_hi_nz, c_hi_nz);
+        let cross0_hi = Self::int128_mulhi_u(b, a.0, c.1);
+        let cross1_hi = Self::int128_mulhi_u(b, a.1, c.0);
+        let cross0_wide = b.binop(BinOp::Ne, cross0_hi, zero);
+        let cross1_wide = b.binop(BinOp::Ne, cross1_hi, zero);
+        let ovf = b.binop(BinOp::Or, both_hi, cross0_wide);
+        let ovf = b.binop(BinOp::Or, ovf, cross1_wide);
+        let ovf = b.binop(BinOp::Or, ovf, carry0);
+        let ovf = b.binop(BinOp::Or, ovf, carry1);
+        ((lo, hi), ovf)
+    }
+
+    /// The 64-bit word above bit 127 of an operand's exact value: the
+    /// high half's sign extension for a signed type, zero otherwise. It
+    /// makes the 128-bit halves an exact 192-bit two's-complement value,
+    /// so operands of different signedness combine without a conversion.
+    fn int128_ext_word(b: &mut SsaBuilder, hi: ValueId, signed: bool) -> ValueId {
+        if signed {
+            b.binop_imm(BinOp::Shr, hi, 63)
+        } else {
+            b.imm(0)
+        }
+    }
+
+    /// Whether an operand of `__builtin_*_overflow` can hold a negative
+    /// value, i.e. its type is a signed integer.
+    fn checked_operand_is_signed(&self, id: ExprId) -> bool {
+        let ty = expr_ty(self.ast.expr(id)).unwrap_or(Ty::Int as i64);
+        (ty & UNSIGNED_BIT) == 0 && !is_pointer_ty(ty)
+    }
+
+    /// 128-bit `__builtin_{add,sub,mul}_overflow`. GCC evaluates the
+    /// operation in infinite precision and reports whether the result is
+    /// representable in the destination type. Both operands convert to
+    /// exact 128-bit halves through [`Self::int128_operand`]; the
+    /// operation runs mod 2^128 and the discarded magnitude is tracked
+    /// exactly -- as the extension word above bit 127 for add and sub,
+    /// and as the sign-and-magnitude form for multiply, whose exact
+    /// product needs 256 bits. A destination narrower than 128 bits
+    /// stores the truncation and also reports a result that does not
+    /// survive the round trip through it.
+    fn walk_checked_arith_128(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: i64,
+        a_expr: ExprId,
+        b_expr: ExprId,
+        dst_expr: ExprId,
+        elem_ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let dst128 = self.is_int128_value_ty(elem_ty);
+        let w = type_size_bytes(elem_ty, self.target);
+        if !dst128 && !matches!(w, 1 | 2 | 4 | 8) {
+            return Err(WalkError::UnsupportedExpr {
+                id: dst_expr,
+                kind: "__builtin_*_overflow requires a 1/2/4/8-byte scalar type",
+            });
+        }
+        let unsigned = (elem_ty & UNSIGNED_BIT) != 0;
+        let a_signed = self.checked_operand_is_signed(a_expr);
+        let c_signed = self.checked_operand_is_signed(b_expr);
+        let a = self.int128_operand(b, a_expr)?;
+        let c = self.int128_operand(b, b_expr)?;
+        let addr = self.walk_expr_rvalue(b, dst_expr)?;
+        let ea = Self::int128_ext_word(b, a.1, a_signed);
+        let ec = Self::int128_ext_word(b, c.1, c_signed);
+        let (sum, ovf) = match op {
+            // The exact sum is `s + ext * 2^128` with `ext` the operand
+            // extension words plus the carry out of bit 127; subtraction
+            // takes the borrow out. The result is representable iff that
+            // word is what the destination type would sign-extend to.
+            0 | 1 => {
+                let (s, adj) = if op == 0 {
+                    let s = Self::int128_add(b, a, c);
+                    let carry = Self::int128_cmp(b, BinOp::Ult, s, a);
+                    let e = b.binop(BinOp::Add, ea, ec);
+                    (s, b.binop(BinOp::Add, e, carry))
+                } else {
+                    let s = Self::int128_sub(b, a, c);
+                    let borrow = Self::int128_cmp(b, BinOp::Ult, a, c);
+                    let e = b.binop(BinOp::Sub, ea, ec);
+                    (s, b.binop(BinOp::Sub, e, borrow))
+                };
+                let f = if unsigned {
+                    b.binop_imm(BinOp::Ne, adj, 0)
+                } else {
+                    let want = b.binop_imm(BinOp::Shr, s.1, 63);
+                    b.binop(BinOp::Ne, adj, want)
+                };
+                (s, f)
+            }
+            // Multiply by magnitude: the exact product is the unsigned
+            // product of the magnitudes with the operand signs combined.
+            // It is representable unsigned iff it is non-negative and
+            // under 2^128, and signed iff its magnitude is under 2^127,
+            // or exactly 2^127 with a negative result.
+            _ => {
+                let ua = Self::int128_xor_sub(b, a, ea);
+                let uc = Self::int128_xor_sub(b, c, ec);
+                let (mag, wide) = Self::int128_mul_ovf_u(b, ua, uc);
+                let sign = b.binop(BinOp::Xor, ea, ec);
+                let s = Self::int128_xor_sub(b, mag, sign);
+                let zero = b.imm(0);
+                let f = if unsigned {
+                    let neg = b.binop_imm(BinOp::And, sign, 1);
+                    let nz = Self::int128_cmp(b, BinOp::Ne, mag, (zero, zero));
+                    b.binop(BinOp::And, neg, nz)
+                } else {
+                    let limit = (zero, b.imm(i64::MIN));
+                    let over = Self::int128_cmp(b, BinOp::Ugt, mag, limit);
+                    let at = Self::int128_cmp(b, BinOp::Eq, mag, limit);
+                    let pos = b.binop_imm(BinOp::Add, sign, 1);
+                    let at_pos = b.binop(BinOp::And, at, pos);
+                    b.binop(BinOp::Or, over, at_pos)
+                };
+                (s, b.binop(BinOp::Or, wide, f))
+            }
+        };
+        if dst128 {
+            self.int128_store(b, addr, sum);
+            return Ok(ovf);
+        }
+        let wrapped = self.extend_atomic_result(b, sum.0, elem_ty);
+        b.store(addr, wrapped, store_kind_for(elem_ty, self.target));
+        let hi = if unsigned || is_pointer_ty(elem_ty) {
+            b.imm(0)
+        } else {
+            b.binop_imm(BinOp::Shr, wrapped, 63)
+        };
+        let lo_eq = b.binop(BinOp::Eq, wrapped, sum.0);
+        let hi_eq = b.binop(BinOp::Eq, hi, sum.1);
+        let fits = b.binop(BinOp::And, lo_eq, hi_eq);
+        let lost = b.binop_imm(BinOp::Xor, fits, 1);
+        Ok(b.binop(BinOp::Or, ovf, lost))
     }
 
     /// Lower a GCC statement expression `({ ... })`. Walks the
@@ -3110,56 +3485,12 @@ impl<'a> Walker<'a> {
                 } else {
                     base
                 };
-                let (load_kind, store_kind) = match bf.unit_size {
-                    1 => (
-                        super::super::ir::LoadKind::U8,
-                        super::super::ir::StoreKind::I8,
-                    ),
-                    2 => (
-                        super::super::ir::LoadKind::U16,
-                        super::super::ir::StoreKind::I16,
-                    ),
-                    4 => (
-                        super::super::ir::LoadKind::U32,
-                        super::super::ir::StoreKind::I32,
-                    ),
-                    _ => (
-                        super::super::ir::LoadKind::I64,
-                        super::super::ir::StoreKind::I64,
-                    ),
-                };
-                let mask: i64 = if bf.bit_width >= 64 {
-                    -1
-                } else {
-                    (1i64 << bf.bit_width) - 1
-                };
-                let clear_mask: i64 = !(mask << bf.bit_offset);
                 // Evaluate the RHS before loading the storage unit: a
                 // chained assignment whose RHS writes the same unit
                 // (adjacent bitfields, `a.x = a.y = v`) must be observed by
                 // this read-modify-write, else its store is clobbered.
-                let rhs_v = self.walk_expr_rvalue(b, *rhs)?;
-                let masked = b.binop_imm(BinOp::And, rhs_v, mask);
-                let old = b.load_vol(addr, load_kind, vol);
-                let cleared = b.binop_imm(BinOp::And, old, clear_mask);
-                let shifted = if bf.bit_offset > 0 {
-                    b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
-                } else {
-                    masked
-                };
-                let combined = b.binop(BinOp::Or, cleared, shifted);
-                b.store_vol(addr, combined, store_kind, vol);
-                // C99 6.5.16p3: the value of the assignment is the value
-                // stored in the bitfield converted to its declared type --
-                // the right-aligned masked field value, sign-extended for a
-                // signed field -- not the whole storage word.
-                if bf.signed && bf.bit_width < 64 {
-                    let shift = 64i64 - (bf.bit_width as i64);
-                    let up = b.binop_imm(BinOp::Shl, masked, shift);
-                    Ok(b.binop_imm(BinOp::Shr, up, shift))
-                } else {
-                    Ok(masked)
-                }
+                let rhs_v = self.bitfield_store_value(b, bf, *rhs)?;
+                Ok(self.store_into_bitfield(b, addr, bf, rhs_v, vol))
             }
             Expr::Assign { lhs, rhs, ty } => {
                 // C99 6.5.16.1p1 + the c5 address-as-value rule:
@@ -4231,39 +4562,16 @@ impl<'a> Walker<'a> {
                 if let Some(bf) = bitfield {
                     // C99 6.7.2.1: bitfield read. Address points at
                     // the field's storage unit (parser already
-                    // included `field_off`); load the unit, shift
-                    // the slice down to bit 0, mask, and sign-
-                    // extend per 6.7.2.1p10 when the declared base
-                    // type is signed.
+                    // included `field_off`).
+                    let bf = *bf;
+                    let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*obj);
                     let base = self.walk_expr_rvalue(b, *obj)?;
                     let addr = if *field_off != 0 {
                         b.binop_imm(BinOp::Add, base, *field_off)
                     } else {
                         base
                     };
-                    let unit_kind = match bf.unit_size {
-                        1 => super::super::ir::LoadKind::U8,
-                        2 => super::super::ir::LoadKind::U16,
-                        4 => super::super::ir::LoadKind::U32,
-                        _ => super::super::ir::LoadKind::I64,
-                    };
-                    let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*obj);
-                    let mut v = b.load_vol(addr, unit_kind, vol);
-                    if bf.bit_offset > 0 {
-                        v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
-                    }
-                    let mask: i64 = if bf.bit_width >= 64 {
-                        -1
-                    } else {
-                        (1i64 << bf.bit_width) - 1
-                    };
-                    v = b.binop_imm(BinOp::And, v, mask);
-                    if bf.signed && bf.bit_width < 64 {
-                        let shift = 64i64 - (bf.bit_width as i64);
-                        v = b.binop_imm(BinOp::Shl, v, shift);
-                        v = b.binop_imm(BinOp::Shr, v, shift);
-                    }
-                    return Ok(v);
+                    return Ok(self.load_from_bitfield(b, addr, bf, vol));
                 }
                 let base = self.walk_expr_rvalue(b, *obj)?;
                 let addr = if *field_off != 0 {
@@ -4391,7 +4699,7 @@ impl<'a> Walker<'a> {
                 // load through it, apply the binop with rhs,
                 // store back. The expression's value is the new
                 // (post-op) value per the same clause.
-                if self.is_int128_value_ty(*ty) {
+                if self.is_int128_value_ty(*ty) || self.is_wide_unit_bitfield(*lhs) {
                     return self.walk_int128_compound_assign(b, *op, *lhs, *rhs);
                 }
                 let load_kind = load_kind_for(*ty, self.target);
@@ -4513,7 +4821,7 @@ impl<'a> Walker<'a> {
                 })
             }
             Expr::PreInc { lvalue, by, ty } => {
-                if self.is_int128_value_ty(*ty) {
+                if self.is_int128_value_ty(*ty) || self.is_wide_unit_bitfield(*lvalue) {
                     return self.walk_int128_inc(b, *lvalue, *by, false);
                 }
                 let kind = load_kind_for(*ty, self.target);
@@ -4543,7 +4851,7 @@ impl<'a> Walker<'a> {
                 )
             }
             Expr::PostInc { lvalue, by, ty } => {
-                if self.is_int128_value_ty(*ty) {
+                if self.is_int128_value_ty(*ty) || self.is_wide_unit_bitfield(*lvalue) {
                     return self.walk_int128_inc(b, *lvalue, *by, true);
                 }
                 let kind = load_kind_for(*ty, self.target);
@@ -4773,15 +5081,23 @@ impl<'a> Walker<'a> {
         let load_kind = load_kind_for(elem_ty, self.target);
         let store_kind = store_kind_for(elem_ty, self.target);
         let width = type_size_bytes(elem_ty, self.target) as u8;
-        // Every atomic form here acts on a 1/2/4/8-byte scalar object; a
-        // wider or aggregate one (a 128-bit `__int128`, sized 0 by
-        // `type_size_bytes`) has no atomic form in the current emit and
-        // would lower to a faulting / high-half-dropping access. Reject it.
-        // TODO: 16-byte objects via cmpxchg16b / ldxp-stxp.
+        // Every atomic form here acts on a 1/2/4/8-byte scalar object,
+        // the widths `__GCC_HAVE_SYNC_COMPARE_AND_SWAP_*` and
+        // `__atomic_is_lock_free` report. A 16-byte object needs the
+        // paired compare-exchange (x86-64 `cmpxchg16b`, aarch64
+        // `casp` / `ldxp`-`stxp`), which the emit does not have; two
+        // 8-byte accesses would tear, so this is rejected rather than
+        // lowered. A wider or aggregate object has no atomic form at all.
+        // TODO: 16-byte objects via the paired compare-exchange.
         if !matches!(width, 1 | 2 | 4 | 8) {
             return Err(WalkError::UnsupportedExpr {
                 id: args[0],
-                kind: "atomic operation requires a 1/2/4/8-byte scalar object",
+                kind: if self.is_int128_value_ty(elem_ty) {
+                    "16-byte atomic object needs a paired compare-exchange, \
+                     which this target's emit does not provide"
+                } else {
+                    "atomic operation requires a 1/2/4/8-byte scalar object"
+                },
             });
         }
         let addr = self.walk_expr_rvalue(b, args[0])?;
@@ -5728,22 +6044,14 @@ impl RmwPlace {
             RmwPlace::Bitfield { addr, bf } => {
                 // C99 6.7.2.1: load the unit, shift the slice to bit 0,
                 // mask, and sign-extend when the field type is signed.
-                let unit_kind = match bf.unit_size {
-                    1 => LoadKind::U8,
-                    2 => LoadKind::U16,
-                    4 => LoadKind::U32,
-                    _ => LoadKind::I64,
-                };
-                let mut v = b.load_vol(addr, unit_kind, vol);
+                // A 128-bit field never reaches here: its operators route
+                // through the walker's 128-bit read-modify-write.
+                debug_assert!(bf.unit_size <= 8);
+                let mut v = b.load_vol(addr, bitfield_load_kind(bf), vol);
                 if bf.bit_offset > 0 {
                     v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
                 }
-                let mask: i64 = if bf.bit_width >= 64 {
-                    -1
-                } else {
-                    (1i64 << bf.bit_width) - 1
-                };
-                v = b.binop_imm(BinOp::And, v, mask);
+                v = b.binop_imm(BinOp::And, v, bitfield_mask_halves(bf.bit_width, 0).0);
                 if bf.signed && bf.bit_width < 64 {
                     let shift = 64i64 - (bf.bit_width as i64);
                     v = b.binop_imm(BinOp::Shl, v, shift);
@@ -5771,18 +6079,10 @@ impl RmwPlace {
             RmwPlace::Bitfield { addr, bf } => {
                 // C99 6.7.2.1: load the unit, clear the slice, mask + shift
                 // the new value into place, OR back, store.
-                let (load_kind, store_kind) = match bf.unit_size {
-                    1 => (LoadKind::U8, StoreKind::I8),
-                    2 => (LoadKind::U16, StoreKind::I16),
-                    4 => (LoadKind::U32, StoreKind::I32),
-                    _ => (LoadKind::I64, StoreKind::I64),
-                };
-                let mask: i64 = if bf.bit_width >= 64 {
-                    -1
-                } else {
-                    (1i64 << bf.bit_width) - 1
-                };
-                let clear_mask: i64 = !(mask << bf.bit_offset);
+                debug_assert!(bf.unit_size <= 8);
+                let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
+                let mask = bitfield_mask_halves(bf.bit_width, 0).0;
+                let clear_mask = !bitfield_mask_halves(bf.bit_width, bf.bit_offset).0;
                 let old = b.load_vol(addr, load_kind, vol);
                 let cleared = b.binop_imm(BinOp::And, old, clear_mask);
                 let masked = b.binop_imm(BinOp::And, value, mask);
@@ -5795,6 +6095,35 @@ impl RmwPlace {
                 b.store_vol(addr, combined, store_kind, vol);
             }
         }
+    }
+}
+
+/// A bitfield's slice mask as the low and high halves of a 128-bit
+/// storage unit. A unit of 8 bytes or less uses the low half alone.
+fn bitfield_mask_halves(width: u8, offset: u8) -> (i64, i64) {
+    let m = super::bitfield_slice_mask(width as u32, offset as u32);
+    (m as u64 as i64, (m >> 64) as u64 as i64)
+}
+
+/// Load kind for a bitfield's addressable storage unit (C99 6.7.2.1p11).
+/// The unsigned kinds keep the unit's bits at their storage positions so
+/// the extraction's shift and mask see no sign extension from above.
+fn bitfield_load_kind(bf: super::BitfieldDesc) -> LoadKind {
+    match bf.unit_size {
+        1 => LoadKind::U8,
+        2 => LoadKind::U16,
+        4 => LoadKind::U32,
+        _ => LoadKind::I64,
+    }
+}
+
+/// Store kind for a bitfield's addressable storage unit.
+fn bitfield_store_kind(bf: super::BitfieldDesc) -> StoreKind {
+    match bf.unit_size {
+        1 => StoreKind::I8,
+        2 => StoreKind::I16,
+        4 => StoreKind::I32,
+        _ => StoreKind::I64,
     }
 }
 

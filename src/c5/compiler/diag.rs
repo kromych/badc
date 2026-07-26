@@ -164,6 +164,7 @@ impl Compiler {
     pub(super) fn expr_const_int(&self, e: ExprId) -> Option<i64> {
         match self.ast.expr(e) {
             Expr::IntLit { val, .. } => Some(*val),
+            Expr::Sizeof(s) => Some(s.size_bytes),
             Expr::Cast { child, .. } => self.expr_const_int(*child),
             Expr::Unary { op, child, .. } => {
                 let v = self.expr_const_int(*child)?;

@@ -378,6 +378,14 @@ fn int128_arithmetic() {
     //   round-to-nearest-even past the significand, truncation toward
     //   zero, and the 2^53 / 2^64 / 2^127 boundaries
     assert_eq!(run_fixture("int128_fp_convert.c"), 0);
+    //   `__builtin_{add,sub,mul}_overflow` in infinite precision with a
+    //   128-bit operand or result, including mixed operand signedness
+    //   and a destination of a different width
+    assert_eq!(run_fixture("int128_overflow_builtin.c"), 0);
+    //   bitfields of the type: 16-byte storage units, widths past 64
+    //   bits, sign extension, the operators, and the C99 6.3.1.1p2
+    //   promotion of a field narrow enough to read as `int`
+    assert_eq!(run_fixture("int128_bitfield.c"), 0);
 }
 
 #[test]
@@ -475,6 +483,14 @@ fn builtin_return_address() {
     // reads the saved slot at [fp+8], the VM returns a non-zero per-frame
     // proxy. The fixture returns 0 only when it is non-null.
     assert_eq!(run_fixture("builtin_return_address.c"), 0);
+}
+
+#[test]
+fn atomic_lock_free_widths() {
+    // C11 7.17.5: the lock-free predicates report the widths the emit
+    // backs. A 16-byte object reports false, matching gcc and clang
+    // where no 16-byte compare-exchange is enabled.
+    assert_eq!(run_fixture("atomic_lock_free_widths.c"), 0);
 }
 
 #[test]

@@ -1519,47 +1519,59 @@ fn atomic_compare_exchange_emits_cmpxchg_x86_64() {
     );
 }
 
-/// A 128-bit `__int128` atomic compare-exchange has no single-instruction
-/// lock form in the current emit. The SSA walk must reject it, not lower
-/// the zero-width access `type_size_bytes` yields for the struct-backed
-/// __int128 (which faults / miscompiles at run time; clang gets it right).
-/// TODO: lower 16-byte objects via cmpxchg16b / ldxp-stxp.
+/// No atomic form on a 16-byte object lowers: the paired
+/// compare-exchange (x86-64 `cmpxchg16b`, aarch64 `casp` / `ldxp`-`stxp`)
+/// is not emitted, and two 8-byte accesses would tear. Every form must
+/// be rejected with that diagnostic rather than lowered through the
+/// zero-width access `type_size_bytes` yields for the struct-backed
+/// __int128. `__atomic_is_lock_free` reports the same limit, so a
+/// caller can test for it (`atomic_lock_free_widths.c`).
+/// TODO: lower 16-byte objects via the paired compare-exchange.
 #[test]
-fn atomic128_compare_exchange_is_rejected_not_miscompiled() {
+fn atomic128_is_rejected_not_miscompiled() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    let program = super::compile_str_bare(
-        "int f(unsigned __int128 *p, unsigned __int128 *e, unsigned __int128 n){ \
-             return __atomic_compare_exchange_n(p, e, n, 0, 5, 5); } \
-         int main(){ return 0; }",
-    );
-    let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
-        .expect_err("128-bit atomic compare-exchange must be rejected, not miscompiled");
-    assert!(
-        err.to_string().contains("1/2/4/8-byte scalar object"),
-        "expected the wide-atomic rejection, got: {err}",
-    );
+    let bodies = [
+        "return __atomic_compare_exchange_n(p, e, n, 0, 5, 5);",
+        "__atomic_store_n(p, n, 5); return 0;",
+        "return (int)__atomic_load_n(p, 5);",
+        "return (int)__atomic_fetch_add(p, n, 5);",
+        "__atomic_load(p, e, 5); return 0;",
+        "__atomic_store(p, e, 5); return 0;",
+    ];
+    for body in bodies {
+        let src = alloc::format!(
+            "int f(unsigned __int128 *p, unsigned __int128 *e, unsigned __int128 n){{ {body} }} \
+             int main(){{ return 0; }}"
+        );
+        let program = super::compile_str_bare(&src);
+        let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("16-byte atomic object"),
+            "expected the wide-atomic rejection for `{body}`, got: {err}",
+        );
+    }
 }
 
-/// A 128-bit `__int128` `__builtin_*_overflow` has no wrapped-value /
-/// overflow-flag form in the current emit -- the formulas assume a
-/// 1/2/4/8-byte scalar in a 64-bit register. The SSA walk must reject it,
-/// not lower the narrow-path formulas that yield a wrong flag / value for
-/// the struct-backed __int128 (which `type_size_bytes` sizes 0; clang
-/// compiles it correctly). TODO: 128-bit overflow.
+/// `__builtin_*_overflow` with a 128-bit operand or result lowers over
+/// the two halves on every target: the walk must produce the wrapped
+/// value and the flag inline, with no call to a runtime helper. The
+/// values are checked against gcc / clang by
+/// `int128_overflow_builtin.c`.
 #[test]
-fn builtin_overflow_on_128bit_operand_is_rejected() {
+fn builtin_overflow_on_128bit_operand_lowers_inline() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     let program = super::compile_str_bare(
         "int f(unsigned __int128 a, unsigned __int128 b, unsigned __int128 *r){ \
              return __builtin_add_overflow(a, b, r); } \
+         int g(__int128 a, long long b, int *r){ \
+             return __builtin_mul_overflow(a, b, r); } \
          int main(){ return 0; }",
     );
-    let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
-        .expect_err("128-bit __builtin_add_overflow must be rejected, not miscompiled");
-    assert!(
-        err.to_string().contains("1/2/4/8-byte scalar type"),
-        "expected the wide-overflow rejection, got: {err}",
-    );
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        emit_native_with_options(&program, target, NativeOptions::default())
+            .expect("128-bit __builtin_*_overflow must lower");
+    }
 }
 
 /// The x86 `x` (xmm) inline-asm operand path moves a full 128-bit value

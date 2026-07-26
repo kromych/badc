@@ -13,7 +13,8 @@ Disassembly of section .text:
 <build_packed>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x20, %rsp
+               	movq	%rbx, (%rsp)
                	movq	%rcx, %r8
                	movslq	%edi, %rdi
                	movslq	%esi, %rsi
@@ -45,9 +46,10 @@ Disassembly of section .text:
                	andq	$0x1f, %rcx
                	movl	(%rax), %r9d
                	andq	$-0x1f01, %r9           # imm = 0xE0FF
-               	shlq	$0x8, %rcx
-               	orq	%r9, %rcx
-               	movl	%ecx, (%rax)
+               	movq	%rcx, %rbx
+               	shlq	$0x8, %rbx
+               	orq	%rbx, %r9
+               	movl	%r9d, (%rax)
                	leaq	-0x8(%rbp), %rax
                	movq	%r8, %rcx
                	andq	$0xfffff, %rcx          # imm = 0xFFFFF
@@ -114,7 +116,8 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
+               	movq	(%rsp), %rbx
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>

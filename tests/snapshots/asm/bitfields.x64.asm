@@ -84,7 +84,9 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rax
                	movl	0x4(%rax), %eax
-               	cmpq	$0x12345678, %rax       # imm = 0x12345678
+               	xorq	$0x12345678, %rax       # imm = 0x12345678
+               	movl	%eax, %eax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x20, %rsp
@@ -144,7 +146,9 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rax
                	movl	0x4(%rax), %eax
-               	cmpq	$0x12345678, %rax       # imm = 0x12345678
+               	xorq	$0x12345678, %rax       # imm = 0x12345678
+               	movl	%eax, %eax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0xb, %eax
                	addq	$0x20, %rsp

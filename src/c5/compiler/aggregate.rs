@@ -551,7 +551,7 @@ impl Compiler {
                             unit,
                             width,
                         );
-                        let a = unit.min(8);
+                        let a = unit.min(16);
                         if a > struct_align {
                             struct_align = a;
                         }
@@ -657,7 +657,10 @@ impl Compiler {
                     if field_array_size != 0 {
                         return Err(self.compile_err("array fields cannot also be bitfields"));
                     }
-                    if is_aggregate_value {
+                    // The 128-bit integer shares the aggregate machinery
+                    // but is a scalar type, so it takes a bitfield like
+                    // any other integer type.
+                    if is_aggregate_value && !self.is_int128_ty(field_ty) {
                         return Err(self.compile_err("aggregate fields cannot also be bitfields"));
                     }
                     self.next()?;
@@ -667,8 +670,13 @@ impl Compiler {
                             self.compile_err(format!("bitfield width must be positive (got {n})"))
                         );
                     }
-                    if n > 64 {
-                        return Err(self.compile_err(format!("bitfield width {n} exceeds 64")));
+                    // C99 6.7.2.1p3: the width shall not exceed the width
+                    // of an object of the declared type.
+                    let type_bits = (self.size_of_type(field_ty).max(1) * 8) as i64;
+                    if n > type_bits {
+                        return Err(self.compile_err(format!(
+                            "bitfield width {n} exceeds the {type_bits}-bit declared type"
+                        )));
                     }
                     bit_width = n as u32;
                     // C99 6.7.2.1: an enum bitfield reads as unsigned (a
@@ -689,7 +697,7 @@ impl Compiler {
                         if bit_unit > offset {
                             offset = bit_unit;
                         }
-                        let a = bit_unit.min(8);
+                        let a = bit_unit.min(16);
                         if a > struct_align {
                             struct_align = a;
                         }
@@ -711,7 +719,7 @@ impl Compiler {
                         field_offset = foff;
                         bit_offset = boff;
                         bit_unit = unit;
-                        let a = unit.min(8);
+                        let a = unit.min(16);
                         if a > struct_align {
                             struct_align = a;
                         }

@@ -105,6 +105,15 @@ enum RegionKey {
 /// activation of itself only through a call cycle, so one off every cycle
 /// (`call_cycle_members`) reuses a single per-callee region across its
 /// sites, and a cycle member appends per site.
+/// Where a spliced body's relocated locals may live: the caller's region
+/// records plus the two sets that force a fresh region per site -- callees
+/// on a call cycle, and functions that can reach stack-pointer asm.
+struct SlotPlacement<'a> {
+    regions: &'a mut CallerRegions,
+    cyclic: &'a BTreeSet<usize>,
+    sp_tainted: &'a BTreeSet<usize>,
+}
+
 #[derive(Default)]
 struct CallerRegions {
     /// Shared region for call-free bodies: `(base, size)` slot-magnitude
@@ -1054,10 +1063,13 @@ fn splice_multi_block(
     splice_block_idx: usize,
     call_pc: u32,
     call_args: &[ValueId],
-    regions: &mut CallerRegions,
-    cyclic: &BTreeSet<usize>,
-    sp_tainted: &BTreeSet<usize>,
+    placement: &mut SlotPlacement<'_>,
 ) {
+    let SlotPlacement {
+        regions,
+        cyclic,
+        sp_tainted,
+    } = placement;
     let n_caller = caller.blocks.len();
     let n_callee = callee.blocks.len();
     let prefix_id = splice_block_idx as u32;
@@ -1824,9 +1836,7 @@ fn needs_reloc_splice(c: &FunctionSsa) -> bool {
 fn inline_caller(
     caller: &mut FunctionSsa,
     callees: &BTreeMap<usize, &FunctionSsa>,
-    regions: &mut CallerRegions,
-    cyclic: &BTreeSet<usize>,
-    sp_tainted: &BTreeSet<usize>,
+    placement: &mut SlotPlacement<'_>,
 ) {
     let mut new_insts: Vec<Inst> = Vec::with_capacity(caller.insts.len());
     let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(caller.inst_src.len());
@@ -2209,9 +2219,7 @@ fn inline_caller(
                 n = caller.name
             );
         }
-        splice_multi_block(
-            caller, callee, b_idx, pc, &args, regions, cyclic, sp_tainted,
-        );
+        splice_multi_block(caller, callee, b_idx, pc, &args, placement);
         steps += 1;
     }
 }
@@ -2342,9 +2350,11 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             inline_caller(
                 caller,
                 &local,
-                regions.entry(caller.ent_pc).or_default(),
-                &cyclic,
-                &sp_tainted,
+                &mut SlotPlacement {
+                    regions: regions.entry(caller.ent_pc).or_default(),
+                    cyclic: &cyclic,
+                    sp_tainted: &sp_tainted,
+                },
             );
             if caller.insts.len() != before {
                 changed = true;

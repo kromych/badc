@@ -2434,14 +2434,6 @@ fn relax_branches(
     short
 }
 
-/// Spill the host-ABI argument registers into the c5 cdecl slots
-/// the body references via address-of-local with slot index
-/// `N >= 2`. c5 places the
-/// first declared parameter at `[rbp + 16]`, the second at
-/// `[rbp + 32]`, etc. AMD64 SysV / Win64 push the return address
-/// before `call`, so the prologue needs to interleave the saved
-/// rbp with the param slots: pop the return address into r11,
-/// push each arg in caller order, push the return address back,
 /// Store a word through rsp to take the fault, if the stack ends here,
 /// on the page the allocation just entered. Immediate source and
 /// `mov`'s flag transparency keep the probe usable at any point in the
@@ -2537,6 +2529,15 @@ fn restore_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
     }
 }
 
+/// Emit the function prologue: spill the host-ABI argument registers
+/// into the c5 cdecl parameter cells the body references via
+/// address-of-local with slot index `N >= 2` (the first declared
+/// parameter at `[rbp + 16]`, the second at `[rbp + 32]`, ...), then
+/// establish the frame and save the callee-saved registers. SysV /
+/// Win64 push the return address before `call`, so the cell block is
+/// interleaved with the saved rbp: pop the return address into r10,
+/// reserve the cells, fill each from its placement, push the return
+/// address back.
 fn emit_prologue(
     code: &mut Vec<u8>,
     func: &FunctionSsa,

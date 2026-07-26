@@ -3469,7 +3469,12 @@ fn post_inline_orphaned_static_and_its_relocations_drop() {
         // at where the repack put it. `.data` leads with the 8-byte NULL
         // guard, so `kept_tag` follows it.
         let data = elf64_section(&obj, ".data").expect("no .data section");
-        let value = elf_data_symbol_value(&obj, "kept_tag").expect("kept_tag st_value");
+        let (value, size) =
+            elf_data_symbol_value_size(&obj, "kept_tag").expect("kept_tag symtab entry");
+        assert_eq!(
+            size, 8,
+            "{target:?}: `kept_tag` lost its st_size across the repack"
+        );
         assert_eq!(
             data.len(),
             16,
@@ -3493,8 +3498,8 @@ fn post_inline_orphaned_static_and_its_relocations_drop() {
     }
 }
 
-/// `st_value` of the named `STT_OBJECT` symbol.
-fn elf_data_symbol_value(b: &[u8], name: &str) -> Option<u64> {
+/// `(st_value, st_size)` of the named `STT_OBJECT` symbol.
+fn elf_data_symbol_value_size(b: &[u8], name: &str) -> Option<(u64, u64)> {
     let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
     let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
     let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
@@ -3513,7 +3518,7 @@ fn elf_data_symbol_value(b: &[u8], name: &str) -> Option<u64> {
         let s = str_off + u32a(p) as usize;
         let e = b[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
         if b[s..e] == *name.as_bytes() && b[p + 4] & 0xf == 1 {
-            return Some(u64a(p + 8));
+            return Some((u64a(p + 8), u64a(p + 16)));
         }
         p += 24;
     }

@@ -636,6 +636,13 @@ fn is_inline_candidate(
                     }
                 }
             }
+            // A load / store through an x86 named-address-space pointer.
+            // The access rides a `%gs:` / `%fs:` override, so it names
+            // per-CPU or per-thread memory rather than the frame: no
+            // callee slot is reachable through it and the segment base is
+            // not frame state, leaving nothing for the splice to relocate.
+            // Its value operands remap like any other access.
+            Inst::SegLoad { .. } | Inst::SegStore { .. } => {}
             Inst::Mcpy { dst, src, .. } => {
                 // For a reloc callee an Mcpy is reproducible: the splice
                 // remaps its dst / src operands (`rewrite_callee_inst`), and a
@@ -901,9 +908,11 @@ pub(super) fn map_v(v: ValueId, remap: &[ValueId]) -> ValueId {
     }
 }
 
-/// Apply the caller's value remap to every operand in `inst`. The
-/// caller hands us a fresh clone; we mutate in place.
-pub(super) fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
+/// Map every value operand in `inst` through `remap`, in place. The
+/// match is exhaustive over `Inst` so a new variant fails to compile
+/// until its operands are routed; a missed variant would silently carry
+/// a foreign `ValueId` into the target function.
+pub(super) fn remap_inst_operands(inst: &mut Inst, remap: &[ValueId]) {
     match inst {
         Inst::Imm(_)
         | Inst::ImmData(_)
@@ -1014,81 +1023,12 @@ fn rewrite_callee_inst(inst: &Inst, args: &[ValueId], callee_remap: &[ValueId]) 
             }
         }
         _ => {
+            // Every operand of a callee inst names a callee value, so the
+            // whole inst routes through `callee_remap`. A `Phi` is handled
+            // by the splice before it reaches here (its predecessor block
+            // ids also need shifting).
             let mut copy = inst.clone();
-            // Phi never reaches here (filtered out) so the &mut visit
-            // walks only operand fields whose target lives in the
-            // callee body and routes through `callee_remap`.
-            match &mut copy {
-                Inst::Load { addr, .. } => *addr = map_v(*addr, callee_remap),
-                Inst::Store { addr, value, .. } => {
-                    *addr = map_v(*addr, callee_remap);
-                    *value = map_v(*value, callee_remap);
-                }
-                Inst::StoreLocal { value, .. } => *value = map_v(*value, callee_remap),
-                Inst::LoadIndexed { base, index, .. } => {
-                    *base = map_v(*base, callee_remap);
-                    *index = map_v(*index, callee_remap);
-                }
-                Inst::StoreIndexed {
-                    base, index, value, ..
-                } => {
-                    *base = map_v(*base, callee_remap);
-                    *index = map_v(*index, callee_remap);
-                    *value = map_v(*value, callee_remap);
-                }
-                Inst::Binop { lhs, rhs, .. } => {
-                    *lhs = map_v(*lhs, callee_remap);
-                    *rhs = map_v(*rhs, callee_remap);
-                }
-                Inst::BinopI { lhs, .. } => *lhs = map_v(*lhs, callee_remap),
-                Inst::Fneg(v) => *v = map_v(*v, callee_remap),
-                Inst::Fma { a, b, c, .. } => {
-                    *a = map_v(*a, callee_remap);
-                    *b = map_v(*b, callee_remap);
-                    *c = map_v(*c, callee_remap);
-                }
-                Inst::Extend { value, .. } => *value = map_v(*value, callee_remap),
-                Inst::FpCast { value, .. } => *value = map_v(*value, callee_remap),
-                Inst::Mcpy { dst, src, .. } => {
-                    *dst = map_v(*dst, callee_remap);
-                    *src = map_v(*src, callee_remap);
-                }
-                // A non-leaf callee's own call site: remap its argument
-                // operands into the caller's value space. The candidate
-                // filter admits only the scalar/void `Call` shape (no
-                // aggregate args or return), whose sole value operands are
-                // the arguments; `target_pc` is a same-unit function index
-                // that stays valid in the caller.
-                Inst::Call { args, .. } => {
-                    for a in args.iter_mut() {
-                        *a = map_v(*a, callee_remap);
-                    }
-                }
-                // The same shape through a function pointer: the callee
-                // address is an ordinary value operand alongside the
-                // arguments.
-                Inst::CallIndirect { target, args, .. } => {
-                    *target = map_v(*target, callee_remap);
-                    for a in args.iter_mut() {
-                        *a = map_v(*a, callee_remap);
-                    }
-                }
-                // Inline-asm operand args (an asm-goto's `"i"` inputs among
-                // them) route through the callee remap like any operand.
-                Inst::InlineAsm { args, .. } => {
-                    for a in args.iter_mut() {
-                        *a = map_v(*a, callee_remap);
-                    }
-                }
-                // An intrinsic's operand args (values, and any output
-                // addresses among them) route through the callee remap too.
-                Inst::Intrinsic { args, .. } => {
-                    for a in args.iter_mut() {
-                        *a = map_v(*a, callee_remap);
-                    }
-                }
-                _ => {}
-            }
+            remap_inst_operands(&mut copy, callee_remap);
             Some(copy)
         }
     }
@@ -1392,7 +1332,7 @@ fn splice_multi_block(
         // move the instruction out rather than deep-cloning its
         // operand vectors.
         let mut mapped = core::mem::replace(&mut original.insts[pc as usize], Inst::Imm(0));
-        remap_caller_inst(&mut mapped, remap);
+        remap_inst_operands(&mut mapped, remap);
         // `&&label` names a block, not a value, so the value remap leaves
         // it alone; it moves with the splice's block-id shift.
         if let Inst::BlockAddr(b) = &mut mapped {
@@ -2331,7 +2271,7 @@ fn inline_caller(
                 } else {
                     let new_id = new_insts.len() as u32;
                     let mut mapped = inst.clone();
-                    remap_caller_inst(&mut mapped, &remap);
+                    remap_inst_operands(&mut mapped, &remap);
                     new_insts.push(mapped);
                     new_inst_src.push(src_pos);
                     new_f32.push(
@@ -3313,6 +3253,107 @@ mod tests {
         };
         assert!(is_inline_candidate(&input_only, 32, abi, None));
         assert!(needs_reloc_splice(&input_only));
+    }
+
+    /// An accessor whose body reads / writes through a `__seg_gs` /
+    /// `__seg_fs` pointer is inlinable, and the operand walk routes both
+    /// variants: an unrouted address operand would keep the callee's
+    /// `ValueId` and land the access at an unrelated offset from the
+    /// segment base.
+    #[test]
+    fn segment_access_inlines_with_its_operands_routed() {
+        use crate::c5::ir::AsmSeg;
+        let abi = Target::LinuxX64.abi();
+        // v0/v1 params, v2 = v0 + v1, v3 = load through %gs:v2.
+        let read = FunctionSsa {
+            n_params: 2,
+            insts: alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64,
+                },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs: 1,
+                },
+                Inst::SegLoad {
+                    addr: 2,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                    seg: AsmSeg::Gs,
+                },
+            ],
+            inst_src: alloc::vec![(0, 0); 4],
+            f32_values: alloc::vec![false; 4],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..4,
+                terminator: Terminator::Return(3),
+                exit_acc: 3,
+            }],
+            ..Default::default()
+        };
+        assert!(is_inline_candidate(&read, 32, abi, None));
+        // The same with a store: v3 = v0 + v1, %fs:v3 = v2.
+        let write = FunctionSsa {
+            n_params: 3,
+            insts: alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64,
+                },
+                Inst::ParamRef {
+                    idx: 2,
+                    kind: LoadKind::I64,
+                },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs: 1,
+                },
+                Inst::SegStore {
+                    addr: 3,
+                    value: 2,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                    seg: AsmSeg::Fs,
+                },
+            ],
+            inst_src: alloc::vec![(0, 0); 5],
+            f32_values: alloc::vec![false; 5],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..5,
+                terminator: Terminator::Return(4),
+                exit_acc: 4,
+            }],
+            ..Default::default()
+        };
+        assert!(is_inline_candidate(&write, 32, abi, None));
+        // Operand routing, the half an allow-list entry cannot supply.
+        let remap = alloc::vec![7, 8, 9, 10, 11];
+        let mut load = read.insts[3].clone();
+        remap_inst_operands(&mut load, &remap);
+        assert!(matches!(load, Inst::SegLoad { addr: 9, .. }));
+        let mut store = write.insts[4].clone();
+        remap_inst_operands(&mut store, &remap);
+        assert!(matches!(
+            store,
+            Inst::SegStore {
+                addr: 10,
+                value: 9,
+                ..
+            }
+        ));
     }
 
     /// A naked function is never inlined: its body is raw asm carrying its

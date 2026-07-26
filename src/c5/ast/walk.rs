@@ -4720,7 +4720,7 @@ impl<'a> Walker<'a> {
                 }
                 let load_kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
-                let place = self.rmw_place(b, *lhs)?;
+                let place = self.rmw_place(b, *lhs, *ty)?;
                 let vol = self.rmw_is_volatile(&place, *ty, *lhs);
                 let old = place.load(b, load_kind, vol);
                 // Constant-rhs short-circuit (mirror of the
@@ -4842,7 +4842,7 @@ impl<'a> Walker<'a> {
                 }
                 let kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
-                let place = self.rmw_place(b, *lvalue)?;
+                let place = self.rmw_place(b, *lvalue, *ty)?;
                 let vol = self.rmw_is_volatile(&place, *ty, *lvalue);
                 let old = place.load(b, kind, vol);
                 let stepped = self.increment_value(b, old, *by, *ty);
@@ -4872,7 +4872,7 @@ impl<'a> Walker<'a> {
                 }
                 let kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
-                let place = self.rmw_place(b, *lvalue)?;
+                let place = self.rmw_place(b, *lvalue, *ty)?;
                 let vol = self.rmw_is_volatile(&place, *ty, *lvalue);
                 let old = place.load(b, kind, vol);
                 let stepped = self.increment_value(b, old, *by, *ty);
@@ -5333,7 +5333,23 @@ impl<'a> Walker<'a> {
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         lvalue: ExprId,
+        ty: i64,
     ) -> Result<RmwPlace, WalkError> {
+        // A named-address-space lvalue: both halves of the
+        // read-modify-write ride the segment override, as the plain read
+        // and write of the same lvalue do. Non-x86 targets have no
+        // segment register, so reject rather than drop the qualifier,
+        // mirroring the load and store paths.
+        if let Some(seg) = segment_of_ty(ty) {
+            if !self.target.is_x86_64() {
+                return Err(WalkError::UnsupportedExpr {
+                    id: lvalue,
+                    kind: "__seg_gs/__seg_fs read-modify-write (x86 only)",
+                });
+            }
+            let addr = self.walk_expr_lvalue(b, lvalue)?;
+            return Ok(RmwPlace::SegAddr { addr, seg });
+        }
         // A bitfield member: compute the storage unit's address once so
         // the read and the write target the same unit (the object is
         // evaluated a single time per C99 6.5.2.4 / 6.5.16.2).
@@ -6036,6 +6052,13 @@ impl<'a> Walker<'a> {
 enum RmwPlace {
     Slot(i64),
     Addr(super::super::ir::ValueId),
+    /// A read-modify-write target in an x86 named address space
+    /// (`__seg_gs` / `__seg_fs`): both halves ride a segment-override
+    /// prefix, as the plain read and write of the same lvalue do.
+    SegAddr {
+        addr: super::super::ir::ValueId,
+        seg: Segment,
+    },
     /// A bitfield read-modify-write target: the storage unit's address
     /// and the field descriptor. `load` extracts the field value;
     /// `store` merges the new value back into the unit, preserving the
@@ -6057,6 +6080,7 @@ impl RmwPlace {
         match *self {
             RmwPlace::Slot(off) => b.load_local_vol(off, kind, vol),
             RmwPlace::Addr(addr) => b.load_vol(addr, kind, vol),
+            RmwPlace::SegAddr { addr, seg } => b.seg_load(addr, kind, asm_seg_of(seg), vol),
             RmwPlace::Bitfield { addr, bf } => {
                 // C99 6.7.2.1: load the unit, shift the slice to bit 0,
                 // mask, and sign-extend when the field type is signed.
@@ -6091,6 +6115,9 @@ impl RmwPlace {
             }
             RmwPlace::Addr(addr) => {
                 b.store_vol(addr, value, kind, vol);
+            }
+            RmwPlace::SegAddr { addr, seg } => {
+                b.seg_store(addr, value, kind, asm_seg_of(seg), vol);
             }
             RmwPlace::Bitfield { addr, bf } => {
                 // C99 6.7.2.1: load the unit, clear the slice, mask + shift

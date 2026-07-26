@@ -45,7 +45,7 @@ use alloc::collections::BTreeSet;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::inline::{map_v, remap_caller_inst, remap_terminator};
+use super::inline::{map_v, remap_inst_operands, remap_terminator};
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
 use crate::c5::ir::{
     BinOp, Block, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId,
@@ -550,7 +550,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
             ($pc:expr) => {{
                 let pc = $pc;
                 let mut inst = func.insts[pc as usize].clone();
-                remap_caller_inst(&mut inst, &remap);
+                remap_inst_operands(&mut inst, &remap);
                 if let Inst::Phi { incoming, .. } = &mut inst {
                     for (pred, _) in incoming.iter_mut() {
                         if *pred == 0 {

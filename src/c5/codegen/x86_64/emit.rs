@@ -6685,6 +6685,40 @@ fn encode_one_x86_section_insn(
                     }
                 }
             }
+            // `seg:disp` with no base register, written as a literal or as a
+            // bare `%cN` / `%PN` operand: the absolute disp32 form, or a
+            // RIP-relative relocation when the operand names an address.
+            AsmOpnd::AbsMem { disp } => concrete.push(Concrete::AbsMem {
+                disp,
+                size: mem_size(insn),
+            }),
+            AsmOpnd::AbsMemRef { idx, .. } => {
+                let size = mem_size(insn);
+                match (refs.imm_of)(idx) {
+                    Some(v) => concrete.push(Concrete::AbsMem {
+                        disp: i32::try_from(v).map_err(|_| {
+                            alloc::format!(
+                                "inline asm: replacement `{text}` absolute displacement out of range"
+                            )
+                        })?,
+                        size,
+                    }),
+                    None => {
+                        let (target, off) = (refs.addr_of)(idx).ok_or_else(|| {
+                            alloc::format!(
+                                "inline asm: replacement `{text}` `%c`/`%P` operand is not a constant or address"
+                            )
+                        })?;
+                        if sym_disp.is_some() {
+                            return Err(alloc::format!(
+                                "inline asm: replacement `{text}` has more than one memory operand"
+                            ));
+                        }
+                        sym_disp = Some((target, off, concrete.len(), true));
+                        concrete.push(Concrete::RipRel { disp: 0, size });
+                    }
+                }
+            }
             // `disp(,%index,scale)`: a no-base scaled-index reference. A symbol
             // displacement (name in `sym_target`) takes an absolute reloc; a
             // literal encodes directly.
@@ -7492,8 +7526,36 @@ fn emit_inline_asm(
                     Some(v) => Concrete::Imm(v),
                     None => return fail("inline asm: non-constant `%c`/`%P` operand"),
                 },
-                AsmOpnd::AbsMemRef { .. } => {
-                    return fail("inline asm: `%c`/`%P` memory operand is not supported");
+                // A bare `%cN` / `%PN` memory reference: a constant addresses
+                // absolutely (the percpu form under a `%%gs:` / `%%fs:`
+                // override), a link-time address RIP-relative, as for `%a`.
+                // TODO: gcc spells a `%c` symbol operand as an absolute
+                // reference, which a non-PIC code model needs.
+                AsmOpnd::AbsMemRef { idx, .. } => {
+                    let size = asm_mem_size(None, insn, &asm.operands, &op_reg)
+                        .unwrap_or(AsmRegSize::Quad);
+                    match const_of(idx) {
+                        Some(v) => match i32::try_from(v) {
+                            Ok(disp) => Concrete::AbsMem { disp, size },
+                            Err(_) => {
+                                return fail("inline asm: absolute displacement out of range");
+                            }
+                        },
+                        None => match args
+                            .get(idx as usize)
+                            .and_then(|a| asm_riprel_target(func, extern_data_names, *a))
+                        {
+                            Some(sym) => {
+                                riprel_reloc = Some((sym, 0));
+                                Concrete::RipRel { disp: 0, size }
+                            }
+                            None => {
+                                return fail(
+                                    "inline asm: `%c`/`%P` memory operand is not a constant or address",
+                                );
+                            }
+                        },
+                    }
                 }
                 AsmOpnd::Reg { reg, size } => Concrete::Reg { reg, size },
                 AsmOpnd::Ref { idx, size } => {

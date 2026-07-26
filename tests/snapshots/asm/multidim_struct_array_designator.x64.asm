@@ -11,9 +11,9 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
                	xorq	%rax, %rax
                	xorq	%rax, %rax
                	xorq	%rax, %rax

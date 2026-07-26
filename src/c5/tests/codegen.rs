@@ -3366,3 +3366,177 @@ fn asm_goto_emits_for_both_targets() {
         }
     }
 }
+
+/// Every symbol name in an ELF64 `.symtab`, paired with `st_shndx`
+/// (`0` == SHN_UNDEF). Complements [`elf_func_symbols`], which reports
+/// only defined `STT_FUNC` entries.
+fn elf_symbol_shndx(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u16)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let Some(sh) = (0..shnum)
+        .map(|i| shoff + i * shentsize)
+        .find(|&sh| u32a(sh + 4) == 2)
+    else {
+        return alloc::vec::Vec::new();
+    };
+    let sym_off = u64a(sh + 0x18) as usize;
+    let sym_len = u64a(sh + 0x20) as usize;
+    let strsh = shoff + (u32a(sh + 0x28) as usize) * shentsize;
+    let str_off = u64a(strsh + 0x18) as usize;
+    let mut out = alloc::vec::Vec::new();
+    let mut p = sym_off;
+    while p + 24 <= sym_off + sym_len {
+        let s = str_off + u32a(p) as usize;
+        let e = b[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+        out.push((
+            alloc::string::String::from_utf8_lossy(&b[s..e]).into_owned(),
+            u16a(p + 6),
+        ));
+        p += 24;
+    }
+    out
+}
+
+/// C99 6.2.2: a static object nothing reachable references is
+/// unobservable. `.data` is packed before lowering, from the pre-inline
+/// call graph, so an object whose last reference the inliner removes --
+/// here the table passed to a stub that ignores its parameter -- is only
+/// dead once the -O pipeline has run. Without the post-inline re-run it
+/// stays in the image and its relocations pull in the functions it names,
+/// leaving those functions' undefined references in the object.
+///
+/// Locks: the orphaned table and its `.rela.data` entries are gone, so is
+/// every function reachable only through them and the extern they alone
+/// called, while the sibling global that is still referenced survives at
+/// an offset its `.text` relocation follows.
+#[test]
+fn post_inline_orphaned_static_and_its_relocations_drop() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "\
+        struct dev; \
+        struct dev_ops { long long (*read)(struct dev *); long long (*write)(struct dev *); }; \
+        extern long long dev_private(struct dev *d); \
+        static long long ops_read(struct dev *d) { return dev_private(d); } \
+        static long long ops_write(struct dev *d) { return dev_private(d) + 1; } \
+        static const struct dev_ops dead_ops = { ops_read, ops_write }; \
+        const char kept_tag[8] = \"kept\"; \
+        static struct dev *alloc_dev(void *priv, const struct dev_ops *ops) \
+            { (void)ops; return (struct dev *)priv; } \
+        struct dev *make_dev(void *p) { return alloc_dev(p, &dead_ops); } \
+        const char *tag(void) { return kept_tag; }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+
+        let syms = elf_symbol_shndx(&obj);
+        let named = |n: &str| syms.iter().any(|(s, _)| s == n);
+        for gone in ["dev_private", "ops_read", "ops_write"] {
+            assert!(
+                !named(gone),
+                "{target:?}: `{gone}` survives after the orphaned ops table is dropped \
+                 (symbols: {syms:?})"
+            );
+        }
+        assert!(
+            named("kept_tag") && named("make_dev") && named("tag"),
+            "{target:?}: a still-referenced definition was dropped (symbols: {syms:?})"
+        );
+        let rela_data = elf64_section(&obj, ".rela.data").unwrap_or(&[]);
+        assert!(
+            rela_data.is_empty(),
+            "{target:?}: the dropped table's function-pointer relocations survive \
+             ({} bytes of .rela.data)",
+            rela_data.len()
+        );
+
+        // The survivor kept its bytes, and the code that names it points
+        // at where the repack put it. `.data` leads with the 8-byte NULL
+        // guard, so `kept_tag` follows it.
+        let data = elf64_section(&obj, ".data").expect("no .data section");
+        let (value, size) =
+            elf_data_symbol_value_size(&obj, "kept_tag").expect("kept_tag symtab entry");
+        assert_eq!(
+            size, 8,
+            "{target:?}: `kept_tag` lost its st_size across the repack"
+        );
+        assert_eq!(
+            data.len(),
+            16,
+            "{target:?}: .data should hold only the NULL guard and `kept_tag`"
+        );
+        assert_eq!(
+            value, 8,
+            "{target:?}: `kept_tag` moved to an unexpected offset"
+        );
+        assert_eq!(
+            &data[value as usize..value as usize + 5],
+            b"kept\0",
+            "{target:?}: `kept_tag` bytes did not move with its symbol"
+        );
+        let text_target = elf_first_data_reloc_target(&obj, target);
+        assert_eq!(
+            text_target,
+            Some(value),
+            "{target:?}: the `.text` reference to `kept_tag` does not follow the repack"
+        );
+    }
+}
+
+/// `(st_value, st_size)` of the named `STT_OBJECT` symbol.
+fn elf_data_symbol_value_size(b: &[u8], name: &str) -> Option<(u64, u64)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let sh = (0..shnum)
+        .map(|i| shoff + i * shentsize)
+        .find(|&sh| u32a(sh + 4) == 2)?;
+    let sym_off = u64a(sh + 0x18) as usize;
+    let sym_len = u64a(sh + 0x20) as usize;
+    let strsh = shoff + (u32a(sh + 0x28) as usize) * shentsize;
+    let str_off = u64a(strsh + 0x18) as usize;
+    let mut p = sym_off;
+    while p + 24 <= sym_off + sym_len {
+        let s = str_off + u32a(p) as usize;
+        let e = b[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+        if b[s..e] == *name.as_bytes() && b[p + 4] & 0xf == 1 {
+            return Some((u64a(p + 8), u64a(p + 16)));
+        }
+        p += 24;
+    }
+    None
+}
+
+/// `.data`-relative byte the object's single `.rela.text` entry names.
+/// x86-64 uses a PC-relative `lea` whose addend carries the -4 the
+/// instruction end contributes; aarch64's `adrp` / `add` pair addends
+/// are the target offset itself.
+fn elf_first_data_reloc_target(b: &[u8], target: crate::Target) -> Option<u64> {
+    let rela = elf64_section(b, ".rela.text")?;
+    if rela.len() < 24 {
+        return None;
+    }
+    let addend = i64::from_le_bytes(rela[16..24].try_into().unwrap());
+    Some(match target {
+        crate::Target::LinuxX64 => (addend + 4) as u64,
+        _ => addend as u64,
+    })
+}

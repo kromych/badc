@@ -2857,6 +2857,8 @@ mod tests {
         use crate::c5::codegen::ResolvedDylib;
         Build {
             text_align: 16,
+            orphaned_data: None,
+            ssa_dump: alloc::string::String::new(),
             asm_sections: Vec::new(),
             asm_section_text_refs: Vec::new(),
             asm_text_abs_refs: Vec::new(),
@@ -3543,13 +3545,16 @@ mod tests {
         let program = Compiler::with_target(super::super::super::tests::with_prelude(src), target)
             .compile()
             .expect("compile");
-        let (compacted, bss_size) =
+        let compacted =
             crate::c5::codegen::ssa::shadow::compact_program_data(&program, target, true, false)
                 .expect("compact");
-        let mut build =
-            super::super::lower_for(&compacted, target, super::super::NativeOptions::default())
-                .expect("lower");
-        build.bss_size = bss_size;
+        let mut build = super::super::lower_for(
+            &compacted.program,
+            target,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        build.bss_size = compacted.bss_size;
         assert!(build.bss_size > 0, "the zero array must occupy bss");
         let bytes = write(&tiny_program(), &build).expect("write Mach-O");
 

@@ -52,7 +52,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v32  Imm(1)                                           -> x0
     terminator Return(v32)   (exit_acc=v32)
   block 8  start_pc=0
-    v33  ImmData(24)                                      -> x0
+    v33  Imm(0)                                           -> x0
     v34  Imm(0)                                           -> x0
     v35  Imm(8)                                           -> x0
     v36  Imm(0)                                           -> x0
@@ -60,7 +60,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v38  Imm(0)                                           -> x1
     terminator Jmp(b9)   (exit_acc=v36)
   block 9  start_pc=0
-    v39  ImmData(24)                                      -> x0
+    v39  Imm(0)                                           -> x0
     v40  Imm(4)                                           -> x1
     v41  BinopI { op=add, lhs=v39, rhs_imm=4 }            -> x0
     v42  Imm(4)                                           -> x0
@@ -74,7 +74,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v48  Imm(0)                                           -> x1
     terminator Jmp(b11)   (exit_acc=v46)
   block 11  start_pc=0
-    v49  ImmData(24)                                      -> x0
+    v49  Imm(0)                                           -> x0
     v50  Imm(8)                                           -> x1
     v51  BinopI { op=add, lhs=v49, rhs_imm=8 }            -> x0
     v52  Imm(7)                                           -> x0

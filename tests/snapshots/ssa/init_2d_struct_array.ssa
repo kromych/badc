@@ -84,7 +84,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v56  Imm(3)                                           -> x0
     terminator Return(v56)   (exit_acc=v56)
   block 12  start_pc=0
-    v57  ImmData(304)                                     -> x0
+    v57  Imm(0)                                           -> x0
     v58  Imm(40)                                          -> x1
     v59  BinopI { op=add, lhs=v57, rhs_imm=40 }           -> x1
     v60  BinopI { op=add, lhs=v57, rhs_imm=48 }           -> x0
@@ -92,7 +92,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v62  Imm(0)                                           -> x0
     terminator Jmp(b13)   (exit_acc=v62)
   block 13  start_pc=0
-    v64  ImmData(392)                                     -> x0
+    v64  ImmData(312)                                     -> x0
     v65  Imm(80)                                          -> x1
     v66  BinopI { op=add, lhs=v64, rhs_imm=80 }           -> x1
     v67  Imm(0)                                           -> x1
@@ -102,7 +102,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v71  Imm(0)                                           -> x1
     terminator Bnz { cond=v70, target=b20, fall=b14 }   (exit_acc=v70)
   block 14  start_pc=0
-    v72  ImmData(392)                                     -> x0
+    v72  ImmData(312)                                     -> x0
     v73  Imm(80)                                          -> x1
     v74  BinopI { op=add, lhs=v72, rhs_imm=80 }           -> x1
     v75  Imm(40)                                          -> x1
@@ -120,7 +120,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v83  Imm(5)                                           -> x0
     terminator Return(v83)   (exit_acc=v83)
   block 17  start_pc=0
-    v84  ImmData(560)                                     -> x0
+    v84  ImmData(480)                                     -> x0
     v85  Imm(0)                                           -> x1
     v86  Imm(40)                                          -> x1
     v87  BinopI { op=add, lhs=v84, rhs_imm=40 }           -> x1

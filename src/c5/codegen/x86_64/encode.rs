@@ -1719,6 +1719,7 @@ pub(crate) fn lower(
     target: Target,
     #[cfg_attr(not(feature = "std"), allow(unused_variables))] native: NativeOptions,
     imports: &super::ResolvedImports,
+    prebuilt: Option<super::ssa::shadow::PrebuiltSsa>,
 ) -> Result<Build, C5Error> {
     let mut code: Vec<u8> = Vec::new();
     let mut func_ent_pcs: Vec<usize> = Vec::new();
@@ -1765,16 +1766,25 @@ pub(crate) fn lower(
     // `ssa_emit_x86_64::emit_function`; a per-function emit bail
     // is a hard error so any IR + emit coverage gap surfaces
     // immediately.
-    let mut ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
-        super::ssa::emit_common::time_pass("ssa::produce_ssa_funcs (x86_64)", || {
-            super::ssa::shadow::produce_ssa_funcs(program, target, native.optimize)
-        })?;
+    // A recompaction retry supplies the post-inline bodies directly; the
+    // walk and the -O passes that produced them are skipped, the rest of
+    // the pipeline runs unchanged.
+    let walked = prebuilt.is_none();
+    let (mut ssa_funcs, prebuilt_promoted) = match prebuilt {
+        Some(p) => (p.funcs, p.promoted_local_slots),
+        None => (
+            super::ssa::emit_common::time_pass("ssa::produce_ssa_funcs (x86_64)", || {
+                super::ssa::shadow::produce_ssa_funcs(program, target, native.optimize)
+            })?,
+            alloc::collections::BTreeMap::new(),
+        ),
+    };
     // Frame slots mem2reg promoted to registers (-O) or that slot
     // coalescing moved onto shared storage: the debug-info emitter drops
     // their stale frame location. Slots coalescing moved to a new exclusive
     // offset are recorded separately so the emitter rewrites the location.
     let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
-        alloc::collections::BTreeMap::new();
+        prebuilt_promoted;
     let mut coalesced_slot_remap: alloc::collections::BTreeMap<
         usize,
         alloc::collections::BTreeMap<i64, i64>,
@@ -1784,7 +1794,7 @@ pub(crate) fn lower(
     // analog, shrinking frames built from many control-flow merges whose
     // phi-substitute slots never overlap. The pass runs regardless of debug
     // info so the emitted code is identical with and without -g.
-    if !native.optimize {
+    if !native.optimize && walked {
         let coalesce_dwarf =
             super::ssa::emit_common::time_pass("ssa::slot_coalesce::run (x86_64)", || {
                 super::ssa::slot_coalesce::run(&mut ssa_funcs, false)
@@ -1803,11 +1813,18 @@ pub(crate) fn lower(
             }
         }
     }
+    // Data the -O pipeline orphans after the pre-inline compaction
+    // packed `.data`; the caller recompacts and lowers again.
+    let mut orphaned_data: Option<crate::c5::codegen::ssa::shadow::OrphanedData> = None;
+    // Written only under the `std` dump path; the Build field is
+    // unconditional.
+    #[cfg_attr(not(feature = "std"), allow(unused_mut))]
+    let mut ssa_dump = alloc::string::String::new();
     // -O: promote address-free local slots to SSA values before
     // register allocation, dropping their frame load / store traffic.
     // Record the promoted slots per function so the debug-info emitter
     // can drop their now-stale frame location.
-    if native.optimize {
+    if native.optimize && walked {
         super::ssa::emit_common::time_pass("ssa::mem2reg::run (x86_64)", || {
             for f in &mut ssa_funcs {
                 let promoted = super::ssa::mem2reg::run(f);
@@ -1944,18 +1961,23 @@ pub(crate) fn lower(
                 program,
             );
         });
-        // Re-run static DCE: inlining a static callee into its last caller,
-        // and the branch fold dropping calls in unreachable arms, can leave
-        // a static function with no remaining references. Dropping it now
-        // keeps its body -- and any undefined symbol it alone referenced
-        // (e.g. an unreachable build-time-assert canary the fold removed
-        // from the caller) -- out of the object.
-        super::ssa::emit_common::time_pass(
+    }
+    // Re-run static DCE: inlining a static callee into its last caller,
+    // and the branch fold dropping calls in unreachable arms, can leave
+    // a static function with no remaining references. Dropping it now
+    // keeps its body -- and any undefined symbol it alone referenced
+    // (e.g. an unreachable build-time-assert canary the fold removed
+    // from the caller) -- out of the object. It also reports the data the
+    // pipeline orphaned; the passes below run on prebuilt bodies too, so a
+    // recompaction retry re-runs them and re-checks the report is empty.
+    if native.optimize {
+        orphaned_data = super::ssa::emit_common::time_pass(
             "ssa::shadow::drop_unreachable_statics (x86_64)",
-            || {
-                crate::c5::codegen::ssa::shadow::drop_unreachable_statics(&mut ssa_funcs, program);
-            },
+            || crate::c5::codegen::ssa::shadow::drop_unreachable_statics(&mut ssa_funcs, program),
         );
+        if let Some(o) = &mut orphaned_data {
+            o.ssa.promoted_local_slots = promoted_local_slots.clone();
+        }
         // Frame compaction after inlining, promotion, and the branch
         // folds: slots with no remaining reference are dropped and the
         // survivors repacked, so a spliced-then-promoted callee region
@@ -2154,13 +2176,13 @@ pub(crate) fn lower(
         };
         #[cfg(feature = "std")]
         if super::ssa::dump::enabled(native) {
-            eprintln!(
-                "; --- SSA dump (ok={ok}) ent_pc={ent_pc} ---",
-                ok = ok,
-                ent_pc = ent_pc,
+            use core::fmt::Write;
+            let _ = write!(
+                ssa_dump,
+                "; --- SSA dump (ok={ok}) ent_pc={ent_pc} ---\n; name={name}\n{body}",
+                name = func_ssa.name,
+                body = super::ssa::dump::dump_function(func_ssa, alloc_for),
             );
-            eprintln!("; name={}", func_ssa.name);
-            eprint!("{}", super::ssa::dump::dump_function(func_ssa, alloc_for),);
         }
         if !ok {
             // Surface a recorded bail reason (an unencodable inline-asm form,
@@ -2409,6 +2431,8 @@ pub(crate) fn lower(
         // Every import on this single-TU path gets a trampoline (data
         // imports ride `ResolvedImports::data_bindings`, not `imports`).
         plt_trampoline_offsets: plt_trampoline_offsets.into_iter().map(Some).collect(),
+        orphaned_data,
+        ssa_dump,
     })
 }
 
@@ -2929,6 +2953,7 @@ mod tests {
             super::super::Target::WindowsX64,
             super::super::NativeOptions::default(),
             &imports,
+            None,
         )
         .expect("lower");
 
@@ -2982,6 +3007,7 @@ mod tests {
             super::super::Target::WindowsX64,
             super::super::NativeOptions::default(),
             &imports,
+            None,
         )
         .expect("lower");
 

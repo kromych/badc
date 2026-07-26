@@ -29,19 +29,5 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	cmp	x0, #0xf
-               	b.eq	<addr>
-               	mov	x0, #0x7                // =7
-               	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	cmp	x0, #0x9
-               	b.eq	<addr>
-               	mov	x0, #0x8                // =8
-               	ret
                	mov	x0, #0x0                // =0
                	ret

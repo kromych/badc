@@ -30,6 +30,20 @@ static int scoped_cond_guard(void) {
     return class_mutex_intr_depth;
 }
 
+// Static storage duration reached from a block, in the function's own
+// scope and in a nested one: the same object model, so the same fold.
+static int block_scope_guard(void) {
+    static const _Bool outer_is_conditional = 1;
+    static const int outer_depth = 5;
+    {
+        static const _Bool inner_is_conditional = 1;
+        BUILD_BUG_ON(!inner_is_conditional, 428);
+    }
+    BUILD_BUG_ON(!outer_is_conditional, 429);
+    BUILD_BUG_ON(outer_depth != 5, 430);
+    return outer_depth;
+}
+
 // `const` reaches `char`, so the array elements are writable objects and
 // keep their loads.
 static const char *names[2] = {(const char *)1, (const char *)2};
@@ -41,10 +55,12 @@ static long first_name(void) { return (long)names[0]; }
 int main(void) {
     if (scoped_cond_guard() != 3)
         return 1;
-    if (first_name() != 1)
+    if (block_scope_guard() != 5)
         return 2;
+    if (first_name() != 1)
+        return 3;
     rename_first();
     if (first_name() != 99)
-        return 3;
+        return 4;
     return 0;
 }

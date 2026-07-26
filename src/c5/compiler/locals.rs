@@ -390,6 +390,12 @@ impl Compiler {
                 self.symbols[loc_idx].is_const_qualified = self.pending.base_is_const
                     && array_size == 0
                     && super::types::is_integer_scalar_ty(ty);
+                // Static storage duration and a const-qualified object type
+                // make the initializer the object's value for the whole
+                // execution, as at file scope; the pointer-indirection
+                // exclusion is the same.
+                self.symbols[loc_idx].storage_is_const =
+                    self.pending.base_is_const && !super::types::is_pointer_ty(ty);
                 // As for a file-scope object: the type's own alignment
                 // counts even when the declarator carries no attribute. A
                 // block-scope static shares the `.data` / `.bss` placement of
@@ -570,6 +576,7 @@ impl Compiler {
             defined_here: true,
             has_initializer: true,
             runtime_initialized: self.symbols[loc_idx].runtime_initialized,
+            storage_is_const: self.symbols[loc_idx].storage_is_const,
             ..Default::default()
         });
         self.symbol_index.record(hash);

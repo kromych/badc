@@ -152,15 +152,17 @@ pub(crate) fn fold_selects(func: &mut FunctionSsa) -> bool {
         return false;
     }
     let users = user_lists(func);
-    let mut seen = vec![false; func.insts.len()];
+    // Per-walk visited marks, stamped with the walk's index so the reset
+    // between selects is free rather than a scan of the whole tape.
+    let mut seen = vec![0u32; func.insts.len()];
     let mut queue: Vec<ValueId> = Vec::new();
     let mut changed = false;
-    for (pivot, values) in &selects {
-        seen.iter_mut().for_each(|s| *s = false);
+    for (walk, (pivot, values)) in selects.iter().enumerate() {
+        let stamp = walk as u32 + 1;
         queue.clear();
         queue.extend_from_slice(&users[*pivot as usize]);
         while let Some(u) = queue.pop() {
-            if core::mem::replace(&mut seen[u as usize], true) {
+            if core::mem::replace(&mut seen[u as usize], stamp) == stamp {
                 continue;
             }
             if !matches!(
@@ -780,5 +782,113 @@ mod tests {
         ]);
         run_one(&mut f);
         assert!(matches!(f.insts[1], Inst::Imm(-32768)));
+    }
+
+    /// `phi(1, 0)` at index 2, with `insts[3..]` as the consumers under test.
+    fn with_select(mut consumers: Vec<Inst>) -> FunctionSsa {
+        let mut insts = vec![
+            Inst::Imm(1),
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::I64,
+            },
+        ];
+        insts.append(&mut consumers);
+        fresh(insts)
+    }
+
+    #[test]
+    fn select_invariant_comparison_folds() {
+        // Both incomings are <= 3, so `ugt 3` is 0 either way. The select
+        // itself is left alone: its value does depend on the condition.
+        let mut f = with_select(vec![Inst::BinopI {
+            op: BinOp::Ugt,
+            lhs: 2,
+            rhs_imm: 3,
+        }]);
+        assert!(fold_selects(&mut f));
+        assert!(matches!(f.insts[3], Inst::Imm(0)));
+        assert!(matches!(f.insts[2], Inst::Phi { .. }));
+    }
+
+    #[test]
+    fn select_variant_consumer_is_left_alone() {
+        // `+ 1` is 2 or 1: the consumer does depend on the condition.
+        let mut f = with_select(vec![Inst::BinopI {
+            op: BinOp::Add,
+            lhs: 2,
+            rhs_imm: 1,
+        }]);
+        assert!(!fold_selects(&mut f));
+        assert!(matches!(f.insts[3], Inst::BinopI { .. }));
+    }
+
+    #[test]
+    fn select_invariant_mask_folds_through_a_variant_chain() {
+        // The `or` intermediates differ per incoming (5 / 4), so they are
+        // walked through rather than folded; the mask over them selects
+        // no bit either can set, so it folds.
+        let mut f = with_select(vec![
+            Inst::BinopI {
+                op: BinOp::Or,
+                lhs: 2,
+                rhs_imm: 4,
+            },
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs: 3,
+                rhs_imm: 0x1_8000,
+            },
+        ]);
+        assert!(fold_selects(&mut f));
+        assert!(matches!(f.insts[3], Inst::BinopI { op: BinOp::Or, .. }));
+        assert!(matches!(f.insts[4], Inst::Imm(0)));
+    }
+
+    #[test]
+    fn select_with_a_non_constant_incoming_is_refused() {
+        // A loop-carried phi has an incoming that is not an immediate, so
+        // the set of values it can take is unknown.
+        let mut f = fresh(vec![
+            Inst::Imm(1),
+            Inst::Load {
+                addr: 0,
+                disp: 0,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Ugt,
+                lhs: 2,
+                rhs_imm: 3,
+            },
+        ]);
+        assert!(!fold_selects(&mut f));
+        assert!(matches!(f.insts[3], Inst::BinopI { .. }));
+    }
+
+    #[test]
+    fn fp_kind_select_is_refused() {
+        // An F64 phi merges bit patterns; the integer evaluator must not
+        // compute on them.
+        let mut f = fresh(vec![
+            Inst::Imm(1),
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::F64,
+            },
+            Inst::BinopI {
+                op: BinOp::Ugt,
+                lhs: 2,
+                rhs_imm: 3,
+            },
+        ]);
+        assert!(!fold_selects(&mut f));
     }
 }

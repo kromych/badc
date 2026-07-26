@@ -190,7 +190,8 @@ fn const_scalar_load_folds_to_its_initializer() {
     // type is undefined, so a file-scope `const` scalar's load folds to
     // its initializer and a guard on it resolves -- including the
     // zero-initialized flag, whose object the data compaction moves to
-    // the zero-filled bss region. The qualifier must reach the object:
+    // the zero-filled bss region, and a block-scope static, whose object
+    // model is the same. The qualifier must reach the object:
     // `const char *names[2]` has writable elements, so `names[0]` keeps
     // its load and observes the store. The undefined `bug` would fail
     // the JIT load if any guard survived.
@@ -210,13 +211,20 @@ fn const_scalar_load_folds_to_its_initializer() {
             BUILD_BUG_ON(mask >= 0);
             return depth;
         }
+        static int block_guard(void) {
+            static const _Bool outer = 1;
+            { static const int inner = 5; BUILD_BUG_ON(inner != 5); }
+            BUILD_BUG_ON(!outer);
+            return 5;
+        }
         static const char *names[2] = {(const char *)1, (const char *)2};
         static long first(void) { return (long)names[0]; }
         int main(void) {
             if (guard() != 3) return 1;
-            if (first() != 1) return 2;
+            if (block_guard() != 5) return 2;
+            if (first() != 1) return 3;
             names[0] = (const char *)99;
-            if (first() != 99) return 3;
+            if (first() != 99) return 4;
             return 8;
         }
     ";

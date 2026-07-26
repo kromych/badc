@@ -19,11 +19,5 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x0, #0x28               // =40
-               	bl	<addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x2a               // =42
                	ret

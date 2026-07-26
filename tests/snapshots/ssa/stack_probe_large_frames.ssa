@@ -55,20 +55,88 @@ fn ent_pc=1 n_params=0 variadic=false locals=1125
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1125)                                 -> x7
-    v2   Imm(9000)                                        -> x6
-    v3   Call { target_pc=0, args=[v1, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    terminator Return(v3)   (exit_acc=v3)
+    v1   LocalAddr(-1125)                                 -> x0
+    v2   Imm(9000)                                        -> x1
+    v3   Imm(0)                                           -> x1
+    v4   Imm(0)                                           -> x1
+    v5   Imm(0)                                           -> x1
+    v6   Imm(1)                                           -> x1
+    v7   Store { addr=v1, disp=0, value=v6, kind=I8 }     -> -
+    v8   Imm(72057594037927936)                           -> x1
+    v9   Imm(2)                                           -> x1
+    v10  Imm(0)                                           -> x2
+    v11  Imm(0)                                           -> x2
+    v12  Imm(9000)                                        -> x2
+    v13  Imm(4500)                                        -> x2
+    v14  BinopI { op=add, lhs=v1, rhs_imm=4500 }          -> x2
+    v15  Store { addr=v14, disp=0, value=v9, kind=I8 }    -> -
+    v16  Imm(144115188075855872)                          -> x1
+    v17  Imm(8999)                                        -> x1
+    v18  BinopI { op=add, lhs=v1, rhs_imm=8999 }          -> x1
+    v19  Imm(3)                                           -> x2
+    v20  Store { addr=v18, disp=0, value=v19, kind=I8 }   -> -
+    v21  Imm(216172782113783808)                          -> x1
+    v22  Load { addr=v1, disp=0, kind=I8 }                -> x1
+    v23  Imm(0)                                           -> x2
+    v24  Imm(0)                                           -> x2
+    v25  Imm(9000)                                        -> x2
+    v26  Imm(4500)                                        -> x2
+    v27  BinopI { op=add, lhs=v1, rhs_imm=4500 }          -> x2
+    v28  Load { addr=v27, disp=0, kind=I8 }               -> x2
+    v29  Binop { op=add, lhs=v22, rhs=v28 }               -> x1
+    v30  BinopI { op=shl, lhs=v29, rhs_imm=32 }           -> x2
+    v31  Extend { value=v29, kind=I32 }                   -> x2
+    v32  Imm(8999)                                        -> x2
+    v33  BinopI { op=add, lhs=v1, rhs_imm=8999 }          -> x0
+    v34  Load { addr=v33, disp=0, kind=I8 }               -> x0
+    v35  Binop { op=add, lhs=v29, rhs=v34 }               -> x0
+    v36  BinopI { op=shl, lhs=v35, rhs_imm=32 }           -> x1
+    v37  Extend { value=v35, kind=I32 }                   -> x0
+    terminator Return(v37)   (exit_acc=v37)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=fifty_pages
 fn ent_pc=2 n_params=0 variadic=false locals=25000
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-25000)                                -> x7
-    v2   Imm(200000)                                      -> x6
-    v3   Call { target_pc=0, args=[v1, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    terminator Return(v3)   (exit_acc=v3)
+    v1   LocalAddr(-25000)                                -> x0
+    v2   Imm(200000)                                      -> x1
+    v3   Imm(0)                                           -> x1
+    v4   Imm(0)                                           -> x1
+    v5   Imm(0)                                           -> x1
+    v6   Imm(1)                                           -> x1
+    v7   Store { addr=v1, disp=0, value=v6, kind=I8 }     -> -
+    v8   Imm(72057594037927936)                           -> x1
+    v9   Imm(2)                                           -> x1
+    v10  Imm(0)                                           -> x2
+    v11  Imm(0)                                           -> x2
+    v12  Imm(200000)                                      -> x2
+    v13  Imm(100000)                                      -> x2
+    v14  BinopI { op=add, lhs=v1, rhs_imm=100000 }        -> x2
+    v15  Store { addr=v14, disp=0, value=v9, kind=I8 }    -> -
+    v16  Imm(144115188075855872)                          -> x1
+    v17  Imm(199999)                                      -> x1
+    v18  BinopI { op=add, lhs=v1, rhs_imm=199999 }        -> x1
+    v19  Imm(3)                                           -> x2
+    v20  Store { addr=v18, disp=0, value=v19, kind=I8 }   -> -
+    v21  Imm(216172782113783808)                          -> x1
+    v22  Load { addr=v1, disp=0, kind=I8 }                -> x1
+    v23  Imm(0)                                           -> x2
+    v24  Imm(0)                                           -> x2
+    v25  Imm(200000)                                      -> x2
+    v26  Imm(100000)                                      -> x2
+    v27  BinopI { op=add, lhs=v1, rhs_imm=100000 }        -> x2
+    v28  Load { addr=v27, disp=0, kind=I8 }               -> x2
+    v29  Binop { op=add, lhs=v22, rhs=v28 }               -> x1
+    v30  BinopI { op=shl, lhs=v29, rhs_imm=32 }           -> x2
+    v31  Extend { value=v29, kind=I32 }                   -> x2
+    v32  Imm(199999)                                      -> x2
+    v33  BinopI { op=add, lhs=v1, rhs_imm=199999 }        -> x0
+    v34  Load { addr=v33, disp=0, kind=I8 }               -> x0
+    v35  Binop { op=add, lhs=v29, rhs=v34 }               -> x0
+    v36  BinopI { op=shl, lhs=v35, rhs_imm=32 }           -> x1
+    v37  Extend { value=v35, kind=I32 }                   -> x0
+    terminator Return(v37)   (exit_acc=v37)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=by_value
 fn ent_pc=3 n_params=1 variadic=false locals=1127

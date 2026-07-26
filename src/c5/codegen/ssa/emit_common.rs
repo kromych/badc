@@ -91,7 +91,7 @@ pub(crate) const STACK_PROBE_UNROLL_MAX: u32 = 4;
 /// instruction is emitted at all is `is_dead_pure`'s decision, and the
 /// frame gate below combines the two so it cannot disagree with the
 /// per-inst emit skip.
-pub(crate) fn inst_addresses_local(inst: &super::super::ir::Inst) -> bool {
+fn inst_addresses_local(inst: &super::super::ir::Inst) -> bool {
     use super::super::ir::Inst;
     match inst {
         Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } | Inst::LocalAddr(off) => {

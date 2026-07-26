@@ -50,8 +50,26 @@ Disassembly of section .text:
                	sub	sp, sp, #0x330
                	sub	x0, x29, #0x2, lsl #12  // =0x2000
                	sub	x0, x0, #0x328
-               	mov	x1, #0x2328             // =9000
-               	bl	<addr>
+               	mov	x1, #0x1                // =1
+               	strb	w1, [x0]
+               	mov	x1, #0x2                // =2
+               	mov	x17, #0x1194            // =4500
+               	add	x2, x0, x17
+               	strb	w1, [x2]
+               	mov	x17, #0x2327            // =8999
+               	add	x1, x0, x17
+               	mov	x2, #0x3                // =3
+               	strb	w2, [x1]
+               	ldrb	w1, [x0]
+               	mov	x17, #0x1194            // =4500
+               	add	x2, x0, x17
+               	ldrb	w2, [x2]
+               	add	x1, x1, x2
+               	mov	x17, #0x2327            // =8999
+               	add	x0, x0, x17
+               	ldrb	w0, [x0]
+               	add	x0, x1, x0
+               	sxtw	x0, w0
                	add	sp, sp, #0x2, lsl #12   // =0x2000
                	add	sp, sp, #0x330
                	ldp	x29, x30, [sp], #0x10
@@ -68,9 +86,30 @@ Disassembly of section .text:
                	sub	sp, sp, #0xd40
                	sub	x0, x29, #0x30, lsl #12 // =0x30000
                	sub	x0, x0, #0xd40
-               	mov	x1, #0xd40              // =3392
-               	movk	x1, #0x3, lsl #16
-               	bl	<addr>
+               	mov	x1, #0x1                // =1
+               	strb	w1, [x0]
+               	mov	x1, #0x2                // =2
+               	mov	x17, #0x86a0            // =34464
+               	movk	x17, #0x1, lsl #16
+               	add	x2, x0, x17
+               	strb	w1, [x2]
+               	mov	x17, #0xd3f             // =3391
+               	movk	x17, #0x3, lsl #16
+               	add	x1, x0, x17
+               	mov	x2, #0x3                // =3
+               	strb	w2, [x1]
+               	ldrb	w1, [x0]
+               	mov	x17, #0x86a0            // =34464
+               	movk	x17, #0x1, lsl #16
+               	add	x2, x0, x17
+               	ldrb	w2, [x2]
+               	add	x1, x1, x2
+               	mov	x17, #0xd3f             // =3391
+               	movk	x17, #0x3, lsl #16
+               	add	x0, x0, x17
+               	ldrb	w0, [x0]
+               	add	x0, x1, x0
+               	sxtw	x0, w0
                	add	sp, sp, #0x30, lsl #12  // =0x30000
                	add	sp, sp, #0xd40
                	ldp	x29, x30, [sp], #0x10

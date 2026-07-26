@@ -1995,6 +1995,51 @@ impl Compiler {
         }
     }
 
+    /// C99 6.9.2: a tentative definition and the later defining declaration
+    /// denote one object. A definition that did not fit the tentative's
+    /// reservation took fresh storage, leaving the references emitted before
+    /// it addressing the abandoned slot. Move them onto the definition:
+    /// identifier snapshots in the parsed functions, and the pointer
+    /// initializers already written into the data segment. Only object base
+    /// addresses reach either channel, and the abandoned slot holds no other
+    /// object, so the byte range identifies the relocated object alone.
+    fn rebase_relocated_globals(&mut self) {
+        let moves: Vec<(i64, i64, i64)> = self
+            .symbols
+            .iter()
+            .filter_map(|s| {
+                let (old_off, old_bytes) = s.relocated_from?;
+                (s.val != old_off).then_some((old_off, old_bytes, s.val))
+            })
+            .collect();
+        if moves.is_empty() {
+            return;
+        }
+        let remap = |off: i64| match moves
+            .iter()
+            .find(|&&(old, bytes, _)| off >= old && off < old + bytes)
+        {
+            Some(&(old, _, new)) => new + (off - old),
+            None => off,
+        };
+        for f in &mut self.finished_functions {
+            f.ast.remap_data_offsets(&remap);
+        }
+        for r in &mut self.data_relocs {
+            let Some(&(old, _, new)) = moves.iter().find(|m| m.0 == r.target_anchor as i64) else {
+                continue;
+            };
+            let target = r.target_offset as i64 - old + new;
+            r.target_offset = target as u64;
+            r.target_anchor = new as u64;
+            let at = r.data_offset as usize;
+            self.data[at..at + 8].copy_from_slice(&(target as u64).to_le_bytes());
+        }
+        for s in &mut self.symbols {
+            s.relocated_from = None;
+        }
+    }
+
     /// Run the full compile pipeline once with no auto-include
     /// retry. Shared by [`Self::compile`] (first pass) and by the
     /// retry branch inside the same method.
@@ -2103,6 +2148,7 @@ impl Compiler {
                 self.data_reloc_sym_idx.push(sym_idx);
             }
             self.extern_data_relocs = still_extern;
+            self.rebase_relocated_globals();
             // Record each defined object's byte size for the object
             // writers' symbol tables; the writers have no type layout.
             for i in 0..self.symbols.len() {

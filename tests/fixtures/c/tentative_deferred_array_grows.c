@@ -1,11 +1,9 @@
 // C99 6.9.2: a deferred-size tentative definition (`T x[];`) completes to one
 // element, so it reserves a single slot. A later defining declaration whose
 // initializer is larger denotes the same object but needs more storage; it
-// must allocate fresh storage rather than overrun the globals that were placed
-// after the one-element tentative. A reference emitted before the definition
-// still observes the tentative's storage (the deferred-size object's address is
-// fixed at the tentative), which is the documented limitation; the point of
-// this test is that the larger initializer does not corrupt its neighbours.
+// takes fresh storage rather than overrun the globals placed after the
+// one-element tentative, and references emitted before the definition are
+// rebased onto it.
 static char doc[];
 
 static long neigh1 = 0x1111111111111111L;
@@ -35,9 +33,9 @@ int main(void) {
     if (doc[0] != 'a' || doc[2] != 'd') {
         return 3;
     }
-    // The pre-definition reference resolves to a readable address (the
-    // tentative's one-element slot); it must not fault.
-    if (via_table() == 0) {
+    // The pre-definition reference denotes the same object, so it observes
+    // the definition's storage.
+    if (via_table() == 0 || via_table()[0] != 'a') {
         return 4;
     }
     return 0;

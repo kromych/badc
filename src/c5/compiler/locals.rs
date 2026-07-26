@@ -569,6 +569,7 @@ impl Compiler {
             linkage: crate::c5::symbol::Linkage::Internal,
             defined_here: true,
             has_initializer: true,
+            runtime_initialized: self.symbols[loc_idx].runtime_initialized,
             ..Default::default()
         });
         self.symbol_index.record(hash);
@@ -1011,6 +1012,7 @@ impl Compiler {
         ty: i64,
         array_size: i64,
     ) -> Result<(), C5Error> {
+        self.symbols[loc_idx].runtime_initialized = true;
         let elem_size = self.size_of_type(ty) as i64;
         let count = if array_size > 0 {
             array_size

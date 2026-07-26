@@ -10,116 +10,40 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sxtw	x0, w0
-               	sub	x1, x29, #0x8
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x2]
-               	strb	w10, [x1]
-               	ldrb	w10, [x2, #0x1]
-               	strb	w10, [x1, #0x1]
-               	ldrb	w10, [x2, #0x2]
-               	strb	w10, [x1, #0x2]
-               	ldrb	w10, [x2, #0x3]
-               	strb	w10, [x1, #0x3]
-               	ldr	x10, [sp], #0x10
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrh	w2, [x1, x0, lsl #1]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrh	w1, [x1, x0, lsl #1]
-               	sub	x2, x29, #0x8
-               	strh	w1, [x2]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrh	w1, [x1, x0, lsl #1]
-               	sub	x0, x29, #0x8
-               	strh	w1, [x0, #0x2]
-               	sub	x0, x29, #0x8
-               	ldrh	w0, [x0]
+               	mov	x17, #0xffff            // =65535
+               	and	x0, x2, x17
                	mov	x17, #0x3e8             // =1000
                	mul	x0, x0, x17
-               	sub	x1, x29, #0x8
-               	ldrh	w1, [x1, #0x2]
+               	mov	x17, #0xffff            // =65535
+               	and	x1, x1, x17
                	add	x0, x0, x1
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <probe_int>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x10
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x3]
-               	str	x10, [x2]
-               	ldrb	w10, [x3, #0x8]
-               	strb	w10, [x2, #0x8]
-               	ldrb	w10, [x3, #0x9]
-               	strb	w10, [x2, #0x9]
-               	ldrb	w10, [x3, #0xa]
-               	strb	w10, [x2, #0xa]
-               	ldrb	w10, [x3, #0xb]
-               	strb	w10, [x2, #0xb]
-               	ldr	x10, [sp], #0x10
                	add	x2, x0, x1
-               	sub	x3, x29, #0x10
-               	str	w2, [x3]
-               	sub	x2, x0, x1
-               	sub	x3, x29, #0x10
-               	str	w2, [x3, #0x4]
+               	sub	x3, x0, x1
                	mul	x0, x0, x1
-               	sub	x1, x29, #0x10
-               	str	w0, [x1, #0x8]
-               	sub	x0, x29, #0x10
-               	ldrsw	x1, [x0]
-               	sub	x0, x29, #0x10
-               	ldrsw	x0, [x0, #0x4]
+               	add	x1, x2, x3
                	add	x0, x1, x0
-               	sub	x1, x29, #0x10
-               	ldrsw	x1, [x1, #0x8]
-               	add	x0, x0, x1
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <probe_long>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x10
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x3]
-               	str	x10, [x2]
-               	ldr	x10, [x3, #0x8]
-               	str	x10, [x2, #0x8]
-               	ldr	x10, [sp], #0x10
                	add	x2, x0, x1
-               	sub	x3, x29, #0x10
-               	str	x2, [x3]
                	sub	x1, x0, x1
-               	sub	x0, x29, #0x10
-               	str	x1, [x0, #0x8]
-               	sub	x0, x29, #0x10
-               	ldr	x1, [x0]
-               	sub	x0, x29, #0x10
-               	ldr	x0, [x0, #0x8]
-               	add	x0, x1, x0
+               	add	x0, x2, x1
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <probe_char>:

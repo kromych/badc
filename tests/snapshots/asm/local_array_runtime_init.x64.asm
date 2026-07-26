@@ -11,113 +11,40 @@ Disassembly of section .text:
                	ud2
 
 <probe_short>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
-               	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movzbq	(%rcx), %rdx
-               	movb	%dl, (%rax)
-               	movzbq	0x1(%rcx), %rdx
-               	movb	%dl, 0x1(%rax)
-               	movzbq	0x2(%rcx), %rdx
-               	movb	%dl, 0x2(%rax)
-               	movzbq	0x3(%rcx), %rdx
-               	movb	%dl, 0x3(%rax)
-               	popq	%rdx
-               	leaq	<rip>, %rax
-               	movzwq	(%rax,%rdi,2), %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movw	%ax, (%rcx)
                	leaq	<rip>, %rax
                	movzwq	(%rax,%rdi,2), %rcx
-               	leaq	-0x8(%rbp), %rax
-               	movw	%cx, 0x2(%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rax
+               	leaq	<rip>, %rax
+               	movzwq	(%rax,%rdi,2), %rdx
+               	movq	%rcx, %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	leaq	-0x8(%rbp), %rcx
-               	movzwq	0x2(%rcx), %rcx
+               	movq	%rdx, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
                	addq	%rcx, %rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <probe_int>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movzbq	0x8(%rcx), %rdx
-               	movb	%dl, 0x8(%rax)
-               	movzbq	0x9(%rcx), %rdx
-               	movb	%dl, 0x9(%rax)
-               	movzbq	0xa(%rcx), %rdx
-               	movb	%dl, 0xa(%rax)
-               	movzbq	0xb(%rcx), %rdx
-               	movb	%dl, 0xb(%rax)
-               	popq	%rdx
                	leaq	(%rdi,%rsi), %rax
-               	leaq	-0x10(%rbp), %rcx
-               	movl	%eax, (%rcx)
-               	movq	%rdi, %rax
-               	subq	%rsi, %rax
-               	leaq	-0x10(%rbp), %rcx
-               	movl	%eax, 0x4(%rcx)
-               	movq	%rdi, %rax
-               	imulq	%rsi, %rax
-               	leaq	-0x10(%rbp), %rcx
-               	movl	%eax, 0x8(%rcx)
-               	leaq	-0x10(%rbp), %rax
-               	movslq	(%rax), %rcx
-               	leaq	-0x10(%rbp), %rax
-               	movslq	0x4(%rax), %rax
+               	movq	%rdi, %rcx
+               	subq	%rsi, %rcx
+               	movq	%rdi, %rdx
+               	imulq	%rsi, %rdx
                	addq	%rcx, %rax
-               	leaq	-0x10(%rbp), %rcx
-               	movslq	0x8(%rcx), %rcx
-               	addq	%rcx, %rax
+               	addq	%rdx, %rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <probe_long>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	popq	%rdx
-               	leaq	(%rdi,%rsi), %rax
-               	leaq	-0x10(%rbp), %rcx
-               	movq	%rax, (%rcx)
-               	movq	%rdi, %rcx
-               	subq	%rsi, %rcx
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rcx, 0x8(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %rcx
-               	leaq	-0x10(%rbp), %rax
-               	movq	0x8(%rax), %rax
-               	addq	%rcx, %rax
+               	leaq	(%rdi,%rsi), %rcx
+               	movq	%rdi, %rdx
+               	subq	%rsi, %rdx
+               	leaq	(%rcx,%rdx), %rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <probe_char>:

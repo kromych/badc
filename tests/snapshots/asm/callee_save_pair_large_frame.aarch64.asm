@@ -31,29 +31,21 @@ Disassembly of section .text:
                	ret
 
 <bigframe>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x330
-               	stp	x20, x21, [sp]
+               	stp	x20, x21, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
                	mov	x20, x0
                	mov	x21, x1
-               	sub	x0, x29, #0x320
-               	str	w20, [x0]
-               	sub	x0, x29, #0x320
-               	str	w21, [x0, #0x31c]
-               	sub	x0, x29, #0x320
-               	ldrsw	x0, [x0]
+               	sxtw	x20, w20
+               	mov	x0, x20
                	bl	<addr>
-               	sub	x1, x29, #0x320
-               	ldrsw	x1, [x1, #0x31c]
-               	add	x0, x0, x1
+               	add	x0, x0, x21
                	add	x0, x0, x20
                	add	x0, x0, x21
                	sxtw	x1, w0
                	sxtw	x0, w1
-               	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x330
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x20
                	ret
 
 <main>:

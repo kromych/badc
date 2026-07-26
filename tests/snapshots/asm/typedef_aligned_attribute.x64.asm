@@ -24,31 +24,6 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x28(%rbp), %rax
-               	movl	$0x7, %ecx
-               	movl	%ecx, (%rax)
-               	leaq	-0x28(%rbp), %rax
-               	addq	$0x4, %rax
-               	movabsq	$0x1122334455667788, %rcx # imm = 0x1122334455667788
-               	movq	%rcx, (%rax)
-               	leaq	-0x28(%rbp), %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x7, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	-0x28(%rbp), %rax
-               	addq	$0x4, %rax
-               	movq	(%rax), %rax
-               	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
                	xorq	%rax, %rax
                	addq	$0x30, %rsp
                	popq	%rbp

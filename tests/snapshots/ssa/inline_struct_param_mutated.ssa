@@ -4,14 +4,14 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
-    v2   LocalAddr(-1)                                    -> x1
-    v3   Load { addr=v2, disp=0, kind=I64 }               -> x1
-    v4   BinopI { op=add, lhs=v3, rhs_imm=100 }           -> x1
+    v1   LocalAddr(-1)                                    -> x1
+    v2   LocalAddr(-1)                                    -> x0
+    v3   Load { addr=v2, disp=0, kind=I64 }               -> x0
+    v4   BinopI { op=add, lhs=v3, rhs_imm=100 }           -> x0
     v5   Store { addr=v1, disp=0, value=v4, kind=I64 }    -> -
-    v6   LocalAddr(-1)                                    -> x0
-    v7   Load { addr=v6, disp=0, kind=I64 }               -> x0
-    terminator Return(v7)   (exit_acc=v7)
+    v6   LocalAddr(-1)                                    -> x1
+    v7   Load { addr=v6, disp=0, kind=I64 }               -> x1
+    terminator Return(v4)   (exit_acc=v4)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=2

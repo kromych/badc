@@ -4,15 +4,15 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x1
-    v2   Imm(0)                                           -> x0
-    v3   Imm(0)                                           -> x0
-    v4   LocalAddr(-4)                                    -> x0
-    v5   Store { addr=v4, disp=0, value=v1, kind=I64 }    -> -
-    v6   BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x2
-    v7   Store { addr=v4, disp=8, value=v1, kind=I64 }    -> -
-    v8   LocalAddr(-2)                                    -> x2
-    v9   Mcpy { dst=v8, src=v4, size=16 }                 -> x0
+    v1   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> x1
+    v3   Imm(0)                                           -> x1
+    v4   LocalAddr(-4)                                    -> x1
+    v5   Imm(0)                                           -> x2
+    v6   BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x1
+    v7   Imm(0)                                           -> x1
+    v8   LocalAddr(-2)                                    -> x1
+    v9   Imm(0)                                           -> x1
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

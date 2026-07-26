@@ -94,28 +94,8 @@ Disassembly of section .text:
                	addq	$0x70, %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
-               	addq	%rax, %rcx
-               	movl	$0xaaaa, %eax           # imm = 0xAAAA
-               	movl	$0xbbbb, %edx           # imm = 0xBBBB
-               	leaq	-0x20(%rbp), %rsi
-               	movq	%rax, (%rsi)
-               	leaq	-0x20(%rbp), %rax
-               	movq	%rdx, 0x8(%rax)
-               	leaq	-0x20(%rbp), %rax
-               	leaq	-0x30(%rbp), %rdx
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rdx)
-               	movq	0x8(%rax), %rcx
-               	movq	%rcx, 0x8(%rdx)
-               	popq	%rcx
-               	movq	%rdx, %rax
-               	leaq	-0x30(%rbp), %rax
-               	movq	(%rax), %rdx
-               	leaq	-0x30(%rbp), %rax
-               	movq	0x8(%rax), %rax
-               	addq	%rdx, %rax
                	addq	%rcx, %rax
+               	addq	$0x16665, %rax          # imm = 0x16665
                	cmpq	$0x16785, %rax          # imm = 0x16785
                	jne	<addr>
                	xorq	%rax, %rax

@@ -223,6 +223,12 @@ pub(crate) struct Symbol {
     /// initializer is a real duplicate.
     pub has_initializer: bool,
 
+    /// True when the object's initial value comes from stores emitted at
+    /// its declaration point rather than from the data image, which is
+    /// left zeroed (a static array with a `&&label` element). A pass
+    /// reading the image for the object's value must skip it.
+    pub runtime_initialized: bool,
+
     /// Number of derefs from this variable's *loaded value* down
     /// to a function-pointer rvalue, plus 1, or 0 if the variable
     /// has no function-pointer lineage. Concretely:

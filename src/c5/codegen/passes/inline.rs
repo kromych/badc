@@ -348,21 +348,14 @@ fn is_inline_candidate(
         return false;
     }
     // Host-ABI aggregates are admitted only in the shapes the splice can
-    // reproduce: a by-value parameter passed in a single integer register
-    // (it arrives as the address of the caller's copy in one argument, and
-    // the body's field loads off the parameter slot redirect to that
-    // address), and a return passed in one or two integer registers (the
-    // body's result-slot writes redirect to the caller's return slot).
-    // Memory-class and FP-class shapes stay rejected.
+    // reproduce: a by-value parameter passed in integer registers (it
+    // arrives as the address of the caller's copy in one argument, and the
+    // body's field loads off the parameter slot redirect to that address),
+    // and a return passed in one or two integer registers (the flat splice
+    // redirects the body's result-slot writes to the caller's return slot;
+    // the reloc splice copies the returned aggregate into it field by
+    // field). Memory-class and FP-class shapes stay rejected.
     if !func.agg_descs.is_empty() {
-        // The redirect (parameter slot -> caller argument address; result
-        // slot -> caller return slot) is wired only through the flat
-        // single-block splice; a multi-block aggregate callee would reach
-        // `splice_multi_block`, which has no redirect.
-        if func.blocks.len() != 1 {
-            say(format_args!("multi-block aggregate"));
-            return false;
-        }
         // Every descriptor must pass by value in integer registers. A
         // by-value parameter arrives as a single argument value -- the
         // address of the caller's copy (the SSA `Inst::Call` carries one
@@ -437,10 +430,14 @@ fn is_inline_candidate(
         say(format_args!("no Return block"));
         return false;
     }
-    // The postfix join phi is built only on the no-aggregate splice path,
-    // and only for an integer return (an FP join phi is out of scope).
-    if return_blocks > 1 && (!no_agg || func.ret_is_fp) {
-        say(format_args!("{return_blocks} Return blocks (need 1)"));
+    // Multiple returns merge through the postfix join phi, built only for
+    // an integer value (an FP join phi is out of scope). An aggregate
+    // return joins its per-return result addresses the same way -- the
+    // postfix copy then reads the merged address -- so only the FP scalar
+    // shape stays out. A flat (single-block) callee has one Return by
+    // construction.
+    if return_blocks > 1 && func.ret_is_fp {
+        say(format_args!("{return_blocks} FP Return blocks (need 1)"));
         return false;
     }
     // `inline` / `__attribute__((always_inline))`-marked functions
@@ -476,14 +473,31 @@ fn is_inline_candidate(
         .filter_map(|(i, _)| func.param_local_slots.get(i).copied())
         .filter(|&s| s != 0)
         .collect();
-    // For an aggregate return, the result lives in the slot named by the
+    // A callee's own local slots are relocated into the caller's frame by
+    // `splice_multi_block`, which `inline_caller` runs for every multi-block
+    // callee and for a single-block callee that holds inline asm. The reloc
+    // path is what lets an asm output write through an own local (the
+    // output's `LocalAddr(<0)` and the read-back `LoadLocal(<0)` relocate
+    // into the caller frame) and what carries an aggregate across blocks:
+    // an aggregate return is copied field by field from the returned
+    // address into the caller's return slot, and a struct-parameter slot
+    // redirects to the caller's argument address. A single-block callee
+    // without asm takes the flat path and keeps its strict gates.
+    let has_asm = func
+        .insts
+        .iter()
+        .any(|i| matches!(i, Inst::InlineAsm { .. }));
+    let reloc = func.blocks.len() > 1 || has_asm;
+    // On the flat path an aggregate return lives in the slot named by the
     // single `Return(LocalAddr(result_slot))`; the splice redirects that
     // slot to the caller's return slot. Reject shapes the redirect cannot
     // handle: a non-LocalAddr return (a global address or an
     // indirect-result pointer), and a result slot that is also a
     // parameter slot (the two redirects would collide and the return slot
-    // would be left unwritten).
-    let result_slot: Option<i64> = if func.ret_agg.is_some() {
+    // would be left unwritten). The reloc path has no result slot: it
+    // copies from whatever address each `Return` carries, so it only
+    // rejects a value-less aggregate Return.
+    let result_slot: Option<i64> = if func.ret_agg.is_some() && !reloc {
         let Terminator::Return(rv) = func.blocks[0].terminator else {
             say(format_args!("aggregate return without a Return terminator"));
             return false;
@@ -502,6 +516,25 @@ fn is_inline_candidate(
     } else {
         None
     };
+    // The per-field copy reads the returned address, so every aggregate
+    // Return must carry one. A prologue-spilled struct-parameter slot
+    // would both relocate (its spill) and redirect (its address); reject
+    // the overlap.
+    if reloc {
+        if func.ret_agg.is_some()
+            && func
+                .blocks
+                .iter()
+                .any(|b| matches!(b.terminator, Terminator::Return(v) if v == NO_VALUE))
+        {
+            say(format_args!("aggregate return without a value"));
+            return false;
+        }
+        if param_agg_slots.iter().any(|s| spilled.contains(s)) {
+            say(format_args!("struct-parameter slot with a prologue spill"));
+            return false;
+        }
+    }
     // Every write into the result slot must stay within its bounds: the
     // splice reproduces each result-slot store against the caller's return
     // slot, so a store past the slot would corrupt the caller's frame.
@@ -534,21 +567,6 @@ fn is_inline_candidate(
             }
         }
     }
-    // A callee's own local slots are relocated into the caller's frame by
-    // `splice_multi_block`, which `inline_caller` runs for every multi-block
-    // callee and for a single-block callee that holds inline asm. The reloc
-    // path is what lets an asm output write through an own local (the
-    // `get_current` / `__rdmsr` shape: the output's `LocalAddr(<0)` and the
-    // read-back `LoadLocal(<0)` relocate into the caller frame); a
-    // single-block callee without asm keeps the strict flat-path gates, so
-    // broadening does not newly inline unrelated address-taken-local
-    // helpers. A no-aggregate callee is the shape whose relocated locals and
-    // inline asm the splice reproduces; an aggregate callee keeps the gates.
-    let has_asm = func
-        .insts
-        .iter()
-        .any(|i| matches!(i, Inst::InlineAsm { .. }));
-    let reloc = func.agg_descs.is_empty() && (func.blocks.len() > 1 || has_asm);
     for (idx, inst) in func.insts.iter().enumerate() {
         match inst {
             Inst::Imm(_)
@@ -569,13 +587,14 @@ fn is_inline_candidate(
                 // On the reloc path the splice relocates a callee's own local
                 // slot (negative) and a spilled parameter cell (its prologue
                 // spill initializes the relocated slot) into the caller's
-                // frame; an unspilled cell (a stack-passed parameter, the
-                // reserved cells) has no reproducible initialization. With
-                // aggregates only a struct-parameter slot (redirects to the
-                // caller's argument) or the aggregate-return result slot
-                // (redirects to the caller's return slot) is admissible.
+                // frame, and redirects a struct-parameter slot to the caller's
+                // argument address; an unspilled non-aggregate cell (a
+                // stack-passed parameter, the reserved cells) has no
+                // reproducible initialization. On the flat path only a
+                // struct-parameter slot or the aggregate-return result slot
+                // (redirected to the caller's return slot) is admissible.
                 if reloc {
-                    if *s >= 0 && !spilled.contains(s) {
+                    if *s >= 0 && !spilled.contains(s) && !param_agg_slots.contains(s) {
                         say(format_args!("LocalAddr of unspilled parameter cell {s}"));
                         return false;
                     }
@@ -589,27 +608,49 @@ fn is_inline_candidate(
                 // addresses a callee frame slot -- whose `LocalAddr` the arm
                 // above already rejects (no caller equivalent) -- or writes
                 // through a pointer value the splice reproduces by remapping
-                // the address operand (`rewrite_callee_inst`). Either way it
-                // is admissible. With aggregates present, a store could reach
-                // a by-value parameter's frame copy, whose slot redirects to
-                // the caller's argument, so the write would corrupt the
-                // caller; keep the strict result-slot gate (the redirect to
-                // the caller's return slot is the only reproducible write).
-                if !func.agg_descs.is_empty()
-                    && (result_slot.is_none() || !addr_is_slot(func, *addr, result_slot.unwrap()))
-                {
-                    say(format_args!("store outside the aggregate return slot"));
-                    return false;
+                // the address operand (`rewrite_callee_inst`). With
+                // aggregates a store must not reach a by-value parameter's
+                // frame copy: its slot redirects to the caller's argument,
+                // so the write would corrupt the caller's object. The reloc
+                // path rejects exactly those; the flat path keeps the strict
+                // result-slot gate (the redirect to the caller's return slot
+                // is its only reproducible write).
+                if !func.agg_descs.is_empty() {
+                    if reloc {
+                        if param_agg_slots
+                            .iter()
+                            .any(|&p| slot_base_offset(func, *addr, p).is_some())
+                        {
+                            say(format_args!("store into a struct-parameter slot"));
+                            return false;
+                        }
+                    } else if result_slot.is_none()
+                        || !addr_is_slot(func, *addr, result_slot.unwrap())
+                    {
+                        say(format_args!("store outside the aggregate return slot"));
+                        return false;
+                    }
                 }
             }
             Inst::Mcpy { dst, src, .. } => {
-                // For a no-aggregate callee an Mcpy is reproducible: the splice
+                // For a reloc callee an Mcpy is reproducible: the splice
                 // remaps its dst / src operands (`rewrite_callee_inst`), and a
                 // dst / src that names a relocated local slot rides the
-                // LocalAddr relocation. With aggregates present only the
-                // compound-literal template init (an `ImmData` template copied
-                // into the result slot) is admitted.
-                if !reloc {
+                // LocalAddr relocation -- but the dst must not reach a
+                // struct-parameter slot (redirected to the caller's argument,
+                // as for `Store`). On the flat path only the compound-literal
+                // template init (an `ImmData` template copied into the result
+                // slot) is admitted.
+                if reloc {
+                    if !func.agg_descs.is_empty()
+                        && param_agg_slots
+                            .iter()
+                            .any(|&p| slot_base_offset(func, *dst, p).is_some())
+                    {
+                        say(format_args!("mcpy into a struct-parameter slot"));
+                        return false;
+                    }
+                } else {
                     let to_result =
                         result_slot.is_some() && addr_is_slot(func, *dst, result_slot.unwrap());
                     let from_template =
@@ -1057,12 +1098,66 @@ pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
 ///   old `ValueId`, and the join branches to the postfix.
 /// * an `AsmGoto` callee block keeps its terminator; its `jump_tables`
 ///   row is cloned into the caller with the successor block ids shifted.
+/// Scalar (offset, width) pieces covering an aggregate's fields, for the
+/// per-field copy an aggregate-returning splice emits. Non-overlapping
+/// flat fields are used as-is so a caller's field read matches a piece
+/// exactly; overlapping fields (a union) fall back to power-of-two
+/// chunks of the merged ranges. A field whose size is not a load width
+/// is chunked the same way. Padding bytes are not copied; they hold
+/// unspecified values either way (C99 6.2.6.1p6).
+fn agg_pieces(d: &crate::c5::ir::AggDesc) -> Vec<(u32, u32)> {
+    let mut fields: Vec<(u32, u32)> = d.fields.iter().map(|f| (f.offset, f.size)).collect();
+    fields.sort_unstable();
+    fields.dedup();
+    let overlap = fields.windows(2).any(|w| w[0].0 + w[0].1 > w[1].0);
+    let ranges: Vec<(u32, u32)> = if overlap {
+        // Merge into maximal covered ranges.
+        let mut merged: Vec<(u32, u32)> = Vec::new();
+        for &(off, size) in &fields {
+            match merged.last_mut() {
+                Some((_, end)) if off <= *end => *end = (*end).max(off + size),
+                _ => merged.push((off, off + size)),
+            }
+        }
+        merged.iter().map(|&(lo, hi)| (lo, hi - lo)).collect()
+    } else {
+        fields
+    };
+    let mut pieces = Vec::new();
+    for (off, size) in ranges {
+        if !overlap && matches!(size, 1 | 2 | 4 | 8) {
+            pieces.push((off, size));
+            continue;
+        }
+        let (mut at, end) = (off, off + size);
+        while at < end {
+            let mut w = 8u32;
+            while w > 1 && (at % w != 0 || at + w > end) {
+                w /= 2;
+            }
+            pieces.push((at, w));
+            at += w;
+        }
+    }
+    pieces
+}
+
+fn piece_kinds(size: u32) -> (LoadKind, StoreKind) {
+    match size {
+        1 => (LoadKind::U8, StoreKind::I8),
+        2 => (LoadKind::U16, StoreKind::I16),
+        4 => (LoadKind::U32, StoreKind::I32),
+        _ => (LoadKind::I64, StoreKind::I64),
+    }
+}
+
 fn splice_multi_block(
     caller: &mut FunctionSsa,
     callee: &FunctionSsa,
     splice_block_idx: usize,
     call_pc: u32,
     call_args: &[ValueId],
+    ret_slot: i64,
     placement: &mut SlotPlacement<'_>,
 ) {
     let SlotPlacement {
@@ -1074,6 +1169,25 @@ fn splice_multi_block(
     let n_callee = callee.blocks.len();
     let prefix_id = splice_block_idx as u32;
     let postfix_id = (splice_block_idx + 1) as u32;
+    // For an aggregate-returning callee the postfix block opens with a
+    // per-field copy from the returned address into the caller's return
+    // slot -- the register transfer a non-inlined call performs. The call
+    // result has no scalar value (the caller reads its own slot), so
+    // `remap[call_pc]` stays NO_VALUE.
+    let ret_pieces: Option<Vec<(u32, u32)>> = callee
+        .ret_agg
+        .map(|i| agg_pieces(&callee.agg_descs[i as usize]));
+    // Frame slots holding a register-passed struct parameter's bytes,
+    // mapped to the parameter index whose argument (the address of the
+    // caller's copy) replaces the body's `LocalAddr(slot)`.
+    let param_slot_arg: BTreeMap<i64, usize> = callee
+        .param_aggs
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| a.is_some())
+        .filter_map(|(i, _)| callee.param_local_slots.get(i).map(|&s| (s, i)))
+        .filter(|&(s, _)| s != 0)
+        .collect();
     // Caller-block-id remap: blocks > splice shift by +1 to make room
     // for the postfix.
     let shift_caller_bid = |b: u32| -> u32 {
@@ -1086,9 +1200,10 @@ fn splice_multi_block(
     let callee_block_base = (n_caller + 1) as u32;
     let shift_callee_bid = |b: u32| -> u32 { b + callee_block_base };
     // Multiple returns route through a synthetic join block appended after
-    // the callee blocks; its phi merges the per-return values. A void
-    // multi-return has no value to merge and needs no join. A single
-    // return keeps the direct `Jmp(postfix)`.
+    // the callee blocks; its phi merges the per-return values -- for an
+    // aggregate return, the per-return result addresses the postfix copy
+    // reads. A void multi-return has no value to merge and needs no join.
+    // A single return keeps the direct `Jmp(postfix)`.
     let n_returns = callee
         .blocks
         .iter()
@@ -1245,6 +1360,12 @@ fn splice_multi_block(
     // id is position arithmetic: assign the complete value maps up
     // front, then emit once. The emission re-derives each id and
     // debug-asserts it matches the assignment.
+    // First new-inst id of the aggregate-return postfix copy (the
+    // `LocalAddr(ret_slot)` + per-piece load/store run opening the postfix
+    // block), and the id of the join phi it reads for a multi-return
+    // callee. Assigned by the counting pass below.
+    let mut pieces_base: u32 = 0;
+    let mut agg_join_phi: ValueId = NO_VALUE;
     {
         let mut at: u32 = 0;
         let count = |pc: u32, remap: &mut [ValueId], at: &mut u32| {
@@ -1258,6 +1379,14 @@ fn splice_multi_block(
         }
         for pc in splice_block.inst_range.start..call_pc {
             count(pc, &mut remap, &mut at);
+        }
+        // The aggregate-return copy opens the postfix block: one
+        // `LocalAddr(ret_slot)` plus a load and a store per piece. The ids
+        // are position arithmetic like everything else; only the copy's own
+        // stores reference them.
+        if let Some(pieces) = &ret_pieces {
+            pieces_base = at;
+            at += 1 + 2 * pieces.len() as u32;
         }
         for pc in (call_pc + 1)..splice_block.inst_range.end {
             count(pc, &mut remap, &mut at);
@@ -1280,6 +1409,14 @@ fn splice_multi_block(
                             }
                             _ => arg,
                         };
+                    }
+                    // A struct-parameter slot's address is the caller's
+                    // argument value; no instruction is emitted for it.
+                    Inst::LocalAddr(s) if param_slot_arg.contains_key(s) => {
+                        callee_remap[ce_pc as usize] = counted_args
+                            .get(param_slot_arg[s])
+                            .copied()
+                            .unwrap_or(NO_VALUE);
                     }
                     Inst::LocalAddr(s) if *s < 0 || *s >= 2 => {
                         callee_remap[ce_pc as usize] = at;
@@ -1305,8 +1442,15 @@ fn splice_multi_block(
         // join phi, whose id is one past the spliced callee body -- the
         // current `at`, since Step 6 emits exactly that many callee insts
         // and the phi is pushed right after. A void multi-return has no
-        // value.
-        if use_join {
+        // value. An aggregate return has no scalar result either -- the
+        // postfix copy writes the caller's return slot -- but its
+        // multi-return join phi (over the result addresses) sits at the
+        // same reserved id.
+        if ret_pieces.is_some() {
+            if use_join {
+                agg_join_phi = at;
+            }
+        } else if use_join {
             remap[call_pc as usize] = at;
         } else {
             for cblock in &callee.blocks {
@@ -1316,6 +1460,25 @@ fn splice_multi_block(
             }
         }
     }
+    // Source address the aggregate-return copy reads: the single Return's
+    // mapped result address, or the join phi merging the per-return
+    // addresses. Resolvable here because the counting pass above assigned
+    // the complete callee map.
+    let agg_ret_src: ValueId = if ret_pieces.is_some() {
+        if use_join {
+            agg_join_phi
+        } else {
+            let mut src = NO_VALUE;
+            for cblock in &callee.blocks {
+                if let Terminator::Return(v) = cblock.terminator {
+                    src = map_v(v, &callee_remap);
+                }
+            }
+            src
+        }
+    } else {
+        NO_VALUE
+    };
     {
         // Step 1: caller blocks 0..splice_block_idx (unchanged).
         for b_idx in 0..splice_block_idx {
@@ -1376,6 +1539,44 @@ fn splice_multi_block(
         // callee Return is spliced (Step 6) and resolves across the
         // emission fixpoint, one forward-reference level per pass.
         let postfix_start = new_insts.len() as u32;
+        // Aggregate-return copy: read each piece from the returned address
+        // (`agg_ret_src`, assigned by the counting pass) and store it into
+        // the caller's return slot. All loads precede all stores so an
+        // overlapping source (the callee returning through a pointer into
+        // the caller's own slot) copies correctly, matching the register
+        // transfer of a non-inlined call.
+        if let Some(pieces) = &ret_pieces {
+            debug_assert_eq!(postfix_start, pieces_base);
+            let la = new_insts.len() as u32;
+            new_insts.push(Inst::LocalAddr(ret_slot));
+            new_inst_src.push((0, 0));
+            new_f32.push(false);
+            let mut loaded: Vec<ValueId> = Vec::with_capacity(pieces.len());
+            for &(off, size) in pieces.iter() {
+                let (lk, _) = piece_kinds(size);
+                loaded.push(new_insts.len() as u32);
+                new_insts.push(Inst::Load {
+                    addr: agg_ret_src,
+                    disp: off as i32,
+                    kind: lk,
+                    volatile: false,
+                });
+                new_inst_src.push((0, 0));
+                new_f32.push(false);
+            }
+            for (&(off, size), &lv) in pieces.iter().zip(&loaded) {
+                let (_, sk) = piece_kinds(size);
+                new_insts.push(Inst::Store {
+                    addr: la,
+                    disp: off as i32,
+                    value: lv,
+                    kind: sk,
+                    volatile: false,
+                });
+                new_inst_src.push((0, 0));
+                new_f32.push(false);
+            }
+        }
         for pc in (call_pc + 1)..splice_block.inst_range.end {
             emit_caller_inst(
                 pc,
@@ -1481,6 +1682,17 @@ fn splice_multi_block(
                             &mut new_inst_src,
                             &mut new_f32,
                         );
+                        continue;
+                    }
+                    // A struct-parameter slot redirects to the caller's
+                    // argument value -- the address of the caller's copy --
+                    // with no instruction emitted, mirroring the counting
+                    // pass and the flat splice.
+                    Inst::LocalAddr(s) if param_slot_arg.contains_key(s) => {
+                        callee_remap[ce_pc as usize] = remapped_args
+                            .get(param_slot_arg[s])
+                            .copied()
+                            .unwrap_or(NO_VALUE);
                         continue;
                     }
                     // A relocated slot access: a callee own local (negative)
@@ -1597,7 +1809,12 @@ fn splice_multi_block(
                         phi_incoming.push((shift_callee_bid(ci as u32), rv));
                         Terminator::Jmp(join_id)
                     } else {
-                        remap[call_pc as usize] = rv;
+                        // An aggregate return leaves the call's remap at
+                        // NO_VALUE: the postfix copy reads `rv` and the
+                        // caller consumes its own return slot.
+                        if ret_pieces.is_none() {
+                            remap[call_pc as usize] = rv;
+                        }
                         Terminator::Jmp(postfix_id)
                     }
                 }
@@ -1638,7 +1855,14 @@ fn splice_multi_block(
         // integer kind is safe -- an FP multi-return callee is rejected.
         if use_join {
             let phi_id = new_insts.len() as u32;
-            debug_assert_eq!(phi_id, remap[call_pc as usize]);
+            debug_assert_eq!(
+                phi_id,
+                if ret_pieces.is_some() {
+                    agg_join_phi
+                } else {
+                    remap[call_pc as usize]
+                }
+            );
             new_insts.push(Inst::Phi {
                 incoming: phi_incoming,
                 kind: LoadKind::I64,
@@ -1748,12 +1972,13 @@ fn splice_multi_block(
         f32_values: new_f32,
         param_fp_mask: original.param_fp_mask,
         // The caller's own `agg_descs` carry through unchanged. A
-        // spliced callee may carry agg_descs, but only the
-        // single-integer-register parameter shape (see the eligibility
-        // guard): its sole agg-referencing inst is the parameter-slot
-        // `LocalAddr`, which the splice redirects to the caller argument
-        // and never re-emits, so no spliced instruction references a
-        // callee-side index. Do not merge the callee's agg_descs.
+        // spliced callee may carry agg_descs -- register-class parameter
+        // and return shapes (see the eligibility guard) -- but no spliced
+        // instruction references a callee-side index: a struct-parameter
+        // slot's `LocalAddr` redirects to the caller argument, the return
+        // copy is plain loads and stores, and the filter admits no callee
+        // `Call` with aggregate metadata. Do not merge the callee's
+        // agg_descs.
         agg_descs: original.agg_descs,
         param_aggs: original.param_aggs,
 
@@ -1826,9 +2051,7 @@ fn splice_param_ref(
 /// output writes through a relocated own local. Multi-block callees always
 /// take that path regardless; this only reclassifies single-block ones.
 fn needs_reloc_splice(c: &FunctionSsa) -> bool {
-    c.blocks.len() == 1
-        && c.agg_descs.is_empty()
-        && c.insts.iter().any(|i| matches!(i, Inst::InlineAsm { .. }))
+    c.blocks.len() == 1 && c.insts.iter().any(|i| matches!(i, Inst::InlineAsm { .. }))
 }
 
 /// Splice eligible call sites in `caller` with the bodies named by
@@ -2082,10 +2305,11 @@ fn inline_caller(
     let has_multiblock_call = caller.blocks.iter().any(|b| {
         (b.inst_range.start..b.inst_range.end).any(|pc| {
             matches!(&caller.insts[pc as usize],
-                Inst::Call { target_pc, args, .. }
+                Inst::Call { target_pc, args, ret_slot_local, .. }
                 if callees.get(target_pc).is_some_and(|c| (c.blocks.len() > 1
                     || needs_reloc_splice(c))
-                    && args.len() >= c.n_params))
+                    && args.len() >= c.n_params
+                    && (c.ret_agg.is_none() || *ret_slot_local != 0)))
         })
     });
     if !any_change && !has_multiblock_call {
@@ -2191,23 +2415,29 @@ fn inline_caller(
             .any(|b| matches!(b.terminator, Terminator::JumpTable { .. }));
     let mut steps = 0usize;
     while steps < MAX_MULTI_BLOCK_SPLICE_STEPS && !block_id_shift_unsafe {
-        let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>)> = None;
+        let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>, i64)> = None;
         'find: for (b_idx, block) in caller.blocks.iter().enumerate() {
             for pc in block.inst_range.start..block.inst_range.end {
                 if let Inst::Call {
-                    target_pc, args, ..
+                    target_pc,
+                    args,
+                    ret_slot_local,
+                    ..
                 } = &caller.insts[pc as usize]
                     && let Some(c) = callees.get(target_pc)
                     && (c.blocks.len() > 1 || needs_reloc_splice(c))
-                    // Same argument-count guard as the single-block path.
+                    // Same argument-count guard as the single-block path;
+                    // an aggregate-returning callee also needs the site's
+                    // return slot for the postfix copy.
                     && args.len() >= c.n_params
+                    && (c.ret_agg.is_none() || *ret_slot_local != 0)
                 {
-                    hit = Some((b_idx, pc, *c, args.clone()));
+                    hit = Some((b_idx, pc, *c, args.clone(), *ret_slot_local));
                     break 'find;
                 }
             }
         }
-        let Some((b_idx, pc, callee, args)) = hit else {
+        let Some((b_idx, pc, callee, args, ret_slot)) = hit else {
             break;
         };
         #[cfg(feature = "codegen_test")]
@@ -2219,7 +2449,7 @@ fn inline_caller(
                 n = caller.name
             );
         }
-        splice_multi_block(caller, callee, b_idx, pc, &args, placement);
+        splice_multi_block(caller, callee, b_idx, pc, &args, ret_slot, placement);
         steps += 1;
     }
 }
@@ -2837,7 +3067,7 @@ mod tests {
             abi,
             Some(&mut reason)
         ));
-        assert_eq!(reason, "2 Return blocks (need 1)");
+        assert_eq!(reason, "2 FP Return blocks (need 1)");
     }
 
     /// A variadic always_inline callee cannot be inlined; the candidate

@@ -1773,9 +1773,16 @@ pub(crate) fn lower(
         // leaves unreachable (so their calls and extern references are
         // neither lowered nor relocated), to a fixed point: pruning a
         // folded branch's dead predecessor can collapse a merge phi and
-        // expose a fresh constant condition one level down.
+        // expose a fresh constant condition one level down. The
+        // const-data-aware form also folds loads from const initialized
+        // data inside the same fixed point, so an inlined table lookup
+        // whose index just became constant decides the next branch (a
+        // build-time-assert guard reading a const table).
         super::ssa::emit_common::time_pass("passes::simplify_branches::run (aarch64)", || {
-            crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs, true);
+            crate::c5::codegen::passes::simplify_branches::run_with_const_data(
+                &mut ssa_funcs,
+                program,
+            );
         });
         // Re-run static DCE: inlining a static callee into its last caller,
         // and the branch fold dropping calls in unreachable arms, can leave

@@ -29,70 +29,15 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x1, %ecx
-               	movb	%cl, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	incq	%rax
-               	movl	$0x2, %ecx
-               	movq	%rcx, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movsbq	(%rax), %rax
-               	cmpq	$0x1, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	incq	%rax
-               	movq	(%rax), %rax
-               	cmpq	$0x2, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
+               	xorq	%rax, %rax
                	movl	$0xa, %eax
                	movl	$0xb, %eax
                	xorq	%rax, %rax
                	movl	$0x1, %eax
                	movabsq	$-0x1, %rax
-               	leaq	-0x18(%rbp), %rax
-               	movl	$0x7, %ecx
-               	movb	%cl, (%rax)
-               	leaq	-0x18(%rbp), %rax
-               	movl	$0x8, %ecx
-               	movl	%ecx, 0x4(%rax)
-               	leaq	-0x18(%rbp), %rax
-               	movsbq	(%rax), %rax
-               	cmpq	$0x7, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	leaq	-0x18(%rbp), %rax
-               	movslq	0x4(%rax), %rax
-               	cmpq	$0x8, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x7, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
                	xorq	%rax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
 
 <die>:
                	jmp	<addr>

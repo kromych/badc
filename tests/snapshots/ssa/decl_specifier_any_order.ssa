@@ -29,18 +29,15 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v20  Imm(-1)                                          -> x0
     v21  Imm(0)                                           -> x0
     v22  LocalAddr(-2)                                    -> x0
-    v23  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x1
-    v24  Imm(-5)                                          -> x1
-    v25  Store { addr=v22, disp=8, value=v24, kind=I64 }  -> -
+    v23  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x0
+    v24  Imm(-5)                                          -> x0
+    v25  Imm(0)                                           -> x0
     v26  LocalAddr(-2)                                    -> x0
     v27  BinopI { op=add, lhs=v26, rhs_imm=8 }            -> x1
     v28  Load { addr=v26, disp=8, kind=I64 }              -> x0
-    v29  BinopI { op=ge, lhs=v28, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v29, target=b5, fall=b4 }   (exit_acc=v29)
+    v29  Imm(0)                                           -> x0
+    terminator Jmp(b4)   (exit_acc=v29)
   block 4  start_pc=0
-    v30  Imm(8)                                           -> x0
-    terminator Return(v30)   (exit_acc=v30)
-  block 5  start_pc=0
     v31  Imm(0)                                           -> x0
     terminator Return(v31)   (exit_acc=v31)
 decl_specifier_any_order.c:29: warning: unused variable `llv`

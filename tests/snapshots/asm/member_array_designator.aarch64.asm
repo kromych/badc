@@ -145,18 +145,18 @@ Disassembly of section .text:
                	sub	x2, x29, #0x18
                	str	w1, [x2, #0x8]
                	add	x2, x0, x1
+               	sxtw	x4, w2
                	sub	x3, x29, #0x18
                	str	w2, [x3, #0x10]
                	mul	x2, x0, x1
+               	sxtw	x5, w2
                	sub	x3, x29, #0x18
                	str	w2, [x3, #0x14]
-               	sub	x2, x29, #0x18
-               	ldrsw	x2, [x2]
+               	sxtw	x2, w0
                	cmp	x2, x0
                	cset	x2, ne
                	cbnz	x2, <addr>
-               	sub	x2, x29, #0x18
-               	ldrsw	x3, [x2, #0x14]
+               	sxtw	x3, w5
                	mul	x2, x0, x1
                	sxtw	x2, w2
                	cmp	x3, x2
@@ -166,13 +166,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x2, x29, #0x18
-               	ldrsw	x2, [x2, #0x8]
+               	sxtw	x2, w1
                	cmp	x2, x1
                	cset	x2, ne
                	cbnz	x2, <addr>
-               	sub	x2, x29, #0x18
-               	ldrsw	x2, [x2, #0x10]
+               	sxtw	x2, w4
                	add	x0, x0, x1
                	sxtw	x0, w0
                	cmp	x2, x0

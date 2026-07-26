@@ -155,14 +155,7 @@ Disassembly of section .text:
                	addq	$0x370, %rsp            # imm = 0x370
                	popq	%rbp
                	retq
-               	leaq	-0x2d0(%rbp), %rcx
                	xorq	%rax, %rax
-               	movq	%rax, 0x10(%rcx)
-               	leaq	-0x2d0(%rbp), %rcx
-               	movq	%rax, (%rcx)
-               	leaq	-0x358(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movl	%ecx, (%rax)
                	leaq	-0x200(%rbp), %rax
                	testq	%rax, %rax
                	sete	%al
@@ -189,11 +182,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	-0x358(%rbp), %rax
-               	movslq	(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
+               	xorq	%rax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xe, %eax

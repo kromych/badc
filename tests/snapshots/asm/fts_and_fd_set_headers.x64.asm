@@ -16,9 +16,7 @@ Disassembly of section .text:
                	subq	$0xb0, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	leaq	-0x90(%rbp), %rax
                	xorq	%rdx, %rdx
-               	movb	%dl, (%rax)
                	leaq	-0x98(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx

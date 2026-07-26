@@ -24,16 +24,6 @@ Disassembly of section .text:
                	movl	$0x12345678, %ecx       # imm = 0x12345678
                	movl	%ecx, 0x4(%rax)
                	leaq	-0x10(%rbp), %rax
-               	movslq	0x4(%rax), %rcx
-               	cmpq	$0x12345678, %rcx       # imm = 0x12345678
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movl	$0x4, %ebx
-               	movslq	0x4(%rax), %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	leaq	-0x10(%rbp), %rax
                	movss	(%rax,%riz), %xmm0
                	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
                	movq	%rax, %xmm15
@@ -279,7 +269,6 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>

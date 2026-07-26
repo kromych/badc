@@ -38,7 +38,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=7
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> x0
@@ -138,21 +138,21 @@ fn ent_pc=3 n_params=0 variadic=false locals=7
     terminator Return(v72)   (exit_acc=v72)
   block 12  start_pc=0
     v73  LocalAddr(-2)                                    -> x0
-    v74  ImmData(48)                                      -> x1
-    v75  Mcpy { dst=v73, src=v74, size=16 }               -> x0
+    v74  ImmData(48)                                      -> x0
+    v75  Imm(0)                                           -> x0
     v76  ImmCode(ent_pc=0)                                -> x0
     v77  LocalAddr(-2)                                    -> x0
-    v78  Store { addr=v77, disp=0, value=v4, kind=I64 }   -> -
-    v79  ImmCode(ent_pc=2)                                -> x1
+    v78  Imm(0)                                           -> x0
+    v79  ImmCode(ent_pc=2)                                -> x13
     v80  LocalAddr(-2)                                    -> x0
-    v81  BinopI { op=add, lhs=v80, rhs_imm=8 }            -> x2
-    v82  Store { addr=v80, disp=8, value=v79, kind=I64 }  -> -
-    v83  LocalAddr(-2)                                    -> x3
+    v81  BinopI { op=add, lhs=v80, rhs_imm=8 }            -> x0
+    v82  Imm(0)                                           -> x0
+    v83  LocalAddr(-2)                                    -> x12
     v84  Imm(0)                                           -> x0
     v85  LocalAddr(-2)                                    -> x0
     v86  Load { addr=v85, disp=0, kind=I64 }              -> x0
     v87  Imm(1077936128)                                  -> x7 [f32]
-    v88  CallIndirect { target=v86, args=[v87], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v88  CallIndirect { target=v4, args=[v87], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
     v89  Imm(1086324736)                                  -> x0 [f32]
     v90  Binop { op=fne, lhs=v88, rhs=v89 }               -> x0
     terminator Bz { cond=v90, target=b14, fall=b13 }   (exit_acc=v90)
@@ -163,7 +163,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=7
     v92  LoadLocal { off=-6, kind=I64 }                   -> x0
     v93  Load { addr=v83, disp=0, kind=I64 }              -> x0
     v94  Imm(1077936128)                                  -> x7 [f32]
-    v95  CallIndirect { target=v93, args=[v94], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v95  CallIndirect { target=v4, args=[v94], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
     v96  Imm(1086324736)                                  -> x0 [f32]
     v97  Binop { op=fne, lhs=v95, rhs=v96 }               -> x0
     terminator Bz { cond=v97, target=b16, fall=b15 }   (exit_acc=v97)
@@ -176,7 +176,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=7
     v101 Load { addr=v83, disp=8, kind=I64 }              -> x0
     v102 Imm(1069547520)                                  -> x7 [f32]
     v103 Imm(1073741824)                                  -> x6 [f32]
-    v104 CallIndirect { target=v101, args=[v102, v103], callee_variadic=false, fixed_args=2, fp_return=true, fp_arg_mask=0x3 } -> d0 [f32]
+    v104 CallIndirect { target=v79, args=[v102, v103], callee_variadic=false, fixed_args=2, fp_return=true, fp_arg_mask=0x3 } -> d0 [f32]
     v105 Imm(1080033280)                                  -> x0 [f32]
     v106 Binop { op=fne, lhs=v104, rhs=v105 }             -> x0
     terminator Bz { cond=v106, target=b18, fall=b17 }   (exit_acc=v106)

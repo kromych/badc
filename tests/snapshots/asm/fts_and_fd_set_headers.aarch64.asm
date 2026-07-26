@@ -14,9 +14,7 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0xc0]
                	add	x29, sp, #0xc0
-               	sub	x0, x29, #0x90
                	mov	x2, #0x0                // =0
-               	strb	w2, [x0]
                	sub	x0, x29, #0x98
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

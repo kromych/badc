@@ -82,20 +82,16 @@ Disassembly of section .text:
                	addq	$0x3e8, %rcx            # imm = 0x3E8
                	movq	%rcx, (%rax)
                	leaq	-0x20(%rbp), %rax
-               	movq	0x18(%rax), %rcx
-               	decq	%rcx
-               	movq	%rcx, 0x18(%rax)
-               	leaq	-0x20(%rbp), %rax
-               	movq	(%rax), %rcx
+               	movq	0x18(%rax), %rdx
+               	decq	%rdx
+               	movq	%rdx, 0x18(%rax)
                	leaq	-0x20(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rax, %rcx
                	leaq	-0x20(%rbp), %rax
                	movq	0x10(%rax), %rax
                	addq	%rax, %rcx
-               	leaq	-0x20(%rbp), %rax
-               	movq	0x18(%rax), %rax
-               	addq	%rcx, %rax
+               	leaq	(%rcx,%rdx), %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	popq	%r11

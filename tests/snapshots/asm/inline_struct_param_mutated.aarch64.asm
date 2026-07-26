@@ -16,13 +16,11 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	sub	x16, x29, #0x8
                	str	x0, [x16]
-               	sub	x0, x29, #0x8
                	sub	x1, x29, #0x8
-               	ldr	x1, [x1]
-               	add	x1, x1, #0x64
-               	str	x1, [x0]
                	sub	x0, x29, #0x8
                	ldr	x0, [x0]
+               	add	x0, x0, #0x64
+               	str	x0, [x1]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10

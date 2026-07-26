@@ -18,9 +18,140 @@
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, ValueId};
 use crate::c5::program::Program;
 use crate::c5::token::Token;
+
+/// Const-data view for folding loads of `const` objects: the `[lo, hi)`
+/// byte ranges of const, defined, initialized file-scope arrays, the
+/// data-segment offsets holding relocated pointers (unknown until link,
+/// so never folded), and the data image itself.
+pub(crate) struct ConstData<'a> {
+    intervals: Vec<(i64, i64)>,
+    reloc_offsets: Vec<i64>,
+    data: &'a [u8],
+}
+
+impl<'a> ConstData<'a> {
+    pub(crate) fn build(program: &'a Program) -> Self {
+        let intervals: Vec<(i64, i64)> = program
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.class == Token::Glo as i64
+                    && s.storage_is_const
+                    && s.has_initializer
+                    && s.defined_here
+                    && s.reserved_data_bytes > 0
+            })
+            .map(|s| (s.val, s.val + s.reserved_data_bytes))
+            .collect();
+        let mut reloc_offsets: Vec<i64> =
+            program.data_relocs.iter().map(|r| r.data_offset as i64).collect();
+        reloc_offsets.sort_unstable();
+        ConstData {
+            intervals,
+            reloc_offsets,
+            data: &program.data,
+        }
+    }
+
+    /// The image bytes of `[off, off + width)` when the whole read sits
+    /// inside one const interval and overlaps no relocation slot.
+    fn read(&self, off: i64, width: i64) -> Option<&[u8]> {
+        if !self
+            .intervals
+            .iter()
+            .any(|&(lo, hi)| off >= lo && off + width <= hi)
+        {
+            return None;
+        }
+        // A relocation patches 8 bytes at its offset with a link-time
+        // address; any overlap makes the read's value unknown here.
+        let i = self.reloc_offsets.partition_point(|&r| r + 8 <= off);
+        if self.reloc_offsets.get(i).is_some_and(|&r| r < off + width) {
+            return None;
+        }
+        self.data.get(off as usize..(off + width) as usize)
+    }
+}
+
+/// Resolve `v` to a data-segment offset when it is an `ImmData` plus a
+/// folded constant displacement chain.
+fn data_addr(func: &FunctionSsa, mut v: ValueId, mut off: i64) -> Option<i64> {
+    for _ in 0..8 {
+        match func.insts.get(v as usize)? {
+            Inst::ImmData(base) => return Some(base.wrapping_add(off)),
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs,
+                rhs_imm,
+            } => {
+                off = off.wrapping_add(*rhs_imm);
+                v = *lhs;
+            }
+            Inst::BinopI {
+                op: BinOp::Sub,
+                lhs,
+                rhs_imm,
+            } => {
+                off = off.wrapping_sub(*rhs_imm);
+                v = *lhs;
+            }
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// Fold non-volatile integer loads from const, initialized data into the
+/// initializer's value (C99 6.7.3: a const object's stored value cannot
+/// be modified, so the image bytes are the object's value for the whole
+/// execution). Returns true when any load folded. Runs inside the branch
+/// fold's fixed point so a load whose address becomes constant only
+/// after a phi collapses still folds; all emission targets are
+/// little-endian, so the image decodes with `from_le_bytes`.
+pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
+    let mut changed = false;
+    for i in 0..func.insts.len() {
+        let Inst::Load {
+            addr,
+            disp,
+            kind,
+            volatile: false,
+        } = func.insts[i]
+        else {
+            continue;
+        };
+        let width = match kind {
+            LoadKind::I8 | LoadKind::U8 => 1i64,
+            LoadKind::I16 | LoadKind::U16 => 2,
+            LoadKind::I32 | LoadKind::U32 => 4,
+            LoadKind::I64 => 8,
+            // The FP kinds keep their register class through the load;
+            // an integer immediate would misclassify them.
+            LoadKind::F32 | LoadKind::F64 => continue,
+        };
+        let Some(off) = data_addr(func, addr, disp as i64) else {
+            continue;
+        };
+        let Some(bytes) = cd.read(off, width) else {
+            continue;
+        };
+        let mut raw = [0u8; 8];
+        raw[..width as usize].copy_from_slice(bytes);
+        let u = u64::from_le_bytes(raw);
+        let value = match kind {
+            LoadKind::I8 => u as u8 as i8 as i64,
+            LoadKind::I16 => u as u16 as i16 as i64,
+            LoadKind::I32 => u as u32 as i32 as i64,
+            _ => u as i64,
+        };
+        func.insts[i] = Inst::Imm(value);
+        changed = true;
+    }
+    changed
+}
 
 pub(crate) fn run(funcs: &mut [FunctionSsa], program: &Program) {
     // [lo, hi) byte ranges of const-element, defined, initialized

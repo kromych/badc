@@ -27,8 +27,19 @@
 //!   - the store and every read sit in one block with the store first, so
 //!     the store dominates the reads and the value is available at each.
 //! A slot failing any condition is left in memory.
+//!
+//! A second, piece-level form (`promote_pieces_once`) covers the
+//! multi-word struct return the inliner materialises as per-field stores
+//! into the call's return slot: a linear walk of the block tracks each
+//! slot's disjoint (disp, width) piece values, forwards a load exactly
+//! matching a piece, and propagates pieces across a whole-slot `Mcpy`
+//! into another tracked slot (`S r = f(...)` copies the return slot into
+//! r's slot, then reads r's fields). The same escape / one-block /
+//! LoadLocal disciplines apply. A multi-cell slot left with no reads
+//! after forwarding has its writes removed; the outer fixed point then
+//! drains the copy chain one link per round.
 
-use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
@@ -117,32 +128,36 @@ impl SlotUse {
 fn run_one(func: &mut FunctionSsa) {
     // A copy out of one slot can leave a second slot in the single-store
     // shape (`S r = f();` copies the return slot into r's slot, then reads
-    // r). Re-run until stable so a forwarding chain fully collapses; the
-    // pass is monotone (each pass only removes slots) so the slot count
-    // bounds the iterations.
+    // r). Re-run until stable so a forwarding chain fully collapses; both
+    // passes are monotone (each round only removes accesses) so the
+    // instruction count bounds the iterations. The one-word pass runs
+    // first each round so it keeps every slot it fully handles.
     let mut rounds = func.insts.len() + 1;
-    while rounds > 0 && promote_once(func) {
+    while rounds > 0 && (promote_once(func) || promote_pieces_once(func)) {
         rounds -= 1;
     }
 }
 
-fn promote_once(func: &mut FunctionSsa) -> bool {
-    let n = func.insts.len();
-    if n == 0 {
-        return false;
-    }
-    // value id of every `LocalAddr(S)` -> its slot S.
+/// Escape-and-visibility context shared by both promotion forms.
+struct SlotCtx {
+    /// value id of every `LocalAddr(S)` -> its slot S.
+    la_slot: BTreeMap<ValueId, i64>,
+    /// Slots also accessed via `LoadLocal` / `StoreLocal`: those mix
+    /// addressing forms the pass does not model.
+    local_accessed: alloc::collections::BTreeSet<i64>,
+    /// Slots whose `LocalAddr` is referenced as an operand in more than
+    /// one block. Both forms reason within one straight-line block, so an
+    /// access elsewhere makes a slot's state unknowable here.
+    multi_block: alloc::collections::BTreeSet<i64>,
+}
+
+fn slot_ctx(func: &FunctionSsa) -> SlotCtx {
     let mut la_slot: BTreeMap<ValueId, i64> = BTreeMap::new();
     for (i, inst) in func.insts.iter().enumerate() {
         if let Inst::LocalAddr(s) = inst {
             la_slot.insert(i as ValueId, *s);
         }
     }
-    if la_slot.is_empty() {
-        return false;
-    }
-    // A slot accessed via LoadLocal / StoreLocal mixes addressing forms the
-    // pass does not model; disqualify it up front.
     let mut local_accessed: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
     for inst in &func.insts {
         match inst {
@@ -152,11 +167,6 @@ fn promote_once(func: &mut FunctionSsa) -> bool {
             _ => {}
         }
     }
-    // Promotion neutralises the single store globally, so a slot whose
-    // address is used in more than one block is unsafe: a read in another
-    // block would see the slot after the store is removed. Exclude any slot
-    // whose `LocalAddr` is referenced as an operand in more than one block;
-    // the per-block pass below promotes only block-local slots.
     let mut slot_block: BTreeMap<i64, u32> = BTreeMap::new();
     let mut multi_block: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
     for (b, block) in func.blocks.iter().enumerate() {
@@ -191,6 +201,26 @@ fn promote_once(func: &mut FunctionSsa) -> bool {
                 }
             }
         }
+    }
+    SlotCtx {
+        la_slot,
+        local_accessed,
+        multi_block,
+    }
+}
+
+fn promote_once(func: &mut FunctionSsa) -> bool {
+    let n = func.insts.len();
+    if n == 0 {
+        return false;
+    }
+    let SlotCtx {
+        la_slot,
+        local_accessed,
+        multi_block,
+    } = slot_ctx(func);
+    if la_slot.is_empty() {
+        return false;
     }
 
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];

@@ -3255,6 +3255,107 @@ mod tests {
         assert!(needs_reloc_splice(&input_only));
     }
 
+    /// An accessor whose body reads / writes through a `__seg_gs` /
+    /// `__seg_fs` pointer is inlinable, and the operand walk routes both
+    /// variants: an unrouted address operand would keep the callee's
+    /// `ValueId` and land the access at an unrelated offset from the
+    /// segment base.
+    #[test]
+    fn segment_access_inlines_with_its_operands_routed() {
+        use crate::c5::ir::AsmSeg;
+        let abi = Target::LinuxX64.abi();
+        // v0/v1 params, v2 = v0 + v1, v3 = load through %gs:v2.
+        let read = FunctionSsa {
+            n_params: 2,
+            insts: alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64,
+                },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs: 1,
+                },
+                Inst::SegLoad {
+                    addr: 2,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                    seg: AsmSeg::Gs,
+                },
+            ],
+            inst_src: alloc::vec![(0, 0); 4],
+            f32_values: alloc::vec![false; 4],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..4,
+                terminator: Terminator::Return(3),
+                exit_acc: 3,
+            }],
+            ..Default::default()
+        };
+        assert!(is_inline_candidate(&read, 32, abi, None));
+        // The same with a store: v3 = v0 + v1, %fs:v3 = v2.
+        let write = FunctionSsa {
+            n_params: 3,
+            insts: alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64,
+                },
+                Inst::ParamRef {
+                    idx: 2,
+                    kind: LoadKind::I64,
+                },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs: 1,
+                },
+                Inst::SegStore {
+                    addr: 3,
+                    value: 2,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                    seg: AsmSeg::Fs,
+                },
+            ],
+            inst_src: alloc::vec![(0, 0); 5],
+            f32_values: alloc::vec![false; 5],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..5,
+                terminator: Terminator::Return(4),
+                exit_acc: 4,
+            }],
+            ..Default::default()
+        };
+        assert!(is_inline_candidate(&write, 32, abi, None));
+        // Operand routing, the half an allow-list entry cannot supply.
+        let remap = alloc::vec![7, 8, 9, 10, 11];
+        let mut load = read.insts[3].clone();
+        remap_inst_operands(&mut load, &remap);
+        assert!(matches!(load, Inst::SegLoad { addr: 9, .. }));
+        let mut store = write.insts[4].clone();
+        remap_inst_operands(&mut store, &remap);
+        assert!(matches!(
+            store,
+            Inst::SegStore {
+                addr: 10,
+                value: 9,
+                ..
+            }
+        ));
+    }
+
     /// A naked function is never inlined: its body is raw asm carrying its
     /// own calling convention, so splicing it into a caller would transfer
     /// control through the inlined return and corrupt the frame -- the

@@ -824,6 +824,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_pushsection.c", 42),
     ("inline_asm_alternative_replacement.c", 42),
     ("file_scope_asm_decls.c", 0),
+    ("file_scope_asm_label_binding.c", 42),
     ("inline_asm_goto_output.c", 42),
     ("inline_asm_goto_multiret.c", 42),
     ("inline_asm_output_reg.c", 42),

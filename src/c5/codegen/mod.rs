@@ -1566,6 +1566,21 @@ pub(crate) struct Build {
     /// absolute immediate (`pushq $1f`). The relocatable ELF writer emits one
     /// `R_X86_64_32S` per entry against the `.text` symbol.
     pub asm_text_abs_refs: Vec<AsmTextAbsRef>,
+    /// Named labels an inline-asm template defines in the main code stream.
+    /// Each is a definition the unit owns, so the writers emit a local
+    /// `.text` symbol and bind a C reference to the same name against it.
+    pub asm_text_labels: Vec<AsmTextLabel>,
+}
+
+/// A named label an inline-asm template defines in the emitted code stream
+/// (`asm volatile ("some_label:\n\t...")`). GNU as makes such a label a
+/// definition of the unit, so a reference from C binds to it instead of
+/// leaving an undefined symbol.
+#[derive(Debug, Clone)]
+pub(crate) struct AsmTextLabel {
+    pub name: alloc::string::String,
+    /// Byte offset of the definition within `Build::text`.
+    pub text_offset: usize,
 }
 
 /// x86_64 Win64 prologue unwind descriptor for one function.

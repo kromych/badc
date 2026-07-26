@@ -8838,3 +8838,71 @@ fn x86_this_ip_rip_relative_lea_has_no_reloc() {
         );
     }
 }
+
+#[test]
+fn c_reference_binds_to_an_asm_defined_label_in_the_same_unit() {
+    // A label defined only by the unit's assembly is a definition of the
+    // unit: gas binds a reference within the unit to it and emits no
+    // undefined entry. gcc on this source emits one local symbol per label
+    // and a direct relocation per reference; three definition sites must
+    // behave alike -- a pushed section, plain file-scope asm in `.text`, and
+    // a named label in a function body's asm stream.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        extern void fn_in_section(void);\n\
+        __asm__(\".pushsection .init.text,\\\"ax\\\",@progbits\\n\"\n\
+                \".type fn_in_section, @function\\n\"\n\
+                \"fn_in_section:\\n\\tret\\n\"\n\
+                \".size fn_in_section, .-fn_in_section\\n\"\n\
+                \".popsection\\n\");\n\
+        extern void plain_text_fn(void);\n\
+        __asm__(\".text\\n\"\n\
+                \".type plain_text_fn, @function\\n\"\n\
+                \"plain_text_fn:\\n\\tret\\n\");\n\
+        extern void label_in_text(void);\n\
+        void user(void) { __asm__ volatile(\"label_in_text:\\n\\tnop\\n\" ::: \"memory\"); }\n\
+        unsigned long a(void) { return (unsigned long)&fn_in_section; }\n\
+        unsigned long b(void) { return (unsigned long)&plain_text_fn; }\n\
+        unsigned long c(void) { return (unsigned long)&label_in_text; }\n";
+    let program = Compiler::with_options(
+        src.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    for name in ["fn_in_section", "plain_text_fn", "label_in_text"] {
+        let hits: alloc::vec::Vec<&crate::c5::linker::object::NativeSymbol> =
+            obj.symbols.iter().filter(|s| s.name == name).collect();
+        assert_eq!(
+            hits.len(),
+            1,
+            "`{name}` must surface as one symbol, not a definition plus an \
+             undefined twin: {hits:?}"
+        );
+        assert_eq!(
+            hits[0].binding, 0,
+            "`{name}` has no `.globl`, so it is local"
+        );
+        assert!(
+            matches!(hits[0].section, NativeSymSection::Text),
+            "`{name}` must be defined in the unit's code, not undefined: {:?}",
+            hits[0].section
+        );
+        // The C reference relocates against that definition.
+        let idx = obj.symbols.iter().position(|s| s.name == name).unwrap();
+        assert!(
+            obj.text_relocs.iter().any(|r| r.sym_idx == idx),
+            "the C reference to `{name}` must relocate against the in-unit definition"
+        );
+    }
+}

@@ -168,15 +168,19 @@ fn fold_exec_asm_sections(
     if build.output_kind == OutputKind::Relocatable || build.asm_sections.is_empty() {
         return Ok(label_at);
     }
-    // Names the image needs: the C code's extern call sites. (An extern
-    // DATA reference to a section label keeps its undefined-reference
-    // diagnostic; TODO fold those through the writers' address-load
-    // patching.) Folding a section can add needs of its own (its
+    // Names the image needs: the C code's extern call sites and address-of
+    // / data references. Folding a section can add needs of its own (its
     // relocations), so iterate to a fixpoint.
     let mut needed: alloc::collections::BTreeSet<String> = build
         .user_extern_call_sites
         .iter()
         .map(|s| s.symbol_name.clone())
+        .chain(
+            build
+                .user_extern_data_refs
+                .iter()
+                .map(|r| r.symbol_name.clone()),
+        )
         .collect();
     let is_a64 = matches!(
         target,
@@ -324,6 +328,16 @@ fn resolve_single_tu_extern_refs(
     for r in core::mem::take(&mut build.user_extern_data_refs) {
         if data_bindings.contains(r.symbol_name.as_str()) {
             kept_data.push(r);
+            continue;
+        }
+        // A label defined in a folded executable asm section: the reference
+        // takes the same address-load patch a function address takes, as the
+        // linker binds the object path's reference against the label.
+        if let Some(&target_off) = asm_labels.get(r.symbol_name.as_str()) {
+            build.func_fixups.push(crate::c5::codegen::FuncFixup {
+                adrp_offset: r.instr_offset,
+                target_native_offset: target_off,
+            });
             continue;
         }
         if !weak_names.contains(r.symbol_name.as_str()) {

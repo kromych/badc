@@ -2453,6 +2453,25 @@ fn emit_stack_probe(code: &mut Vec<u8>) {
     super::encode::emit_mi(code, Mnem::Mov, 8, Reg::RSP, 0, 0);
 }
 
+/// Reserve the realigned region and align rsp down to `realign_align`
+/// (C11 6.7.5). The reservation descends in probed steps; the AND then
+/// descends by up to `realign_align - 1` further bytes, which the probe
+/// schedule cannot see. When the two together can outrun the unprobed
+/// margin, a probe on each side of the AND keeps every step from a touched
+/// address within one page, so a stack overflow still faults in the guard.
+fn emit_realign_rsp(code: &mut Vec<u8>, frame: Frame) {
+    let slack = frame.realign_align - 1;
+    let probe = frame.realign_region_bytes.saturating_add(slack) > MAX_UNPROBED_STACK_STEP;
+    emit_stack_alloc(code, frame.realign_region_bytes, Some(Reg::R11));
+    if probe {
+        emit_stack_probe(code);
+    }
+    super::encode::emit_ri(code, Mnem::And, 8, Reg::RSP, -(frame.realign_align as i32));
+    if probe {
+        emit_stack_probe(code);
+    }
+}
+
 /// Lower `rsp -= bytes`, descending in probed steps when the amount is
 /// larger than one step can safely cover.
 ///
@@ -2744,13 +2763,14 @@ fn emit_prologue(
     save_callee_saved(code, alloc, frame);
     emit_struct_param_scatter(code, func, frame, abi);
     emit_struct_stack_param_copy(code, func, frame, abi);
-    // C11 6.7.5: realign rsp down to the over-aligned objects' alignment and
-    // reserve their region below the static frame. Done last, after the
-    // callee-saved stores (which stay at rbp-frame_bytes, where the epilogue's
+    // C11 6.7.5: reserve the over-aligned objects' region below the static
+    // frame and align rsp down into it. Done last, after the callee-saved
+    // stores (which stay at rbp-frame_bytes, where the epilogue's
     // restore_dynamic_sp puts rsp back); the objects live at [rsp + region_off].
+    // Reserving before aligning keeps the AND's descent inside bytes the
+    // reservation already claimed, so the region cannot overlap the frame.
     if frame.realign_align > 0 {
-        super::encode::emit_ri(code, Mnem::And, 8, Reg::RSP, -(frame.realign_align as i32));
-        emit_stack_alloc(code, frame.realign_region_bytes, Some(Reg::R11));
+        emit_realign_rsp(code, frame);
     }
     uw
 }

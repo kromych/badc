@@ -14,23 +14,25 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
+               	andq	$-0x10, %rsp
+               	subq	$0x20, %rsp
                	leaq	<rip>, %rax
-               	leaq	-0x10(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	pushq	%rdx
                	movq	(%rax), %rdx
                	movq	%rdx, (%rcx)
                	movq	0x8(%rax), %rdx
                	movq	%rdx, 0x8(%rcx)
                	popq	%rdx
-               	leaq	-0x10(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	pushq	%rdx
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	leaq	-0x10(%rbp), %rax
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	(%rsp), %rax
+               	leaq	0x10(%rsp), %rcx
                	pushq	%rdx
                	movq	(%rax), %rdx
                	movq	%rdx, (%rcx)
@@ -38,8 +40,8 @@ Disassembly of section .text:
                	movq	%rdx, 0x8(%rcx)
                	popq	%rdx
                	movq	%rcx, %rax
-               	leaq	-0x10(%rbp), %rax
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	(%rsp), %rax
+               	leaq	0x10(%rsp), %rcx
                	pushq	%rdx
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
@@ -47,6 +49,7 @@ Disassembly of section .text:
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
                	xorq	%rax, %rax
+               	leaq	-0x20(%rbp), %rsp
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
@@ -54,7 +57,10 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	andq	$-0x10, %rsp
+               	subq	$0x40, %rsp
                	callq	<addr>
                	movslq	%eax, %rax
+               	leaq	(%rbp), %rsp
                	popq	%rbp
                	retq

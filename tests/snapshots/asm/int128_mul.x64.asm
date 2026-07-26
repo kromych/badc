@@ -54,6 +54,8 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
+               	andq	$-0x10, %rsp
+               	subq	$0x50, %rsp
                	leaq	<rip>, %rax
                	movq	(%rax), %r12
                	leaq	<rip>, %rax
@@ -104,6 +106,7 @@ Disassembly of section .text:
                	je	<addr>
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
+               	leaq	-0x20(%rbp), %rsp
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
@@ -118,6 +121,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x2, %eax
+               	leaq	-0x20(%rbp), %rsp
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
@@ -132,6 +136,7 @@ Disassembly of section .text:
                	cmpq	%rax, %r8
                	je	<addr>
                	movl	$0x3, %eax
+               	leaq	-0x20(%rbp), %rsp
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
@@ -185,6 +190,7 @@ Disassembly of section .text:
                	je	<addr>
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
+               	leaq	-0x20(%rbp), %rsp
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
@@ -244,6 +250,7 @@ Disassembly of section .text:
                	je	<addr>
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
+               	leaq	-0x20(%rbp), %rsp
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13
@@ -252,6 +259,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
+               	leaq	-0x20(%rbp), %rsp
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13

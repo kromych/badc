@@ -1717,6 +1717,31 @@ fn emit_stack_probe(code: &mut Vec<u8>) {
     emit(code, super::encode::enc_str_imm(Reg(31), Reg::SP, 0));
 }
 
+/// Reserve the realigned region and align sp down to `realign_align`
+/// (C11 6.7.5). The reservation descends in probed steps; the AND then
+/// descends by up to `realign_align - 1` further bytes, which the probe
+/// schedule cannot see. When the two together can outrun the unprobed
+/// margin, a probe on each side of the AND keeps every step from a touched
+/// address within one page, so a stack overflow still faults in the guard.
+/// x16 is the emitter's reserved prologue scratch; AND-immediate cannot read
+/// sp, so the alignment stages through it.
+fn emit_realign_sp(code: &mut Vec<u8>, frame: Frame) {
+    let slack = frame.realign_align - 1;
+    let probe = frame.realign_region_bytes.saturating_add(slack) > MAX_UNPROBED_STACK_STEP;
+    emit_stack_alloc(code, frame.realign_region_bytes, Some(Reg(16)));
+    if probe {
+        emit_stack_probe(code);
+    }
+    emit(code, enc_add_imm(Reg(16), Reg(31), 0));
+    emit(
+        code,
+        super::encode::enc_and_sp_pow2(Reg(16), frame.realign_align.trailing_zeros()),
+    );
+    if probe {
+        emit_stack_probe(code);
+    }
+}
+
 /// Lower `sp -= bytes`, descending in probed steps when the amount is
 /// larger than one step can safely cover.
 ///
@@ -1965,18 +1990,13 @@ fn emit_prologue(
         emit_local_addr_fp(code, Place::IntReg(16), func.indirect_result_slot, frame);
         emit(code, enc_str_imm(Reg(8), Reg(16), 0));
     }
-    // C11 6.7.5: realign sp down to the over-aligned objects' alignment and
-    // reserve their region below the static frame. Done last, after all
-    // fp-relative setup; the objects live at [sp + region_off]. x16 is the
-    // emitter's reserved prologue scratch. AND-immediate cannot read sp, so
-    // stage through x16.
+    // C11 6.7.5: reserve the over-aligned objects' region below the static
+    // frame and align sp down into it. Done last, after all fp-relative setup;
+    // the objects live at [sp + region_off]. Reserving before aligning keeps
+    // the AND's descent inside bytes the reservation already claimed, so the
+    // region cannot overlap the frame.
     if frame.realign_align > 0 {
-        emit(code, enc_add_imm(Reg(16), Reg(31), 0));
-        emit(
-            code,
-            super::encode::enc_and_sp_pow2(Reg(16), frame.realign_align.trailing_zeros()),
-        );
-        emit_stack_alloc(code, frame.realign_region_bytes, Some(Reg(16)));
+        emit_realign_sp(code, frame);
     }
 }
 

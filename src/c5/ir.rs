@@ -1038,8 +1038,11 @@ impl FunctionSsa {
 /// along existing call edges, so membership computed on pre-inline
 /// bodies is stable for a whole inline run.
 pub(crate) fn sp_asm_reachers(funcs: &[FunctionSsa]) -> alloc::collections::BTreeSet<usize> {
-    let idx_of: alloc::collections::BTreeMap<usize, usize> =
-        funcs.iter().enumerate().map(|(i, f)| (f.ent_pc, i)).collect();
+    let idx_of: alloc::collections::BTreeMap<usize, usize> = funcs
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.ent_pc, i))
+        .collect();
     let n = funcs.len();
     let mut preds: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
     for (v, f) in funcs.iter().enumerate() {
@@ -1061,7 +1064,10 @@ pub(crate) fn sp_asm_reachers(funcs: &[FunctionSsa]) -> alloc::collections::BTre
             }
         }
     }
-    (0..n).filter(|&v| tainted[v]).map(|v| funcs[v].ent_pc).collect()
+    (0..n)
+        .filter(|&v| tainted[v])
+        .map(|v| funcs[v].ent_pc)
+        .collect()
 }
 
 /// External functions that may return twice into the caller's frame:

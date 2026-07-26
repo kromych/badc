@@ -2209,7 +2209,9 @@ fn inline_caller(
                 n = caller.name
             );
         }
-        splice_multi_block(caller, callee, b_idx, pc, &args, regions, cyclic, sp_tainted);
+        splice_multi_block(
+            caller, callee, b_idx, pc, &args, regions, cyclic, sp_tainted,
+        );
         steps += 1;
     }
 }
@@ -2671,7 +2673,10 @@ mod tests {
             asm_callee_with_template(100, 4, b"mov %%rsp, (%0)"),
         ];
         run(&mut funcs, 32, abi);
-        assert_eq!(funcs[0].locals, 10, "2 sites of a 4-slot sp-asm callee append");
+        assert_eq!(
+            funcs[0].locals, 10,
+            "2 sites of a 4-slot sp-asm callee append"
+        );
     }
 
     /// A caller that can come to execute stack-pointer asm -- here through

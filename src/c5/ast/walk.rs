@@ -2604,7 +2604,8 @@ impl<'a> Walker<'a> {
     /// are already extended in the 64-bit register, so `a op b` is exact
     /// and overflow is exactly the case where truncation changes it; the
     /// 64-bit case uses the carry / sign-overflow formulas, with a
-    /// guarded division for the multiply.
+    /// guarded division for the multiply. A 128-bit operand or result
+    /// goes through [`Self::walk_checked_arith_128`].
     fn walk_checked_arith(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
@@ -2616,10 +2617,15 @@ impl<'a> Walker<'a> {
     ) -> Result<super::super::ir::ValueId, WalkError> {
         let store_kind = store_kind_for(elem_ty, self.target);
         let w = type_size_bytes(elem_ty, self.target);
+        if self.is_int128_value_ty(elem_ty)
+            || self.expr_is_int128_value(a_expr)
+            || self.expr_is_int128_value(b_expr)
+        {
+            return self.walk_checked_arith_128(b, op, a_expr, b_expr, dst_expr, elem_ty);
+        }
         // The wrapped-value and overflow-flag formulas below operate on a
         // 1/2/4/8-byte scalar in a 64-bit register; a wider or aggregate
-        // operand (a 128-bit `__int128`, sized 0 here) has no such form and
-        // would yield a wrong flag / value. Reject it. TODO: 128-bit.
+        // operand has no such form and would yield a wrong flag / value.
         if !matches!(w, 1 | 2 | 4 | 8) {
             return Err(WalkError::UnsupportedExpr {
                 id: dst_expr,
@@ -2703,6 +2709,159 @@ impl<'a> Walker<'a> {
             }
         };
         Ok(flag)
+    }
+
+    /// 128-bit multiply, returning the product mod 2^128 and whether the
+    /// exact product needs more than 128 bits. The exact product is
+    /// `a0*c0 + (a1*c0 + a0*c1) << 64 + a1*c1 << 128`, so it exceeds 128
+    /// bits iff both high halves are non-zero, a cross product exceeds 64
+    /// bits, or its sum with the low product's high half carries out.
+    fn int128_mul_ovf_u(b: &mut SsaBuilder, a: Halves, c: Halves) -> (Halves, ValueId) {
+        let lo = b.binop(BinOp::Mul, a.0, c.0);
+        let base = Self::int128_mulhi_u(b, a.0, c.0);
+        let cross0 = b.binop(BinOp::Mul, a.0, c.1);
+        let cross1 = b.binop(BinOp::Mul, a.1, c.0);
+        let mid = b.binop(BinOp::Add, base, cross0);
+        let carry0 = b.binop(BinOp::Ult, mid, base);
+        let hi = b.binop(BinOp::Add, mid, cross1);
+        let carry1 = b.binop(BinOp::Ult, hi, mid);
+        let zero = b.imm(0);
+        let a_hi_nz = b.binop(BinOp::Ne, a.1, zero);
+        let c_hi_nz = b.binop(BinOp::Ne, c.1, zero);
+        let both_hi = b.binop(BinOp::And, a_hi_nz, c_hi_nz);
+        let cross0_hi = Self::int128_mulhi_u(b, a.0, c.1);
+        let cross1_hi = Self::int128_mulhi_u(b, a.1, c.0);
+        let cross0_wide = b.binop(BinOp::Ne, cross0_hi, zero);
+        let cross1_wide = b.binop(BinOp::Ne, cross1_hi, zero);
+        let ovf = b.binop(BinOp::Or, both_hi, cross0_wide);
+        let ovf = b.binop(BinOp::Or, ovf, cross1_wide);
+        let ovf = b.binop(BinOp::Or, ovf, carry0);
+        let ovf = b.binop(BinOp::Or, ovf, carry1);
+        ((lo, hi), ovf)
+    }
+
+    /// The 64-bit word above bit 127 of an operand's exact value: the
+    /// high half's sign extension for a signed type, zero otherwise. It
+    /// makes the 128-bit halves an exact 192-bit two's-complement value,
+    /// so operands of different signedness combine without a conversion.
+    fn int128_ext_word(b: &mut SsaBuilder, hi: ValueId, signed: bool) -> ValueId {
+        if signed {
+            b.binop_imm(BinOp::Shr, hi, 63)
+        } else {
+            b.imm(0)
+        }
+    }
+
+    /// Whether an operand of `__builtin_*_overflow` can hold a negative
+    /// value, i.e. its type is a signed integer.
+    fn checked_operand_is_signed(&self, id: ExprId) -> bool {
+        let ty = expr_ty(self.ast.expr(id)).unwrap_or(Ty::Int as i64);
+        (ty & UNSIGNED_BIT) == 0 && !is_pointer_ty(ty)
+    }
+
+    /// 128-bit `__builtin_{add,sub,mul}_overflow`. GCC evaluates the
+    /// operation in infinite precision and reports whether the result is
+    /// representable in the destination type. Both operands convert to
+    /// exact 128-bit halves through [`Self::int128_operand`]; the
+    /// operation runs mod 2^128 and the discarded magnitude is tracked
+    /// exactly -- as the extension word above bit 127 for add and sub,
+    /// and as the sign-and-magnitude form for multiply, whose exact
+    /// product needs 256 bits. A destination narrower than 128 bits
+    /// stores the truncation and also reports a result that does not
+    /// survive the round trip through it.
+    fn walk_checked_arith_128(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: i64,
+        a_expr: ExprId,
+        b_expr: ExprId,
+        dst_expr: ExprId,
+        elem_ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let dst128 = self.is_int128_value_ty(elem_ty);
+        let w = type_size_bytes(elem_ty, self.target);
+        if !dst128 && !matches!(w, 1 | 2 | 4 | 8) {
+            return Err(WalkError::UnsupportedExpr {
+                id: dst_expr,
+                kind: "__builtin_*_overflow requires a 1/2/4/8-byte scalar type",
+            });
+        }
+        let unsigned = (elem_ty & UNSIGNED_BIT) != 0;
+        let a_signed = self.checked_operand_is_signed(a_expr);
+        let c_signed = self.checked_operand_is_signed(b_expr);
+        let a = self.int128_operand(b, a_expr)?;
+        let c = self.int128_operand(b, b_expr)?;
+        let addr = self.walk_expr_rvalue(b, dst_expr)?;
+        let ea = Self::int128_ext_word(b, a.1, a_signed);
+        let ec = Self::int128_ext_word(b, c.1, c_signed);
+        let (sum, ovf) = match op {
+            // The exact sum is `s + ext * 2^128` with `ext` the operand
+            // extension words plus the carry out of bit 127; subtraction
+            // takes the borrow out. The result is representable iff that
+            // word is what the destination type would sign-extend to.
+            0 | 1 => {
+                let (s, adj) = if op == 0 {
+                    let s = Self::int128_add(b, a, c);
+                    let carry = Self::int128_cmp(b, BinOp::Ult, s, a);
+                    let e = b.binop(BinOp::Add, ea, ec);
+                    (s, b.binop(BinOp::Add, e, carry))
+                } else {
+                    let s = Self::int128_sub(b, a, c);
+                    let borrow = Self::int128_cmp(b, BinOp::Ult, a, c);
+                    let e = b.binop(BinOp::Sub, ea, ec);
+                    (s, b.binop(BinOp::Sub, e, borrow))
+                };
+                let f = if unsigned {
+                    b.binop_imm(BinOp::Ne, adj, 0)
+                } else {
+                    let want = b.binop_imm(BinOp::Shr, s.1, 63);
+                    b.binop(BinOp::Ne, adj, want)
+                };
+                (s, f)
+            }
+            // Multiply by magnitude: the exact product is the unsigned
+            // product of the magnitudes with the operand signs combined.
+            // It is representable unsigned iff it is non-negative and
+            // under 2^128, and signed iff its magnitude is under 2^127,
+            // or exactly 2^127 with a negative result.
+            _ => {
+                let ua = Self::int128_xor_sub(b, a, ea);
+                let uc = Self::int128_xor_sub(b, c, ec);
+                let (mag, wide) = Self::int128_mul_ovf_u(b, ua, uc);
+                let sign = b.binop(BinOp::Xor, ea, ec);
+                let s = Self::int128_xor_sub(b, mag, sign);
+                let zero = b.imm(0);
+                let f = if unsigned {
+                    let neg = b.binop_imm(BinOp::And, sign, 1);
+                    let nz = Self::int128_cmp(b, BinOp::Ne, mag, (zero, zero));
+                    b.binop(BinOp::And, neg, nz)
+                } else {
+                    let limit = (zero, b.imm(i64::MIN));
+                    let over = Self::int128_cmp(b, BinOp::Ugt, mag, limit);
+                    let at = Self::int128_cmp(b, BinOp::Eq, mag, limit);
+                    let pos = b.binop_imm(BinOp::Add, sign, 1);
+                    let at_pos = b.binop(BinOp::And, at, pos);
+                    b.binop(BinOp::Or, over, at_pos)
+                };
+                (s, b.binop(BinOp::Or, wide, f))
+            }
+        };
+        if dst128 {
+            self.int128_store(b, addr, sum);
+            return Ok(ovf);
+        }
+        let wrapped = self.extend_atomic_result(b, sum.0, elem_ty);
+        b.store(addr, wrapped, store_kind_for(elem_ty, self.target));
+        let hi = if unsigned || is_pointer_ty(elem_ty) {
+            b.imm(0)
+        } else {
+            b.binop_imm(BinOp::Shr, wrapped, 63)
+        };
+        let lo_eq = b.binop(BinOp::Eq, wrapped, sum.0);
+        let hi_eq = b.binop(BinOp::Eq, hi, sum.1);
+        let fits = b.binop(BinOp::And, lo_eq, hi_eq);
+        let lost = b.binop_imm(BinOp::Xor, fits, 1);
+        Ok(b.binop(BinOp::Or, ovf, lost))
     }
 
     /// Lower a GCC statement expression `({ ... })`. Walks the

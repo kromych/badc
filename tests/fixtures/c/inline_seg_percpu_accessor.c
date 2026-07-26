@@ -52,6 +52,14 @@ static ALWAYS u8 pcpu_read8(unsigned long base, unsigned long off) {
 static ALWAYS void pcpu_write64(unsigned long base, unsigned long off, u64 v) {
     *(u64 __seg_gs *)(base + off) = v;
 }
+/* Read-modify-write: both halves ride the override, so the accumulated
+ * value must land at the accessed offset and nowhere else. */
+static ALWAYS void pcpu_add64(unsigned long base, unsigned long off, u64 v) {
+    *(u64 __seg_gs *)(base + off) += v;
+}
+static ALWAYS void pcpu_inc32(unsigned long base, unsigned long off) {
+    (*(u32 __seg_gs *)(base + off))++;
+}
 
 /* A two-level accessor: the outer body is what the kernel's percpu
  * helpers look like, and it inlines only once the inner one does. */
@@ -87,6 +95,9 @@ int main(void) {
 
     pcpu_write64(v_eight, 32, 0x0f1e2d3c4b5a6978ULL);
     pcpu_write64(v_zero, v_eight * 2, 0xfeedfacecafebeefULL);
+    pcpu_add64(v_eight, 40, 0x1111111111111111ULL);
+    pcpu_add64(v_zero, 56, 3);
+    pcpu_inc32(v_eight, 40);
 
     if (set_gs((void *)0) != 0)
         return 8;
@@ -96,8 +107,11 @@ int main(void) {
         return 9;
     if (area[2] != 0xfeedfacecafebeefULL)
         return 10;
-    if (area[0] != 0 || area[4] != 0 || area[6] != 0 || area[7] != 0)
+    /* area[6]: 0 + 0x1111111111111111, then its low word incremented. */
+    if (area[6] != 0x1111111111111112ULL)
         return 11;
+    if (area[0] != 0 || area[4] != 0 || area[7] != 3)
+        return 12;
 #endif
     return 42;
 }

@@ -875,6 +875,27 @@ fn seg_qualified_direct_access_rides_a_segment_prefix() {
         riding(&gs_write, 0x65, 0x89),
         "`__seg_gs` write must ride a %gs (0x65) prefix on the 64-bit store: {gs_write:02x?}"
     );
+    // A read-modify-write through the same lvalue: C99 6.5.16.2 reads and
+    // writes the object, so both halves ride the override. Dropping it on
+    // either half accesses the generic-space address instead.
+    let gs_rmw = text_of(
+        "void a(unsigned long *p, unsigned long x){ *(unsigned long __seg_gs *)p += x; }\n\
+         int main(void){ unsigned long x = 0; a(&x, 1); return 0; }",
+    );
+    let gs_inc = text_of(
+        "void i(unsigned long *p){ (*(unsigned long __seg_gs *)p)++; }\n\
+         int main(void){ unsigned long x = 0; i(&x); return 0; }",
+    );
+    for (name, text) in [("+=", &gs_rmw), ("++", &gs_inc)] {
+        assert!(
+            riding(text, 0x65, 0x8b),
+            "a `__seg_gs` {name} must read under a %gs prefix: {text:02x?}"
+        );
+        assert!(
+            riding(text, 0x65, 0x89),
+            "a `__seg_gs` {name} must write under a %gs prefix: {text:02x?}"
+        );
+    }
     assert!(
         !riding(&plain, 0x65, 0x8b) && !riding(&plain, 0x64, 0x8b),
         "an unqualified load must carry no segment override: {plain:02x?}"

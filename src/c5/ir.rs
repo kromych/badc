@@ -415,6 +415,49 @@ pub(crate) enum Inst {
     },
 }
 
+impl Inst {
+    /// Whether the inst's only effect is defining its result, so it can be
+    /// dropped when nothing reads that result. The allocator's use-count
+    /// fixed point and the per-arch emit's dead-value skip must agree on
+    /// this: an inst pure to one and not the other loses its operands'
+    /// materialization yet is still emitted, so the access reads whatever
+    /// the operand register happens to hold.
+    ///
+    /// A volatile load is an access the abstract machine performs even
+    /// when the value is unused (C99 5.1.2.3p2, 6.7.3p6), so it is never
+    /// pure.
+    pub(crate) fn is_pure(&self) -> bool {
+        matches!(
+            self,
+            Inst::Imm(_)
+                | Inst::ImmData(_)
+                | Inst::ImmCode(_)
+                | Inst::ImmExtCode(_)
+                | Inst::LocalAddr(_)
+                | Inst::TlsAddr(_)
+                | Inst::Load {
+                    volatile: false,
+                    ..
+                }
+                | Inst::LoadLocal {
+                    volatile: false,
+                    ..
+                }
+                | Inst::SegLoad {
+                    volatile: false,
+                    ..
+                }
+                | Inst::LoadIndexed { .. }
+                | Inst::Binop { .. }
+                | Inst::BinopI { .. }
+                | Inst::Fneg(_)
+                | Inst::Fma { .. }
+                | Inst::FpCast { .. }
+                | Inst::Extend { .. }
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum LoadKind {
     /// 8-byte signed integer.

@@ -121,6 +121,22 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
+               	leaq	<rip>, %rdx
+               	movq	(%rdx), %rsi
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rdi
+               	movq	(%rcx), %rsi
+               	movq	(%rdx), %rdx
+               	movq	(%rcx), %rcx
+               	addq	%rdx, %rcx
+               	movq	%gs:(%rcx), %rcx
+               	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
+               	cmpq	%r11, %rcx
+               	je	<addr>
+               	movl	$0xd, %eax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rdx
                	movabsq	$0xf1e2d3c4b5a6978, %rsi # imm = 0xF1E2D3C4B5A6978

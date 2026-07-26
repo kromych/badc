@@ -1286,7 +1286,7 @@ fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
     loop {
         let mut changed = false;
         for (i, inst) in func.insts.iter().enumerate() {
-            if killed[i] || !is_pure_inst(inst) {
+            if killed[i] || !inst.is_pure() {
                 continue;
             }
             if counts[i] == 0 {
@@ -1300,43 +1300,6 @@ fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
         }
     }
     counts
-}
-
-/// True when the inst has no side effects and can be DCE'd if its
-/// result is unread. Mirrors `is_dead_pure` in ssa_emit_common but
-/// kept here to drive the allocator's use-count fixed-point pass.
-/// A volatile load is an access the abstract machine performs even
-/// when the value is unused (C99 5.1.2.3p2 / 6.7.3p6), so it is
-/// never pure.
-fn is_pure_inst(inst: &Inst) -> bool {
-    matches!(
-        inst,
-        Inst::Imm(_)
-            | Inst::ImmData(_)
-            | Inst::ImmCode(_)
-            | Inst::ImmExtCode(_)
-            | Inst::LocalAddr(_)
-            | Inst::TlsAddr(_)
-            | Inst::Load {
-                volatile: false,
-                ..
-            }
-            | Inst::LoadLocal {
-                volatile: false,
-                ..
-            }
-            | Inst::SegLoad {
-                volatile: false,
-                ..
-            }
-            | Inst::LoadIndexed { .. }
-            | Inst::Binop { .. }
-            | Inst::BinopI { .. }
-            | Inst::Fneg(_)
-            | Inst::Fma { .. }
-            | Inst::FpCast { .. }
-            | Inst::Extend { .. }
-    )
 }
 
 /// Whether `inst` is the inline setjmp intrinsic. A longjmp back to
@@ -2768,6 +2731,57 @@ int main(void) { return 0; }
         assert!(
             volatile_loads >= 2,
             "expected the global and the local volatile reads in SSA, saw {volatile_loads}"
+        );
+    }
+
+    /// The allocator's use-count fixed point and the emit's dead-value
+    /// skip read one purity predicate, so an inst whose operands stop
+    /// being counted is also skipped. Two lists let a variant be pure to
+    /// the allocator alone: its address operand was dropped as unread
+    /// while the access itself was still emitted, reading through
+    /// whatever the register held.
+    #[test]
+    fn dead_pure_insts_drop_together_with_their_operands() {
+        use crate::c5::ir::{AsmSeg, Block};
+        let f = FunctionSsa {
+            insts: vec![
+                Inst::Imm(0x1000),
+                Inst::SegLoad {
+                    addr: 0,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                    seg: AsmSeg::Gs,
+                },
+                Inst::Imm(0),
+                Inst::Fma {
+                    a: 2,
+                    b: 2,
+                    c: 2,
+                    neg_product: false,
+                    neg_addend: false,
+                },
+                Inst::ImmExtCode(0),
+                Inst::Imm(0),
+            ],
+            blocks: vec![Block {
+                start_pc: 0,
+                inst_range: 0..6,
+                terminator: Terminator::Return(5),
+                exit_acc: 5,
+            }],
+            ..Default::default()
+        };
+        let alloc = allocate(&f, Target::LinuxX64);
+        for v in [0usize, 1, 3, 4] {
+            assert!(
+                super::super::emit_common::is_dead_pure(&f.insts[v], v as ValueId, &alloc),
+                "v{v} is dead and pure, so emit must skip it: {:?}",
+                f.insts[v]
+            );
+        }
+        assert_eq!(
+            alloc.use_counts[0], 0,
+            "the dead segment read stops counting its address operand"
         );
     }
 

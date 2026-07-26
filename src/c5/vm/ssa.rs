@@ -2103,6 +2103,7 @@ fn run_inline_asm(
                 o,
                 AsmOpnd::Mem { .. }
                     | AsmOpnd::AbsMem { .. }
+                    | AsmOpnd::AbsMemRef { .. }
                     | AsmOpnd::IndexMem { .. }
                     | AsmOpnd::RipRel { .. }
                     | AsmOpnd::RipRelRef { .. }
@@ -2197,6 +2198,7 @@ fn run_inline_asm(
             | AsmOpnd::GotoLabel(_)
             | AsmOpnd::Mem { .. }
             | AsmOpnd::AbsMem { .. }
+            | AsmOpnd::AbsMemRef { .. }
             | AsmOpnd::IndexMem { .. }
             | AsmOpnd::SymMem { .. }
             | AsmOpnd::RipRel { .. }
@@ -2219,6 +2221,7 @@ fn run_inline_asm(
             | AsmOpnd::GotoLabel(_)
             | AsmOpnd::Mem { .. }
             | AsmOpnd::AbsMem { .. }
+            | AsmOpnd::AbsMemRef { .. }
             | AsmOpnd::IndexMem { .. }
             | AsmOpnd::SymMem { .. }
             | AsmOpnd::RipRel { .. }

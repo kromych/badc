@@ -7492,6 +7492,9 @@ fn emit_inline_asm(
                     Some(v) => Concrete::Imm(v),
                     None => return fail("inline asm: non-constant `%c`/`%P` operand"),
                 },
+                AsmOpnd::AbsMemRef { .. } => {
+                    return fail("inline asm: `%c`/`%P` memory operand is not supported");
+                }
                 AsmOpnd::Reg { reg, size } => Concrete::Reg { reg, size },
                 AsmOpnd::Ref { idx, size } => {
                     let width = asm.operands[idx as usize].width;

@@ -341,6 +341,62 @@ fn x86_seg_qualified_memory_operand_rides_a_segment_prefix() {
     );
 }
 
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_c_operand_memory_reference_is_never_an_immediate() {
+    use crate::{NativeOptions, Target};
+    // A bare `%c` / `%P` operand is a memory reference in AT&T syntax. Taking
+    // it for an immediate turns the percpu load `movq %%gs:%c1, %0` into
+    // `movq $imm, %reg` under a stray segment prefix -- the same value the
+    // template asked to dereference, silently. Whatever the emitter does with
+    // these shapes, it must never encode the immediate form: `c7 /0` (mov
+    // imm32 to r/m) and `b8+r` (mov imm to reg) are the two spellings.
+    let emit = |body: &str| -> Option<alloc::vec::Vec<u8>> {
+        let src = alloc::format!(
+            "long g; long f(void){{ long v; {body} return v; }} int main(void){{ return 0; }}"
+        );
+        let program =
+            crate::Compiler::with_options(src, Target::LinuxX64, crate::CompileOptions::default())
+                .compile()
+                .expect("compile");
+        crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            Target::LinuxX64,
+            NativeOptions::default(),
+        )
+        .ok()
+    };
+    // The displacements are distinctive so the scan cannot collide with an
+    // unrelated constant load elsewhere in the image.
+    let cases = [
+        (
+            "__asm__ volatile(\"movq %%gs:%c1, %0\" : \"=r\"(v) : \"i\"(0x1234));",
+            0x1234u32,
+        ),
+        (
+            "__asm__ volatile(\"movq %%fs:%c1, %0\" : \"=r\"(v) : \"i\"(0x5678));",
+            0x5678,
+        ),
+        (
+            "__asm__ volatile(\"movq %c1, %0\" : \"=r\"(v) : \"i\"(0x2468));",
+            0x2468,
+        ),
+    ];
+    for (body, disp) in cases {
+        let Some(bytes) = emit(body) else { continue };
+        // `REX.W c7 /0 imm32` (mov imm32 to r/m) carrying the displacement as
+        // its immediate: the shape the miscompile produced.
+        let imm_move = bytes.windows(8).any(|w| {
+            (0x48..=0x4f).contains(&w[0])
+                && w[1] == 0xC7
+                && w[2] & 0xF8 == 0xC0
+                && u32::from_le_bytes([w[3], w[4], w[5], w[6]]) == disp
+        });
+        assert!(!imm_move, "`{body}` must not encode as an immediate move");
+    }
+}
+
 #[test]
 fn x86_range_immediate_constraints_are_immediates() {
     // The x86 range-restricted immediate letters classify as immediates,

@@ -96,11 +96,22 @@ impl<'a> ConstData<'a> {
     }
 }
 
+/// Instruction indices whose `Inst::ImmData` payload is a link-time
+/// placeholder for an extern symbol rather than an offset into this
+/// unit's data. `extern_imm_data_refs` is the emitter's own record of
+/// which `ImmData` instructions the linker retargets.
+fn extern_imm_data(func: &FunctionSsa) -> BTreeSet<u32> {
+    func.extern_imm_data_refs.iter().map(|&(i, _)| i).collect()
+}
+
 /// Resolve `v` to a data-segment offset when it is an `ImmData` plus a
-/// folded constant displacement chain.
-fn data_addr(func: &FunctionSsa, mut v: ValueId, mut off: i64) -> Option<i64> {
+/// folded constant displacement chain. An `ImmData` naming an extern
+/// symbol resolves to nothing: its payload is a placeholder, so the
+/// bytes at that offset belong to an unrelated object of this unit.
+fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i64) -> Option<i64> {
     for _ in 0..8 {
         match func.insts.get(v as usize)? {
+            Inst::ImmData(_) if ext.contains(&v) => return None,
             Inst::ImmData(base) => return Some(base.wrapping_add(off)),
             Inst::BinopI {
                 op: BinOp::Add,
@@ -133,6 +144,7 @@ fn data_addr(func: &FunctionSsa, mut v: ValueId, mut off: i64) -> Option<i64> {
 /// little-endian, so the image decodes with `from_le_bytes`.
 pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
     let mut changed = false;
+    let ext = extern_imm_data(func);
     for i in 0..func.insts.len() {
         let Inst::Load {
             addr,
@@ -152,7 +164,7 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
             // an integer immediate would misclassify them.
             LoadKind::F32 | LoadKind::F64 => continue,
         };
-        let Some(off) = data_addr(func, addr, disp as i64) else {
+        let Some(off) = data_addr(func, &ext, addr, disp as i64) else {
             continue;
         };
         let Some(bytes) = cd.read(off, width) else {
@@ -208,6 +220,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], program: &Program) {
     }
 
     for f in funcs.iter_mut() {
+        let ext = extern_imm_data(f);
         // A value's id is its instruction index, so `insts[id]` is the
         // defining instruction.
         for i in 0..f.insts.len() {
@@ -230,15 +243,17 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], program: &Program) {
             };
             // The member address is `ImmData(base)` directly, or -- before
             // index_fold folds the member offset into the load's `disp` --
-            // `BinopI{add, ImmData(base), k}`.
+            // `BinopI{add, ImmData(base), k}`. An `ImmData` naming an
+            // extern symbol carries a link-time placeholder, so it says
+            // nothing about this unit's data.
             let base = match f.insts.get(addr as usize) {
-                Some(Inst::ImmData(base)) => *base,
+                Some(Inst::ImmData(base)) if !ext.contains(&addr) => *base,
                 Some(Inst::BinopI {
                     op: BinOp::Add,
                     lhs,
                     rhs_imm,
                 }) => match f.insts.get(*lhs as usize) {
-                    Some(Inst::ImmData(base)) => *base + *rhs_imm,
+                    Some(Inst::ImmData(base)) if !ext.contains(lhs) => *base + *rhs_imm,
                     _ => continue,
                 },
                 _ => continue,

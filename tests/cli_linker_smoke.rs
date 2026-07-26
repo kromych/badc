@@ -3197,3 +3197,51 @@ fn glibc_nonshared_atexit_runs() {
         "atexit handler must run: stdout={stdout:?}"
     );
 }
+
+// A load through an extern data symbol must not fold against this unit's
+// own const image. The address instruction badc emits for an extern
+// object is an `ImmData` whose payload is a link-time placeholder, so a
+// member read lands at the member's byte offset -- an offset that names
+// an unrelated object here. `pad` is sized so the read at offset 64 falls
+// inside it; folding returns pad's bytes and `g.tag` reads non-zero.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn extern_data_load_is_not_folded_against_local_const_image() {
+    let dir = tempdir("extern-const-fold");
+    write_source(
+        &dir,
+        "defs.c",
+        "struct Big { unsigned char head[64]; long tag; };\n\
+         struct Big g;\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "static const unsigned char pad[4096] = { [0 ... 4095] = 0x41 };\n\
+         struct Big { unsigned char head[64]; long tag; };\n\
+         extern struct Big g;\n\
+         int main(void) {\n\
+         \tif (pad[0] != 0x41) return 2;\n\
+         \treturn g.tag == 0 ? 0 : 1;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-O")
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("defs.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link extern-const-fold",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "extern member read folded against local const data: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

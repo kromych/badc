@@ -1380,45 +1380,19 @@ fn apply_got_fixups(
     fixups: &[super::GotFixup],
 ) -> Result<(), C5Error> {
     for fx in fixups {
-        let adrp_file_off = code_base_in_file + fx.adrp_offset;
-        let ldr_file_off = adrp_file_off + 4;
-
-        let adrp_vmaddr = code_vmaddr_base + fx.adrp_offset as u64;
-        let target_vmaddr = got_base_vmaddr + (fx.import_index as u64) * 8;
-
-        // adrp computes (PC & ~0xFFF) + (imm21 << 12). Solve for imm21.
-        let adrp_page = adrp_vmaddr & !0xFFF;
-        let target_page = target_vmaddr & !0xFFF;
-        let page_diff = target_page as i64 - adrp_page as i64;
-        if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("Mach-O: GOT page diff {page_diff} not 4 KiB aligned"),
-            )));
-        }
-        let imm21 = (page_diff >> 12) as i32;
-
-        // ldr xN, [xN, #imm12] uses a 12-bit unsigned offset scaled
-        // by 8 for 64-bit loads. The in-page byte offset must be
-        // 8-aligned.
-        let in_page = (target_vmaddr & 0xFFF) as u32;
-        if !in_page.is_multiple_of(8) {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("Mach-O: GOT slot offset {in_page:#x} not 8-aligned"),
-            )));
-        }
-
-        // The codegen emitted `adrp Rd, page` + a second instruction
-        // into the same Rd to compute the address. Preserve Rd (bits
-        // [4:0] of the adrp) so the rewritten `adrp Rd; ldr Rd, [Rd,
-        // slot]` lands the GOT pointer in the register the following
-        // dereference reads, rather than a fixed scratch register.
-        let orig_adrp =
-            u32::from_le_bytes(out[adrp_file_off..adrp_file_off + 4].try_into().unwrap());
-        let rd = super::aarch64::Reg((orig_adrp & 0x1F) as u8);
-        let adrp_word = super::aarch64::enc_adrp(rd, imm21);
-        let ldr_word = super::aarch64::enc_ldr_imm(rd, rd, in_page);
-        out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-        out[ldr_file_off..ldr_file_off + 4].copy_from_slice(&ldr_word.to_le_bytes());
+        let slot_vmaddr = got_base_vmaddr + (fx.import_index as u64) * 8;
+        super::aarch64::patch::patch_slot_load(
+            out,
+            code_base_in_file + fx.adrp_offset,
+            (code_vmaddr_base + fx.adrp_offset as u64) as i64,
+            slot_vmaddr as i64,
+            super::aarch64::patch::SlotWidth::W64,
+        )
+        .map_err(|e| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &e.describe("Mach-O: GOT"),
+            ))
+        })?;
     }
     Ok(())
 }
@@ -1487,40 +1461,14 @@ fn apply_macho_tlv_fixups(
     for fx in fixups {
         let descriptor_vmaddr =
             thread_vars_vmaddr + (fx.descriptor_index as u64) * TLV_DESCRIPTOR_SIZE;
-        // The codegen emitted the adrp/add with rd = x0, but
-        // `patch_adrp_add` writes x19. Patch the words directly
-        // so the encoded rd field stays as the codegen wrote it.
-        let adrp_file_off = code_base_in_file + fx.adrp_offset;
-        let add_file_off = adrp_file_off + 4;
-        let adrp_vmaddr = code_vmaddr_base + fx.adrp_offset as u64;
-
-        let adrp_page = adrp_vmaddr & !0xFFF;
-        let target_page = descriptor_vmaddr & !0xFFF;
-        let page_diff = target_page as i64 - adrp_page as i64;
-        if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("Mach-O: TLV adrp page diff {page_diff} not 4 KiB aligned"),
-            )));
-        }
-        let imm21 = (page_diff >> 12) as i32;
-        let in_page = (descriptor_vmaddr & 0xFFF) as u32;
-
-        // Preserve rd from the original adrp (codegen emitted rd=x0)
-        // by reading the existing word; rd shouldn't change here, but
-        // mirrors `patch_adrp_add`'s shape so future per-fixup rd
-        // changes are easy.
-        let adrp_word = u32::from_le_bytes([
-            out[adrp_file_off],
-            out[adrp_file_off + 1],
-            out[adrp_file_off + 2],
-            out[adrp_file_off + 3],
-        ]);
-        let rd = (adrp_word & 0x1F) as u8;
-        let new_adrp = super::aarch64::enc_adrp(super::aarch64::Reg(rd), imm21);
-        let new_add =
-            super::aarch64::enc_add_imm(super::aarch64::Reg(rd), super::aarch64::Reg(rd), in_page);
-        out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&new_adrp.to_le_bytes());
-        out[add_file_off..add_file_off + 4].copy_from_slice(&new_add.to_le_bytes());
+        patch_adrp_add(
+            out,
+            code_base_in_file,
+            code_vmaddr_base,
+            fx.adrp_offset,
+            descriptor_vmaddr,
+            "TLV descriptor",
+        )?;
     }
     Ok(())
 }

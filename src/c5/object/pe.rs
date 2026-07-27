@@ -1609,32 +1609,18 @@ fn patch_aarch64_adrp_ldr32(
     adrp_rva: u32,
     target_rva: u32,
 ) -> Result<(), C5Error> {
-    let adrp_page = (adrp_rva as u64) & !0xFFF;
-    let target_page = (target_rva as u64) & !0xFFF;
-    let page_diff = target_page as i64 - adrp_page as i64;
-    if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("PE: aarch64 TLS-index adrp page diff {page_diff} not 4 KiB aligned"),
-        )));
-    }
-    let imm21 = (page_diff >> 12) as i32;
-    let in_page = target_rva & 0xFFF;
-    if !in_page.is_multiple_of(4) {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("PE: aarch64 TLS-index ldr offset {in_page:#x} not 4-aligned"),
-        )));
-    }
-    let off = adrp_offset_in_text as usize;
-    let adrp_word = u32::from_le_bytes([text[off], text[off + 1], text[off + 2], text[off + 3]]);
-    let ldr_word = u32::from_le_bytes([text[off + 4], text[off + 5], text[off + 6], text[off + 7]]);
-    let rd = (adrp_word & 0x1F) as u8;
-    let ldr_rt = (ldr_word & 0x1F) as u8;
-    let ldr_rn = ((ldr_word >> 5) & 0x1F) as u8;
-    let new_adrp = aarch64::enc_adrp(aarch64::Reg(rd), imm21);
-    let new_ldr = aarch64::enc_ldr32_imm(aarch64::Reg(ldr_rt), aarch64::Reg(ldr_rn), in_page);
-    text[off..off + 4].copy_from_slice(&new_adrp.to_le_bytes());
-    text[off + 4..off + 8].copy_from_slice(&new_ldr.to_le_bytes());
-    Ok(())
+    aarch64::patch::patch_slot_load(
+        text,
+        adrp_offset_in_text as usize,
+        adrp_rva as i64,
+        target_rva as i64,
+        aarch64::patch::SlotWidth::W32,
+    )
+    .map_err(|e| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &e.describe("PE: aarch64 TLS index"),
+        ))
+    })
 }
 
 // ----------------------------------------------------------------
@@ -2837,22 +2823,23 @@ fn patch_x86_64_disp32(
     Ok(())
 }
 
-/// Patch an aarch64 `adrp xd, _; ldr xd, [xd, #_]` pair to load
-/// the 64-bit value at `target_rva` into `xd`. The adrp's imm21
-/// is the diff between the target's page and the adrp's page,
-/// scaled by 4 KiB; the ldr's imm12 is the in-page byte offset
-/// (scaled by 8 for a 64-bit load).
+/// Patch an aarch64 pair to load the 64-bit value at `target_rva`
+/// into `xd`. `target_rva` names an IAT slot, so the second
+/// instruction ends up `ldr xd, [xd, #_]` whether the input carried
+/// a load (a call thunk) or the `add` an object spells for the
+/// address of an extern data symbol.
 fn patch_aarch64_adrp_ldr(
     text: &mut [u8],
     adrp_offset_in_text: u32,
     adrp_rva: u32,
     target_rva: u32,
 ) -> Result<(), C5Error> {
-    aarch64::patch::patch_pair(
+    aarch64::patch::patch_slot_load(
         text,
         adrp_offset_in_text as usize,
         adrp_rva as i64,
         target_rva as i64,
+        aarch64::patch::SlotWidth::W64,
     )
     .map_err(|e| {
         C5Error::Compile(crate::c5::error::fmt_internal_err(

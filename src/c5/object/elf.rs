@@ -1232,43 +1232,18 @@ fn patch_adrp_ldr(
     target_vmaddr: u64,
     label: &str,
 ) -> Result<(), C5Error> {
-    let adrp_file_off = (code_base_in_file + adrp_offset_in_code) as usize;
-    let ldr_file_off = adrp_file_off + 4;
-    let adrp_vmaddr = code_vmaddr_base + adrp_offset_in_code;
-
-    let adrp_page = adrp_vmaddr & !0xFFF;
-    let target_page = target_vmaddr & !0xFFF;
-    let page_diff = target_page as i64 - adrp_page as i64;
-    if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("ELF: {label} page diff {page_diff} not 4 KiB aligned"),
-        )));
-    }
-    let imm21 = (page_diff >> 12) as i32;
-    let in_page = (target_vmaddr & 0xFFF) as u32;
-    if !in_page.is_multiple_of(8) {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("ELF: {label} slot offset {in_page:#x} not 8-aligned"),
-        )));
-    }
-
-    // Preserve the destination register the codegen chose: a GOT call
-    // loads into x16 (matched by its `blr x16`), but an inline GOT data
-    // load (`adrp x0; ldr x0, [x0]` for the address of an imported data
-    // object) loads into the register the following code reads. Read the
-    // original `Rd` from the adrp being patched rather than forcing x16,
-    // which would strand the loaded address in a register the code never
-    // reads. `adrp` Rd is bits 0..4; `ldr` (unsigned offset) has Rt in
-    // 0..4 and Rn in 5..9, both the same register for this pair.
-    let orig_adrp = u32::from_le_bytes(out[adrp_file_off..adrp_file_off + 4].try_into().unwrap());
-    let rd = orig_adrp & 0x1f;
-    let adrp_word = (aarch64::enc_adrp(aarch64::Reg::X16, imm21) & !0x1f) | rd;
-    let ldr_word = (aarch64::enc_ldr_imm(aarch64::Reg::X16, aarch64::Reg::X16, in_page) & !0x3ff)
-        | rd
-        | (rd << 5);
-    out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-    out[ldr_file_off..ldr_file_off + 4].copy_from_slice(&ldr_word.to_le_bytes());
-    Ok(())
+    aarch64::patch::patch_slot_load(
+        out,
+        (code_base_in_file + adrp_offset_in_code) as usize,
+        (code_vmaddr_base + adrp_offset_in_code) as i64,
+        target_vmaddr as i64,
+        aarch64::patch::SlotWidth::W64,
+    )
+    .map_err(|e| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &e.describe(&format!("ELF: {label}")),
+        ))
+    })
 }
 
 /// Per-machine dispatch for "load an absolute address into the

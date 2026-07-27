@@ -6,8 +6,14 @@
 //! delta and a second instruction carrying the in-page offset. The field
 //! layouts come from [`super::encode`], which is byte-verified against a
 //! reference assembler, so a fix there reaches every consumer.
+//!
+//! Two kinds of pair, and a consumer must pick the one matching its
+//! reference. [`patch_pair`] materialises an address and keeps the second
+//! instruction's form. [`patch_slot_load`] resolves a reference that
+//! reaches its target through a GOT / IAT slot the loader fills, so the
+//! second instruction becomes a load whatever form the input carried.
 
-use super::encode::{Reg, enc_adrp};
+use super::encode::{Reg, enc_adrp, enc_ldr_imm, enc_ldr32_imm};
 use alloc::format;
 use alloc::string::String;
 
@@ -71,9 +77,9 @@ pub(crate) fn adrp_word(word: u32, pages: i32) -> Result<u32, PairError> {
 /// rewritten, so operand width, shift, and opcode survive -- a foreign
 /// object's 32-bit `add` keeps its width.
 pub(crate) fn lo12_word(word: u32, in_page: u32) -> Result<u32, PairError> {
-    let imm12 = if word & 0x7F80_0000 == 0x1100_0000 {
+    let imm12 = if is_add_imm(word) {
         in_page
-    } else if word & 0x3B00_0000 == 0x3900_0000 {
+    } else if is_ldst_unsigned(word) {
         let scale = 1u32 << (word >> 30);
         if !in_page.is_multiple_of(scale) {
             return Err(PairError::Lo12Unscalable { in_page, scale });
@@ -83,6 +89,52 @@ pub(crate) fn lo12_word(word: u32, in_page: u32) -> Result<u32, PairError> {
         return Err(PairError::NotLo12(word));
     };
     Ok((word & !(0xFFF << 10)) | ((imm12 & 0xFFF) << 10))
+}
+
+/// `add rd, rn, #imm12` with no `lsl #12`.
+fn is_add_imm(word: u32) -> bool {
+    word & 0x7F80_0000 == 0x1100_0000
+}
+
+/// Load/store with an unsigned, size-scaled 12-bit immediate offset.
+fn is_ldst_unsigned(word: u32) -> bool {
+    word & 0x3B00_0000 == 0x3900_0000
+}
+
+/// Access width of a slot load: `ldr w` or `ldr x`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SlotWidth {
+    W32,
+    W64,
+}
+
+impl SlotWidth {
+    fn bytes(self) -> u32 {
+        match self {
+            Self::W32 => 4,
+            Self::W64 => 8,
+        }
+    }
+}
+
+/// Second word of an `adrp` pair rebuilt as a load of `in_page` bytes
+/// past the register the `adrp` wrote. The destination comes from the
+/// word being replaced, so the following code still reads the register
+/// it expects.
+fn slot_load_word(adrp: u32, word: u32, in_page: u32, width: SlotWidth) -> Result<u32, PairError> {
+    if !is_add_imm(word) && !is_ldst_unsigned(word) {
+        return Err(PairError::NotLo12(word));
+    }
+    let scale = width.bytes();
+    if !in_page.is_multiple_of(scale) {
+        return Err(PairError::Lo12Unscalable { in_page, scale });
+    }
+    let rt = Reg((word & 0x1F) as u8);
+    let rn = Reg((adrp & 0x1F) as u8);
+    Ok(match width {
+        SlotWidth::W32 => enc_ldr32_imm(rt, rn, in_page),
+        SlotWidth::W64 => enc_ldr_imm(rt, rn, in_page),
+    })
 }
 
 fn read_word(code: &[u8], at: usize) -> u32 {
@@ -124,6 +176,28 @@ pub(crate) fn patch_pair(
     let (pages, in_page) = page_fields(adrp_addr, target_addr)?;
     let first = adrp_word(read_word(code, at), pages)?;
     let second = lo12_word(read_word(code, at + 4), in_page)?;
+    write_word(code, at, first);
+    write_word(code, at + 4, second);
+    Ok(())
+}
+
+/// Patch the pair at `at` into a load of the value held at `slot_addr`.
+/// A reference to an imported object reaches it through a slot the
+/// loader fills, so the second instruction must end up a load however
+/// the input spelled it -- an object referencing an extern data symbol
+/// carries `adrp` + `add`, which materialises the slot's address rather
+/// than reading it.
+pub(crate) fn patch_slot_load(
+    code: &mut [u8],
+    at: usize,
+    adrp_addr: i64,
+    slot_addr: i64,
+    width: SlotWidth,
+) -> Result<(), PairError> {
+    let (pages, in_page) = page_fields(adrp_addr, slot_addr)?;
+    let adrp_raw = read_word(code, at);
+    let first = adrp_word(adrp_raw, pages)?;
+    let second = slot_load_word(adrp_raw, read_word(code, at + 4), in_page, width)?;
     write_word(code, at, first);
     write_word(code, at + 4, second);
     Ok(())
@@ -228,5 +302,73 @@ mod tests {
     fn wrong_shapes_are_refused() {
         assert_eq!(adrp_word(0, 0), Err(PairError::NotAdrp(0)));
         assert_eq!(lo12_word(0, 0), Err(PairError::NotLo12(0)));
+        let mut pair = [0u8; 8];
+        assert_eq!(
+            patch_slot_load(&mut pair, 0, 0, 0, SlotWidth::W64),
+            Err(PairError::NotAdrp(0))
+        );
+    }
+
+    /// A slot reference spelled `adrp` + `add` must come out as a load:
+    /// the pair has to read the slot the loader filled, not compute the
+    /// slot's own address. Keeping the `add` yields the address of the
+    /// import table entry wherever an object's address was wanted.
+    #[test]
+    fn slot_load_turns_an_address_materialisation_into_a_load() {
+        for rd in [0u8, 5, 16, 30] {
+            let mut pair = Vec::new();
+            pair.extend_from_slice(&enc_adrp(Reg(rd), 0).to_le_bytes());
+            pair.extend_from_slice(&enc_add_imm(Reg(rd), Reg(rd), 0).to_le_bytes());
+            patch_slot_load(&mut pair, 0, 0x1000, 0x5068, SlotWidth::W64).unwrap();
+            assert_eq!(
+                u32::from_le_bytes(pair[0..4].try_into().unwrap()),
+                enc_adrp(Reg(rd), 4),
+                "rd={rd}"
+            );
+            assert_eq!(
+                u32::from_le_bytes(pair[4..8].try_into().unwrap()),
+                enc_ldr_imm(Reg(rd), Reg(rd), 0x68),
+                "rd={rd}"
+            );
+        }
+    }
+
+    /// A pair already spelled as a load is patched, not rejected, and a
+    /// 4-byte slot takes the 32-bit form.
+    #[test]
+    fn slot_load_accepts_a_load_and_both_widths() {
+        let mut pair = Vec::new();
+        pair.extend_from_slice(&enc_adrp(Reg(16), 0).to_le_bytes());
+        pair.extend_from_slice(&enc_ldr_imm(Reg(16), Reg(16), 0).to_le_bytes());
+        patch_slot_load(&mut pair, 0, 0x2000, 0x9040, SlotWidth::W64).unwrap();
+        assert_eq!(
+            u32::from_le_bytes(pair[4..8].try_into().unwrap()),
+            enc_ldr_imm(Reg(16), Reg(16), 0x40)
+        );
+
+        let mut pair32 = Vec::new();
+        pair32.extend_from_slice(&enc_adrp(Reg(17), 0).to_le_bytes());
+        pair32.extend_from_slice(&enc_add_imm(Reg(17), Reg(17), 0).to_le_bytes());
+        patch_slot_load(&mut pair32, 0, 0x2000, 0x9044, SlotWidth::W32).unwrap();
+        assert_eq!(
+            u32::from_le_bytes(pair32[4..8].try_into().unwrap()),
+            enc_ldr32_imm(Reg(17), Reg(17), 0x44)
+        );
+    }
+
+    /// A slot whose in-page offset does not divide by the access width
+    /// has no scaled encoding.
+    #[test]
+    fn slot_load_rejects_an_unscalable_offset() {
+        let mut pair = Vec::new();
+        pair.extend_from_slice(&enc_adrp(Reg(0), 0).to_le_bytes());
+        pair.extend_from_slice(&enc_add_imm(Reg(0), Reg(0), 0).to_le_bytes());
+        assert_eq!(
+            patch_slot_load(&mut pair, 0, 0, 0x14, SlotWidth::W64),
+            Err(PairError::Lo12Unscalable {
+                in_page: 0x14,
+                scale: 8
+            })
+        );
     }
 }

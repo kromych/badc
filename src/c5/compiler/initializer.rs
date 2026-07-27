@@ -1938,6 +1938,25 @@ impl Compiler {
         total
     }
 
+    /// The aggregate's flexible array member: a trailing `T v[]`
+    /// (C99 6.7.2.1p16) or its GNU `T v[0]` spelling, both carried as
+    /// `array_size < 0`. Only a trailing member is one. The same
+    /// spelling earlier in the aggregate is a zero-storage position
+    /// marker whose offset is not the fixed part's size, and the
+    /// members after it hold the object's bytes.
+    pub(super) fn flexible_array_member(&self, struct_id: usize) -> Option<&super::StructField> {
+        self.structs[struct_id]
+            .fields
+            .last()
+            .filter(|f| f.array_size < 0)
+    }
+
+    /// Whether member `idx` of `struct_id` is its flexible array member.
+    pub(super) fn is_flexible_array_member(&self, struct_id: usize, idx: usize) -> bool {
+        let fields = &self.structs[struct_id].fields;
+        idx + 1 == fields.len() && fields[idx].array_size < 0
+    }
+
     /// Bytes a definition of type `ty` adds past `sizeof` for its
     /// flexible array member's initializer. The lexer must be at the
     /// `=` of the definition and is left there. 0 when `ty` is not a
@@ -1952,12 +1971,7 @@ impl Compiler {
             return Ok(0);
         }
         let sid = struct_id_of(ty);
-        let Some(elem_ty) = self.structs[sid]
-            .fields
-            .iter()
-            .find(|f| f.array_size < 0)
-            .map(|f| f.ty)
-        else {
+        let Some(elem_ty) = self.flexible_array_member(sid).map(|f| f.ty) else {
             return Ok(0);
         };
         let elem = self.size_of_type(elem_ty) as i64;
@@ -1986,12 +2000,7 @@ impl Compiler {
     /// Returns 0 when the struct has no FAM or the initializer does not
     /// reach it.
     pub(super) fn flexible_array_init_count(&mut self, sid: usize) -> Result<usize, C5Error> {
-        let fam_offset = self.structs[sid]
-            .fields
-            .iter()
-            .find(|f| f.array_size < 0)
-            .map(|f| f.offset);
-        let Some(fam_offset) = fam_offset else {
+        let Some(fam_offset) = self.flexible_array_member(sid).map(|f| f.offset) else {
             return Ok(0);
         };
         if self.lex.tk != '{' {
@@ -2717,6 +2726,23 @@ impl Compiler {
                 for _ in 0..close_parens {
                     self.accept(')')?;
                 }
+                self.accept(',')?;
+                continue;
+            }
+            // A `T v[0]` member ahead of the last one is a zero-storage
+            // position marker, not the aggregate's flexible array member.
+            // It has no subobject to initialize and shares its offset with
+            // the member after it, so its element is consumed and dropped
+            // rather than written (GCC reports the element as excess and
+            // discards it too).
+            if field.array_size < 0 && !self.is_flexible_array_member(struct_id, field_idx) {
+                let data_snap = self.data.len();
+                self.skip_init_element_value()?;
+                self.truncate_data(data_snap);
+                for _ in 0..close_parens {
+                    self.accept(')')?;
+                }
+                pos = field_idx + 1;
                 self.accept(',')?;
                 continue;
             }

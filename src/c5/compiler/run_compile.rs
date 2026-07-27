@@ -1998,10 +1998,7 @@ impl Compiler {
                         && !self.symbols[id_idx].defined_here
                         && is_struct_value_ty(ty)
                         && (self.structs[struct_id_of(ty)].fields.is_empty()
-                            || self.structs[struct_id_of(ty)]
-                                .fields
-                                .iter()
-                                .any(|f| f.array_size < 0))
+                            || self.flexible_array_member(struct_id_of(ty)).is_some())
                     {
                         // C99 6.2.2p4 + 6.9.2p2: after a prior definition in
                         // this unit the extern redeclaration is a pure

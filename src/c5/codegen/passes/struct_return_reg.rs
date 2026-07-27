@@ -221,7 +221,7 @@ fn multi_block_slots(func: &FunctionSsa, addrs: &BTreeMap<ValueId, (i64, i64)>) 
         let mut refs: Vec<ValueId> = Vec::new();
         for idx in block.inst_range.clone() {
             if let Some(inst) = func.insts.get(idx as usize) {
-                for_each_operand(inst, &mut |v| refs.push(*v));
+                inst.for_each_operand(|v| refs.push(v));
             }
         }
         match &block.terminator {
@@ -363,12 +363,11 @@ fn promote_once(func: &mut FunctionSsa, strict_align: bool) -> bool {
                 }
                 // Any other operand that is a slot address escapes it.
                 other => {
-                    let mut esc = |v: &ValueId| {
-                        if let Some(&(s, _)) = la_slot.get(v) {
+                    other.for_each_operand(|v| {
+                        if let Some(&(s, _)) = la_slot.get(&v) {
                             mark_disq(&mut slots, s);
                         }
-                    };
-                    for_each_operand(other, &mut esc);
+                    });
                 }
             }
         }
@@ -520,20 +519,13 @@ fn apply_redirect(func: &mut FunctionSsa, redirect: &[Option<ValueId>]) -> bool 
         *op = t;
     };
     for inst in func.insts.iter_mut() {
-        for_each_operand_mut(inst, &mut fix);
+        inst.for_each_operand_mut(&mut fix);
     }
     for block in func.blocks.iter_mut() {
         if block.exit_acc != NO_VALUE {
             fix(&mut block.exit_acc);
         }
-        match &mut block.terminator {
-            Terminator::Bz { cond: v, .. }
-            | Terminator::Bnz { cond: v, .. }
-            | Terminator::GotoIndirect { target: v }
-            | Terminator::JumpTable { idx: v, .. } => fix(v),
-            Terminator::Return(v) if *v != NO_VALUE => fix(v),
-            _ => {}
-        }
+        block.terminator.for_each_operand_mut(&mut fix);
     }
     moved
 }
@@ -646,8 +638,8 @@ fn escaped_slots(func: &FunctionSsa, addrs: &BTreeMap<ValueId, (i64, i64)>) -> B
                         escaped.insert(s);
                     }
                 }
-                other => for_each_operand(other, &mut |v| {
-                    if let Some(&(s, _)) = addrs.get(v) {
+                other => other.for_each_operand(|v| {
+                    if let Some(&(s, _)) = addrs.get(&v) {
                         escaped.insert(s);
                     }
                 }),
@@ -904,150 +896,4 @@ fn promote_pieces_once(func: &mut FunctionSsa) -> bool {
     }
     any |= apply_redirect(func, &redirect);
     any
-}
-
-fn for_each_operand(inst: &Inst, f: &mut impl FnMut(&ValueId)) {
-    match inst {
-        Inst::Load { addr, .. } => f(addr),
-        Inst::Store { addr, value, .. } => {
-            f(addr);
-            f(value);
-        }
-        Inst::StoreLocal { value, .. } => f(value),
-        Inst::LoadIndexed { base, index, .. } => {
-            f(base);
-            f(index);
-        }
-        Inst::StoreIndexed {
-            base, index, value, ..
-        } => {
-            f(base);
-            f(index);
-            f(value);
-        }
-        Inst::Binop { lhs, rhs, .. } => {
-            f(lhs);
-            f(rhs);
-        }
-        Inst::BinopI { lhs, .. } => f(lhs),
-        Inst::Fneg(v) => f(v),
-        Inst::Fma { a, b, c, .. } => {
-            f(a);
-            f(b);
-            f(c);
-        }
-        Inst::Extend { value, .. } => f(value),
-        Inst::FpCast { value, .. } => f(value),
-        Inst::Mcpy { dst, src, .. } => {
-            f(dst);
-            f(src);
-        }
-        Inst::Call { args, .. }
-        | Inst::CallExt { args, .. }
-        | Inst::Intrinsic { args, .. }
-        | Inst::InlineAsm { args, .. } => {
-            for a in args {
-                f(a);
-            }
-        }
-        Inst::CallIndirect { target, args, .. } => {
-            f(target);
-            for a in args {
-                f(a);
-            }
-        }
-        Inst::AtomicRmw { addr, value, .. } => {
-            f(addr);
-            f(value);
-        }
-        Inst::AtomicCas {
-            addr,
-            expected_addr,
-            desired,
-            ..
-        } => {
-            f(addr);
-            f(expected_addr);
-            f(desired);
-        }
-        Inst::Phi { incoming, .. } => {
-            for (_, v) in incoming {
-                f(v);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
-    match inst {
-        Inst::Load { addr, .. } => f(addr),
-        Inst::Store { addr, value, .. } => {
-            f(addr);
-            f(value);
-        }
-        Inst::StoreLocal { value, .. } => f(value),
-        Inst::LoadIndexed { base, index, .. } => {
-            f(base);
-            f(index);
-        }
-        Inst::StoreIndexed {
-            base, index, value, ..
-        } => {
-            f(base);
-            f(index);
-            f(value);
-        }
-        Inst::Binop { lhs, rhs, .. } => {
-            f(lhs);
-            f(rhs);
-        }
-        Inst::BinopI { lhs, .. } => f(lhs),
-        Inst::Fneg(v) => f(v),
-        Inst::Fma { a, b, c, .. } => {
-            f(a);
-            f(b);
-            f(c);
-        }
-        Inst::Extend { value, .. } => f(value),
-        Inst::FpCast { value, .. } => f(value),
-        Inst::Mcpy { dst, src, .. } => {
-            f(dst);
-            f(src);
-        }
-        Inst::Call { args, .. }
-        | Inst::CallExt { args, .. }
-        | Inst::Intrinsic { args, .. }
-        | Inst::InlineAsm { args, .. } => {
-            for a in args {
-                f(a);
-            }
-        }
-        Inst::CallIndirect { target, args, .. } => {
-            f(target);
-            for a in args {
-                f(a);
-            }
-        }
-        Inst::AtomicRmw { addr, value, .. } => {
-            f(addr);
-            f(value);
-        }
-        Inst::AtomicCas {
-            addr,
-            expected_addr,
-            desired,
-            ..
-        } => {
-            f(addr);
-            f(expected_addr);
-            f(desired);
-        }
-        Inst::Phi { incoming, .. } => {
-            for (_, v) in incoming {
-                f(v);
-            }
-        }
-        _ => {}
-    }
 }

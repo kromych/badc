@@ -3429,51 +3429,11 @@ fn emit_inst(
         other => {
             bail_msg(&alloc::format!(
                 "inst variant not yet covered: {}",
-                inst_variant_name(other)
+                other.variant_name()
             ));
             let _ = frame;
             false
         }
-    }
-}
-
-/// Human-readable name of an `Inst` variant for bail diagnostics.
-fn inst_variant_name(inst: &super::super::ir::Inst) -> &'static str {
-    use super::super::ir::Inst;
-    match inst {
-        Inst::Imm(_) => "Imm",
-        Inst::ImmData(_) => "ImmData",
-        Inst::ImmCode(_) => "ImmCode",
-        Inst::ImmExtCode(_) => "ImmExtCode",
-        Inst::BlockAddr(_) => "BlockAddr",
-        Inst::LocalAddr(_) => "LocalAddr",
-        Inst::TlsAddr(_) => "TlsAddr",
-        Inst::Load { .. } => "Load",
-        Inst::Store { .. } => "Store",
-        Inst::SegLoad { .. } => "SegLoad",
-        Inst::SegStore { .. } => "SegStore",
-        Inst::LoadLocal { .. } => "LoadLocal",
-        Inst::StoreLocal { .. } => "StoreLocal",
-        Inst::LoadIndexed { .. } => "LoadIndexed",
-        Inst::StoreIndexed { .. } => "StoreIndexed",
-        Inst::Binop { .. } => "Binop",
-        Inst::BinopI { .. } => "BinopI",
-        Inst::Fneg(_) => "Fneg",
-        Inst::Fma { .. } => "Fma",
-        Inst::Extend { .. } => "Extend",
-        Inst::FpCast { .. } => "FpCast",
-        Inst::Call { .. } => "Call",
-        Inst::CallIndirect { .. } => "CallIndirect",
-        Inst::CallExt { .. } => "CallExt",
-        Inst::TailExt(_) => "TailExt",
-        Inst::Mcpy { .. } => "Mcpy",
-        Inst::AtomicRmw { .. } => "AtomicRmw",
-        Inst::AtomicCas { .. } => "AtomicCas",
-        Inst::Intrinsic { .. } => "Intrinsic",
-        Inst::InlineAsm { .. } => "InlineAsm",
-        Inst::AllocaInit(_) => "AllocaInit",
-        Inst::ParamRef { .. } => "ParamRef",
-        Inst::Phi { .. } => "Phi",
     }
 }
 

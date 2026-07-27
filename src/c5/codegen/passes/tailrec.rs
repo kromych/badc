@@ -123,6 +123,12 @@ struct Plan {
 
 /// Instructions with an observable effect or that must not be reordered
 /// past the recursive call when it becomes a loop back edge.
+///
+/// `classify` takes the last such instruction in a returning block to be
+/// the self-call, so anything effectful that this misses is not seen to
+/// follow the call and the block is transformed as if the effect were not
+/// there. An instruction absent from [`Inst::is_pure`] belongs here unless
+/// it only names a value (`Phi`, `ParamRef`, `BlockAddr`, `AllocaInit`).
 fn is_effectful(inst: &Inst) -> bool {
     matches!(
         inst,
@@ -132,13 +138,16 @@ fn is_effectful(inst: &Inst) -> bool {
             | Inst::Store { .. }
             | Inst::StoreIndexed { .. }
             | Inst::StoreLocal { .. }
+            | Inst::SegStore { .. }
             | Inst::Mcpy { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
             | Inst::Intrinsic { .. }
+            | Inst::InlineAsm { .. }
             | Inst::TailExt(_)
             | Inst::Load { volatile: true, .. }
             | Inst::LoadLocal { volatile: true, .. }
+            | Inst::SegLoad { volatile: true, .. }
     )
 }
 

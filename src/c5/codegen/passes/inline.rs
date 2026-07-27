@@ -1049,96 +1049,11 @@ pub(super) fn map_v(v: ValueId, remap: &[ValueId]) -> ValueId {
     }
 }
 
-/// Map every value operand in `inst` through `remap`, in place. The
-/// match is exhaustive over `Inst` so a new variant fails to compile
-/// until its operands are routed; a missed variant would silently carry
-/// a foreign `ValueId` into the target function.
+/// Map every value operand in `inst` through `remap`, in place. Routes
+/// through the exhaustive walker: a variant missed here would silently
+/// carry a foreign `ValueId` into the target function.
 pub(super) fn remap_inst_operands(inst: &mut Inst, remap: &[ValueId]) {
-    match inst {
-        Inst::Imm(_)
-        | Inst::ImmData(_)
-        | Inst::ImmCode(_)
-        | Inst::ImmExtCode(_)
-        | Inst::BlockAddr(_)
-        | Inst::LocalAddr(_)
-        | Inst::TlsAddr(_)
-        | Inst::LoadLocal { .. }
-        | Inst::TailExt(_)
-        | Inst::AllocaInit(_)
-        | Inst::ParamRef { .. } => {}
-        Inst::Load { addr, .. } => *addr = map_v(*addr, remap),
-        Inst::Store { addr, value, .. } => {
-            *addr = map_v(*addr, remap);
-            *value = map_v(*value, remap);
-        }
-        Inst::SegLoad { addr, .. } => *addr = map_v(*addr, remap),
-        Inst::SegStore { addr, value, .. } => {
-            *addr = map_v(*addr, remap);
-            *value = map_v(*value, remap);
-        }
-        Inst::StoreLocal { value, .. } => *value = map_v(*value, remap),
-        Inst::LoadIndexed { base, index, .. } => {
-            *base = map_v(*base, remap);
-            *index = map_v(*index, remap);
-        }
-        Inst::StoreIndexed {
-            base, index, value, ..
-        } => {
-            *base = map_v(*base, remap);
-            *index = map_v(*index, remap);
-            *value = map_v(*value, remap);
-        }
-        Inst::Binop { lhs, rhs, .. } => {
-            *lhs = map_v(*lhs, remap);
-            *rhs = map_v(*rhs, remap);
-        }
-        Inst::BinopI { lhs, .. } => *lhs = map_v(*lhs, remap),
-        Inst::Fneg(v) => *v = map_v(*v, remap),
-        Inst::Fma { a, b, c, .. } => {
-            *a = map_v(*a, remap);
-            *b = map_v(*b, remap);
-            *c = map_v(*c, remap);
-        }
-        Inst::Extend { value, .. } => *value = map_v(*value, remap),
-        Inst::FpCast { value, .. } => *value = map_v(*value, remap),
-        Inst::Call { args, .. }
-        | Inst::CallExt { args, .. }
-        | Inst::Intrinsic { args, .. }
-        | Inst::InlineAsm { args, .. } => {
-            for a in args.iter_mut() {
-                *a = map_v(*a, remap);
-            }
-        }
-        Inst::CallIndirect { target, args, .. } => {
-            *target = map_v(*target, remap);
-            for a in args.iter_mut() {
-                *a = map_v(*a, remap);
-            }
-        }
-        Inst::Mcpy { dst, src, .. } => {
-            *dst = map_v(*dst, remap);
-            *src = map_v(*src, remap);
-        }
-        Inst::AtomicRmw { addr, value, .. } => {
-            *addr = map_v(*addr, remap);
-            *value = map_v(*value, remap);
-        }
-        Inst::AtomicCas {
-            addr,
-            expected_addr,
-            desired,
-            ..
-        } => {
-            *addr = map_v(*addr, remap);
-            *expected_addr = map_v(*expected_addr, remap);
-            *desired = map_v(*desired, remap);
-        }
-        Inst::Phi { incoming, .. } => {
-            for (_, v) in incoming.iter_mut() {
-                *v = map_v(*v, remap);
-            }
-        }
-    }
+    inst.for_each_operand_mut(|v| *v = map_v(*v, remap));
 }
 
 /// Translate a callee inst into the caller's value space. `ParamRef`

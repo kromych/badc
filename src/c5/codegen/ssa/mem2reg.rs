@@ -438,27 +438,13 @@ pub(crate) fn insert_phis(
         }
     };
     for inst in new_insts.iter_mut() {
-        for_each_operand_mut(inst, remap);
+        inst.for_each_operand_mut(remap);
     }
     for block in func.blocks.iter_mut() {
         if block.exit_acc != NO_VALUE && (block.exit_acc as usize) < value_remap.len() {
             block.exit_acc = value_remap[block.exit_acc as usize];
         }
-        match &mut block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => remap(cond),
-            Terminator::GotoIndirect { target } => remap(target),
-            Terminator::JumpTable { idx, .. } => remap(idx),
-            Terminator::Return(v) => {
-                if *v != NO_VALUE {
-                    remap(v);
-                }
-            }
-            Terminator::Jmp(_)
-            | Terminator::FallThrough(_)
-            | Terminator::TailExt(_)
-            | Terminator::AsmGoto { .. }
-            | Terminator::Unreachable => {}
-        }
+        block.terminator.for_each_operand_mut(remap);
     }
     // The per-site cross-TU relocation tables key on the value-id of
     // the `ImmData` / `ImmCode` / `TlsAddr` that names the symbol.
@@ -479,97 +465,6 @@ pub(crate) fn insert_phis(
     func.inst_src = new_src;
     func.f32_values = new_f32;
     phi_id_at
-}
-
-/// Apply `f` to every value-id operand of an instruction. Exhaustive
-/// over `Inst`: a missed operand would leave a stale reference to a
-/// promoted load after the rewrite below.
-fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
-    match inst {
-        Inst::Imm(_)
-        | Inst::ImmData(_)
-        | Inst::ImmCode(_)
-        | Inst::ImmExtCode(_)
-        | Inst::BlockAddr(_)
-        | Inst::LocalAddr(_)
-        | Inst::TlsAddr(_)
-        | Inst::LoadLocal { .. }
-        | Inst::TailExt(_)
-        | Inst::AllocaInit(_)
-        | Inst::ParamRef { .. } => {}
-        Inst::Load { addr, .. } => f(addr),
-        Inst::Store { addr, value, .. } => {
-            f(addr);
-            f(value);
-        }
-        Inst::SegLoad { addr, .. } => f(addr),
-        Inst::SegStore { addr, value, .. } => {
-            f(addr);
-            f(value);
-        }
-        Inst::StoreLocal { value, .. } => f(value),
-        Inst::LoadIndexed { base, index, .. } => {
-            f(base);
-            f(index);
-        }
-        Inst::StoreIndexed {
-            base, index, value, ..
-        } => {
-            f(base);
-            f(index);
-            f(value);
-        }
-        Inst::Binop { lhs, rhs, .. } => {
-            f(lhs);
-            f(rhs);
-        }
-        Inst::BinopI { lhs, .. } => f(lhs),
-        Inst::Fneg(v) => f(v),
-        Inst::Fma { a, b, c, .. } => {
-            f(a);
-            f(b);
-            f(c);
-        }
-        Inst::Extend { value, .. } => f(value),
-        Inst::FpCast { value, .. } => f(value),
-        Inst::Call { args, .. }
-        | Inst::CallExt { args, .. }
-        | Inst::Intrinsic { args, .. }
-        | Inst::InlineAsm { args, .. } => {
-            for a in args {
-                f(a);
-            }
-        }
-        Inst::CallIndirect { target, args, .. } => {
-            f(target);
-            for a in args {
-                f(a);
-            }
-        }
-        Inst::Mcpy { dst, src, .. } => {
-            f(dst);
-            f(src);
-        }
-        Inst::AtomicRmw { addr, value, .. } => {
-            f(addr);
-            f(value);
-        }
-        Inst::AtomicCas {
-            addr,
-            expected_addr,
-            desired,
-            ..
-        } => {
-            f(addr);
-            f(expected_addr);
-            f(desired);
-        }
-        Inst::Phi { incoming, .. } => {
-            for (_, v) in incoming {
-                f(v);
-            }
-        }
-    }
 }
 
 /// True when every `LoadLocal` / `StoreLocal` against `slot` uses the
@@ -1317,33 +1212,15 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
 
     // Rewrite every operand, terminator value, and block accumulator.
     for inst in func.insts.iter_mut() {
-        for_each_operand_mut(inst, |op| *op = resolve(&redirect, *op));
+        inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
     }
     for block in func.blocks.iter_mut() {
         if block.exit_acc != NO_VALUE {
             block.exit_acc = resolve(&redirect, block.exit_acc);
         }
-        match &mut block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
-                *cond = resolve(&redirect, *cond);
-            }
-            Terminator::GotoIndirect { target } => {
-                *target = resolve(&redirect, *target);
-            }
-            Terminator::JumpTable { idx, .. } => {
-                *idx = resolve(&redirect, *idx);
-            }
-            Terminator::Return(v) => {
-                if *v != NO_VALUE {
-                    *v = resolve(&redirect, *v);
-                }
-            }
-            Terminator::Jmp(_)
-            | Terminator::FallThrough(_)
-            | Terminator::TailExt(_)
-            | Terminator::AsmGoto { .. }
-            | Terminator::Unreachable => {}
-        }
+        block
+            .terminator
+            .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
     }
     // Neutralize promoted stores: their id has been redirected to the
     // stored value, and their memory write is no longer wanted.

@@ -6734,6 +6734,220 @@ fn aarch64_asm_replacement_branch_resolves_to_in_region_label() {
     );
 }
 
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_asm_replacement_branch_to_symbol_relocates_out_of_line() {
+    // An ALTERNATIVE `.subsection` replacement that branches to a symbol: the
+    // out-of-line site takes a call relocation, exactly as a main-stream
+    // template branch does.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+        extern void helper(void);
+        long probe(long x) {
+            __asm__ volatile(
+                "661:\n\tnop\n662:\n"
+                ".pushsection .altinstructions,\"a\"\n"
+                " .word 661b - .\n .word 663f - .\n .hword 66\n"
+                " .byte 662b-661b\n .byte 664f-663f\n"
+                ".popsection\n"
+                ".subsection 1\n"
+                "663:\n\tbl helper\n664:\n\t.previous\n" : "+r"(x));
+            return x;
+        }
+    "#;
+    let program = Compiler::with_options(
+        String::from(src),
+        Target::LinuxAarch64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let sites: alloc::vec::Vec<&crate::c5::linker::NativeReloc> = obj
+        .text_relocs
+        .iter()
+        .filter(|r| obj.symbols[r.sym_idx].name == "helper")
+        .collect();
+    assert_eq!(sites.len(), 1, "expected one relocation against `helper`");
+    assert_eq!(sites[0].rtype, 283, "R_AARCH64_CALL26 expected");
+    let text = elf_sections(&bytes)
+        .into_iter()
+        .find(|(n, ..)| n == ".text")
+        .expect(".text missing")
+        .3;
+    // The site holds the zero-displacement `bl` the linker patches, and it
+    // sits past the function body rather than in the fall-through path.
+    let off = sites[0].offset as usize;
+    assert_eq!(
+        u32::from_le_bytes(text[off..off + 4].try_into().unwrap()),
+        0x9400_0000
+    );
+    let ret = text
+        .chunks_exact(4)
+        .position(|c| u32::from_le_bytes(c.try_into().unwrap()) == 0xd65f_03c0)
+        .expect("ret present");
+    assert!(off > ret * 4, "replacement branch is not out of line");
+}
+
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_clobbered_callee_saved_register_is_saved_around_the_block() {
+    // The allocator places live values in the callee-saved GPRs, so a clobber
+    // of one must be saved and restored around the block as a caller-saved
+    // clobber is; otherwise the template destroys the value.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+        long sink(long);
+        long f(long a) {
+            long v0 = sink(a + 1), v1 = sink(a + 2), v2 = sink(a + 3);
+            long v3 = sink(a + 4), v4 = sink(a + 5), v5 = sink(a + 6);
+            long v6 = sink(a + 7), v7 = sink(a + 8), v8 = sink(a + 9);
+            __asm__ volatile("mov x20, #-1" ::: "x20", "memory");
+            return v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8;
+        }
+    "#;
+    let program = Compiler::with_options(
+        String::from(src),
+        Target::LinuxAarch64,
+        crate::CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let text = elf_sections(&bytes)
+        .into_iter()
+        .find(|(n, ..)| n == ".text")
+        .expect(".text missing")
+        .3;
+    let words: alloc::vec::Vec<u32> = text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    let template = words
+        .iter()
+        .position(|&w| w == 0x9280_0014)
+        .expect("`mov x20, #-1` emitted");
+    // `str x20, [sp, #imm]` before and `ldr x20, [sp, #imm]` after.
+    let is_sp_x20 =
+        |w: u32, load: bool| w & 0xFFC0_03FF == (if load { 0xF940_03F4 } else { 0xF900_03F4 });
+    assert!(
+        words[..template].iter().any(|&w| is_sp_x20(w, false)),
+        "clobbered x20 not saved: {words:08x?}"
+    );
+    assert!(
+        words[template..].iter().any(|&w| is_sp_x20(w, true)),
+        "clobbered x20 not restored: {words:08x?}"
+    );
+}
+
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_fixed_operand_outside_the_pool_is_saved_and_restored() {
+    // A register-asm variable names its own register, which need not be in the
+    // allocatable pool. The block saves and restores it like any other operand
+    // register; only the emitter's scratch pair is off limits.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+        long strip(long p) {
+            register long v __asm__("x30") = p;
+            __asm__("hint #7" : "+r"(v));
+            return v;
+        }
+    "#;
+    let program = Compiler::with_options(
+        String::from(src),
+        Target::LinuxAarch64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let text = elf_sections(&bytes)
+        .into_iter()
+        .find(|(n, ..)| n == ".text")
+        .expect(".text missing")
+        .3;
+    let words: alloc::vec::Vec<u32> = text
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // x30 is stored to the operand frame before the template and reloaded
+    // after it: `str x30, [sp, #imm]` / `ldr x30, [sp, #imm]` (0xf90*/0xf94*
+    // with Rt = 30), around `hint #7` (xpaclri).
+    let hint = words
+        .iter()
+        .position(|&w| w == 0xd503_20ff)
+        .expect("hint #7 emitted");
+    let is_sp_x30 =
+        |w: u32, load: bool| w & 0xFFC0_03FF == (if load { 0xF940_03FE } else { 0xF900_03FE });
+    assert!(
+        words[..hint].iter().any(|&w| is_sp_x30(w, false)),
+        "x30 not saved before the template: {words:08x?}"
+    );
+    assert!(
+        words[hint..].iter().any(|&w| is_sp_x30(w, true)),
+        "x30 not restored after the template: {words:08x?}"
+    );
+}
+
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_file_scope_section_assembles_instructions() {
+    // A file-scope `.pushsection .text,"ax"` block of register-concrete
+    // instructions is assembled into the named section.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+        __asm__(".pushsection .text.stub, \"ax\", @progbits\n"
+                ".global stub\n"
+                "stub:\n"
+                "\tmov x10, x30\n"
+                "\tmov x30, x9\n"
+                "\tret x10\n"
+                ".popsection\n");
+        void f(void) {}
+    "#;
+    let program = Compiler::with_options(
+        String::from(src),
+        Target::LinuxAarch64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let sec = elf_sections(&bytes)
+        .into_iter()
+        .find(|(n, ..)| n == ".text.stub")
+        .expect(".text.stub missing")
+        .3;
+    let words: alloc::vec::Vec<u32> = sec
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // mov x10, x30 / mov x30, x9 / ret x10, as the reference assembler encodes
+    // them (orr Xd, xzr, Xm; ret Xn).
+    assert_eq!(&words[..3], &[0xaa1e_03ea, 0xaa09_03fe, 0xd65f_0140]);
+}
+
 #[test]
 fn aarch64_asm_replacement_goto_branch_targets_label_block() {
     // A frameless `asm goto` whose ALTERNATIVE `.subsection` replacement

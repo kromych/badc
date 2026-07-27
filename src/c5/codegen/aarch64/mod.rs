@@ -7,6 +7,7 @@ pub(crate) mod emit;
 pub(crate) mod encode;
 mod isa_a64_table;
 pub(crate) mod patch;
+mod sysreg_a64_table;
 pub(crate) mod table;
 
 // Resolve the codegen-level paths the two large modules reference relative to

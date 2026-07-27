@@ -1272,9 +1272,51 @@ fn mov_alias() {
     // mov Rd, #imm is movz Rd, #imm for a 16-bit immediate.
     assert_eq!(enc("mov", &[x(0), Opnd::Imm(5)]), 0xD28000A0);
     assert_eq!(enc("mov", &[w(3), Opnd::Imm(42)]), 0x52800543);
-    // A wider immediate needs an explicit movz/movk/movn.
-    assert!(encode("mov", &[x(0), Opnd::Imm(0x10000)]).is_err());
+    // A 16-bit chunk at a higher position keeps the movz form, shifted.
+    assert_eq!(enc("mov", &[x(0), Opnd::Imm(0x10000)]), 0xD2A00020);
+    assert_eq!(enc("mov", &[w(2), Opnd::Imm(0x10000)]), 0x52A00022);
+    assert_eq!(enc("mov", &[x(1), Opnd::Imm(0x5_0000_0000)]), 0xD2C000A1);
+    // A value whose complement is a chunk is movn.
+    assert_eq!(enc("mov", &[w(0), Opnd::Imm(-14)]), 0x128001A0);
+    assert_eq!(enc("mov", &[x(0), Opnd::Imm(-1)]), 0x92800000);
+    // Neither: a bitmask immediate through orr Rd, ZR, #imm.
+    assert_eq!(enc("mov", &[x(0), Opnd::Imm(0xFFFF_FFFF)]), 0xB2407FE0);
+    assert_eq!(enc("mov", &[w(5), Opnd::Imm(0x3333_3333)]), 0x3200E7E5);
+    // A value that is none of the three has no `mov` form.
+    assert!(encode("mov", &[x(0), Opnd::Imm(0x1234567)]).is_err());
     // (mov Rd, sp / mov sp, Rd are rewritten to add ..., #0 by the parser.)
+}
+
+#[test]
+fn ror_immediate_is_the_extr_alias() {
+    // ror Rd, Rn, #n is extr Rd, Rn, Rn, #n; the register form stays rorv.
+    assert_eq!(enc("ror", &[x(0), x(0), Opnd::Imm(1)]), 0x93C00400);
+    assert_eq!(enc("ror", &[w(0), w(0), Opnd::Imm(16)]), 0x13804000);
+    assert_eq!(enc("ror", &[x(3), x(4), Opnd::Imm(63)]), 0x93C4FC83);
+    assert_eq!(enc("ror", &[x(0), x(1), x(2)]), 0x9AC22C20);
+    // The shift amount is bounded by the register width.
+    assert!(encode("ror", &[w(0), w(0), Opnd::Imm(32)]).is_err());
+}
+
+#[test]
+fn add_sub_immediate_picks_the_shift() {
+    // A 12-bit value encodes unshifted; a multiple of 4096 that does not fit
+    // takes the sh bit, as the assembler does.
+    assert_eq!(enc("add", &[w(1), w(0), Opnd::Imm(65536)]), 0x11404001);
+    assert_eq!(enc("add", &[x(1), x(0), Opnd::Imm(4095)]), 0x913FFC01);
+    assert_eq!(enc("sub", &[x(1), x(0), Opnd::Imm(4096)]), 0xD1400401);
+    // A written shift fixes it: the value is the raw field, not pre-shifted.
+    assert_eq!(
+        enc("add", &[w(1), w(0), Opnd::Imm(16), Opnd::Lsl(12)]),
+        0x11404001
+    );
+    assert_eq!(
+        enc("add", &[x(1), x(0), Opnd::Imm(1), Opnd::Lsl(0)]),
+        0x91000401
+    );
+    // Neither representable nor a legal written shift.
+    assert!(encode("add", &[x(1), x(0), Opnd::Imm(0x1001)]).is_err());
+    assert!(encode("add", &[x(1), x(0), Opnd::Imm(1), Opnd::Lsl(4)]).is_err());
 }
 
 #[test]
@@ -1651,6 +1693,7 @@ mod differential {
             | Field::ScaledSImm { op, .. }
             | Field::LogicalImm { op, .. }
             | Field::LogicalImmNot { op, .. }
+            | Field::AddSubImm { op, .. }
             | Field::MovImm { op }
             | Field::MovHw { op }
             | Field::LslAlias { op, .. }
@@ -1680,6 +1723,18 @@ mod differential {
     fn slot_cands(f: &Form, idx: usize) -> Vec<Option<(String, Opnd)>> {
         let is64 = matches!(f.ops.first(), Some(A64Op::X));
         let imm = |v: i64| Some((alloc::format!("#{v}"), Opnd::Imm(v)));
+        // The add/sub-immediate shift slot is named by its value field, not by
+        // a field of its own.
+        if f.fields
+            .iter()
+            .any(|fl| matches!(*fl, Field::AddSubImm { shift_op, .. } if shift_op as usize == idx))
+        {
+            return alloc::vec![
+                None,
+                Some((String::from("lsl #0"), Opnd::Lsl(0))),
+                Some((String::from("lsl #12"), Opnd::Lsl(12))),
+            ];
+        }
         match field_for(f, idx) {
             Some(Field::UImm { width, .. }) => {
                 let max = (1i64 << width) - 1;
@@ -1717,6 +1772,8 @@ mod differential {
             .iter()
             .map(|&v| imm(v))
             .collect(),
+            // 4096 has no 12-bit form: the encoder must pick the shifted one.
+            Some(Field::AddSubImm { .. }) => [1i64, 4095, 4096].iter().map(|&v| imm(v)).collect(),
             Some(Field::MovImm { .. }) => [0x1234i64, 0, 0xFFFF].iter().map(|&v| imm(v)).collect(),
             Some(Field::MovHw { .. }) => {
                 let lsl = |s: u32| Some((alloc::format!("lsl #{s}"), Opnd::Lsl(s)));
@@ -1789,6 +1846,79 @@ mod differential {
             }
             _ => Vec::new(),
         }
+    }
+
+    /// Every name in the generated system-register table must encode as the
+    /// assembler does: `mrs x0, NAME` (or `msr NAME, x0` for a write-only
+    /// register) equals the base word with the table's 16-bit selector
+    /// spliced in. Names the local assembler does not know are skipped.
+    #[test]
+    fn sysreg_table_matches_assembler() {
+        if !enabled() {
+            return;
+        }
+        let (mut checked, mut skipped) = (0usize, 0usize);
+        for &(name, field) in super::super::super::sysreg_a64_table::SYSREGS {
+            let want_r = 0xD530_0000 | ((u32::from(field) & 0x7FFF) << 5);
+            let want_w = 0xD510_0000 | ((u32::from(field) & 0x7FFF) << 5);
+            let got = clang_word(&alloc::format!("mrs x0, {name}"))
+                .map(|w| (w, want_r))
+                .or_else(|| clang_word(&alloc::format!("msr {name}, x0")).map(|w| (w, want_w)));
+            match got {
+                Some((w, want)) => {
+                    assert_eq!(w, want, "sysreg `{name}` (selector {field:#06x})");
+                    assert_eq!(super::super::super::asm::sysreg_field(name), Some(field));
+                    checked += 1;
+                }
+                None => skipped += 1,
+            }
+        }
+        assert!(checked > 500, "only {checked} registers checked");
+        std::eprintln!("sysreg table: {checked} verified, {skipped} unknown to the assembler");
+    }
+
+    /// The same for the `dc` / `ic` / `at` / `tlbi` operation tables: each
+    /// name's word equals the `sys`-alias base with the table's selector.
+    #[test]
+    fn sysop_tables_match_assembler() {
+        if !enabled() {
+            return;
+        }
+        use super::super::super::sysreg_a64_table::{AT_OPS, DC_OPS, IC_OPS, TLBI_OPS};
+        let (mut checked, mut skipped) = (0usize, 0usize);
+        for (mnem, table) in [
+            ("dc", DC_OPS),
+            ("ic", IC_OPS),
+            ("at", AT_OPS),
+            ("tlbi", TLBI_OPS),
+        ] {
+            for &(name, sel) in table {
+                let sel = u32::from(sel);
+                let base = 0xD508_0000
+                    | ((sel >> 11) << 16)
+                    | (((sel >> 7) & 15) << 12)
+                    | (((sel >> 3) & 15) << 8)
+                    | ((sel & 7) << 5);
+                // The register-taking spelling covers both: an operation with
+                // no register operand encodes Rt = 31, which the assembler
+                // also accepts written as `xzr`.
+                let got = clang_word(&alloc::format!("{mnem} {name}, x0"))
+                    .map(|w| (w, base))
+                    .or_else(|| {
+                        clang_word(&alloc::format!("{mnem} {name}")).map(|w| (w, base | 31))
+                    });
+                match got {
+                    Some((w, want)) => {
+                        assert_eq!(w, want, "`{mnem} {name}` (selector {sel:#06x})");
+                        assert_eq!(super::super::super::asm::sysop_base(mnem, name), Some(base));
+                        checked += 1;
+                    }
+                    None => skipped += 1,
+                }
+            }
+        }
+        assert!(checked > 100, "only {checked} operations checked");
+        std::eprintln!("sysop tables: {checked} verified, {skipped} unknown to the assembler");
     }
 
     /// Sweep the catalogue itself: synthesize operands for every form from its

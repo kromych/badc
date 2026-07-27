@@ -27,6 +27,10 @@ pub(crate) enum Field {
     /// A raw unsigned immediate: `shift` = low bit, `width` = bit count. Fed by
     /// the operand at `op` (index into the instruction's operand list).
     UImm { op: u8, shift: u8, width: u8 },
+    /// The add/sub-immediate value group: the 12-bit field at bit 10 plus the
+    /// `sh` bit at 22 selecting a left shift of 12. An optional `lsl #0|#12` at
+    /// `shift_op` fixes the shift; without one it comes from the value.
+    AddSubImm { op: u8, shift_op: u8 },
     /// A two's-complement signed immediate: `shift` = low bit, `width` = bit
     /// count. Fed by the operand at `op` -- either a plain immediate (`smax`
     /// imm8) or a memory reference's offset (`ldur`/`ldtr` unscaled imm9).
@@ -1780,19 +1784,48 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 let base = if is64 { 0xAA00_03E0u32 } else { 0x2A00_03E0 };
                 return Ok(base | ((rm as u32) << 16) | (rd as u32));
             }
-            [Opnd::Reg { num: rd, is64, .. }, Opnd::Imm(v)] => {
-                if !(0..=0xFFFF).contains(&v) {
-                    return Err(String::from(
-                        "inline asm: mov immediate out of movz range; use movz/movk/movn",
-                    ));
-                }
-                let base = if is64 { 0xD280_0000u32 } else { 0x5280_0000 };
-                return Ok(base | ((v as u32) << 5) | (rd as u32));
-            }
+            [dst @ Opnd::Reg { is64, .. }, Opnd::Imm(v)] => return encode_mov_imm(dst, is64, v),
             _ => return Err(String::from("inline asm: bad mov operands")),
         }
     }
+    // `ror Rd, Rn, #n` is the immediate alias of `extr Rd, Rn, Rn, #n`; the
+    // register form (`rorv`) is in the catalogue under the same mnemonic.
+    if mnemonic == "ror"
+        && let [dst, src @ Opnd::Reg { .. }, imm @ Opnd::Imm(_)] = *ops
+    {
+        return encode_catalogue("extr", &[dst, src, src, imm]);
+    }
     encode_catalogue(mnemonic, ops)
+}
+
+/// `mov Rd, #imm`: the move alias the value admits, in the order the
+/// architecture prefers -- a 16-bit chunk (`movz`), the complement of one
+/// (`movn`), then a bitmask immediate (`orr Rd, ZR, #imm`).
+fn encode_mov_imm(dst: Opnd, is64: bool, v: i64) -> Result<u32, String> {
+    let width = if is64 { 64u32 } else { 32 };
+    let value = if is64 { v as u64 } else { v as u32 as u64 };
+    let chunk =
+        |x: u64| -> Option<u32> { (0..width / 16).find(|hw| x & !(0xFFFFu64 << (hw * 16)) == 0) };
+    for (mnem, x) in [
+        ("movz", value),
+        ("movn", !value & (u64::MAX >> (64 - width))),
+    ] {
+        if let Some(hw) = chunk(x) {
+            let imm = Opnd::Imm(((x >> (hw * 16)) & 0xFFFF) as i64);
+            return encode_catalogue(mnem, &[dst, imm, Opnd::Lsl(hw * 16)]);
+        }
+    }
+    if encode_logical_imm(value, is64).is_some() {
+        let zr = Opnd::Reg {
+            num: 31,
+            is64,
+            sp: false,
+        };
+        return encode_catalogue("orr", &[dst, zr, Opnd::Imm(v)]);
+    }
+    Err(String::from(
+        "inline asm: mov immediate is not a move-wide or bitmask immediate",
+    ))
 }
 
 /// Look the operand shape up in the generated catalogue and pack it. A form
@@ -1874,6 +1907,30 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
         match *field {
             Field::Reg { op, shift } => {
                 word |= (reg(ops[op as usize])? as u32 & 31) << shift;
+            }
+            Field::AddSubImm { op, shift_op } => {
+                let v = imm_or_off(ops[op as usize])?;
+                let written = match ops.get(shift_op as usize) {
+                    None => None,
+                    Some(Opnd::Lsl(n @ (0 | 12))) => Some(*n == 12),
+                    Some(_) => {
+                        return Err(String::from(
+                            "inline asm: add/sub immediate shift must be lsl #0 or #12",
+                        ));
+                    }
+                };
+                let (v, sh) = match written {
+                    Some(sh) => (v, sh),
+                    None if (0..=0xFFF).contains(&v) => (v, false),
+                    None if v > 0 && v & 0xFFF == 0 && v >> 12 <= 0xFFF => (v >> 12, true),
+                    None => {
+                        return Err(String::from("inline asm: immediate out of 12-bit range"));
+                    }
+                };
+                if !(0..=0xFFF).contains(&v) {
+                    return Err(String::from("inline asm: immediate out of 12-bit range"));
+                }
+                word |= ((v as u32) << 10) | (u32::from(sh) << 22);
             }
             Field::UImm { op, shift, width } => {
                 let v = imm_or_off(ops[op as usize])?;

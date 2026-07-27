@@ -654,6 +654,13 @@ impl<'a> Exp<'a> {
                 let t = self.synth(format!("\"{filename}\""), TokKind::Str, tok.space);
                 out.push(t);
             }
+            // The main input file, so it keeps its value inside an
+            // include where `__FILE__` names the header.
+            "__BASE_FILE__" => {
+                let base = self.pp.source_label.clone();
+                let t = self.synth(format!("\"{base}\""), TokKind::Str, tok.space);
+                out.push(t);
+            }
             // Extension: each use expands to the next integer.
             "__COUNTER__" => {
                 let n = self.pp.counter.get();
@@ -1041,7 +1048,10 @@ impl Preprocessor {
 /// Names `dynamic_predefine` expands from context rather than from the
 /// macro table.
 pub(super) fn is_dynamic_predefine(name: &str) -> bool {
-    matches!(name, "__LINE__" | "__FILE__" | "__COUNTER__")
+    matches!(
+        name,
+        "__LINE__" | "__FILE__" | "__BASE_FILE__" | "__COUNTER__"
+    )
 }
 
 /// True when the token ending in `prev` directly followed by a token

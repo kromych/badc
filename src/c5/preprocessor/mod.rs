@@ -1369,11 +1369,16 @@ impl Preprocessor {
     }
 
     /// C99 6.10.1 `defined`: any macro of either kind, plus the
-    /// `__has_*` operator names the preprocessor implements.
+    /// `__has_*` operator names the preprocessor implements and the
+    /// predefines expanded from context. The context-expanded ones
+    /// hold no table entry, but C99 6.10.8 makes them macros, so
+    /// `#ifdef __FILE__` and the `#ifdef __COUNTER__` feature probe
+    /// must see them.
     pub(super) fn is_defined_name(&self, name: &str) -> bool {
         self.macros.contains_key(name)
             || self.fn_macros.contains_key(name)
             || is_operator_name(name)
+            || super::preprocessor::expand::is_dynamic_predefine(name)
     }
 
     /// Install a function-like macro definition. A trailing `...`

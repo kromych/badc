@@ -614,6 +614,59 @@ fn push_asm_names(
     }
 }
 
+/// Where each data object landed in the packed image: the sorted object
+/// `starts`, each object's packed base (`new_base[i] < 0` for a dropped
+/// object) and length. Answers the compaction pass's offset surface.
+struct PackedData<'a> {
+    starts: &'a [i64],
+    new_base: &'a [i64],
+    obj_lens: &'a [i64],
+    data_len: i64,
+}
+
+impl PackedData<'_> {
+    fn interval_of(&self, off: i64) -> usize {
+        match self.starts.binary_search(&off) {
+            Ok(i) => i,
+            Err(i) => i.saturating_sub(1),
+        }
+    }
+}
+
+impl crate::c5::layout::DataRemap for PackedData<'_> {
+    fn in_data(&self, off: i64) -> bool {
+        (0..self.data_len).contains(&off)
+    }
+
+    fn remap(&self, off: i64, anchor: i64) -> Option<i64> {
+        if !self.in_data(anchor) {
+            // No object owns the offset; it passes through (the extern
+            // `ImmData(0)` sentinel and out-of-image values both land here).
+            return Some(remap_data_off(
+                off,
+                self.starts,
+                self.new_base,
+                self.data_len,
+            ));
+        }
+        let i = self.interval_of(anchor);
+        (self.new_base[i] >= 0).then(|| self.new_base[i] + (off - self.starts[i]))
+    }
+
+    fn remap_span(&self, lo: i64, hi: i64) -> Option<(i64, i64)> {
+        if !self.in_data(lo) || hi <= lo || hi > self.data_len {
+            return None;
+        }
+        let i = self.interval_of(lo);
+        // A span crossing into the next object would not stay contiguous.
+        if self.new_base[i] < 0 || hi > self.starts[i] + self.obj_lens[i] {
+            return None;
+        }
+        let delta = self.new_base[i] - self.starts[i];
+        Some((lo + delta, hi + delta))
+    }
+}
+
 /// New packed offset for a data byte at `off`, given the sorted object
 /// `starts` and each object's packed base (`new_base[i] < 0` for a
 /// dropped object). An offset outside `[0, data_len)` passes through
@@ -795,8 +848,6 @@ pub(crate) fn apply_data_liveness(
     segregate: bool,
     ssa: Option<(&mut [FunctionSsa], &DataMap)>,
 ) -> (Program, i64, DataMap) {
-    use crate::c5::token::Token;
-
     let data_len = program.data.len() as i64;
     let starts = &sets.starts;
     let live = &sets.data_live;
@@ -813,7 +864,7 @@ pub(crate) fn apply_data_liveness(
     // it. `ALIGN` is the section's own alignment, which the writers place
     // `.data` and `.bss` at, so preserving residues modulo it preserves
     // each object's absolute alignment up to that of the whole section.
-    let align: i64 = (program.data_align.max(16)).next_power_of_two() as i64;
+    let align: i64 = crate::c5::layout::bss_image_align(program.data_align) as i64;
     let obj_end = |i: usize| -> i64 { if i + 1 < n { starts[i + 1] } else { data_len } };
     // A relocation writes a (generally non-zero) value into its slot at
     // link/write time, so the slot's object is initialised data even when
@@ -916,34 +967,18 @@ pub(crate) fn apply_data_liveness(
         }
     }
     let bss_size = bss_cursor - bss_base;
-    // Parse-recorded padding inside a surviving interval moves with it
-    // (intervals are copied wholesale, so interior offsets shift by the
-    // interval's delta); padding in a dropped interval is gone. The
-    // above-8 alignment marks move the same way.
-    for &(lo, hi) in &program.data_pad_ranges {
-        if !(0..data_len).contains(&lo) || hi <= lo || hi > data_len {
-            continue;
-        }
-        let i = interval_of(lo);
-        if new_base[i] < 0 || hi > obj_end(i) {
-            continue;
-        }
-        let delta = new_base[i] - starts[i];
-        new_pad_ranges.push((lo + delta, hi + delta));
-    }
-    new_pad_ranges.sort_unstable();
-    let mut new_align_marks: Vec<(i64, i64)> = Vec::new();
-    for &(off, a) in &program.data_align_marks {
-        if !(0..data_len).contains(&off) {
-            continue;
-        }
-        let i = interval_of(off);
-        if new_base[i] < 0 {
-            continue;
-        }
-        new_align_marks.push((new_base[i] + (off - starts[i]), a));
-    }
-    new_align_marks.sort_unstable();
+    // The one description of where every object went. Every stored offset
+    // -- symbol values, relocation slots and targets, AST references, IR
+    // immediates, padding spans, alignment marks, object starts -- is
+    // rewritten through it by `Program::remap_data_offsets`, whose
+    // implementations destructure their types exhaustively.
+    let obj_lens: Vec<i64> = (0..n).map(|i| obj_end(i) - starts[i]).collect();
+    let map_to = PackedData {
+        starts,
+        new_base: &new_base,
+        obj_lens: &obj_lens,
+        data_len,
+    };
     let map = |off: i64| remap_data_off(off, starts, &new_base, data_len);
 
     let mut out = program.clone();
@@ -957,62 +992,15 @@ pub(crate) fn apply_data_liveness(
     out.data_relocs.retain(|r| slot_live(r.data_offset));
     out.code_relocs.retain(|r| slot_live(r.data_offset));
     out.extern_data_relocs.retain(|r| slot_live(r.data_offset));
-    out.data = new_data;
-    out.data_pad_ranges = new_pad_ranges;
-    out.data_align_marks = new_align_marks;
     out.finished_functions
         .retain(|f| live_func_pcs.contains(&f.ent_pc));
-    for sym in &mut out.symbols {
-        // A `_Thread_local` symbol's `val` is an offset into the separate
-        // TLS image, not `.data`, so it must not pass through the `.data`
-        // remap (mirrors `for_each_data_offset`, which skips them).
-        if sym.class == Token::Glo as i64
-            && sym.defined_here
-            && !sym.is_thread_local
-            && (0..data_len).contains(&sym.val)
-        {
-            if new_base[interval_of(sym.val)] < 0 {
-                // The object was dropped; retire the record in place
-                // (removal would shift the indices the AST references)
-                // so no writer places or carves it.
-                sym.defined_here = false;
-                sym.is_used = false;
-                sym.section_name = None;
-                sym.val = 0;
-            } else {
-                sym.val = map(sym.val);
-            }
-        }
-    }
-    for r in &mut out.data_relocs {
-        r.data_offset = map(r.data_offset as i64) as u64;
-        // Rebase the target against its own object, resolved via the
-        // anchor: a one-past-the-end target (C99 6.5.6p8) lies on the
-        // next object's start and the raw offset would follow that
-        // object instead.
-        let anchor = r.target_anchor as i64;
-        if (0..data_len).contains(&anchor) {
-            let i = interval_of(anchor);
-            if new_base[i] >= 0 {
-                r.target_offset = (new_base[i] + (r.target_offset as i64 - starts[i])) as u64;
-            } else {
-                r.target_offset = 0;
-            }
-            r.target_anchor = map(anchor) as u64;
-        } else {
-            r.target_offset = map(r.target_offset as i64) as u64;
-            r.target_anchor = r.target_offset;
-        }
-    }
-    for r in &mut out.code_relocs {
-        r.data_offset = map(r.data_offset as i64) as u64;
-    }
-    for r in &mut out.extern_data_relocs {
-        r.data_offset = map(r.data_offset as i64) as u64;
-    }
-    for f in &mut out.finished_functions {
-        f.ast.remap_data_offsets(&map);
-    }
+    crate::c5::layout::DataOffsets::remap_data_offsets(&mut out, &map_to);
+    out.data = new_data;
+    // The gaps this pass opened join the parse-recorded padding the remap
+    // above carried over.
+    out.data_pad_ranges.extend(new_pad_ranges);
+    out.data_pad_ranges.sort_unstable();
+    out.data_align_marks.sort_unstable();
     // A dropped object is named only by address materialisations nothing
     // consumes -- that is why it was dropped. Those become plain constants:
     // `ImmData` is deduplicated by key, so parking them all on one
@@ -1045,20 +1033,7 @@ pub(crate) fn apply_data_liveness(
             }
         }
     }
-    out.data_object_starts.retain(|&s| {
-        (0..data_len).contains(&s) && {
-            let i = match starts.binary_search(&s) {
-                Ok(i) => i,
-                Err(i) => i.saturating_sub(1),
-            };
-            live[i]
-        }
-    });
-    for s in &mut out.data_object_starts {
-        *s = map(*s);
-    }
-    let obj_len: Vec<i64> = (0..n).map(|i| obj_end(i) - starts[i]).collect();
-    (out, bss_size, DataMap::new(starts, new_base, &obj_len))
+    (out, bss_size, DataMap::new(starts, new_base, &obj_lens))
 }
 
 /// Read-only measurement of statically-dead data objects (no mutation,

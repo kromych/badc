@@ -52,6 +52,7 @@ use super::super::error::C5Error;
 use super::super::program::Program;
 use super::{Abi, Build, Machine};
 use super::{aarch64, dwarf, x86_64};
+use crate::c5::layout::{round_up, write_struct};
 
 // ------------------------------------------------------------------
 // ELF constants. Names mirror `<elf.h>` so cross-checking is mechanical.
@@ -319,17 +320,139 @@ struct Elf64Shdr {
 
 const _: () = assert!(core::mem::size_of::<Elf64Shdr>() == ELF64_SHDR_SIZE as usize);
 
-/// Append a `#[repr(C)]` struct's raw bytes to `out`. Same shape
-/// the PE writer uses; see that module for the safety argument.
-fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
-    const _: () = assert!(
-        cfg!(target_endian = "little"),
-        "ELF writer assumes a little-endian host; emit bytes manually if you need to cross-build from big-endian"
+/// Section-header table layout.
+///
+/// The writer emits a fixed sequence of sections, some conditional. Every
+/// count and every section index derives from this one description, so a
+/// section added here shifts the indices of the sections after it without
+/// any other site needing to know. `index_of` answers for an absent
+/// section too: it reports the slot the section would occupy, which is
+/// what a symbol referring to a section this image does not carry needs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Sec {
+    Null,
+    Interp,
+    Dynsym,
+    Dynstr,
+    Hash,
+    GnuVersion,
+    GnuVersionR,
+    RelaDyn,
+    Text,
+    Tdata,
+    Dynamic,
+    Got,
+    Data,
+    Tbss,
+    Bss,
+    Debug,
+    Symtab,
+    Strtab,
+    Shstrtab,
+}
+
+/// Emission order. `Sec::Debug` stands for the whole `.debug_*` run.
+const SECTION_ORDER: [Sec; 19] = [
+    Sec::Null,
+    Sec::Interp,
+    Sec::Dynsym,
+    Sec::Dynstr,
+    Sec::Hash,
+    Sec::GnuVersion,
+    Sec::GnuVersionR,
+    Sec::RelaDyn,
+    Sec::Text,
+    Sec::Tdata,
+    Sec::Dynamic,
+    Sec::Got,
+    Sec::Data,
+    Sec::Tbss,
+    Sec::Bss,
+    Sec::Debug,
+    Sec::Symtab,
+    Sec::Strtab,
+    Sec::Shstrtab,
+];
+
+struct SectionPlan {
+    /// Headers each slot of [`SECTION_ORDER`] contributes.
+    counts: [usize; 19],
+}
+
+impl SectionPlan {
+    fn new(
+        has_versions: bool,
+        has_tdata: bool,
+        has_data: bool,
+        has_tbss: bool,
+        has_bss: bool,
+        dwarf_sections: usize,
+        has_plt_symtab: bool,
+    ) -> Self {
+        let mut counts = [1usize; 19];
+        let mut set =
+            |s: Sec, n: usize| counts[SECTION_ORDER.iter().position(|&x| x == s).unwrap()] = n;
+        set(Sec::GnuVersion, has_versions as usize);
+        set(Sec::GnuVersionR, has_versions as usize);
+        set(Sec::Tdata, has_tdata as usize);
+        set(Sec::Data, has_data as usize);
+        set(Sec::Tbss, has_tbss as usize);
+        set(Sec::Bss, has_bss as usize);
+        set(Sec::Debug, dwarf_sections);
+        set(Sec::Symtab, has_plt_symtab as usize);
+        set(Sec::Strtab, has_plt_symtab as usize);
+        Self { counts }
+    }
+
+    /// Plan carrying only the sections that precede `.text`, for the
+    /// early `text_shndx` the symbol tables need.
+    fn prefix(has_versions: bool) -> Self {
+        Self::new(has_versions, false, false, false, false, 0, false)
+    }
+
+    fn len(&self) -> usize {
+        self.counts.iter().sum()
+    }
+
+    /// Section-header index of `s`, or of the slot it would occupy.
+    fn index_of(&self, s: Sec) -> u16 {
+        let at = SECTION_ORDER.iter().position(|&x| x == s).unwrap();
+        self.counts[..at].iter().sum::<usize>() as u16
+    }
+
+    /// Which slot the header at index `i` belongs to.
+    fn at(&self, i: usize) -> Sec {
+        let mut seen = 0;
+        for (slot, &n) in self.counts.iter().enumerate() {
+            seen += n;
+            if i < seen {
+                return SECTION_ORDER[slot];
+            }
+        }
+        panic!("section index {i} past the plan");
+    }
+}
+
+/// Append one section header, checking it lands where the plan says.
+/// Emission and the derived indices then cannot disagree.
+///
+/// Checked in release too: the indices are handed to every exported
+/// symbol's `st_shndx`, so a table emitted out of plan order produces a
+/// silently corrupt image rather than a failure.
+fn emit_shdr(
+    out: &mut Vec<u8>,
+    plan: &SectionPlan,
+    cursor: &mut usize,
+    kind: Sec,
+    shdr: &Elf64Shdr,
+) {
+    assert_eq!(
+        plan.at(*cursor),
+        kind,
+        "section header {cursor} emitted out of plan order"
     );
-    let bytes = unsafe {
-        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
-    };
-    out.extend_from_slice(bytes);
+    *cursor += 1;
+    write_struct(out, shdr);
 }
 
 /// Dynamic linker path. Selected per machine: `aarch64` lives at
@@ -377,10 +500,6 @@ fn r_relative(machine: Machine) -> u64 {
 
 fn put_u32(out: &mut Vec<u8>, v: u32) {
     out.extend_from_slice(&v.to_le_bytes());
-}
-
-fn round_up(n: u64, align: u64) -> u64 {
-    (n + align - 1) & !(align - 1)
 }
 
 // ------------------------------------------------------------------
@@ -1310,66 +1429,17 @@ fn patch_adrp_add(
     target_vmaddr: u64,
     label: &str,
 ) -> Result<(), C5Error> {
-    let adrp_file_off = (code_base_in_file + adrp_offset_in_code) as usize;
-    let add_file_off = adrp_file_off + 4;
-    let adrp_vmaddr = code_vmaddr_base + adrp_offset_in_code;
-
-    let adrp_page = adrp_vmaddr & !0xFFF;
-    let target_page = target_vmaddr & !0xFFF;
-    let page_diff = target_page as i64 - adrp_page as i64;
-    if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("ELF: {label} page diff {page_diff} not 4 KiB aligned"),
-        )));
-    }
-    let imm21 = (page_diff >> 12) as i32;
-    let in_page = (target_vmaddr & 0xFFF) as u32;
-
-    // Recover the registers the codegen (or another toolchain) encoded at the
-    // placeholder site. The adrp carries rd in the low 5 bits; the second
-    // instruction is either `add rd, rn, #lo12` or an unsigned-offset
-    // load/store (`ldr/str [rn, #:lo12:sym]`), patched in place below.
-    let prev_adrp = u32::from_le_bytes([
-        out[adrp_file_off],
-        out[adrp_file_off + 1],
-        out[adrp_file_off + 2],
-        out[adrp_file_off + 3],
-    ]);
-    let prev_add = u32::from_le_bytes([
-        out[add_file_off],
-        out[add_file_off + 1],
-        out[add_file_off + 2],
-        out[add_file_off + 3],
-    ]);
-    let rd = (prev_adrp & 0x1F) as u8;
-    let adrp_word = aarch64::enc_adrp(aarch64::Reg(rd), imm21);
-    out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-
-    // ADD (immediate) takes the low 12 bits unscaled. An unsigned-offset
-    // load/store scales the immediate by the access size (2^size, size in bits
-    // 31..30), so its opcode is preserved and only imm12 (bits 21..10) is
-    // rewritten.
-    let second = if (prev_add & 0x7F80_0000) == 0x1100_0000 {
-        let add_rd = (prev_add & 0x1F) as u8;
-        let add_rn = ((prev_add >> 5) & 0x1F) as u8;
-        aarch64::enc_add_imm(aarch64::Reg(add_rd), aarch64::Reg(add_rn), in_page)
-    } else if (prev_add & 0x3B00_0000) == 0x3900_0000 {
-        let scale = 1u32 << (prev_add >> 30);
-        if !in_page.is_multiple_of(scale) {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "ELF: {label} low-12 offset {in_page:#x} not aligned to load/store size {scale}"
-                ),
-            )));
-        }
-        (prev_add & !(0xFFF << 10)) | (((in_page / scale) & 0xFFF) << 10)
-    } else {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("ELF: {label} adrp paired with an unrecognized instruction {prev_add:#010x}"),
-        )));
-    };
-    out[add_file_off..add_file_off + 4].copy_from_slice(&second.to_le_bytes());
-    Ok(())
+    aarch64::patch::patch_pair(
+        out,
+        (code_base_in_file + adrp_offset_in_code) as usize,
+        (code_vmaddr_base + adrp_offset_in_code) as i64,
+        target_vmaddr as i64,
+    )
+    .map_err(|e| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &e.describe(&format!("ELF: {label}")),
+        ))
+    })
 }
 
 // ------------------------------------------------------------------
@@ -1619,11 +1689,9 @@ pub(super) fn write(
         dynstr.push(0);
     }
     let has_versions = !verneed_groups.is_empty();
-    // Two extra allocated sections (.gnu.version / .gnu.version_r) precede
-    // .rela.dyn when has_versions, shifting .text onward by two. Symbols
-    // whose st_shndx names .text must use this shifted index.
-    let ver_shdrs: u16 = if has_versions { 2 } else { 0 };
-    let text_shndx: u16 = 6 + ver_shdrs;
+    // Every section before `.text` is unconditional except the two
+    // version sections, so `.text`'s index needs only `has_versions`.
+    let text_shndx: u16 = SectionPlan::prefix(has_versions).index_of(Sec::Text);
     let (gnu_version, gnu_version_r): (Vec<u8>, Vec<u8>) = if has_versions {
         let mut versym: Vec<u8> = Vec::with_capacity(total_dynsym * 2);
         versym.extend_from_slice(&0u16.to_le_bytes()); // null symbol
@@ -1780,7 +1848,7 @@ pub(super) fn write(
     let got_size = (n_imports as u64) * 8;
     // `.data`'s base alignment: p_vaddr == p_offset within the RW
     // segment, so aligning the file offset aligns the vaddr.
-    let data_align = build.data_align.max(8) as u64;
+    let data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
     let data_off = round_up(got_off + got_size, data_align);
     let data_size = build.data.len() as u64;
     // An object wider than the arch page size needs the RW segment's
@@ -2061,29 +2129,20 @@ pub(super) fn write(
     // optional .data, .tbss, .bss. Used to attribute each .dynsym export
     // to its real section. `ver_shdrs` / `text_shndx` are computed near
     // `has_versions` above so the PLT symtab can share the shifted index.
-    let data_shndx: u16 = 9 + ver_shdrs + has_tdata as u16;
-    let bss_shndx: u16 = 9 + ver_shdrs + has_tdata as u16 + has_data as u16 + has_tbss as u16;
-    let n_section_headers: u64 = 1 // NULL
-        + 1 // .interp
-        + 1 // .dynsym
-        + 1 // .dynstr
-        + 1 // .hash
-        + ver_shdrs as u64 // .gnu.version + .gnu.version_r
-        + 1 // .rela.dyn
-        + 1 // .text
-        + (if has_tdata { 1 } else { 0 }) // .tdata
-        + 1 // .dynamic
-        + 1 // .got
-        + (if has_data { 1 } else { 0 }) // .data
-        + (if has_tbss { 1 } else { 0 }) // .tbss
-        + (if has_bss { 1 } else { 0 }) // .bss
-        + (if emit_dwarf { 5 } else { 0 }) // .debug_* x 5 (info, abbrev, line, str, frame);
-        + (if emit_plt_symtab { 2 } else { 0 }) // .symtab + .strtab; 
-        + 1; // .shstrtab
+    let plan = SectionPlan::new(
+        has_versions,
+        has_tdata,
+        has_data,
+        has_tbss,
+        has_bss,
+        if emit_dwarf { 5 } else { 0 },
+        emit_plt_symtab,
+    );
+    let data_shndx: u16 = plan.index_of(Sec::Data);
+    let bss_shndx: u16 = plan.index_of(Sec::Bss);
+    let n_section_headers: u64 = plan.len() as u64;
     let total_filesize = shdr_off + n_section_headers * ELF64_SHDR_SIZE;
-    // shstrtab is the last section in the table; its index is
-    // n_section_headers - 1.
-    let shstrtab_idx: u16 = (n_section_headers - 1) as u16;
+    let shstrtab_idx: u16 = plan.index_of(Sec::Shstrtab);
 
     // ---- Build the bytes. ----
     let mut out: Vec<u8> = Vec::with_capacity(total_filesize as usize);
@@ -2519,12 +2578,16 @@ pub(super) fn write(
     let dynsym_shdr_idx: u16 = 2;
     let dynstr_shdr_idx: u16 = 3;
     let _hash_shdr_idx: u16 = 4;
-    let _rela_shdr_idx: u16 = 5 + ver_shdrs;
+    let _rela_shdr_idx: u16 = plan.index_of(Sec::RelaDyn);
     let _ = (dynsym_shdr_idx, dynstr_shdr_idx);
 
+    let mut shdr_cursor = 0usize;
     // [0] NULL sentinel.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Null,
         &Elf64Shdr {
             sh_name: name_off(""),
             sh_type: SHT_NULL,
@@ -2540,8 +2603,11 @@ pub(super) fn write(
     );
 
     // [1] .interp -- the dynamic linker path string.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Interp,
         &Elf64Shdr {
             sh_name: name_off(".interp"),
             sh_type: SHT_PROGBITS,
@@ -2560,8 +2626,11 @@ pub(super) fn write(
     // sh_info = index of first non-local symbol (we have only
     // a NULL sentinel + globals, so 1).
     let dynsym_link_pending: u16 = dynstr_shdr_idx;
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Dynsym,
         &Elf64Shdr {
             sh_name: name_off(".dynsym"),
             sh_type: SHT_DYNSYM,
@@ -2577,8 +2646,11 @@ pub(super) fn write(
     );
 
     // [3] .dynstr -- string table for .dynsym.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Dynstr,
         &Elf64Shdr {
             sh_name: name_off(".dynstr"),
             sh_type: SHT_STRTAB,
@@ -2595,8 +2667,11 @@ pub(super) fn write(
 
     // [4] .hash -- DT_HASH bucket / chain table.
     let dynsym_idx_for_hash = dynsym_shdr_idx;
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Hash,
         &Elf64Shdr {
             sh_name: name_off(".hash"),
             sh_type: SHT_HASH,
@@ -2616,8 +2691,11 @@ pub(super) fn write(
     // .rela.dyn so the section-header order tracks the file/address
     // order; present only when an import carries a version requirement.
     if has_versions {
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::GnuVersion,
             &Elf64Shdr {
                 sh_name: name_off(".gnu.version"),
                 sh_type: SHT_GNU_VERSYM,
@@ -2631,8 +2709,11 @@ pub(super) fn write(
                 sh_entsize: 2,
             },
         );
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::GnuVersionR,
             &Elf64Shdr {
                 sh_name: name_off(".gnu.version_r"),
                 sh_type: SHT_GNU_VERNEED,
@@ -2649,8 +2730,11 @@ pub(super) fn write(
     }
 
     // [5] .rela.dyn -- relocations resolved at load time.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::RelaDyn,
         &Elf64Shdr {
             sh_name: name_off(".rela.dyn"),
             sh_type: SHT_RELA,
@@ -2667,8 +2751,11 @@ pub(super) fn write(
 
     // [6] .text -- the executable code segment. The size covers
     // the entry stub + build.text; the address is `code_vmaddr`.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Text,
         &Elf64Shdr {
             sh_name: name_off(".text"),
             sh_type: SHT_PROGBITS,
@@ -2685,8 +2772,11 @@ pub(super) fn write(
 
     // [optional] .tdata -- TLS image template (when has_tdata).
     if has_tdata {
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Tdata,
             &Elf64Shdr {
                 sh_name: name_off(".tdata"),
                 sh_type: SHT_PROGBITS,
@@ -2703,8 +2793,11 @@ pub(super) fn write(
     }
 
     // [N] .dynamic -- dynamic linking info table.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Dynamic,
         &Elf64Shdr {
             sh_name: name_off(".dynamic"),
             sh_type: SHT_DYNAMIC,
@@ -2720,8 +2813,11 @@ pub(super) fn write(
     );
 
     // [N+1] .got -- global offset table (one slot per import).
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Got,
         &Elf64Shdr {
             sh_name: name_off(".got"),
             sh_type: SHT_PROGBITS,
@@ -2738,8 +2834,11 @@ pub(super) fn write(
 
     // [optional] .data -- the initialised data segment.
     if has_data {
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Data,
             &Elf64Shdr {
                 sh_name: name_off(".data"),
                 sh_type: SHT_PROGBITS,
@@ -2760,8 +2859,11 @@ pub(super) fn write(
         // .tbss has no file-resident bytes; sh_offset still
         // points where the loader-zeroed region would conceptually
         // start so tools can compute its boundaries.
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Tbss,
             &Elf64Shdr {
                 sh_name: name_off(".tbss"),
                 sh_type: 8,                              // SHT_NOBITS
@@ -2781,8 +2883,11 @@ pub(super) fn write(
     // PT_LOAD p_memsz tail reserves these bytes; the header lets size /
     // llvm-size attribute them to bss rather than reading zero.
     if has_bss {
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Bss,
             &Elf64Shdr {
                 sh_name: name_off(".bss"),
                 sh_type: 8, // SHT_NOBITS
@@ -2836,8 +2941,11 @@ pub(super) fn write(
             ),
         ];
         for &(name_offset, off, sz) in dwarf_section_specs {
-            write_struct(
+            emit_shdr(
                 &mut out,
+                &plan,
+                &mut shdr_cursor,
+                Sec::Debug,
                 &Elf64Shdr {
                     sh_name: name_offset,
                     sh_type: SHT_PROGBITS,
@@ -2859,22 +2967,16 @@ pub(super) fn write(
     // we only emit locals, so it's `n_symbols` (sentinel + one
     // per import). `sh_link` references the matching `.strtab`.
     if let Some(name_idx) = plt_symtab_name_idx_in_shstrtab {
-        // Section-header indices for `.symtab` / `.strtab`. They
-        // sit just before `.shstrtab` (which is always at
-        // `n_section_headers - 1`), so they're at -3 / -2 from
-        // the end. These are independent of `shstrtab_names`
-        // ordering -- the names list and the shdr table use
-        // different indexing schemes (the former includes only
-        // names; the latter includes optional sections like
-        // `.tdata` / `.data` / `.tbss` whose names are at fixed
-        // shstrtab slots).
-        let symtab_shdr_idx = (n_section_headers - 3) as u32;
-        let strtab_shdr_idx = (n_section_headers - 2) as u32;
+        let symtab_shdr_idx = plan.index_of(Sec::Symtab) as u32;
+        let strtab_shdr_idx = plan.index_of(Sec::Strtab) as u32;
         let _ = symtab_shdr_idx;
         let n_sym = (plt_symtab_bytes.len() as u64) / ELF64_SYM_SIZE;
         // [N] .symtab
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Symtab,
             &Elf64Shdr {
                 sh_name: shstrtab_offsets[name_idx],
                 sh_type: SHT_SYMTAB,
@@ -2889,8 +2991,11 @@ pub(super) fn write(
             },
         );
         // [N+1] .strtab
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Strtab,
             &Elf64Shdr {
                 sh_name: shstrtab_offsets[name_idx + 1],
                 sh_type: SHT_STRTAB,
@@ -2907,8 +3012,11 @@ pub(super) fn write(
     }
 
     // [last] .shstrtab.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Shstrtab,
         &Elf64Shdr {
             sh_name: shstrtab_offsets[shstrtab_idx_self],
             sh_type: SHT_STRTAB,
@@ -2923,6 +3031,14 @@ pub(super) fn write(
         },
     );
 
+    // `e_shnum` and the file size were both computed from the plan before
+    // the table existed; a short or long table means the header describes a
+    // file the writer did not produce.
+    assert_eq!(
+        shdr_cursor,
+        plan.len(),
+        "section table length differs from the plan"
+    );
     debug_assert_eq!(out.len() as u64, total_filesize);
 
     // ---- Patch fixups. ----
@@ -3093,6 +3209,42 @@ mod tests {
     /// vec produces an empty subprogram list and trivial section
     /// bytes, which is enough for the structural invariants the
     /// tests check.
+    /// Every section index the writer hands out resolves back to the
+    /// section it names, for every combination of optional sections, and
+    /// the table length is the sum of what the plan carries. The indices
+    /// used to be hand-summed against a separate emission list.
+    #[test]
+    fn section_indices_resolve_to_their_own_section() {
+        for bits in 0u8..64 {
+            let plan = SectionPlan::new(
+                bits & 1 != 0,
+                bits & 2 != 0,
+                bits & 4 != 0,
+                bits & 8 != 0,
+                bits & 16 != 0,
+                if bits & 32 != 0 { 5 } else { 0 },
+                bits & 1 != 0,
+            );
+            // Independent restatement of the unconditional set: NULL,
+            // .interp, .dynsym, .dynstr, .hash, .rela.dyn, .text, .dynamic,
+            // .got, .shstrtab.
+            let mut expected = 10;
+            expected += 2 * (bits & 1 != 0) as usize; // .gnu.version{,_r}
+            expected += (bits & 2 != 0) as usize; // .tdata
+            expected += (bits & 4 != 0) as usize; // .data
+            expected += (bits & 8 != 0) as usize; // .tbss
+            expected += (bits & 16 != 0) as usize; // .bss
+            expected += if bits & 32 != 0 { 5 } else { 0 }; // .debug_*
+            expected += 2 * (bits & 1 != 0) as usize; // .symtab + .strtab
+            assert_eq!(plan.len(), expected, "bits={bits}");
+            for s in [Sec::Null, Sec::Text, Sec::Dynamic, Sec::Got, Sec::Shstrtab] {
+                assert_eq!(plan.at(plan.index_of(s) as usize), s, "bits={bits} {s:?}");
+            }
+            // `.shstrtab` is always last.
+            assert_eq!(plan.index_of(Sec::Shstrtab) as usize, plan.len() - 1);
+        }
+    }
+
     fn tiny_program() -> Program {
         Program {
             data: Vec::new(),

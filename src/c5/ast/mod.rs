@@ -819,27 +819,39 @@ impl Ast {
                     is_thread_local,
                     ..
                 } if *class == Token::Glo as i64 && !*is_thread_local => f(val),
-                Expr::CompoundLiteral { init, .. } => match init {
-                    LocalInit::Aggregate { src_data_off, .. } => f(src_data_off),
-                    LocalInit::Runtime {
-                        zero_init: Some((off, _)),
-                        ..
-                    } => f(off),
-                    _ => {}
-                },
-                _ => {}
+                Expr::CompoundLiteral { init, .. } => local_init_offsets(init, f),
+                Expr::Ident { .. }
+                | Expr::IntLit { .. }
+                | Expr::FloatLit { .. }
+                | Expr::Unary { .. }
+                | Expr::LabelAddr { .. }
+                | Expr::Binary { .. }
+                | Expr::Ternary { .. }
+                | Expr::Call { .. }
+                | Expr::Member { .. }
+                | Expr::Index { .. }
+                | Expr::Cast { .. }
+                | Expr::Assign { .. }
+                | Expr::BitfieldAssign { .. }
+                | Expr::CompoundAssign { .. }
+                | Expr::PreInc { .. }
+                | Expr::PostInc { .. }
+                | Expr::Sizeof { .. }
+                | Expr::Comma { .. }
+                | Expr::ShortCircuit { .. }
+                | Expr::Intrinsic { .. }
+                | Expr::InlineAsm { .. }
+                | Expr::Atomic { .. }
+                | Expr::VlaBase { .. }
+                | Expr::VlaSizeof { .. }
+                | Expr::StmtExpr { .. }
+                | Expr::CheckedArith { .. } => {}
             }
         }
         for decl in &mut self.decls {
-            if let Decl::Local { init, .. } = decl {
-                match init {
-                    LocalInit::Aggregate { src_data_off, .. } => f(src_data_off),
-                    LocalInit::Runtime {
-                        zero_init: Some((off, _)),
-                        ..
-                    } => f(off),
-                    _ => {}
-                }
+            match decl {
+                Decl::Local { init, .. } => local_init_offsets(init, f),
+                Decl::Vla { .. } | Decl::StaticLocal { .. } => {}
             }
         }
     }
@@ -854,14 +866,6 @@ impl Ast {
             return;
         }
         self.for_each_data_offset(&mut |off| *off += data_base);
-    }
-
-    /// Rewrite every data-segment offset through `remap`. Used by static
-    /// DCE after `.data` is compacted: an object that survives the prune
-    /// moves to a new packed offset, and every AST reference to it must
-    /// follow. `remap` must be defined for every offset the AST holds.
-    pub(crate) fn remap_data_offsets(&mut self, remap: &impl Fn(i64) -> i64) {
-        self.for_each_data_offset(&mut |off| *off = remap(*off));
     }
 
     /// Linker-side fixup for multi-TU builds: shift every
@@ -1066,6 +1070,55 @@ fn visit_decl_ty(decl: &mut Decl, f: &mut impl FnMut(&mut i64)) {
         }
         Decl::Vla { elem_ty, .. } => f(elem_ty),
         Decl::StaticLocal { .. } => {}
+    }
+}
+
+impl crate::c5::layout::DataOffsets for FinishedFunction {
+    fn remap_data_offsets(&mut self, r: &dyn crate::c5::layout::DataRemap) {
+        let Self {
+            ast,
+            ent_pc: _,
+            end_pc: _,
+            n_params: _,
+            is_variadic: _,
+            is_inline: _,
+            is_always_inline: _,
+            is_naked: _,
+            n_locals: _,
+            param_tys: _,
+            param_local_slots: _,
+            returns_struct: _,
+            return_struct_size: _,
+            return_ty: _,
+            alloca_top_slot: _,
+            multi_cell_slots: _,
+            over_aligned_slots: _,
+            name: _,
+        } = self;
+        ast.remap_data_offsets(r);
+    }
+}
+
+/// Offsets a local-object initializer holds. Matched exhaustively so a new
+/// initializer shape carrying staged data is classified here.
+fn local_init_offsets(init: &mut LocalInit, f: &mut impl FnMut(&mut i64)) {
+    match init {
+        LocalInit::Aggregate { src_data_off, .. } => f(src_data_off),
+        LocalInit::Runtime {
+            zero_init: Some((off, _)),
+            ..
+        } => f(off),
+        LocalInit::Runtime {
+            zero_init: None, ..
+        }
+        | LocalInit::None
+        | LocalInit::Scalar(..) => {}
+    }
+}
+
+impl crate::c5::layout::DataOffsets for Ast {
+    fn remap_data_offsets(&mut self, r: &dyn crate::c5::layout::DataRemap) {
+        self.for_each_data_offset(&mut |off| crate::c5::layout::remap_self(off, r));
     }
 }
 

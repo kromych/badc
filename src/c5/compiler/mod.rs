@@ -2015,14 +2015,9 @@ impl Compiler {
         if moves.is_empty() {
             return;
         }
-        let remap = |off: i64| match moves
-            .iter()
-            .find(|&&(old, bytes, _)| off >= old && off < old + bytes)
-        {
-            Some(&(old, _, new)) => new + (off - old),
-            None => off,
-        };
+        let remap = RelocatedGlobals(moves.clone());
         for f in &mut self.finished_functions {
+            use crate::c5::layout::DataOffsets;
             f.ast.remap_data_offsets(&remap);
         }
         for r in &mut self.data_relocs {
@@ -2262,5 +2257,39 @@ impl Compiler {
             init_funcs: self.init_funcs,
             function_aliases,
         })
+    }
+}
+
+/// Objects a defining declaration moved off their tentative reservation,
+/// as `(old offset, reserved bytes, new offset)`. Reuses the compaction
+/// pass's offset surface so both rebases reach the same fields.
+struct RelocatedGlobals(Vec<(i64, i64, i64)>);
+
+impl RelocatedGlobals {
+    fn shift(&self, off: i64) -> i64 {
+        match self
+            .0
+            .iter()
+            .find(|&&(old, bytes, _)| off >= old && off < old + bytes)
+        {
+            Some(&(old, _, new)) => new + (off - old),
+            None => off,
+        }
+    }
+}
+
+impl crate::c5::layout::DataRemap for RelocatedGlobals {
+    /// Every offset is a candidate: an object outside the move table
+    /// shifts by zero.
+    fn in_data(&self, _off: i64) -> bool {
+        true
+    }
+
+    fn remap(&self, off: i64, _anchor: i64) -> Option<i64> {
+        Some(self.shift(off))
+    }
+
+    fn remap_span(&self, lo: i64, hi: i64) -> Option<(i64, i64)> {
+        Some((self.shift(lo), self.shift(lo) + (hi - lo)))
     }
 }

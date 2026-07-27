@@ -45,6 +45,8 @@ use alloc::vec::Vec;
 
 use super::{Build, Target};
 use crate::c5::compiler::{StructDef, types};
+// CIE / FDE bodies pad to 8 with `DW_CFA_nop`, which is a zero byte.
+use crate::c5::layout::pad_to_align as pad_to_alignment;
 use crate::c5::program::Program;
 use crate::c5::token::Ty;
 
@@ -182,7 +184,6 @@ const OPCODE_BASE: u8 = 13;
 const DW_CFA_ADVANCE_LOC_HI: u8 = 0x40;
 const DW_CFA_OFFSET_HI: u8 = 0x80;
 
-const DW_CFA_NOP: u8 = 0x00;
 const DW_CFA_ADVANCE_LOC1: u8 = 0x02;
 const DW_CFA_ADVANCE_LOC2: u8 = 0x03;
 const DW_CFA_ADVANCE_LOC4: u8 = 0x04;
@@ -2147,15 +2148,6 @@ fn write_advance_loc(out: &mut Vec<u8>, arch: CfiArch, bytes: u32) {
     } else {
         out.push(DW_CFA_ADVANCE_LOC4);
         out.extend_from_slice(&units.to_le_bytes());
-    }
-}
-
-/// Round `body.len()` up to a multiple of 8 (the CIE / FDE
-/// alignment for 64-bit DWARF) by appending `DW_CFA_nop` (0x00)
-/// padding.
-fn pad_to_alignment(body: &mut Vec<u8>, alignment: usize) {
-    while !body.len().is_multiple_of(alignment) {
-        body.push(DW_CFA_NOP);
     }
 }
 

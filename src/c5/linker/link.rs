@@ -25,6 +25,7 @@ use crate::c5::error::C5Error;
 use super::object::{
     ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection, SharedLibrary,
 };
+use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 
 /// AArch64 reloc-type constants. Kept in step with the writer
 /// and the reader; a future common module lifts them out of
@@ -436,21 +437,24 @@ pub fn link_native_objects_with_shared_libs(
     let mut text: Vec<u8> = Vec::new();
     let mut data: Vec<u8> = Vec::new();
     let mut bss_size: usize = 0;
-    let mut data_align: usize = 8;
+    let mut data_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
     let mut text_align: usize = 16;
     for obj in objs {
         align_up(&mut text, obj.text_align.max(16));
         text_align = text_align.max(obj.text_align);
         text_bases.push(text.len());
         text.extend_from_slice(&obj.text);
-        align_up(&mut data, obj.data_align.max(8));
+        align_up(
+            &mut data,
+            crate::c5::layout::data_image_align(obj.data_align),
+        );
         data_align = data_align.max(obj.data_align);
         data_bases.push(data.len());
         data.extend_from_slice(&obj.data);
         // Each unit's bss offsets carry an alignment residue modulo the
         // widest `.bss` sh_addralign the unit claims; a unit base aligned
         // to the same value preserves it.
-        bss_size = align_usize(bss_size, obj.bss_align.max(16));
+        bss_size = align_usize(bss_size, crate::c5::layout::bss_image_align(obj.bss_align));
         bss_bases.push(bss_size);
         bss_size += obj.bss_size;
     }
@@ -515,7 +519,7 @@ pub fn link_native_objects_with_shared_libs(
     // data-offset space; pad the file image so bss offsets keep their
     // per-unit alignment residues in the final image.
     if bss_size > 0 {
-        align_up(&mut data, data_align.max(16));
+        align_up(&mut data, crate::c5::layout::bss_image_align(data_align));
     }
 
     // Pass 2 -- defined symbols. Every `STB_GLOBAL` symbol that
@@ -2166,34 +2170,13 @@ fn patch_x86_64_pc32(text: &mut [u8], offset: usize, target: i64) -> Result<(), 
 }
 
 fn patch_aarch64_adr_pg(text: &mut [u8], offset: usize, target: i64) -> Result<(), C5Error> {
-    // ADRP encodes bits 32..12 of the 4-KiB-page distance from
-    // the instruction's PC. Split into immlo (bits 30..29) and
-    // immhi (bits 23..5).
-    let pc_page = (offset as i64) & !0xfff;
-    let target_page = target & !0xfff;
-    let delta = target_page - pc_page;
-    let pages = delta >> 12;
-    if !(-(1 << 20)..(1 << 20)).contains(&pages) {
-        return Err(err(&format!(
-            "ADR_PREL_PG_HI21 disp 0x{delta:x} out of +-2^32 range at 0x{offset:x}",
-        )));
-    }
-    let immlo = (pages as u32) & 0x3;
-    let immhi = ((pages as u32) >> 2) & 0x7ffff;
-    let mut instr = u32::from_le_bytes(text[offset..offset + 4].try_into().unwrap());
-    instr = (instr & !0x60ff_ffe0) | (immlo << 29) | (immhi << 5);
-    text[offset..offset + 4].copy_from_slice(&instr.to_le_bytes());
-    Ok(())
+    crate::c5::codegen::aarch64::patch::patch_adrp(text, offset, offset as i64, target)
+        .map_err(|e| err(&e.describe(&format!("ADR_PREL_PG_HI21 at 0x{offset:x}"))))
 }
 
 fn patch_aarch64_add_lo12(text: &mut [u8], offset: usize, target: i64) -> Result<(), C5Error> {
-    // ADD (immediate) carries the low 12 bits of the target as
-    // imm12 (bits 21..10) of the instruction.
-    let imm12 = ((target & 0xfff) as u32) & 0xfff;
-    let mut instr = u32::from_le_bytes(text[offset..offset + 4].try_into().unwrap());
-    instr = (instr & !0x003f_fc00) | (imm12 << 10);
-    text[offset..offset + 4].copy_from_slice(&instr.to_le_bytes());
-    Ok(())
+    crate::c5::codegen::aarch64::patch::patch_lo12(text, offset, target)
+        .map_err(|e| err(&e.describe(&format!("ADD_ABS_LO12_NC at 0x{offset:x}"))))
 }
 
 fn is_aarch64_text_pageref(machine: NativeMachine, rtype: u32) -> bool {
@@ -2246,16 +2229,6 @@ fn park_data_ref(
 }
 
 // ---- helpers ----
-
-fn align_up(v: &mut Vec<u8>, alignment: usize) {
-    while !v.len().is_multiple_of(alignment) {
-        v.push(0);
-    }
-}
-
-fn align_usize(v: usize, alignment: usize) -> usize {
-    v.div_ceil(alignment) * alignment
-}
 
 fn err(msg: &str) -> C5Error {
     C5Error::Compile(crate::c5::error::fmt_internal_err(msg))

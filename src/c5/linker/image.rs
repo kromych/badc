@@ -34,6 +34,12 @@ use crate::c5::error::C5Error;
 
 use super::link::MergedNative;
 use super::object::{NativeMachine, NativeSymSection};
+use crate::c5::layout::round_up;
+
+/// Page-align `n` up to the next multiple of [`PAGE_SIZE`].
+fn round_up_page(n: u64) -> u64 {
+    round_up(n, PAGE_SIZE)
+}
 
 const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
 const EI_CLASS_64: u8 = 2;
@@ -175,8 +181,8 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
     // `p_vaddr & (PAGE_SIZE - 1) == p_offset & (PAGE_SIZE - 1)`
     // -- the kernel requires that congruence for executable
     // mmap.
-    let data_file_off: u64 = page_align(text_file_off + text_file_size);
-    let data_vaddr: u64 = page_align(text_vaddr + text_file_size) + PAGE_SIZE;
+    let data_file_off: u64 = round_up_page(text_file_off + text_file_size);
+    let data_vaddr: u64 = round_up_page(text_vaddr + text_file_size) + PAGE_SIZE;
     let data_file_size: u64 = merged.data.len() as u64;
     let data_mem_size: u64 = data_file_size + merged.bss_size as u64;
 
@@ -314,11 +320,6 @@ fn patch_data_abs_relocs(
         data[slot..slot + 8].copy_from_slice(&value.to_le_bytes());
     }
     Ok(())
-}
-
-/// Page-align `n` up to the next multiple of [`PAGE_SIZE`].
-fn page_align(n: u64) -> u64 {
-    (n + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1)
 }
 
 fn write_u16(out: &mut Vec<u8>, v: u16) {
@@ -612,8 +613,8 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
     // segment. Page-align both the file offset and the load
     // vaddr; the kernel's mmap requires
     // `vaddr % PAGE_SIZE == offset % PAGE_SIZE`.
-    let data_seg_file_off = page_align(text_off + text_size);
-    let data_seg_vaddr = page_align(BASE_ADDR + text_off + text_size) + PAGE_SIZE;
+    let data_seg_file_off = round_up_page(text_off + text_size);
+    let data_seg_vaddr = round_up_page(BASE_ADDR + text_off + text_size) + PAGE_SIZE;
     let got_plt_off = data_seg_file_off;
     let got_plt_size: u64 = (n_imports as u64) * 8;
     let data_off = got_plt_off + got_plt_size;

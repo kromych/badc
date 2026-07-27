@@ -1404,6 +1404,96 @@ pub(crate) fn returns_twice_fn_name(name: &str) -> bool {
     )
 }
 
+impl crate::c5::layout::DataOffsets for Inst {
+    fn remap_data_offsets(&mut self, r: &dyn crate::c5::layout::DataRemap) {
+        match self {
+            // The only `.data` offset the IR holds; an interior address is a
+            // separate add, so the payload is always an object base.
+            Inst::ImmData(off) => crate::c5::layout::remap_self(off, r),
+            Inst::Imm { .. }
+            | Inst::ImmCode { .. }
+            | Inst::ImmExtCode { .. }
+            | Inst::BlockAddr { .. }
+            | Inst::LocalAddr { .. }
+            | Inst::TlsAddr { .. }
+            | Inst::Load { .. }
+            | Inst::Store { .. }
+            | Inst::LoadLocal { .. }
+            | Inst::StoreLocal { .. }
+            | Inst::LoadIndexed { .. }
+            | Inst::StoreIndexed { .. }
+            | Inst::SegLoad { .. }
+            | Inst::SegStore { .. }
+            | Inst::Binop { .. }
+            | Inst::BinopI { .. }
+            | Inst::Fneg { .. }
+            | Inst::Fma { .. }
+            | Inst::Extend { .. }
+            | Inst::FpCast { .. }
+            | Inst::Call { .. }
+            | Inst::CallIndirect { .. }
+            | Inst::CallExt { .. }
+            | Inst::TailExt { .. }
+            | Inst::Mcpy { .. }
+            | Inst::AtomicRmw { .. }
+            | Inst::AtomicCas { .. }
+            | Inst::Intrinsic { .. }
+            | Inst::InlineAsm { .. }
+            | Inst::AllocaInit { .. }
+            | Inst::ParamRef { .. }
+            | Inst::Phi { .. } => {}
+        }
+    }
+}
+
+impl crate::c5::layout::DataOffsets for FunctionSsa {
+    fn remap_data_offsets(&mut self, r: &dyn crate::c5::layout::DataRemap) {
+        let Self {
+            name: _,
+            ent_pc: _,
+            end_pc: _,
+            locals: _,
+            n_params: _,
+            is_variadic: _,
+            is_inline: _,
+            is_always_inline: _,
+            is_naked: _,
+            is_weak: _,
+            is_internal: _,
+            const_params: _,
+            insts,
+            inst_src: _,
+            blocks: _,
+            extern_call_refs: _,
+            extern_imm_code_refs: _,
+            extern_imm_data_refs: _,
+            extern_tls_refs: _,
+            f32_values: _,
+            param_fp_mask: _,
+            agg_descs: _,
+            param_aggs: _,
+            param_local_slots: _,
+            ret_agg: _,
+            ret_is_fp: _,
+            ret_type_tag: _,
+            indirect_result_slot: _,
+            computed_goto_targets: _,
+            jump_tables: _,
+            synthetic_base: _,
+            multi_cell_slots: _,
+            over_aligned: _,
+            frame_align: _,
+            realign_region_bytes: _,
+            has_returns_twice_call: _,
+            did_unroll: _,
+            did_inline: _,
+        } = self;
+        for i in insts.iter_mut() {
+            i.remap_data_offsets(r);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

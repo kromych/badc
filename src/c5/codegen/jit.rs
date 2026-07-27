@@ -1765,39 +1765,17 @@ mod jit_impl {
         target_vmaddr: u64,
         label: &str,
     ) -> Result<(), C5Error> {
-        let off = instr_offset as usize;
-        let adrp_vmaddr = code_vmaddr + instr_offset;
-        let adrp_page = adrp_vmaddr & !0xFFF;
-        let target_page = target_vmaddr & !0xFFF;
-        let page_diff = target_page as i64 - adrp_page as i64;
-        if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("JIT: {label} page diff {page_diff} not 4 KiB aligned"),
-            )));
-        }
-        let imm21 = (page_diff >> 12) as i32;
-        let in_page = (target_vmaddr & 0xFFF) as u32;
-
-        // Recover the destination register encoded by the codegen at
-        // the placeholder site. adrp/add carry rd in the low 5 bits;
-        // the add additionally carries rn in bits 5..10. Both match
-        // by construction (`adrp rd; add rd, rd, #imm`).
-        let prev_adrp =
-            u32::from_le_bytes([code[off], code[off + 1], code[off + 2], code[off + 3]]);
-        let prev_add =
-            u32::from_le_bytes([code[off + 4], code[off + 5], code[off + 6], code[off + 7]]);
-        let rd = (prev_adrp & 0x1F) as u8;
-        let add_rd = (prev_add & 0x1F) as u8;
-        let add_rn = ((prev_add >> 5) & 0x1F) as u8;
-        let adrp_word = super::super::aarch64::enc_adrp(super::super::aarch64::Reg(rd), imm21);
-        let add_word = super::super::aarch64::enc_add_imm(
-            super::super::aarch64::Reg(add_rd),
-            super::super::aarch64::Reg(add_rn),
-            in_page,
-        );
-        code[off..off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-        code[off + 4..off + 8].copy_from_slice(&add_word.to_le_bytes());
-        Ok(())
+        super::super::aarch64::patch::patch_pair(
+            code,
+            instr_offset as usize,
+            (code_vmaddr + instr_offset) as i64,
+            target_vmaddr as i64,
+        )
+        .map_err(|e| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &e.describe(&format!("JIT: {label}")),
+            ))
+        })
     }
 
     fn patch_lea_rip32(
@@ -1844,8 +1822,7 @@ mod jit_impl {
     /// requested length, but rounding the length here keeps the two
     /// consistent.
     fn round_up_to_page(n: usize) -> usize {
-        let p = page_size();
-        (n + p - 1) & !(p - 1)
+        crate::c5::layout::round_up(n, page_size())
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

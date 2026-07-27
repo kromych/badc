@@ -43,6 +43,7 @@ use alloc::vec::Vec;
 use super::super::program::Program;
 use super::super::token::Ty;
 use super::Build;
+use crate::c5::layout::write_struct;
 
 /// Section that an emitted reloc lives in. Used to route the
 /// reloc into the matching `.rela.<section>` table in the ELF
@@ -245,13 +246,6 @@ const DEBUG_LINE_PROGRAM_HEADER_SIZE: u64 = 18;
 const _: () = assert!(
     core::mem::size_of::<DebugLineProgramHeader>() == DEBUG_LINE_PROGRAM_HEADER_SIZE as usize
 );
-
-fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
-    let bytes = unsafe {
-        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
-    };
-    out.extend_from_slice(bytes);
-}
 
 /// Emit the relocatable DWARF triple plus the address-reloc list.
 /// `source_path` becomes the CU's `DW_AT_name`; the line table's

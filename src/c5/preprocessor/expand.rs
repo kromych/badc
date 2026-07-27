@@ -91,6 +91,8 @@ fn hs_union(a: &Hideset, b: &Hideset) -> Hideset {
 pub(super) struct CachedBody {
     body: Rc<str>,
     toks: Rc<Vec<Tok>>,
+    /// A `##` occurs in the list, so expansion must run the paste pass.
+    has_paste: bool,
 }
 
 /// The C99 6.4.6 punctuators badc lexes, longest first. `punct_len` and
@@ -426,6 +428,40 @@ impl<'a> Exp<'a> {
         toks
     }
 
+    /// C99 6.10.3.3p2 pasting over a replacement list with no
+    /// parameters: each `##` is deleted and the tokens either side are
+    /// concatenated, left to right. A `##` at either end of the list
+    /// violates 6.10.3.3p1 and has no operand to join, so it is
+    /// dropped.
+    fn paste_run(&mut self, toks: Vec<Tok>) -> Vec<Tok> {
+        let mut out: Vec<Tok> = self.take_vec();
+        out.reserve(toks.len());
+        let mut i = 0;
+        while i < toks.len() {
+            let t = toks[i];
+            if !self.is_punct(t, "##") {
+                out.push(t);
+                i += 1;
+                continue;
+            }
+            match (out.pop(), toks.get(i + 1).copied()) {
+                (Some(left), Some(right)) => {
+                    let mut glued = self.glue(left, right);
+                    out.append(&mut glued);
+                    i += 2;
+                }
+                (left, _) => {
+                    if let Some(l) = left {
+                        out.push(l);
+                    }
+                    i += 1;
+                }
+            }
+        }
+        self.put_vec(toks);
+        out
+    }
+
     /// `#param` (C99 6.10.3.2): the argument's spelling as a string
     /// literal, interior white space collapsed to single spaces, `\`
     /// and `"` escaped within character constants and string literals.
@@ -543,14 +579,15 @@ impl<'a> Exp<'a> {
         Some((args, rp_hs))
     }
 
-    /// The macro body's tokens mapped into this arena.
-    fn body_toks(&mut self, name: &str, body: &str) -> Vec<Tok> {
-        let (bbuf, toks) = self.pp.cached_body(name, body);
+    /// The macro body's tokens mapped into this arena, and whether the
+    /// list contains a `##`.
+    fn body_toks(&mut self, name: &str, body: &str) -> (Vec<Tok>, bool) {
+        let (bbuf, toks, has_paste) = self.pp.cached_body(name, body);
         let bid = self.buf_id(&bbuf);
         let mut out = self.take_vec();
         out.reserve(toks.len());
         out.extend(toks.iter().map(|t| Tok { buf: bid, ..*t }));
-        out
+        (out, has_paste)
     }
 
     /// The C99 6.10.3.4 scan: pop the next token; a live macro name
@@ -622,7 +659,10 @@ impl<'a> Exp<'a> {
             }
             let body = pp.macros.get(name).unwrap();
             let hs = self.hs_with_name(tok.hs, name);
-            let mut btoks = self.body_toks(name, body);
+            let (mut btoks, has_paste) = self.body_toks(name, body);
+            if has_paste {
+                btoks = self.paste_run(btoks);
+            }
             self.hs_add_all(&mut btoks, hs);
             if let Some(f) = btoks.first_mut() {
                 f.space = tok.space;
@@ -688,7 +728,7 @@ impl<'a> Exp<'a> {
         inv_hs: u32,
         depth: usize,
     ) -> Vec<Tok> {
-        let body = self.body_toks(name, &def.body);
+        let (body, _) = self.body_toks(name, &def.body);
         let nfixed = def.params.len();
 
         let raw_va: Vec<Tok> = if def.is_variadic {
@@ -742,20 +782,15 @@ impl<'a> Exp<'a> {
                     continue;
                 };
                 // GNU `, ## __VA_ARGS__`: an empty tail deletes the
-                // comma; a non-empty tail keeps comma and tail.
+                // comma; a non-empty tail keeps comma and tail. The
+                // tail is a `##` operand, so it is spliced unexpanded
+                // (C99 6.10.3.1p1) and the rescan expands whatever
+                // stays in a plain position.
                 if self.is_va(def, next) && out.last().is_some_and(|&p| self.is_punct(p, ",")) {
                     if raw_va.is_empty() {
                         out.pop();
                     } else {
-                        let va = match &exp_va {
-                            Some(v) => v.clone(),
-                            None => {
-                                let v = self.join_va(raw_args, nfixed, true, depth);
-                                exp_va = Some(v.clone());
-                                v
-                            }
-                        };
-                        splice(&mut out, va, true);
+                        splice(&mut out, raw_va.clone(), true);
                     }
                     i += 2;
                     continue;
@@ -867,25 +902,29 @@ impl Preprocessor {
     /// The body's buffer and token list, lexed on first use per
     /// definition (token `buf` ids are 0; callers remap into their
     /// arena).
-    fn cached_body(&self, name: &str, body: &str) -> (Rc<str>, Rc<Vec<Tok>>) {
+    fn cached_body(&self, name: &str, body: &str) -> (Rc<str>, Rc<Vec<Tok>>, bool) {
         let mut cache = self.body_toks.borrow_mut();
         if let Some(c) = cache.get(name)
             && &*c.body == body
         {
-            return (c.body.clone(), c.toks.clone());
+            return (c.body.clone(), c.toks.clone(), c.has_paste);
         }
         let buf: Rc<str> = Rc::from(body);
         let mut toks = Vec::new();
         lex_into(&buf, 0, &mut toks);
+        let has_paste = toks
+            .iter()
+            .any(|t| t.kind == TokKind::Punct && &buf[t.start as usize..t.end as usize] == "##");
         let toks = Rc::new(toks);
         cache.insert(
             name.to_string(),
             CachedBody {
                 body: buf.clone(),
                 toks: toks.clone(),
+                has_paste,
             },
         );
-        (buf, toks)
+        (buf, toks, has_paste)
     }
 
     /// The shared one-name hideset `{name}`.
@@ -1002,6 +1041,37 @@ impl Preprocessor {
                 plural(want)
             )
         };
+        self.record_pp_error(crate::c5::error::C5Error::Compile(
+            crate::c5::error::fmt_compile_err(filename, line_no, &msg),
+        ));
+    }
+
+    /// C99 6.10.3.3p1: `##` shall not occur at the beginning or at the
+    /// end of a replacement list, for either form of macro definition.
+    /// A leading `##` spells `##` and a trailing one ends in `#`, so
+    /// the two text tests are necessary conditions and only a body
+    /// passing one of them is lexed.
+    pub(super) fn check_paste_placement(
+        &self,
+        name: &str,
+        body: &str,
+        filename: &str,
+        line_no: usize,
+    ) {
+        if !body.starts_with("##") && !body.ends_with('#') {
+            return;
+        }
+        let mut toks = Vec::new();
+        lex_into(body, 0, &mut toks);
+        let is_paste = |t: Option<&Tok>| {
+            t.is_some_and(|t| {
+                t.kind == TokKind::Punct && &body[t.start as usize..t.end as usize] == "##"
+            })
+        };
+        if !is_paste(toks.first()) && !is_paste(toks.last()) {
+            return;
+        }
+        let msg = format!("`##` cannot appear at either end of the replacement list of `{name}`");
         self.record_pp_error(crate::c5::error::C5Error::Compile(
             crate::c5::error::fmt_compile_err(filename, line_no, &msg),
         ));

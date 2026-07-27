@@ -40,6 +40,102 @@ fn m(base: u8) -> Opnd {
 fn enc(mnem: &str, ops: &[Opnd]) -> u32 {
     encode(mnem, ops).unwrap_or_else(|e| panic!("{mnem}: {e}"))
 }
+fn shift(kind: u8, amount: u8) -> Opnd {
+    Opnd::Shift { kind, amount }
+}
+fn extend(option: u8, amount: u8) -> Opnd {
+    Opnd::Extend { option, amount }
+}
+
+/// Register 31 written as `sp` selects the encoding that reads it as the
+/// stack pointer. Words match GNU as / clang for `aarch64-linux-gnu`.
+#[test]
+fn stack_pointer_operand_selects_the_extended_form() {
+    // add/sub/adds/subs with a register source: the extended-register form
+    // (bit 21 set, option = UXTX/UXTW), not the shifted one.
+    assert_eq!(enc("add", &[x(0), sp(true), x(0)]), 0x8B2063E0);
+    assert_eq!(enc("sub", &[x(2), sp(true), x(3)]), 0xCB2363E2);
+    assert_eq!(enc("subs", &[x(2), sp(true), x(3)]), 0xEB2363E2);
+    assert_eq!(enc("adds", &[x(2), sp(true), x(3)]), 0xAB2363E2);
+    assert_eq!(enc("add", &[sp(true), x(0), x(1)]), 0x8B21601F);
+    assert_eq!(enc("add", &[sp(true), sp(true), x(0)]), 0x8B2063FF);
+    assert_eq!(enc("sub", &[sp(true), sp(true), x(3)]), 0xCB2363FF);
+    // 32-bit forms extend from W with UXTW as the identity option.
+    assert_eq!(enc("add", &[w(0), sp(false), w(1)]), 0x0B2143E0);
+    assert_eq!(enc("add", &[sp(false), w(0), w(1)]), 0x0B21401F);
+    assert_eq!(enc("subs", &[w(1), sp(false), w(3)]), 0x6B2343E1);
+    // cmp/cmn alias subs/adds with a zero-register destination.
+    assert_eq!(enc("cmp", &[sp(true), x(0)]), 0xEB2063FF);
+    assert_eq!(enc("cmn", &[sp(true), x(0)]), 0xAB2063FF);
+    assert_eq!(enc("cmp", &[sp(false), w(0)]), 0x6B2043FF);
+    // The immediate forms already read 31 as SP.
+    assert_eq!(enc("cmp", &[sp(true), Opnd::Imm(16)]), 0xF10043FF);
+    assert_eq!(enc("add", &[x(0), sp(true), Opnd::Imm(8)]), 0x910023E0);
+    assert_eq!(enc("bic", &[sp(true), x(2), Opnd::Imm(1)]), 0x927FF85F);
+    // xzr keeps the shifted form; only the sp spelling moves the encoding.
+    assert_eq!(enc("add", &[x(0), x(31), x(1)]), 0x8B0103E0);
+    assert_eq!(enc("add", &[x(0), sp(true), x(31)]), 0x8B3F63E0);
+    // Memory bases and the SP-capable pointer forms encode 31 directly.
+    assert_eq!(enc("ldr", &[x(0), m(31)]), 0xF94003E0);
+    assert_eq!(enc("pacia", &[x(1), sp(true)]), 0xDAC103E1);
+}
+
+/// Register 31 is the zero register in every other form, so a written `sp`
+/// names no encoding there rather than silently reading as `xzr`.
+#[test]
+fn stack_pointer_rejected_where_31_is_the_zero_register() {
+    // Logical shifted-register and immediate flag-setting forms.
+    assert!(encode("and", &[sp(true), x(1), x(2)]).is_err());
+    assert!(encode("orr", &[sp(true), x(1), x(2)]).is_err());
+    assert!(encode("ands", &[sp(true), x(1), Opnd::Imm(1)]).is_err());
+    // The extended second source is a zero register, not SP.
+    assert!(encode("add", &[x(0), x(1), sp(true)]).is_err());
+    // The flag-setting add/sub cannot write SP.
+    assert!(encode("adds", &[sp(true), x(1), Opnd::Imm(1)]).is_err());
+    assert!(encode("subs", &[sp(true), sp(true), x(3)]).is_err());
+    // Plain data processing never names SP.
+    assert!(encode("mul", &[sp(true), x(1), x(2)]).is_err());
+    assert!(encode("madd", &[x(0), sp(true), x(2), x(3)]).is_err());
+}
+
+/// The shifted- and extended-register operand groups.
+#[test]
+fn register_shift_and_extend_groups() {
+    // Shifted register: lsl/lsr/asr on the arithmetic forms, ror on logical.
+    assert_eq!(enc("add", &[x(0), x(1), x(2), Opnd::Lsl(3)]), 0x8B020C20);
+    assert_eq!(enc("add", &[x(0), x(1), x(2), shift(2, 3)]), 0x8B820C20);
+    assert_eq!(enc("add", &[x(0), x(1), x(2), shift(1, 63)]), 0x8B42FC20);
+    assert_eq!(enc("and", &[x(0), x(1), x(2), shift(3, 3)]), 0x8AC20C20);
+    assert_eq!(enc("add", &[w(0), w(1), w(2), Opnd::Lsl(31)]), 0x0B027C20);
+    assert!(encode("add", &[x(0), x(1), x(2), shift(3, 3)]).is_err()); // ror
+    assert!(encode("add", &[w(0), w(1), w(2), Opnd::Lsl(32)]).is_err());
+    // Extended register: the option fixes the second source's width.
+    assert_eq!(enc("add", &[x(0), x(1), w(2), extend(0, 0)]), 0x8B220020);
+    assert_eq!(enc("add", &[x(0), x(1), w(2), extend(5, 2)]), 0x8B22A820);
+    assert_eq!(
+        enc("add", &[x(0), sp(true), w(1), extend(6, 4)]),
+        0x8B21D3E0
+    );
+    assert_eq!(
+        enc("add", &[x(0), sp(true), x(1), extend(3, 0)]),
+        0x8B2163E0
+    );
+    assert_eq!(
+        enc("add", &[x(0), sp(true), x(1), Opnd::Lsl(3)]),
+        0x8B216FE0
+    );
+    assert_eq!(
+        enc("sub", &[x(0), sp(true), x(1), Opnd::Lsl(2)]),
+        0xCB216BE0
+    );
+    assert_eq!(enc("cmp", &[sp(true), x(1), Opnd::Lsl(2)]), 0xEB216BFF);
+    assert_eq!(
+        enc("add", &[w(0), sp(false), w(1), extend(7, 0)]),
+        0x0B21E3E0
+    );
+    assert!(encode("add", &[x(0), x(1), x(2), extend(0, 0)]).is_err()); // width
+    assert!(encode("add", &[x(0), x(1), w(2), extend(0, 5)]).is_err()); // amount
+}
 
 #[test]
 fn reg3_data_processing() {

@@ -86,6 +86,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("atomic128_ldst.c", "linux-x64"), // aarch64 128-bit ldp/stp, ldxp/stxp
     ("atomic128_cmpxchg_llsc.c", "linux-x64"), // aarch64 128-bit ldxp/stxp CAS (generic encoder)
     ("inline_asm_a64_dp.c", "linux-x64"), // aarch64 mul/csel (x86 mul is 1-operand)
+    ("inline_asm_a64_sp_operand.c", "linux-x64"), // aarch64 sp-operand add/sub
     ("inline_asm_a64_labels.c", "linux-x64"), // aarch64 local-label branches
     ("inline_asm_a64_barriers.c", "linux-x64"), // aarch64 dmb/dsb/isb/clrex
     ("inline_asm_a64_acqrel.c", "linux-x64"), // aarch64 ldar/stlr via `Q`

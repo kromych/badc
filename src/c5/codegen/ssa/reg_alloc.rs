@@ -1315,108 +1315,27 @@ pub(crate) fn is_setjmp_barrier(inst: &Inst) -> bool {
     )
 }
 
-/// Invoke `f` for each operand `ValueId` referenced by `inst`.
+/// Invoke `f` for each operand `ValueId` referenced by `inst`, for the
+/// allocator's use counting.
+///
+/// The traversal itself is `Inst::for_each_operand`; the one deviation is
+/// the `VaArg` intrinsic's second operand, a compile-time packed type
+/// descriptor (`(kind << 16) | size`) the per-target emit reads straight
+/// off the constant `Inst::Imm`. It is never a runtime value, so counting
+/// it would force the descriptor into a register instead of letting it
+/// stay dead.
 pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
-    match inst {
-        Inst::Imm(_)
-        | Inst::ImmData(_)
-        | Inst::ImmCode(_)
-        | Inst::ImmExtCode(_)
-        | Inst::BlockAddr(_)
-        | Inst::LocalAddr(_)
-        | Inst::TlsAddr(_)
-        | Inst::AllocaInit(_)
-        | Inst::ParamRef { .. }
-        | Inst::TailExt(_)
-        | Inst::LoadLocal { .. } => {}
-        Inst::Load { addr, .. } => f(*addr),
-        Inst::Store { addr, value, .. } => {
-            f(*addr);
-            f(*value);
-        }
-        Inst::SegLoad { addr, .. } => f(*addr),
-        Inst::SegStore { addr, value, .. } => {
-            f(*addr);
-            f(*value);
-        }
-        Inst::StoreLocal { value, .. } => f(*value),
-        Inst::LoadIndexed { base, index, .. } => {
-            f(*base);
-            f(*index);
-        }
-        Inst::StoreIndexed {
-            base, index, value, ..
-        } => {
-            f(*base);
-            f(*index);
-            f(*value);
-        }
-        Inst::Binop { lhs, rhs, .. } => {
-            f(*lhs);
-            f(*rhs);
-        }
-        Inst::BinopI { lhs, .. } => f(*lhs),
-        Inst::Fneg(v) => f(*v),
-        Inst::Fma { a, b, c, .. } => {
-            f(*a);
-            f(*b);
-            f(*c);
-        }
-        Inst::Extend { value, .. } => f(*value),
-        Inst::FpCast { value, .. } => f(*value),
-        Inst::Intrinsic { kind, args } => {
-            // The VaArg intrinsic's second operand is a compile-time
-            // packed type descriptor (`(kind << 16) | size`); the
-            // per-target emit reads it from the constant `Inst::Imm`
-            // directly (System V routes the gp / fp save area by it; the
-            // cursor / stack targets ignore it). It is never a runtime
-            // value, so it must not contribute a use that would force the
-            // descriptor `Inst::Imm` to be materialised into a register.
-            // Skipping it keeps the descriptor dead (DCE'd at emit time)
-            // and the stack-based targets byte-identical.
-            let is_va_arg = *kind == crate::c5::op::Intrinsic::VaArg as i64;
+    if let Inst::Intrinsic { kind, args } = inst {
+        if *kind == crate::c5::op::Intrinsic::VaArg as i64 {
             for (i, &a) in args.iter().enumerate() {
-                if is_va_arg && i == 1 {
-                    continue;
+                if i != 1 {
+                    f(a);
                 }
-                f(a);
             }
-        }
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::InlineAsm { args, .. } => {
-            for &a in args {
-                f(a);
-            }
-        }
-        Inst::CallIndirect { target, args, .. } => {
-            f(*target);
-            for &a in args {
-                f(a);
-            }
-        }
-        Inst::Mcpy { dst, src, .. } => {
-            f(*dst);
-            f(*src);
-        }
-        Inst::AtomicRmw { addr, value, .. } => {
-            f(*addr);
-            f(*value);
-        }
-        Inst::AtomicCas {
-            addr,
-            expected_addr,
-            desired,
-            ..
-        } => {
-            f(*addr);
-            f(*expected_addr);
-            f(*desired);
-        }
-        Inst::Phi { incoming, .. } => {
-            for (_, v) in incoming {
-                f(*v);
-            }
+            return;
         }
     }
+    inst.for_each_operand(f);
 }
 
 /// Whether an instruction defines an int / FP value or none at all.

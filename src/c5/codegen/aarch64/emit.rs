@@ -4338,7 +4338,17 @@ fn emit_inst(
             deferred_regions,
             None,
         ),
-        _ => false,
+        // `BlockAddr` is materialized in `emit_function`'s block loop and
+        // `TailExt` is a terminator, so neither reaches here; the segment
+        // accesses are x86-only. Reaching this arm means a variant has no
+        // aarch64 lowering, which is a compile failure, not silent output.
+        other => {
+            bail_msg(&alloc::format!(
+                "inst variant not yet covered: {}",
+                other.variant_name()
+            ));
+            false
+        }
     }
 }
 

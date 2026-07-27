@@ -73,6 +73,7 @@ const COMPILE_SKIPLIST: &[&str] = &[
     "select_operand_guard_folds.c",
     "const_scalar_load_folds.c",
     "unroll_const_trip_index_literal.c",
+    "inline_zero_frame_callee_past_gate.c",
 ];
 
 /// Fixtures whose body carries inline asm specific to one ISA. The
@@ -275,6 +276,7 @@ fn dead_branch_calls_are_eliminated_under_optimize() {
         "select_operand_guard_folds.c",
         "const_scalar_load_folds.c",
         "unroll_const_trip_index_literal.c",
+        "inline_zero_frame_callee_past_gate.c",
     ] {
         let src = root.join(name);
         let stem = name.trim_end_matches(".c");

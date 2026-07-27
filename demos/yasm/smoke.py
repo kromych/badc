@@ -276,10 +276,24 @@ def byte_parity(a: Path, b: Path) -> None:
         asm.write_text(FIXTURE)
         for fmt in ("elf64", "elf32", "bin", "win64", "macho64"):
             oa, ob = dp / f"a_{fmt}", dp / f"b_{fmt}"
-            subprocess.run([str(a), "-f", fmt, "-o", str(oa), str(asm)], capture_output=True)
-            subprocess.run([str(b), "-f", fmt, "-o", str(ob), str(asm)], capture_output=True)
-            if not oa.is_file() or not ob.is_file() or oa.read_bytes() != ob.read_bytes():
-                fail(f"byte parity mismatch in -f {fmt}")
+            ra = subprocess.run([str(a), "-f", fmt, "-o", str(oa), str(asm)],
+                                capture_output=True, text=True)
+            rb = subprocess.run([str(b), "-f", fmt, "-o", str(ob), str(asm)],
+                                capture_output=True, text=True)
+            # A run that dies writes no file, which is not a byte
+            # difference; reporting both as one verdict hides which
+            # happened.
+            for who, r, out in (("badc-built", ra, oa), ("reference", rb, ob)):
+                if r.returncode != 0 or not out.is_file():
+                    fail(f"the {who} yasm failed on -f {fmt}: exit {r.returncode}"
+                         f"{'' if out.is_file() else ', no output file'}\n"
+                         f"{(r.stderr or r.stdout).strip()[-400:]}")
+            ba, bb = oa.read_bytes(), ob.read_bytes()
+            if ba != bb:
+                at = next((i for i in range(min(len(ba), len(bb))) if ba[i] != bb[i]),
+                          min(len(ba), len(bb)))
+                fail(f"byte parity mismatch in -f {fmt}: badc-built {len(ba)} bytes, "
+                     f"reference {len(bb)} bytes, first difference at offset {at}")
         log("byte parity OK across 5 object formats")
 
 

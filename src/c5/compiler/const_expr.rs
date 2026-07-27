@@ -1431,7 +1431,7 @@ impl Compiler {
         // Record the symbol; `value` seeds the displacement and any following
         // `.field`/`[N]` designators fold onto it.
         if self.lex.tk == Token::Id {
-            let idx = self.lex.curr_id_idx;
+            let mut idx = self.lex.curr_id_idx;
             let class = self.symbols[idx].class;
             if class == Token::Glo as i64
                 || class == Token::Fun as i64
@@ -1439,6 +1439,11 @@ impl Compiler {
             {
                 let is_code = class != Token::Glo as i64;
                 let ty = self.symbols[idx].type_;
+                // A libc-bound name has no code address of its own; its
+                // relocation target is the synthesised trampoline.
+                if class == Token::Sys as i64 {
+                    idx = self.ensure_sys_trampoline_sym(idx);
+                }
                 let value = self.symbols[idx].val;
                 self.symbols[idx].was_referenced = true;
                 self.next()?;
@@ -1672,7 +1677,6 @@ impl Compiler {
             let is_fn = class == Token::Fun as i64 || class == Token::Sys as i64;
             let is_array = class == Token::Glo as i64 && self.symbols[idx].array_size != 0;
             if is_fn || is_array {
-                let value = self.symbols[idx].val;
                 let snap = self.lex.snapshot();
                 self.next()?;
                 let postfix = self.lex.tk == '('
@@ -1682,9 +1686,16 @@ impl Compiler {
                 if postfix {
                     self.restore_lex(snap);
                 } else {
+                    // A libc-bound name has no code address of its own; its
+                    // relocation target is the synthesised trampoline.
+                    let idx = if class == Token::Sys as i64 {
+                        self.ensure_sys_trampoline_sym(idx)
+                    } else {
+                        idx
+                    };
                     self.symbols[idx].was_referenced = true;
                     return Ok(ConstVal::Addr(ConstAddr {
-                        value,
+                        value: self.symbols[idx].val,
                         sym: Some(idx),
                         sym_code: is_fn,
                     }));

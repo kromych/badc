@@ -129,7 +129,7 @@ impl InitTarget {
 /// Lengths of the append-only initializer output buffers plus the lexer
 /// position, captured so a speculative measuring parse can be undone
 /// exactly. See [`Compiler::init_checkpoint`].
-struct InitCheckpoint {
+pub(super) struct InitCheckpoint {
     lex: LexerSnapshot,
     next_ent_pc: usize,
     data: usize,
@@ -1043,12 +1043,14 @@ impl Compiler {
             let snap = self.lex.snapshot();
             // A `:` or `)` terminator appears when this value is a
             // conditional arm (`cond ? &a : &b`) or a parenthesised leaf;
-            // `,` / `}` terminate a brace-list element.
+            // `,` / `}` terminate a brace-list element and `;` a scalar
+            // declaration's initializer.
             if let Some((off, sym_idx, _)) = self.parse_const_address()?
                 && (self.lex.tk == ','
                     || self.lex.tk == '}'
                     || self.lex.tk == ':'
-                    || self.lex.tk == ')')
+                    || self.lex.tk == ')'
+                    || self.lex.tk == ';')
             {
                 return Ok((off as i128, InitElemReloc::Data(Some(sym_idx))));
             }
@@ -2032,7 +2034,7 @@ impl Compiler {
     /// compiler-owned buffers, and identifier interning done during the
     /// parse is left in place (it is idempotent -- a later lex of the
     /// same name reuses the entry).
-    fn init_checkpoint(&self) -> InitCheckpoint {
+    pub(super) fn init_checkpoint(&self) -> InitCheckpoint {
         InitCheckpoint {
             lex: self.lex.snapshot(),
             next_ent_pc: self.next_ent_pc,
@@ -2046,7 +2048,7 @@ impl Compiler {
         }
     }
 
-    fn restore_init_checkpoint(&mut self, cp: InitCheckpoint) {
+    pub(super) fn restore_init_checkpoint(&mut self, cp: InitCheckpoint) {
         self.restore_lex(cp.lex);
         self.next_ent_pc = cp.next_ent_pc;
         self.truncate_data(cp.data);

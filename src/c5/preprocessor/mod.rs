@@ -908,25 +908,29 @@ impl Preprocessor {
         // diagnostic targeting one of the synthesized lines
         // points at that label and the line in the original
         // source isn't shifted from the user's perspective.
+        let mut out = String::with_capacity(source.len());
         if !self.force_includes.is_empty() {
             let mut preamble = String::new();
             for name in &self.force_includes.clone() {
                 preamble.push_str(&format!("#include \"{name}\"\n"));
             }
-            let mut combined = self.process_named(&preamble, "<force-include>")?;
-            let label = self.source_label.clone();
-            combined.push_str(&self.process_named(source, &label)?);
-            return Ok(combined);
+            self.process_named(&preamble, "<force-include>", &mut out)?;
         }
         let label = self.source_label.clone();
-        self.process_named(source, &label)
+        self.process_named(source, &label, &mut out)?;
+        Ok(out)
     }
 
     /// Recursive entry point. `filename` labels the buffer so error
     /// messages and `#pragma once` can name what they're talking
     /// about; the top-level call uses `"<source>"`, `#include`'d
     /// files use the header name (`"stdio.h"`).
-    fn process_named(&mut self, source: &str, filename: &str) -> Result<String, C5Error> {
+    fn process_named(
+        &mut self,
+        source: &str,
+        filename: &str,
+        out: &mut String,
+    ) -> Result<(), C5Error> {
         // A UTF-8 byte-order mark opening the file is accepted and
         // skipped, following gcc and clang.
         let source = source.strip_prefix('\u{feff}').unwrap_or(source);
@@ -946,7 +950,7 @@ impl Preprocessor {
         // lexer sees comment tail text as code.
         let stripped = strip_c_comments(&unfolded);
         let source = stripped.as_str();
-        let mut out = String::with_capacity(source.len());
+        out.reserve(source.len());
 
         // Emit a leading line marker so the lexer attributes
         // tokens in this buffer to `(filename, 1)`. The
@@ -1010,75 +1014,22 @@ impl Preprocessor {
 
             if let Some(rest) = trimmed.strip_prefix('#') {
                 let directive = rest.trim_start();
-                match parse_directive(directive) {
-                    Directive::Define(name, body) => {
-                        if active {
-                            self.apply_define(name, body);
-                        }
-                    }
-                    Directive::DefineFn(name, params, body) => {
-                        if active {
-                            self.apply_define_fn(name, params, body);
-                        }
-                    }
-                    Directive::Undef(name) => {
-                        if active {
-                            self.apply_undef(name);
-                        }
-                    }
-                    Directive::Ifdef(name) => {
-                        // C99 6.10.1: `#ifdef` is true when the name is
-                        // defined as any macro -- object-like or
-                        // function-like.
-                        let taken = active
-                            && (self.macros.contains_key(name)
-                                || self.fn_macros.contains_key(name)
-                                || is_builtin_operator_name(name));
-                        cond_stack.push(CondFrame {
-                            parent_active: active,
-                            this_branch_taken: taken,
-                            any_branch_taken: taken,
-                            saw_else: false,
-                        });
-                        active = taken;
-                    }
-                    Directive::Ifndef(name) => {
-                        let taken = active
-                            && !(self.macros.contains_key(name)
-                                || self.fn_macros.contains_key(name)
-                                || is_builtin_operator_name(name));
-                        cond_stack.push(CondFrame {
-                            parent_active: active,
-                            this_branch_taken: taken,
-                            any_branch_taken: taken,
-                            saw_else: false,
-                        });
-                        active = taken;
-                    }
-                    Directive::If(expr) => {
-                        let taken = active && self.eval_condition(expr, source_line, filename)?;
-                        cond_stack.push(CondFrame {
-                            parent_active: active,
-                            this_branch_taken: taken,
-                            any_branch_taken: taken,
-                            saw_else: false,
-                        });
-                        active = taken;
-                    }
-                    Directive::Else => {
-                        active = apply_else(&mut cond_stack, filename, line_no)?;
-                    }
-                    Directive::Elif(expr) => {
-                        // The directive eval needs a `&Self`, but the
-                        // frame update borrows `cond_stack` -- check
-                        // eligibility first, evaluate, then mutate.
-                        let eligible = elif_eligible(&cond_stack, filename, line_no)?;
-                        let cond = eligible && self.eval_condition(expr, source_line, filename)?;
-                        active = apply_elif(&mut cond_stack, cond, filename, line_no)?;
-                    }
-                    Directive::Endif => {
-                        active = apply_endif(&mut cond_stack, filename, line_no)?;
-                    }
+                let parsed = parse_directive(directive);
+                if let Some(next) = self.apply_cond_or_macro_directive(
+                    &parsed,
+                    active,
+                    &mut cond_stack,
+                    source_line,
+                    line_no,
+                    filename,
+                )? {
+                    active = next;
+                    out.push('\n');
+                    source_line += 1;
+                    idx_iter += 1;
+                    continue;
+                }
+                match parsed {
                     Directive::Pragma(args) => {
                         if active {
                             match parse_pragma_directive(args) {
@@ -1134,9 +1085,7 @@ impl Preprocessor {
                                         .map(|n| (n, true))
                                 });
                             if let Some((n, quoted)) = name {
-                                let included =
-                                    self.process_include(n.trim(), line_no, filename, quoted)?;
-                                out.push_str(&included);
+                                self.process_include(n.trim(), line_no, filename, quoted, out)?;
                                 out.push_str(&format_line_marker(source_line + 1, &current_file));
                                 source_line += 1;
                                 idx_iter += 1;
@@ -1154,8 +1103,7 @@ impl Preprocessor {
                     }
                     Directive::Include { name, quoted } => {
                         if active {
-                            let included = self.process_include(name, line_no, filename, quoted)?;
-                            out.push_str(&included);
+                            self.process_include(name, line_no, filename, quoted, out)?;
                             // Closing marker uses `source_line + 1`
                             // (NOT `line_no + 1`) and `current_file`
                             // (NOT the static `filename` param).
@@ -1180,9 +1128,7 @@ impl Preprocessor {
                     }
                     Directive::IncludeNext { name, quoted } => {
                         if active {
-                            let included =
-                                self.process_include_next(name, line_no, filename, quoted)?;
-                            out.push_str(&included);
+                            self.process_include_next(name, line_no, filename, quoted, out)?;
                             out.push_str(&format_line_marker(source_line + 1, &current_file));
                             source_line += 1;
                             idx_iter += 1;
@@ -1253,38 +1199,6 @@ impl Preprocessor {
                             ));
                         }
                     }
-                    Directive::Error(message) => {
-                        // C99 sec 6.10.5: `#error` produces a compile-time
-                        // diagnostic. The text after the directive name,
-                        // up to the newline, is the diagnostic message;
-                        // we surface it verbatim through the standard
-                        // C5Error path so the same downstream tooling
-                        // that reports lexer / parser failures handles
-                        // it.
-                        if active {
-                            return Err(C5Error::Compile(super::error::fmt_compile_err(
-                                filename,
-                                line_no,
-                                &format!("#error {}", message.trim()),
-                            )));
-                        }
-                    }
-                    Directive::Warning(message) => {
-                        // gcc/clang extension; standardised in C23.
-                        // Same shape as `#error` but emits a
-                        // `warning:` diagnostic and lets compilation
-                        // continue. Goes into the preprocessor's
-                        // warning bag so the CLI surfaces it through
-                        // the same TTY-colorising path as
-                        // type-mismatch and tentative-decl warnings.
-                        if active {
-                            self.warnings.push(super::error::fmt_compile_warn(
-                                filename,
-                                line_no,
-                                &format!("#warning {}", message.trim()),
-                            ));
-                        }
-                    }
                     Directive::Other => {
                         // Unknown directive. C99 6.10.6 reserves
                         // every non-directive form for the
@@ -1315,6 +1229,23 @@ impl Preprocessor {
                     Directive::Shebang => {
                         // First-line `#!/usr/bin/env badc` shebangs --
                         // no preprocessor semantics, just skipped.
+                    }
+                    // Spelled out rather than `_` so a new directive
+                    // variant is a compile error here as well as in
+                    // `apply_cond_or_macro_directive`, which already
+                    // consumed every one of these.
+                    Directive::Define(..)
+                    | Directive::DefineFn(..)
+                    | Directive::Undef(..)
+                    | Directive::Ifdef(..)
+                    | Directive::Ifndef(..)
+                    | Directive::If(..)
+                    | Directive::Elif(..)
+                    | Directive::Else
+                    | Directive::Endif
+                    | Directive::Error(..)
+                    | Directive::Warning(..) => {
+                        unreachable!("consumed by apply_cond_or_macro_directive")
                     }
                 }
                 out.push('\n');
@@ -1357,91 +1288,20 @@ impl Preprocessor {
                     let dline = source_line + consumed - 1;
                     let cont_trimmed = cont.trim_start();
                     if let Some(rest) = cont_trimmed.strip_prefix('#') {
-                        match parse_directive(rest.trim_start()) {
-                            Directive::Define(name, body) => {
-                                if active {
-                                    self.apply_define(name, body);
-                                }
-                            }
-                            Directive::DefineFn(name, params, body) => {
-                                if active {
-                                    self.apply_define_fn(name, params, body);
-                                }
-                            }
-                            Directive::Undef(name) => {
-                                if active {
-                                    self.apply_undef(name);
-                                }
-                            }
-                            Directive::Ifdef(name) => {
-                                let taken = active
-                                    && (self.macros.contains_key(name)
-                                        || self.fn_macros.contains_key(name)
-                                        || is_builtin_operator_name(name));
-                                cond_stack.push(CondFrame {
-                                    parent_active: active,
-                                    this_branch_taken: taken,
-                                    any_branch_taken: taken,
-                                    saw_else: false,
-                                });
-                                active = taken;
-                            }
-                            Directive::Ifndef(name) => {
-                                let taken = active
-                                    && !(self.macros.contains_key(name)
-                                        || self.fn_macros.contains_key(name)
-                                        || is_builtin_operator_name(name));
-                                cond_stack.push(CondFrame {
-                                    parent_active: active,
-                                    this_branch_taken: taken,
-                                    any_branch_taken: taken,
-                                    saw_else: false,
-                                });
-                                active = taken;
-                            }
-                            Directive::If(expr) => {
-                                let taken = active && self.eval_condition(expr, dline, filename)?;
-                                cond_stack.push(CondFrame {
-                                    parent_active: active,
-                                    this_branch_taken: taken,
-                                    any_branch_taken: taken,
-                                    saw_else: false,
-                                });
-                                active = taken;
-                            }
-                            Directive::Elif(expr) => {
-                                let eligible = elif_eligible(&cond_stack, filename, dline)?;
-                                let cond =
-                                    eligible && self.eval_condition(expr, dline, filename)?;
-                                active = apply_elif(&mut cond_stack, cond, filename, dline)?;
-                            }
-                            Directive::Else => {
-                                active = apply_else(&mut cond_stack, filename, dline)?;
-                            }
-                            Directive::Endif => {
-                                active = apply_endif(&mut cond_stack, filename, dline)?;
-                            }
-                            Directive::Error(message) => {
-                                if active {
-                                    return Err(C5Error::Compile(super::error::fmt_compile_err(
-                                        filename,
-                                        dline,
-                                        &format!("#error {}", message.trim()),
-                                    )));
-                                }
-                            }
-                            Directive::Warning(message) if active => {
-                                self.warnings.push(super::error::fmt_compile_warn(
-                                    filename,
-                                    dline,
-                                    &format!("#warning {}", message.trim()),
-                                ));
-                            }
-                            // TODO: `#include`, `#line`, and `#pragma`
-                            // inside an argument list are consumed
-                            // without effect; their output would have to
-                            // interleave with the joined expansion.
-                            _ => {}
+                        let parsed = parse_directive(rest.trim_start());
+                        // TODO: `#include`, `#line` and `#pragma` inside an
+                        // argument list are consumed without effect; their
+                        // output would have to interleave with the joined
+                        // expansion.
+                        if let Some(next) = self.apply_cond_or_macro_directive(
+                            &parsed,
+                            active,
+                            &mut cond_stack,
+                            dline,
+                            dline,
+                            filename,
+                        )? {
+                            active = next;
                         }
                     } else if active {
                         let appended = buffer.len();
@@ -1483,7 +1343,7 @@ impl Preprocessor {
             )));
         }
 
-        Ok(out)
+        Ok(())
     }
 
     /// Install an object-like macro definition.
@@ -1492,23 +1352,120 @@ impl Preprocessor {
         self.fn_macros.remove(name);
     }
 
+    /// Directives whose whole effect is on the macro table or the
+    /// conditional stack. Both the top-level line loop and the
+    /// macro-argument line joiner dispatch through this so the two
+    /// cannot drift; `None` means the directive belongs to neither
+    /// group and the caller must handle it. `presumed` is the
+    /// `#line`-adjusted number an `#if` expression evaluates against,
+    /// `diag` the buffer line a diagnostic cites.
+    fn apply_cond_or_macro_directive(
+        &mut self,
+        directive: &Directive<'_>,
+        active: bool,
+        cond_stack: &mut Vec<CondFrame>,
+        presumed: usize,
+        diag: usize,
+        filename: &str,
+    ) -> Result<Option<bool>, C5Error> {
+        let mut push_branch = |taken: bool| {
+            cond_stack.push(CondFrame {
+                parent_active: active,
+                this_branch_taken: taken,
+                any_branch_taken: taken,
+                saw_else: false,
+            });
+            taken
+        };
+        let next_active = match directive {
+            Directive::Define(name, body) => {
+                if active {
+                    self.apply_define(name, body);
+                }
+                active
+            }
+            Directive::DefineFn(name, params, body) => {
+                if active {
+                    self.apply_define_fn(name, params, body);
+                }
+                active
+            }
+            Directive::Undef(name) => {
+                if active {
+                    self.apply_undef(name);
+                }
+                active
+            }
+            // C99 6.10.1: `#ifdef` is true when the name is defined as
+            // any macro -- object-like or function-like.
+            Directive::Ifdef(name) => push_branch(active && self.is_defined_name(name)),
+            Directive::Ifndef(name) => push_branch(active && !self.is_defined_name(name)),
+            Directive::If(expr) => {
+                push_branch(active && self.eval_condition(expr, presumed, filename)?)
+            }
+            Directive::Elif(expr) => {
+                // The expression eval needs a `&Self` while the frame
+                // update borrows `cond_stack`: check eligibility
+                // first, evaluate, then mutate.
+                let eligible = elif_eligible(cond_stack, filename, diag)?;
+                let cond = eligible && self.eval_condition(expr, presumed, filename)?;
+                apply_elif(cond_stack, cond, filename, diag)?
+            }
+            Directive::Else => apply_else(cond_stack, filename, diag)?,
+            Directive::Endif => apply_endif(cond_stack, filename, diag)?,
+            Directive::Error(message) => {
+                if active {
+                    return Err(C5Error::Compile(super::error::fmt_compile_err(
+                        filename,
+                        diag,
+                        &format!("#error {}", message.trim()),
+                    )));
+                }
+                active
+            }
+            // gcc/clang extension, standardised in C23: same shape as
+            // `#error` but compilation continues.
+            Directive::Warning(message) => {
+                if active {
+                    self.warnings.push(super::error::fmt_compile_warn(
+                        filename,
+                        diag,
+                        &format!("#warning {}", message.trim()),
+                    ));
+                }
+                active
+            }
+            _ => return Ok(None),
+        };
+        Ok(Some(next_active))
+    }
+
+    /// C99 6.10.1 `defined`: any macro of either kind, plus the
+    /// `__has_*` operator names the preprocessor implements.
+    fn is_defined_name(&self, name: &str) -> bool {
+        self.macros.contains_key(name)
+            || self.fn_macros.contains_key(name)
+            || is_builtin_operator_name(name)
+    }
+
     /// Install a function-like macro definition. A trailing `...`
     /// (C99 6.10.3) or the GCC named-rest form `name...` makes the
     /// macro variadic; the named form additionally binds the trailing
     /// arguments to `name`.
-    fn apply_define_fn(&mut self, name: &str, mut params: Vec<&str>, body: &str) {
+    fn apply_define_fn(&mut self, name: &str, params: &[&str], body: &str) {
         let mut is_variadic = false;
         let mut va_name = None;
+        let mut params = params;
         if let Some(last) = params.last().copied() {
             if last == "..." {
                 is_variadic = true;
-                params.pop();
+                params = &params[..params.len() - 1];
             } else if let Some(prefix) = last.strip_suffix("...") {
                 let prefix = prefix.trim();
                 if is_ident(prefix) {
                     is_variadic = true;
                     va_name = Some(prefix.to_string());
-                    params.pop();
+                    params = &params[..params.len() - 1];
                 }
             }
         }

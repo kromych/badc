@@ -12,13 +12,28 @@ pub(super) fn strip_c_comments(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
     let bytes = source.as_bytes();
     let mut i = 0;
+    // `source[copied..i]` is retained text not yet flushed. Flushing it
+    // as one span rather than byte by byte keeps multi-byte UTF-8
+    // sequences intact and skips a per-byte encode.
+    let mut copied = 0;
     while i < bytes.len() {
         let c = bytes[i];
+        if !matches!(c, b'/' | b'"' | b'\'') {
+            let rest = &bytes[i + 1..];
+            i += 1 + rest
+                .iter()
+                .position(|&b| matches!(b, b'/' | b'"' | b'\''))
+                .unwrap_or(rest.len());
+            continue;
+        }
         if c == b'/' && bytes.get(i + 1) == Some(&b'*') {
             // Block comment.
+            out.push_str(&source[copied..i]);
             i += 2;
-            while i + 1 < bytes.len() {
-                if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+            // An unterminated comment runs to end of file, as in
+            // gcc / clang; the diagnostic is the lexer's.
+            while i < bytes.len() {
+                if bytes[i] == b'*' && bytes.get(i + 1) == Some(&b'/') {
                     i += 2;
                     break;
                 }
@@ -28,25 +43,25 @@ pub(super) fn strip_c_comments(source: &str) -> String {
                 i += 1;
             }
             out.push(' ');
+            copied = i;
             continue;
         }
         if c == b'/' && bytes.get(i + 1) == Some(&b'/') {
             // Line comment -- skip to next newline (don't consume it).
+            out.push_str(&source[copied..i]);
             i += 2;
             while i < bytes.len() && bytes[i] != b'\n' {
                 i += 1;
             }
             out.push(' ');
+            copied = i;
             continue;
         }
         if c == b'"' || c == b'\'' {
-            // Pass-through quoted literal so `"//"` etc. survive.
-            // Copy the byte range as a UTF-8 slice so a multibyte
-            // sequence is not re-encoded byte by byte.
-            let quote = c;
-            let lit_start = i;
+            // Quoted literals stay in the retained span so `"//"` etc.
+            // survive; only the bounds are skipped here.
             i += 1;
-            while i < bytes.len() && bytes[i] != quote {
+            while i < bytes.len() && bytes[i] != c {
                 if bytes[i] == b'\\' && i + 1 < bytes.len() {
                     i += 2;
                 } else {
@@ -56,19 +71,11 @@ pub(super) fn strip_c_comments(source: &str) -> String {
             if i < bytes.len() {
                 i += 1;
             }
-            match core::str::from_utf8(&bytes[lit_start..i]) {
-                Ok(s) => out.push_str(s),
-                Err(_) => {
-                    for &b in &bytes[lit_start..i] {
-                        out.push(b as char);
-                    }
-                }
-            }
             continue;
         }
-        out.push(c as char);
         i += 1;
     }
+    out.push_str(&source[copied..]);
     out
 }
 
@@ -112,6 +119,16 @@ impl LineScan {
             scan_step();
             let c = joined[i];
             match self.mode {
+                // Outside a literal or comment with no `/` pending, only
+                // `/`, `"` and `'` change state; skip to the next one.
+                ScanMode::Normal if !self.slash && !matches!(c, b'/' | b'"' | b'\'') => {
+                    let rest = &joined[i + 1..];
+                    i += 1 + rest
+                        .iter()
+                        .position(|&b| matches!(b, b'/' | b'"' | b'\''))
+                        .unwrap_or(rest.len());
+                    continue;
+                }
                 ScanMode::Normal => {
                     if self.slash {
                         self.slash = false;
@@ -189,10 +206,19 @@ pub(super) fn unfold_line_continuations(source: &str) -> String {
     let mut iter = source.lines();
     let mut joined = String::new();
     while let Some(line) = iter.next() {
+        // A line that neither continues nor leaves a block comment open
+        // is the overwhelming majority; emit it straight from `source`
+        // instead of staging it in `joined`. The scan state is carried
+        // into the join loop so the line is never scanned twice.
+        let mut scan = LineScan::default();
+        if !line.ends_with('\\') && !scan.ends_in_open_block_comment(line.as_bytes()) {
+            out.push_str(line);
+            out.push('\n');
+            continue;
+        }
         joined.clear();
         joined.push_str(line);
         let mut padding = 0;
-        let mut scan = LineScan::default();
         loop {
             if joined.ends_with('\\') {
                 joined.pop();
@@ -301,6 +327,62 @@ fn ends_in_open_block_comment_ref(s: &str) -> bool {
         i += 1;
     }
     in_block
+}
+
+/// Byte-at-a-time reference for `strip_c_comments`: the same rules
+/// written without span flushing, so the span-copying implementation
+/// can be proved equivalent over a corpus.
+#[cfg(test)]
+pub(super) fn strip_c_comments_ref(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let bytes = source.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c == b'/' && bytes.get(i + 1) == Some(&b'*') {
+            i += 2;
+            while i < bytes.len() {
+                if bytes[i] == b'*' && bytes.get(i + 1) == Some(&b'/') {
+                    i += 2;
+                    break;
+                }
+                if bytes[i] == b'\n' {
+                    out.push('\n');
+                }
+                i += 1;
+            }
+            out.push(' ');
+            continue;
+        }
+        if c == b'/' && bytes.get(i + 1) == Some(&b'/') {
+            i += 2;
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            out.push(' ');
+            continue;
+        }
+        if c == b'"' || c == b'\'' {
+            let lit_start = i;
+            i += 1;
+            while i < bytes.len() && bytes[i] != c {
+                if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            if i < bytes.len() {
+                i += 1;
+            }
+            out.push_str(&source[lit_start..i]);
+            continue;
+        }
+        let ch = source[i..].chars().next().expect("byte index on a char");
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
 }
 
 /// Full-rescan reference for `unfold_line_continuations`.

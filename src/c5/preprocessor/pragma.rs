@@ -1,6 +1,7 @@
 use super::text::{is_ident, is_ident_byte};
 use super::{Binding, DylibSpec, Preprocessor, Subsystem};
 use crate::c5::error::C5Error;
+use alloc::borrow::Cow;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -15,14 +16,14 @@ impl Preprocessor {
     /// unchanged so a `_Pragma` substring inside one is not mistaken for
     /// the operator. A malformed operator is left in place for the lexer
     /// to diagnose.
-    pub(super) fn apply_pragma_operators(
+    pub(super) fn apply_pragma_operators<'t>(
         &mut self,
-        text: &str,
+        text: &'t str,
         line_no: usize,
         filename: &str,
-    ) -> Result<String, C5Error> {
+    ) -> Result<Cow<'t, str>, C5Error> {
         if !text.contains("_Pragma") && !text.contains("__pragma") {
-            return Ok(text.to_string());
+            return Ok(Cow::Borrowed(text));
         }
         let bytes = text.as_bytes();
         let mut out = String::with_capacity(text.len());
@@ -78,7 +79,7 @@ impl Preprocessor {
             i += 1;
         }
         out.push_str(&text[copied..]);
-        Ok(out)
+        Ok(Cow::Owned(out))
     }
 
     /// Apply a single destringized `_Pragma` operand through the same

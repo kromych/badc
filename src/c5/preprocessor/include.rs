@@ -27,7 +27,8 @@ impl Preprocessor {
         line_no: usize,
         filename: &str,
         quoted: bool,
-    ) -> Result<String, C5Error> {
+        out: &mut String,
+    ) -> Result<(), C5Error> {
         // Resolution order:
         //   1. Filesystem search paths added via `add_search_path`
         //      (= the CLI's `-I` flag plus any built-in defaults).
@@ -60,7 +61,7 @@ impl Preprocessor {
         // as the new file's name so a nested quoted include resolves
         // against the right directory.
         let resolved: Option<(String, String)> = self.find_include(name, source_dir.as_deref());
-        self.finish_include(resolved, name, line_no, filename)
+        self.finish_include(resolved, name, line_no, filename, out)
     }
 
     /// `#include_next <header>` (C/GCC extension): resolve `name` from the
@@ -74,9 +75,10 @@ impl Preprocessor {
         line_no: usize,
         filename: &str,
         _quoted: bool,
-    ) -> Result<String, C5Error> {
+        out: &mut String,
+    ) -> Result<(), C5Error> {
         let resolved = self.find_include_next(name, filename);
-        self.finish_include(resolved, name, line_no, filename)
+        self.finish_include(resolved, name, line_no, filename, out)
     }
 
     /// Shared tail of `process_include` / `process_include_next`: error on
@@ -88,7 +90,8 @@ impl Preprocessor {
         name: &str,
         line_no: usize,
         filename: &str,
-    ) -> Result<String, C5Error> {
+        out: &mut String,
+    ) -> Result<(), C5Error> {
         let Some((content, resolved_path)) = resolved else {
             // Missing header is a hard error, as in gcc/clang: the
             // directive cannot perform the replacement C99 6.10.2
@@ -117,7 +120,7 @@ impl Preprocessor {
                 self.include_trace
                     .push(format!("{} {} (cached)", ".".repeat(depth), name));
             }
-            return Ok(String::new());
+            return Ok(());
         }
         if self.show_includes {
             let depth = self.include_stack.len() + 1;
@@ -141,7 +144,7 @@ impl Preprocessor {
             )));
         }
         self.include_stack.push(name.to_string());
-        let result = self.process_named(&content, &resolved_path);
+        let result = self.process_named(&content, &resolved_path, out);
         self.include_stack.pop();
         result
     }

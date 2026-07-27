@@ -153,8 +153,14 @@ impl Preprocessor {
                     }
                 }
             }
-            out.push(bytes[i] as char);
+            // Bytes with no operator meaning pass through as a UTF-8
+            // slice; a per-byte `as char` would widen non-ASCII.
+            let start = i;
             i += 1;
+            while i < bytes.len() && !bytes[i].is_ascii() {
+                i += 1;
+            }
+            out.push_str(&expr[start..i]);
         }
         // Now expand all remaining identifiers (object + function-
         // like) via the standard substitute pass. Then strip block
@@ -1131,8 +1137,12 @@ pub(super) fn replace_has_operators(s: &str) -> String {
             }
         }
         if !matched {
-            out.push(bytes[i] as char);
+            let start = i;
             i += 1;
+            while i < bytes.len() && !bytes[i].is_ascii() {
+                i += 1;
+            }
+            out.push_str(&s[start..i]);
         }
     }
     out

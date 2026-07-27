@@ -20,12 +20,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	testq	%rcx, %rcx
                	jne	<addr>
-               	cmpq	%rsi, %rsi
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
+               	xorq	%rax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	xorq	%rax, %rax
@@ -42,12 +37,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	testq	%rcx, %rcx
                	jne	<addr>
-               	cmpq	%rsi, %rsi
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
+               	xorq	%rax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	xorq	%rax, %rax
@@ -73,12 +63,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	testq	%rcx, %rcx
                	je	<addr>
-               	cmpq	%rsi, %rsi
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
+               	movl	$0x1, %eax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax

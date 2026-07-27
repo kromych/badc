@@ -11,7 +11,8 @@ Disassembly of section .text:
                	ud2
 
 <find_next>:
-               	cmpq	%rsi, %rdx
+               	movl	$0x64, %esi
+               	cmpq	$0x64, %rdx
                	jb	<addr>
                	movq	%rsi, %rax
                	retq
@@ -30,7 +31,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	0x1(%rax), %rcx
                	shlq	$0x6, %rcx
-               	cmpq	%rsi, %rcx
+               	cmpq	$0x64, %rcx
                	jae	<addr>
                	incq	%rax
                	movq	(%rdi,%rax,8), %rcx
@@ -68,7 +69,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
                	addq	%rdx, %rax
-               	cmpq	%rsi, %rax
+               	cmpq	$0x64, %rax
                	jbe	<addr>
                	jmp	<addr>
                	movq	%rax, %rsi

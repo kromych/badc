@@ -659,6 +659,8 @@ mod tests {
             is_always_inline: false,
             is_naked: false,
             is_weak: false,
+            is_internal: false,
+            const_params: 0,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,

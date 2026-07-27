@@ -486,6 +486,8 @@ mod tests {
             is_always_inline: false,
             is_naked: false,
             is_weak: false,
+            is_internal: false,
+            const_params: 0,
             inst_src: vec![(0, 0); n],
             f32_values: vec![false; n],
             param_fp_mask: 0,

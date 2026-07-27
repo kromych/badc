@@ -52,8 +52,8 @@ Disassembly of section .text:
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
                	movq	%r15, 0x20(%rsp)
-               	movl	$0x100000, %edx         # imm = 0x100000
-               	movq	%rdx, %r11
+               	movl	$0x100000, %eax         # imm = 0x100000
+               	movq	%rax, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11
                	movq	%rsp, %rcx
@@ -66,14 +66,14 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rcx, %rsp
-               	movl	$0x7, %r8d
+               	movl	$0x7, %edi
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	(%rcx,%rax), %rsi
-               	movl	$0x7, %edi
-               	movb	%dil, (%rsi)
+               	leaq	(%rcx,%rax), %rdx
+               	movl	$0x7, %esi
+               	movb	%sil, (%rdx)
                	addq	$0x1000, %rax           # imm = 0x1000
-               	cmpq	%rdx, %rax
+               	cmpq	$0x100000, %rax         # imm = 0x100000
                	jl	<addr>
                	leaq	0xfffff(%rcx), %rax
                	movl	$0x8, %edx
@@ -83,10 +83,10 @@ Disassembly of section .text:
                	movsbq	(%rcx), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %r15
-               	movl	$0x1, %edi
+               	movl	$0x1, %ecx
                	movl	$0x2, %esi
                	movl	$0x3, %edx
-               	movl	$0x4, %ecx
+               	movl	$0x4, %r8d
                	movl	$0x5, %r9d
                	movl	$0x6, %ebx
                	movl	$0x8, %r12d
@@ -95,10 +95,12 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	subq	$0x20, %rsp
-               	movq	%r8, (%rsp)
+               	movq	%rdi, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
+               	movq	%rcx, %rdi
+               	movq	%r8, %rcx
                	movq	%r9, %r8
                	movq	%rbx, %r9
                	callq	*%rax

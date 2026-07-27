@@ -86,7 +86,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x3                // =3
-               	sub	x1, x29, #0x8
+               	mov	x1, #0x3                // =3
+               	sub	x2, x29, #0x8
                	sub	sp, sp, #0x50
                	str	x0, [sp, #0x18]
                	str	x1, [sp, #0x20]
@@ -94,9 +95,9 @@ Disassembly of section .text:
                	str	d0, [sp, #0x30]
                	str	d1, [sp, #0x38]
                	str	d2, [sp, #0x40]
-               	str	x1, [sp]
+               	str	x2, [sp]
                	str	x0, [sp, #0x8]
-               	str	x0, [sp, #0x10]
+               	str	x1, [sp, #0x10]
                	ldr	x1, [sp, #0x8]
                	ldr	x2, [sp, #0x10]
                	fmov	d1, x1

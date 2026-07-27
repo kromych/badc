@@ -17,13 +17,14 @@ Disassembly of section .text:
                	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
                	movabsq	$-0x123456789abcdf0, %rcx # imm = 0xFEDCBA9876543210
                	movq	%rax, -0x8(%rbp)
+               	movabsq	$-0x123456789abcdf0, %rax # imm = 0xFEDCBA9876543210
                	movl	$0xc, %edx
                	leaq	-0x8(%rbp), %rsi
                	movq	%rax, -0x40(%rbp)
                	movq	%rcx, -0x38(%rbp)
                	movq	%rbx, -0x30(%rbp)
                	movq	%rsi, -0x28(%rbp)
-               	movq	%rcx, -0x20(%rbp)
+               	movq	%rax, -0x20(%rbp)
                	movq	%rdx, -0x18(%rbp)
                	movq	-0x28(%rbp), %r10
                	movq	(%r10), %rax
@@ -35,14 +36,15 @@ Disassembly of section .text:
                	movq	-0x40(%rbp), %rax
                	movq	-0x38(%rbp), %rcx
                	movq	-0x30(%rbp), %rbx
-               	movq	-0x8(%rbp), %rdx
+               	movq	-0x8(%rbp), %rax
                	movabsq	$0x3456789abcdeffed, %r11 # imm = 0x3456789ABCDEFFED
-               	cmpq	%r11, %rdx
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+               	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
                	movq	%rcx, -0x8(%rbp)
                	movl	$0x14, %ecx
                	leaq	-0x8(%rbp), %rdx

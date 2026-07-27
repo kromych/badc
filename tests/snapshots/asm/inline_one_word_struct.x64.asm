@@ -11,15 +11,14 @@ Disassembly of section .text:
                	ud2
 
 <sum_sr>:
-               	movslq	%esi, %rsi
                	xorq	%rax, %rax
                	movq	%rax, %rdx
                	jmp	<addr>
-               	movq	(%rdi,%rcx,8), %r8
-               	addq	%r8, %rdx
+               	movq	(%rdi,%rcx,8), %rsi
+               	addq	%rsi, %rdx
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
-               	cmpq	%rsi, %rcx
+               	cmpq	$0x5, %rcx
                	jl	<addr>
                	movq	%rdx, %rax
                	retq

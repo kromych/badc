@@ -26,11 +26,12 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	leaq	-<rip>, %rcx       # <addr>
                	movq	%rcx, (%rax)
-               	xorq	%rdx, %rdx
-               	movl	%edx, -0x8(%rbp)
+               	xorq	%rax, %rax
+               	movl	%eax, -0x8(%rbp)
                	leaq	-0x10(%rbp), %rdi
                	leaq	<rip>, %rsi
                	leaq	-0x8(%rbp), %r8
+               	xorq	%rdx, %rdx
                	movq	(%rdi), %rax
                	movl	$0xffff, %ecx           # imm = 0xFFFF
                	callq	*%rax

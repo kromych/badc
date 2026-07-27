@@ -11,31 +11,31 @@ Disassembly of section .text:
                	ud2
 
 <sum_zero>:
-               	movslq	%esi, %rsi
-               	movslq	%esi, %rcx
+               	movl	$0x8, %eax
+               	movslq	%eax, %rdx
+               	testq	%rdx, %rdx
+               	setg	%cl
+               	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
-               	setg	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
-               	leaq	-0x1(%rsi), %rax
-               	movslq	%eax, %rax
-               	movq	(%rdi,%rax,8), %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	leaq	-0x1(%rax), %rcx
+               	movslq	%ecx, %rcx
+               	movq	(%rdi,%rcx,8), %rcx
+               	testq	%rcx, %rcx
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	-0x1(%rcx), %rsi
+               	leaq	-0x1(%rdx), %rax
                	jmp	<addr>
                	jmp	<addr>
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
                	movapd	%xmm14, %xmm0
                	retq
-               	leaq	-0x1(%rsi), %rax
+               	decq	%rax
                	movslq	%eax, %rax
                	movq	(%rdi,%rax,8), %rax
                	xorps	%xmm0, %xmm0

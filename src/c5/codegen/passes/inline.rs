@@ -2104,6 +2104,8 @@ fn splice_multi_block(
         is_always_inline: original.is_always_inline,
         is_naked: original.is_naked,
         is_weak: original.is_weak,
+        is_internal: original.is_internal,
+        const_params: original.const_params,
         insts: new_insts,
         inst_src: new_inst_src,
         blocks: new_blocks,

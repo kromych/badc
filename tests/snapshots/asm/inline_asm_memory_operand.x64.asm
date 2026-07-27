@@ -139,16 +139,17 @@ Disassembly of section .text:
                	retq
                	movl	$0x64, %eax
                	movq	%rax, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x10(%rbp), %rax
+               	movl	$0x64, %ecx
                	movl	$0xc8, %edx
                	leaq	-0x8(%rbp), %rsi
                	movq	%rax, -0x70(%rbp)
                	movq	%rcx, -0x68(%rbp)
                	movq	%rbx, -0x60(%rbp)
                	movq	%rsi, -0x58(%rbp)
-               	movq	%rcx, -0x50(%rbp)
+               	movq	%rax, -0x50(%rbp)
                	movq	%rdx, -0x48(%rbp)
-               	movq	%rax, -0x40(%rbp)
+               	movq	%rcx, -0x40(%rbp)
                	movq	-0x50(%rbp), %rbx
                	movq	-0x48(%rbp), %rcx
                	movq	-0x40(%rbp), %rax

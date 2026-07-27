@@ -180,6 +180,14 @@ pub(crate) fn scan_param_slot_usage(
             _ => {}
         }
     }
+    // A parameter a whole-program constant reached keeps no `ParamRef`:
+    // its incoming register has no reader, so its cell needs no entry
+    // spill for the same reason a seeded one does not.
+    for i in 0..64u32 {
+        if func.const_params & (1u64 << i) != 0 {
+            seeded.insert(i);
+        }
+    }
     (seeded, addr_taken, needed)
 }
 

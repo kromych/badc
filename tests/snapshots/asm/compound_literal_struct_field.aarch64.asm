@@ -15,29 +15,16 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	mov	x3, x1
-               	sub	x1, x29, #0x28
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
+               	sub	x0, x29, #0x28
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x2]
-               	str	x10, [x1]
+               	ldr	x10, [x1]
+               	str	x10, [x0]
                	ldr	x10, [sp], #0x10
                	sub	x2, x29, #0x28
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cmp	x0, x0
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	cmp	x3, x3
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	ldrsw	x0, [x2]
                	cmp	x0, #0x3
                	cset	x0, ne

@@ -75,20 +75,15 @@ Disassembly of section .text:
                	retq
 
 <small_round>:
-               	leaq	0x1(%rdi), %rax
-               	addq	%rdi, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rcx
-               	movslq	%ecx, %rax
+               	movl	$0x7, %eax
                	retq
 
 <big_round>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	-0x18(%rbp), %rax
-               	movq	%rdi, %rsi
-               	movq	%rax, %rdi
+               	movl	$0x5, %esi
+               	leaq	-0x18(%rbp), %rdi
                	callq	<addr>
                	leaq	-0x18(%rbp), %rdi
                	subq	$0x20, %rsp

@@ -17,19 +17,18 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	sub	x16, x29, #0x28
                	str	x8, [x16]
+               	mov	x0, #0x7b               // =123
                	sub	x1, x29, #0x20
                	str	x0, [x1]
-               	sub	x1, x29, #0x20
-               	mov	x17, #0x5555            // =21845
-               	eor	x2, x0, x17
-               	str	x2, [x1, #0x8]
-               	sub	x1, x29, #0x20
-               	add	x2, x0, #0x9
-               	str	x2, [x1, #0x10]
-               	sub	x1, x29, #0x20
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
-               	str	x0, [x1, #0x18]
+               	sub	x0, x29, #0x20
+               	mov	x1, #0x552e             // =21806
+               	str	x1, [x0, #0x8]
+               	sub	x0, x29, #0x20
+               	mov	x1, #0x84               // =132
+               	str	x1, [x0, #0x10]
+               	sub	x0, x29, #0x20
+               	mov	x1, #0x171              // =369
+               	str	x1, [x0, #0x18]
                	sub	x0, x29, #0x20
                	mov	x16, x0
                	sub	x17, x29, #0x28
@@ -139,95 +138,49 @@ Disassembly of section .text:
                	sub	sp, sp, #0x50
                	sub	x16, x29, #0x48
                	str	x8, [x16]
-               	add	x1, x0, #0x1
-               	add	x2, x0, #0x2
-               	add	x3, x0, #0x3
-               	add	x4, x0, #0x4
-               	add	x5, x0, #0x5
-               	add	x6, x0, #0x6
-               	add	x7, x0, #0x7
-               	add	x1, x0, x1
-               	add	x1, x1, x2
-               	add	x1, x1, x3
-               	add	x1, x1, x4
-               	add	x1, x1, x5
-               	add	x1, x1, x6
-               	add	x1, x1, x7
-               	add	x2, x1, #0x1
-               	add	x3, x1, #0x2
-               	add	x4, x1, #0x3
-               	add	x5, x1, #0x4
-               	add	x6, x1, #0x5
-               	add	x7, x1, #0x6
-               	add	x8, x1, #0x7
-               	add	x2, x1, x2
-               	add	x2, x2, x3
-               	add	x2, x2, x4
-               	add	x2, x2, x5
-               	add	x2, x2, x6
-               	add	x2, x2, x7
-               	add	x2, x2, x8
-               	add	x3, x2, #0x1
-               	add	x4, x2, #0x2
-               	add	x5, x2, #0x3
-               	add	x6, x2, #0x4
-               	add	x7, x2, #0x5
-               	add	x8, x2, #0x6
-               	add	x9, x2, #0x7
-               	add	x3, x2, x3
-               	add	x3, x3, x4
-               	add	x3, x3, x5
-               	add	x3, x3, x6
-               	add	x3, x3, x7
-               	add	x3, x3, x8
-               	add	x3, x3, x9
-               	sub	x4, x29, #0x40
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
+               	mov	x0, #0xa                // =10
+               	sub	x1, x29, #0x40
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x5]
-               	str	x10, [x4]
-               	ldr	x10, [x5, #0x8]
-               	str	x10, [x4, #0x8]
-               	ldr	x10, [x5, #0x10]
-               	str	x10, [x4, #0x10]
-               	ldr	x10, [x5, #0x18]
-               	str	x10, [x4, #0x18]
-               	ldr	x10, [x5, #0x20]
-               	str	x10, [x4, #0x20]
-               	ldr	x10, [x5, #0x28]
-               	str	x10, [x4, #0x28]
-               	ldr	x10, [x5, #0x30]
-               	str	x10, [x4, #0x30]
-               	ldr	x10, [x5, #0x38]
-               	str	x10, [x4, #0x38]
+               	ldr	x10, [x2]
+               	str	x10, [x1]
+               	ldr	x10, [x2, #0x8]
+               	str	x10, [x1, #0x8]
+               	ldr	x10, [x2, #0x10]
+               	str	x10, [x1, #0x10]
+               	ldr	x10, [x2, #0x18]
+               	str	x10, [x1, #0x18]
+               	ldr	x10, [x2, #0x20]
+               	str	x10, [x1, #0x20]
+               	ldr	x10, [x2, #0x28]
+               	str	x10, [x1, #0x28]
+               	ldr	x10, [x2, #0x30]
+               	str	x10, [x1, #0x30]
+               	ldr	x10, [x2, #0x38]
+               	str	x10, [x1, #0x38]
                	ldr	x10, [sp], #0x10
-               	sub	x4, x29, #0x40
-               	str	x0, [x4]
-               	add	x5, x0, #0x1
-               	sub	x4, x29, #0x40
-               	str	x5, [x4, #0x8]
-               	add	x5, x0, #0x2
-               	sub	x4, x29, #0x40
-               	str	x5, [x4, #0x10]
-               	add	x5, x0, #0x3
-               	sub	x4, x29, #0x40
-               	str	x5, [x4, #0x18]
-               	add	x5, x0, #0x4
-               	sub	x4, x29, #0x40
-               	str	x5, [x4, #0x20]
-               	add	x5, x0, #0x5
-               	sub	x4, x29, #0x40
-               	str	x5, [x4, #0x28]
-               	add	x5, x0, #0x6
-               	sub	x4, x29, #0x40
-               	str	x5, [x4, #0x30]
-               	sub	x1, x1, x1
-               	add	x0, x0, x1
-               	sub	x1, x2, x2
-               	add	x0, x0, x1
-               	sub	x1, x3, x3
-               	add	x1, x0, x1
+               	sub	x1, x29, #0x40
+               	str	x0, [x1]
+               	mov	x1, #0xb                // =11
+               	sub	x0, x29, #0x40
+               	str	x1, [x0, #0x8]
+               	mov	x1, #0xc                // =12
+               	sub	x0, x29, #0x40
+               	str	x1, [x0, #0x10]
+               	mov	x1, #0xd                // =13
+               	sub	x0, x29, #0x40
+               	str	x1, [x0, #0x18]
+               	mov	x1, #0xe                // =14
+               	sub	x0, x29, #0x40
+               	str	x1, [x0, #0x20]
+               	mov	x1, #0xf                // =15
+               	sub	x0, x29, #0x40
+               	str	x1, [x0, #0x28]
+               	mov	x1, #0x10               // =16
+               	sub	x0, x29, #0x40
+               	str	x1, [x0, #0x30]
+               	mov	x1, #0xa                // =10
                	sub	x0, x29, #0x40
                	str	x1, [x0, #0x38]
                	sub	x0, x29, #0x40

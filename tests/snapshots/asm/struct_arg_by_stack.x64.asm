@@ -27,9 +27,9 @@ Disassembly of section .text:
                	movq	%r10, -0x10(%rbp)
                	movq	0x58(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
-               	movslq	%edi, %rdi
-               	leaq	<rip>, %rax
-               	movq	%rdi, (%rax)
+               	movl	$0x7, %eax
+               	leaq	<rip>, %rcx
+               	movq	%rax, (%rcx)
                	leaq	<rip>, %rax
                	leaq	-0x20(%rbp), %rcx
                	movq	(%rcx), %rcx

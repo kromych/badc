@@ -407,9 +407,6 @@ Disassembly of section .text:
                	subq	$0xa0, %rsp
                	subq	$0x80, %rsp
                	andq	$-0x20, %rsp
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
-               	je	<addr>
                	leaq	(%rsp), %rax
                	leaq	<rip>, %rcx
                	movq	%rax, (%rcx)
@@ -439,11 +436,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	xorq	%rax, %rax
-               	leaq	-0xa0(%rbp), %rsp
-               	addq	$0xa0, %rsp
-               	popq	%rbp
-               	retq
 
 <main>:
                	pushq	%rbp

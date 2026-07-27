@@ -368,15 +368,8 @@ Disassembly of section .text:
                	add	x29, sp, #0x80
                	mov	x21, x0
                	mov	x23, x4
-               	mov	x22, x2
-               	mov	x20, x1
-               	cmp	x22, #0x0
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x80]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x90
-               	ret
+               	mov	x20, #0x0               // =0
+               	mov	x22, #0x40              // =64
                	sub	x0, x29, #0x10
                	add	x0, x0, #0x0
                	mov	x1, #0x0                // =0

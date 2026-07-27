@@ -5680,7 +5680,9 @@ impl<'a> Walker<'a> {
                 ..
             } => self.addr_const_object(*child),
             // An array designator's value is its own address.
-            Expr::Ident { array_size, .. } | Expr::Member { array_size, .. } if *array_size != 0 => {
+            Expr::Ident { array_size, .. } | Expr::Member { array_size, .. }
+                if *array_size != 0 =>
+            {
                 self.addr_const_object(id)
             }
             Expr::Cast { child, to_ty } => {

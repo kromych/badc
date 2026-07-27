@@ -900,6 +900,16 @@ pub(crate) struct FunctionSsa {
     /// time, so the body this unit sees is not necessarily the one that runs
     /// and every call has to reach it through the symbol.
     pub is_weak: bool,
+    /// True when the definition has internal linkage (C99 6.2.2): a
+    /// file-scope `static` function. Every call reaching it is in this
+    /// translation unit, so the whole-program facts a pass can derive
+    /// from the call sites it sees are complete.
+    pub is_internal: bool,
+    /// Declared parameters, by index, whose value a whole-program
+    /// constant reached (`passes::ipa_const_param`). Their incoming
+    /// argument register has no reader left, so the entry spill of
+    /// their frame cell buys nothing. Indices past 63 are not tracked.
+    pub const_params: u64,
     /// Flat list of all SSA instructions in the function, indexed
     /// by [`ValueId`]. Each [`Block::inst_range`] is a contiguous
     /// slice of this list.

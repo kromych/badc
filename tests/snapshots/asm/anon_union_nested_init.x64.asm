@@ -40,43 +40,11 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <check_runtime>:
-               	movslq	%edi, %rdi
-               	movq	%rdi, %rax
-               	imulq	%rsi, %rax
-               	movslq	%eax, %rcx
-               	movq	%rdi, %rax
-               	andq	$0xff, %rax
-               	movq	%rdi, %rdx
-               	andq	$0xff, %rdx
-               	cmpq	%rdx, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	andq	$0xff, %rcx
-               	movq	%rdi, %rax
-               	imulq	%rsi, %rax
-               	movslq	%eax, %rax
-               	andq	$0xff, %rax
-               	cmpq	%rax, %rcx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0xa, %eax
-               	retq
                	xorq	%rax, %rax
-               	movslq	%edi, %rax
-               	cmpq	%rdi, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0xb, %eax
-               	retq
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

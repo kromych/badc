@@ -369,20 +369,21 @@ fn ent_pc=3 n_params=0 variadic=false locals=33
     v56  LocalAddr(-32)                                   -> x0
     v57  Imm(3)                                           -> x1
     v58  Imm(0)                                           -> x1
-    v59  Imm(0)                                           -> x1
-    v60  Imm(192)                                         -> x1
-    v61  BinopI { op=add, lhs=v56, rhs_imm=192 }          -> x1
-    v62  Imm(0)                                           -> x1
+    v59  Imm(3)                                           -> x1
+    v60  Imm(0)                                           -> x1
+    v61  Imm(192)                                         -> x1
+    v62  BinopI { op=add, lhs=v56, rhs_imm=192 }          -> x1
     v63  Imm(0)                                           -> x1
-    v64  Load { addr=v56, disp=192, kind=I64 }            -> x0
-    v65  BinopI { op=ne, lhs=v64, rhs_imm=300 }           -> x0
-    terminator Bz { cond=v65, target=b10, fall=b9 }   (exit_acc=v65)
+    v64  Imm(0)                                           -> x1
+    v65  Load { addr=v56, disp=192, kind=I64 }            -> x0
+    v66  BinopI { op=ne, lhs=v65, rhs_imm=300 }           -> x0
+    terminator Bz { cond=v66, target=b10, fall=b9 }   (exit_acc=v66)
   block 9  start_pc=0
-    v66  Imm(4)                                           -> x0
-    terminator Return(v66)   (exit_acc=v66)
-  block 10  start_pc=0
-    v67  Imm(0)                                           -> x0
+    v67  Imm(4)                                           -> x0
     terminator Return(v67)   (exit_acc=v67)
+  block 10  start_pc=0
+    v68  Imm(0)                                           -> x0
+    terminator Return(v68)   (exit_acc=v68)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

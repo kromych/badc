@@ -5467,10 +5467,17 @@ fn unused_binding_diagnostics_follow_symbol_table_order() {
     assert_eq!(unused, ["zz", "aa"], "warnings: {:?}", prog.warnings);
 }
 
-/// Marginal cost of one function definition, measured against a unit
-/// carrying `globals` file-scope declarations.
+/// Marginal cost of one function definition at two declaration counts,
+/// measured against units carrying only the declarations so the shared
+/// parse cancels out.
+///
+/// All four units are timed alternately rather than one configuration
+/// at a time: the figure is a difference of two timings, which is far
+/// noisier than either, and the suite runs its tests in parallel, so a
+/// load excursion during one batch would otherwise land entirely in one
+/// side of the ratio.
 #[cfg(not(debug_assertions))]
-fn per_function_compile_cost(globals: usize, functions: usize) -> f64 {
+fn per_function_compile_costs(small: usize, large: usize, functions: usize) -> (f64, f64) {
     fn unit(globals: usize, functions: usize) -> String {
         let mut s = String::new();
         for j in 0..globals {
@@ -5484,18 +5491,25 @@ fn per_function_compile_cost(globals: usize, functions: usize) -> f64 {
         s.push_str("int main(void) { return 0; }\n");
         s
     }
-    fn best(src: &str) -> f64 {
-        (0..3)
-            .map(|_| {
-                let t = std::time::Instant::now();
-                let _ = compile_str(src);
-                t.elapsed().as_secs_f64()
-            })
-            .fold(f64::MAX, f64::min)
+    fn once(src: &str) -> f64 {
+        let t = std::time::Instant::now();
+        let _ = compile_str(src);
+        t.elapsed().as_secs_f64()
     }
-    let with = unit(globals, functions);
-    let without = unit(globals, 0);
-    (best(&with) - best(&without)).max(0.0) / functions as f64
+    let units = [
+        unit(small, functions),
+        unit(small, 0),
+        unit(large, functions),
+        unit(large, 0),
+    ];
+    let mut best = [f64::MAX; 4];
+    for _ in 0..3 {
+        for (b, u) in best.iter_mut().zip(units.iter()) {
+            *b = b.min(once(u));
+        }
+    }
+    let per = |with: f64, without: f64| (with - without).max(0.0) / functions as f64;
+    (per(best[0], best[1]), per(best[2], best[3]))
 }
 
 #[test]
@@ -5506,8 +5520,10 @@ fn function_close_cost_is_independent_of_declaration_count() {
     // must not pay 16x per function definition. Measured as the
     // marginal cost of adding the definitions, so the shared parse of
     // the declarations cancels out.
-    let small = per_function_compile_cost(2000, 400);
-    let large = per_function_compile_cost(32000, 400);
+    let (small, large) = per_function_compile_costs(2000, 32000, 400);
+    // A `small` at the timer floor cannot discriminate: the ratio would
+    // be whatever noise divided by noise gives.
+    assert!(small > 0.0, "no measurable per-function cost to compare");
     assert!(
         large < small * 4.0,
         "per-function close cost grew {:.1}x for 16x the declarations \

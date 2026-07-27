@@ -1280,10 +1280,9 @@ pub(crate) fn assign_operand_regs(
     // value out); the front end rejects two outputs on one register.
     for (i, op) in operands.iter().enumerate() {
         if let C::Fixed(r) = op.constraint {
-            // The allocatable pool is x0..x15, but a register-asm variable
-            // names its own register: any general register is admissible
-            // except the emitter's own scratch pair, which the operand
-            // capture and write-back use.
+            // A register-asm variable names its own register, which need not
+            // be in the allocatable pool; only the emitter's scratch pair is
+            // reserved.
             if r > 30 || matches!(r, 16 | 17) {
                 return Err(String::from(
                     "inline asm: fixed operand register is not a general register",

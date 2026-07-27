@@ -1514,8 +1514,7 @@ pub(crate) fn emit_function(
         deferred_bases.push(base);
         code.extend_from_slice(&region.bytes);
         // A replacement branch to a symbol becomes a call fixup (same unit) or
-        // a relocation (link-time), as a main-stream one does; the region's
-        // base is now final, so the site's text offset is known.
+        // a relocation (link-time), as a main-stream one does.
         for sb in &region.sym_branches {
             let native_offset = base + sb.region_off;
             match name2entpc.get(sb.name.as_str()) {
@@ -3095,12 +3094,12 @@ fn emit_inline_asm_aarch64(
         }
     };
     // Registers the block overwrites: the operand registers plus the explicit
-    // clobber list. Every general register is saved and restored around the
-    // block, since the allocator may hold a live value in any of them; x16 /
-    // x17 are excluded because they are this lowering's own scratch, reloaded
-    // after the template rather than carried across it. `w` operands and FP
-    // clobbers are in the independent d0..d7 file and are saved separately. A
-    // `w` operand must be a double (the SSA model's only FP width is f64).
+    // clobber list. Every general register is saved around the block, since the
+    // allocator may hold a live value in any of them; x16 / x17 are this
+    // lowering's own scratch, reloaded after the template rather than carried
+    // across it. `w` operands and FP clobbers are in the independent d0..d7
+    // file and are saved separately, and must be doubles (the SSA model's only
+    // FP width is f64).
     let mut used_mask: u32 = asm.clobber_regs & 0x7FFF_FFFF & !0x0003_0000;
     let mut fp_used_mask: u32 = asm.clobber_fp_regs & 0xFF;
     for (i, op) in asm.operands.iter().enumerate() {
@@ -3115,8 +3114,6 @@ fn emit_inline_asm_aarch64(
             used_mask |= 1 << r;
         }
     }
-    // A fixed operand may name a register outside the allocatable pool, so the
-    // save set spans the general registers rather than the pool alone.
     let save_list: Vec<u8> = (0u8..31).filter(|r| used_mask & (1 << r) != 0).collect();
     let fp_save_list: Vec<u8> = (0u8..8).filter(|r| fp_used_mask & (1 << r) != 0).collect();
 

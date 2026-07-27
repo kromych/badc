@@ -117,7 +117,7 @@ fn gnu_identity_macros_are_opt_in() {
 
     // `enable_gnu` (the `--gnu` flag) defines both.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-    pp.enable_gnu();
+    pp.enable_gnu(false);
     let out = pp.process(probe).expect("preprocessor failed");
     assert!(
         out.contains("G yes") && out.contains("S yes"),

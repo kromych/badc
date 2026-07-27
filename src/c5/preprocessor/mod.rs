@@ -748,14 +748,16 @@ impl Preprocessor {
     /// Define the GCC identity macros (`--gnu`). badc claims `__GNUC__`
     /// only on request because it implements most, but not all, of the
     /// GNU C surface (`<x86intrin.h>` and the x86 intrinsics are
-    /// absent). `__GNUC_STDC_INLINE__` reports ISO C99 inline
-    /// semantics (not the GNU89 dialect);
+    /// absent). Exactly one of `__GNUC_STDC_INLINE__` /
+    /// `__GNUC_GNU_INLINE__` reports which inline linkage model is in
+    /// force, per `gnu89_inline`; headers key the spelling of their
+    /// inline declarations off it.
     /// `__VERSION__` is the compiler-identification string embedded by
     /// code such as `Py_GetCompiler`. `__STRICT_ANSI__` reports strict
     /// ISO conformance alongside `__GNUC__`, exactly as
     /// `gcc`/`clang -std=c11` does, so portable code uses the standard
     /// path for the GNU-only features badc lacks.
-    pub fn enable_gnu(&mut self) {
+    pub fn enable_gnu(&mut self, gnu89_inline: bool) {
         // The claimed version stays at 4.2.1. The language features a 5.1
         // claim implies are backed -- `__atomic_*` (4.7), `asm goto`
         // (4.5), `__builtin_types_compatible_p` including array type
@@ -773,8 +775,13 @@ impl Preprocessor {
             .insert("__GNUC_MINOR__".to_string(), "2".to_string());
         self.macros
             .insert("__GNUC_PATCHLEVEL__".to_string(), "1".to_string());
+        let inline_model_macro = if gnu89_inline {
+            "__GNUC_GNU_INLINE__"
+        } else {
+            "__GNUC_STDC_INLINE__"
+        };
         self.macros
-            .insert("__GNUC_STDC_INLINE__".to_string(), "1".to_string());
+            .insert(inline_model_macro.to_string(), "1".to_string());
         self.macros
             .insert("__VERSION__".to_string(), "\"4.2.1\"".to_string());
         // The `__sync_*` builtins lower for these widths, so the

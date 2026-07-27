@@ -51,6 +51,7 @@ struct AttrFlags {
     constructor: bool,
     destructor: bool,
     always_inline: bool,
+    gnu_inline: bool,
     naked: bool,
     weak: bool,
     used: bool,
@@ -67,6 +68,7 @@ impl AttrFlags {
         self.noreturn |= other.noreturn;
         self.dllexport |= other.dllexport;
         self.always_inline |= other.always_inline;
+        self.gnu_inline |= other.gnu_inline;
         self.naked |= other.naked;
         self.weak |= other.weak;
         self.used |= other.used;
@@ -843,6 +845,10 @@ impl Compiler {
                 // GNU `always_inline`: a mandatory inline request. Recorded so
                 // the inliner can warn when it cannot honor it.
                 f.always_inline = true;
+            } else if n == "gnu_inline" || n == "__gnu_inline__" {
+                // GNU `gnu_inline`: the function follows the GNU89 inline
+                // linkage model whatever the unit's default model is.
+                f.gnu_inline = true;
             } else if n == "naked" || n == "__naked__" {
                 // GNU `naked`: emit no prologue/epilogue; the body is the
                 // function's entire machine code (inline asm). Used for
@@ -1154,9 +1160,14 @@ impl Compiler {
             self.pending.attr_destructor = true;
         }
         if attrs.always_inline {
-            // A mandatory inline request implies `inline`.
+            // A mandatory inline request implies `inline` for the
+            // inliner; it is not the `inline` specifier, so the linkage
+            // model does not see it.
             self.pending_is_inline = true;
             self.pending_is_always_inline = true;
+        }
+        if attrs.gnu_inline {
+            self.pending_is_gnu_inline = true;
         }
         if attrs.naked {
             self.pending_is_naked = true;
@@ -1359,6 +1370,7 @@ impl Compiler {
             }
             if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
                 self.pending_is_inline = true;
+                self.pending_saw_inline_specifier = true;
                 if self.lex.tk == Token::ForceInline {
                     self.pending_is_always_inline = true;
                 }
@@ -1535,6 +1547,7 @@ impl Compiler {
             }
             if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
                 self.pending_is_inline = true;
+                self.pending_saw_inline_specifier = true;
                 if self.lex.tk == Token::ForceInline {
                     self.pending_is_always_inline = true;
                 }

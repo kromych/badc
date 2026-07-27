@@ -208,7 +208,7 @@ fn flag_output_macro_is_advertised_only_where_implemented() {
     let check = |target: crate::Target, gnu: bool| -> bool {
         let mut pp = crate::c5::preprocessor::Preprocessor::new("", target, "0");
         if gnu {
-            pp.enable_gnu();
+            pp.enable_gnu(false);
         }
         pp.process(probe).unwrap_or_default().contains("yes")
     };

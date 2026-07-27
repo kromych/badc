@@ -357,6 +357,8 @@ impl Compiler {
             self.pending.auto_type_single_declarator = false;
             self.pending_is_inline = false;
             self.pending_is_always_inline = false;
+            self.pending_saw_inline_specifier = false;
+            self.pending_is_gnu_inline = false;
             self.pending_is_naked = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
@@ -391,6 +393,7 @@ impl Compiler {
                 } else if is_decl_modifier(self.lex.tk) {
                     if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
                         self.pending_is_inline = true;
+                        self.pending_saw_inline_specifier = true;
                         if self.lex.tk == Token::ForceInline {
                             self.pending_is_always_inline = true;
                         }
@@ -562,6 +565,7 @@ impl Compiler {
                     self.next()?;
                 } else if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
                     self.pending_is_inline = true;
+                    self.pending_saw_inline_specifier = true;
                     if self.lex.tk == Token::ForceInline {
                         self.pending_is_always_inline = true;
                     }
@@ -978,26 +982,20 @@ impl Compiler {
                             self.symbols[id_idx].decl_line = self.lex.line;
                             self.symbols[id_idx].decl_in_main_source = self.in_main_source();
                         }
-                        // C99 6.2.2 / 6.7.4p7 linkage, recomputed from the
-                        // facts accumulated across every declaration of this
-                        // name. `static` is internal and sticky. A function
-                        // all of whose declarations are `inline` without
-                        // `extern` provides no external definition in this
-                        // unit, so it takes internal linkage (the out-of-line
-                        // copy stays private; the external definition, when
-                        // the program needs one, comes from a unit that
-                        // declares it `extern inline` or non-inline). A single
-                        // non-inline or `extern` declaration makes it external.
-                        if static_seen {
-                            self.symbols[id_idx].saw_static_decl = true;
-                        }
-                        if !self.pending_is_inline {
-                            self.symbols[id_idx].saw_noninline_decl = true;
-                        }
-                        // `static` is internal; an all-`inline`, never-`extern`
-                        // function is inline-only (also internal); anything
-                        // with a non-inline or `extern` declaration is external.
+                        // Census one file-scope declaration of this name for
+                        // the inline linkage models (C99 6.7.4p6-p7 and
+                        // GNU89); `resolve_inline_linkage` reads the totals
+                        // once the unit's last declaration is in. The
+                        // provisional linkage below keeps mid-parse state
+                        // consistent for a `static`-vs-external decision that
+                        // does not depend on the inline model.
                         let sym = &mut self.symbols[id_idx];
+                        sym.saw_static_decl |= static_seen;
+                        match (self.pending_saw_inline_specifier, extern_seen) {
+                            (false, _) => sym.saw_noninline_decl = true,
+                            (true, false) => sym.saw_plain_inline_decl = true,
+                            (true, true) => sym.saw_extern_inline_decl = true,
+                        }
                         let internal = sym.saw_static_decl
                             || (!sym.saw_noninline_decl && !extern_seen && !sym.is_extern_decl);
                         sym.linkage = if internal {
@@ -2789,6 +2787,9 @@ impl Compiler {
             self.next()?;
         }
         self.resolve_pending_aliases()?;
+        // Before the asm `.globl` sweep: that directive is an explicit
+        // request to export the name and outranks the inline model.
+        self.resolve_inline_linkage();
         self.resolve_file_scope_asm_globl();
         self.warn_unused_static_functions();
         Ok(())
@@ -2860,6 +2861,46 @@ impl Compiler {
         Ok(())
     }
 
+    /// Settle every function's inline linkage once the unit's last
+    /// file-scope declaration has been censused.
+    ///
+    /// C99 6.7.4p6: when all of a function's file-scope declarations
+    /// include `inline` without `extern`, the definition here is an
+    /// inline definition and provides no external definition; the
+    /// program's external definition, if it needs one, comes from
+    /// another unit. GNU89 inverts that: `extern inline` is the
+    /// inline-only form and a plain `inline` provides the external
+    /// definition. `static` is internal in both and is decided first.
+    ///
+    /// An inline definition takes internal linkage, so it is neither
+    /// exported nor a dead-code root: an unreferenced one drops, and a
+    /// reference the inliner did not absorb binds to the unit-local
+    /// copy rather than to an undefined symbol. C99 6.7.4p6 states that
+    /// choice outright ("provides an alternative to an external
+    /// definition, which a translator may use to implement any call to
+    /// the function in the same translation unit"); under GNU89 it is
+    /// narrower than gcc, which leaves an external reference instead.
+    fn resolve_inline_linkage(&mut self) {
+        use crate::c5::symbol::{Linkage, inline_definition};
+        let model = self.inline_model;
+        for sym in self.symbols.iter_mut() {
+            // Only names this unit declared at file scope; the census
+            // bits are the record of that, and symbols the parser
+            // synthesizes keep whatever linkage they were built with.
+            let declared =
+                sym.saw_noninline_decl || sym.saw_plain_inline_decl || sym.saw_extern_inline_decl;
+            if sym.class != Token::Fun as i64 || sym.saw_static_decl || !declared {
+                continue;
+            }
+            sym.is_inline_definition = inline_definition(sym, model);
+            sym.linkage = if sym.is_inline_definition {
+                Linkage::Internal
+            } else {
+                Linkage::External
+            };
+        }
+    }
+
     /// Emit one `unused function` diagnostic per defined-here
     /// Token::Fun whose `was_referenced` flag is still false and
     /// whose `linkage` is `Internal`. C99 6.2.2: a `static`
@@ -2884,6 +2925,9 @@ impl Compiler {
             if sym.class != Token::Fun as i64
                 || !sym.defined_here
                 || sym.linkage != Linkage::Internal
+                // An inline definition is internal but externally
+                // declared; another unit may still call the name.
+                || sym.is_inline_definition
                 || sym.was_referenced
                 || !sym.decl_in_main_source
                 || sym.name.is_empty()
@@ -2911,6 +2955,12 @@ impl Compiler {
         }
         if self.pending.attr_used {
             self.symbols[id_idx].is_used = true;
+        }
+        // Sticky like the rest: `gnu_inline` on any declaration selects
+        // the GNU89 model for the name, whichever side of the declarator
+        // the attribute was written on.
+        if self.pending_is_gnu_inline {
+            self.symbols[id_idx].is_gnu_inline = true;
         }
         if self.pending.attr_hidden {
             self.symbols[id_idx].is_hidden = true;

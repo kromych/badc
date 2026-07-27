@@ -88,6 +88,24 @@ fn exec_with_retry(path: &Path) -> std::io::Result<std::process::Output> {
     exec_with_retry_args(path, &[])
 }
 
+/// `exec_with_retry` for a caller that needs to configure the command
+/// (environment, working directory). The closure is called afresh per
+/// attempt because `Command` is consumed by `output`.
+fn exec_with_retry_cmd(
+    mut build: impl FnMut() -> Command,
+) -> std::io::Result<std::process::Output> {
+    for attempt in 0..10 {
+        match build().output() {
+            Ok(o) => return Ok(o),
+            Err(e) if e.raw_os_error() == Some(26) => {
+                std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    build().output()
+}
+
 fn exec_with_retry_args(path: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
     for attempt in 0..10 {
         match Command::new(path).args(args).output() {
@@ -1593,10 +1611,14 @@ fn badc_caller_oversize_struct_return_from_foreign() {
     std::fs::write(&exe_path, &exe).expect("write caller exe");
     set_executable(&exe_path);
 
-    let output = Command::new(&exe_path)
-        .env("LD_LIBRARY_PATH", &dir)
-        .output()
-        .expect("run linked binary");
+    // ETXTBSY: the image was just written, and a concurrent test in
+    // this process may still hold a writable handle to its own output.
+    let output = exec_with_retry_cmd(|| {
+        let mut c = Command::new(&exe_path);
+        c.env("LD_LIBRARY_PATH", &dir);
+        c
+    })
+    .expect("run linked binary");
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(
         output.status.code(),

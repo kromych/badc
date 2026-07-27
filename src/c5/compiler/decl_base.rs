@@ -662,6 +662,9 @@ impl Compiler {
             }
         }
         self.check_register_asm_init(Some(reg))?;
+        // Binds `Loc` without a `shadow_symbol`, so list it explicitly;
+        // it stays bound past every scope exit.
+        self.scope_bound.push(id_idx as u32);
         let sym = &mut self.symbols[id_idx];
         sym.class = Token::Loc as i64;
         sym.type_ = ty;

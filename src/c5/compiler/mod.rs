@@ -918,6 +918,15 @@ pub struct Compiler {
     /// `find_symbol` / `resolve_symbol` are O(1) amortised instead of
     /// scanning the whole vector on every identifier.
     symbol_index: lexer::SymbolIndex,
+    /// Indices into `symbols` whose binding an inner scope rebound and
+    /// which the scope-exit unwind has yet to restore. `symbols` is
+    /// interned, not a scope stack, so a function's bindings are
+    /// scattered through it; without this list every scope exit would
+    /// have to scan the whole table. Maintained by `shadow_symbol` /
+    /// `capture_block_shadow` and drained by `unwind_scope_bound`,
+    /// which keeps the entries whose binding outlives the scope (a
+    /// file-scope register variable is permanently `Loc`).
+    scope_bound: Vec<u32>,
 
     // --- Codegen state ---
     /// Next available `ent_pc` identifier for a user function or
@@ -1692,6 +1701,7 @@ impl Compiler {
             lex,
             symbols,
             symbol_index,
+            scope_bound: Vec::new(),
             deferred_error,
             dylibs,
             warned_implicit_ret: alloc::collections::BTreeSet::new(),

@@ -1187,11 +1187,8 @@ impl Compiler {
                                 // retry once the unit is complete.
                                 self.pending_aliases.push((id_idx, target, false));
                                 self.symbols[id_idx].is_alias = true;
-                                for sym in self.symbols.iter_mut() {
-                                    if sym.class == Token::Loc as i64 {
-                                        Self::restore_shadowed_symbol(sym);
-                                    }
-                                }
+                                let bound = self.take_scope_bound();
+                                self.unwind_scope_bound(bound);
                                 self.accept_declarator_separator()?;
                                 continue;
                             };
@@ -1216,11 +1213,8 @@ impl Compiler {
                         // marked them as `Loc`) so subsequent declarations
                         // of the same names don't trip the
                         // duplicate-global check.
-                        for sym in self.symbols.iter_mut() {
-                            if sym.class == Token::Loc as i64 {
-                                Self::restore_shadowed_symbol(sym);
-                            }
-                        }
+                        let bound = self.take_scope_bound();
+                        self.unwind_scope_bound(bound);
                         // On `,` consume it and let the outer loop parse
                         // the next declarator; on `;` the outer loop exits
                         // and `self.next()` after it consumes the `;`.
@@ -1712,7 +1706,13 @@ impl Compiler {
                     // local (val < 0).
                     let param_set: alloc::collections::BTreeSet<usize> =
                         params.indices.iter().copied().collect();
-                    for (i, sym) in self.symbols.iter().enumerate() {
+                    let bound = self.take_scope_bound();
+                    // `variables` accumulates over the whole unit; this
+                    // function owns exactly the entries appended from here on.
+                    let vars_start = self.variables.len();
+                    for &bi in &bound {
+                        let i = bi as usize;
+                        let sym = &self.symbols[i];
                         if sym.class == Token::Loc as i64
                             && sym.val != 0
                             && sym.val != 1
@@ -1769,8 +1769,8 @@ impl Compiler {
                     // `fp_slot < 0` -- not `!is_parameter` -- selects every
                     // local that needs its interior cells reserved.
                     let mut multi_cell: Vec<(i64, i64)> = Vec::new();
-                    for v in &self.variables {
-                        if v.function_bc_pc == ent_pc as u64 && v.fp_slot < 0 {
+                    for v in &self.variables[vars_start..] {
+                        if v.fp_slot < 0 {
                             let cells = self.local_storage_slots(v.type_tag, v.array_size as i64);
                             if cells > 1 {
                                 multi_cell.push((v.fp_slot, cells));
@@ -1814,7 +1814,9 @@ impl Compiler {
                         ValueSet,
                     }
                     let mut unused: Vec<(usize, String, UnusedKind)> = Vec::new();
-                    for (i, sym) in self.symbols.iter().enumerate() {
+                    for &bi in &bound {
+                        let i = bi as usize;
+                        let sym = &self.symbols[i];
                         if sym.class != Token::Loc as i64
                             || !sym.decl_in_main_source
                             || sym.address_escaped
@@ -1869,20 +1871,12 @@ impl Compiler {
                     // reaches function exit without an intervening
                     // read or branch is unambiguously dead.
                     self.emit_dead_stores_and_flush();
-                    for sym in self.symbols.iter_mut() {
-                        // Block-scope locals (`Loc`), `static` locals
-                        // (promoted to `Glo` but block-scoped) and an
-                        // `extern` that converted a bound file-scope name
-                        // all unbind at function exit so the outer binding
-                        // of the same name reappears.
-                        if sym.class == Token::Loc as i64
-                            || sym.is_scope_static
-                            || sym.is_scope_typedef
-                            || sym.block_extern_active
-                        {
-                            Self::restore_shadowed_symbol(sym);
-                        }
-                    }
+                    // Block-scope locals (`Loc`), `static` locals
+                    // (promoted to `Glo` but block-scoped) and an
+                    // `extern` that converted a bound file-scope name
+                    // all unbind at function exit so the outer binding
+                    // of the same name reappears.
+                    self.unwind_scope_bound(bound);
                 } else {
                     self.symbols[id_idx].class = Token::Glo as i64;
                     if !was_tentative_glo {

@@ -513,6 +513,15 @@ enum GloAddr {
     Extern,
 }
 
+/// A C99 6.6p9 address constant: a static-storage object plus a byte
+/// offset into it. `base` is the naming identifier's symbol index and
+/// its parse-time data offset, which together identify the object.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct AddrConst {
+    base: (u32, i64),
+    off: i64,
+}
+
 /// Per-walk context. Mutable so the walker can stack break /
 /// continue targets across nested loops + switches and intern
 /// `LabelId -> BlockId` for cross-stmt gotos.
@@ -5557,6 +5566,11 @@ impl<'a> Walker<'a> {
                 }
             }
             Expr::Binary { op, lhs, rhs, .. } => {
+                if is_comparison_op(*op)
+                    && let Some(v) = self.const_fold_addr_cmp(*op, *lhs, *rhs)
+                {
+                    return Some(v);
+                }
                 // Integer `/` and `%` are integer constant expressions
                 // (C99 6.6) but are not immediate-foldable operators, so
                 // the imm-safe predicate (shared with the BinopI rvalue
@@ -5625,6 +5639,136 @@ impl<'a> Walker<'a> {
             {
                 Some(0)
             }
+            _ => None,
+        }
+    }
+
+    /// Fold `lhs op rhs` when both are address constants over the same
+    /// object. C99 6.5.8p5 / 6.5.9p6 define the result of comparing two
+    /// pointers into one object as the comparison of their offsets, and
+    /// that answer is fixed at translation time even though the object's
+    /// own address is not. Addresses over *different* objects are left
+    /// alone: their relative order is chosen by the data layout.
+    fn const_fold_addr_cmp(&self, op: BinOp, lhs: ExprId, rhs: ExprId) -> Option<i64> {
+        let l = self.addr_const_value(lhs)?;
+        let r = self.addr_const_value(rhs)?;
+        if l.base != r.base {
+            return None;
+        }
+        // The base cancels, so the ordering of the addresses is the
+        // ordering of the offsets as integers; the pointer comparisons'
+        // unsigned forms would wrap on a negative offset.
+        let signed = match op {
+            BinOp::Ult => BinOp::Lt,
+            BinOp::Ugt => BinOp::Gt,
+            BinOp::Ule => BinOp::Le,
+            BinOp::Uge => BinOp::Ge,
+            BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge => op,
+            _ => return None,
+        };
+        Some(fold_int_binop(signed, l.off, r.off))
+    }
+
+    /// The value of `id` as an address constant (C99 6.6p9), or None
+    /// when it is not one. Casts that keep the whole address pass
+    /// through; a narrowing cast does not.
+    fn addr_const_value(&self, id: ExprId) -> Option<AddrConst> {
+        match self.ast.expr(id) {
+            Expr::Unary {
+                op: UnOp::AddrOf,
+                child,
+                ..
+            } => self.addr_const_object(*child),
+            // An array designator's value is its own address.
+            Expr::Ident { array_size, .. } | Expr::Member { array_size, .. } if *array_size != 0 => {
+                self.addr_const_object(id)
+            }
+            Expr::Cast { child, to_ty } => {
+                if type_size_bytes(*to_ty, self.target) < 8 || is_floating_scalar(*to_ty) {
+                    return None;
+                }
+                self.addr_const_value(*child)
+            }
+            Expr::Binary {
+                op: op @ (BinOp::Add | BinOp::Sub),
+                lhs,
+                rhs,
+                ..
+            } => {
+                // The parser has already scaled the integer operand to
+                // bytes, so it adds to the offset unchanged.
+                if let Some(mut base) = self.addr_const_value(*lhs) {
+                    let k = self.const_fold_int(*rhs)?;
+                    base.off = if *op == BinOp::Add {
+                        base.off.wrapping_add(k)
+                    } else {
+                        base.off.wrapping_sub(k)
+                    };
+                    return Some(base);
+                }
+                if *op != BinOp::Add {
+                    return None;
+                }
+                let mut base = self.addr_const_value(*rhs)?;
+                base.off = base.off.wrapping_add(self.const_fold_int(*lhs)?);
+                Some(base)
+            }
+            _ => None,
+        }
+    }
+
+    /// The address of the lvalue `id` as an address constant. Only an
+    /// object with static storage duration has one: a frame slot's
+    /// address is not fixed at translation time, and a thread-local's
+    /// resolves through the TLS block.
+    fn addr_const_object(&self, id: ExprId) -> Option<AddrConst> {
+        match self.ast.expr(id) {
+            Expr::Ident {
+                sym,
+                class,
+                val,
+                is_thread_local,
+                ..
+            } => {
+                if *class != Token::Glo as i64 || *is_thread_local {
+                    return None;
+                }
+                // The symbol table entry is reused when a name is
+                // shadowed, so the parse-time data offset pins the
+                // object the identifier named here.
+                Some(AddrConst {
+                    base: (*sym, *val),
+                    off: 0,
+                })
+            }
+            Expr::Member {
+                obj,
+                field_off,
+                bitfield,
+                ..
+            } => {
+                if bitfield.is_some() {
+                    return None;
+                }
+                // `p->f` loads `p`; only `s.f` keeps a constant base.
+                if is_pointer_ty(expr_ty(self.ast.expr(*obj))?) {
+                    return None;
+                }
+                let mut base = self.addr_const_object(*obj)?;
+                base.off = base.off.wrapping_add(*field_off);
+                Some(base)
+            }
+            Expr::Index { array, idx, .. } => {
+                let mut base = self.addr_const_value(*array)?;
+                base.off = base.off.wrapping_add(self.const_fold_int(*idx)?);
+                Some(base)
+            }
+            // `&*p` is `p` -- no load runs.
+            Expr::Unary {
+                op: UnOp::Deref,
+                child,
+                ..
+            } => self.addr_const_value(*child),
             _ => None,
         }
     }

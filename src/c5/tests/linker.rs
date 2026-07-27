@@ -4032,6 +4032,7 @@ fn unrouted_weak_undef_resolves_to_zero() {
             data,
             data_align: 8,
             bss_size: 0,
+            bss_align: 1,
             tls_data: alloc::vec::Vec::new(),
             tls_bss_size: 0,
             symbols: alloc::vec![null_sym(), weak_undef()],

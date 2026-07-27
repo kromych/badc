@@ -422,7 +422,7 @@ Disassembly of section .text:
                	movq	-0x240(%rbp), %r10
                	movups	(%r10,%riz), %xmm1
                	movq	-0x238(%rbp), %rax
-               	vpaddd	<rip>, %xmm1, %xmm0 # 0x402160
+               	vpaddd	<rip>, %xmm1, %xmm0
                	movq	-0x248(%rbp), %r10
                	movups	%xmm0, (%r10,%riz)
                	movq	-0x250(%rbp), %rax

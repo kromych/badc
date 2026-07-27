@@ -78,10 +78,10 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"0x[0-9a-fA-F]+[ \t]+<[^>\n]+>"), "<addr>"),
     # `callq *0xfe89(%rip)           # 0x4100c0`: trailing absolute
     # annotation appended after a RIP-relative computation. objdump
-    # tab-aligns the `#` past column 40, so 4-plus whitespace before
-    # `#` distinguishes the x86_64 comment form from aarch64's
-    # `, #0x8` immediate syntax.
-    (re.compile(r"\s{4,}#\s*0x[0-9a-fA-F]+\s*$", re.MULTILINE), ""),
+    # writes a space after the `#` of a comment and none after the `#`
+    # of an aarch64 immediate, which separates the two forms whatever
+    # column the operands leave the comment in.
+    (re.compile(r"\s+#\s+0x[0-9a-fA-F]+\s*$", re.MULTILINE), ""),
     # `0xfe89(%rip)`: x86_64 RIP-relative addressing. The offset is
     # measured from the next instruction's address and shifts whenever
     # any earlier code or .rodata moves.

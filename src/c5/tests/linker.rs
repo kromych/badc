@@ -6835,7 +6835,7 @@ fn asm_goto_branch_and_section_field_name_one_address() {
         // symbol, so its addend is the target's text offset.
         let addend =
             |k: usize| i64::from_le_bytes(rela[k * 24 + 16..k * 24 + 24].try_into().unwrap());
-        let (code_off, label_off) = (addend(0) as usize, addend(1) as i64);
+        let (code_off, label_off) = (addend(0) as usize, addend(1));
         let reached = if matches!(target, Target::LinuxAarch64) {
             let w = u32::from_le_bytes(text[code_off..code_off + 4].try_into().unwrap());
             assert_eq!(w & 0xfc00_0000, 0x1400_0000, "{target:?}: `1b` holds a `b`");

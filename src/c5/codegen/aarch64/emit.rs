@@ -3710,7 +3710,7 @@ fn emit_inline_asm_aarch64(
             if size == 0 {
                 ctx.direct_goto.push(AsmGotoDirectBranch {
                     site,
-                    kind: kind.clone(),
+                    kind: *kind,
                     target: ctx.row[1 + k],
                 });
                 continue;

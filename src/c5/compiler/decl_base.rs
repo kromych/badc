@@ -36,6 +36,43 @@ use super::types::{
     is_decl_modifier, struct_ty_for,
 };
 
+/// The declaration decorators a `__attribute__` / `__declspec` / `[[ ]]`
+/// run names. `note_attribute_name` fills one of these per attribute; the
+/// run's totals accumulate through `merge_names` plus the three flags whose
+/// operand the caller parses before recording them.
+#[derive(Default, Debug, Clone, Copy)]
+struct AttrFlags {
+    packed: bool,
+    maybe_unused: bool,
+    thread_local: bool,
+    noreturn: bool,
+    dllexport: bool,
+    aligned: bool,
+    constructor: bool,
+    destructor: bool,
+    always_inline: bool,
+    naked: bool,
+    weak: bool,
+    used: bool,
+}
+
+impl AttrFlags {
+    /// Fold one attribute's names into the run's totals. `aligned` /
+    /// `constructor` / `destructor` are excluded: each takes an operand
+    /// the caller parses and records itself.
+    fn merge_names(&mut self, other: &AttrFlags) {
+        self.packed |= other.packed;
+        self.maybe_unused |= other.maybe_unused;
+        self.thread_local |= other.thread_local;
+        self.noreturn |= other.noreturn;
+        self.dllexport |= other.dllexport;
+        self.always_inline |= other.always_inline;
+        self.naked |= other.naked;
+        self.weak |= other.weak;
+        self.used |= other.used;
+    }
+}
+
 /// Accumulator for the int-modifier soup that prefixes a C base
 /// type. `signed` / `unsigned` / `short` / `long` (any count) /
 /// `_Bool` are tracked separately so a later dispatch can pick
@@ -766,75 +803,59 @@ impl Compiler {
         Ok(ty)
     }
 
-    /// Set `*packed` / `*maybe_unused` if the current token is the
-    /// corresponding attribute name (`packed` / `__packed__`,
-    /// `unused` / `maybe_unused` / `__unused__`). Other names are
-    /// ignored.
-    #[allow(clippy::too_many_arguments)]
-    fn note_attribute_name(
-        &self,
-        packed: &mut bool,
-        maybe_unused: &mut bool,
-        thread_local: &mut bool,
-        noreturn: &mut bool,
-        dllexport: &mut bool,
-        aligned: &mut bool,
-        constructor: &mut bool,
-        destructor: &mut bool,
-        always_inline: &mut bool,
-        naked: &mut bool,
-        weak: &mut bool,
-        used: &mut bool,
-    ) {
+    /// Set the flag naming the attribute at the cursor. Other names are
+    /// ignored. The caller passes a fresh set per attribute: the three
+    /// flags that take an operand must be read back before the next name.
+    fn note_attribute_name(&self, f: &mut AttrFlags) {
         // The bare `noreturn` spelling lexes as the <stdnoreturn.h>
         // keyword token, not an identifier; both name this attribute.
         if self.lex.tk == Token::Noreturn {
-            *noreturn = true;
+            f.noreturn = true;
             return;
         }
         if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.as_str();
             if n == "packed" || n == "__packed__" {
-                *packed = true;
+                f.packed = true;
             } else if n == "unused" || n == "maybe_unused" || n == "__unused__" {
-                *maybe_unused = true;
+                f.maybe_unused = true;
             } else if n == "thread" {
                 // MSVC `__declspec(thread)`: thread-local storage. `thread` is
                 // not a GNU attribute, so it can only mean this.
-                *thread_local = true;
+                f.thread_local = true;
             } else if n == "noreturn" || n == "__noreturn__" {
                 // `__declspec(noreturn)` / `__attribute__((noreturn))`.
-                *noreturn = true;
+                f.noreturn = true;
             } else if n == "dllexport" {
                 // MSVC `__declspec(dllexport)`: export the symbol, the
                 // equivalent of `#pragma export(name)`.
-                *dllexport = true;
+                f.dllexport = true;
             } else if n == "aligned" || n == "__aligned__" || n == "align" {
                 // GNU `aligned(N)` / MSVC `__declspec(align(N))`.
-                *aligned = true;
+                f.aligned = true;
             } else if n == "constructor" || n == "__constructor__" {
                 // GNU `constructor` / `constructor(N)`: run before `main`.
-                *constructor = true;
+                f.constructor = true;
             } else if n == "destructor" || n == "__destructor__" {
                 // GNU `destructor` / `destructor(N)`: run after `main` returns.
-                *destructor = true;
+                f.destructor = true;
             } else if n == "always_inline" || n == "__always_inline__" {
                 // GNU `always_inline`: a mandatory inline request. Recorded so
                 // the inliner can warn when it cannot honor it.
-                *always_inline = true;
+                f.always_inline = true;
             } else if n == "naked" || n == "__naked__" {
                 // GNU `naked`: emit no prologue/epilogue; the body is the
                 // function's entire machine code (inline asm). Used for
                 // interrupt service routines that return via `iretq`/`eret`.
-                *naked = true;
+                f.naked = true;
             } else if n == "weak" || n == "__weak__" {
                 // GNU `weak`: the defined (or declared) symbol binds
                 // STB_WEAK in the object's symbol table.
-                *weak = true;
+                f.weak = true;
             } else if n == "used" || n == "__used__" {
                 // GNU `used`: keep the definition in the object even when
                 // nothing in the unit references it.
-                *used = true;
+                f.used = true;
             }
         }
     }
@@ -859,19 +880,9 @@ impl Compiler {
     }
 
     pub(super) fn skip_attribute_specifiers(&mut self) -> Result<bool, C5Error> {
-        let mut packed = false;
-        let mut maybe_unused = false;
-        let mut thread_local = false;
-        let mut noreturn = false;
-        let mut dllexport = false;
+        let mut attrs = AttrFlags::default();
         let mut align: i64 = 0;
         let mut vector_size: i64 = 0;
-        let mut constructor = false;
-        let mut destructor = false;
-        let mut always_inline = false;
-        let mut naked = false;
-        let mut weak = false;
-        let mut used = false;
         let mut init_priority: Option<u32> = None;
         loop {
             if self.lex.tk == Token::Attribute {
@@ -965,25 +976,11 @@ impl Compiler {
                                 self.symbols[self.lex.curr_id_idx].name.as_str(),
                                 "visibility" | "__visibility__"
                             );
-                        let mut saw_aligned = false;
-                        let mut saw_constructor = false;
-                        let mut saw_destructor = false;
-                        self.note_attribute_name(
-                            &mut packed,
-                            &mut maybe_unused,
-                            &mut thread_local,
-                            &mut noreturn,
-                            &mut dllexport,
-                            &mut saw_aligned,
-                            &mut saw_constructor,
-                            &mut saw_destructor,
-                            &mut always_inline,
-                            &mut naked,
-                            &mut weak,
-                            &mut used,
-                        );
+                        let mut seen = AttrFlags::default();
+                        self.note_attribute_name(&mut seen);
+                        attrs.merge_names(&seen);
                         self.next()?;
-                        if saw_aligned {
+                        if seen.aligned {
                             if self.lex.tk == '(' {
                                 self.next()?;
                                 let n = self.parse_constant_int()?;
@@ -1000,9 +997,9 @@ impl Compiler {
                                 // supported targets).
                                 align = align.max(16);
                             }
-                        } else if saw_constructor || saw_destructor {
-                            constructor |= saw_constructor;
-                            destructor |= saw_destructor;
+                        } else if seen.constructor || seen.destructor {
+                            attrs.constructor |= seen.constructor;
+                            attrs.destructor |= seen.destructor;
                             init_priority = self.parse_init_priority(init_priority)?;
                         } else if is_vector_size && self.lex.tk == '(' {
                             // GCC `vector_size(N)`: the declared type becomes a
@@ -1104,25 +1101,11 @@ impl Compiler {
                     } else if self.lex.tk == 0 {
                         return Err(self.compile_err("unterminated `[[` attribute"));
                     } else {
-                        let mut saw_aligned = false;
-                        let mut saw_constructor = false;
-                        let mut saw_destructor = false;
-                        self.note_attribute_name(
-                            &mut packed,
-                            &mut maybe_unused,
-                            &mut thread_local,
-                            &mut noreturn,
-                            &mut dllexport,
-                            &mut saw_aligned,
-                            &mut saw_constructor,
-                            &mut saw_destructor,
-                            &mut always_inline,
-                            &mut naked,
-                            &mut weak,
-                            &mut used,
-                        );
+                        let mut seen = AttrFlags::default();
+                        self.note_attribute_name(&mut seen);
+                        attrs.merge_names(&seen);
                         self.next()?;
-                        if saw_aligned && self.lex.tk == '(' {
+                        if seen.aligned && self.lex.tk == '(' {
                             self.next()?;
                             let n = self.parse_constant_int()?;
                             align = align.max(n);
@@ -1132,9 +1115,9 @@ impl Compiler {
                                 );
                             }
                             self.next()?;
-                        } else if saw_constructor || saw_destructor {
-                            constructor |= saw_constructor;
-                            destructor |= saw_destructor;
+                        } else if seen.constructor || seen.destructor {
+                            attrs.constructor |= seen.constructor;
+                            attrs.destructor |= seen.destructor;
                             init_priority = self.parse_init_priority(init_priority)?;
                         }
                     }
@@ -1143,51 +1126,51 @@ impl Compiler {
                 break;
             }
         }
-        if maybe_unused {
+        if attrs.maybe_unused {
             self.pending.attr_maybe_unused = true;
         }
-        if thread_local {
+        if attrs.thread_local {
             self.pending.attr_thread_local = true;
         }
-        if noreturn {
+        if attrs.noreturn {
             self.pending_noreturn = true;
         }
-        if dllexport {
+        if attrs.dllexport {
             self.pending.attr_dllexport = true;
         }
         if align > 0 {
             self.pending.attr_align = self.pending.attr_align.max(align);
         }
-        if packed {
+        if attrs.packed {
             self.pending.attr_packed = true;
         }
         if vector_size > 0 {
             self.pending.attr_vector_size = vector_size;
         }
-        if constructor {
+        if attrs.constructor {
             self.pending.attr_constructor = true;
         }
-        if destructor {
+        if attrs.destructor {
             self.pending.attr_destructor = true;
         }
-        if always_inline {
+        if attrs.always_inline {
             // A mandatory inline request implies `inline`.
             self.pending_is_inline = true;
             self.pending_is_always_inline = true;
         }
-        if naked {
+        if attrs.naked {
             self.pending_is_naked = true;
         }
         if let Some(p) = init_priority {
             self.pending.attr_init_priority = Some(p);
         }
-        if weak {
+        if attrs.weak {
             self.pending.attr_weak = true;
         }
-        if used {
+        if attrs.used {
             self.pending.attr_used = true;
         }
-        Ok(packed)
+        Ok(attrs.packed)
     }
 
     /// Parse the string-literal operand of an attribute whose payload

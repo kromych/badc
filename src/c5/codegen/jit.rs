@@ -1649,31 +1649,18 @@ mod jit_impl {
         target_vmaddr: u64,
         label: &str,
     ) -> Result<(), C5Error> {
-        let off = instr_offset as usize;
-        let adrp_vmaddr = code_vmaddr + instr_offset;
-        let adrp_page = adrp_vmaddr & !0xFFF;
-        let target_page = target_vmaddr & !0xFFF;
-        let page_diff = target_page as i64 - adrp_page as i64;
-        if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("JIT: {label} page diff {page_diff} not 4 KiB aligned"),
-            )));
-        }
-        let imm21 = (page_diff >> 12) as i32;
-        let in_page = (target_vmaddr & 0xFFF) as u32;
-        if !in_page.is_multiple_of(8) {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("JIT: {label} slot offset {in_page:#x} not 8-aligned"),
-            )));
-        }
-        let prev_adrp =
-            u32::from_le_bytes([code[off], code[off + 1], code[off + 2], code[off + 3]]);
-        let rd = super::super::aarch64::Reg((prev_adrp & 0x1F) as u8);
-        let adrp_word = super::super::aarch64::enc_adrp(rd, imm21);
-        let ldr_word = super::super::aarch64::enc_ldr_imm(rd, rd, in_page);
-        code[off..off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-        code[off + 4..off + 8].copy_from_slice(&ldr_word.to_le_bytes());
-        Ok(())
+        super::super::aarch64::patch::patch_slot_load(
+            code,
+            instr_offset as usize,
+            (code_vmaddr + instr_offset) as i64,
+            target_vmaddr as i64,
+            super::super::aarch64::patch::SlotWidth::W64,
+        )
+        .map_err(|e| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &e.describe(&format!("JIT: {label}")),
+            ))
+        })
     }
 
     /// Patch an extern-data reference so the register receives the

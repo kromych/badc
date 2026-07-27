@@ -828,6 +828,186 @@ fn pe_iat_slot_rva(image: &[u8], want: &str) -> Option<u32> {
     None
 }
 
+/// `(sh_addr, contents)` of the named section of a linked ELF image.
+#[cfg(feature = "full")]
+fn elf_section_addr_bytes(b: &[u8], want: &[u8]) -> Option<(u64, alloc::vec::Vec<u8>)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap()) as usize;
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap()) as usize;
+    let shoff = u64a(0x28);
+    let shentsize = u16a(0x3a);
+    let shnum = u16a(0x3c);
+    let stroff = u64a(shoff + u16a(0x3e) * shentsize + 0x18);
+    (0..shnum).map(|i| shoff + i * shentsize).find_map(|sh| {
+        let name = stroff + u32a(sh);
+        let end = name + b[name..].iter().position(|&c| c == 0)?;
+        if &b[name..end] != want {
+            return None;
+        }
+        let off = u64a(sh + 0x18);
+        let size = u64a(sh + 0x20);
+        Some((u64a(sh + 0x10) as u64, b[off..off + size].to_vec()))
+    })
+}
+
+/// `(addr, contents)` of the named section of a linked Mach-O image.
+#[cfg(feature = "full")]
+fn macho_section_addr_bytes(b: &[u8], want: &[u8]) -> Option<(u64, alloc::vec::Vec<u8>)> {
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let ncmds = u32a(16);
+    let mut lc = 32;
+    for _ in 0..ncmds {
+        // LC_SEGMENT_64 = 0x19; sections follow the 72-byte command.
+        if u32a(lc) == 0x19 {
+            let nsects = u32a(lc + 64);
+            for s in 0..nsects {
+                let sh = lc + 72 + s * 80;
+                let end = sh + b[sh..sh + 16].iter().position(|&c| c == 0).unwrap_or(16);
+                if &b[sh..end] == want {
+                    let off = u32a(sh + 48);
+                    let size = u64a(sh + 40) as usize;
+                    return Some((u64a(sh + 32), b[off..off + size].to_vec()));
+                }
+            }
+        }
+        lc += u32a(lc + 4);
+    }
+    None
+}
+
+/// `(code address, code bytes, address range of the import slots)` of a
+/// linked image: the IAT entry the loader fills for a PE, the `.got` /
+/// `__got` region for the other two formats.
+#[cfg(feature = "full")]
+fn import_slot_layout(
+    image: &[u8],
+    target: crate::Target,
+) -> Option<(u64, alloc::vec::Vec<u8>, core::ops::Range<u64>)> {
+    use crate::Target;
+    match target {
+        Target::WindowsX64 | Target::WindowsAarch64 => {
+            let (text_rva, text) = pe_text_section(image)?;
+            let slot = pe_iat_slot_rva(image, "_timezone")? as u64;
+            Some((text_rva as u64, text.to_vec(), slot..slot + 8))
+        }
+        Target::LinuxX64 | Target::LinuxAarch64 => {
+            let (text_addr, text) = elf_section_addr_bytes(image, b".text")?;
+            let (got_addr, got) = elf_section_addr_bytes(image, b".got")?;
+            Some((text_addr, text, got_addr..got_addr + got.len() as u64))
+        }
+        Target::MacOSAarch64 => {
+            let (text_addr, text) = macho_section_addr_bytes(image, b"__text")?;
+            let (got_addr, got) = macho_section_addr_bytes(image, b"__got")?;
+            Some((text_addr, text, got_addr..got_addr + got.len() as u64))
+        }
+    }
+}
+
+/// Count the references into `slots` that read through a slot and the
+/// ones that materialise a slot's own address. Scans `code` for the
+/// two page-relative forms each machine uses; the resolved target has
+/// to land in `slots`, so an unaligned scan start cannot contribute.
+#[cfg(feature = "full")]
+fn count_slot_references(
+    target: crate::Target,
+    code_va: u64,
+    code: &[u8],
+    slots: &core::ops::Range<u64>,
+) -> (usize, usize) {
+    use crate::Target;
+    let (mut through, mut addressed) = (0usize, 0usize);
+    match target {
+        Target::LinuxX64 | Target::WindowsX64 => {
+            // `REX.W 8B /r` loads and `REX.W 8D /r` takes the address;
+            // both are 7 bytes with a RIP-relative modrm (mod 00, rm 101).
+            for i in 0..code.len().saturating_sub(7) {
+                if code[i] & 0xF8 != 0x48 || code[i + 2] & 0xC7 != 0x05 {
+                    continue;
+                }
+                let disp = i32::from_le_bytes(code[i + 3..i + 7].try_into().unwrap()) as i64;
+                let hit = slots.contains(&((code_va + i as u64 + 7).wrapping_add(disp as u64)));
+                match code[i + 1] {
+                    0x8B if hit => through += 1,
+                    0x8D if hit => addressed += 1,
+                    _ => {}
+                }
+            }
+        }
+        Target::LinuxAarch64 | Target::WindowsAarch64 | Target::MacOSAarch64 => {
+            let word = |i: usize| u32::from_le_bytes(code[i..i + 4].try_into().unwrap());
+            for i in (0..code.len().saturating_sub(7)).step_by(4) {
+                let adrp = word(i);
+                if adrp & 0x9F00_0000 != 0x9000_0000 {
+                    continue;
+                }
+                let imm21 = ((adrp >> 29) & 3) | (((adrp >> 5) & 0x7_FFFF) << 2);
+                let pages = (((imm21 << 11) as i32) >> 11) as i64;
+                let page = (((code_va + i as u64) & !0xFFF) as i64 + (pages << 12)) as u64;
+                let next = word(i + 4);
+                if (next >> 5) & 0x1F != adrp & 0x1F {
+                    continue;
+                }
+                let imm12 = ((next >> 10) & 0xFFF) as u64;
+                if next & 0x7F80_0000 == 0x1100_0000 {
+                    addressed += slots.contains(&page.wrapping_add(imm12)) as usize;
+                } else if next & 0x3B00_0000 == 0x3900_0000 {
+                    let scale = 1u64 << (next >> 30);
+                    through += slots.contains(&page.wrapping_add(imm12 * scale)) as usize;
+                }
+            }
+        }
+    }
+    (through, addressed)
+}
+
+/// A reference to an imported data object reaches the object through the
+/// slot the loader fills, so the emitted sequence has to read that slot.
+/// Materialising the slot's address instead hands the object's address
+/// to code expecting its value, and every later dereference is off by
+/// one indirection. Each of the three image writers patches the site
+/// with its own helper, so the property is checked on every target.
+#[cfg(feature = "full")]
+#[test]
+fn an_import_slot_reference_reads_the_slot_on_every_target() {
+    use crate::{Compiler, NativeOptions, Target};
+    const SRC: &str = "#include <stdio.h>\n#include <time.h>\n\
+                       void *fp(void) { return (void *)&puts; }\n\
+                       long tz(void) { return timezone; }\n\
+                       int main(void) { return fp() != 0 && tz() == 0; }\n";
+    let targets = [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ];
+    // An ELF x86_64 image resolves a bound data object by copy
+    // relocation instead, so it reads no slot; every other target does.
+    let mut reading = 0usize;
+    for target in targets {
+        let program = Compiler::with_target(SRC.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: compile: {e:?}"));
+        let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("{target:?}: link: {e}"));
+        let (code_va, code, slots) = import_slot_layout(&image, target)
+            .unwrap_or_else(|| panic!("{target:?}: image carries no import-slot region"));
+        let (through, addressed) = count_slot_references(target, code_va, &code, &slots);
+        assert_eq!(
+            addressed, 0,
+            "{target:?}: {addressed} reference(s) materialise an import slot's address \
+             instead of reading it"
+        );
+        reading += usize::from(through > 0);
+    }
+    assert_eq!(
+        reading,
+        targets.len() - 1,
+        "the scan proves nothing unless the images actually read their import slots"
+    );
+}
+
 /// Walk an emitted ELF64 `.symtab` and return `(name, st_size)` for
 /// every `STT_FUNC` entry. Minimal fixed-offset parse for the symbol-
 /// size regression above.

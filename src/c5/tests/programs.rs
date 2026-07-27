@@ -5520,12 +5520,19 @@ fn function_close_cost_is_independent_of_declaration_count() {
     // must not pay 16x per function definition. Measured as the
     // marginal cost of adding the definitions, so the shared parse of
     // the declarations cancels out.
-    let (small, large) = per_function_compile_costs(2000, 32000, 400);
+    //
+    // The bound is 8x, not the 1x the title suggests. Scanning the whole
+    // table would cost 16x, which this still catches with margin, but
+    // the per-function figure is not strictly independent of the table
+    // size even with the scan gone: the larger table has worse locality
+    // for the bindings a scope does touch. That constant factor is real
+    // work, not a defect, and it varies by machine.
+    let (small, large) = per_function_compile_costs(2000, 32000, 1000);
     // A `small` at the timer floor cannot discriminate: the ratio would
     // be whatever noise divided by noise gives.
     assert!(small > 0.0, "no measurable per-function cost to compare");
     assert!(
-        large < small * 4.0,
+        large < small * 8.0,
         "per-function close cost grew {:.1}x for 16x the declarations \
          ({small:.3e}s -> {large:.3e}s)",
         large / small

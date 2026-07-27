@@ -1475,6 +1475,24 @@ fn user_defined_c5_entry_links_freestanding() {
     );
 }
 
+/// The PE entry stub direct-calls `__c5_entry`, which a bare single-TU
+/// image has no runtime to supply. The resulting failure is a problem
+/// with the link inputs, so it must be reported in the `error: <message>`
+/// form every diagnostic reader keys on rather than as a bare sentence a
+/// log scraper cannot find.
+#[test]
+fn pe_entry_stub_without_runtime_reports_a_link_error() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare("int main(void) { return 0; }");
+    let err = emit_native_with_options(&program, Target::WindowsX64, NativeOptions::default())
+        .expect_err("a PE image with no linked runtime has no `__c5_entry` to call");
+    let msg = format!("{err}");
+    assert!(
+        msg.starts_with("error: ") && msg.contains("__c5_entry"),
+        "the missing-runtime failure is not a well-formed diagnostic: {msg:?}"
+    );
+}
+
 /// C11 7.17.7.2 + Intel SDM Vol.2: `atomic_fetch_add` must lower to a
 /// genuine `LOCK XADD`, not a plain load-op-store. Confirm the emitted
 /// x86_64 image carries the `F0` LOCK prefix immediately followed by
@@ -3545,6 +3563,57 @@ fn post_inline_recompaction_keeps_inlined_import() {
                 .iter()
                 .any(|(n, _)| n == "ops_read" || n == "dev_private"),
             "{target:?}: the orphaned table's function survived (symbols: {syms:?})"
+        );
+    }
+}
+
+/// A data-liveness probe stops as soon as it has a report, so its
+/// `Build` carries no image -- not even the `output_kind` the writer
+/// routes on. Stopping only pays off when the caller holds a compaction
+/// plan to replay the report against. A unit with no function to walk
+/// gets no plan, yet the -O pipeline still reports its unreferenced
+/// objects, so the probe must run to completion instead of handing the
+/// writer an empty `Build`: PE routed that to the executable writer and
+/// failed on the entry stub, ELF wrote a linked image where an object
+/// was asked for.
+///
+/// Locks: `-O` relocatable output for a data-only unit is an `ET_REL`
+/// object that still defines its externally visible data.
+#[test]
+fn data_only_unit_at_o_emits_relocatable_object() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "static const char dead_tag[8] = \"dead\"; \
+                       const char kept_tag[8] = \"kept\";";
+
+    for target in [
+        Target::MacOSAarch64,
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+        assert_eq!(
+            u16::from_le_bytes(obj[16..18].try_into().unwrap()),
+            1,
+            "{target:?}: relocatable output is not ET_REL"
+        );
+        let syms = elf_symbol_shndx(&obj);
+        assert!(
+            syms.iter().any(|(n, _)| n == "kept_tag"),
+            "{target:?}: the unit's data symbol is missing (symbols: {syms:?})"
         );
     }
 }

@@ -104,6 +104,7 @@ pub(crate) fn compile_function_to_bytes(
                     &mut macho_tlv_fixups,
                     &mut macho_tlv_descriptors,
                     &alloc::collections::BTreeMap::new(),
+                    false,
                 )
             };
             if !ok {

@@ -1553,7 +1553,7 @@ pub(crate) fn emit_function(
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
-    no_sse: bool,
+    no_fp_regs: bool,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -1611,7 +1611,7 @@ pub(crate) fn emit_function(
     }
     let abi = {
         let mut a = target.abi();
-        a.no_sse_varargs = no_sse;
+        a.no_fp_varargs = no_fp_regs;
         a
     };
     let frame = compute_frame(func, alloc, abi);
@@ -2735,7 +2735,7 @@ fn emit_prologue(
         // Under `-mno-sse` the XMM save is omitted entirely: the target
         // environment faults on any XMM access and its callers do not
         // maintain the `al` count, so even the guarded form is unsafe.
-        if !abi.no_sse_varargs {
+        if !abi.no_fp_varargs {
             // test al, al ; je past_fp_save
             super::encode::emit_test_al_al(code);
             super::encode::emit_jcc_rel32(code, Cc::E, 0);
@@ -8252,7 +8252,7 @@ fn emit_intrinsic(
             let gp_offset = named_int.min(6) * 8;
             // With the XMM save area unpopulated (`-mno-sse`), report the
             // FP bank exhausted so `va_arg` walks gp then overflow only.
-            let fp_offset = if abi.no_sse_varargs {
+            let fp_offset = if abi.no_fp_varargs {
                 SYSV_REG_SAVE_BYTES
             } else {
                 SYSV_GP_SAVE_BYTES + named_fp.min(8) * 16

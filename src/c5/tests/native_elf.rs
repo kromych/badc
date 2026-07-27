@@ -1410,3 +1410,66 @@ int main(void) { return (sum_arr() == 666) ? 0 : 1; }\n";
         "extern global moved by data DCE but its symbol offset was not updated to match"
     );
 }
+
+/// The AAPCS64 variadic callee prologue spills q0..q7 into the vector
+/// half of the register save area unconditionally (AAPCS64 has no
+/// caller-passed vector count). A freestanding aarch64 environment runs
+/// with CPACR_EL1.FPEN trapping, so each `str dN` raises a synchronous
+/// exception before the kernel can report it. Under `no_fp_regs`
+/// (`-mgeneral-regs-only`) the object must contain none of the eight
+/// stores; the default object contains all eight. The area stays
+/// reserved, so every offset above it is unchanged.
+#[test]
+fn variadic_prologue_no_fp_regs_omits_vector_save_aarch64() {
+    use crate::{CompileOptions, OutputKind};
+
+    const SRC: &str = "int sum(int n, ...) {\n\
+         \t__builtin_va_list ap;\n\
+         \t__builtin_va_start(ap, n);\n\
+         \tint t = 0;\n\
+         \tfor (int i = 0; i < n; i++) t += __builtin_va_arg(ap, int);\n\
+         \t__builtin_va_end(ap);\n\
+         \treturn t;\n\
+         }\n";
+    let emit = |no_fp_regs: bool| -> Vec<u8> {
+        let prog = Compiler::with_options(
+            SRC.to_string(),
+            Target::LinuxAarch64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile variadic callee: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            no_fp_regs,
+            ..NativeOptions::default()
+        };
+        emit_native_with_options(&prog, Target::LinuxAarch64, opts)
+            .unwrap_or_else(|e| panic!("emit object (no_fp_regs={no_fp_regs}): {e}"))
+    };
+    // `str dN, [sp, #imm]` is 0xfd0000?? little-endian; count the eight
+    // save-area stores by their encodings.
+    let stores: Vec<[u8; 4]> = (0..8u32)
+        .map(|i| {
+            let imm12 = (64 + i * 16) / 8;
+            let insn: u32 = 0xfd00_0000 | (imm12 << 10) | (31 << 5) | i;
+            insn.to_le_bytes()
+        })
+        .collect();
+    let count = |obj: &[u8]| -> usize {
+        stores
+            .iter()
+            .filter(|s| obj.windows(4).any(|w| w == s.as_slice()))
+            .count()
+    };
+    assert_eq!(
+        count(&emit(false)),
+        8,
+        "default object lacks the vector save"
+    );
+    assert_eq!(
+        count(&emit(true)),
+        0,
+        "no_fp_regs object still contains the vector save stores"
+    );
+}

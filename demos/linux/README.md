@@ -168,10 +168,12 @@ compile context: a source also built into an isolated-link environment
 (the EFI stub's `lib-%.o`) is listed by the object it becomes there,
 leaving its other compiles to badc. The manifest gets one line per kernel
 unit: `badc`, `fallback`, or `fail` plus the source and first diagnostic.
-Unlike the sweep, the shim forwards `-mno-sse`: linked kernel objects
-must keep off the SSE registers (no CR4.OSFXSR at runtime, callers do
-not maintain the System V `al` convention), which badc's variadic
-prologue honors under that flag.
+Unlike the sweep, the shim forwards `-mno-sse` and
+`-mgeneral-regs-only`: a linked kernel object must keep off the
+floating-point / SIMD register file, which the kernel runs with trapped
+(no CR4.OSFXSR on x86_64, CPACR_EL1.FPEN on aarch64) and whose callers do
+not maintain the System V `al` convention. badc's variadic prologue
+honors both spellings.
 Environment: `BADC` (required), `BADC_REAL_CC` (default `gcc`),
 `BADC_TARGET` (default `linux-x64`), `BADC_TIMEOUT` (default 300s),
 `BADC_WEAKEN` (symbols demoted to STB_WEAK in each badc object; see the

@@ -1994,6 +1994,7 @@ pub(crate) fn lower(
                 &mut macho_tlv_fixups,
                 &mut macho_tlv_descriptors,
                 &name2entpc,
+                native.no_fp_regs,
             )
         };
         if !ok {

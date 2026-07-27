@@ -105,6 +105,34 @@ DB_FIXES = {
     # database ships the row without the multiplier.
     ("prfm #prf_op, [Xn|SP, #offZ]", "11111001|10|offZ:12|Rn|prf_op:5"):
         ("prfm #prf_op, [Xn|SP, #offZ*8]", None),
+    # Register-31 role: the shipped `|SP` marks disagree with the assembler on
+    # eleven rows. The flag-setting add/sub immediate and the flag-setting
+    # logical forms write the zero register, not SP; the logical
+    # shifted-register forms take a zero-register destination in every case
+    # (only the immediate forms reach SP); and irg writes SP as well as reads
+    # it.
+    ("adds Wd|WSP, Wn|WSP, #immZ, {lsl #n=0|12}", "00110001|0|n:1|immZ:12|Rn|Rd"):
+        ("adds Wd, Wn|WSP, #immZ, {lsl #n=0|12}", None),
+    ("adds Xd|SP, Xn|SP, #immZ, {lsl #n=0|12}", "10110001|0|n:1|immZ:12|Rn|Rd"):
+        ("adds Xd, Xn|SP, #immZ, {lsl #n=0|12}", None),
+    ("subs Wd|WSP, Wn|WSP, #immZ, {lsl #n=0|12}", "01110001|0|n:1|immZ:12|Rn|Rd"):
+        ("subs Wd, Wn|WSP, #immZ, {lsl #n=0|12}", None),
+    ("subs Xd|SP, Xn|SP, #immZ, {lsl #n=0|12}", "11110001|0|n:1|immZ:12|Rn|Rd"):
+        ("subs Xd, Xn|SP, #immZ, {lsl #n=0|12}", None),
+    ("and Wd|WSP, Wn, Wm, {sop #n}", "00001010|sop|0|Rm|n:6|Rn|Rd"):
+        ("and Wd, Wn, Wm, {sop #n}", None),
+    ("and Xd|SP, Xn, Xm, {sop #n}", "10001010|sop|0|Rm|n:6|Rn|Rd"):
+        ("and Xd, Xn, Xm, {sop #n}", None),
+    ("ands Wd|WSP, Wn, Wm, {sop #n}", "01101010|sop|0|Rm|n:6|Rn|Rd"):
+        ("ands Wd, Wn, Wm, {sop #n}", None),
+    ("ands Xd|SP, Xn, Xm, {sop #n}", "11101010|sop|0|Rm|n:6|Rn|Rd"):
+        ("ands Xd, Xn, Xm, {sop #n}", None),
+    ("ands Wd|WSP, Wn, #imm", "01110010|0|imm:13|Rn|Rd"):
+        ("ands Wd, Wn, #imm", None),
+    ("ands Xd|SP, Xn, #imm", "11110010|0|imm:13|Rn|Rd"):
+        ("ands Xd, Xn, #imm", None),
+    ("irg Xd, Xn|SP, Xm", "10011010|110|Rm|000100|Rn|Rd"):
+        ("irg Xd|SP, Xn|SP, Xm", None),
 }
 
 # The store-form atomic aliases (ST<op> = LD<op> with the result discarded)
@@ -132,16 +160,16 @@ EXCLUDED_ROWS = {
 EXTRA_FORMS = {
     ('bic', ('W', 'W', 'Imm')): (0x12000000, [
         'Reg { op: 0, shift: 0 }', 'Reg { op: 1, shift: 5 }',
-        'LogicalImmNot { op: 2, is64: false }'], 'bic Wd, Wn, #imm'),
+        'LogicalImmNot { op: 2, is64: false }'], 'bic Wd|WSP, Wn, #imm', 0x01),
     ('bic', ('X', 'X', 'Imm')): (0x92000000, [
         'Reg { op: 0, shift: 0 }', 'Reg { op: 1, shift: 5 }',
-        'LogicalImmNot { op: 2, is64: true }'], 'bic Xd, Xn, #imm'),
+        'LogicalImmNot { op: 2, is64: true }'], 'bic Xd|SP, Xn, #imm', 0x01),
     ('ldxp', ('W', 'W', 'Mem')): (0x887F0000, [
         'Reg { op: 0, shift: 0 }', 'Reg { op: 1, shift: 10 }',
-        'Reg { op: 2, shift: 5 }'], 'ldxp Wd, Wd2, [Xn|SP]'),
+        'Reg { op: 2, shift: 5 }'], 'ldxp Wd, Wd2, [Xn|SP]', 0x04),
     ('ldxp', ('X', 'X', 'Mem')): (0xC87F0000, [
         'Reg { op: 0, shift: 0 }', 'Reg { op: 1, shift: 10 }',
-        'Reg { op: 2, shift: 5 }'], 'ldxp Xd, Xd2, [Xn|SP]'),
+        'Reg { op: 2, shift: 5 }'], 'ldxp Xd, Xd2, [Xn|SP]', 0x04),
 }
 
 # Bare op-string tokens whose bit width is not written inline (widths verified
@@ -205,7 +233,10 @@ REG_FIELD = {'d': 'Rd', 'n': 'Rn', 'm': 'Rm', 'a': 'Ra', 's': 'Rs',
 
 def classify(heads, toks, op, im, scaled_wb=False):
     """Map one row's written operands onto the field model.
-    -> ('ok', ops, fields, base) or ('residual', reason)."""
+    -> ('ok', ops, fields, base, sp) or ('residual', reason). `sp` is the
+    bitmask of operand slots whose register field reads 31 as the stack
+    pointer (the row's `|SP` / `|WSP` marks); 31 is the zero register
+    everywhere else."""
     if 'mov' in heads:
         # mov's row set is an alias family whose member choice depends on the
         # operand values (wide/inverted/bitmask immediate, SP form); selecting
@@ -222,11 +253,11 @@ def classify(heads, toks, op, im, scaled_wb=False):
     # the raw immr/imms fields (unlike the ImmBFX/ImmBFIZ aliases, whose written
     # lsb/width are value-transformed and stay unexpressible).
     bfmm = re.match(r'ImmBFM\(', im or '')
-    i, rd_width = 0, None
+    i, rd_width, width, sp = 0, None, None, 0
     while i < len(toks):
         t = toks[i]
         t0 = t.split('|')[0]
-        if (m := re.fullmatch(r'([XW])(d2|s2|t2|[dnmast])', t0)):
+        if (m := re.fullmatch(r'([XW])(d2|s2|t2|[dnmast])(\|W?SP)?', t)):
             # A register operand feeds a named 5-bit field; its bit position is
             # read from the encoding, so any operand order is expressible.
             w, fname = m.group(1), REG_FIELD[m.group(2)]
@@ -236,12 +267,27 @@ def classify(heads, toks, op, im, scaled_wb=False):
             consumed.add(fname)
             ops.append(w)
             fields.append(f'Reg {{ op: {i}, shift: {fv[1]} }}')
+            if m.group(3):
+                sp |= 1 << i
             if m.group(2) == 'd':
                 rd_width = w
+            width = width or w
+            i += 1
+            continue
+        if t == 'Rm':
+            # The extended-register second source: its width follows the
+            # written extend (W for the byte/halfword/word extends, X for
+            # uxtx/sxtx), so the slot takes either.
+            fv = fl.get('Rm')
+            if fv is None or fv[0] != 5:
+                return ('residual', 'register field Rm not a 5-bit field')
+            consumed.add('Rm')
+            ops.append('RegAny')
+            fields.append(f'Reg {{ op: {i}, shift: {fv[1]} }}')
             i += 1
             continue
         if (mm := re.fullmatch(
-                r'\[Xn(?:\|SP)?(?:, #(\w+)(?:\*(\d+))?)?\]([!@]?)', t)):
+                r'\[Xn(\|SP)?(?:, #(\w+)(?:\*(\d+))?)?\]([!@]?)', t)):
             # A memory reference: the base feeds Rn, an optional immediate
             # offset feeds its named field. `#offS` is a two's-complement
             # offset, `#offZ` unsigned; a `*N` multiplier scales the written
@@ -250,11 +296,13 @@ def classify(heads, toks, op, im, scaled_wb=False):
             fv = fl.get('Rn')
             if fv is None or fv[0] != 5:
                 return ('residual', 'memory base field Rn not a 5-bit field')
-            mode = mm.group(3)
+            mode = mm.group(4)
             consumed.add('Rn')
             ops.append('MemPre' if mode == '!' else 'Mem')
             fields.append(f'Reg {{ op: {i}, shift: {fv[1]} }}')
-            offname = mm.group(1)
+            if mm.group(1):
+                sp |= 1 << i
+            offname = mm.group(2)
             if mode and offname is None:
                 return ('residual', 'writeback form without an offset field')
             if mode == '@' and i != len(toks) - 1:
@@ -264,7 +312,7 @@ def classify(heads, toks, op, im, scaled_wb=False):
                 if ov is None:
                     return ('residual', f'memory offset #{offname} has no field')
                 consumed.add(offname)
-                scale = int(mm.group(2) or 1)
+                scale = int(mm.group(3) or 1)
                 if mode and not scaled_wb:
                     # The one-row-per-mode pre/post loads write the offset
                     # with the access-size multiplier, but the imm9 field
@@ -287,8 +335,8 @@ def classify(heads, toks, op, im, scaled_wb=False):
                 i += 1
             i += 1
             continue
-        if re.fullmatch(r'\[Xn(?:\|SP)?, Rm, '
-                        r'\{uxtw\|lsl\|sxtw\|sxtx #n(?:\*\d+)?\}\]', t):
+        if (mr := re.fullmatch(r'\[Xn(\|SP)?, Rm, '
+                               r'\{uxtw\|lsl\|sxtw\|sxtx #n(?:\*\d+)?\}\]', t)):
             # A register-offset memory reference: Rm/option/S at the class
             # positions; the S bit's valid shift amount is the access-size
             # log2, which this encoding class carries in bits 31:30.
@@ -300,6 +348,8 @@ def classify(heads, toks, op, im, scaled_wb=False):
             ops.append('MemReg')
             fields.append(f'Reg {{ op: {i}, shift: 5 }}')
             fields.append(f'MemRegIdx {{ op: {i}, sl2: {(base >> 30) & 3} }}')
+            if mr.group(1):
+                sp |= 1 << i
             i += 1
             continue
         if t0 == '#sysreg':
@@ -368,6 +418,31 @@ def classify(heads, toks, op, im, scaled_wb=False):
             i += 1
             continue
         if t.startswith('{'):
+            # The register-operand shift and extend groups are optional written
+            # operands: `sop`/`n` for the shifted-register forms, `option`/`n`
+            # for the extended-register ones. An absent shift is LSL #0 (the
+            # zero encoding); an absent extend is UXTX/UXTW #0, which is not.
+            if t == '{sop #n}' or t.startswith('{lsl|lsr|asr'):
+                if fl.get('sop') != (2, 22) or fl.get('n') != (6, 10):
+                    return ('residual', 'shift group fields not sop2@22 + n6@10')
+                consumed.update(('sop', 'n'))
+                ops.append('OptShift')
+                ror = 'true' if t == '{sop #n}' else 'false'
+                is64 = 'true' if width == 'X' else 'false'
+                fields.append(f'Shift {{ op: {i}, is64: {is64}, ror: {ror} }}')
+                i += 1
+                continue
+            if t == '{extend #n}':
+                if fl.get('option') != (3, 13) or fl.get('n') != (3, 10):
+                    return ('residual', 'extend group fields not option3@13 + n3@10')
+                if i == 0 or ops[i - 1] not in ('W', 'RegAny'):
+                    return ('residual', 'extend group does not follow its register')
+                consumed.update(('option', 'n'))
+                ops.append('OptExt')
+                is64 = 'true' if width == 'X' else 'false'
+                fields.append(f'Extend {{ op: {i}, rm: {i - 1}, is64: {is64} }}')
+                i += 1
+                continue
             # Optional shift groups whose absent form is all-zero field bits
             # are dropped; extend/index groups are not (their default is not
             # the zero encoding).
@@ -379,7 +454,7 @@ def classify(heads, toks, op, im, scaled_wb=False):
     left = set(fl) - consumed - {'n', 'sop'}
     if left:
         return ('residual', 'unmapped fields: ' + ','.join(sorted(left)))
-    return ('ok', ops, fields, base)
+    return ('ok', ops, fields, base, sp)
 
 
 def expand_wb(inst, op):
@@ -411,7 +486,7 @@ def load_rows(db):
 
 
 def catalogue(rows, residuals=None):
-    """Classify every row; -> {(mnemonic, ops-tuple): (base, fields, inst)}."""
+    """Classify every row; -> {(mnemonic, ops-tuple): (base, fields, inst, sp)}."""
     forms = {}
     for inst, op, im, scaled_wb in rows:
         headpart, _, rest = inst.partition(' ')
@@ -424,11 +499,11 @@ def catalogue(rows, residuals=None):
                                for t in toks) or '(no operands)'
                 residuals[(sig, r[1])].append(inst)
             continue
-        _, ops, fields, base = r
+        _, ops, fields, base, sp = r
         for head in heads:
             # A row names every alias spelling (`asr|asrv`); each gets a form.
             # Keep the first row per (mnemonic, operand pattern).
-            forms.setdefault((head, tuple(ops)), (base, fields, inst))
+            forms.setdefault((head, tuple(ops)), (base, fields, inst, sp))
     return forms
 
 
@@ -461,10 +536,11 @@ def main():
         '#[rustfmt::skip]',
         'pub(crate) static FORMS: &[Form] = &[',
     ]
-    for (mnem, ops), (base, fields, src) in out:
+    for (mnem, ops), (base, fields, src, sp) in out:
         lines.append(
             f'    Form {{ mnemonic: "{mnem}", ops: &[{", ".join(ops)}], '
-            f'base: 0x{base:08X}, fields: &[{", ".join(fields)}] }},  // {src}')
+            f'base: 0x{base:08X}, sp: 0x{sp:02X}, '
+            f'fields: &[{", ".join(fields)}] }},  // {src}')
     lines.append('];')
     lines.append('')
     open(a.out, 'w').write('\n'.join(lines))

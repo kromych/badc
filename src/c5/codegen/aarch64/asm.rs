@@ -31,9 +31,16 @@ pub(crate) enum AsmOpndA64 {
     /// immediate syntax. Valid on an `i`-class operand; the emitter
     /// resolves the compile-time constant value.
     RefConst(u8),
-    /// An explicit register: `x5` / `w5` / `sp` / `xzr` (`num == 31` is the
-    /// zero register or SP, per the instruction).
-    Reg { num: u8, is64: bool },
+    /// An explicit register: `x5` / `w5` / `sp` / `xzr`. `num == 31` is the
+    /// zero register or SP per the instruction, so `sp` records which spelling
+    /// was written; the encoder picks the form that reads it that way.
+    Reg { num: u8, is64: bool, sp: bool },
+    /// A shifted-register `<lsr|asr|ror> #amount` modifier (`kind` 1..3; `lsl`
+    /// stays [`AsmOpndA64::Lsl`], which the extended forms also take).
+    Shift { kind: u8, amount: u8 },
+    /// An extended-register `<extend> {#amount}` modifier; `option` is the
+    /// 3-bit extend selector.
+    Extend { option: u8, amount: u8 },
     /// A SIMD/FP register: `d5` (64-bit) or `s5` (32-bit). `is_d` selects the
     /// double vs single view; the register file is separate from the GP one.
     VReg { num: u8, is_d: bool },
@@ -455,10 +462,13 @@ pub(crate) fn cond_code(name: &str) -> Option<u8> {
     })
 }
 
-fn parse_reg(tok: &str) -> Option<(u8, bool)> {
+/// A general register token: `(number, is64, written as sp)`.
+fn parse_reg(tok: &str) -> Option<(u8, bool, bool)> {
     match tok {
-        "sp" | "xzr" => return Some((31, true)),
-        "wsp" | "wzr" => return Some((31, false)),
+        "sp" => return Some((31, true, true)),
+        "xzr" => return Some((31, true, false)),
+        "wsp" => return Some((31, false, true)),
+        "wzr" => return Some((31, false, false)),
         _ => {}
     }
     let (is64, rest) = match tok.as_bytes().first()? {
@@ -467,7 +477,22 @@ fn parse_reg(tok: &str) -> Option<(u8, bool)> {
         _ => return None,
     };
     let n: u8 = rest.parse().ok()?;
-    (n <= 30).then_some((n, is64))
+    (n <= 30).then_some((n, is64, false))
+}
+
+/// The 3-bit extend selector of an `<extend> {#amount}` operand group.
+fn extend_option(kw: &str) -> Option<u8> {
+    Some(match kw {
+        "uxtb" => 0,
+        "uxth" => 1,
+        "uxtw" => 2,
+        "uxtx" => 3,
+        "sxtb" => 4,
+        "sxth" => 5,
+        "sxtw" => 6,
+        "sxtx" => 7,
+        _ => return None,
+    })
 }
 
 /// A SIMD/FP register: `d0`..`d31` (returns `is_d = true`) or `s0`..`s31`
@@ -505,7 +530,7 @@ fn parse_vscalar(tok: &str) -> Option<(u8, u8)> {
 /// (`b`/`h`/`s`/`d`/`q`/`vN`) map to the FP file. Returns None for a name that
 /// is not a register (e.g. `cc`).
 pub(crate) fn clobber_reg_name(name: &str) -> Option<(bool, u8)> {
-    if let Some((num, _)) = parse_reg(name) {
+    if let Some((num, ..)) = parse_reg(name) {
         return Some((false, num));
     }
     if let Some((num, _)) = parse_vreg(name) {
@@ -743,7 +768,11 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
             ));
         }
         let (index, idx_is64) = match parse_operand(parts[1])? {
-            AsmOpndA64::Reg { num, is64 } => (MemBase::Reg(num), is64),
+            // The index field reads 31 as the zero register, never as SP.
+            AsmOpndA64::Reg { sp: true, .. } => {
+                return Err(format!("inline asm: sp is not an index register `[{inner}]`"));
+            }
+            AsmOpndA64::Reg { num, is64, .. } => (MemBase::Reg(num), is64),
             AsmOpndA64::Ref { idx, is64 } => (MemBase::Ref(idx), is64.unwrap_or(true)),
             _ => return Err(format!("inline asm: bad index register `{}`", parts[1])),
         };
@@ -892,7 +921,9 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
         return Ok(AsmOpndA64::Ref { idx, is64 });
     }
-    // `lsl #n` shift modifier (the only shift kind the move-wide forms take).
+    // `lsl #n` shift modifier: the move-wide `hw` amount, the shifted-register
+    // LSL kind, and the extended-register identity extend all spell it this
+    // way, so it keeps its own operand kind.
     if let Some(rest) = tok.strip_prefix("lsl") {
         let amt = rest
             .trim()
@@ -900,6 +931,37 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             .and_then(parse_int)
             .ok_or_else(|| format!("inline asm: bad shift `{tok}`"))?;
         return Ok(AsmOpndA64::Lsl(amt as u32));
+    }
+    // The remaining shifted-register kinds `<lsr|asr|ror> #n`.
+    if let Some(kind) = match tok.get(..3) {
+        Some("lsr") => Some(1u8),
+        Some("asr") => Some(2),
+        Some("ror") => Some(3),
+        _ => None,
+    } {
+        let amt = tok[3..]
+            .trim()
+            .strip_prefix('#')
+            .and_then(parse_int)
+            .filter(|v| (0..64).contains(v))
+            .ok_or_else(|| format!("inline asm: bad shift `{tok}`"))?;
+        return Ok(AsmOpndA64::Shift {
+            kind,
+            amount: amt as u8,
+        });
+    }
+    // An extended-register `<extend> {#n}` group; the amount defaults to 0.
+    if let Some(option) = tok.get(..4).and_then(extend_option) {
+        let rest = tok[4..].trim();
+        let amount = if rest.is_empty() {
+            0
+        } else {
+            rest.strip_prefix('#')
+                .and_then(parse_int)
+                .filter(|v| (0..=4).contains(v))
+                .ok_or_else(|| format!("inline asm: bad extend amount `{tok}`"))? as u8
+        };
+        return Ok(AsmOpndA64::Extend { option, amount });
     }
     if let Some((num, size, index)) = parse_vec_list_lane(tok) {
         return Ok(AsmOpndA64::VecElem { num, size, index });
@@ -927,8 +989,8 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     if let Some((num, size)) = parse_vscalar(tok) {
         return Ok(AsmOpndA64::VScalar { num, size });
     }
-    if let Some((num, is64)) = parse_reg(tok) {
-        return Ok(AsmOpndA64::Reg { num, is64 });
+    if let Some((num, is64, sp)) = parse_reg(tok) {
+        return Ok(AsmOpndA64::Reg { num, is64, sp });
     }
     // A system-register name (for mrs / msr).
     if let Some(field) = sysreg_field(tok) {
@@ -1071,16 +1133,15 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             Some(p) => (&piece[..p], piece[p..].trim()),
             None => (piece, ""),
         };
-        // `mov Rd, sp` / `mov sp, Rn` is `add Rd, Rn, #0` -- distinct from the
-        // register move `mov Rd, Rm` (`orr Rd, xzr, Rm`), and only the raw
-        // token tells `sp` from `xzr` (both parse to register 31). Rewrite the
+        // `mov Rd, sp` / `mov sp, Rn` is `add Rd, Rn, #0`, distinct from the
+        // register move `mov Rd, Rm` (`orr Rd, xzr, Rm`). Rewrite the
         // stack-pointer forms here; a plain register / immediate `mov` stays and
         // is encoded by the alias arm in `super::table::encode`.
         if mnem == "mov" {
             let toks: Vec<&str> = split_operands(rest);
-            if toks.len() == 2
-                && (toks[0] == "sp" || toks[0] == "wsp" || toks[1] == "sp" || toks[1] == "wsp")
-            {
+            let written_sp =
+                |t: &str| matches!(parse_operand(t), Ok(AsmOpndA64::Reg { sp: true, .. }));
+            if toks.len() == 2 && (written_sp(toks[0]) || written_sp(toks[1])) {
                 let dst = parse_operand(toks[0])?;
                 let src = parse_operand(toks[1])?;
                 insns.push(AsmInsnA64 {

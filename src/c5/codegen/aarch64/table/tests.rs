@@ -9,13 +9,11 @@
 use super::*;
 
 fn x(n: u8) -> Opnd {
-    Opnd::Reg { num: n, is64: true }
+    Opnd::Reg { num: n, is64: true, .. }
 }
 fn w(n: u8) -> Opnd {
-    Opnd::Reg {
-        num: n,
-        is64: false,
-    }
+    Opnd::Reg { num: n,
+        is64: false,, .. }
 }
 fn m(base: u8) -> Opnd {
     Opnd::Mem {
@@ -903,7 +901,7 @@ fn simd_ld_st_single_lane() {
 #[test]
 fn poly_multiply() {
     let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
-    let x = |n: u8| Opnd::Reg { num: n, is64: true };
+    let x = |n: u8| Opnd::Reg { num: n, is64: true, .. };
     // Byte form widens .8b/.16b to .8h; pmull2 reads the upper 64-bit halves.
     assert_eq!(
         enc("pmull", &[v(0, 1, true), v(1, 0, false), v(2, 0, false)]),
@@ -1515,7 +1513,7 @@ mod differential {
     }
 
     fn xn(n: u8) -> Opnd {
-        Opnd::Reg { num: n, is64: true }
+        Opnd::Reg { num: n, is64: true, .. }
     }
 
     fn cond_name(c: u8) -> &'static str {
@@ -1662,7 +1660,7 @@ mod differential {
                                 if is64 { 'x' } else { 'w' },
                                 regs[i]
                             ));
-                            ops.push(Opnd::Reg { num: regs[i], is64 });
+                            ops.push(Opnd::Reg { num: regs[i], is64, .. });
                         }
                         A64Op::Mem => match mem_off(f, i) {
                             Some(off) => {

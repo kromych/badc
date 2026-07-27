@@ -122,101 +122,14 @@ pub(crate) enum MemBase {
 /// `s<op0>_<op1>_c<CRn>_c<CRm>_<op2>` spelling that names any register.
 /// `field = op0<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2` (op0 is the full two
 /// bits; the generic spelling reaches op0 0/1, named registers use 2/3).
-fn sysreg_field(name: &str) -> Option<u16> {
-    fn pack(op0: u16, op1: u16, crn: u16, crm: u16, op2: u16) -> u16 {
-        (op0 << 14) | (op1 << 11) | (crn << 7) | (crm << 3) | op2
-    }
+pub(super) fn sysreg_field(name: &str) -> Option<u16> {
     // Register names are case-insensitive in the architecture; normalize before
     // matching either the named table or the generic spelling.
-    let name = name.to_ascii_lowercase();
-    let name = name.as_str();
-    // Common registers by name; extend as needed.
-    let named = |n: &str| -> Option<(u16, u16, u16, u16, u16)> {
-        Some(match n {
-            "midr_el1" => (3, 0, 0, 0, 0),
-            "mpidr_el1" => (3, 0, 0, 0, 5),
-            "clidr_el1" => (3, 1, 0, 0, 1),
-            "id_aa64isar0_el1" => (3, 0, 0, 6, 0),
-            "id_aa64mmfr1_el1" => (3, 0, 0, 7, 1),
-            "mdscr_el1" => (2, 0, 0, 2, 2),
-            "osdlr_el1" => (2, 0, 1, 3, 4),
-            "oslar_el1" => (2, 0, 1, 0, 4),
-            "id_aa64dfr0_el1" => (3, 0, 0, 5, 0),
-            "pmccntr_el0" => (3, 3, 9, 13, 0),
-            "pmccfiltr_el0" => (3, 3, 14, 15, 7),
-            "pmceid0_el0" => (3, 3, 9, 12, 6),
-            "pmceid1_el0" => (3, 3, 9, 12, 7),
-            "pmcntenclr_el0" => (3, 3, 9, 12, 2),
-            "pmcntenset_el0" => (3, 3, 9, 12, 1),
-            "pmcr_el0" => (3, 3, 9, 12, 0),
-            "pmintenclr_el1" => (3, 0, 9, 14, 2),
-            "pmintenset_el1" => (3, 0, 9, 14, 1),
-            "pmovsclr_el0" => (3, 3, 9, 12, 3),
-            "pmselr_el0" => (3, 3, 9, 12, 5),
-            "pmuserenr_el0" => (3, 3, 9, 14, 0),
-            "ctr_el0" => (3, 3, 0, 0, 1),
-            "dczid_el0" => (3, 3, 0, 0, 7),
-            "fpcr" => (3, 3, 4, 4, 0),
-            "fpsr" => (3, 3, 4, 4, 1),
-            "tcr_el1" => (3, 0, 2, 0, 2),
-            "ttbr0_el1" => (3, 0, 2, 0, 0),
-            "ttbr1_el1" => (3, 0, 2, 0, 1),
-            "mair_el1" => (3, 0, 10, 2, 0),
-            "par_el1" => (3, 0, 7, 4, 0),
-            "tpidr_el0" => (3, 3, 13, 0, 2),
-            "tpidrro_el0" => (3, 3, 13, 0, 3),
-            "tpidr_el1" => (3, 0, 13, 0, 4),
-            "sctlr_el1" => (3, 0, 1, 0, 0),
-            "vbar_el1" => (3, 0, 12, 0, 0),
-            "daif" => (3, 3, 4, 2, 1),
-            "nzcv" => (3, 3, 4, 2, 0),
-            "cntfrq_el0" => (3, 3, 14, 0, 0),
-            "cntpct_el0" => (3, 3, 14, 0, 1),
-            "cntvct_el0" => (3, 3, 14, 0, 2),
-            // Physical / virtual generic-timer control, timer-value, and
-            // compare-value registers.
-            "cntp_ctl_el0" => (3, 3, 14, 2, 1),
-            "cntp_tval_el0" => (3, 3, 14, 2, 0),
-            "cntp_cval_el0" => (3, 3, 14, 2, 2),
-            "cntv_ctl_el0" => (3, 3, 14, 3, 1),
-            "cntv_tval_el0" => (3, 3, 14, 3, 0),
-            "cntv_cval_el0" => (3, 3, 14, 3, 2),
-            "cntkctl_el1" => (3, 0, 14, 1, 0),
-            "esr_el1" => (3, 0, 5, 2, 0),
-            "far_el1" => (3, 0, 6, 0, 0),
-            "elr_el1" => (3, 0, 4, 0, 1),
-            "spsr_el1" => (3, 0, 4, 0, 0),
-            "currentel" => (3, 0, 4, 2, 2),
-            // Stack pointer, exception-link, saved-PSTATE, vector-base and
-            // thread-id registers at EL0/EL2/EL3 (the EL1 forms are above).
-            "sp_el0" => (3, 0, 4, 1, 0),
-            "sp_el1" => (3, 4, 4, 1, 0),
-            "sp_el2" => (3, 6, 4, 1, 0),
-            "elr_el2" => (3, 4, 4, 0, 1),
-            "elr_el3" => (3, 6, 4, 0, 1),
-            "spsr_el2" => (3, 4, 4, 0, 0),
-            "spsr_el3" => (3, 6, 4, 0, 0),
-            "vbar_el2" => (3, 4, 12, 0, 0),
-            "vbar_el3" => (3, 6, 12, 0, 0),
-            "tpidr_el2" => (3, 4, 13, 0, 2),
-            // EL1/EL2 control and translation registers (the EL1
-            // sctlr/tcr/ttbr0/mair/esr/far forms are above).
-            "cpacr_el1" => (3, 0, 1, 0, 2),
-            "sctlr_el2" => (3, 4, 1, 0, 0),
-            "hcr_el2" => (3, 4, 1, 1, 0),
-            "cptr_el2" => (3, 4, 1, 1, 2),
-            "tcr_el2" => (3, 4, 2, 0, 2),
-            "ttbr0_el2" => (3, 4, 2, 0, 0),
-            "mair_el2" => (3, 4, 10, 2, 0),
-            "esr_el2" => (3, 4, 5, 2, 0),
-            "far_el2" => (3, 4, 6, 0, 0),
-            _ => return None,
-        })
-    };
-    if let Some((op0, op1, crn, crm, op2)) = named(name).or_else(|| sysreg_family(name)) {
-        return Some(pack(op0, op1, crn, crm, op2));
+    let lower = name.to_ascii_lowercase();
+    let name = lower.as_str();
+    if let Ok(i) = super::sysreg_a64_table::SYSREGS.binary_search_by_key(&name, |&(n, _)| n) {
+        return Some(super::sysreg_a64_table::SYSREGS[i].1);
     }
-    // Generic `sN_N_cN_cN_N` spelling.
     let p: Vec<&str> = name.split('_').collect();
     if p.len() == 5
         && let Some(op0) = p[0].strip_prefix('s').and_then(|s| s.parse::<u16>().ok())
@@ -230,43 +143,7 @@ fn sysreg_field(name: &str) -> Option<u16> {
         && crm <= 15
         && op2 <= 7
     {
-        return Some(pack(op0, op1, crn, crm, op2));
-    }
-    None
-}
-
-/// System registers named with a numeric index (`dbgbvr<N>_el1`,
-/// `pmevcntr<N>_el0`, ...), returning the (op0, op1, CRn, CRm, op2) selector.
-/// The index maps into CRm for the debug families and splits across CRm/op2 for
-/// the performance-monitor counters; kept parametric to avoid a row per index.
-fn sysreg_family(name: &str) -> Option<(u16, u16, u16, u16, u16)> {
-    // Debug breakpoint/watchpoint value/control registers, index 0..=15 in CRm.
-    for (prefix, op2) in [
-        ("dbgbvr", 4u16),
-        ("dbgbcr", 5),
-        ("dbgwvr", 6),
-        ("dbgwcr", 7),
-    ] {
-        if let Some(n) = name
-            .strip_prefix(prefix)
-            .and_then(|r| r.strip_suffix("_el1"))
-            .and_then(|d| d.parse::<u16>().ok())
-            && n <= 15
-        {
-            return Some((2, 0, 0, n, op2));
-        }
-    }
-    // Performance-monitor event counter / type registers, index 0..=30 split as
-    // CRm = base + (N >> 3), op2 = N & 7.
-    for (prefix, crm_base) in [("pmevcntr", 8u16), ("pmevtyper", 12)] {
-        if let Some(n) = name
-            .strip_prefix(prefix)
-            .and_then(|r| r.strip_suffix("_el0"))
-            .and_then(|d| d.parse::<u16>().ok())
-            && n <= 30
-        {
-            return Some((3, 3, 14, crm_base + (n >> 3), n & 7));
-        }
+        return Some((op0 << 14) | (op1 << 11) | (crn << 7) | (crm << 3) | op2);
     }
     None
 }
@@ -290,68 +167,34 @@ fn pstate_field(name: &str) -> Option<(u16, u16)> {
     })
 }
 
-/// The base word of a `dc` / `ic` / `tlbi` system operation
+/// The base word of a `dc` / `ic` / `at` / `tlbi` system operation
 /// (`0xD5080000 | op1<<16 | CRn<<12 | CRm<<8 | op2<<5`, no Rt), or None if the
-/// mnemonic/op pair is not a known one. The (op1, CRn, CRm, op2) selectors are
-/// the reference-assembler encodings.
-fn sysop_base(mnem: &str, op: &str) -> Option<u32> {
-    let (op1, crn, crm, op2): (u32, u32, u32, u32) = match (mnem, op.to_ascii_lowercase().as_str())
-    {
-        ("dc", "ivac") => (0, 7, 6, 1),
-        ("dc", "isw") => (0, 7, 6, 2),
-        ("dc", "csw") => (0, 7, 10, 2),
-        ("dc", "cisw") => (0, 7, 14, 2),
-        ("dc", "zva") => (3, 7, 4, 1),
-        ("dc", "cvac") => (3, 7, 10, 1),
-        ("dc", "cvau") => (3, 7, 11, 1),
-        ("dc", "cvap") => (3, 7, 12, 1),
-        ("dc", "civac") => (3, 7, 14, 1),
-        ("ic", "ialluis") => (0, 7, 1, 0),
-        ("ic", "iallu") => (0, 7, 5, 0),
-        ("ic", "ivau") => (3, 7, 5, 1),
-        ("tlbi", "vmalle1is") => (0, 8, 3, 0),
-        ("tlbi", "vae1is") => (0, 8, 3, 1),
-        ("tlbi", "aside1is") => (0, 8, 3, 2),
-        ("tlbi", "vaae1is") => (0, 8, 3, 3),
-        ("tlbi", "vale1is") => (0, 8, 3, 5),
-        ("tlbi", "vaale1is") => (0, 8, 3, 7),
-        ("tlbi", "vmalle1") => (0, 8, 7, 0),
-        ("tlbi", "vae1") => (0, 8, 7, 1),
-        ("tlbi", "aside1") => (0, 8, 7, 2),
-        ("tlbi", "vaae1") => (0, 8, 7, 3),
-        ("tlbi", "vale1") => (0, 8, 7, 5),
-        ("tlbi", "vaale1") => (0, 8, 7, 7),
-        ("tlbi", "alle1") => (4, 8, 7, 4),
-        ("tlbi", "alle1is") => (4, 8, 3, 4),
-        ("tlbi", "alle2") => (4, 8, 7, 0),
-        ("tlbi", "alle3") => (6, 8, 7, 0),
-        ("tlbi", "vae2") => (4, 8, 7, 1),
-        ("tlbi", "vae3") => (6, 8, 7, 1),
-        ("tlbi", "ipas2e1is") => (4, 8, 0, 1),
-        ("tlbi", "vmalls12e1is") => (4, 8, 3, 6),
+/// mnemonic/op pair is not a known one.
+pub(super) fn sysop_base(mnem: &str, op: &str) -> Option<u32> {
+    use super::sysreg_a64_table::{AT_OPS, DC_OPS, IC_OPS, TLBI_OPS};
+    let table = match mnem {
+        "dc" => DC_OPS,
+        "ic" => IC_OPS,
+        "at" => AT_OPS,
+        "tlbi" => TLBI_OPS,
         _ => return None,
     };
-    Some(0xD508_0000 | (op1 << 16) | (crn << 12) | (crm << 8) | (op2 << 5))
+    let lower = op.to_ascii_lowercase();
+    let i = table
+        .binary_search_by_key(&lower.as_str(), |&(n, _)| n)
+        .ok()?;
+    let sel = u32::from(table[i].1);
+    Some(sysop_word(
+        sel >> 11,
+        (sel >> 7) & 15,
+        (sel >> 3) & 15,
+        sel & 7,
+    ))
 }
 
-/// The (op1, op2) selector of an `at` address-translation operation, or None.
-/// CRn/CRm are fixed at 7/8; the base word is built as for a `sys` instruction.
-fn at_op(name: &str) -> Option<(u32, u32)> {
-    Some(match name.to_ascii_lowercase().as_str() {
-        "s1e1r" => (0, 0),
-        "s1e1w" => (0, 1),
-        "s1e0r" => (0, 2),
-        "s1e0w" => (0, 3),
-        "s1e2r" => (4, 0),
-        "s1e2w" => (4, 1),
-        "s12e1r" => (4, 4),
-        "s12e1w" => (4, 5),
-        "s12e0r" => (4, 6),
-        "s12e0w" => (4, 7),
-        "s1e3r" => (6, 0),
-        "s1e3w" => (6, 1),
-        _ => return None,
-    })
+/// The `sys` base word for an (op1, CRn, CRm, op2) selector, Rt left zero.
+fn sysop_word(op1: u32, crn: u32, crm: u32, op2: u32) -> u32 {
+    0xD508_0000 | (op1 << 16) | (crn << 12) | (crm << 8) | (op2 << 5)
 }
 
 /// The base word of a `sys #op1, cN, cM, #op2` operand list (`op1`, `crn`,
@@ -370,7 +213,7 @@ fn sys_op_base(op1: &str, crn: &str, crm: &str, op2: &str) -> Option<u32> {
             .filter(|v| *v <= 15)
     };
     let (op1, crn, crm, op2) = (imm(op1)?, cn(crn)?, cn(crm)?, imm(op2)?);
-    Some(0xD508_0000 | (op1 << 16) | (crn << 12) | (crm << 8) | (op2 << 5))
+    Some(sysop_word(op1, crn, crm, op2))
 }
 
 /// The 4-bit CRm value of a `dmb` / `dsb` barrier option, or None if the
@@ -709,18 +552,27 @@ fn parse_vec_list(tok: &str) -> Option<(u8, u8, u8, bool)> {
     Some((first, regs.len() as u8, size, q))
 }
 
+/// An assembler integer operand: a literal or a GNU as constant expression
+/// (`(1 << 16)`, `4 * 0`). Operand references do not appear here, so the
+/// expression resolver yields None for them.
 fn parse_int(s: &str) -> Option<i64> {
     let s = s.trim();
-    let (neg, s) = match s.strip_prefix('-') {
-        Some(r) => (true, r),
+    let (neg, digits) = match s.strip_prefix('-') {
+        Some(r) => (true, r.trim_start()),
         None => (false, s),
     };
-    let v = if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        i64::from_str_radix(h, 16).ok()?
+    let v = if let Some(h) = digits
+        .strip_prefix("0x")
+        .or_else(|| digits.strip_prefix("0X"))
+    {
+        i64::from_str_radix(h, 16).ok()
     } else {
-        s.parse::<i64>().ok()?
+        digits.parse::<i64>().ok()
     };
-    Some(if neg { -v } else { v })
+    match v {
+        Some(v) => Some(if neg { -v } else { v }),
+        None => super::super::ssa::emit_common::eval_const_expr_ops(s, &|_| None),
+    }
 }
 
 /// Split an operand list on commas, but not commas inside `[...]` (a memory
@@ -839,6 +691,13 @@ fn parse_extend(spec: &str, idx_is64: bool) -> Result<(u8, Option<u8>), String> 
     Ok((option, shift))
 }
 
+/// The amount of a shift / extend modifier. GAS makes the `#` optional here as
+/// it does on an immediate operand, so `lsl 12` and `lsl #12` are one form.
+fn shift_amount(rest: &str) -> Option<i64> {
+    let rest = rest.trim();
+    parse_int(rest.strip_prefix('#').unwrap_or(rest))
+}
+
 /// Parse one operand token (already trimmed).
 fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     // `[...]` is an offset reference; `[...]!` a pre-index writeback.
@@ -927,11 +786,7 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     // LSL kind, and the extended-register identity extend all spell it this
     // way, so it keeps its own operand kind.
     if let Some(rest) = tok.strip_prefix("lsl") {
-        let amt = rest
-            .trim()
-            .strip_prefix('#')
-            .and_then(parse_int)
-            .ok_or_else(|| format!("inline asm: bad shift `{tok}`"))?;
+        let amt = shift_amount(rest).ok_or_else(|| format!("inline asm: bad shift `{tok}`"))?;
         return Ok(AsmOpndA64::Lsl(amt as u32));
     }
     // The remaining shifted-register kinds `<lsr|asr|ror> #n`.
@@ -941,10 +796,7 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
         Some("ror") => Some(3),
         _ => None,
     } {
-        let amt = tok[3..]
-            .trim()
-            .strip_prefix('#')
-            .and_then(parse_int)
+        let amt = shift_amount(&tok[3..])
             .filter(|v| (0..64).contains(v))
             .ok_or_else(|| format!("inline asm: bad shift `{tok}`"))?;
         return Ok(AsmOpndA64::Shift {
@@ -958,8 +810,7 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
         let amount = if rest.is_empty() {
             0
         } else {
-            rest.strip_prefix('#')
-                .and_then(parse_int)
+            shift_amount(rest)
                 .filter(|v| (0..=4).contains(v))
                 .ok_or_else(|| format!("inline asm: bad extend amount `{tok}`"))? as u8
         };
@@ -1192,12 +1043,12 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         // field, so it falls through to the operand parse.
         if mnem == "msr" {
             let toks = split_operands(rest);
+            // A name that is both a PSTATE field and a system register (SPSel,
+            // PAN, ...) takes this path only for the immediate form.
             if toks.len() == 2
                 && let Some((op1, op2)) = pstate_field(toks[0])
+                && let Ok(AsmOpndA64::Imm(v)) = parse_operand(toks[1])
             {
-                let AsmOpndA64::Imm(v) = parse_operand(toks[1])? else {
-                    return Err(format!("inline asm: `msr {}` needs a #imm4", toks[0]));
-                };
                 if !(0..=15).contains(&v) {
                     return Err(format!(
                         "inline asm: `msr {}` immediate out of range",
@@ -1280,18 +1131,16 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             });
             continue;
         }
-        // `at <op>, Xt` translates an address; the op selects (op1, op2) with
-        // CRn/CRm fixed at 7/8, and Xt holds the input address. Encoded as a
-        // `sys` instruction, sharing the dc/ic/tlbi encode path.
+        // `at <op>, Xt` translates an address; Xt holds the input address.
+        // Encoded as a `sys` instruction, sharing the dc/ic/tlbi encode path.
         if mnem == "at" {
             let toks = split_operands(rest);
             if toks.len() != 2 {
                 return Err(String::from("inline asm: `at` takes an op and a register"));
             }
-            let Some((op1, op2)) = at_op(toks[0]) else {
+            let Some(base) = sysop_base(mnem, toks[0]) else {
                 return Err(format!("inline asm: unknown `at` op `{}`", toks[0]));
             };
-            let base = 0xD508_0000 | (op1 << 16) | (7 << 12) | (8 << 8) | (op2 << 5);
             insns.push(AsmInsnA64 {
                 mnemonic: String::from("at"),
                 operands: alloc::vec![AsmOpndA64::SysOp(base), parse_operand(toks[1])?],
@@ -1431,9 +1280,13 @@ pub(crate) fn assign_operand_regs(
     // value out); the front end rejects two outputs on one register.
     for (i, op) in operands.iter().enumerate() {
         if let C::Fixed(r) = op.constraint {
-            if (r as usize) >= 16 {
+            // The allocatable pool is x0..x15, but a register-asm variable
+            // names its own register: any general register is admissible
+            // except the emitter's own scratch pair, which the operand
+            // capture and write-back use.
+            if r > 30 || matches!(r, 16 | 17) {
                 return Err(String::from(
-                    "inline asm: fixed operand register outside x0..x15",
+                    "inline asm: fixed operand register is not a general register",
                 ));
             }
             used[r as usize] = true;
@@ -2201,6 +2054,77 @@ mod tests {
         // The generic S-form reaches op0 0/1 (mrs x0, s0_3_c1_c0_1 -> 0xD5231020).
         assert_eq!(sysreg_field("s0_3_c1_c0_1"), Some(0x1881));
         assert_eq!(sysreg_field("S0_3_C1_C0_1"), Some(0x1881));
+    }
+
+    #[test]
+    fn sysreg_and_sysop_tables_cover_the_architecture() {
+        // Rows the generated tables add over the earlier hand-written set,
+        // each verified byte-identical to the reference assembler
+        // (`mrs x0, NAME` = 0xD5200000 | field<<5, and a `sys` alias word =
+        // 0xD5080000 | op1<<16 | CRn<<12 | CRm<<8 | op2<<5).
+        for (name, field) in [
+            ("id_aa64mmfr0_el1", 0xC038u16), // mrs x0 -> 0xD5380700
+            ("spsel", 0xC210),               // mrs x1 -> 0xD5384201
+            ("mdccint_el1", 0x8010),         // mrs x2 -> 0xD5300202
+            ("cntvoff_el2", 0xE703),         // msr    <- 0xD51CE063
+            ("vtcr_el2", 0xE10A),            // msr    <- 0xD51C2144
+            ("spsr_und", 0xE21A),            // mrs x5 -> 0xD53C4345
+            ("fpexc32_el2", 0xE298),         // mrs x6 -> 0xD53C5306
+            ("vmpidr_el2", 0xE005),          // mrs x7 -> 0xD53C00A7
+            ("dbgauthstatus_el1", 0x83F6),   // mrs x8 -> 0xD5307EC8
+        ] {
+            assert_eq!(sysreg_field(name), Some(field), "{name}");
+            assert_eq!(
+                sysreg_field(&name.to_ascii_uppercase()),
+                Some(field),
+                "{name}"
+            );
+        }
+        // The TLBI range operations and the newer address-translation ops,
+        // whose CRm is not the 8 the earlier `at` path assumed.
+        for (mnem, op, word) in [
+            ("tlbi", "rvale1is", 0xD50882A0u32), // tlbi rvale1is, x0
+            ("tlbi", "rvae1is", 0xD5088220),
+            ("tlbi", "vae2is", 0xD50C8320),
+            ("at", "s1e1a", 0xD5087940),
+            ("dc", "cigdvac", 0xD50B7EA0),
+            ("ic", "ivau", 0xD50B7520),
+        ] {
+            assert_eq!(sysop_base(mnem, op), Some(word), "{mnem} {op}");
+            assert_eq!(
+                sysop_base(mnem, &op.to_ascii_uppercase()),
+                Some(word),
+                "{mnem} {op}"
+            );
+        }
+        assert_eq!(sysop_base("tlbi", "not_an_op"), None);
+        // A name that is both a PSTATE field and a system register takes the
+        // immediate encoding only for the immediate form: `msr SPSel, #0` is
+        // 0xD500409F, `msr SPSel, x0` is 0xD5184200.
+        let insns = parse_template(b"msr spsel, #0; msr spsel, x0").unwrap();
+        assert_eq!(insns[0].bytes, 0xD500_40BFu32.to_le_bytes());
+        assert_eq!(insns[1].mnemonic, "msr");
+        assert_eq!(insns[1].operands[0], AsmOpndA64::SysReg(0xC210));
+    }
+
+    #[test]
+    fn shift_and_immediate_accept_gas_spellings() {
+        // GAS makes `#` optional on a shift amount, and an immediate is a
+        // constant expression, not just a literal.
+        let insns = parse_template(b"add x0, x0, #0, lsl 12; add x1, x1, #(1 << 16)").unwrap();
+        assert_eq!(insns[0].operands[3], AsmOpndA64::Lsl(12));
+        assert_eq!(insns[1].operands[2], AsmOpndA64::Imm(1 << 16));
+        let insns = parse_template(b"eor x0, x1, x2, ror 16; lsr x3, x4, 5").unwrap();
+        assert_eq!(
+            insns[0].operands[3],
+            AsmOpndA64::Shift {
+                kind: 3,
+                amount: 16
+            }
+        );
+        assert_eq!(insns[1].operands[2], AsmOpndA64::Imm(5));
+        // A non-constant shift is still rejected.
+        assert!(parse_template(b"add x0, x0, #0, lsl foo").is_err());
     }
 
     #[test]

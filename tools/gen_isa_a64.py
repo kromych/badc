@@ -402,6 +402,18 @@ def classify(heads, toks, op, im, scaled_wb=False):
                 i += 1
                 continue
             return ('residual', 'shift-alias fields not immr/imms shaped')
+        # The add/sub-immediate value group: a 12-bit field plus the `sh` bit
+        # selecting a left shift of 12. One field, because without a written
+        # shift the encoder picks it from the value.
+        if (m := re.fullmatch(r'#(\w+)', t0)) and i + 1 < len(toks) \
+                and toks[i + 1] == '{lsl #n=0|12}':
+            if fl.get(m.group(1)) != (12, 10) or fl.get('n') != (1, 22):
+                return ('residual', 'add/sub-imm fields not imm12@10 + n1@22')
+            consumed.update((m.group(1), 'n'))
+            ops += ['Imm', 'OptLsl']
+            fields.append(f'AddSubImm {{ op: {i}, shift_op: {i + 1} }}')
+            i += 2
+            continue
         # ImmPRF tags prfm's prefetch-op slot, a raw 5-bit code.
         if (m := re.fullmatch(r'#(\w+)', t0)) and (
                 not im or bfmm or im.startswith('ImmPRF')):

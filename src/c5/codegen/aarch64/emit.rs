@@ -1510,8 +1510,31 @@ pub(crate) fn emit_function(
     // labels to the region's final text offset.
     let mut deferred_bases: Vec<usize> = Vec::with_capacity(deferred_regions.len());
     for region in &deferred_regions {
-        deferred_bases.push(code.len());
+        let base = code.len();
+        deferred_bases.push(base);
         code.extend_from_slice(&region.bytes);
+        // A replacement branch to a symbol becomes a call fixup (same unit) or
+        // a relocation (link-time), as a main-stream one does; the region's
+        // base is now final, so the site's text offset is known.
+        for sb in &region.sym_branches {
+            let native_offset = base + sb.region_off;
+            match name2entpc.get(sb.name.as_str()) {
+                Some(&ent_pc) => fixups.push(Fixup {
+                    native_offset,
+                    target_ent_pc: ent_pc,
+                    kind: if sb.is_call {
+                        BranchKind::Bl
+                    } else {
+                        BranchKind::B
+                    },
+                }),
+                None => asm_extern_call_sites.push(super::UserExternCallSite {
+                    instr_offset: native_offset,
+                    symbol_name: sb.name.clone(),
+                    is_tail: !sb.is_call,
+                }),
+            }
+        }
     }
     super::ssa::emit_common::resolve_asm_deferred_relocs(
         asm_sections,
@@ -2538,6 +2561,16 @@ struct DeferredAsmRegion {
     bytes: alloc::vec::Vec<u8>,
     labels: alloc::vec::Vec<(u32, usize)>,
     goto_branches: alloc::vec::Vec<DeferredGotoBranch>,
+    sym_branches: alloc::vec::Vec<DeferredSymBranch>,
+}
+
+/// A replacement `b` / `bl` to a symbol. The rel26 is a link-time or
+/// whole-text decision, so the region carries a zero placeholder word and the
+/// site is registered as a call fixup once the region's text base is known.
+struct DeferredSymBranch {
+    region_off: usize,
+    name: alloc::string::String,
+    is_call: bool,
 }
 
 /// A replacement `%l[...]` asm-goto branch that leaves the out-of-line region
@@ -2741,6 +2774,7 @@ fn encode_deferred_asm_region(
     text: &str,
     conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
     main_label: &dyn Fn(&str) -> Option<usize>,
+    sym_name: &dyn Fn(&str) -> Result<alloc::string::String, alloc::string::String>,
 ) -> Result<(DeferredAsmRegion, Vec<(usize, LabelBranch, u8)>), alloc::string::String> {
     use super::asm::{AsmOpndA64, parse_template};
     use super::table::{self, Opnd};
@@ -2756,6 +2790,7 @@ fn encode_deferred_asm_region(
     // label offset is known: `(byte offset in the region, kind, label, forward)`.
     let mut label_fixups: Vec<(usize, LabelBranch, u32, bool)> = Vec::new();
     let mut goto_sites: Vec<(usize, LabelBranch, u8)> = Vec::new();
+    let mut sym_branches: Vec<DeferredSymBranch> = Vec::new();
     for stmt in text.split(['\n', ';']) {
         let mut stmt = stmt.trim();
         // Peel leading `N:` label definitions; a directive may follow one.
@@ -2818,10 +2853,20 @@ fn encode_deferred_asm_region(
                 bytes.extend_from_slice(&insn.bytes);
                 continue;
             }
-            if insn.sym_target.is_some() {
-                return Err(String::from(
-                    "inline asm: a replacement branch to a symbol is not placed out of line",
-                ));
+            if let Some(name) = &insn.sym_target {
+                let is_call = insn.mnemonic == "bl";
+                sym_branches.push(DeferredSymBranch {
+                    region_off: bytes.len(),
+                    name: sym_name(name)?,
+                    is_call,
+                });
+                let word = if is_call {
+                    super::encode::enc_bl(0)
+                } else {
+                    super::encode::enc_b(0)
+                };
+                bytes.extend_from_slice(&word.to_le_bytes());
+                continue;
             }
             match insn.operands.last() {
                 Some(&AsmOpndA64::Here(off)) => {
@@ -2892,6 +2937,7 @@ fn encode_deferred_asm_region(
             bytes,
             labels,
             goto_branches: Vec::new(),
+            sym_branches,
         },
         goto_sites,
     ))
@@ -3067,7 +3113,9 @@ fn emit_inline_asm_aarch64(
             used_mask |= 1 << r;
         }
     }
-    let save_list: Vec<u8> = (0u8..16).filter(|r| used_mask & (1 << r) != 0).collect();
+    // A fixed operand may name a register outside the allocatable pool, so the
+    // save set spans the general registers rather than the pool alone.
+    let save_list: Vec<u8> = (0u8..31).filter(|r| used_mask & (1 << r) != 0).collect();
     let fp_save_list: Vec<u8> = (0u8..8).filter(|r| fp_used_mask & (1 << r) != 0).collect();
 
     let n = asm.operands.len();
@@ -3546,7 +3594,16 @@ fn emit_inline_asm_aarch64(
     let deferred_idx: Option<u32> = if deferred_text.is_empty() {
         None
     } else {
-        match encode_deferred_asm_region(&deferred_text, &conv, &main_label_off) {
+        // A replacement branch names its target the same way a main-stream one
+        // does, operand references included (`bl __get_user_%c0`).
+        let sym_name = |name: &str| -> Result<String, String> {
+            super::super::ssa::emit_common::resolve_asm_symbol_target(
+                name,
+                &super::super::ssa::emit_common::A64_SYMBOL_SUBST,
+                &const_of,
+            )
+        };
+        match encode_deferred_asm_region(&deferred_text, &conv, &main_label_off, &sym_name) {
             Ok((region, gotos)) => {
                 let idx = deferred_regions.len() as u32;
                 deferred_regions.push(region);
@@ -9106,6 +9163,110 @@ fn emit_return(
 /// int placement.
 fn int_reg(p: Place) -> Option<Reg> {
     p.int_reg_u8().map(Reg)
+}
+
+/// Encode instruction lines in an executable file-scope inline-asm section
+/// (`.pushsection .text,"ax"`) to machine bytes. A file-scope block has no
+/// operands, so every instruction must be register-concrete; a branch to a
+/// symbol needs a relocation the section model does not carry here and is
+/// rejected rather than mis-encoded.
+pub(crate) fn encode_a64_file_asm_section_code(
+    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+) -> Result<(), alloc::string::String> {
+    use super::asm::AsmOpndA64;
+    use super::ssa::emit_common::AsmSectionItem;
+    use super::table::{self, Opnd};
+    let conv = |o: &AsmOpndA64| -> Result<Opnd, alloc::string::String> {
+        Ok(match *o {
+            AsmOpndA64::Imm(v) => Opnd::Imm(v),
+            AsmOpndA64::FpImm(v) => Opnd::FpImm(v),
+            AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
+            AsmOpndA64::Shift { kind, amount } => Opnd::Shift { kind, amount },
+            AsmOpndA64::Extend { option, amount } => Opnd::Extend { option, amount },
+            AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
+            AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
+            AsmOpndA64::Cond(c) => Opnd::Cond(c),
+            AsmOpndA64::Reg { num, is64, sp } => Opnd::Reg { num, is64, sp },
+            AsmOpndA64::VReg { num, is_d } => Opnd::VReg { num, is_d },
+            AsmOpndA64::QReg(num) => Opnd::QReg(num),
+            AsmOpndA64::VScalar { num, size } => Opnd::VScalar { num, size },
+            AsmOpndA64::VecReg { num, size, q } => Opnd::VecReg { num, size, q },
+            AsmOpndA64::VecElem { num, size, index } => Opnd::VecElem { num, size, index },
+            AsmOpndA64::VecList {
+                first,
+                count,
+                size,
+                q,
+            } => Opnd::VecList {
+                first,
+                count,
+                size,
+                q,
+            },
+            AsmOpndA64::Mem { base, off, pre } => match base {
+                super::asm::MemBase::Reg(b) => Opnd::Mem { base: b, off, pre },
+                super::asm::MemBase::Ref(_) => {
+                    return Err(alloc::string::String::from(
+                        "inline asm: operand reference in a file-scope section",
+                    ));
+                }
+            },
+            AsmOpndA64::MemReg {
+                base,
+                index,
+                option,
+                shift,
+            } => match (base, index) {
+                (super::asm::MemBase::Reg(b), super::asm::MemBase::Reg(i)) => Opnd::MemReg {
+                    base: b,
+                    index: i,
+                    option,
+                    shift,
+                },
+                _ => {
+                    return Err(alloc::string::String::from(
+                        "inline asm: operand reference in a file-scope section",
+                    ));
+                }
+            },
+            _ => {
+                return Err(alloc::string::String::from(
+                    "inline asm: unsupported operand in a file-scope section",
+                ));
+            }
+        })
+    };
+    for b in blocks.iter_mut() {
+        for item in b.items.iter_mut() {
+            let AsmSectionItem::Code(text) = item else {
+                continue;
+            };
+            let insns = super::asm::parse_template(text.as_bytes())
+                .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
+            let mut bytes: Vec<u8> = Vec::new();
+            for insn in &insns {
+                if !insn.bytes.is_empty() {
+                    bytes.extend_from_slice(&insn.bytes);
+                    continue;
+                }
+                if insn.sym_target.is_some() || insn.label_def.is_some() {
+                    return Err(alloc::format!(
+                        "inline asm: `{text}` in a file-scope section needs a relocation"
+                    ));
+                }
+                let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
+                for o in &insn.operands {
+                    ops.push(conv(o)?);
+                }
+                bytes.extend_from_slice(&table::encode(&insn.mnemonic, &ops)?.to_le_bytes());
+            }
+            *item = AsmSectionItem::CodeBytes {
+                bytes,
+                relocs: Vec::new(),
+            };
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

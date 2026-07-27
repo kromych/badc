@@ -20,15 +20,15 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "add", ops: &[X, X, X, OptShift], base: 0x8B000000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Shift { op: 3, is64: true, ror: false }] },  // add Xd, Xn, Xm, {lsl|lsr|asr #n}
     Form { mnemonic: "add", ops: &[W, W, W, OptExt], base: 0x0B200000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Extend { op: 3, rm: 2, is64: false }] },  // add Wd|WSP, Wn|WSP, Wm, {extend #n}
     Form { mnemonic: "add", ops: &[X, X, RegAny, OptExt], base: 0x8B200000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Extend { op: 3, rm: 2, is64: true }] },  // add Xd|SP, Xn|SP, Rm, {extend #n}
-    Form { mnemonic: "add", ops: &[W, W, Imm], base: 0x11000000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 10, width: 12 }] },  // add Wd|WSP, Wn|WSP, #immZ, {lsl #n=0|12}
-    Form { mnemonic: "add", ops: &[X, X, Imm], base: 0x91000000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 10, width: 12 }] },  // add Xd|SP, Xn|SP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "add", ops: &[W, W, Imm, OptLsl], base: 0x11000000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, AddSubImm { op: 2, shift_op: 3 }] },  // add Wd|WSP, Wn|WSP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "add", ops: &[X, X, Imm, OptLsl], base: 0x91000000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, AddSubImm { op: 2, shift_op: 3 }] },  // add Xd|SP, Xn|SP, #immZ, {lsl #n=0|12}
     Form { mnemonic: "addpt", ops: &[X, X, X], base: 0x9A002000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // addpt Xd|SP, Xn|SP, Xm, {lsl #n}
     Form { mnemonic: "adds", ops: &[W, W, W, OptShift], base: 0x2B000000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Shift { op: 3, is64: false, ror: false }] },  // adds Wd, Wn, Wm, {lsl|lsr|asr #n}
     Form { mnemonic: "adds", ops: &[X, X, X, OptShift], base: 0xAB000000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Shift { op: 3, is64: true, ror: false }] },  // adds Xd, Xn, Xm, {lsl|lsr|asr #n}
     Form { mnemonic: "adds", ops: &[W, W, W, OptExt], base: 0x2B200000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Extend { op: 3, rm: 2, is64: false }] },  // adds Wd, Wn|WSP, Wm, {extend #n}
     Form { mnemonic: "adds", ops: &[X, X, RegAny, OptExt], base: 0xAB200000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Extend { op: 3, rm: 2, is64: true }] },  // adds Xd, Xn|SP, Rm, {extend #n}
-    Form { mnemonic: "adds", ops: &[W, W, Imm], base: 0x31000000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 10, width: 12 }] },  // adds Wd, Wn|WSP, #immZ, {lsl #n=0|12}
-    Form { mnemonic: "adds", ops: &[X, X, Imm], base: 0xB1000000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 10, width: 12 }] },  // adds Xd, Xn|SP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "adds", ops: &[W, W, Imm, OptLsl], base: 0x31000000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, AddSubImm { op: 2, shift_op: 3 }] },  // adds Wd, Wn|WSP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "adds", ops: &[X, X, Imm, OptLsl], base: 0xB1000000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, AddSubImm { op: 2, shift_op: 3 }] },  // adds Xd, Xn|SP, #immZ, {lsl #n=0|12}
     Form { mnemonic: "and", ops: &[W, W, W, OptShift], base: 0x0A000000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Shift { op: 3, is64: false, ror: true }] },  // and Wd, Wn, Wm, {sop #n}
     Form { mnemonic: "and", ops: &[X, X, X, OptShift], base: 0x8A000000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Shift { op: 3, is64: true, ror: true }] },  // and Xd, Xn, Xm, {sop #n}
     Form { mnemonic: "and", ops: &[W, W, Imm], base: 0x12000000, sp: 0x01, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, LogicalImm { op: 2, is64: false }] },  // and Wd|WSP, Wn, #imm
@@ -108,8 +108,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "cls", ops: &[X, X], base: 0xDAC01400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // cls Xd, Xn
     Form { mnemonic: "clz", ops: &[W, W], base: 0x5AC01000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // clz Wd, Wn
     Form { mnemonic: "clz", ops: &[X, X], base: 0xDAC01000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // clz Xd, Xn
-    Form { mnemonic: "cmn", ops: &[W, Imm], base: 0x3100001F, sp: 0x01, fields: &[Reg { op: 0, shift: 5 }, UImm { op: 1, shift: 10, width: 12 }] },  // cmn Wn|WSP, #imm, {lsl #n=0|12}
-    Form { mnemonic: "cmn", ops: &[X, Imm], base: 0xB100001F, sp: 0x01, fields: &[Reg { op: 0, shift: 5 }, UImm { op: 1, shift: 10, width: 12 }] },  // cmn Xn|SP, #imm, {lsl #n=0|12}
+    Form { mnemonic: "cmn", ops: &[W, Imm, OptLsl], base: 0x3100001F, sp: 0x01, fields: &[Reg { op: 0, shift: 5 }, AddSubImm { op: 1, shift_op: 2 }] },  // cmn Wn|WSP, #imm, {lsl #n=0|12}
+    Form { mnemonic: "cmn", ops: &[X, Imm, OptLsl], base: 0xB100001F, sp: 0x01, fields: &[Reg { op: 0, shift: 5 }, AddSubImm { op: 1, shift_op: 2 }] },  // cmn Xn|SP, #imm, {lsl #n=0|12}
     Form { mnemonic: "cmn", ops: &[W, W, OptExt], base: 0x2B20001F, sp: 0x01, fields: &[Reg { op: 0, shift: 5 }, Reg { op: 1, shift: 16 }, Extend { op: 2, rm: 1, is64: false }] },  // cmn Wn|WSP, Wm, {extend #n}
     Form { mnemonic: "cmn", ops: &[X, RegAny, OptExt], base: 0xAB20001F, sp: 0x01, fields: &[Reg { op: 0, shift: 5 }, Reg { op: 1, shift: 16 }, Extend { op: 2, rm: 1, is64: true }] },  // cmn Xn|SP, Rm, {extend #n}
     Form { mnemonic: "cmn", ops: &[W, W, OptShift], base: 0x2B00001F, sp: 0x00, fields: &[Reg { op: 0, shift: 5 }, Reg { op: 1, shift: 16 }, Shift { op: 2, is64: false, ror: false }] },  // cmn Wn, Wm, {lsl|lsr|asr #n}
@@ -118,8 +118,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "cmp", ops: &[X, X, OptShift], base: 0xEB00001F, sp: 0x00, fields: &[Reg { op: 0, shift: 5 }, Reg { op: 1, shift: 16 }, Shift { op: 2, is64: true, ror: false }] },  // cmp Xn, Xm, {lsl|lsr|asr #n}
     Form { mnemonic: "cmp", ops: &[W, W, OptExt], base: 0x6B20001F, sp: 0x01, fields: &[Reg { op: 0, shift: 5 }, Reg { op: 1, shift: 16 }, Extend { op: 2, rm: 1, is64: false }] },  // cmp Wn|WSP, Wm, {extend #n}
     Form { mnemonic: "cmp", ops: &[X, RegAny, OptExt], base: 0xEB20001F, sp: 0x01, fields: &[Reg { op: 0, shift: 5 }, Reg { op: 1, shift: 16 }, Extend { op: 2, rm: 1, is64: true }] },  // cmp Xn|SP, Rm, {extend #n}
-    Form { mnemonic: "cmp", ops: &[W, Imm], base: 0x7100001F, sp: 0x01, fields: &[Reg { op: 0, shift: 5 }, UImm { op: 1, shift: 10, width: 12 }] },  // cmp Wn|WSP, #imm, {lsl #n=0|12}
-    Form { mnemonic: "cmp", ops: &[X, Imm], base: 0xF100001F, sp: 0x01, fields: &[Reg { op: 0, shift: 5 }, UImm { op: 1, shift: 10, width: 12 }] },  // cmp Xn|SP, #imm, {lsl #n=0|12}
+    Form { mnemonic: "cmp", ops: &[W, Imm, OptLsl], base: 0x7100001F, sp: 0x01, fields: &[Reg { op: 0, shift: 5 }, AddSubImm { op: 1, shift_op: 2 }] },  // cmp Wn|WSP, #imm, {lsl #n=0|12}
+    Form { mnemonic: "cmp", ops: &[X, Imm, OptLsl], base: 0xF100001F, sp: 0x01, fields: &[Reg { op: 0, shift: 5 }, AddSubImm { op: 1, shift_op: 2 }] },  // cmp Xn|SP, #imm, {lsl #n=0|12}
     Form { mnemonic: "cmpp", ops: &[X, X], base: 0xBAC0001F, sp: 0x03, fields: &[Reg { op: 0, shift: 5 }, Reg { op: 1, shift: 16 }] },  // cmpp Xn|SP, Xm|SP
     Form { mnemonic: "cnt", ops: &[W, W], base: 0x5AC01C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // cnt Wd, Wn
     Form { mnemonic: "cnt", ops: &[X, X], base: 0xDAC01C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // cnt Xd, Xn
@@ -712,8 +712,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "sub", ops: &[X, X, X, OptShift], base: 0xCB000000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Shift { op: 3, is64: true, ror: false }] },  // sub Xd, Xn, Xm, {lsl|lsr|asr #n}
     Form { mnemonic: "sub", ops: &[W, W, W, OptExt], base: 0x4B200000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Extend { op: 3, rm: 2, is64: false }] },  // sub Wd|WSP, Wn|WSP, Wm, {extend #n}
     Form { mnemonic: "sub", ops: &[X, X, RegAny, OptExt], base: 0xCB200000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Extend { op: 3, rm: 2, is64: true }] },  // sub Xd|SP, Xn|SP, Rm, {extend #n}
-    Form { mnemonic: "sub", ops: &[W, W, Imm], base: 0x51000000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 10, width: 12 }] },  // sub Wd|WSP, Wn|WSP, #immZ, {lsl #n=0|12}
-    Form { mnemonic: "sub", ops: &[X, X, Imm], base: 0xD1000000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 10, width: 12 }] },  // sub Xd|SP, Xn|SP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "sub", ops: &[W, W, Imm, OptLsl], base: 0x51000000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, AddSubImm { op: 2, shift_op: 3 }] },  // sub Wd|WSP, Wn|WSP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "sub", ops: &[X, X, Imm, OptLsl], base: 0xD1000000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, AddSubImm { op: 2, shift_op: 3 }] },  // sub Xd|SP, Xn|SP, #immZ, {lsl #n=0|12}
     Form { mnemonic: "subp", ops: &[X, X, X], base: 0x9AC00000, sp: 0x06, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // subp Xd, Xn|SP, Xm|SP
     Form { mnemonic: "subps", ops: &[X, X, X], base: 0xBAC00000, sp: 0x06, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // subps Xd, Xn|SP, Xm|SP
     Form { mnemonic: "subpt", ops: &[X, X, X], base: 0xDA002000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // subpt Xd|SP, Xn|SP, Xm, {lsl #n}
@@ -721,8 +721,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "subs", ops: &[X, X, X, OptShift], base: 0xEB000000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Shift { op: 3, is64: true, ror: false }] },  // subs Xd, Xn, Xm, {lsl|lsr|asr #n}
     Form { mnemonic: "subs", ops: &[W, W, W, OptExt], base: 0x6B200000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Extend { op: 3, rm: 2, is64: false }] },  // subs Wd, Wn|WSP, Wm, {extend #n}
     Form { mnemonic: "subs", ops: &[X, X, RegAny, OptExt], base: 0xEB200000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Extend { op: 3, rm: 2, is64: true }] },  // subs Xd, Xn|SP, Rm, {extend #n}
-    Form { mnemonic: "subs", ops: &[W, W, Imm], base: 0x71000000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 10, width: 12 }] },  // subs Wd, Wn|WSP, #immZ, {lsl #n=0|12}
-    Form { mnemonic: "subs", ops: &[X, X, Imm], base: 0xF1000000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, UImm { op: 2, shift: 10, width: 12 }] },  // subs Xd, Xn|SP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "subs", ops: &[W, W, Imm, OptLsl], base: 0x71000000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, AddSubImm { op: 2, shift_op: 3 }] },  // subs Wd, Wn|WSP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "subs", ops: &[X, X, Imm, OptLsl], base: 0xF1000000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, AddSubImm { op: 2, shift_op: 3 }] },  // subs Xd, Xn|SP, #immZ, {lsl #n=0|12}
     Form { mnemonic: "svc", ops: &[Imm], base: 0xD4000001, sp: 0x00, fields: &[UImm { op: 0, shift: 5, width: 16 }] },  // svc #immZ
     Form { mnemonic: "swp", ops: &[W, W, Mem], base: 0xB8208000, sp: 0x04, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // swp Ws, Wd, [Xn|SP]
     Form { mnemonic: "swp", ops: &[X, X, Mem], base: 0xF8208000, sp: 0x04, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // swp Xs, Xd, [Xn|SP]

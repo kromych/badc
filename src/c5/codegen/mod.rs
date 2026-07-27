@@ -2279,7 +2279,9 @@ pub(crate) fn encode_file_asm_section_code(
         Target::LinuxX64 | Target::WindowsX64 => {
             x86_64::emit::encode_x86_file_asm_section_code(blocks)
         }
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => Ok(()),
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+            aarch64::emit::encode_a64_file_asm_section_code(blocks)
+        }
     }
 }
 

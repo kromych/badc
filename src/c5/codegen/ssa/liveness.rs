@@ -413,8 +413,9 @@ impl Liveness {
     /// the other's live range.
     /// The per-pair form of the relation [`Liveness::interference`] builds
     /// a graph of. The passes read the graph; this is the reference the
-    /// congruence-class test holds it to.
-    #[cfg(test)]
+    /// congruence-class test and the `codegen_test` allocation audit hold
+    /// it to.
+    #[cfg(any(test, feature = "codegen_test"))]
     pub(crate) fn interfere(&self, func: &FunctionSsa, a: ValueId, b: ValueId) -> bool {
         if a == b {
             return false;

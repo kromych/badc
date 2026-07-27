@@ -104,17 +104,126 @@ pub(crate) fn successors(
 /// Predecessor block ids for every block, indexed by `BlockId`.
 /// Built by inverting each block's terminator successors.
 pub(crate) fn predecessors(func: &FunctionSsa) -> Vec<Vec<BlockId>> {
+    let graph = SuccGraph::new(func);
     let mut preds: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); func.blocks.len()];
-    for (idx, block) in func.blocks.iter().enumerate() {
-        for succ in successors(
-            &block.terminator,
-            &func.computed_goto_targets,
-            &func.jump_tables,
-        ) {
-            preds[succ as usize].push(idx as BlockId);
+    for b in 0..func.blocks.len() {
+        for &succ in graph.of(b as BlockId) {
+            preds[succ as usize].push(b as BlockId);
         }
     }
     preds
+}
+
+/// Successor adjacency for a function's CFG in flat form: block `b`'s
+/// successors, in branch order, are `targets[offsets[b]..offsets[b+1]]`.
+/// Built once per walk so a CFG traversal does not re-derive -- and
+/// re-allocate -- a successor list at every visit.
+pub(crate) struct SuccGraph {
+    offsets: Vec<u32>,
+    targets: Vec<BlockId>,
+    preds: Vec<u32>,
+    pred_offsets: Vec<u32>,
+}
+
+impl SuccGraph {
+    pub(crate) fn new(func: &FunctionSsa) -> Self {
+        let n = func.blocks.len();
+        let mut offsets: Vec<u32> = Vec::with_capacity(n + 1);
+        let mut targets: Vec<BlockId> = Vec::with_capacity(n * 2);
+        let mut pred_counts: Vec<u32> = alloc::vec![0; n + 1];
+        for block in &func.blocks {
+            offsets.push(targets.len() as u32);
+            for s in successors(
+                &block.terminator,
+                &func.computed_goto_targets,
+                &func.jump_tables,
+            ) {
+                targets.push(s);
+                pred_counts[s as usize] += 1;
+            }
+        }
+        offsets.push(targets.len() as u32);
+        // Counting sort of the reversed edge set into CSR form.
+        let mut pred_offsets: Vec<u32> = Vec::with_capacity(n + 1);
+        let mut acc = 0u32;
+        for c in &pred_counts[..n] {
+            pred_offsets.push(acc);
+            acc += c;
+        }
+        pred_offsets.push(acc);
+        let mut fill = pred_offsets.clone();
+        let mut preds: Vec<u32> = alloc::vec![0; targets.len()];
+        for b in 0..n {
+            for &s in &targets[offsets[b] as usize..offsets[b + 1] as usize] {
+                preds[fill[s as usize] as usize] = b as u32;
+                fill[s as usize] += 1;
+            }
+        }
+        Self {
+            offsets,
+            targets,
+            preds,
+            pred_offsets,
+        }
+    }
+
+    pub(crate) fn of(&self, b: BlockId) -> &[BlockId] {
+        &self.targets[self.offsets[b as usize] as usize..self.offsets[b as usize + 1] as usize]
+    }
+
+    pub(crate) fn preds_of(&self, b: BlockId) -> &[u32] {
+        &self.preds
+            [self.pred_offsets[b as usize] as usize..self.pred_offsets[b as usize + 1] as usize]
+    }
+
+    /// Depth-first postorder of the blocks reachable from the entry.
+    pub(crate) fn postorder(&self) -> Vec<BlockId> {
+        let n = self.offsets.len() - 1;
+        let mut order: Vec<BlockId> = Vec::with_capacity(n);
+        if n == 0 {
+            return order;
+        }
+        let mut visited = alloc::vec![false; n];
+        let mut stack: Vec<(BlockId, usize)> = Vec::new();
+        visited[0] = true;
+        stack.push((0, 0));
+        while let Some(&(b, si)) = stack.last() {
+            let succ = self.of(b);
+            if si < succ.len() {
+                stack.last_mut().unwrap().1 += 1;
+                let s = succ[si];
+                if !visited[s as usize] {
+                    visited[s as usize] = true;
+                    stack.push((s, 0));
+                }
+            } else {
+                order.push(b);
+                stack.pop();
+            }
+        }
+        order
+    }
+
+    /// Visit order for a backward dataflow: every block once, starting
+    /// in postorder so a block's successors are settled before it where
+    /// the CFG is acyclic, with the blocks unreachable from the entry
+    /// appended (they reach no reachable block, so their order is
+    /// immaterial). Pop from the back.
+    pub(crate) fn backward_worklist(&self) -> Vec<BlockId> {
+        let n = self.offsets.len() - 1;
+        let mut order = self.postorder();
+        let mut seen = alloc::vec![false; n];
+        for &b in &order {
+            seen[b as usize] = true;
+        }
+        for (b, &reached) in seen.iter().enumerate() {
+            if !reached {
+                order.push(b as BlockId);
+            }
+        }
+        order.reverse();
+        order
+    }
 }
 
 /// Sentinel for an undefined / unreachable immediate dominator.
@@ -123,36 +232,7 @@ const NO_BLOCK: BlockId = BlockId::MAX;
 /// Depth-first postorder of the blocks reachable from the entry
 /// (block 0). Blocks unreachable from the entry do not appear.
 pub(crate) fn postorder(func: &FunctionSsa) -> Vec<BlockId> {
-    let n = func.blocks.len();
-    let mut order: Vec<BlockId> = Vec::with_capacity(n);
-    let mut visited = alloc::vec![false; n];
-    // Iterative DFS: stack holds (block, next-successor-index) so a
-    // block is appended to the postorder only after all successors.
-    let mut stack: Vec<(BlockId, usize)> = Vec::new();
-    if n == 0 {
-        return order;
-    }
-    visited[0] = true;
-    stack.push((0, 0));
-    while let Some(&(b, si)) = stack.last() {
-        let succ = successors(
-            &func.blocks[b as usize].terminator,
-            &func.computed_goto_targets,
-            &func.jump_tables,
-        );
-        if si < succ.len() {
-            stack.last_mut().unwrap().1 += 1;
-            let s = succ[si];
-            if !visited[s as usize] {
-                visited[s as usize] = true;
-                stack.push((s, 0));
-            }
-        } else {
-            order.push(b);
-            stack.pop();
-        }
-    }
-    order
+    SuccGraph::new(func).postorder()
 }
 
 /// Immediate dominator of every block, indexed by `BlockId`
@@ -356,43 +436,16 @@ fn slot_live_in_sets(func: &FunctionSsa, promotable: &BTreeSet<i64>) -> SlotLive
             }
         }
     }
-    // Successor and predecessor adjacency, materialized once: the
-    // fixpoint reads both per visit.
-    let mut succ: Vec<Vec<BlockId>> = Vec::with_capacity(nblocks);
-    for b in 0..nblocks {
-        succ.push(successors(
-            &func.blocks[b].terminator,
-            &func.computed_goto_targets,
-            &func.jump_tables,
-        ));
-    }
-    let mut preds: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); nblocks];
-    for (b, ss) in succ.iter().enumerate() {
-        for &s in ss {
-            preds[s as usize].push(b as BlockId);
-        }
-    }
+    let graph = SuccGraph::new(func);
     let mut live_in: Vec<u64> = alloc::vec![0; nblocks * words];
     let mut queued: Vec<bool> = alloc::vec![true; nblocks];
-    let mut worklist: Vec<BlockId> = postorder(func);
-    // Blocks unreachable from the entry are absent from the postorder;
-    // seed them so their gen sets still reach their predecessors.
-    let mut seen: Vec<bool> = alloc::vec![false; nblocks];
-    for &b in &worklist {
-        seen[b as usize] = true;
-    }
-    for (b, &reached) in seen.iter().enumerate() {
-        if !reached {
-            worklist.push(b as BlockId);
-        }
-    }
-    worklist.reverse();
+    let mut worklist: Vec<BlockId> = graph.backward_worklist();
     let mut acc: Vec<u64> = alloc::vec![0; words];
     while let Some(b) = worklist.pop() {
         let bi = b as usize;
         queued[bi] = false;
         acc.copy_from_slice(&gen_set[bi * words..(bi + 1) * words]);
-        for &s in &succ[bi] {
+        for &s in graph.of(b) {
             let si = s as usize;
             for w in 0..words {
                 acc[w] |= live_in[si * words + w] & !kill[bi * words + w];
@@ -401,7 +454,7 @@ fn slot_live_in_sets(func: &FunctionSsa, promotable: &BTreeSet<i64>) -> SlotLive
         let cur = &mut live_in[bi * words..(bi + 1) * words];
         if cur != acc.as_slice() {
             cur.copy_from_slice(&acc);
-            for &p in &preds[bi] {
+            for &p in graph.preds_of(b) {
                 if !queued[p as usize] {
                     queued[p as usize] = true;
                     worklist.push(p);

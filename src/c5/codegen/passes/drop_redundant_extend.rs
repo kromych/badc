@@ -323,17 +323,19 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
     }
     let idom = crate::c5::codegen::ssa::mem2reg::dominators(func);
     // Dominator-tree depth per block; unreachable blocks get MAX.
+    // Reverse postorder settles a block's immediate dominator before the
+    // block itself, so one pass suffices.
     let mut depth = alloc::vec![u32::MAX; func.blocks.len()];
-    for b in 0..func.blocks.len() {
-        if idom[b] == u32::MAX {
+    let mut po = crate::c5::codegen::ssa::mem2reg::postorder(func);
+    po.reverse();
+    for b in po {
+        depth[b as usize] = if b == 0 {
+            0
+        } else if idom[b as usize] == u32::MAX {
             continue;
-        }
-        let (mut d, mut cur) = (0u32, b as u32);
-        while cur != 0 && idom[cur as usize] != u32::MAX {
-            cur = idom[cur as usize];
-            d += 1;
-        }
-        depth[b] = d;
+        } else {
+            depth[idom[b as usize] as usize].saturating_add(1)
+        };
     }
     let mut groups: HashMap<(ValueId, LoadKind), Vec<ValueId>> = HashMap::new();
     for (idx, inst) in func.insts.iter().enumerate() {
@@ -386,32 +388,36 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
         (range.start.max(br.start)..range.end.min(br.end))
             .any(|idx| is_call(&func.insts[idx as usize]))
     };
-    let succs = |b: u32| {
-        crate::c5::codegen::ssa::mem2reg::successors(
-            &func.blocks[b as usize].terminator,
-            &func.computed_goto_targets,
-            &func.jump_tables,
-        )
-    };
+    let graph = crate::c5::codegen::ssa::mem2reg::SuccGraph::new(func);
+    // A function with no call at all cannot have one between two
+    // points, so the search below never fires.
+    let any_call = block_has_call.iter().any(|&c| c);
+    // Visit marks for the search, reused across queries: `seen[b][f]`
+    // holds the query number that last marked block `b` in state `f`.
+    let mut seen = alloc::vec![[0u32; 2]; func.blocks.len()];
+    let mut query = 0u32;
+    let mut work: Vec<(u32, bool)> = Vec::new();
     // Whether some path from `c` (exclusive) to `e` (exclusive) passes a
     // call: the straight-line segment when both sit in one block, else a
     // forward search over successor edges carrying a seen-a-call state.
     // The start block contributes its calls after `c`, the target block
     // its calls before `e`, and any block in between its calls
     // wholesale (a cyclic revisit of the start / target block too).
-    let call_between = |c: ValueId, e: ValueId| -> bool {
+    let mut call_between = |c: ValueId, e: ValueId| -> bool {
+        if !any_call {
+            return false;
+        }
         let c_blk = inst_block[c as usize];
         let e_blk = inst_block[e as usize];
         if c_blk == e_blk && c < e && call_in(c_blk, c + 1..e) {
             return true;
         }
-        let n = func.blocks.len();
-        let mut seen = alloc::vec![[false; 2]; n];
-        let mut work: Vec<(u32, bool)> = Vec::new();
+        query += 1;
+        work.clear();
         let start_flag = call_in(c_blk, c + 1..u32::MAX);
-        for s in succs(c_blk) {
-            if !seen[s as usize][start_flag as usize] {
-                seen[s as usize][start_flag as usize] = true;
+        for &s in graph.of(c_blk) {
+            if seen[s as usize][start_flag as usize] != query {
+                seen[s as usize][start_flag as usize] = query;
                 work.push((s, start_flag));
             }
         }
@@ -420,9 +426,9 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
                 return true;
             }
             let f2 = f || block_has_call[b as usize];
-            for s in succs(b) {
-                if !seen[s as usize][f2 as usize] {
-                    seen[s as usize][f2 as usize] = true;
+            for &s in graph.of(b) {
+                if seen[s as usize][f2 as usize] != query {
+                    seen[s as usize][f2 as usize] = query;
                     work.push((s, f2));
                 }
             }

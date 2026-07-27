@@ -139,32 +139,41 @@ impl Liveness {
             }
         }
 
+        // Backward dataflow off a postorder worklist: a block is
+        // revisited only when a successor's live-in grew, so the
+        // iteration count tracks loop depth rather than the block count.
+        let graph = super::mem2reg::SuccGraph::new(func);
         let mut live_in = vec![0u64; nblocks * words];
         let mut live_out = vec![0u64; nblocks * words];
         let mut scratch = vec![0u64; words];
-        let mut changed = true;
-        while changed {
-            changed = false;
-            for b in (0..nblocks).rev() {
-                let base = b * words;
-                scratch.iter_mut().for_each(|w| *w = 0);
-                for s in super::mem2reg::successors(
-                    &func.blocks[b].terminator,
-                    &func.computed_goto_targets,
-                    &func.jump_tables,
-                ) {
-                    let sb = s as usize * words;
-                    for w in 0..words {
-                        scratch[w] |= live_in[sb + w];
-                    }
-                }
+        let mut worklist = graph.backward_worklist();
+        let mut queued = vec![true; nblocks];
+        while let Some(bb) = worklist.pop() {
+            let b = bb as usize;
+            queued[b] = false;
+            let base = b * words;
+            scratch.iter_mut().for_each(|w| *w = 0);
+            for &s in graph.of(bb) {
+                let sb = s as usize * words;
                 for w in 0..words {
-                    scratch[w] |= phi_live_out[base + w];
-                    live_out[base + w] = scratch[w];
-                    let ni = used_set[base + w] | (scratch[w] & !kill[base + w]);
-                    if ni != live_in[base + w] {
-                        live_in[base + w] = ni;
-                        changed = true;
+                    scratch[w] |= live_in[sb + w];
+                }
+            }
+            let mut changed = false;
+            for w in 0..words {
+                scratch[w] |= phi_live_out[base + w];
+                live_out[base + w] = scratch[w];
+                let ni = used_set[base + w] | (scratch[w] & !kill[base + w]);
+                if ni != live_in[base + w] {
+                    live_in[base + w] = ni;
+                    changed = true;
+                }
+            }
+            if changed {
+                for &p in graph.preds_of(bb) {
+                    if !queued[p as usize] {
+                        queued[p as usize] = true;
+                        worklist.push(p);
                     }
                 }
             }

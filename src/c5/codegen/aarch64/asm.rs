@@ -815,14 +815,14 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
 fn parse_extend(spec: &str, idx_is64: bool) -> Result<(u8, Option<u8>), String> {
     let mut it = spec.split_ascii_whitespace();
     let kw = it.next().unwrap_or("");
-    let (option, want64) = match kw {
-        "lsl" | "uxtx" => (0b011u8, true),
-        "sxtx" => (0b111, true),
-        "uxtw" => (0b010, false),
-        "sxtw" => (0b110, false),
-        _ => return Err(format!("inline asm: bad index extend `{kw}`")),
+    let option = match kw {
+        "lsl" => 0b011,
+        // The index takes the word and doubleword extends only.
+        _ => extend_option(kw)
+            .filter(|o| matches!(o, 0b010 | 0b011 | 0b110 | 0b111))
+            .ok_or_else(|| format!("inline asm: bad index extend `{kw}`"))?,
     };
-    if want64 != idx_is64 {
+    if (option & 1 == 1) != idx_is64 {
         return Err(format!(
             "inline asm: extend `{kw}` does not match the index width"
         ));
@@ -1609,6 +1609,47 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn parse_stack_pointer_and_operand_groups() {
+        // `sp` and `xzr` share register 31 and differ only by spelling.
+        let insns = parse_template(b"add x0, sp, x1; add x0, xzr, x1").unwrap();
+        assert_eq!(
+            insns[0].operands[1],
+            AsmOpndA64::Reg {
+                num: 31,
+                is64: true,
+                sp: true,
+            }
+        );
+        assert_eq!(
+            insns[1].operands[1],
+            AsmOpndA64::Reg {
+                num: 31,
+                is64: true,
+                sp: false,
+            }
+        );
+        // Trailing shift and extend groups are operands of their own.
+        let insns = parse_template(
+            b"add x0, x1, x2, lsr #3; add x0, sp, w1, uxtw #2; add x0, x1, x2, lsl #4",
+        )
+        .unwrap();
+        assert_eq!(
+            insns[0].operands[3],
+            AsmOpndA64::Shift { kind: 1, amount: 3 }
+        );
+        assert_eq!(
+            insns[1].operands[3],
+            AsmOpndA64::Extend {
+                option: 0b010,
+                amount: 2
+            }
+        );
+        assert_eq!(insns[2].operands[3], AsmOpndA64::Lsl(4));
+        // An index register is never the stack pointer.
+        assert!(parse_template(b"ldr x0, [x1, sp]").is_err());
     }
 
     #[test]

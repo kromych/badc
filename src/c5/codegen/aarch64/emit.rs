@@ -9067,6 +9067,7 @@ mod tests {
                 &mut tlv_desc,
                 &alloc::collections::BTreeMap::new(),
                 false,
+                false,
             )
         };
         assert!(
@@ -9242,6 +9243,7 @@ mod tests {
                 &mut tlv_desc,
                 &alloc::collections::BTreeMap::new(),
                 false,
+                false,
             )
         };
         assert!(ok, "binop handler should cover Add + Shl + Shr");
@@ -9315,6 +9317,7 @@ mod tests {
                 &mut tlv_fx,
                 &mut tlv_desc,
                 &alloc::collections::BTreeMap::new(),
+                false,
                 false,
             )
         };

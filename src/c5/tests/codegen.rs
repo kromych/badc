@@ -3591,3 +3591,101 @@ fn elf_first_data_reloc_target(b: &[u8], target: crate::Target) -> Option<u64> {
         _ => addend as u64,
     })
 }
+
+/// `-mstrict-align` (`NativeOptions::strict_align`): an aggregate copy
+/// must not transfer in units wider than the copied type's alignment.
+/// Code that runs with the MMU off sees Device-typed memory, where an
+/// unaligned access raises an alignment fault rather than being fixed
+/// up, so an 8-byte load against a 4-aligned `struct { int x, y; }`
+/// faults there.
+#[test]
+fn strict_align_narrows_the_aggregate_copy_transfer_width() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    const SRC: &str = "struct T { int x, y; };\n\
+         void copy_t(struct T *d, struct T *s) { *d = *s; }\n";
+    let emit = |target: Target, strict_align: bool| -> Vec<u8> {
+        let prog = crate::Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile struct copy: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            strict_align,
+            ..NativeOptions::default()
+        };
+        emit_native_with_options(&prog, target, opts)
+            .unwrap_or_else(|e| panic!("emit object (strict_align={strict_align}): {e}"))
+    };
+
+    // aarch64: count LDR/STR <Xt>, [<Xn>, #imm] (unsigned offset,
+    // size=11) off a base that is neither `sp` nor `fp`. The frame is
+    // 16-aligned by construction; every other base in this fixture is
+    // one of the two 4-aligned struct pointers.
+    let a64_wide = |obj: &[u8]| -> usize {
+        elf_text(obj)
+            .chunks_exact(4)
+            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .filter(|insn| {
+                let ldst64 = insn & 0xFFC0_0000 == 0xF940_0000 || insn & 0xFFC0_0000 == 0xF900_0000;
+                let base = (insn >> 5) & 31;
+                ldst64 && base != 29 && base != 31
+            })
+            .count()
+    };
+    assert_eq!(
+        a64_wide(&emit(Target::LinuxAarch64, false)),
+        2,
+        "aarch64 default should copy the 8-byte struct with one ldr/str pair"
+    );
+    assert_eq!(
+        a64_wide(&emit(Target::LinuxAarch64, true)),
+        0,
+        "aarch64 strict_align still copies through 64-bit accesses"
+    );
+
+    // x86_64: the copy's 8-byte `mov` carries a REX.W prefix; the
+    // narrowed form drops it. Count `REX.W 8B /r` (load) and
+    // `REX.W 89 /r` (store) with a register base and no SIB.
+    let x64_wide = |obj: &[u8]| -> usize {
+        elf_text(obj)
+            .windows(3)
+            .filter(|w| w[0] & 0xF8 == 0x48 && (w[1] == 0x8B || w[1] == 0x89) && w[2] >> 6 != 3)
+            .count()
+    };
+    let x64_before = x64_wide(&emit(Target::LinuxX64, false));
+    assert!(
+        x64_before >= 2,
+        "x86_64 default should copy the 8-byte struct through 64-bit movs, saw {x64_before}"
+    );
+    assert!(
+        x64_wide(&emit(Target::LinuxX64, true)) < x64_before,
+        "x86_64 strict_align did not narrow the copy"
+    );
+}
+
+/// Minimal ELF64 section walk returning the `.text` bytes.
+fn elf_text(bytes: &[u8]) -> alloc::vec::Vec<u8> {
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+    let shoff = u64le(0x28);
+    let shentsize = u16le(0x3A);
+    let shnum = u16le(0x3C);
+    let shstrndx = u16le(0x3E);
+    let stroff = u64le(shoff + shstrndx * shentsize + 0x18);
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        let name_off = stroff + u32le(sh);
+        let end = bytes[name_off..].iter().position(|&c| c == 0).unwrap();
+        if &bytes[name_off..name_off + end] == b".text" {
+            let off = u64le(sh + 0x18);
+            let size = u64le(sh + 0x20);
+            return bytes[off..off + size].to_vec();
+        }
+    }
+    alloc::vec::Vec::new()
+}

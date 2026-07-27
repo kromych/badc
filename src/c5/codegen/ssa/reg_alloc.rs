@@ -3044,7 +3044,7 @@ int main(void) { return 0; }
         let mut b = SsaBuilder::new(0, 0, false);
         let v_dst = b.imm(0x2000);
         let v_src = b.imm(0x3000);
-        b.mcpy(v_dst, v_src, 8);
+        b.mcpy(v_dst, v_src, 8, 8);
         let v_zero = b.imm(0);
         b.return_(v_zero);
         let func = b.finish();

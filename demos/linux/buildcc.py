@@ -71,6 +71,13 @@ def rewrite(argv: list[str]) -> list[str]:
         elif a.startswith("-O"):
             opt = a  # last one wins, as with gcc
             i += 1
+        elif a == "-mstrict-align":
+            # Early-boot units that run with the MMU off are built with
+            # this: memory is Device-typed there and an unaligned access
+            # raises an alignment fault. badc caps every compiler-generated
+            # access at the alignment its operand types guarantee.
+            out.append(a)
+            i += 1
         elif a in ("-mno-sse", "-mgeneral-regs-only"):
             # Keep generated code off the floating-point / SIMD register
             # file, which a linked kernel object must do: the kernel runs

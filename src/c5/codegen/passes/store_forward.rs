@@ -836,7 +836,8 @@ mod tests {
                 Inst::Mcpy {
                     dst: 0,
                     src: 1,
-                    size: 8
+                    size: 8,
+                    align: 8,
                 },
                 Inst::Load {
                     addr: 0,

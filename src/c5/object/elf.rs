@@ -2842,8 +2842,11 @@ pub(super) fn write(
     // [optional] .rodata -- read-only data. `SHF_ALLOC` without
     // `SHF_WRITE`; its own PF_R load keeps it non-executable too.
     if has_rodata {
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::RoData,
             &Elf64Shdr {
                 sh_name: name_off(".rodata"),
                 sh_type: SHT_PROGBITS,

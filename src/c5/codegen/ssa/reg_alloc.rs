@@ -1325,15 +1325,15 @@ pub(crate) fn is_setjmp_barrier(inst: &Inst) -> bool {
 /// it would force the descriptor into a register instead of letting it
 /// stay dead.
 pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
-    if let Inst::Intrinsic { kind, args } = inst {
-        if *kind == crate::c5::op::Intrinsic::VaArg as i64 {
-            for (i, &a) in args.iter().enumerate() {
-                if i != 1 {
-                    f(a);
-                }
+    if let Inst::Intrinsic { kind, args } = inst
+        && *kind == crate::c5::op::Intrinsic::VaArg as i64
+    {
+        for (i, &a) in args.iter().enumerate() {
+            if i != 1 {
+                f(a);
             }
-            return;
         }
+        return;
     }
     inst.for_each_operand(f);
 }
@@ -2737,7 +2737,10 @@ int main(void) { return 0; }
                 let kind = result_kind(&f.insts[i]);
                 let store_with_dead_dst = matches!(
                     f.insts[i],
-                    Inst::Store { .. } | Inst::StoreLocal { .. } | Inst::StoreIndexed { .. }
+                    Inst::Store { .. }
+                        | Inst::StoreLocal { .. }
+                        | Inst::StoreIndexed { .. }
+                        | Inst::SegStore { .. }
                 ) && alloc.use_counts.get(i).copied().unwrap_or(0) == 0;
                 match kind {
                     ResultKind::None => assert_eq!(*p, Place::None),

@@ -21,7 +21,7 @@ use super::super::ir::LoadKind;
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{is_bool_ty, is_struct_ty, is_unsigned_ty, load_op_for, struct_ptr_depth};
+use super::types::{is_bool_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, load_op_for};
 
 impl Compiler {
     // ---- Lexer plumbing ----
@@ -353,7 +353,7 @@ impl Compiler {
             }
             _ => return None,
         };
-        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+        if is_struct_value_ty(ty) {
             return None;
         }
         Some(load_op_for(ty, self.target))

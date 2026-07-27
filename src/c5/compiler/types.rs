@@ -331,6 +331,15 @@ pub(crate) fn struct_ptr_depth(ty: i64) -> i64 {
     ((ty - STRUCT_BASE) % STRUCT_STRIDE) / Ty::Ptr as i64
 }
 
+/// True when `ty` names an aggregate *value* -- a struct, union, GCC
+/// vector or 128-bit integer object -- rather than a pointer to one. The
+/// distinction decides whether a type is copied by extent or held in a
+/// register, so it gates aggregate assignment, argument passing, member
+/// access and the initializer traversal.
+pub(crate) fn is_struct_value_ty(ty: i64) -> bool {
+    is_struct_ty(ty) && struct_ptr_depth(ty) == 0
+}
+
 pub(super) fn struct_ty_for(id: usize) -> i64 {
     STRUCT_BASE + (id as i64) * STRUCT_STRIDE
 }

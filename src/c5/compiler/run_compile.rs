@@ -25,8 +25,8 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::types::{
-    apply_qual_bits, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty, is_void_ty,
-    strip_unsigned, struct_id_of, struct_ptr_depth,
+    apply_qual_bits, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty,
+    is_struct_value_ty, is_void_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
 impl Compiler {
@@ -1649,8 +1649,7 @@ impl Compiler {
                         })
                         .collect();
                     let ret_ty_for_finish = self.current_func_return_ty;
-                    let returns_struct_finish =
-                        is_struct_ty(ret_ty_for_finish) && struct_ptr_depth(ret_ty_for_finish) == 0;
+                    let returns_struct_finish = is_struct_value_ty(ret_ty_for_finish);
                     let return_struct_size_finish = if returns_struct_finish {
                         self.size_of_type(ret_ty_for_finish) as i64
                     } else {
@@ -2005,8 +2004,7 @@ impl Compiler {
                     // flipping it undefined here would drop the symbol.
                     if was_extern_only_decl
                         && !self.symbols[id_idx].defined_here
-                        && is_struct_ty(ty)
-                        && struct_ptr_depth(ty) == 0
+                        && is_struct_value_ty(ty)
                         && (self.structs[struct_id_of(ty)].fields.is_empty()
                             || self.structs[struct_id_of(ty)]
                                 .fields

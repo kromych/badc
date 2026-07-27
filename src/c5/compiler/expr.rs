@@ -40,8 +40,8 @@ use super::CODE_BASE;
 use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, VOLATILE_BIT, apply_qual_bits, format_type, fp_result_ty, integer_promote,
-    is_bool_ty, is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty,
-    is_vector_ty, is_void_ptr_ty, struct_id_of, struct_ptr_depth,
+    is_bool_ty, is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_struct_value_ty,
+    is_unsigned_ty, is_vector_ty, is_void_ptr_ty, struct_id_of, struct_ptr_depth,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -531,8 +531,7 @@ impl Compiler {
         if self.is_int128_ty(lhs_ty) || self.is_int128_ty(rhs_ty) {
             return Ok(());
         }
-        let is_aggregate_value = |ty: i64| is_struct_ty(ty) && struct_ptr_depth(ty) == 0;
-        if is_aggregate_value(lhs_ty) || is_aggregate_value(rhs_ty) {
+        if is_struct_value_ty(lhs_ty) || is_struct_value_ty(rhs_ty) {
             return Err(self.compile_err(format!("invalid operands to binary `{op}`")));
         }
         Ok(())
@@ -1231,7 +1230,7 @@ impl Compiler {
                         if let Some(child) = self.ast_acc {
                             self.ast_emit_cast(child, res_ty + Ty::Ptr as i64);
                         }
-                        if !(is_struct_ty(res_ty) && struct_ptr_depth(res_ty) == 0) {
+                        if !(is_struct_value_ty(res_ty)) {
                             self.mark_emit_scalar_load();
                         }
                         self.ty = res_ty;
@@ -1280,8 +1279,7 @@ impl Compiler {
                     // `lhs = call(...)` Mcpy reads from there.
                     let callee_ret_ty = self.symbols[id_idx].type_;
                     let callee_returns_struct = self.symbols[id_idx].class == Token::Fun as i64
-                        && is_struct_ty(callee_ret_ty)
-                        && struct_ptr_depth(callee_ret_ty) == 0;
+                        && is_struct_value_ty(callee_ret_ty);
                     // A Token::Sys (dylib-bound) call returning a struct by
                     // value is lowered through the native SSA path: the
                     // walker tags the CallExt with `ret_agg` and the emitter
@@ -1752,7 +1750,7 @@ impl Compiler {
                         .compile_err(format!("undefined variable {}", self.symbols[id_idx].name)));
                 }
                 self.ty = self.symbols[id_idx].type_;
-                let is_struct_value = is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+                let is_struct_value = is_struct_value_ty(self.ty);
                 let is_array_var =
                     self.symbols[id_idx].array_size != 0 || self.symbols[id_idx].is_zero_len_array;
                 let is_vla_var = self.symbols[id_idx].is_vla;
@@ -2320,8 +2318,7 @@ impl Compiler {
                 // value: the address goes in `a`, no load. The next
                 // op (`.field`, `= rhs` lowering Mcpy, etc.) reads
                 // the address from `a` directly.
-                let result_is_struct_value =
-                    is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+                let result_is_struct_value = is_struct_value_ty(self.ty);
                 // Capture the operand snapshot before
                 // `mark_emit_scalar_load` clears the chain-depth
                 // state; the snapshot is the deref's child for
@@ -2426,7 +2423,7 @@ impl Compiler {
             let pre_addr_ty = self.ty;
             let _ = pre_addr_ty;
             self.ty += Ty::Ptr as i64;
-            if is_struct_ty(pre_addr_ty) && struct_ptr_depth(pre_addr_ty) == 0 {
+            if is_struct_value_ty(pre_addr_ty) {
                 // Struct value -- the parser already left the address
                 // in `a` (no final-load Li), so the bytecode path needs
                 // no change. Record the pointer result type in the
@@ -2723,8 +2720,7 @@ impl Compiler {
             // operator (the contiguous token range `Lor..=ModOp`). Reject the
             // LHS here; each value-computing branch checks its RHS below. A
             // pointer to a struct is a scalar and is allowed through.
-            if is_struct_ty(t)
-                && struct_ptr_depth(t) == 0
+            if is_struct_value_ty(t)
                 && self.lex.tk >= Token::Lor as i64
                 && self.lex.tk <= Token::ModOp as i64
                 // GCC vector extension: a vector LHS with a bitwise operator is
@@ -2954,7 +2950,7 @@ impl Compiler {
                         } => Some((*obj, *field_off, *desc)),
                         _ => None,
                     });
-                let lhs_is_struct_value = is_struct_ty(t) && struct_ptr_depth(t) == 0;
+                let lhs_is_struct_value = is_struct_value_ty(t);
                 if let Some((obj, field_off, desc)) = bf_lvalue {
                     self.expr(Token::Assign as i64)?;
                     if let Some(rhs) = self.ast_acc {
@@ -4175,8 +4171,7 @@ impl Compiler {
                     // field offset to the just-computed element
                     // address. Scalar / pointer / nested-pointer
                     // element types still take the regular load.
-                    let elem_is_struct_value =
-                        is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+                    let elem_is_struct_value = is_struct_value_ty(self.ty);
                     if !elem_is_struct_value {
                         self.mark_emit_scalar_load();
                         // The load marking cleared the function-pointer
@@ -4208,7 +4203,7 @@ impl Compiler {
                 let obj_ast = self.ast_acc;
                 let is_dot = self.lex.tk == Token::Dot;
                 let valid = if is_dot {
-                    is_struct_ty(t) && struct_ptr_depth(t) == 0
+                    is_struct_value_ty(t)
                 } else {
                     is_struct_ty(t) && struct_ptr_depth(t) == 1
                 };
@@ -4415,8 +4410,7 @@ impl Compiler {
                     // address propagates so `s.inner.field` chains. Array
                     // fields decay to a pointer-to-element with the same
                     // address-as-value rule as a local array.
-                    let field_is_struct_value =
-                        is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+                    let field_is_struct_value = is_struct_value_ty(self.ty);
                     if field.array_size != 0 {
                         self.ty += Ty::Ptr as i64;
                         if field.array_size > 0 {

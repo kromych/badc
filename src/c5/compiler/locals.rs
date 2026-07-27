@@ -31,7 +31,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{apply_qual_bits, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{apply_qual_bits, is_pointer_ty, is_struct_value_ty, struct_id_of};
 
 /// Alignment facts a block-scope declarator carries into its storage
 /// allocation. Produced once per declarator by
@@ -1306,7 +1306,7 @@ impl Compiler {
                 break;
             }
             let is_elem = match self.peek_expr_type() {
-                Ok(t) => is_struct_ty(t) && struct_ptr_depth(t) == 0 && struct_id_of(t) == sid,
+                Ok(t) => is_struct_value_ty(t) && struct_id_of(t) == sid,
                 Err(_) => false,
             };
             if is_elem {
@@ -2219,7 +2219,7 @@ impl Compiler {
         if s.class != Token::Glo as i64 || s.array_size > 0 {
             return false;
         }
-        !(is_struct_ty(s.type_) && struct_ptr_depth(s.type_) == 0)
+        !(is_struct_value_ty(s.type_))
     }
 
     /// Whether an identifier value in an automatic-storage initializer

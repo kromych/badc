@@ -40,7 +40,8 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::const_expr::ConstVal;
 use super::types::{
-    is_pointer_ty, is_struct_ty, is_unsigned_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
+    is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, strip_unsigned, struct_id_of,
+    struct_ptr_depth,
 };
 
 /// Relocation kind for one initializer-element value. Tracks
@@ -868,9 +869,7 @@ impl Compiler {
                 level += 1;
             } else if self.lex.tk == Token::Dot || self.lex.tk == Token::Arrow {
                 self.next()?;
-                if self.lex.tk != Token::Id
-                    || !(is_struct_ty(cur_ty) && struct_ptr_depth(cur_ty) == 0)
-                {
+                if self.lex.tk != Token::Id || !(is_struct_value_ty(cur_ty)) {
                     self.restore_lex(snap);
                     self.truncate_data(data_snap);
                     return Ok(None);
@@ -1599,7 +1598,7 @@ impl Compiler {
             return Err(self.compile_err("`{` expected to start compound-literal initializer"));
         }
         let elem_size = self.size_of_type(elem_ty);
-        let elem_is_struct = is_struct_ty(elem_ty) && struct_ptr_depth(elem_ty) == 0;
+        let elem_is_struct = is_struct_value_ty(elem_ty);
         // The element count must be known before the storage is reserved:
         // a struct element with a string-literal or `&global` field
         // appends to the data segment as it is filled, so per-element
@@ -2158,7 +2157,7 @@ impl Compiler {
             }
         } else if self.is_lex_typedef_name() {
             let ty = self.symbols[self.lex.curr_id_idx].type_;
-            if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            if is_struct_value_ty(ty) {
                 Some(struct_id_of(ty))
             } else {
                 None
@@ -2351,10 +2350,7 @@ impl Compiler {
         // zero-padding short rows (C99 6.7.8p21); write its flat leaves into
         // the member and record the scalar-leaf count the enclosing object
         // uses to size its tail (bytes = count * sizeof(base element)).
-        if !inner_dims.is_empty()
-            && self.lex.tk == '{'
-            && !(is_struct_ty(elem_ty) && struct_ptr_depth(elem_ty) == 0)
-        {
+        if !inner_dims.is_empty() && self.lex.tk == '{' && !(is_struct_value_ty(elem_ty)) {
             self.pending.init_inner_dims = inner_dims.to_vec();
             let elems = self.collect_array_initializer(elem_ty)?;
             grow_to(&mut self.data, field_base + elems.len() * elem_size);
@@ -2383,7 +2379,7 @@ impl Compiler {
                 .compile_err("flexible array member initializer must be a brace list or string"));
         }
         self.next()?;
-        let elem_is_struct = is_struct_ty(elem_ty) && struct_ptr_depth(elem_ty) == 0;
+        let elem_is_struct = is_struct_value_ty(elem_ty);
         let mut idx = 0usize;
         let mut count = 0usize;
         while self.lex.tk != '}' {
@@ -3496,11 +3492,7 @@ impl Compiler {
         // C99 6.7.9p13: a brace-elided first field taking an expression
         // of the enclosing struct's own type is a whole-object copy, not
         // elision into the first scalar field. Copy the bytes and stop.
-        if first_elided
-            && is_struct_ty(self.ty)
-            && struct_ptr_depth(self.ty) == 0
-            && struct_id_of(self.ty) == struct_id
-        {
+        if first_elided && is_struct_value_ty(self.ty) && struct_id_of(self.ty) == struct_id {
             let value = self.ast_acc;
             let elem_ty = self.ty;
             self.ast_assign();
@@ -3518,9 +3510,7 @@ impl Compiler {
         // C99 6.7.8p13: a struct member may be initialized by a single
         // compatible struct expression (copied); a scalar value would be
         // brace elision into its sub-fields, which this path can't model.
-        if self.is_traversable_aggregate_ty(field.ty)
-            && !(is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0)
-        {
+        if self.is_traversable_aggregate_ty(field.ty) && !(is_struct_value_ty(self.ty)) {
             return Err(self
                 .compile_err("brace elision into a non-constant struct member is not supported"));
         }
@@ -3782,7 +3772,7 @@ impl Compiler {
         // wrapping `init_ast` so the walker can issue the
         // canonical `store_local` directly.
         self.pending_local_init_ast = self.ast_acc;
-        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+        if is_struct_value_ty(ty) {
             self.mark_emit_other();
         } else if strip_unsigned(ty) == Ty::Char as i64 {
             self.ast_assign();

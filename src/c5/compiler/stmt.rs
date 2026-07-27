@@ -28,7 +28,7 @@ use super::super::error::C5Error;
 use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
 use super::locals::DeclScope;
-use super::types::{is_struct_ty, struct_ptr_depth};
+use super::types::{is_struct_ty, is_struct_value_ty, struct_ptr_depth};
 
 /// The outer binding a nested block saved before rebinding a name, restored
 /// at the block's exit. A block nests arbitrarily, so unlike the single
@@ -3012,7 +3012,7 @@ impl Compiler {
             let line = self.lex.line;
             self.next()?;
             let ret_ty = self.current_func_return_ty;
-            let returns_struct = is_struct_ty(ret_ty) && struct_ptr_depth(ret_ty) == 0;
+            let returns_struct = is_struct_value_ty(ret_ty);
             let returns_void = self.current_func_returns_void;
             let mut return_value: Option<super::super::ast::ExprId> = None;
             if self.lex.tk != ';' {

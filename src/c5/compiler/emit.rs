@@ -645,6 +645,7 @@ impl Compiler {
     /// outer name; the function-exit cleanup pass restores the
     /// outer binding by reading the shadow fields back.
     pub(super) fn shadow_symbol(&mut self, idx: usize) {
+        self.scope_bound.push(idx as u32);
         let s = &mut self.symbols[idx];
         s.h_class = s.class;
         s.h_type = s.type_;
@@ -699,6 +700,87 @@ impl Compiler {
         sym.block_extern_active = false;
         // The register-asm binding belongs to the block-scope local
         // being unbound, never to the restored outer symbol.
+    }
+
+    /// Whether [`Self::restore_shadowed_symbol`] would leave `sym`
+    /// unchanged, i.e. its shadow slots already mirror its live
+    /// binding. True for a symbol that binds itself (a compiler-made
+    /// unnamed temporary), which is why such a symbol needs no entry
+    /// in `scope_bound`.
+    #[cfg(debug_assertions)]
+    fn shadow_mirrors_binding(sym: &Symbol) -> bool {
+        sym.class == sym.h_class
+            && sym.type_ == sym.h_type
+            && sym.val == sym.h_val
+            && sym.fn_ptr_indirection == sym.h_fn_ptr_indirection
+            && sym.params == sym.h_params
+            && sym.is_variadic == sym.h_is_variadic
+            && sym.array_size == sym.h_array_size
+            && sym.type_align == sym.h_type_align
+            && sym.inner_array_size == sym.h_inner_array_size
+            && sym.array_dims == sym.h_array_dims
+            && sym.is_vla == sym.h_is_vla
+            && sym.vla_ptr_slot == sym.h_vla_ptr_slot
+            && sym.vla_size_slot == sym.h_vla_size_slot
+            && sym.is_zero_len_array == sym.h_is_zero_len_array
+            && sym.asm_register == sym.h_asm_register
+            && sym.is_global_register == sym.h_is_global_register
+            && !sym.is_scope_static
+            && !sym.is_scope_typedef
+            && !sym.block_extern_active
+    }
+
+    /// The scope's rebound symbol indices, ascending and deduplicated.
+    /// Callers that only unwind hand the list straight to
+    /// [`Self::unwind_scope_bound`]; the function-close path also walks
+    /// it to collect the debug-info and unused-binding reports, both of
+    /// which follow symbol-table order.
+    pub(super) fn take_scope_bound(&mut self) -> alloc::vec::Vec<u32> {
+        let mut bound = core::mem::take(&mut self.scope_bound);
+        bound.sort_unstable();
+        bound.dedup();
+        // Completeness: the list stands in for a full-table scan, so a
+        // symbol the scan would restore and this list omits is a
+        // binding that would outlive its scope.
+        #[cfg(debug_assertions)]
+        for (i, sym) in self.symbols.iter().enumerate() {
+            debug_assert!(
+                !Self::scope_binding_active(sym)
+                    || bound.binary_search(&(i as u32)).is_ok()
+                    || (sym.name.is_empty() && Self::shadow_mirrors_binding(sym)),
+                "symbol {i} (`{}`) is scope-bound but untracked",
+                sym.name
+            );
+        }
+        bound
+    }
+
+    /// Whether `sym` currently holds a binding an enclosing scope must
+    /// get back at scope exit: a local or parameter, a block-scope
+    /// `static` or `typedef` (which no longer read as `Loc`), or a
+    /// block-scope `extern` that converted a bound file-scope name.
+    pub(super) fn scope_binding_active(sym: &Symbol) -> bool {
+        sym.class == Token::Loc as i64
+            || sym.is_scope_static
+            || sym.is_scope_typedef
+            || sym.block_extern_active
+    }
+
+    /// Restore the outer binding of every symbol in `bound` that still
+    /// holds one, then keep the entries whose binding survives the
+    /// restore -- a file-scope register variable shadows itself, so it
+    /// stays bound and every later scope exit must revisit it.
+    pub(super) fn unwind_scope_bound(&mut self, mut bound: alloc::vec::Vec<u32>) {
+        for &i in &bound {
+            let sym = &mut self.symbols[i as usize];
+            if Self::scope_binding_active(sym) {
+                Self::restore_shadowed_symbol(sym);
+            }
+        }
+        let symbols = &self.symbols;
+        bound.retain(|&i| Self::scope_binding_active(&symbols[i as usize]));
+        bound.append(&mut self.scope_bound);
+        self.scope_bound = bound;
     }
 
     // ---- AST helpers ----

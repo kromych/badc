@@ -1,6 +1,7 @@
 //! End-to-end tests: load a C source from `tests/fixtures/c/`, compile, run, and
 //! check the exit code. These exercise the whole pipeline.
 
+use super::compile_str;
 use super::run_fixture;
 use super::run_str;
 
@@ -5422,4 +5423,95 @@ fn const_expr_dead_ternary_arm_keeps_function_call() {
         int main(void) { return (int)(sizeof(struct s) / sizeof(long long)); }
     ";
     assert_eq!(run_str(src), 6);
+}
+
+#[test]
+fn inner_scope_bindings_unbind_at_scope_exit() {
+    // C99 6.2.1p4: a parameter, body local, block local, block-scope
+    // `static` / `typedef` / `extern` and a prototype's parameters all
+    // stop being visible at their scope's end. A binding left in place
+    // resolves the file-scope name to the inner declaration's frame slot.
+    assert_eq!(run_fixture("scope_unbind_at_function_exit.c"), 0);
+}
+
+#[test]
+fn unused_binding_diagnostics_follow_symbol_table_order() {
+    // The per-function unused-binding report walks the function's
+    // bindings in symbol-table index order, not declaration order:
+    // `zz` interns at file scope and so precedes `aa` despite being
+    // declared second.
+    let src = "
+        int zz;
+        int f(void)
+        {
+            int aa = 1;
+            int zz = 2;
+            return 0;
+        }
+        int main(void) { return f(); }
+    ";
+    let prog = compile_str(src);
+    let unused: Vec<&str> = prog
+        .warnings
+        .iter()
+        .filter_map(|w| {
+            if w.contains("unused variable `zz`") {
+                Some("zz")
+            } else if w.contains("unused variable `aa`") {
+                Some("aa")
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(unused, ["zz", "aa"], "warnings: {:?}", prog.warnings);
+}
+
+/// Marginal cost of one function definition, measured against a unit
+/// carrying `globals` file-scope declarations.
+#[cfg(not(debug_assertions))]
+fn per_function_compile_cost(globals: usize, functions: usize) -> f64 {
+    fn unit(globals: usize, functions: usize) -> String {
+        let mut s = String::new();
+        for j in 0..globals {
+            s.push_str(&format!("int gv{j};\n"));
+        }
+        for i in 0..functions {
+            s.push_str(&format!(
+                "int sf{i}(int p, int q) {{ int u = p + q; int v = u * 3; return u + v; }}\n"
+            ));
+        }
+        s.push_str("int main(void) { return 0; }\n");
+        s
+    }
+    fn best(src: &str) -> f64 {
+        (0..3)
+            .map(|_| {
+                let t = std::time::Instant::now();
+                let _ = compile_str(src);
+                t.elapsed().as_secs_f64()
+            })
+            .fold(f64::MAX, f64::min)
+    }
+    let with = unit(globals, functions);
+    let without = unit(globals, 0);
+    (best(&with) - best(&without)).max(0.0) / functions as f64
+}
+
+#[test]
+#[cfg(not(debug_assertions))]
+fn function_close_cost_is_independent_of_declaration_count() {
+    // Closing a function scope must cost its own bindings, not the
+    // whole symbol table: a unit with 16x the file-scope declarations
+    // must not pay 16x per function definition. Measured as the
+    // marginal cost of adding the definitions, so the shared parse of
+    // the declarations cancels out.
+    let small = per_function_compile_cost(2000, 400);
+    let large = per_function_compile_cost(32000, 400);
+    assert!(
+        large < small * 4.0,
+        "per-function close cost grew {:.1}x for 16x the declarations \
+         ({small:.3e}s -> {large:.3e}s)",
+        large / small
+    );
 }

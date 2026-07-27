@@ -57,7 +57,11 @@ pub(super) struct BlockShadow {
 
 impl Compiler {
     /// Snapshot the current binding of `idx` for restore at block exit.
-    pub(super) fn capture_block_shadow(&self, idx: usize) -> BlockShadow {
+    /// Also lists `idx` on `scope_bound`, so that the enclosing scope's
+    /// unwind covers every rebound name whether or not this snapshot
+    /// carries the field the unwind reads.
+    pub(super) fn capture_block_shadow(&mut self, idx: usize) -> BlockShadow {
+        self.scope_bound.push(idx as u32);
         let s = &self.symbols[idx];
         BlockShadow {
             idx,

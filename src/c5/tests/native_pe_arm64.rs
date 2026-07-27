@@ -1003,6 +1003,9 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_hfa_struct_arg.c", 0),
     ("variadic_cast_fnptr_dispatch.c", 0),
     ("builtin_constant_p_deferred.c", 0),
+    ("switch_const_index_jump_table_fold.c", 0),
+    ("computed_goto_label_only_target.c", 0),
+    ("zero_length_array_member_marker.c", 0),
 ];
 
 #[test]

@@ -5423,3 +5423,25 @@ fn const_expr_dead_ternary_arm_keeps_function_call() {
     ";
     assert_eq!(run_str(src), 6);
 }
+
+#[test]
+fn switch_const_index_jump_table_fold() {
+    // A jump-table dispatch whose index folds to a constant leaves the
+    // table's target list without a terminator naming it; the deleted
+    // case blocks must not stay recorded there.
+    assert_eq!(run_fixture("switch_const_index_jump_table_fold.c"), 0);
+}
+
+#[test]
+fn computed_goto_label_only_target() {
+    // A label reachable only through `goto *` survives block deletion:
+    // the indirect transfer carries no terminator edge.
+    assert_eq!(run_fixture("computed_goto_label_only_target.c"), 0);
+}
+
+#[test]
+fn zero_length_array_member_marker() {
+    // C99 6.7.2.1p16: only a trailing member is the flexible array
+    // member; a `T v[0]` marker ahead of it is zero-storage.
+    assert_eq!(run_fixture("zero_length_array_member_marker.c"), 0);
+}

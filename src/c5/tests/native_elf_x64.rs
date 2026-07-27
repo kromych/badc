@@ -883,6 +883,9 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("indirect_call_target_scratch_exhausted.c", 0),
     ("fp_load_folded_disp.c", 0),
     ("builtin_constant_p_deferred.c", 0),
+    ("switch_const_index_jump_table_fold.c", 0),
+    ("computed_goto_label_only_target.c", 0),
+    ("zero_length_array_member_marker.c", 0),
 ];
 
 #[test]

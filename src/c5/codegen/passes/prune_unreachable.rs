@@ -12,11 +12,10 @@
 //! Runs after `constfold_branch`. A jump table's target blocks are
 //! reachable through the indirect dispatch, not a terminator edge, so
 //! reachability seeds them from `func.jump_tables`; `remap_block_ids`
-//! renumbers those target lists after compaction. Computed-goto
-//! functions are still skipped: their reachable set is every
-//! address-taken label (`Inst::BlockAddr`), which is not tracked as a
-//! successor graph, and `constfold_branch` leaves computed goto
-//! untouched anyway.
+//! renumbers those target lists after compaction. An address-taken
+//! label (`Inst::BlockAddr`, recorded in `func.computed_goto_targets`)
+//! is likewise entered indirectly, and its address may escape the
+//! function, so every such block is a reachability root.
 
 use alloc::vec::Vec;
 
@@ -58,23 +57,26 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     // Reachability from block 0 through terminator successors, plus a
     // jump table's target blocks (reached via its indirect dispatch,
     // recorded in `func.jump_tables` rather than the terminator).
+    // An address-taken label (`computed_goto_targets`) is a root of its
+    // own: no terminator edge names it, and its address may outlive --
+    // or escape -- the `goto *` that used it.
     let mut reachable = alloc::vec![false; n];
-    reachable[0] = true;
     let mut stack = alloc::vec![0 as BlockId];
+    reachable[0] = true;
+    for &t in &func.computed_goto_targets {
+        if !reachable[t as usize] {
+            reachable[t as usize] = true;
+            stack.push(t);
+        }
+    }
     let mut succ = Vec::new();
     while let Some(b) = stack.pop() {
         succ.clear();
         push_successors(&func.blocks[b as usize].terminator, &mut succ);
-        match &func.blocks[b as usize].terminator {
-            Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } => {
-                succ.extend_from_slice(&func.jump_tables[*table as usize]);
-            }
-            // An indirect goto reaches every block whose address was
-            // taken; the set rides the function, not the terminator.
-            Terminator::GotoIndirect { .. } => {
-                succ.extend_from_slice(&func.computed_goto_targets);
-            }
-            _ => {}
+        if let Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } =
+            func.blocks[b as usize].terminator
+        {
+            succ.extend_from_slice(&func.jump_tables[table as usize]);
         }
         for &s in &succ {
             if !reachable[s as usize] {
@@ -120,25 +122,26 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
         }
     }
 
-    // A dispatch block (jump table / asm goto) that is itself unreachable
-    // leaves its target row unreferenced -- the terminator is gone after
-    // compaction. Clear the row: its targets may also be doomed, and a
-    // removed-block id left in it would make the block-id remap here (and
-    // later passes') index out of range, the same hazard the phi cleanup
-    // above avoids. A reachable dispatch keeps its row: its targets were
-    // seeded reachable above, so none is doomed.
-    let dead_tables: Vec<u32> = func
-        .blocks
-        .iter()
-        .enumerate()
-        .filter(|(b, _)| !reachable[*b])
-        .filter_map(|(_, blk)| match blk.terminator {
-            Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } => Some(table),
-            _ => None,
-        })
-        .collect();
-    for t in dead_tables {
-        func.jump_tables[t as usize].clear();
+    // A `jump_tables` row is live only while a surviving dispatch
+    // terminator names it: its block may be unreachable, or the block may
+    // survive with a constant-index fold having rewritten the dispatch to
+    // a plain `Jmp`. Either way the stale row lists targets that may be
+    // doomed, and a removed-block id left in it would make the block-id
+    // remap here (and later passes') index out of range -- the hazard the
+    // phi cleanup above avoids. A live dispatch keeps its row: its targets
+    // were seeded reachable above, so none is doomed.
+    let mut live_table = alloc::vec![false; func.jump_tables.len()];
+    for (b, blk) in func.blocks.iter().enumerate() {
+        if let (true, Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table }) =
+            (reachable[b], blk.terminator)
+        {
+            live_table[table as usize] = true;
+        }
+    }
+    for (t, row) in func.jump_tables.iter_mut().enumerate() {
+        if !live_table[t] {
+            row.clear();
+        }
     }
 
     // Compact the survivors (original order preserved) and renumber.

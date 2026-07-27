@@ -53,6 +53,7 @@ const SHT_NOBITS: u32 = 8;
 // resolved by a paired `.rela.init_array` / `.rela.fini_array`.
 const SHT_INIT_ARRAY: u32 = 14;
 const SHT_FINI_ARRAY: u32 = 15;
+const SHT_PREINIT_ARRAY: u32 = 16;
 
 // Vendor note types under namesz="badc\0". Standard ELF note
 // shape (ELF gABI, section 5): each entry is (namesz, descsz,
@@ -118,6 +119,35 @@ const NT_BADC_MACHO_TLV_DESC_SYM: u32 = 9;
 // The linker patches each imm32 with the variable's TPOFF once the
 // units' TLS blocks are merged.
 const NT_BADC_ELF_TPOFF: u32 = 10;
+/// Output section for `const`-qualified file-scope storage the
+/// declaration did not place by name.
+const RODATA_SECTION: &str = ".rodata";
+
+/// Data-segment byte offsets that carry a relocated pointer slot.
+/// Storage overlapping one cannot be placed read-only: the loader has
+/// to write the resolved address into it.
+fn relocated_data_offsets(program: &Program) -> alloc::collections::BTreeSet<u64> {
+    let mut out = alloc::collections::BTreeSet::new();
+    for off in program
+        .data_relocs
+        .iter()
+        .map(|r| r.data_offset)
+        .chain(program.code_relocs.iter().map(|r| r.data_offset))
+        .chain(program.extern_data_relocs.iter().map(|r| r.data_offset))
+    {
+        out.insert(off);
+    }
+    out
+}
+
+/// Diagnostic for an assembler `.section` / `.pushsection` argument
+/// the relocatable writer cannot reproduce faithfully.
+fn asm_section_err(name: &str, what: &str) -> C5Error {
+    C5Error::Compile(crate::c5::error::fmt_link_err(&alloc::format!(
+        "inline asm: section `{name}` requests {what}, which the object writer does not emit"
+    )))
+}
+
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
@@ -503,6 +533,22 @@ struct DataPlan {
     bss_align: u64,
 }
 
+/// Home of a unified data offset before any named-section carve.
+///
+/// The single authority on data-versus-bss. `apply_data_liveness`
+/// makes the decision -- an object is zero-fill when it is wholly
+/// zero and holds no relocated slot -- and records it by moving those
+/// objects past the file-backed image; `data_file_len` is that
+/// watershed. Every later consumer asks here rather than re-deriving
+/// the rule.
+fn unified_home(off: u64, data_file_len: u64) -> DataHome {
+    if off < data_file_len {
+        DataHome::Data(off)
+    } else {
+        DataHome::Bss(off - data_file_len)
+    }
+}
+
 impl DataPlan {
     fn identity(data_file_len: u64, bss_size: u64, data_align: u64) -> Self {
         DataPlan {
@@ -517,11 +563,7 @@ impl DataPlan {
 
     fn map(&self, off: u64) -> DataHome {
         if self.spans.is_empty() {
-            return if off < self.data_file_len {
-                DataHome::Data(off)
-            } else {
-                DataHome::Bss(off - self.data_file_len)
-            };
+            return unified_home(off, self.data_file_len);
         }
         let i = self.spans.partition_point(|s| s.old_lo <= off);
         if i == 0 {
@@ -735,7 +777,7 @@ fn plan_data_layout(
         if let Some((&s, _)) = split_align.range((pos + 1)..hi).next() {
             hi = s;
         }
-        let in_file = pos < data_file_len;
+        let in_file = matches!(unified_home(pos, data_file_len), DataHome::Data(_));
         let cursor = if in_file {
             &mut cursor_data
         } else {
@@ -965,13 +1007,23 @@ pub(super) fn write_relocatable(
         // `copy` is the object's own byte size; `extent` additionally
         // covers the 8-byte-slot rounding of its unified storage, which
         // the plan drops like alignment padding.
+        //
+        // Two carves share the pass. An explicit `section("name")`
+        // places the object by name, `SHF_WRITE` only when the storage
+        // is writable (C99 6.7.3: a `const`-qualified object cannot be
+        // written through its declared type, and one writable member
+        // makes the whole section writable -- `get_or_insert` unions).
+        // Everything else that is `const`, file-backed and holds no
+        // relocated slot goes to `.rodata`, so the loader can map it
+        // without write permission.
+        let reloc_slots = relocated_data_offsets(program);
+        let data_file_len = build.data.len() as u64;
         let mut named_objs: Vec<NamedDataObj> = Vec::new();
         for sym in &program.symbols {
             if sym.class != Token::Glo as i64
                 || !sym.defined_here
                 || sym.is_alias
                 || sym.is_thread_local
-                || sym.section_name.is_none()
                 || !matches!(sym.linkage, Linkage::External | Linkage::Internal)
             {
                 continue;
@@ -986,14 +1038,37 @@ pub(super) fn write_relocatable(
             } else {
                 extent
             };
-            let sec = sym.section_name.as_deref().unwrap_or("");
+            let val = sym.val as u64;
+            let (sec, flags) = match sym.section_name.as_deref() {
+                Some(name) => (
+                    name,
+                    if sym.storage_is_const {
+                        SHF_ALLOC
+                    } else {
+                        SHF_ALLOC | SHF_WRITE
+                    },
+                ),
+                None => {
+                    // A zero-fill object stays in `.bss`; a relocated
+                    // slot needs a writable page because the image
+                    // carries no `PT_GNU_RELRO`.
+                    let holds_reloc = reloc_slots
+                        .range(val..val.saturating_add(extent))
+                        .next()
+                        .is_some();
+                    if !sym.storage_is_const || holds_reloc || val + extent > data_file_len {
+                        continue;
+                    }
+                    (RODATA_SECTION, SHF_ALLOC)
+                }
+            };
             let align = sym.data_align.max(1) as u64;
             let e = carve
                 .table
-                .get_or_insert(sec, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, align)
+                .get_or_insert(sec, SHT_PROGBITS, flags, align)
                 .map_err(internal)?;
             named_objs.push(NamedDataObj {
-                val: sym.val as u64,
+                val,
                 copy,
                 extent,
                 align,
@@ -1037,15 +1112,38 @@ pub(super) fn write_relocatable(
                 b'a' => flags |= SHF_ALLOC,
                 b'w' => flags |= SHF_WRITE,
                 b'x' => flags |= SHF_EXECINSTR,
-                // Merge / strings / group flags are layout hints a
-                // relocatable object can omit without changing meaning.
-                _ => {}
+                // `M` needs the entsize the directive parser drops and
+                // `S` only qualifies it; both are deduplication hints a
+                // relocatable object may decline. `G` (group) is
+                // dropped with them because the writer emits no
+                // `SHT_GROUP` section for the flag to reference.
+                b'M' | b'S' | b'G' => {}
+                // `T` would make the section thread-local storage,
+                // which the merged TLS block is not built from.
+                b'T' => {
+                    return Err(asm_section_err(&s.name, "the `T` (TLS) section flag"));
+                }
+                _ => {
+                    return Err(asm_section_err(
+                        &s.name,
+                        &alloc::format!("section flag `{}`", c as char),
+                    ));
+                }
             }
         }
         let sh_type = match s.sh_type.as_deref() {
+            None | Some("progbits") => SHT_PROGBITS,
             Some("nobits") => SHT_NOBITS,
             Some("note") => SHT_NOTE,
-            _ => SHT_PROGBITS,
+            Some("init_array") => SHT_INIT_ARRAY,
+            Some("fini_array") => SHT_FINI_ARRAY,
+            Some("preinit_array") => SHT_PREINIT_ARRAY,
+            Some(other) => {
+                return Err(asm_section_err(
+                    &s.name,
+                    &alloc::format!("section type `@{other}`"),
+                ));
+            }
         };
         let align = s.align.max(1) as u64;
         let e = carve
@@ -2227,6 +2325,20 @@ pub(super) fn write_relocatable(
     // or an undefined symbol.
     {
         use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
+        // Undefined-symbol index by name. The three name lists are
+        // disjoint by construction (each is filtered against the ones
+        // before it), so one map answers all three.
+        let mut extern_symidx_by_name: alloc::collections::BTreeMap<&str, usize> =
+            alloc::collections::BTreeMap::new();
+        for (list, idx) in [
+            (&user_extern_names, &user_extern_sym_idx),
+            (&user_extern_data_names, &user_extern_data_sym_idx),
+            (&asm_extern_names, &asm_extern_sym_idx),
+        ] {
+            for (k, n) in list.iter().enumerate() {
+                extern_symidx_by_name.insert(n, idx[k]);
+            }
+        }
         for (&(e, base), s) in asm_placements.iter().zip(build.asm_sections.iter()) {
             for r in &s.relocs {
                 let (sym_idx, addend) = match &r.target {
@@ -2261,21 +2373,15 @@ pub(super) fn write_relocatable(
                         } else if let Some(&val) = defined_data_by_name.get(name.as_str()) {
                             let (sym, off) = data_section_ref(val);
                             (sym, off + r.addend)
-                        } else if let Some(pos) =
-                            user_extern_names.iter().position(|n| *n == name.as_str())
-                        {
-                            (user_extern_sym_idx[pos] as u64, r.addend)
-                        } else if let Some(pos) = user_extern_data_names
-                            .iter()
-                            .position(|n| *n == name.as_str())
-                        {
-                            (user_extern_data_sym_idx[pos] as u64, r.addend)
+                        } else if let Some(&idx) = extern_symidx_by_name.get(name.as_str()) {
+                            (idx as u64, r.addend)
                         } else {
-                            let pos = asm_extern_names
-                                .iter()
-                                .position(|n| *n == name.as_str())
-                                .expect("asm_extern_names covers every unresolved asm reloc name");
-                            (asm_extern_sym_idx[pos] as u64, r.addend)
+                            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                                &alloc::format!(
+                                    "elf_reloc: asm relocation names `{name}`, which reached \
+                                     no defined or undefined symbol"
+                                ),
+                            )));
                         }
                     }
                 };
@@ -3518,6 +3624,7 @@ mod tests {
             copy_relocs: Default::default(),
             text: Vec::new(),
             data: Vec::new(),
+            data_ro_len: 0,
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),

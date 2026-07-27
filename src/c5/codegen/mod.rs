@@ -1267,6 +1267,12 @@ pub(crate) struct Build {
     /// segment, so a `DataFixup { data_offset: K }` resolves to
     /// byte K of this `Vec`.
     pub data: Vec<u8>,
+    /// Length of the read-only prefix of [`Self::data`]. Bytes below
+    /// it are `const`-qualified storage with no relocated slot, so the
+    /// image writers can place them in a section the loader maps
+    /// without write permission; the rest stays writable. Zero when
+    /// the producer segregated nothing.
+    pub data_ro_len: usize,
     /// Base alignment `data` requires in the image, at least 8.
     /// Raised past 8 only by linked foreign sections with a larger
     /// sh_addralign (e.g. `.rodata.cst16`); the writers place the

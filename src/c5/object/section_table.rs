@@ -48,10 +48,13 @@ pub(crate) struct SectionTable {
 }
 
 impl SectionTable {
-    /// Index of the entry for `name`, creating it when absent. An
-    /// existing entry keeps its type/flags; asking for the same name
-    /// with a different identity is an error surfaced to the caller.
-    /// The entry's alignment grows to the largest request.
+    /// Index of the entry for `name`, creating it when absent. The
+    /// entry's alignment grows to the largest request and its flags to
+    /// the union of every request: one writable member makes the whole
+    /// section writable, one executable member makes it executable.
+    /// Asking for the same name with a different `sh_type` is an error
+    /// surfaced to the caller -- content shape, unlike permission, has
+    /// no meaningful union.
     pub(crate) fn get_or_insert(
         &mut self,
         name: &str,
@@ -61,11 +64,14 @@ impl SectionTable {
     ) -> Result<usize, String> {
         if let Some(i) = self.entries.iter().position(|e| e.name == name) {
             let e = &mut self.entries[i];
-            if e.sh_type != sh_type || e.flags != flags {
+            if e.sh_type != sh_type {
                 return Err(alloc::format!(
-                    "section `{name}` requested with conflicting type/flags"
+                    "section `{name}` requested with conflicting type \
+                     ({} then {sh_type})",
+                    e.sh_type,
                 ));
             }
+            e.flags |= flags;
             e.align = e.align.max(align);
             return Ok(i);
         }

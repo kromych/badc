@@ -854,6 +854,11 @@ pub(crate) fn apply_data_liveness(
     // the `BADC_NO_BSS_SEGREGATE` opt-out or a target whose writer does
     // not support it), every live object (zero or not) is packed into the
     // file image as before and `bss_size` stays 0. The caller sets it.
+    //
+    // This predicate is the only place the question is decided. The
+    // layout it produces records the answer as a position -- everything
+    // at or past the file image is zero-fill -- and the object writer
+    // reads it back through that watershed rather than re-deriving it.
     let is_bss = |i: usize| -> bool {
         segregate
             && i != 0

@@ -1777,6 +1777,15 @@ fn array_compound_literal_address_const() {
 }
 
 #[test]
+fn parenthesized_address_constant() {
+    // C99 6.5.1p5: parentheses around the operand of `&` are transparent, so
+    // `&(obj)` is the address constant `&obj` (6.6p9). Covers the operand
+    // forms at file scope and at block-scope `static`, which share the
+    // constant-expression path.
+    assert_eq!(run_fixture("parenthesized_address_constant.c"), 0);
+}
+
+#[test]
 fn attribute_section_placement() {
     // `section("name")` placements: the interpreter ignores them; the
     // native object writer places the bytes (locked by the object-level

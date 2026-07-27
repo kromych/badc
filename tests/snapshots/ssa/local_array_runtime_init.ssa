@@ -51,7 +51,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=2
     v3   ParamRef(1, kind=I32)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-2)                                    -> x0
-    v6   ImmData(1084)                                    -> x0
+    v6   ImmData(1088)                                    -> x0
     v7   Imm(0)                                           -> x0
     v8   LoadLocal { off=2, kind=I32 }                    -> x0
     v9   LoadLocal { off=3, kind=I32 }                    -> x0
@@ -107,7 +107,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=2
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-2)                                    -> x0
-    v6   ImmData(1096)                                    -> x0
+    v6   ImmData(1104)                                    -> x0
     v7   Imm(0)                                           -> x0
     v8   LoadLocal { off=2, kind=I64 }                    -> x0
     v9   LoadLocal { off=3, kind=I64 }                    -> x0
@@ -142,7 +142,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=1
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   LocalAddr(-1)                                    -> x0
-    v4   ImmData(1112)                                    -> x1
+    v4   ImmData(1120)                                    -> x1
     v5   Mcpy { dst=v3, src=v4, size=4, align=8 }         -> x0
     v6   Imm(97)                                          -> x0
     v7   LoadLocal { off=2, kind=I32 }                    -> x0
@@ -289,8 +289,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=4
     terminator Return(v31)   (exit_acc=v31)
   block 8  start_pc=0
     v32  LocalAddr(-2)                                    -> x0
-    v33  ImmData(12)                                      -> x1
-    v34  Mcpy { dst=v32, src=v33, size=12, align=4 }      -> x0
+    v33  ImmData(8)                                       -> x1
+    v34  Mcpy { dst=v32, src=v33, size=12, align=8 }      -> x0
     v35  LocalAddr(-2)                                    -> x0
     v36  Imm(0)                                           -> x1
     v37  Load { addr=v35, disp=0, kind=I32 }              -> x1
@@ -315,8 +315,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=4
     terminator Return(v53)   (exit_acc=v53)
   block 10  start_pc=0
     v54  LocalAddr(-3)                                    -> x0
-    v55  ImmData(30)                                      -> x1
-    v56  Mcpy { dst=v54, src=v55, size=8, align=2 }       -> x0
+    v55  ImmData(32)                                      -> x1
+    v56  Mcpy { dst=v54, src=v55, size=8, align=8 }       -> x0
     v57  LocalAddr(-3)                                    -> x0
     v58  Imm(0)                                           -> x1
     v59  Load { addr=v57, disp=0, kind=I8 }               -> x0

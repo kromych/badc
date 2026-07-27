@@ -698,6 +698,10 @@ impl Compiler {
         elements: &[(i128, InitElemReloc)],
     ) -> (usize, usize) {
         let elem_size = self.size_of_type(elem_ty);
+        // The staged template's only consumer is an `Inst::Mcpy` into an
+        // 8-byte-slotted frame local, which transfers in units up to 8
+        // bytes; the source must satisfy the same alignment.
+        self.align_data_to_8();
         let start_addr = self.data.len();
         if elem_size == 1 {
             for &(v, _) in elements {

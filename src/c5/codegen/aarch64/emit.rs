@@ -5501,7 +5501,7 @@ fn emit_call_ext(
     let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
     emit_stack_alloc(code, plan.scratch_bytes, None);
     if !marshal_args(
-        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     ) {
         return false;
     }
@@ -5702,7 +5702,7 @@ fn emit_call(
             super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         emit_stack_alloc(code, plan.scratch_bytes, None);
         if !marshal_args(
-            code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+            code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
         ) {
             return false;
         }
@@ -5749,7 +5749,7 @@ fn emit_call(
     let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
     emit_stack_alloc(code, plan.scratch_bytes, None);
     if !marshal_args(
-        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     ) {
         return false;
     }
@@ -6002,7 +6002,7 @@ fn emit_call_indirect(
         emit_sp_str_x_auto(code, target_reg, off);
     }
     if !marshal_args(
-        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     ) {
         return false;
     }
@@ -6036,21 +6036,33 @@ fn emit_call_indirect(
 /// ldrb/strb tail for any sub-word remainder. The defined value
 /// is `dst` -- mirrors C's `memcpy(dst, src, size)` return.
 /// One load / store pair of `width` bytes (8, 4, 2 or 1) moving
-/// `[sbase + off]` to `[dbase + off]` through `temp`.
-fn emit_copy_unit(code: &mut Vec<u8>, width: u32, temp: Reg, sbase: Reg, dbase: Reg, off: u32) {
+/// `[sbase + soff]` to `[dbase + doff]` through `temp`.
+#[allow(clippy::too_many_arguments)]
+fn emit_copy_unit(
+    code: &mut Vec<u8>,
+    width: u32,
+    temp: Reg,
+    sbase: Reg,
+    soff: u32,
+    dbase: Reg,
+    doff: u32,
+) {
     let (ld, st) = match width {
-        8 => (enc_ldr_imm(temp, sbase, off), enc_str_imm(temp, dbase, off)),
+        8 => (
+            enc_ldr_imm(temp, sbase, soff),
+            enc_str_imm(temp, dbase, doff),
+        ),
         4 => (
-            super::encode::enc_ldr32_imm(temp, sbase, off),
-            super::encode::enc_str32_imm(temp, dbase, off),
+            super::encode::enc_ldr32_imm(temp, sbase, soff),
+            super::encode::enc_str32_imm(temp, dbase, doff),
         ),
         2 => (
-            enc_ldrh_imm(temp, sbase, off),
-            enc_strh_imm(temp, dbase, off),
+            enc_ldrh_imm(temp, sbase, soff),
+            enc_strh_imm(temp, dbase, doff),
         ),
         _ => (
-            enc_ldrb_imm(temp, sbase, off),
-            enc_strb_imm(temp, dbase, off),
+            enc_ldrb_imm(temp, sbase, soff),
+            enc_strb_imm(temp, dbase, doff),
         ),
     };
     emit(code, ld);
@@ -6128,7 +6140,7 @@ fn emit_mcpy(
         let words = run / unit;
         for w in 0..words {
             let off = w * unit;
-            emit_copy_unit(code, unit, temp, sbase, dbase, off);
+            emit_copy_unit(code, unit, temp, sbase, off, dbase, off);
         }
         let tail_start = words * unit;
         for i in 0..(run - tail_start) {
@@ -8551,6 +8563,7 @@ fn marshal_args(
     frame: Frame,
     arg_aggs: &[Option<u32>],
     agg_descs: &[super::super::ir::AggDesc],
+    abi: super::Abi,
 ) -> bool {
     let arg_place = |i: usize| -> Place {
         alloc
@@ -8606,14 +8619,27 @@ fn marshal_args(
             if src.0 != scratch.primary.0 {
                 emit_mov_reg(code, scratch.primary, src);
             }
+            // The outgoing stack slot is 8-aligned (AAPCS64 5.4.2); the
+            // source is the caller's object, so its own alignment bounds
+            // the unit.
+            let align = arg_aggs
+                .get(i)
+                .copied()
+                .flatten()
+                .map_or(1, |k| agg_descs[k as usize].align);
+            let unit = super::super::access_chunk(align, abi.strict_align, 8);
             let mut copied = 0u32;
-            while copied + 8 <= size {
-                emit(
+            while copied + unit <= size {
+                emit_copy_unit(
                     code,
-                    enc_ldr_imm(scratch.secondary, scratch.primary, copied),
+                    unit,
+                    scratch.secondary,
+                    scratch.primary,
+                    copied,
+                    Reg(31),
+                    off + copied,
                 );
-                emit(code, enc_str_imm(scratch.secondary, Reg(31), off + copied));
-                copied += 8;
+                copied += unit;
             }
             while copied < size {
                 emit(

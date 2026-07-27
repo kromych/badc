@@ -5,12 +5,12 @@ fn ent_pc=0 n_params=0 variadic=false locals=22
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-21)                                   -> x0
-    v2   ImmData(79)                                      -> x1
-    v3   Mcpy { dst=v1, src=v2, size=168, align=1 }       -> x0
-    v4   ImmData(39)                                      -> x0
+    v2   ImmData(48)                                      -> x1
+    v3   Mcpy { dst=v1, src=v2, size=168, align=8 }       -> x0
+    v4   ImmData(24)                                      -> x0
     v5   LocalAddr(-21)                                   -> x1
     v6   Store { addr=v5, disp=0, value=v4, kind=I64 }    -> -
-    v7   ImmData(43)                                      -> x1
+    v7   ImmData(28)                                      -> x1
     v8   LocalAddr(-21)                                   -> x0
     v9   BinopI { op=add, lhs=v8, rhs_imm=8 }             -> x2
     v10  Store { addr=v8, disp=8, value=v7, kind=I64 }    -> -
@@ -35,7 +35,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=22
     v29  LocalAddr(-21)                                   -> x1
     v30  BinopI { op=add, lhs=v29, rhs_imm=40 }           -> x6
     v31  Store { addr=v29, disp=40, value=v28, kind=I32 } -> -
-    v32  ImmData(46)                                      -> x6
+    v32  ImmData(31)                                      -> x6
     v33  LocalAddr(-21)                                   -> x1
     v34  BinopI { op=add, lhs=v33, rhs_imm=48 }           -> x2
     v35  Store { addr=v33, disp=48, value=v32, kind=I64 } -> -

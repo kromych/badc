@@ -99,8 +99,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
     terminator Jmp(b11)   (exit_acc=v37)
   block 11  start_pc=0
     v39  LocalAddr(-2)                                    -> x0
-    v40  ImmData(38)                                      -> x1
-    v41  Mcpy { dst=v39, src=v40, size=16, align=2 }      -> x0
+    v40  ImmData(40)                                      -> x1
+    v41  Mcpy { dst=v39, src=v40, size=16, align=8 }      -> x0
     v42  LocalAddr(-2)                                    -> x0
     terminator Jmp(b12)
   block 12  start_pc=0
@@ -167,8 +167,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
     terminator Return(v44)   (exit_acc=v44)
   block 21  start_pc=0
     v45  LocalAddr(-5)                                    -> x0
-    v46  ImmData(54)                                      -> x1
-    v47  Mcpy { dst=v45, src=v46, size=16, align=2 }      -> x0
+    v46  ImmData(56)                                      -> x1
+    v47  Mcpy { dst=v45, src=v46, size=16, align=8 }      -> x0
     v48  LocalAddr(-5)                                    -> x0
     v49  Imm(0)                                           -> x1
     v50  LoadLocal { off=-3, kind=I64 }                   -> x1
@@ -224,8 +224,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
     terminator Return(v85)   (exit_acc=v85)
   block 29  start_pc=0
     v86  LocalAddr(-7)                                    -> x0
-    v87  ImmData(70)                                      -> x1
-    v88  Mcpy { dst=v86, src=v87, size=8, align=2 }       -> x0
+    v87  ImmData(72)                                      -> x1
+    v88  Mcpy { dst=v86, src=v87, size=8, align=8 }       -> x0
     v89  LocalAddr(-7)                                    -> x0
     v90  Imm(0)                                           -> x1
     v91  Load { addr=v89, disp=0, kind=I32 }              -> x1
@@ -245,7 +245,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
     v101 Imm(10)                                          -> x0
     v102 Imm(0)                                           -> x0
     v103 LocalAddr(-11)                                   -> x0
-    v104 ImmData(110)                                     -> x0
+    v104 ImmData(112)                                     -> x0
     v105 Imm(0)                                           -> x0
     v106 LoadLocal { off=-13, kind=I32 }                  -> x0
     v107 LocalAddr(-11)                                   -> x0

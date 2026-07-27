@@ -5,7 +5,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> x0
-    v2   ImmData(52)                                      -> x0
+    v2   ImmData(56)                                      -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(42)                                          -> x0
     v5   Imm(0)                                           -> x0
@@ -45,7 +45,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     terminator Jmp(b5)   (exit_acc=v31)
   block 5  start_pc=0
     v40  LocalAddr(-3)                                    -> x0
-    v41  ImmData(62)                                      -> x0
+    v41  ImmData(72)                                      -> x0
     v42  Imm(0)                                           -> x0
     v43  LoadLocal { off=-5, kind=I32 }                   -> x0
     v44  Imm(42)                                          -> x0
@@ -83,7 +83,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     terminator Jmp(b10)   (exit_acc=v68)
   block 10  start_pc=0
     v77  LocalAddr(-2)                                    -> x0
-    v78  ImmData(72)                                      -> x0
+    v78  ImmData(88)                                      -> x0
     v79  Imm(0)                                           -> x0
     v80  LoadLocal { off=-5, kind=I32 }                   -> x0
     v81  Imm(42)                                          -> x0
@@ -191,8 +191,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     terminator Jmp(b24)   (exit_acc=v166)
   block 24  start_pc=0
     v175 LocalAddr(-1)                                    -> x0
-    v176 ImmData(79)                                      -> x1
-    v177 Mcpy { dst=v175, src=v176, size=4, align=1 }     -> x0
+    v176 ImmData(96)                                      -> x1
+    v177 Mcpy { dst=v175, src=v176, size=4, align=8 }     -> x0
     v178 Imm(200)                                         -> x0
     v179 Imm(0)                                           -> x0
     v180 LoadLocal { off=-5, kind=I32 }                   -> x0
@@ -223,7 +223,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v204 LoadLocal { off=-5, kind=I64 }                   -> x1
     terminator Bz { cond=v203, target=b30, fall=b29 }   (exit_acc=v203)
   block 29  start_pc=0
-    v205 ImmData(19)                                      -> x7
+    v205 ImmData(20)                                      -> x7
     v206 Imm(99)                                          -> x6
     v207 LocalAddr(-1)                                    -> x0
     v208 Imm(0)                                           -> x1

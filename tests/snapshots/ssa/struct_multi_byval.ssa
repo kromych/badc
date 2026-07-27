@@ -8,7 +8,7 @@ fn ent_pc=0 n_params=8 variadic=false locals=9
     v2   Imm(0)                                           -> x0
     v3   ParamRef(5, kind=I32)                            -> x9
     v4   Imm(0)                                           -> x0
-    v5   ImmData(88)                                      -> x2
+    v5   ImmData(104)                                     -> x2
     v6   LocalAddr(-1)                                    -> x0
     v7   Load { addr=v6, disp=0, kind=I32 }               -> x1
     v8   LocalAddr(-1)                                    -> x0
@@ -173,13 +173,13 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v5   ImmData(24)                                      -> x1
     v6   Mcpy { dst=v4, src=v5, size=12, align=8 }        -> x0
     v7   LocalAddr(-27)                                   -> x0
-    v8   ImmData(36)                                      -> x1
-    v9   Mcpy { dst=v7, src=v8, size=4, align=4 }         -> x0
+    v8   ImmData(40)                                      -> x1
+    v9   Mcpy { dst=v7, src=v8, size=4, align=8 }         -> x0
     v10  LocalAddr(-19)                                   -> x0
-    v11  ImmData(40)                                      -> x1
+    v11  ImmData(48)                                      -> x1
     v12  Mcpy { dst=v10, src=v11, size=16, align=8 }      -> x0
     v13  LocalAddr(-22)                                   -> x0
-    v14  ImmData(56)                                      -> x1
+    v14  ImmData(64)                                      -> x1
     v15  Mcpy { dst=v13, src=v14, size=24, align=8 }      -> x0
     v16  LocalAddr(-28)                                   -> x7
     v17  Imm(1000)                                        -> x6
@@ -190,7 +190,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v22  LocalAddr(-22)                                   -> x0
     v23  Imm(3000)                                        -> x3
     v24  Call { target_pc=0, args=[v16, v17, v18, v19, v20, v21, v22, v23], fixed_args=8, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v25  ImmData(88)                                      -> x0
+    v25  ImmData(104)                                     -> x0
     v26  Load { addr=v25, disp=0, kind=I64 }              -> x0
     v27  BinopI { op=ne, lhs=v26, rhs_imm=6674 }          -> x0
     terminator Bz { cond=v27, target=b2, fall=b1 }   (exit_acc=v27)

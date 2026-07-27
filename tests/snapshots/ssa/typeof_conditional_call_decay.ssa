@@ -73,11 +73,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     terminator Return(v33)   (exit_acc=v33)
   block 13  start_pc=0
     v34  LocalAddr(-2)                                    -> x0
-    v35  ImmData(68)                                      -> x1
-    v36  Mcpy { dst=v34, src=v35, size=10, align=4 }      -> x0
+    v35  ImmData(72)                                      -> x1
+    v36  Mcpy { dst=v34, src=v35, size=10, align=8 }      -> x0
     v37  LocalAddr(-5)                                    -> x0
-    v38  ImmData(78)                                      -> x1
-    v39  Mcpy { dst=v37, src=v38, size=20, align=2 }      -> x0
+    v38  ImmData(88)                                      -> x1
+    v39  Mcpy { dst=v37, src=v38, size=20, align=8 }      -> x0
     v40  LocalAddr(-2)                                    -> x0
     v41  BinopI { op=and, lhs=v40, rhs_imm=255 }          -> x0
     v42  LocalAddr(-5)                                    -> x0

@@ -61,8 +61,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     terminator Return(v46)   (exit_acc=v46)
   block 6  start_pc=0
     v47  LocalAddr(-1)                                    -> x0
-    v48  ImmData(28)                                      -> x2
-    v49  Mcpy { dst=v47, src=v48, size=4, align=4 }       -> x0
+    v48  ImmData(32)                                      -> x2
+    v49  Mcpy { dst=v47, src=v48, size=4, align=8 }       -> x0
     v50  LocalAddr(-1)                                    -> x6
     v51  LocalAddr(-1)                                    -> x0
     v52  Imm(1)                                           -> x2

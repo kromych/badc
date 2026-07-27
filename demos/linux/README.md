@@ -216,9 +216,7 @@ into the tree.
 Two parameters depend on the corpus rather than the architecture and have to
 be passed. `--expect-units` is the unit count of the configuration under test
 (1912 for the pinned x86_64 config, 1346 for the aarch64 one). `--rdinit` is
-whatever the initramfs installs, `/init` by default. `--weaken` forwards
-`BADC_WEAKEN` for the extern-inline gap the shim docstring describes; it is a
-shim, not a pass condition, and the run states it.
+whatever the initramfs installs, `/init` by default.
 
 ## Scope
 

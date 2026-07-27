@@ -89,10 +89,7 @@ def build(args, arch: dict, tree: Path, manifest: Path) -> tuple[int, float, Pat
         env["BADC_FALLBACK"] = str(Path(args.fallback).resolve())
     else:
         env.pop("BADC_FALLBACK", None)
-    if args.weaken:
-        env["BADC_WEAKEN"] = args.weaken
-    else:
-        env.pop("BADC_WEAKEN", None)
+    env.pop("BADC_WEAKEN", None)
 
     manifest.unlink(missing_ok=True)
     if args.clean:
@@ -151,8 +148,6 @@ def main() -> int:
     ap.add_argument("--timeout", type=int, default=600, help="seconds per badc unit")
     ap.add_argument("--fallback", help="units to leave to the reference compiler; "
                                        "the gate expects none")
-    ap.add_argument("--weaken", help="BADC_WEAKEN passthrough (a shim, not a pass "
-                                     "condition)")
     ap.add_argument("--clean", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--expect-units", type=int, default=0,
                     help="minimum badc-compiled units; guards against a build that "

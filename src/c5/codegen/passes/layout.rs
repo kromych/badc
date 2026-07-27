@@ -36,16 +36,17 @@ use crate::c5::ir::{BlockId, FunctionSsa, Inst, Terminator};
 const NO_BLOCK: BlockId = BlockId::MAX;
 
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
+    let mut chains = JumpChains::default();
     for func in funcs.iter_mut() {
-        run_one(func);
+        run_one(func, &mut chains);
     }
 }
 
-fn run_one(func: &mut FunctionSsa) {
+fn run_one(func: &mut FunctionSsa, chains: &mut JumpChains) {
     if !func.computed_goto_targets.is_empty() || func.blocks.len() < 2 {
         return;
     }
-    thread_jumps(func);
+    thread_jumps(func, chains);
     let rpo = rpo_numbers(func);
     let idom = dominators(func);
     if is_irreducible(func, &idom, &rpo) {
@@ -82,14 +83,120 @@ fn block_has_phis(func: &FunctionSsa, b: BlockId) -> bool {
         .any(|i| matches!(func.insts[i as usize], Inst::Phi { .. }))
 }
 
+/// Per-block chain end of the empty unconditionally-branching blocks
+/// reachable from it, and the block one hop short of that end.
+///
+/// Chains overlap -- the chain from a block is its successor's chain
+/// with one block in front -- so the ends are resolved once for the
+/// whole function instead of per edge, which costs the chain's length
+/// at every block along it. The buffers are owned by the pass and
+/// refilled per function, so a unit of many small functions pays no
+/// allocation per function.
+#[derive(Default)]
+struct JumpChains {
+    /// Chain end per block, `NO_BLOCK` when the chain never terminates.
+    end: Vec<BlockId>,
+    /// Block preceding `end` on the chain; the block itself when the
+    /// chain is empty.
+    penultimate: Vec<BlockId>,
+    /// Per block: 0 unvisited, 1 on the current path, 2 resolved.
+    state: Vec<u8>,
+    /// Blocks of the chain being resolved, unwound to assign their ends.
+    path: Vec<BlockId>,
+}
+
+impl JumpChains {
+    fn build(&mut self, func: &FunctionSsa) {
+        let n = func.blocks.len();
+        let JumpChains {
+            end,
+            penultimate,
+            state,
+            path,
+        } = self;
+        end.clear();
+        end.resize(n, NO_BLOCK);
+        penultimate.clear();
+        penultimate.resize(n, NO_BLOCK);
+        state.clear();
+        state.resize(n, 0);
+        path.clear();
+        let hop = |b: BlockId| -> Option<BlockId> {
+            if !block_is_empty(func, b) {
+                return None;
+            }
+            uncond_target(&func.blocks[b as usize].terminator).filter(|&t| t != b)
+        };
+        for start in 0..n as BlockId {
+            if state[start as usize] != 0 {
+                continue;
+            }
+            let mut cur = start;
+            // Walk until the chain reaches a resolved block, a block
+            // that ends no chain, or the path itself (a jump cycle).
+            let tail = loop {
+                if state[cur as usize] == 2 {
+                    break Some(cur);
+                }
+                if state[cur as usize] == 1 {
+                    break None; // cycle: the walk never terminates
+                }
+                state[cur as usize] = 1;
+                path.push(cur);
+                match hop(cur) {
+                    Some(t) => cur = t,
+                    None => {
+                        end[cur as usize] = cur;
+                        penultimate[cur as usize] = cur;
+                        state[cur as usize] = 2;
+                        path.pop();
+                        break Some(cur);
+                    }
+                }
+            };
+            let terminates = tail.is_some_and(|t| end[t as usize] != NO_BLOCK);
+            while let Some(b) = path.pop() {
+                state[b as usize] = 2;
+                if !terminates {
+                    continue;
+                }
+                let t = hop(b).expect("a block on the path hops");
+                end[b as usize] = end[t as usize];
+                penultimate[b as usize] = if end[t as usize] == t {
+                    b
+                } else {
+                    penultimate[t as usize]
+                };
+            }
+        }
+    }
+
+    /// The block an edge into `start` may target instead. The chain's
+    /// end must carry no phis (its incomings key predecessor ids that a
+    /// retarget would falsify); when it does, the chain stops one hop
+    /// short, at the empty block that holds the edge's phi moves.
+    ///
+    /// A chain that reaches a jump cycle has no end, so it is walked in
+    /// the graph as it stands: retargeting rewrites the edges the walk
+    /// reads, and only a cyclic chain's answer depends on how far that
+    /// rewriting has got.
+    fn target(&self, func: &FunctionSsa, start: BlockId) -> BlockId {
+        let e = self.end[start as usize];
+        if e == NO_BLOCK {
+            return walk_chain(func, start);
+        }
+        if block_has_phis(func, e) {
+            self.penultimate[start as usize]
+        } else {
+            e
+        }
+    }
+}
+
 /// Follow the chain of empty unconditionally-branching blocks from
-/// `start` and return the block an edge into `start` may target
-/// instead. The final block must carry no phis (its incomings key
-/// predecessor ids that a retarget would falsify); when it does, the
-/// chain stops one hop short, at the empty block that holds the
-/// edge's phi moves. A chain longer than the block count is a jump
-/// cycle and is left alone.
-fn thread_target(func: &FunctionSsa, start: BlockId) -> BlockId {
+/// `start`, stopping one hop short of a phi-carrying end. A chain
+/// longer than the block count is a jump cycle and is left alone.
+fn walk_chain(func: &FunctionSsa, start: BlockId) -> BlockId {
     let mut prev = start;
     let mut cur = start;
     let mut steps = 0usize;
@@ -113,23 +220,24 @@ fn thread_target(func: &FunctionSsa, start: BlockId) -> BlockId {
     if block_has_phis(func, cur) { prev } else { cur }
 }
 
-/// Retarget every terminator edge through [`thread_target`]. Bypassed
-/// blocks keep their own edges; any that become unreachable are
-/// placed after the reachable code by the layout order.
-fn thread_jumps(func: &mut FunctionSsa) {
+/// Retarget every terminator edge through [`JumpChains::target`].
+/// Bypassed blocks keep their own edges; any that become unreachable
+/// are placed after the reachable code by the layout order.
+fn thread_jumps(func: &mut FunctionSsa, chains: &mut JumpChains) {
+    chains.build(func);
     for i in 0..func.blocks.len() {
         let term = func.blocks[i].terminator;
         let new_term = match term {
-            Terminator::Jmp(t) => Terminator::Jmp(thread_target(func, t)),
-            Terminator::FallThrough(t) => Terminator::FallThrough(thread_target(func, t)),
+            Terminator::Jmp(t) => Terminator::Jmp(chains.target(func, t)),
+            Terminator::FallThrough(t) => Terminator::FallThrough(chains.target(func, t)),
             Terminator::Bz {
                 cond,
                 target,
                 fall_through,
             } => Terminator::Bz {
                 cond,
-                target: thread_target(func, target),
-                fall_through: thread_target(func, fall_through),
+                target: chains.target(func, target),
+                fall_through: chains.target(func, fall_through),
             },
             Terminator::Bnz {
                 cond,
@@ -137,8 +245,8 @@ fn thread_jumps(func: &mut FunctionSsa) {
                 fall_through,
             } => Terminator::Bnz {
                 cond,
-                target: thread_target(func, target),
-                fall_through: thread_target(func, fall_through),
+                target: chains.target(func, target),
+                fall_through: chains.target(func, fall_through),
             },
             other => other,
         };
@@ -791,7 +899,7 @@ mod tests {
     #[test]
     fn for_loop_rotates_to_bottom_test() {
         let mut f = for_loop_shape();
-        run_one(&mut f);
+        run_one(&mut f, &mut JumpChains::default());
         // Layout: entry, body, post, header, after. Old ids: 0 3 2 1 4.
         assert_eq!(f.blocks.len(), 5);
         // Entry branches to the rotated header at the loop bottom.
@@ -816,7 +924,7 @@ mod tests {
     #[test]
     fn rotated_loop_keeps_instructions_in_their_blocks() {
         let mut f = for_loop_shape();
-        run_one(&mut f);
+        run_one(&mut f, &mut JumpChains::default());
         // Each block kept its inst_range: old header's single Imm(1)
         // now sits in layout block 3.
         assert_eq!(f.blocks[3].inst_range, 1..2);
@@ -832,7 +940,7 @@ mod tests {
             incoming: vec![(3, 3)],
             kind: LoadKind::I64,
         };
-        run_one(&mut f);
+        run_one(&mut f, &mut JumpChains::default());
         // Layout: entry, body, post, header, after (old 0 3 2 1 4);
         // the post block keeps id 2, its incoming now names body = 1.
         let Inst::Phi { incoming, .. } = &f.insts[2] else {
@@ -853,7 +961,7 @@ mod tests {
                 block(1..2, Terminator::Return(1)),
             ],
         );
-        thread_jumps(&mut f);
+        thread_jumps(&mut f, &mut JumpChains::default());
         assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(3)));
     }
 
@@ -875,7 +983,7 @@ mod tests {
                 block(1..2, Terminator::Return(1)),
             ],
         );
-        thread_jumps(&mut f);
+        thread_jumps(&mut f, &mut JumpChains::default());
         assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(1)));
     }
 
@@ -888,7 +996,7 @@ mod tests {
             .iter()
             .map(|b| alloc::format!("{:?}", b.terminator))
             .collect();
-        run_one(&mut f);
+        run_one(&mut f, &mut JumpChains::default());
         let after: Vec<_> = f
             .blocks
             .iter()
@@ -936,7 +1044,7 @@ mod tests {
             .iter()
             .map(|b| alloc::format!("{:?}", b.terminator))
             .collect();
-        run_one(&mut f);
+        run_one(&mut f, &mut JumpChains::default());
         let after: Vec<_> = f
             .blocks
             .iter()
@@ -965,7 +1073,7 @@ mod tests {
                 block(3..4, Terminator::Return(3)),
             ],
         );
-        run_one(&mut f);
+        run_one(&mut f, &mut JumpChains::default());
         assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(1)));
         assert!(matches!(f.blocks[1].terminator, Terminator::Jmp(2)));
         assert!(matches!(
@@ -1012,7 +1120,7 @@ mod tests {
                 block(7..8, Terminator::Return(7)),
             ],
         );
-        run_one(&mut f);
+        run_one(&mut f, &mut JumpChains::default());
         assert!(max_backedge_uncond_branches(&f) <= 1);
     }
 
@@ -1048,7 +1156,7 @@ mod tests {
                 block(6..7, Terminator::Return(6)),
             ],
         );
-        run_one(&mut f);
+        run_one(&mut f, &mut JumpChains::default());
         assert_eq!(max_backedge_uncond_branches(&f), 0);
         // Recover the inner loop on the permuted function and check
         // its blocks are adjacent in layout.
@@ -1077,5 +1185,82 @@ mod tests {
         );
         super::super::remap_blocks::permute_blocks(&mut f, &[1, 0]);
         assert!(matches!(f.insts[0], Inst::BlockAddr(0)));
+    }
+
+    /// A function of `n` empty blocks each jumping to the next, ending
+    /// at a block that returns. `phi_end` gives the last block a phi, so
+    /// the chain must stop one hop short of it.
+    fn jump_chain(n: usize, phi_end: bool) -> FunctionSsa {
+        let insts = if phi_end {
+            vec![
+                Inst::Imm(0),
+                Inst::Phi {
+                    incoming: vec![(n as BlockId, 0)],
+                    kind: LoadKind::I64,
+                },
+            ]
+        } else {
+            vec![Inst::Imm(0)]
+        };
+        let last = insts.len() as u32;
+        let mut blocks: Vec<Block> = (0..n)
+            .map(|i| block(1..1, Terminator::Jmp(i as BlockId + 1)))
+            .collect();
+        blocks.push(block(1..last, Terminator::Return(0)));
+        blocks[0] = block(0..1, Terminator::Jmp(1));
+        func_with(insts, blocks)
+    }
+
+    /// The precomputed chain ends answer what the per-edge walk does,
+    /// over a plain chain, a chain ending at a phi-carrying block, and a
+    /// jump cycle (which is left alone).
+    #[test]
+    fn jump_chains_match_the_reference_walk() {
+        let mut shapes = vec![
+            jump_chain(1, false),
+            jump_chain(6, false),
+            jump_chain(6, true),
+        ];
+        // b0 -> b1 -> b2 -> b1: a cycle of empty jump blocks.
+        shapes.push(func_with(
+            vec![Inst::Imm(0)],
+            vec![
+                block(0..1, Terminator::Jmp(1)),
+                block(1..1, Terminator::Jmp(2)),
+                block(1..1, Terminator::Jmp(1)),
+            ],
+        ));
+        for f in &shapes {
+            let mut chains = JumpChains::default();
+            chains.build(f);
+            for b in 0..f.blocks.len() as BlockId {
+                assert_eq!(
+                    chains.target(f, b),
+                    walk_chain(f, b),
+                    "block {b} of a {}-block shape",
+                    f.blocks.len(),
+                );
+            }
+        }
+    }
+
+    /// Threading walked the chain from every edge, so a chain of N empty
+    /// jump blocks cost N^2. Quadrupling the chain must not quadruple
+    /// the cost -- 16x is what the per-edge walk would spend.
+    #[test]
+    fn jump_threading_is_not_quadratic_in_the_chain() {
+        let run = |n: usize| {
+            let mut f = jump_chain(n, false);
+            let start = std::time::Instant::now();
+            thread_jumps(&mut f, &mut JumpChains::default());
+            start.elapsed().as_secs_f64()
+        };
+        let small = (0..3).map(|_| run(8000)).fold(f64::MAX, f64::min);
+        let large = (0..3).map(|_| run(32000)).fold(f64::MAX, f64::min);
+        assert!(
+            large < small * 8.0,
+            "4x the chain cost {:.1}x, past the 8x headroom over linear",
+            large / small,
+        );
     }
 }

@@ -3300,14 +3300,19 @@ int main(void) { return 0; }
             // Seed competing hints at several positions, including one
             // past the chain's head, so propagation runs both with and
             // against the sweep direction.
-            for seed in [alloc::vec![], alloc::vec![(0usize, 3u8)], alloc::vec![(n - 1, 7u8)], {
-                let mut v = alloc::vec![(0usize, 3u8)];
-                if n > 2 {
-                    v.push((n / 2, 5u8));
-                }
-                v.push((n - 1, 7u8));
-                v
-            }] {
+            for seed in [
+                alloc::vec![],
+                alloc::vec![(0usize, 3u8)],
+                alloc::vec![(n - 1, 7u8)],
+                {
+                    let mut v = alloc::vec![(0usize, 3u8)];
+                    if n > 2 {
+                        v.push((n / 2, 5u8));
+                    }
+                    v.push((n - 1, 7u8));
+                    v
+                },
+            ] {
                 let mut a: Vec<Option<u8>> = alloc::vec![None; n];
                 let mut b: Vec<Option<u8>> = alloc::vec![None; n];
                 for &(i, r) in &seed {

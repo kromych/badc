@@ -442,8 +442,8 @@ impl Liveness {
     /// The live set is a bit vector (the `live_out` rows' own shape)
     /// and the nodes currently live ride a counted sparse set, so a
     /// definition point emits each (def-node, live-node) edge exactly
-    /// once with no per-edge allocation; the pair list is sorted,
-    /// deduplicated, and laid out as a CSR row per node at the end.
+    /// once with no per-edge allocation; the pair list is laid out as a
+    /// CSR row per node at the end.
     #[allow(dead_code)]
     pub(crate) fn interference(&self, func: &FunctionSsa, node_of: &[ValueId]) -> Interference {
         let n = func.insts.len();
@@ -584,50 +584,6 @@ impl Liveness {
     }
 }
 
-/// LSD radix sort by 16-bit digits: the packed interference pairs
-/// run to millions of keys, where counting passes beat comparison
-/// sorting. Passes above the maximum key's width are skipped.
-fn radix_sort_u64(keys: &mut [u64]) {
-    if keys.len() < 64 {
-        keys.sort_unstable();
-        return;
-    }
-    let max = keys.iter().copied().max().unwrap_or(0);
-    let mut scratch = alloc::vec![0u64; keys.len()];
-    let mut counts = alloc::vec![0u32; 1 << 16];
-    let mut src_is_keys = true;
-    for pass in 0..4 {
-        let shift = pass * 16;
-        if max >> shift == 0 {
-            break;
-        }
-        counts.iter_mut().for_each(|c| *c = 0);
-        let (src, dst): (&[u64], &mut [u64]) = if src_is_keys {
-            (keys, &mut scratch)
-        } else {
-            (&scratch, keys)
-        };
-        for &k in src {
-            counts[((k >> shift) & 0xffff) as usize] += 1;
-        }
-        let mut sum = 0u32;
-        for c in counts.iter_mut() {
-            let v = *c;
-            *c = sum;
-            sum += v;
-        }
-        for &k in src {
-            let d = ((k >> shift) & 0xffff) as usize;
-            dst[counts[d] as usize] = k;
-            counts[d] += 1;
-        }
-        src_is_keys = !src_is_keys;
-    }
-    if !src_is_keys {
-        keys.copy_from_slice(&scratch);
-    }
-}
-
 /// The values live at a sweep point, tracked at two granularities:
 /// membership as a bit vector (the `live_out` rows' own shape) and
 /// the distinct register-allocation nodes those values belong to as
@@ -711,7 +667,10 @@ pub(crate) struct Interference {
 
 #[allow(dead_code)]
 impl Interference {
-    /// Nodes that interfere with `node`, ascending.
+    /// Nodes that interfere with `node`, each listed once. The row order
+    /// is the order the sweep emitted the edges; both consumers (the
+    /// coalescer's membership test and the colourer's neighbour-colour
+    /// scan) read a row as a set.
     pub(crate) fn neighbors(&self, node: ValueId) -> &[ValueId] {
         let (a, b) = (
             self.offsets[node as usize] as usize,
@@ -727,25 +686,26 @@ impl Interference {
 
     /// Build the CSR rows from canonicalized `(low << 32) | high`
     /// pairs, duplicates welcome.
-    fn from_pairs(n: usize, mut pairs: Vec<u64>) -> Self {
-        radix_sort_u64(&mut pairs);
-        pairs.dedup();
+    ///
+    /// Counting the two endpoints of every pair sizes each row directly,
+    /// so the pairs need no global order: the scatter places each edge in
+    /// both rows, and a per-row pass with a stamp array drops the repeats
+    /// a pair list can carry (an edge whose two definition points each see
+    /// the other value live). Compaction runs in place -- the write cursor
+    /// never passes the row being read -- so no second edge buffer exists.
+    fn from_pairs(n: usize, pairs: Vec<u64>) -> Self {
         let unpack = |p: u64| ((p >> 32) as usize, (p & 0xffff_ffff) as usize);
-        let mut deg = alloc::vec![0u32; n];
+        let mut cap = alloc::vec![0u32; n + 1];
         for &p in &pairs {
             let (a, b) = unpack(p);
-            deg[a] += 1;
-            deg[b] += 1;
+            cap[a + 1] += 1;
+            cap[b + 1] += 1;
         }
-        let mut offsets = alloc::vec![0u32; n + 1];
         for i in 0..n {
-            offsets[i + 1] = offsets[i] + deg[i];
+            cap[i + 1] += cap[i];
         }
-        let mut cursor: Vec<u32> = offsets[..n].to_vec();
-        let mut edges = alloc::vec![0 as ValueId; offsets[n] as usize];
-        // Pairs are sorted and each row's second-position entries (all
-        // below the node id) fill before its first-position entries
-        // (all above it), so every row comes out ascending.
+        let mut cursor: Vec<u32> = cap[..n].to_vec();
+        let mut edges = alloc::vec![0 as ValueId; cap[n] as usize];
         for &p in &pairs {
             let (a, b) = unpack(p);
             edges[cursor[a] as usize] = b as ValueId;
@@ -753,6 +713,22 @@ impl Interference {
             edges[cursor[b] as usize] = a as ValueId;
             cursor[b] += 1;
         }
+        let mut offsets = alloc::vec![0u32; n + 1];
+        let mut seen = alloc::vec![u32::MAX; n];
+        let mut w = 0u32;
+        for a in 0..n {
+            offsets[a] = w;
+            for i in cap[a]..cap[a + 1] {
+                let nb = edges[i as usize];
+                if seen[nb as usize] != a as u32 {
+                    seen[nb as usize] = a as u32;
+                    edges[w as usize] = nb;
+                    w += 1;
+                }
+            }
+        }
+        offsets[n] = w;
+        edges.truncate(w as usize);
         Self { offsets, edges }
     }
 
@@ -979,6 +955,27 @@ mod tests {
             "interference graph must record the back-edge wrap-around edge v5--v4",
         );
         assert!(g.neighbors(4).contains(&5));
+    }
+
+    /// Every row is the neighbour set, each entry once and both
+    /// directions present, whatever order and multiplicity the sweep
+    /// emitted the pairs in. The CSR build sizes the rows off the raw
+    /// pair count, so a repeated edge would otherwise show up twice.
+    #[test]
+    fn rows_are_deduplicated_and_symmetric() {
+        let g = Interference::from_edges(4, &[(0, 1), (1, 0), (0, 1), (2, 0), (3, 2), (3, 2)]);
+        let row = |v: ValueId| {
+            let mut r: Vec<ValueId> = g.neighbors(v).to_vec();
+            r.sort_unstable();
+            r
+        };
+        assert_eq!(row(0), alloc::vec![1, 2]);
+        assert_eq!(row(1), alloc::vec![0]);
+        assert_eq!(row(2), alloc::vec![0, 3]);
+        assert_eq!(row(3), alloc::vec![2]);
+        for v in 0..4 as ValueId {
+            assert_eq!(g.degree(v), row(v).len(), "degree counts a row once");
+        }
     }
 
     #[test]

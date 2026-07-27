@@ -964,6 +964,66 @@ struct CalleeFacts {
 /// Facts keyed by callee entry pc.
 type FactsMap = BTreeMap<usize, CalleeFacts>;
 
+/// One fixpoint iteration's candidate bodies under a single gate
+/// combination, shared by every caller the gates admit. Building the
+/// gated sets once per iteration keeps the pass off callers x
+/// candidates.
+struct CandidatePool<'a> {
+    map: BTreeMap<usize, &'a FunctionSsa>,
+    /// Entry pcs of candidates whose loops were unrolled, at most two:
+    /// a caller excludes only its own entry, so two settle the query.
+    unrolled: Vec<usize>,
+}
+
+impl<'a> CandidatePool<'a> {
+    fn build(src: &BTreeMap<usize, &'a FunctionSsa>, keep: impl Fn(&FunctionSsa) -> bool) -> Self {
+        let map: BTreeMap<usize, &'a FunctionSsa> = src
+            .iter()
+            .filter(|(_, c)| keep(c))
+            .map(|(&pc, &c)| (pc, c))
+            .collect();
+        let unrolled = map
+            .iter()
+            .filter(|(_, c)| c.did_unroll)
+            .map(|(&pc, _)| pc)
+            .take(2)
+            .collect();
+        CandidatePool { map, unrolled }
+    }
+
+    fn view(&self, exclude: usize) -> CandidateSet<'_, 'a> {
+        CandidateSet {
+            pool: self,
+            exclude,
+        }
+    }
+}
+
+/// One caller's view of a pool. The caller's own entry is excluded:
+/// splicing a self-recursive call would expand without bound.
+struct CandidateSet<'p, 'a> {
+    pool: &'p CandidatePool<'a>,
+    exclude: usize,
+}
+
+impl<'a> CandidateSet<'_, 'a> {
+    fn get(&self, pc: &usize) -> Option<&&'a FunctionSsa> {
+        if *pc == self.exclude {
+            None
+        } else {
+            self.pool.map.get(pc)
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        !self.pool.map.keys().any(|&pc| pc != self.exclude)
+    }
+
+    fn any_unrolled(&self) -> bool {
+        self.pool.unrolled.iter().any(|&pc| pc != self.exclude)
+    }
+}
+
 /// A splice target: the callee body with the facts derived from it.
 #[derive(Clone, Copy)]
 struct Callee<'a> {
@@ -2165,10 +2225,21 @@ fn needs_reloc_splice(c: &FunctionSsa) -> bool {
 /// `callees`. Modifies `caller` in place.
 fn inline_caller(
     caller: &mut FunctionSsa,
-    callees: &BTreeMap<usize, &FunctionSsa>,
+    callees: &CandidateSet<'_, '_>,
     facts: &FactsMap,
     placement: &mut SlotPlacement<'_>,
 ) {
+    // No live call names a candidate, so neither splice path can fire.
+    // Both walks below rebuild the whole body before reaching that
+    // conclusion; the scan reaches it in one pass over the tape.
+    if !caller.blocks.iter().any(|b| {
+        (b.inst_range.start..b.inst_range.end).any(|pc| {
+            matches!(&caller.insts[pc as usize],
+                Inst::Call { target_pc, .. } if callees.get(target_pc).is_some())
+        })
+    }) {
+        return;
+    }
     let mut new_insts: Vec<Inst> = Vec::with_capacity(caller.insts.len());
     let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(caller.inst_src.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(caller.insts.len());
@@ -2650,12 +2721,18 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
     // leaf after its own sub-calls were inlined becomes eligible on
     // the next round. `INLINE_FIXPOINT_ITERS` bounds the depth.
     for iter in 0..INLINE_FIXPOINT_ITERS {
-        let snapshot: Vec<FunctionSsa> = funcs.to_vec();
+        // The splice reads each callee's pre-iteration body while the
+        // callers are rewritten in place, so the candidates -- and only
+        // they -- are copied; a body no call site can splice is never
+        // read.
+        let bodies: Vec<FunctionSsa> = funcs
+            .iter()
+            .filter(|f| is_inline_candidate(f, cap, abi, None))
+            .cloned()
+            .collect();
         let mut candidates: BTreeMap<usize, &FunctionSsa> = BTreeMap::new();
-        for f in &snapshot {
-            if is_inline_candidate(f, cap, abi, None) {
-                candidates.insert(f.ent_pc, f);
-            }
+        for f in &bodies {
+            candidates.insert(f.ent_pc, f);
         }
         #[cfg(feature = "codegen_test")]
         if trace {
@@ -2684,13 +2761,19 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             .iter()
             .map(|(&pc, c)| (pc, callee_facts(c)))
             .collect();
+        // The two caller gates below are predicates over the candidate
+        // body alone, so each combination they select is one shared pool
+        // rather than a per-caller copy of the candidate map.
+        let marked = |c: &FunctionSsa| c.is_inline;
+        let frame_free = |c: &FunctionSsa| c.is_always_inline || facts[&c.ent_pc].frame_cost == 0;
+        let pools = [
+            CandidatePool::build(&candidates, |_| true),
+            CandidatePool::build(&candidates, marked),
+            CandidatePool::build(&candidates, frame_free),
+            CandidatePool::build(&candidates, |c| marked(c) && frame_free(c)),
+        ];
         let mut changed = false;
         for (fi, caller) in funcs.iter_mut().enumerate() {
-            // Drop self-recursive inlines: a recursive call would
-            // expand indefinitely. The candidate set names ent_pc;
-            // the caller's ent_pc is the loop guard.
-            let mut local = candidates.clone();
-            local.remove(&caller.ent_pc);
             // A self-recursive caller's frame is paid once per recursion
             // level, so inlining that inflates it costs stack in proportion
             // to the depth -- a per-callee body cap is not enough. Once such
@@ -2705,11 +2788,8 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
                 .insts
                 .iter()
                 .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == caller.ent_pc));
-            if (recursive && caller.locals > RECURSIVE_FRAME_SLOTS)
-                || caller.insts.len() > CALLER_INST_BUDGET
-            {
-                local.retain(|_, c| c.is_inline);
-            }
+            let only_marked = (recursive && caller.locals > RECURSIVE_FRAME_SLOTS)
+                || caller.insts.len() > CALLER_INST_BUDGET;
             // Once a caller's frame has grown past CALLER_FRAME_SLOTS and
             // multiplied its pre-inline size, keep a mandatory request and
             // any candidate whose splice relocates no frame slots -- the
@@ -2717,11 +2797,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             // The absolute bound is enforced per splice (see
             // `inline_caller_multi_block`), where the growth is known
             // exactly.
-            if caller.locals > CALLER_FRAME_SLOTS
-                && caller.locals > orig_locals[fi].saturating_mul(FRAME_GROWTH_FACTOR)
-            {
-                local.retain(|_, c| c.is_always_inline || facts[&c.ent_pc].frame_cost == 0);
-            }
+            let only_frame_free = caller.locals > CALLER_FRAME_SLOTS
+                && caller.locals > orig_locals[fi].saturating_mul(FRAME_GROWTH_FACTOR);
+            // Splicing a self-recursive call would expand indefinitely,
+            // so the caller's own entry is excluded from its view.
+            let local = pools[usize::from(only_marked) | (usize::from(only_frame_free) << 1)]
+                .view(caller.ent_pc);
             if local.is_empty() {
                 continue;
             }
@@ -2755,7 +2836,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
                 // A spliced callee whose loops were unrolled carries
                 // constant-offset array accesses into the caller; mark
                 // the caller so the post-inline scalar promotion scans it.
-                if local.values().any(|c| c.did_unroll) {
+                if local.any_unrolled() {
                     caller.did_unroll = true;
                 }
             }
@@ -3789,5 +3870,79 @@ mod tests {
         past.n_params = 1;
         assert!(forwarded_param_cells(&past, &value_use_mask(&past)).is_empty());
         assert!(!is_inline_candidate(&past, 32, abi, None));
+    }
+
+    /// One-instruction leaf returning a constant: the smallest shape the
+    /// candidate filter admits.
+    fn leaf_callee(ent_pc: usize) -> FunctionSsa {
+        let insts = alloc::vec![Inst::Imm(ent_pc as i64)];
+        FunctionSsa {
+            ent_pc,
+            inst_src: alloc::vec![(0, 0); 1],
+            f32_values: alloc::vec![false; 1],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Return(0),
+                exit_acc: 0,
+            }],
+            insts,
+            ..Default::default()
+        }
+    }
+
+    /// Driver calling every entry pc in `targets` once.
+    fn driver(ent_pc: usize, targets: &[usize]) -> FunctionSsa {
+        let insts: Vec<Inst> = targets.iter().map(|&t| call_to(t)).collect();
+        let n = insts.len() as u32;
+        FunctionSsa {
+            ent_pc,
+            inst_src: alloc::vec![(0, 0); insts.len()],
+            f32_values: alloc::vec![false; insts.len()],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..n,
+                terminator: Terminator::Return(NO_VALUE),
+                exit_acc: NO_VALUE,
+            }],
+            insts,
+            ..Default::default()
+        }
+    }
+
+    /// The pass copied every function into a per-iteration snapshot and
+    /// the candidate map into a per-caller copy, so a module of N
+    /// helpers cost N^2. Quadrupling the helper count must not
+    /// quadruple the cost -- 16x is what the copies would spend.
+    #[test]
+    fn candidate_bookkeeping_is_not_quadratic_in_the_module() {
+        let build = |n: usize| {
+            let mut funcs: Vec<FunctionSsa> = (0..n).map(|i| leaf_callee(i + 1)).collect();
+            funcs.push(driver(0, &(1..=n).collect::<Vec<_>>()));
+            funcs
+        };
+        let run_once = |n: usize| {
+            let mut funcs = build(n);
+            let start = std::time::Instant::now();
+            run(&mut funcs, 64, Target::LinuxX64.abi());
+            let t = start.elapsed().as_secs_f64();
+            assert!(
+                !funcs
+                    .last()
+                    .unwrap()
+                    .insts
+                    .iter()
+                    .any(|i| matches!(i, Inst::Call { .. })),
+                "the driver's calls must all have been spliced",
+            );
+            t
+        };
+        let small = (0..3).map(|_| run_once(500)).fold(f64::MAX, f64::min);
+        let large = (0..3).map(|_| run_once(2000)).fold(f64::MAX, f64::min);
+        assert!(
+            large < small * 8.0,
+            "4x the module cost {:.1}x, past the 8x headroom over linear",
+            large / small,
+        );
     }
 }

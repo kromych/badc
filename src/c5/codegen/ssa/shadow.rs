@@ -62,22 +62,10 @@ pub(crate) fn walk_program(
         let f = &program.finished_functions[i];
         walker_pcs.insert(f.ent_pc);
         let mut func = crate::c5::ast::walk::walk_function(
-            &f.ast,
+            f,
             &program.symbols,
             &program.structs,
             target,
-            f.ent_pc,
-            f.end_pc,
-            f.n_params,
-            f.is_variadic,
-            f.n_locals,
-            &f.param_tys,
-            &f.param_local_slots,
-            f.returns_struct,
-            f.return_struct_size,
-            f.return_ty,
-            f.alloca_top_slot,
-            &f.over_aligned_slots,
             optimize,
         )
         .map_err(|e| {

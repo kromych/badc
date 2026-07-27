@@ -20,7 +20,7 @@ use super::super::compiler::types::{
 use super::super::ir::{AsmSeg, AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind, ValueId};
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
-use super::{AtomicKind, Expr, ExprId, Stmt, StmtId, UnOp};
+use super::{AtomicKind, Expr, ExprId, FinishedFunction, Stmt, StmtId, UnOp};
 
 /// The low and high 64-bit halves of a 128-bit value, in that order.
 type Halves = (ValueId, ValueId);
@@ -87,26 +87,33 @@ impl WalkError {
 /// identifier -- the SSA emit threads it through so the
 /// post-link codegen can resolve call-site fixups against the
 /// same identifier the linker rebased.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn walk_function(
-    ast: &super::Ast,
+    fun: &FinishedFunction,
     symbols: &[Symbol],
     structs: &[crate::c5::compiler::StructDef],
     target: Target,
-    ent_pc: usize,
-    end_pc: usize,
-    n_params: usize,
-    is_variadic: bool,
-    n_locals: i64,
-    param_tys: &[i64],
-    param_local_slots: &[i64],
-    returns_struct: bool,
-    return_struct_size: i64,
-    return_ty: i64,
-    alloca_top_slot: i64,
-    over_aligned_slots: &[(i64, i64, i64)],
     optimize: bool,
 ) -> Result<FunctionSsa, WalkError> {
+    let FinishedFunction {
+        ast,
+        ent_pc,
+        end_pc,
+        n_params,
+        is_variadic,
+        n_locals,
+        param_tys,
+        param_local_slots,
+        returns_struct,
+        return_struct_size,
+        return_ty,
+        alloca_top_slot,
+        over_aligned_slots,
+        ..
+    } = fun;
+    let (ent_pc, end_pc, n_params) = (*ent_pc, *end_pc, *n_params);
+    let (is_variadic, n_locals) = (*is_variadic, *n_locals);
+    let (returns_struct, return_struct_size) = (*returns_struct, *return_struct_size);
+    let (return_ty, alloca_top_slot) = (*return_ty, *alloca_top_slot);
     let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
     b.set_end_pc(end_pc);
     // C11 6.7.5: automatic objects whose alignment exceeds the 8-byte frame
@@ -6910,22 +6917,15 @@ mod tests {
         ast.body = Some(__ret);
 
         let func = walk_function(
-            &ast,
+            &FinishedFunction {
+                ast,
+                n_locals: 0,
+                return_ty: Ty::Int as i64,
+                ..Default::default()
+            },
             &empty_symbols(),
             &[],
             Target::LinuxAarch64,
-            0,
-            0,
-            0,
-            false,
-            0,
-            &[],
-            &[],
-            false,
-            0,
-            Ty::Int as i64,
-            0,
-            &[],
             false,
         )
         .expect("walk");
@@ -6977,22 +6977,14 @@ mod tests {
         ast.body = Some(__ret);
 
         let func = walk_function(
-            &ast,
+            &FinishedFunction {
+                ast,
+                n_locals: 8,
+                ..Default::default()
+            },
             &syms,
             &[],
             Target::LinuxAarch64,
-            0,
-            0,
-            0,
-            false,
-            8,
-            &[],
-            &[],
-            false,
-            0,
-            0,
-            0,
-            &[],
             false,
         )
         .expect("walk");
@@ -7052,22 +7044,14 @@ mod tests {
         ast.body = Some(__ret);
 
         let func = walk_function(
-            &ast,
+            &FinishedFunction {
+                ast,
+                n_locals: 8,
+                ..Default::default()
+            },
             &syms,
             &[],
             Target::LinuxAarch64,
-            0,
-            0,
-            0,
-            false,
-            8,
-            &[],
-            &[],
-            false,
-            0,
-            0,
-            0,
-            &[],
             false,
         )
         .expect("walk");
@@ -7119,22 +7103,14 @@ mod tests {
         ast.body = Some(__ret);
 
         let func = walk_function(
-            &ast,
+            &FinishedFunction {
+                ast,
+                n_locals: 0,
+                ..Default::default()
+            },
             &empty_symbols(),
             &[],
             Target::LinuxAarch64,
-            0,
-            0,
-            0,
-            false,
-            0,
-            &[],
-            &[],
-            false,
-            0,
-            0,
-            0,
-            &[],
             false,
         )
         .expect("walk");
@@ -7166,22 +7142,14 @@ mod tests {
         ast.body = Some(asm_id);
 
         let err = walk_function(
-            &ast,
+            &FinishedFunction {
+                ast,
+                n_locals: 0,
+                ..Default::default()
+            },
             &empty_symbols(),
             &[],
             Target::LinuxAarch64,
-            0,
-            0,
-            0,
-            false,
-            0,
-            &[],
-            &[],
-            false,
-            0,
-            0,
-            0,
-            &[],
             false,
         )
         .expect_err("Asm must surface as unsupported");

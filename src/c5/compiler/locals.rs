@@ -613,10 +613,11 @@ impl Compiler {
             return;
         }
         let final_array = self.symbols[loc_idx].array_size;
+        let fam_tail = self.symbols[loc_idx].fam_init_bytes;
         let reserved = if final_array > 0 {
             ((self.size_of_type(ty) as i64 * final_array + 7) / 8 * 8).max(8)
         } else {
-            (self.slots_of_type(ty) * 8).max(8)
+            ((self.slots_of_type(ty) * 8).max(8) + fam_tail + 7) / 8 * 8
         };
         let name = alloc::format!(
             "{}.{}",
@@ -634,6 +635,7 @@ impl Compiler {
             val: self.symbols[loc_idx].val,
             array_size: final_array,
             reserved_data_bytes: reserved,
+            fam_init_bytes: fam_tail,
             data_align: self.symbols[loc_idx].data_align,
             linkage: crate::c5::symbol::Linkage::Internal,
             defined_here: true,
@@ -657,7 +659,7 @@ impl Compiler {
         // zero-sized object (empty struct, GNU) still reserves one slot:
         // the data-DCE interval model and the named-section carve
         // identify objects by start offset, so no two may share one.
-        let bytes = if array_size > 0 {
+        let mut bytes = if array_size > 0 {
             let total = (self.size_of_type(ty) as i64) * array_size;
             (((total + 7) / 8) * 8).max(8)
         } else if array_size == -1 {
@@ -666,6 +668,14 @@ impl Compiler {
         } else {
             (self.slots_of_type(ty) * 8).max(8)
         };
+        // A flexible array member's initialized elements occupy storage
+        // past `sizeof`, as at file scope; without the reservation the
+        // field fill writes over whatever follows in `.data`.
+        let fam_tail = self.flexible_array_init_tail_bytes(ty)?;
+        if fam_tail > 0 {
+            self.symbols[loc_idx].fam_init_bytes = fam_tail;
+            bytes = ((bytes + fam_tail + 7) / 8) * 8;
+        }
         self.symbols[loc_idx].array_size = array_size.max(0);
         // A `static _Thread_local` local lives in the TLS block (`.tdata` /
         // `.tbss`), like a file-scope thread-local, not in `.data`.

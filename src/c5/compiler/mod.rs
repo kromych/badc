@@ -2163,7 +2163,7 @@ impl Compiler {
                 } else if s.array_size > 0 {
                     elem * s.array_size
                 } else {
-                    elem
+                    elem + s.fam_init_bytes
                 };
             }
             // Function-pointer initializers (`int (*const fp)

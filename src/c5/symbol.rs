@@ -22,10 +22,16 @@ pub(crate) struct Symbol {
     /// identifier snapshots in the AST and pointer initializers already
     /// written into the data segment -- are rebased onto `val`.
     pub relocated_from: Option<(i64, i64)>,
-    /// For a defined file-scope object, `sizeof` the object in bytes,
-    /// filled at unit finalize. The object writers emit it as the symbol
-    /// size (`st_size`); 0 means unknown and keeps the size unset.
+    /// For a defined file-scope object, its byte size, filled at unit
+    /// finalize. The object writers emit it as the symbol size
+    /// (`st_size`); 0 means unknown and keeps the size unset.
     pub data_byte_size: i64,
+    /// Bytes the object occupies past `sizeof` for a flexible array
+    /// member's initialized elements (C99 6.7.2.1p16 keeps the member
+    /// out of `sizeof`). Added to `data_byte_size`, so the object's
+    /// recorded size covers the tail and the named-section carve moves
+    /// all of it.
+    pub fam_init_bytes: i64,
     pub h_class: i64,
     pub h_type: i64,
     pub h_val: i64,

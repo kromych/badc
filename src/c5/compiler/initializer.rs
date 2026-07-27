@@ -1926,9 +1926,39 @@ impl Compiler {
         total
     }
 
+    /// Bytes a definition of type `ty` adds past `sizeof` for its
+    /// flexible array member's initializer. The lexer must be at the
+    /// `=` of the definition and is left there. 0 when `ty` is not a
+    /// FAM-bearing struct, the declaration has no initializer, or the
+    /// initializer does not reach the member. The object's storage
+    /// reservation and its recorded byte size both take this term:
+    /// C99 6.7.2.1p16 keeps the member out of `sizeof`, but the object
+    /// still occupies the initialized elements, and the following
+    /// object starts past them.
+    pub(super) fn flexible_array_init_tail_bytes(&mut self, ty: i64) -> Result<i64, C5Error> {
+        if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 || self.lex.tk != Token::Assign {
+            return Ok(0);
+        }
+        let sid = struct_id_of(ty);
+        let Some(elem_ty) = self.structs[sid]
+            .fields
+            .iter()
+            .find(|f| f.array_size < 0)
+            .map(|f| f.ty)
+        else {
+            return Ok(0);
+        };
+        let elem = self.size_of_type(elem_ty) as i64;
+        let snap = self.lex.snapshot();
+        self.next()?; // `=`
+        let count = self.flexible_array_init_count(sid)? as i64;
+        self.restore_lex(snap);
+        Ok(count * elem)
+    }
+
     /// Count the elements a struct's flexible array member (`T v[]`,
-    /// C99 6.7.2.1) is initialized with. A file-scope object of a
-    /// FAM-bearing struct is laid out as if the member were a fixed
+    /// C99 6.7.2.1) is initialized with. An object of a FAM-bearing
+    /// struct is laid out as if the member were a fixed
     /// array sized to its initializer; the storage reservation must
     /// include those element bytes *before* the field fill runs, or an
     /// earlier field's string literal is appended into that trailing

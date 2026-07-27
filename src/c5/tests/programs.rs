@@ -663,6 +663,39 @@ fn scalar_compound_literal_lvalue() {
 }
 
 #[test]
+fn qualified_compound_literal_element_scopes() {
+    // C99 6.7.7p1: a type-name is a specifier-qualifier-list, so a qualified
+    // whole-element compound literal `(const T){ ... }` names the same type as
+    // `(T){ ... }`. Every element position is asserted at file scope, block
+    // scope with static storage, and block scope with automatic storage, so a
+    // divergence between the scopes' initializer paths fails rather than
+    // passing at one of them.
+    assert_eq!(
+        run_fixture("qualified_compound_literal_element_scopes.c"),
+        0
+    );
+}
+
+#[test]
+fn builtin_fold_in_aggregate_element() {
+    // A builtin that folds to an integer constant expression (C99 6.6p10) is
+    // a constant expression in an aggregate initializer element as much as in
+    // a scalar one. Asserted through the scalar, positional-element,
+    // designated-element, array-element and enum entry points so a capability
+    // difference between them fails rather than passing at one.
+    assert_eq!(run_fixture("builtin_fold_in_aggregate_element.c"), 0);
+}
+
+#[test]
+fn sizeof_array_compound_literal() {
+    // C99 6.3.2.1p3 exempts a `sizeof` operand from array-to-pointer
+    // conversion, so `sizeof (T[]){ ... }` is the literal's object size, not
+    // the decayed pointer's. Several counts at each of four element widths:
+    // a total that happens to equal the pointer size cannot discriminate.
+    assert_eq!(run_fixture("sizeof_array_compound_literal.c"), 0);
+}
+
+#[test]
 fn compound_literal_array_element() {
     // An array-of-struct element written as a compound literal `(T){...}`
     // naming the element type (C99 6.5.2.5).

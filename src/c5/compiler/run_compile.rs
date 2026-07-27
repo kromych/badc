@@ -2225,18 +2225,7 @@ impl Compiler {
                                             ));
                                         }
                                         let here = off + (row * inner_dim + j) * elem_size as i64;
-                                        self.skip_opt_compound_literal_cast()?;
-                                        let cl_parens = core::mem::take(
-                                            &mut self.pending.compound_lit_close_parens,
-                                        );
-                                        if self.lex.tk == '{' {
-                                            self.collect_struct_initializer(sid, here)?;
-                                        } else {
-                                            self.fill_struct_fields(sid, here, false)?;
-                                        }
-                                        for _ in 0..cl_parens {
-                                            self.accept(')')?;
-                                        }
+                                        self.init_struct_array_element(sid, here)?;
                                         j += 1;
                                         self.accept(',')?;
                                     }
@@ -2304,25 +2293,7 @@ impl Compiler {
                                     return Err(self.compile_err(format!("struct array element count miscount (parser scanned {count}, parsed past)")));
                                 }
                                 let here = off + i * elem_size as i64;
-                                // A struct-array element may be written as a
-                                // compound literal `(T){ ... }` naming the
-                                // element type (C99 6.5.2.5); drop the
-                                // redundant cast and fill the brace list.
-                                self.skip_opt_compound_literal_cast()?;
-                                let cl_parens =
-                                    core::mem::take(&mut self.pending.compound_lit_close_parens);
-                                if self.lex.tk == '{' {
-                                    self.collect_struct_initializer(sid, here)?;
-                                } else {
-                                    // Brace-elided element: fill the
-                                    // struct's fields from the flat list
-                                    // until it is full, leaving the rest
-                                    // for the next element.
-                                    self.fill_struct_fields(sid, here, false)?;
-                                }
-                                for _ in 0..cl_parens {
-                                    self.accept(')')?;
-                                }
+                                self.init_struct_array_element(sid, here)?;
                                 i += 1;
                                 self.accept(',')?;
                             }
@@ -2629,18 +2600,7 @@ impl Compiler {
                                                     ));
                                                 }
                                                 self.next()?;
-                                                self.skip_opt_compound_literal_cast()?;
-                                                let cl_parens = core::mem::take(
-                                                    &mut self.pending.compound_lit_close_parens,
-                                                );
-                                                if self.lex.tk == '{' {
-                                                    self.collect_struct_initializer(sid, here)?;
-                                                } else {
-                                                    self.fill_struct_fields(sid, here, false)?;
-                                                }
-                                                for _ in 0..cl_parens {
-                                                    self.accept(')')?;
-                                                }
+                                                self.init_struct_array_element(sid, here)?;
                                             }
                                             idx = desig + 1;
                                             self.accept(',')?;
@@ -2688,38 +2648,18 @@ impl Compiler {
                                             self.restore_lex(snap);
                                         }
                                         let here = var_offset + k * group_stride;
-                                        // C99 6.7.8p20: the braces around each
-                                        // struct element may be elided; a
-                                        // multi-dimensional element is itself an
-                                        // array of structs.
-                                        // A compound-literal element `(T){...}`
-                                        // naming the element type: drop the
-                                        // redundant cast (a multi-dim element
-                                        // is an array, never a compound
-                                        // literal, so skip only the scalar
-                                        // case).
-                                        let cl_parens = if inner_dims.is_empty() {
-                                            self.skip_opt_compound_literal_cast()?;
-                                            core::mem::take(
-                                                &mut self.pending.compound_lit_close_parens,
-                                            )
+                                        // A multi-dimensional element is an
+                                        // array of structs, never a compound
+                                        // literal.
+                                        if inner_dims.is_empty() {
+                                            self.init_struct_array_element(sid, here)?;
                                         } else {
-                                            0
-                                        };
-                                        if !inner_dims.is_empty() {
                                             self.collect_struct_array_data(
                                                 sid,
                                                 here,
                                                 &inner_dims,
                                                 elem_size as i64,
                                             )?;
-                                        } else if self.lex.tk == '{' {
-                                            self.collect_struct_initializer(sid, here)?;
-                                        } else {
-                                            self.fill_struct_fields(sid, here, false)?;
-                                        }
-                                        for _ in 0..cl_parens {
-                                            self.accept(')')?;
                                         }
                                         if k >= last {
                                             break;

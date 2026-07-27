@@ -72,6 +72,7 @@ use super::super::error::C5Error;
 use super::super::program::Program;
 use super::Build;
 use super::dwarf;
+use crate::c5::layout::{pad_to_align as pad_to, round_up, write_struct};
 
 // ------------------------------------------------------------------
 // Mach-O constants. Names mirror `<mach-o/loader.h>` and `<mach-o/nlist.h>`
@@ -468,24 +469,6 @@ struct Nlist64 {
 const NLIST_64_SIZE: usize = 16;
 const _: () = assert!(core::mem::size_of::<Nlist64>() == NLIST_64_SIZE);
 
-/// Append a `#[repr(C)]` struct's raw bytes to `out`.
-///
-/// Mach-O is little-endian on every CPU we target, so a memcpy of the
-/// in-memory struct produces the right wire format. The structs above
-/// have explicit field order and const-asserted sizes; the only
-/// remaining surprise would be host endianness, and a const-time
-/// check rules that out.
-fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
-    const _: () = assert!(
-        cfg!(target_endian = "little"),
-        "Mach-O writer assumes a little-endian host; emit bytes manually if you ever need a big-endian build host"
-    );
-    let bytes = unsafe {
-        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
-    };
-    out.extend_from_slice(bytes);
-}
-
 /// Pack a name into the 16-byte `segname` / `sectname` field, NUL-
 /// padded. `<mach-o/loader.h>` only requires NUL-termination when the
 /// name is shorter than 16 bytes, so a name that exactly fills the
@@ -621,20 +604,6 @@ fn build_export_trie(entries: &[(String, u64)]) -> Vec<u8> {
         out.push(0);
     }
     out
-}
-
-/// Pad a Vec to the next multiple of `align`. Used for keeping load-
-/// command bodies (LC_LOAD_DYLIB strings etc.) at their required
-/// 8-byte alignment.
-fn pad_to(out: &mut Vec<u8>, align: usize) {
-    while !out.len().is_multiple_of(align) {
-        out.push(0);
-    }
-}
-
-/// Round `n` up to the next multiple of `align`.
-fn round_up(n: u64, align: u64) -> u64 {
-    (n + align - 1) & !(align - 1)
 }
 
 // ------------------------------------------------------------------
@@ -1467,49 +1436,17 @@ fn patch_adrp_add(
     target_vmaddr: u64,
     label: &str,
 ) -> Result<(), C5Error> {
-    let adrp_file_off = code_base_in_file + adrp_offset;
-    let add_file_off = adrp_file_off + 4;
-    let adrp_vmaddr = code_vmaddr_base + adrp_offset as u64;
-
-    let adrp_page = adrp_vmaddr & !0xFFF;
-    let target_page = target_vmaddr & !0xFFF;
-    let page_diff = target_page as i64 - adrp_page as i64;
-    if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("Mach-O: {label} page diff {page_diff} not 4 KiB aligned"),
-        )));
-    }
-    let imm21 = (page_diff >> 12) as i32;
-    let in_page = (target_vmaddr & 0xFFF) as u32;
-
-    // Recover the destination register encoded by the codegen at the
-    // placeholder site. adrp/add carry the rd in the low 5 bits; the
-    // add additionally carries rn in bits 5..10. Both registers match
-    // by construction (`adrp rd; add rd, rd, #imm`).
-    let prev_adrp = u32::from_le_bytes([
-        out[adrp_file_off],
-        out[adrp_file_off + 1],
-        out[adrp_file_off + 2],
-        out[adrp_file_off + 3],
-    ]);
-    let prev_add = u32::from_le_bytes([
-        out[add_file_off],
-        out[add_file_off + 1],
-        out[add_file_off + 2],
-        out[add_file_off + 3],
-    ]);
-    let rd = (prev_adrp & 0x1F) as u8;
-    let add_rd = (prev_add & 0x1F) as u8;
-    let add_rn = ((prev_add >> 5) & 0x1F) as u8;
-    let adrp_word = super::aarch64::enc_adrp(super::aarch64::Reg(rd), imm21);
-    let add_word = super::aarch64::enc_add_imm(
-        super::aarch64::Reg(add_rd),
-        super::aarch64::Reg(add_rn),
-        in_page,
-    );
-    out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-    out[add_file_off..add_file_off + 4].copy_from_slice(&add_word.to_le_bytes());
-    Ok(())
+    super::aarch64::patch::patch_pair(
+        out,
+        code_base_in_file + adrp_offset,
+        (code_vmaddr_base + adrp_offset as u64) as i64,
+        target_vmaddr as i64,
+    )
+    .map_err(|e| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &e.describe(&format!("Mach-O: {label}")),
+        ))
+    })
 }
 
 /// Patch each `Inst::ImmData` lowering site. `data_off_to_vaddr` maps
@@ -2026,7 +1963,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let got_section_offset_in_segment: u64 = 0;
     // __data's base alignment: the segment base is page-aligned, so
     // aligning the in-segment offset aligns both fileoff and vmaddr.
-    let data_align = build.data_align.max(8) as u64;
+    let data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
     let data_section_offset_in_segment: u64 = round_up(got_size, data_align);
     let program_data_size = build.data.len() as u64;
     let post_data_offset_in_segment: u64 =

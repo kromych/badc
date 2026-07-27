@@ -74,6 +74,7 @@ use super::aarch64;
 use super::dwarf;
 use super::x86_64;
 use super::{Build, Machine};
+use crate::c5::layout::{round_up, write_struct};
 use crate::c5::program::Program;
 
 // ----------------------------------------------------------------
@@ -199,32 +200,19 @@ const NUM_DATA_DIRS: u32 = 16;
 /// them. Absolute VAs live in the TLS directory and in
 /// address-of-static initializers, so `.reloc` follows their
 /// presence.
-fn num_sections(
-    data_section_present: bool,
-    reloc_section_present: bool,
-    edata_section_present: bool,
-    dwarf_section_count: usize,
-) -> usize {
-    let mut n = 3; // .text, .pdata, .idata
-    if data_section_present {
-        n += 1;
+struct SectionPlan {
+    data: bool,
+    reloc: bool,
+    edata: bool,
+    dwarf: usize,
+}
+
+impl SectionPlan {
+    /// Headers the image carries: `.text`, `.pdata` and `.idata`
+    /// unconditionally, plus each optional section this plan names.
+    fn count(&self) -> usize {
+        3 + self.data as usize + self.reloc as usize + self.edata as usize + self.dwarf
     }
-    if reloc_section_present {
-        n += 1;
-    }
-    if edata_section_present {
-        n += 1;
-    }
-    // One section header per non-empty DWARF blob (info / abbrev /
-    // line / str / frame). The Windows image loader returns
-    // ERROR_BAD_EXE_FORMAT (193) when a SizeOfRawData == 0 section
-    // shares its VirtualAddress with the next one or sits at the
-    // SizeOfImage boundary, so empty blobs are dropped before they
-    // reach the section table. PE caps section names at 8 chars, so
-    // the leading dot is dropped (mingw-w64 convention) -- lldb /
-    // gdb / `llvm-dwarfdump` walk by content, not literal name.
-    n += dwarf_section_count;
-    n
 }
 
 const DOS_HEADER_AND_STUB: usize = 128; // 64 byte DOS header + 64 byte stub
@@ -236,23 +224,12 @@ const SECTION_HEADER_SIZE: usize = 40;
 /// Raw on-disk size of the PE headers (DOS + PE sig + COFF +
 /// Optional + section table), rounded up to FILE_ALIGNMENT.
 /// 3 sections fit in 0x200; 4 sections need 0x400.
-fn headers_raw_size(
-    data_section_present: bool,
-    reloc_section_present: bool,
-    edata_section_present: bool,
-    dwarf_section_count: usize,
-) -> usize {
+fn headers_raw_size(plan: &SectionPlan) -> usize {
     let unaligned = DOS_HEADER_AND_STUB
         + PE_SIG_SIZE
         + COFF_HEADER_SIZE
         + OPTIONAL64_HEADER_SIZE
-        + SECTION_HEADER_SIZE
-            * num_sections(
-                data_section_present,
-                reloc_section_present,
-                edata_section_present,
-                dwarf_section_count,
-            );
+        + SECTION_HEADER_SIZE * plan.count();
     (unaligned + FILE_ALIGNMENT as usize - 1) & !(FILE_ALIGNMENT as usize - 1)
 }
 
@@ -492,12 +469,16 @@ pub(super) fn write(
     } else {
         0
     };
-    let headers_size = headers_raw_size(
-        data_section_present,
-        reloc_section_present,
-        edata_section_present,
-        dwarf_section_count,
-    ) as u32;
+    // One description of which sections this image carries. The header
+    // size, the COFF header's count and the emitted table all read it, so
+    // adding a section cannot leave one of the three behind.
+    let plan = SectionPlan {
+        data: data_section_present,
+        reloc: reloc_section_present,
+        edata: edata_section_present,
+        dwarf: dwarf_section_count,
+    };
+    let headers_size = headers_raw_size(&plan) as u32;
 
     let text_file_off: u32 = headers_size;
     let text_size: u32 = text_prologue_len + build.text.len() as u32;
@@ -1006,10 +987,7 @@ pub(super) fn write(
         &mut out,
         OPTIONAL64_HEADER_SIZE,
         machine,
-        data_section_present,
-        reloc_section_present,
-        edata_section_present,
-        dwarf_section_count,
+        plan.count(),
         coff_symtab_file_off,
         n_coff_symbols,
         coff_strtab_file_off,
@@ -1076,12 +1054,7 @@ pub(super) fn write(
             subsystem,
         },
     );
-    let mut sections: Vec<SectionHeader> = Vec::with_capacity(num_sections(
-        data_section_present,
-        reloc_section_present,
-        edata_section_present,
-        dwarf_section_count,
-    ));
+    let mut sections: Vec<SectionHeader> = Vec::with_capacity(plan.count());
     sections.push(SectionHeader {
         name: *b".text\0\0\0",
         virtual_size: text_size,
@@ -1155,6 +1128,17 @@ pub(super) fn write(
                 | IMAGE_SCN_MEM_READ
                 | IMAGE_SCN_MEM_DISCARDABLE,
         });
+    }
+    // The header size and the COFF count were both computed from `plan`
+    // before the table existed; the table is the ground truth.
+    if sections.len() != plan.count() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!(
+                "PE: emitted {} section headers, layout reserved {}",
+                sections.len(),
+                plan.count()
+            ),
+        )));
     }
     write_section_headers(&mut out, &sections);
     pad_to(&mut out, text_file_off as usize)?;
@@ -1760,26 +1744,6 @@ struct SectionHeaderRaw {
 
 const _: () = assert!(core::mem::size_of::<SectionHeaderRaw>() == SECTION_HEADER_SIZE);
 
-/// Append a `#[repr(C)]` struct's raw bytes to `out`.
-///
-/// PE32+ is a little-endian byte format, and our hosts (x86_64 and
-/// AArch64) and targets are all little-endian, so a memcpy of the
-/// in-memory struct produces the right wire format. The structs in
-/// this module are explicit about field order and have const-asserted
-/// sizes that match the PE/COFF spec, so the only thing that could
-/// surprise is the host endianness -- and a const-time check guards
-/// that.
-fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
-    const _: () = assert!(
-        cfg!(target_endian = "little"),
-        "PE writer assumes a little-endian host; emit bytes manually if you need to cross-build from big-endian"
-    );
-    let bytes = unsafe {
-        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
-    };
-    out.extend_from_slice(bytes);
-}
-
 fn write_dos_header_and_stub(out: &mut Vec<u8>) {
     write_struct(
         out,
@@ -1801,10 +1765,7 @@ fn write_coff_header(
     out: &mut Vec<u8>,
     optional_header_size: usize,
     machine: Machine,
-    data_section_present: bool,
-    reloc_section_present: bool,
-    edata_section_present: bool,
-    dwarf_section_count: usize,
+    n_sections: usize,
     coff_symtab_file_off: u32,
     n_coff_symbols: u32,
     coff_strtab_file_off: u32,
@@ -1823,12 +1784,7 @@ fn write_coff_header(
         out,
         &CoffHeader {
             machine: machine_id,
-            number_of_sections: num_sections(
-                data_section_present,
-                reloc_section_present,
-                edata_section_present,
-                dwarf_section_count,
-            ) as u16,
+            number_of_sections: n_sections as u16,
             time_date_stamp: 0,
             // PE images carry a COFF strtab at the file
             // tail so the long DWARF section names ("/<offset>")
@@ -2095,7 +2051,7 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
     // shape (each descriptor is 20 bytes), so a 2-DLL setup ends
     // at offset 60 -- not 8-aligned. Pad here so the IAT starts at
     // an 8-byte boundary regardless of how many DLLs we have.
-    let iat_off = round_up_usize(import_dir_off + import_dir_size, 8);
+    let iat_off = round_up(import_dir_off + import_dir_size, 8);
     // IAT layout: per-DLL block of (n_members + 1) u64 entries (the
     // final entry per DLL is a NULL terminator).
     let iat_size = dlls
@@ -2892,32 +2848,17 @@ fn patch_aarch64_adrp_ldr(
     adrp_rva: u32,
     target_rva: u32,
 ) -> Result<(), C5Error> {
-    let adrp_page = (adrp_rva as u64) & !0xFFF;
-    let target_page = (target_rva as u64) & !0xFFF;
-    let page_diff = target_page as i64 - adrp_page as i64;
-    if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("PE: aarch64 adrp page diff {page_diff} not 4 KiB aligned"),
-        )));
-    }
-    let imm21 = (page_diff >> 12) as i32;
-    let in_page = target_rva & 0xFFF;
-    if !in_page.is_multiple_of(8) {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("PE: aarch64 ldr offset {in_page:#x} not 8-aligned"),
-        )));
-    }
-    let off = adrp_offset_in_text as usize;
-    let adrp_word = u32::from_le_bytes([text[off], text[off + 1], text[off + 2], text[off + 3]]);
-    let ldr_word = u32::from_le_bytes([text[off + 4], text[off + 5], text[off + 6], text[off + 7]]);
-    let rd = (adrp_word & 0x1F) as u8;
-    let ldr_rt = (ldr_word & 0x1F) as u8;
-    let ldr_rn = ((ldr_word >> 5) & 0x1F) as u8;
-    let new_adrp = aarch64::enc_adrp(aarch64::Reg(rd), imm21);
-    let new_ldr = aarch64::enc_ldr_imm(aarch64::Reg(ldr_rt), aarch64::Reg(ldr_rn), in_page);
-    text[off..off + 4].copy_from_slice(&new_adrp.to_le_bytes());
-    text[off + 4..off + 8].copy_from_slice(&new_ldr.to_le_bytes());
-    Ok(())
+    aarch64::patch::patch_pair(
+        text,
+        adrp_offset_in_text as usize,
+        adrp_rva as i64,
+        target_rva as i64,
+    )
+    .map_err(|e| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &e.describe("PE: aarch64"),
+        ))
+    })
 }
 
 /// Patch an aarch64 `adrp xd, _; add xd, xd, #_` pair to point at
@@ -2931,40 +2872,22 @@ fn patch_aarch64_adrp_add(
     adrp_rva: u32,
     target_rva: u32,
 ) -> Result<(), C5Error> {
-    let adrp_page = (adrp_rva as u64) & !0xFFF;
-    let target_page = (target_rva as u64) & !0xFFF;
-    let page_diff = target_page as i64 - adrp_page as i64;
-    if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("PE: aarch64 adrp page diff {page_diff} not 4 KiB aligned"),
-        )));
-    }
-    let imm21 = (page_diff >> 12) as i32;
-    let in_page = target_rva & 0xFFF;
-    let off = adrp_offset_in_text as usize;
-    let adrp_word = u32::from_le_bytes([text[off], text[off + 1], text[off + 2], text[off + 3]]);
-    let add_word = u32::from_le_bytes([text[off + 4], text[off + 5], text[off + 6], text[off + 7]]);
-    let rd = (adrp_word & 0x1F) as u8;
-    let add_rd = (add_word & 0x1F) as u8;
-    let add_rn = ((add_word >> 5) & 0x1F) as u8;
-    let new_adrp = aarch64::enc_adrp(aarch64::Reg(rd), imm21);
-    let new_add = aarch64::enc_add_imm(aarch64::Reg(add_rd), aarch64::Reg(add_rn), in_page);
-    text[off..off + 4].copy_from_slice(&new_adrp.to_le_bytes());
-    text[off + 4..off + 8].copy_from_slice(&new_add.to_le_bytes());
-    Ok(())
+    aarch64::patch::patch_pair(
+        text,
+        adrp_offset_in_text as usize,
+        adrp_rva as i64,
+        target_rva as i64,
+    )
+    .map_err(|e| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &e.describe("PE: aarch64"),
+        ))
+    })
 }
 
 // ----------------------------------------------------------------
 // Misc.
 // ----------------------------------------------------------------
-
-fn round_up(value: u32, align: u32) -> u32 {
-    (value + align - 1) & !(align - 1)
-}
-
-fn round_up_usize(value: usize, align: usize) -> usize {
-    (value + align - 1) & !(align - 1)
-}
 
 /// Zero-pad `out` to the precomputed file offset of the next section.
 /// A write cursor already past the target means the layout pass and
@@ -3011,14 +2934,6 @@ mod tests {
         let mut build = super::super::lower_for(program, target, options)?;
         inject_runtime_stub_symbols(&mut build);
         Ok(build)
-    }
-
-    #[test]
-    fn round_up_aligns_correctly() {
-        assert_eq!(round_up(0, 0x200), 0);
-        assert_eq!(round_up(1, 0x200), 0x200);
-        assert_eq!(round_up(0x200, 0x200), 0x200);
-        assert_eq!(round_up(0x201, 0x200), 0x400);
     }
 
     /// `pad_to` rejects a write cursor already past the layout's

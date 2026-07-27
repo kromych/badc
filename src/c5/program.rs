@@ -442,3 +442,320 @@ pub struct VariableInfo {
     /// DWARF file_names index. Zero is the primary source.
     pub decl_file: u32,
 }
+
+// ---- Data-offset surface ----
+//
+// Each implementation destructures its type without `..`: a new field
+// holding a `Program::data` byte offset does not compile until it is
+// classified. See [`crate::c5::layout::DataOffsets`].
+
+use crate::c5::layout::{DataOffsets, DataRemap, remap_self_u64};
+
+impl DataOffsets for DataReloc {
+    fn remap_data_offsets(&mut self, r: &dyn DataRemap) {
+        let Self {
+            data_offset,
+            target_offset,
+            target_anchor,
+        } = self;
+        remap_self_u64(data_offset, r);
+        // The target follows the object its anchor names: a one-past-the-end
+        // target (C99 6.5.6p8) sits on the next object's start, so its own
+        // value would track the wrong object.
+        let anchor = *target_anchor as i64;
+        if r.in_data(anchor) {
+            *target_offset = r.remap(*target_offset as i64, anchor).unwrap_or(0) as u64;
+            remap_self_u64(target_anchor, r);
+        } else {
+            remap_self_u64(target_offset, r);
+            *target_anchor = *target_offset;
+        }
+    }
+}
+
+impl DataOffsets for CodeReloc {
+    fn remap_data_offsets(&mut self, r: &dyn DataRemap) {
+        let Self {
+            data_offset,
+            target_ent_pc: _, // code address space
+        } = self;
+        remap_self_u64(data_offset, r);
+    }
+}
+
+impl DataOffsets for ExternDataReloc {
+    fn remap_data_offsets(&mut self, r: &dyn DataRemap) {
+        let Self {
+            data_offset,
+            symbol_name: _,
+            addend: _, // relative to the target symbol, not to `data`
+        } = self;
+        remap_self_u64(data_offset, r);
+    }
+}
+
+impl DataOffsets for Program {
+    fn remap_data_offsets(&mut self, r: &dyn DataRemap) {
+        let Self {
+            data: _, // the bytes the offsets index; the pass replaces them wholesale
+            file_asm: _,
+            asm_weak_names: _,
+            data_align: _, // an alignment, not an offset
+            data_object_starts,
+            data_pad_ranges,
+            data_align_marks,
+            entry_pc: _,
+            warnings: _,
+            tls_data: _,      // separate image
+            tls_init_size: _, // extent of `tls_data`
+            data_relocs,
+            extern_data_relocs,
+            code_relocs,
+            exports: _,
+            dylibs: _,
+            dllmain_pc: _,
+            source_files: _,
+            source_path: _,
+            variables: _, // frame-relative slots
+            structs: _,
+            enums: _,
+            entry_name: _,
+            entry_pragma: _,
+            auto_includes: _,
+            subsystem: _,
+            finished_functions,
+            symbols,
+            synthetic_ssa_funcs,
+            user_ssa_funcs,
+            extern_function_imports: _, // code address space
+            init_funcs: _,              // code address space
+            function_aliases: _,
+        } = self;
+        data_object_starts.retain_mut(|s| match r.remap(*s, *s) {
+            Some(_) if !r.in_data(*s) => false,
+            Some(new) => {
+                *s = new;
+                true
+            }
+            None => false,
+        });
+        data_pad_ranges.retain_mut(|(lo, hi)| match r.remap_span(*lo, *hi) {
+            Some((a, b)) => {
+                (*lo, *hi) = (a, b);
+                true
+            }
+            None => false,
+        });
+        data_align_marks.retain_mut(|(off, _)| {
+            if !r.in_data(*off) {
+                return false;
+            }
+            match r.remap(*off, *off) {
+                Some(new) => {
+                    *off = new;
+                    true
+                }
+                None => false,
+            }
+        });
+        for x in data_relocs.iter_mut() {
+            x.remap_data_offsets(r);
+        }
+        for x in extern_data_relocs.iter_mut() {
+            x.remap_data_offsets(r);
+        }
+        for x in code_relocs.iter_mut() {
+            x.remap_data_offsets(r);
+        }
+        for x in symbols.iter_mut() {
+            x.remap_data_offsets(r);
+        }
+        for x in finished_functions.iter_mut() {
+            x.remap_data_offsets(r);
+        }
+        for x in synthetic_ssa_funcs.iter_mut() {
+            x.remap_data_offsets(r);
+        }
+        for x in user_ssa_funcs.iter_mut() {
+            x.remap_data_offsets(r);
+        }
+    }
+}
+
+#[cfg(test)]
+mod data_offset_tests {
+    use super::*;
+    use crate::c5::layout::{DataOffsets, DataRemap};
+
+    /// Shifts every offset by a fixed amount so a field the surface does
+    /// not reach stays at its original value and is visible as such.
+    struct ShiftBy(i64);
+
+    impl DataRemap for ShiftBy {
+        fn in_data(&self, off: i64) -> bool {
+            (0..1024).contains(&off)
+        }
+        fn remap(&self, off: i64, _anchor: i64) -> Option<i64> {
+            Some(off + self.0)
+        }
+        fn remap_span(&self, lo: i64, hi: i64) -> Option<(i64, i64)> {
+            Some((lo + self.0, hi + self.0))
+        }
+    }
+
+    /// A `Program` with no content, for seeding one offset per field.
+    fn empty_program() -> Program {
+        Program {
+            data: Vec::new(),
+            file_asm: Vec::new(),
+            asm_weak_names: Vec::new(),
+            data_object_starts: Vec::new(),
+            data_pad_ranges: Vec::new(),
+            data_align_marks: Vec::new(),
+            entry_pc: 0,
+            warnings: Vec::new(),
+            tls_data: Vec::new(),
+            tls_init_size: 0,
+            data_relocs: Vec::new(),
+            extern_data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
+            exports: Vec::new(),
+            dylibs: Vec::new(),
+            dllmain_pc: None,
+            source_files: Vec::new(),
+            source_path: String::new(),
+            variables: Vec::new(),
+            structs: Vec::new(),
+            enums: Vec::new(),
+            entry_name: None,
+            entry_pragma: None,
+            auto_includes: Vec::new(),
+            data_align: 8,
+            subsystem: None,
+            finished_functions: Vec::new(),
+            symbols: Vec::new(),
+            synthetic_ssa_funcs: Vec::new(),
+            user_ssa_funcs: Vec::new(),
+            extern_function_imports: Vec::new(),
+            init_funcs: Vec::new(),
+            function_aliases: Vec::new(),
+        }
+    }
+
+    fn seeded() -> Program {
+        let mut p = empty_program();
+        p.data = alloc::vec![0u8; 1024];
+        p.data_object_starts = alloc::vec![16];
+        p.data_pad_ranges = alloc::vec![(24, 32)];
+        p.data_align_marks = alloc::vec![(40, 16)];
+        p.data_relocs = alloc::vec![DataReloc {
+            data_offset: 48,
+            target_offset: 56,
+            target_anchor: 56,
+        }];
+        p.code_relocs = alloc::vec![CodeReloc {
+            data_offset: 64,
+            target_ent_pc: 0,
+        }];
+        p.extern_data_relocs = alloc::vec![ExternDataReloc {
+            data_offset: 72,
+            symbol_name: alloc::string::String::from("x"),
+            addend: 0,
+        }];
+        let mut sym = crate::c5::symbol::Symbol {
+            class: crate::c5::token::Token::Glo as i64,
+            val: 80,
+            defined_here: true,
+            ..Default::default()
+        };
+        sym.name = alloc::string::String::from("g");
+        p.symbols = alloc::vec![sym];
+        let with_imm = |off: i64| crate::c5::ir::FunctionSsa {
+            insts: alloc::vec![crate::c5::ir::Inst::ImmData(off)],
+            ..Default::default()
+        };
+        p.synthetic_ssa_funcs = alloc::vec![with_imm(88)];
+        p.user_ssa_funcs = alloc::vec![with_imm(96)];
+        p
+    }
+
+    /// Every field of `Program` that stores a `.data` byte offset is
+    /// reached by the offset surface. A field dropped from an
+    /// implementation's destructuring -- or reached through a `..` that
+    /// skips it -- leaves its offset at the pre-compaction value, which
+    /// this test reports as an un-shifted offset.
+    #[test]
+    fn every_offset_bearing_field_is_remapped() {
+        let mut p = seeded();
+        p.remap_data_offsets(&ShiftBy(1000));
+        assert_eq!(
+            p.data_object_starts,
+            alloc::vec![1016],
+            "data_object_starts"
+        );
+        assert_eq!(
+            p.data_pad_ranges,
+            alloc::vec![(1024, 1032)],
+            "data_pad_ranges"
+        );
+        assert_eq!(
+            p.data_align_marks,
+            alloc::vec![(1040, 16)],
+            "data_align_marks"
+        );
+        assert_eq!(
+            p.data_relocs[0].data_offset, 1048,
+            "data_relocs.data_offset"
+        );
+        assert_eq!(
+            p.data_relocs[0].target_offset, 1056,
+            "data_relocs.target_offset"
+        );
+        assert_eq!(
+            p.data_relocs[0].target_anchor, 1056,
+            "data_relocs.target_anchor"
+        );
+        assert_eq!(
+            p.code_relocs[0].data_offset, 1064,
+            "code_relocs.data_offset"
+        );
+        assert_eq!(
+            p.extern_data_relocs[0].data_offset, 1072,
+            "extern_data_relocs.data_offset"
+        );
+        assert_eq!(p.symbols[0].val, 1080, "symbols[].val");
+        let imm_data = |f: &crate::c5::ir::FunctionSsa| match f.insts[0] {
+            crate::c5::ir::Inst::ImmData(off) => off,
+            _ => panic!("expected ImmData"),
+        };
+        assert_eq!(
+            imm_data(&p.synthetic_ssa_funcs[0]),
+            1088,
+            "synthetic_ssa_funcs Inst::ImmData"
+        );
+        assert_eq!(
+            imm_data(&p.user_ssa_funcs[0]),
+            1096,
+            "user_ssa_funcs Inst::ImmData"
+        );
+    }
+
+    /// A `_Thread_local` symbol's `val` indexes the TLS image, and a
+    /// function symbol's is an `ent_pc`; neither is a `.data` offset.
+    #[test]
+    fn non_data_symbol_values_are_left_alone() {
+        let mut p = seeded();
+        p.symbols[0].is_thread_local = true;
+        let mut fun = crate::c5::symbol::Symbol {
+            class: crate::c5::token::Token::Fun as i64,
+            val: 90,
+            defined_here: true,
+            ..Default::default()
+        };
+        fun.name = alloc::string::String::from("f");
+        p.symbols.push(fun);
+        p.remap_data_offsets(&ShiftBy(1000));
+        assert_eq!(p.symbols[0].val, 80, "TLS offset must not move");
+        assert_eq!(p.symbols[1].val, 90, "ent_pc must not move");
+    }
+}

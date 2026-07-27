@@ -34,6 +34,7 @@ use super::super::program::{ExportedFunction, Program};
 use super::Build;
 use super::Machine;
 use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget, DwarfRelocWidth};
+use crate::c5::layout::{round_up, write_struct};
 
 // ELF64 constants (Elf.h subset).
 const ELF_CLASS_64: u8 = 2;
@@ -275,20 +276,6 @@ struct Elf64Sym {
 }
 const _: () = assert!(core::mem::size_of::<Elf64Sym>() == ELF64_SYM_SIZE);
 
-fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
-    let bytes = unsafe {
-        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
-    };
-    out.extend_from_slice(bytes);
-}
-
-fn round_up(n: u64, align: u64) -> u64 {
-    if align == 0 {
-        return n;
-    }
-    n.div_ceil(align) * align
-}
-
 /// Build a NUL-separated string blob. Returns (`bytes`, `offsets`)
 /// where `offsets[i]` is the offset of `names[i]` in `bytes`.
 /// `bytes[0]` is the leading NUL so offset 0 indexes the empty
@@ -394,47 +381,6 @@ fn build_init_array_sections(
         });
     }
     Ok(out)
-}
-
-/// Byte size of a defined data global, for the symbol table's
-/// `st_size`. The compiler records `sizeof` on the symbol at unit
-/// finalize (`data_byte_size`), covering aggregates; the width-based
-/// fallback below serves symbols that predate that record (synthetic
-/// builds). A correct size matters for a COPY-relocated data import
-/// (`environ`), whose `st_size` the loader compares against the host
-/// symbol's.
-fn data_global_byte_size(sym: &crate::c5::symbol::Symbol) -> u64 {
-    use crate::c5::compiler::types::{is_pointer_ty, strip_unsigned};
-    use crate::c5::token::Ty;
-    if sym.data_byte_size > 0 {
-        return sym.data_byte_size as u64;
-    }
-    let ty = sym.type_;
-    let elem: u64 = if is_pointer_ty(ty) {
-        8
-    } else {
-        let stripped = strip_unsigned(ty);
-        if stripped == Ty::Char as i64 || stripped == Ty::Bool as i64 {
-            1
-        } else if stripped == Ty::Short as i64 {
-            2
-        } else if stripped == Ty::Int as i64 || stripped == Ty::Float as i64 {
-            4
-        } else if stripped == Ty::Long as i64
-            || stripped == Ty::LongLong as i64
-            || stripped == Ty::Double as i64
-        {
-            8
-        } else {
-            return 0;
-        }
-    };
-    let count = if sym.array_size > 0 {
-        sym.array_size as u64
-    } else {
-        1
-    };
-    elem * count
 }
 
 /// Emit a relocatable ELF64 object holding the contents of
@@ -556,8 +502,8 @@ impl DataPlan {
             data_file_len,
             data_len: data_file_len,
             bss_len: bss_size,
-            data_align: data_align.max(8),
-            bss_align: data_align.max(8).max(16),
+            data_align: crate::c5::layout::data_image_align(data_align as usize) as u64,
+            bss_align: crate::c5::layout::bss_image_align(data_align as usize) as u64,
         }
     }
 
@@ -736,8 +682,8 @@ fn plan_data_layout(
     let mut spans: Vec<DataSpan> = Vec::new();
     let mut cursor_data: u64 = 0;
     let mut cursor_bss: u64 = 0;
-    let mut data_align: u64 = 8;
-    let mut bss_align: u64 = 16;
+    let mut data_align: u64 = crate::c5::layout::DATA_ALIGN_MIN as u64;
+    let mut bss_align: u64 = crate::c5::layout::BSS_ALIGN_MIN as u64;
     // One past the previously placed content; padding offsets map here
     // so a one-past-the-end address stays adjacent to its object.
     let mut last_end = DataHome::Data(0);
@@ -784,7 +730,7 @@ fn plan_data_layout(
             &mut cursor_bss
         };
         let base = if let Some(&a) = split_align.get(&pos) {
-            let a = a.max(8);
+            let a = crate::c5::layout::data_image_align(a as usize) as u64;
             if in_file {
                 data_align = data_align.max(a);
             } else {
@@ -1028,15 +974,8 @@ pub(super) fn write_relocatable(
             {
                 continue;
             }
-            let computed = data_global_byte_size(sym);
-            let extent = (sym.reserved_data_bytes as u64).max(computed);
-            if extent == 0 {
+            let Some(size) = crate::c5::layout::data_object_extent(sym) else {
                 continue;
-            }
-            let copy = if computed > 0 {
-                computed.min(extent)
-            } else {
-                extent
             };
             let val = sym.val as u64;
             let (sec, flags) = match sym.section_name.as_deref() {
@@ -1053,10 +992,10 @@ pub(super) fn write_relocatable(
                     // slot needs a writable page because the image
                     // carries no `PT_GNU_RELRO`.
                     let holds_reloc = reloc_slots
-                        .range(val..val.saturating_add(extent))
+                        .range(val..val.saturating_add(size.extent))
                         .next()
                         .is_some();
-                    if !sym.storage_is_const || holds_reloc || val + extent > data_file_len {
+                    if !sym.storage_is_const || holds_reloc || val + size.extent > data_file_len {
                         continue;
                     }
                     (RODATA_SECTION, SHF_ALLOC)
@@ -1069,8 +1008,8 @@ pub(super) fn write_relocatable(
                 .map_err(internal)?;
             named_objs.push(NamedDataObj {
                 val,
-                copy,
-                extent,
+                copy: size.copy,
+                extent: size.extent,
                 align,
                 entry: e,
             });
@@ -1468,13 +1407,13 @@ pub(super) fn write_relocatable(
                     defined_tls_globals.push((
                         sym.name.as_str(),
                         sym.val,
-                        data_global_byte_size(sym),
+                        crate::c5::layout::data_object_byte_size(sym),
                     ));
                 } else {
                     defined_data_globals.push((
                         sym.name.as_str(),
                         sym.val,
-                        data_global_byte_size(sym),
+                        crate::c5::layout::data_object_byte_size(sym),
                     ));
                 }
             }
@@ -3179,9 +3118,9 @@ fn build_badc_note(
     out.extend_from_slice(&(dylibs_desc.len() as u32).to_le_bytes());
     out.extend_from_slice(&NT_BADC_DYLIBS.to_le_bytes());
     out.extend_from_slice(name);
-    pad_to_4(&mut out);
+    crate::c5::layout::pad_to_align(&mut out, 4);
     out.extend_from_slice(&dylibs_desc);
-    pad_to_4(&mut out);
+    crate::c5::layout::pad_to_align(&mut out, 4);
 
     // Record 2: per-import dylib map. Skip when there are no
     // imports -- the parser tolerates a missing record so the
@@ -3208,9 +3147,9 @@ fn build_badc_note(
         out.extend_from_slice(&(bm_desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_BINDING_MAP.to_le_bytes());
         out.extend_from_slice(name);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
         out.extend_from_slice(&bm_desc);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
     }
 
     // Record 3: source-declared export names. Omitted when the TU
@@ -3226,9 +3165,9 @@ fn build_badc_note(
         out.extend_from_slice(&(ex_desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_EXPORTS.to_le_bytes());
         out.extend_from_slice(name);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
         out.extend_from_slice(&ex_desc);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
     }
 
     // Record 4: Win64 `_tls_index` fixup offsets. Omitted when the
@@ -3243,9 +3182,9 @@ fn build_badc_note(
         out.extend_from_slice(&(tls_desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_TLS_INDEX.to_le_bytes());
         out.extend_from_slice(name);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
         out.extend_from_slice(&tls_desc);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
     }
 
     // Record 5: Mach-O TLV descriptor offsets.
@@ -3258,9 +3197,9 @@ fn build_badc_note(
         out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_MACHO_TLV_DESC.to_le_bytes());
         out.extend_from_slice(name);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
         out.extend_from_slice(&desc);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
     }
 
     // Record 6: Mach-O TLV fixups -- (adrp_offset, descriptor_index)
@@ -3275,9 +3214,9 @@ fn build_badc_note(
         out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_MACHO_TLV_FIXUP.to_le_bytes());
         out.extend_from_slice(name);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
         out.extend_from_slice(&desc);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
     }
 
     // Record 8: defined `_Thread_local` symbols -- (tls_offset, size,
@@ -3294,9 +3233,9 @@ fn build_badc_note(
         out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_TLS_SYM.to_le_bytes());
         out.extend_from_slice(name);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
         out.extend_from_slice(&desc);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
     }
 
     // Record 9: Mach-O TLV descriptors keyed by a cross-unit symbol --
@@ -3317,9 +3256,9 @@ fn build_badc_note(
         out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_MACHO_TLV_DESC_SYM.to_le_bytes());
         out.extend_from_slice(name);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
         out.extend_from_slice(&desc);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
     }
 
     // Record 10: Linux/x86_64 TLS access fixups -- (imm_offset, kind,
@@ -3344,9 +3283,9 @@ fn build_badc_note(
         out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_ELF_TPOFF.to_le_bytes());
         out.extend_from_slice(name);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
         out.extend_from_slice(&desc);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
     }
 
     // Record 7: data-import copy relocations -- (local_name, host_symbol)
@@ -3363,17 +3302,11 @@ fn build_badc_note(
         out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_COPY_RELOC.to_le_bytes());
         out.extend_from_slice(name);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
         out.extend_from_slice(&desc);
-        pad_to_4(&mut out);
+        crate::c5::layout::pad_to_align(&mut out, 4);
     }
     out
-}
-
-fn pad_to_4(out: &mut Vec<u8>) {
-    while !out.len().is_multiple_of(4) {
-        out.push(0);
-    }
 }
 
 /// Translate a `DwarfReloc` (target = section kind + width) into

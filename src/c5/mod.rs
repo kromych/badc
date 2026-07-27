@@ -5,6 +5,7 @@ mod error;
 mod headers;
 mod host;
 mod ir;
+mod layout;
 mod lexer;
 #[cfg(feature = "full")]
 mod linker;

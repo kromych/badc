@@ -24,6 +24,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
+use crate::c5::layout::write_struct;
 
 /// ar(5) member header: a fixed 60-byte record of space-padded ASCII
 /// fields, identical in the regular `!<arch>` and thin `!<thin>`
@@ -55,13 +56,6 @@ fn read_header(bytes: &[u8], off: usize) -> Result<ArHeader, C5Error> {
     // arrays (align 1), so any offset reads cleanly and the in-memory
     // pattern matches the on-disk bytes.
     Ok(unsafe { core::ptr::read_unaligned(bytes.as_ptr().add(off) as *const ArHeader) })
-}
-
-fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
-    let bytes = unsafe {
-        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
-    };
-    out.extend_from_slice(bytes);
 }
 
 /// One archive member after parsing. `bytes` aliases into the

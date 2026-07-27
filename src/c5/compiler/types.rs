@@ -34,6 +34,7 @@
 
 use super::super::ir::LoadKind;
 use super::super::token::{Tok, Token, Ty};
+pub(super) use crate::c5::layout::round_up;
 
 /// Base of the struct-tag namespace. Every primitive (including
 /// the long band at 300) sits below this.
@@ -222,17 +223,6 @@ pub(crate) fn is_void_ty(ty: i64) -> bool {
 /// pointers carry no [`VOID_BIT`] and answer false.
 pub(crate) fn is_void_ptr_ty(ty: i64) -> bool {
     (ty & VOID_BIT) != 0 && strip_unsigned(ty) == Ty::Char as i64 + Ty::Ptr as i64
-}
-
-/// Round `x` up to the nearest multiple of `alignment` (which must
-/// be a power of two). Used by struct-field layout, struct-tail
-/// padding, bitfield-storage placement, and any other code that
-/// needs `(x + alignment-1) & ~(alignment-1)` -- the helper makes
-/// the intent explicit and centralises the +1/!mask off-by-one
-/// trap in one place.
-pub(super) fn round_up(x: usize, alignment: usize) -> usize {
-    let mask = alignment - 1;
-    (x + mask) & !mask
 }
 
 /// Render a c5 type tag back into a C-like spelling: `int`, `char *`,

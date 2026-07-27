@@ -569,3 +569,110 @@ pub fn inline_definition(sym: &Symbol, model: InlineModel) -> bool {
         !sym.saw_noninline_decl && !sym.saw_extern_inline_decl
     }
 }
+
+impl crate::c5::layout::DataOffsets for Symbol {
+    /// `val` is a `Program::data` byte offset only for a file-scope object
+    /// this unit defines: a function symbol's `val` is an `ent_pc`, a
+    /// `_Thread_local` symbol's indexes the TLS image, and an undefined
+    /// `extern` reserves no storage here.
+    fn remap_data_offsets(&mut self, r: &dyn crate::c5::layout::DataRemap) {
+        let Self {
+            name: _,
+            token: _,
+            class,
+            type_: _,
+            val,
+            reserved_data_bytes: _, // a byte count, not an offset
+            relocated_from: _,      // the pre-relocation span, kept for diagnostics
+            data_byte_size: _,      // a byte count
+            fam_init_bytes: _,      // a byte count
+            h_class: _,
+            h_type: _,
+            h_val: _, // scope-restore shadow; every scope is unwound before a `Program` exists
+            params: _,
+            is_variadic: _,
+            h_params: _,
+            h_is_variadic: _,
+            implicit_return_int: _,
+            is_noreturn: _,
+            is_thread_local,
+            asm_register: _,
+            h_asm_register: _,
+            is_global_register: _,
+            h_is_global_register: _,
+            is_weak: _,
+            is_used,
+            is_hidden: _,
+            section_name,
+            data_align: _, // an alignment, not an offset
+            is_alias: _,
+            array_size: _,
+            h_array_size: _,
+            inner_array_size: _,
+            h_inner_array_size: _,
+            array_dims: _,
+            h_array_dims: _,
+            is_vla: _,
+            vla_ptr_slot: _,  // frame slot
+            vla_size_slot: _, // frame slot
+            h_is_vla: _,
+            h_vla_ptr_slot: _,
+            h_vla_size_slot: _,
+            is_zero_len_array: _,
+            h_is_zero_len_array: _,
+            is_const_qualified: _,
+            storage_is_const: _,
+            has_initializer: _,
+            runtime_initialized: _,
+            fn_ptr_indirection: _,
+            h_fn_ptr_indirection: _,
+            is_function_type: _,
+            returns_void: _,
+            is_void_typedef: _,
+            is_enum_typedef: _,
+            type_align: _,
+            h_type_align: _,
+            linkage: _,
+            defined_here,
+            is_extern_decl: _,
+            saw_noninline_decl: _,
+            saw_plain_inline_decl: _,   // linkage model input, not an offset
+            saw_extern_inline_decl: _,  // linkage model input, not an offset
+            is_gnu_inline: _,           // linkage model selector
+            is_inline_definition: _,    // linkage model result
+            saw_static_decl: _,
+            block_extern_active: _,
+            is_scope_static: _,
+            is_scope_typedef: _,
+            owner_ent_pc: _, // code address space
+            was_referenced: _,
+            was_read: _,
+            was_written: _,
+            address_escaped: _,
+            pending_stores: _,
+            decl_line: _,
+            decl_file: _,
+            decl_in_main_source: _,
+            maybe_unused: _,
+        } = self;
+        if *class != crate::c5::token::Token::Glo as i64
+            || !*defined_here
+            || *is_thread_local
+            || !r.in_data(*val)
+        {
+            return;
+        }
+        match r.remap(*val, *val) {
+            Some(new) => *val = new,
+            // The object was dropped. Retire the record in place -- removing
+            // it would shift the indices the AST references -- so no writer
+            // places or carves it.
+            None => {
+                *defined_here = false;
+                *is_used = false;
+                *section_name = None;
+                *val = 0;
+            }
+        }
+    }
+}

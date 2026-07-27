@@ -284,7 +284,7 @@ fn run() {
     // Errors and warnings still print; only informational lines
     // are quieted.
     let mut quiet = false;
-    let mut mno_sse = false;
+    let mut mno_fp_regs = false;
     // `--export-all` exports every non-static function in the dynamic
     // symbol table / export trie of native output, so a runtime
     // `dlopen` consumer can `dlsym` it without a source-level `#pragma
@@ -490,10 +490,12 @@ fn run() {
             // progress, `info: wrote file <path>` lines). Errors
             // and warnings remain on stderr unchanged.
             "-q" | "--quiet" => quiet = true,
-            // gcc `-mno-sse` (x86_64): compiler-generated code keeps off
-            // the SSE registers. Freestanding environments (OS kernels)
-            // fault on any XMM access; see `NativeOptions::no_sse`.
-            "-mno-sse" => mno_sse = true,
+            // Keep compiler-generated code off the floating-point /
+            // SIMD register file: gcc spells it `-mno-sse` on x86_64 and
+            // `-mgeneral-regs-only` on aarch64. Freestanding environments
+            // (OS kernels) run with that register file trapped, so any
+            // access faults; see `NativeOptions::no_fp_regs`.
+            "-mno-sse" | "-mgeneral-regs-only" => mno_fp_regs = true,
             // Export every non-static function (dlopen/dlsym visibility).
             "--export-all" => export_all = true,
             // Export every defined non-static global (function and data)
@@ -1024,7 +1026,7 @@ fn run() {
         let mut reloc_opts = badc::NativeOptions::new()
             .with_debug_info(emit_debug_info)
             .with_inline_cap(inline_cap);
-        reloc_opts.no_sse = mno_sse;
+        reloc_opts.no_fp_regs = mno_fp_regs;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -1570,7 +1572,7 @@ fn run() {
         let mut reloc_opts = badc::NativeOptions::new()
             .with_debug_info(emit_debug_info)
             .with_inline_cap(inline_cap);
-        reloc_opts.no_sse = mno_sse;
+        reloc_opts.no_fp_regs = mno_fp_regs;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -1689,7 +1691,7 @@ fn run() {
         let mut reloc_opts = badc::NativeOptions::new()
             .with_debug_info(emit_debug_info)
             .with_inline_cap(inline_cap);
-        reloc_opts.no_sse = mno_sse;
+        reloc_opts.no_fp_regs = mno_fp_regs;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }

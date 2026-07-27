@@ -71,8 +71,13 @@ def rewrite(argv: list[str]) -> list[str]:
         elif a.startswith("-O"):
             opt = a  # last one wins, as with gcc
             i += 1
-        elif a == "-mno-sse":
-            out.append(a)  # badc keeps generated code off the SSE registers
+        elif a in ("-mno-sse", "-mgeneral-regs-only"):
+            # Keep generated code off the floating-point / SIMD register
+            # file, which a linked kernel object must do: the kernel runs
+            # with it trapped (no CR4.OSFXSR on x86_64, CPACR_EL1.FPEN on
+            # aarch64) and callers do not maintain the System V `al`
+            # convention. badc's variadic prologue honors both spellings.
+            out.append(a)
             i += 1
         elif a.startswith("-"):
             i += 1

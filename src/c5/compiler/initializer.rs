@@ -3635,6 +3635,24 @@ impl Compiler {
     /// or `elem_size` bytes (int / pointer arrays). Pointer-into-
     /// data elements record a DataReloc so the native writers
     /// patch the runtime address.
+    /// A zero-element array definition still reserves one slot when it
+    /// sits at the end of the data segment: the object model identifies
+    /// objects by start offset (static DCE intervals, the named-section
+    /// carve), so no two objects may share one. An object placed in
+    /// storage a tentative declaration already reserved keeps that
+    /// storage and needs nothing here.
+    pub(super) fn reserve_zero_length_array_slot(&mut self, id_idx: usize) {
+        if !self.symbols[id_idx].is_zero_len_array
+            || self.symbols[id_idx].val != self.data.len() as i64
+        {
+            return;
+        }
+        self.symbols[id_idx].reserved_data_bytes = 8;
+        for _ in 0..8 {
+            self.data.push(0);
+        }
+    }
+
     pub(super) fn write_array_init_into_data(
         &mut self,
         var_offset: i64,

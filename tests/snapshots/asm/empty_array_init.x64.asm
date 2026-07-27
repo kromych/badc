@@ -12,17 +12,19 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax
-               	movq	(%rax), %rcx
-               	cmpq	%rcx, %rcx
+               	cmpq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	(%rax), %rcx
-               	movslq	(%rcx), %rcx
-               	addq	$0x0, %rcx
-               	movslq	0x4(%rax), %rdx
-               	addq	%rdx, %rcx
-               	movslq	0x8(%rax), %rax
+               	leaq	<rip>, %rax
+               	addq	$0x0, %rax
+               	movslq	(%rax), %rax
+               	addq	$0x0, %rax
+               	leaq	<rip>, %rcx
+               	movslq	0x4(%rcx), %rcx
+               	addq	%rcx, %rax
+               	leaq	<rip>, %rcx
+               	movslq	0x8(%rcx), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	cmpq	$0x3c, %rax

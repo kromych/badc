@@ -2181,7 +2181,7 @@ pub(crate) fn lower(
                 &mut asm_section_text_refs,
                 &mut asm_text_abs_refs,
                 &mut asm_text_labels,
-                native.no_sse,
+                native.no_fp_regs,
             )
         };
         #[cfg(feature = "std")]

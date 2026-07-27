@@ -1990,9 +1990,10 @@ pub struct NativeOptions {
     /// `.bss` region instead of packing them into the file image.
     /// On by default; `BADC_NO_BSS_SEGREGATE` forces it off.
     pub bss_segregate: bool,
-    /// `-mno-sse` (x86_64): keep compiler-generated code off the SSE
-    /// registers. See [`Abi::no_sse_varargs`], which this sets.
-    pub no_sse: bool,
+    /// Keep compiler-generated code off the floating-point / SIMD
+    /// register file (`-mno-sse` on x86_64, `-mgeneral-regs-only` on
+    /// aarch64). See [`Abi::no_fp_varargs`], which this sets.
+    pub no_fp_regs: bool,
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -2043,7 +2044,7 @@ impl NativeOptions {
             dump_ssa: false,
             inline_cap: 64,
             bss_segregate: true,
-            no_sse: false,
+            no_fp_regs: false,
         }
     }
 
@@ -2430,16 +2431,19 @@ pub(crate) struct Abi {
     /// SysV x86_64 requires `%al` to hold the count of XMM
     /// regs used at every variadic call site.
     pub variadic_zero_xmm_count: bool,
-    /// `-mno-sse`: compiler-generated code must not touch SSE registers.
-    /// Freestanding x86_64 environments (OS kernels) run without
-    /// CR4.OSFXSR, where any XMM access is #UD, and their callers do not
-    /// maintain the System V `al` XMM-count convention. The variadic
-    /// callee prologue skips the XMM save area and `va_start` marks the
-    /// FP area exhausted so `va_arg` walks gp then overflow only.
-    /// Floating-point argument codegen is unaffected: such environments
-    /// pass no FP varargs. Per-run (from [`NativeOptions::no_sse`]), not
-    /// a `Target::abi` row property.
-    pub no_sse_varargs: bool,
+    /// Compiler-generated code must not touch the floating-point / SIMD
+    /// register file. A freestanding x86_64 environment runs without
+    /// CR4.OSFXSR, where any XMM access is #UD, and its callers do not
+    /// maintain the System V `al` XMM-count convention; a freestanding
+    /// aarch64 environment runs with CPACR_EL1.FPEN trapping, where any
+    /// FP/SIMD access raises a synchronous exception. The variadic callee
+    /// prologue skips the FP half of the register save area and
+    /// `va_start` marks the FP area exhausted, so `va_arg` walks the
+    /// general area then the overflow stack. Floating-point argument
+    /// codegen is unaffected: such environments pass no FP varargs.
+    /// Per-run (from [`NativeOptions::no_fp_regs`]), not a `Target::abi`
+    /// row property.
+    pub no_fp_varargs: bool,
 }
 
 impl Abi {
@@ -2519,7 +2523,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
-                no_sse_varargs: false,
+                no_fp_varargs: false,
             },
             Target::LinuxAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -2529,7 +2533,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
-                no_sse_varargs: false,
+                no_fp_varargs: false,
             },
             Target::LinuxX64 => Abi {
                 arch: Arch::X86_64,
@@ -2539,7 +2543,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: true,
-                no_sse_varargs: false,
+                no_fp_varargs: false,
             },
             Target::WindowsX64 => Abi {
                 arch: Arch::X86_64,
@@ -2549,7 +2553,7 @@ impl Target {
                 variadic_int_only: true,
                 position_indexed_args: true,
                 variadic_zero_xmm_count: false,
-                no_sse_varargs: false,
+                no_fp_varargs: false,
             },
             Target::WindowsAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -2559,7 +2563,7 @@ impl Target {
                 variadic_int_only: true,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
-                no_sse_varargs: false,
+                no_fp_varargs: false,
             },
         }
     }

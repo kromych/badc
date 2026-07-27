@@ -2253,6 +2253,7 @@ impl Compiler {
                                 let total = count * inner_dim;
                                 self.symbols[id_idx].array_size = total;
                                 self.symbols[id_idx].is_zero_len_array = total == 0;
+                                self.reserve_zero_length_array_slot(id_idx);
                                 if let Some(first) = self.symbols[id_idx].array_dims.first_mut()
                                     && *first == 0
                                 {
@@ -2336,6 +2337,7 @@ impl Compiler {
                             // Keep the array-ness (the `array_size == 0`
                             // scalar encoding would otherwise lose it).
                             self.symbols[id_idx].is_zero_len_array = count == 0;
+                            self.reserve_zero_length_array_slot(id_idx);
                             // Pad data to 8-byte alignment so the next
                             // global doesn't land on an odd offset.
                             while !self.data.len().is_multiple_of(8) {
@@ -2354,6 +2356,7 @@ impl Compiler {
                         // array-ness that the scalar `array_size == 0`
                         // encoding would otherwise drop.
                         self.symbols[id_idx].is_zero_len_array = final_size == 0;
+                        self.reserve_zero_length_array_slot(id_idx);
                         // Patch the deferred-outer placeholder in
                         // `array_dims[0]` to the resolved row count.
                         // Layout: total elements = outer * inner-dims-product,

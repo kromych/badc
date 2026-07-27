@@ -712,6 +712,7 @@ pub(crate) fn emit_function(
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    no_fp_regs: bool,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -729,7 +730,11 @@ pub(crate) fn emit_function(
     let asm_sections = &mut *cx.asm_sections;
     let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
     let text_align = &mut *cx.text_align;
-    let abi = target.abi();
+    let abi = {
+        let mut a = target.abi();
+        a.no_fp_varargs = no_fp_regs;
+        a
+    };
     let frame = compute_frame(func, alloc, abi, target);
     let scratch = ScratchPool::new();
     let snapshot = code.len();
@@ -1858,14 +1863,20 @@ fn emit_prologue(
         for (i, &r) in abi.int_arg_regs.iter().enumerate() {
             emit(code, enc_str_imm(Reg(r), Reg(31), (i as u32) * 8));
         }
-        for i in 0..8u32 {
-            // `str dN, [sp, #gr_save + i*16]` -- the d-register view
-            // stores the low eightbyte of vN into the slot start; a
-            // `va_arg(double)` reads it back from the same offset.
-            emit(
-                code,
-                enc_str_d_imm(i as u8, Reg(31), AARCH64_GR_SAVE_BYTES + i * 16),
-            );
+        // The vector half is skipped when the FP/SIMD file is off limits
+        // (`no_fp_varargs`): the store itself would fault. The area stays
+        // reserved so every offset above it is unchanged, and `va_start`
+        // marks it exhausted.
+        if !abi.no_fp_varargs {
+            for i in 0..8u32 {
+                // `str dN, [sp, #gr_save + i*16]` -- the d-register view
+                // stores the low eightbyte of vN into the slot start; a
+                // `va_arg(double)` reads it back from the same offset.
+                emit(
+                    code,
+                    enc_str_d_imm(i as u8, Reg(31), AARCH64_GR_SAVE_BYTES + i * 16),
+                );
+            }
         }
         emit_frame_and_saves(code, alloc, frame);
         return;
@@ -4703,8 +4714,15 @@ fn emit_intrinsic(
             let gr_offs = -((8u32.saturating_sub(named_int) * 8) as i64);
             load_imm64(code, scratch.secondary, gr_offs as u64);
             emit(code, enc_str32_imm(scratch.secondary, ap, 24));
-            // __vr_offs (+28) = -(8 - named_fp) * 16.
-            let vr_offs = -((8u32.saturating_sub(named_fp) * 16) as i64);
+            // __vr_offs (+28) = -(8 - named_fp) * 16, or 0 when the
+            // prologue skipped the vector save area: zero reads as
+            // exhausted, so `va_arg` walks the general area then the
+            // overflow stack.
+            let vr_offs = if abi.no_fp_varargs {
+                0
+            } else {
+                -((8u32.saturating_sub(named_fp) * 16) as i64)
+            };
             load_imm64(code, scratch.secondary, vr_offs as u64);
             emit(code, enc_str32_imm(scratch.secondary, ap, 28));
             true
@@ -9007,6 +9025,7 @@ mod tests {
                 &mut tlv_fx,
                 &mut tlv_desc,
                 &alloc::collections::BTreeMap::new(),
+                false,
             )
         };
         assert!(
@@ -9181,6 +9200,7 @@ mod tests {
                 &mut tlv_fx,
                 &mut tlv_desc,
                 &alloc::collections::BTreeMap::new(),
+                false,
             )
         };
         assert!(ok, "binop handler should cover Add + Shl + Shr");
@@ -9254,6 +9274,7 @@ mod tests {
                 &mut tlv_fx,
                 &mut tlv_desc,
                 &alloc::collections::BTreeMap::new(),
+                false,
             )
         };
         assert!(

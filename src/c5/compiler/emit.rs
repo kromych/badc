@@ -55,12 +55,19 @@ impl Compiler {
     }
 
     /// Truncate the data segment (a speculative parse is being undone)
-    /// and drop the literal boundaries recorded past the new end: later
-    /// growth reuses those offsets for unrelated bytes, and a stale
-    /// boundary could split a live object.
+    /// and drop everything recorded past the new end: later growth
+    /// reuses those offsets for unrelated bytes, so a stale literal
+    /// boundary could split a live object and a stale padding range or
+    /// alignment mark would describe live bytes as padding.
     pub(super) fn truncate_data(&mut self, len: usize) {
         self.data.truncate(len);
-        self.data_object_starts.retain(|&s| s < len as i64);
+        let end = len as i64;
+        self.data_object_starts.retain(|&s| s < end);
+        self.data_pad_ranges.retain_mut(|r| {
+            r.1 = r.1.min(end);
+            r.0 < r.1
+        });
+        self.data_align_marks.retain(|&(off, _)| off < end);
     }
 
     /// Skip tokens until the matching close paren. Caller has
@@ -827,7 +834,15 @@ impl Compiler {
         let class = s.class;
         let val = s.val;
         let is_thread_local = s.is_thread_local;
-        let array_size = s.array_size;
+        // A zero-length array (`T x[] = {}`) is array-shaped with a zero
+        // element count, which the count alone cannot express. Record it
+        // with the sentinel an incomplete `extern T x[];` already uses so
+        // the walker consumes the object as its address (C99 6.3.2.1p3).
+        let array_size = if s.array_size == 0 && s.is_zero_len_array {
+            -1
+        } else {
+            s.array_size
+        };
         // A reference to a block-scope `extern` that shadows a bound name
         // (the slot is `Glo` and marked `block_extern_active`) must resolve
         // by name / same-TU offset regardless of the class restored at

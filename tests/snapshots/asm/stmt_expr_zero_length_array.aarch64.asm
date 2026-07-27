@@ -15,8 +15,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	ldur	x0, [x29, #-0x8]
-               	cmp	x0, x0
+               	sub	x0, x29, #0x8
+               	sub	x1, x29, #0x8
+               	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10

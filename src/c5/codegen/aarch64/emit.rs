@@ -2620,7 +2620,7 @@ fn build_label_branch(
         "b" if insn.operands.len() == 1 => LabelBranch::B,
         "bl" if insn.operands.len() == 1 => LabelBranch::Bl,
         "cbz" | "cbnz" if insn.operands.len() == 2 => match conv(&insn.operands[0])? {
-            Opnd::Reg { num: rt, is64 } => LabelBranch::Cb {
+            Opnd::Reg { num: rt, is64, .. } => LabelBranch::Cb {
                 nz: insn.mnemonic == "cbnz",
                 rt,
                 is64,
@@ -2633,7 +2633,7 @@ fn build_label_branch(
         },
         "tbz" | "tbnz" if insn.operands.len() == 3 => {
             let (rt, is64) = match conv(&insn.operands[0])? {
-                Opnd::Reg { num, is64 } => (num, is64),
+                Opnd::Reg { num, is64, .. } => (num, is64),
                 _ => {
                     return Err(String::from(
                         "aarch64 inline asm: tbz/tbnz operand must be a register",
@@ -2657,7 +2657,9 @@ fn build_label_branch(
             }
         }
         "adr" if insn.operands.len() == 2 => match conv(&insn.operands[0])? {
-            Opnd::Reg { num, is64: true } => LabelBranch::Adr { rd: num },
+            Opnd::Reg {
+                num, is64: true, ..
+            } => LabelBranch::Adr { rd: num },
             _ => {
                 return Err(String::from(
                     "aarch64 inline asm: adr destination must be a 64-bit register",
@@ -3134,9 +3136,11 @@ fn emit_inline_asm_aarch64(
                 }
             },
             AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
+            AsmOpndA64::Shift { kind, amount } => Opnd::Shift { kind, amount },
+            AsmOpndA64::Extend { option, amount } => Opnd::Extend { option, amount },
             AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
             AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
-            AsmOpndA64::Reg { num, is64 } => Opnd::Reg { num, is64 },
+            AsmOpndA64::Reg { num, is64, sp } => Opnd::Reg { num, is64, sp },
             AsmOpndA64::VReg { num, is_d } => Opnd::VReg { num, is_d },
             AsmOpndA64::QReg(num) => Opnd::QReg(num),
             AsmOpndA64::VScalar { num, size } => Opnd::VScalar { num, size },
@@ -3189,7 +3193,11 @@ fn emit_inline_asm_aarch64(
                     }
                 } else {
                     let is64 = is64.unwrap_or(asm.operands[idx as usize].width >= 8);
-                    Opnd::Reg { num: r, is64 }
+                    Opnd::Reg {
+                        num: r,
+                        is64,
+                        sp: false,
+                    }
                 }
             }
             AsmOpndA64::Mem { base, off, pre } => {

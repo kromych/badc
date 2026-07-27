@@ -77,6 +77,16 @@ pub(crate) enum Field {
     /// the inverted condition for the aliases whose written condition flips
     /// (`cset`/`csetm`); al/nv have no inversion and are rejected there.
     Cond { op: u8, inv: bool },
+    /// The shifted-register group: the 2-bit shift kind at bit 22 and the
+    /// 6-bit amount at bit 10, fed by an optional trailing operand (absent =
+    /// LSL #0). `is64` bounds the amount (0..63 vs 0..31); `ror` admits the
+    /// fourth kind, which the arithmetic forms reserve.
+    Shift { op: u8, is64: bool, ror: bool },
+    /// The extended-register group: the 3-bit extend option at bit 13 and the
+    /// 3-bit amount at bit 10, fed by an optional trailing operand (absent =
+    /// UXTX #0 at 64 bits, UXTW #0 at 32). The option also fixes the width of
+    /// the extended register at slot `rm`.
+    Extend { op: u8, rm: u8, is64: bool },
 }
 
 /// One catalogue entry: a base word and the fields spliced into it.
@@ -86,6 +96,10 @@ pub(crate) struct Form {
     /// Operand shapes this form accepts, in written order.
     pub ops: &'static [A64Op],
     pub base: u32,
+    /// Bitmask of operand slots whose register field reads 31 as the stack
+    /// pointer. Register 31 is the zero register in every other slot, so a
+    /// written `sp` there does not name this form.
+    pub sp: u8,
     pub fields: &'static [Field],
 }
 
@@ -96,10 +110,18 @@ pub(crate) enum A64Op {
     X,
     /// A 32-bit `W` register.
     W,
+    /// A register of either width: the extended-register second source, whose
+    /// width the written extend selects.
+    RegAny,
     /// An immediate.
     Imm,
     /// An optional `lsl #s` shift (move-wide / add-sub-imm); absent = 0.
     OptLsl,
+    /// An optional shifted-register `<lsl|lsr|asr|ror> #n` group; absent = 0.
+    OptShift,
+    /// An optional extended-register `<extend> {#n}` group; absent = the
+    /// width's identity extend.
+    OptExt,
     /// A condition code.
     Cond,
     /// A base-register memory reference `[Xn|SP]`, with or without an
@@ -114,10 +136,13 @@ pub(crate) enum A64Op {
 /// A resolved operand handed to [`encode`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Opnd {
-    /// Register: `num` 0..31, `is64` selects X vs W.
+    /// Register: `num` 0..31, `is64` selects X vs W. `sp` records that
+    /// register 31 was written as `sp`/`wsp` rather than `xzr`/`wzr`; the two
+    /// spellings share the field value and differ only by form.
     Reg {
         num: u8,
         is64: bool,
+        sp: bool,
     },
     /// SIMD/FP register: `num` 0..31, `is_d` selects the D (64) vs S (32) view.
     VReg {
@@ -159,8 +184,21 @@ pub(crate) enum Opnd {
     Imm(i64),
     /// A floating-point immediate as its 8-bit VFP encoding (`fmov Vd, #imm`).
     FpImm(u8),
-    /// An `lsl #shift` modifier operand.
+    /// An `lsl #shift` modifier operand. In a shifted-register group it is the
+    /// LSL kind; in an extended-register one, the width's identity extend.
     Lsl(u32),
+    /// A shifted-register `<lsr|asr|ror> #amount` modifier (`kind` 1..3; LSL
+    /// arrives as [`Opnd::Lsl`], which the extended forms also accept).
+    Shift {
+        kind: u8,
+        amount: u8,
+    },
+    /// An extended-register `<extend> {#amount}` modifier; `option` is the
+    /// 3-bit extend selector (UXTB 0 .. UXTX 3, SXTB 4 .. SXTX 7).
+    Extend {
+        option: u8,
+        amount: u8,
+    },
     /// A system register, as its 16-bit `mrs`/`msr` field
     /// (`op0<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2`).
     SysReg(u16),
@@ -294,8 +332,11 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
     match (p, o) {
         (A64Op::X, Opnd::Reg { is64, .. }) => is64,
         (A64Op::W, Opnd::Reg { is64, .. }) => !is64,
+        (A64Op::RegAny, Opnd::Reg { .. }) => true,
         (A64Op::Imm, Opnd::Imm(_)) => true,
         (A64Op::OptLsl, Opnd::Lsl(_)) => true,
+        (A64Op::OptShift, Opnd::Lsl(_) | Opnd::Shift { .. }) => true,
+        (A64Op::OptExt, Opnd::Lsl(_) | Opnd::Extend { .. }) => true,
         (A64Op::Cond, Opnd::Cond(_)) => true,
         // The offset and writeback addressing modes are distinct catalogue
         // shapes, so a pre-index operand never takes an offset-only encoding.
@@ -385,6 +426,12 @@ fn fp_ldst_reg(mnem: &str, rt: &Opnd) -> Option<(u8, u32, u32, u32)> {
 /// (assembly) order. `OptLsl` slots may be omitted by the caller (a missing
 /// trailing shift defaults to 0).
 pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
+    // A written `sp` is only ever a catalogue form's business: the bespoke
+    // arms below all encode register 31 as the zero register, so routing an sp
+    // operand past them would silently drop the stack pointer.
+    if ops.iter().any(|o| matches!(o, Opnd::Reg { sp: true, .. })) {
+        return encode_catalogue(mnemonic, ops);
+    }
     // System-register move: `mrs Xt, <sysreg>` / `msr <sysreg>, Xt`. The
     // register is always 64-bit; the 16-bit `op0:op1:CRn:CRm:op2` field sits at
     // bit 5, with the L bit (read/write) fixed by the base word.
@@ -403,10 +450,16 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // as: `casp x0,x1,x2,x3,[x4]` is 0x4820_7C82.
     if let "casp" | "caspa" | "caspl" | "caspal" = mnemonic {
         let [
-            Opnd::Reg { num: rs, is64 },
-            Opnd::Reg { num: rs2, is64: w1 },
-            Opnd::Reg { num: rt, is64: w2 },
-            Opnd::Reg { num: rt2, is64: w3 },
+            Opnd::Reg { num: rs, is64, .. },
+            Opnd::Reg {
+                num: rs2, is64: w1, ..
+            },
+            Opnd::Reg {
+                num: rt, is64: w2, ..
+            },
+            Opnd::Reg {
+                num: rt2, is64: w3, ..
+            },
             Opnd::Mem {
                 base: rn,
                 off: 0,
@@ -442,11 +495,17 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // widths (Xd<->Dn, Wd<->Sn); Rn/Rd sit at their usual positions.
     if mnemonic == "fmov" {
         return match ops {
-            [Opnd::Reg { num: rd, is64 }, Opnd::VReg { num: vn, is_d }] if is64 == is_d => {
+            [
+                Opnd::Reg { num: rd, is64, .. },
+                Opnd::VReg { num: vn, is_d },
+            ] if is64 == is_d => {
                 let base = if *is64 { 0x9E66_0000u32 } else { 0x1E26_0000 };
                 Ok(base | ((*vn as u32) << 5) | (*rd as u32))
             }
-            [Opnd::VReg { num: vd, is_d }, Opnd::Reg { num: rn, is64 }] if is64 == is_d => {
+            [
+                Opnd::VReg { num: vd, is_d },
+                Opnd::Reg { num: rn, is64, .. },
+            ] if is64 == is_d => {
                 let base = if *is_d { 0x9E67_0000u32 } else { 0x1E27_0000 };
                 Ok(base | ((*rn as u32) << 5) | (*vd as u32))
             }
@@ -560,7 +619,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "ucvtf" => Some(0x1_0000),
         _ => None,
     } {
-        let [Opnd::VReg { num: rd, is_d }, Opnd::Reg { num: rn, is64 }] = *ops else {
+        let [
+            Opnd::VReg { num: rd, is_d },
+            Opnd::Reg { num: rn, is64, .. },
+        ] = *ops
+        else {
             return Err(String::from("inline asm: bad scvtf/ucvtf operands"));
         };
         let base = if is64 { 0x8000_0000u32 } else { 0 }
@@ -575,7 +638,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fcvtzu" => Some(0x1_0000),
         _ => None,
     } {
-        let [Opnd::Reg { num: rd, is64 }, Opnd::VReg { num: rn, is_d }] = *ops else {
+        let [
+            Opnd::Reg { num: rd, is64, .. },
+            Opnd::VReg { num: rn, is_d },
+        ] = *ops
+        else {
             return Err(String::from("inline asm: bad fcvtzs/fcvtzu operands"));
         };
         let base = if is64 { 0x8000_0000u32 } else { 0 }
@@ -1306,7 +1373,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "smov" => Some((0x0E00_2C00, true)),
         _ => None,
     } && let [
-        Opnd::Reg { num: rd, is64 },
+        Opnd::Reg { num: rd, is64, .. },
         Opnd::VecElem {
             num: rn,
             size,
@@ -1339,7 +1406,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 size,
                 index,
             },
-            Opnd::Reg { num: rn, is64 },
+            Opnd::Reg { num: rn, is64, .. },
         ] = *ops
     {
         if is64 != (size == 3) {
@@ -1366,8 +1433,10 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // regsize, imms=width-1. The register width picks the field-mask bit N.
     if let "ubfx" | "sbfx" | "bfxil" | "ubfiz" | "sbfiz" | "bfi" = mnemonic {
         let [
-            Opnd::Reg { num: rd, is64 },
-            Opnd::Reg { num: rn, is64: n2 },
+            Opnd::Reg { num: rd, is64, .. },
+            Opnd::Reg {
+                num: rn, is64: n2, ..
+            },
             Opnd::Imm(lsb),
             Opnd::Imm(width),
         ] = *ops
@@ -1504,7 +1573,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 }
                 (31, 1u32 << 23)
             }
-            [Opnd::Reg { num, is64: true }] => (*num as u32, 1u32 << 23),
+            [
+                Opnd::Reg {
+                    num, is64: true, ..
+                },
+            ] => (*num as u32, 1u32 << 23),
             _ => {
                 return Err(String::from(
                     "inline asm: bad ld1/st1 post-index (want `, #imm` or `, Xm`)",
@@ -1562,7 +1635,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 }
                 (31, 1u32 << 23)
             }
-            [Opnd::Reg { num, is64: true }] => (*num as u32, 1u32 << 23),
+            [
+                Opnd::Reg {
+                    num, is64: true, ..
+                },
+            ] => (*num as u32, 1u32 << 23),
             _ => {
                 return Err(String::from(
                     "inline asm: bad ldNr post-index (want `, #imm` or `, Xm`)",
@@ -1619,7 +1696,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 }
                 (31, 1u32 << 23)
             }
-            [Opnd::Reg { num, is64: true }] => (*num as u32, 1u32 << 23),
+            [
+                Opnd::Reg {
+                    num, is64: true, ..
+                },
+            ] => (*num as u32, 1u32 << 23),
             _ => {
                 return Err(String::from(
                     "inline asm: bad single-lane post-index (want `, #imm` or `, Xm`)",
@@ -1695,11 +1776,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // `add ..., #0` earlier (the parser, which can tell `sp` from `xzr`).
     if mnemonic == "mov" {
         match *ops {
-            [Opnd::Reg { num: rd, is64 }, Opnd::Reg { num: rm, .. }] => {
+            [Opnd::Reg { num: rd, is64, .. }, Opnd::Reg { num: rm, .. }] => {
                 let base = if is64 { 0xAA00_03E0u32 } else { 0x2A00_03E0 };
                 return Ok(base | ((rm as u32) << 16) | (rd as u32));
             }
-            [Opnd::Reg { num: rd, is64 }, Opnd::Imm(v)] => {
+            [Opnd::Reg { num: rd, is64, .. }, Opnd::Imm(v)] => {
                 if !(0..=0xFFFF).contains(&v) {
                     return Err(String::from(
                         "inline asm: mov immediate out of movz range; use movz/movk/movn",
@@ -1711,25 +1792,51 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => return Err(String::from("inline asm: bad mov operands")),
         }
     }
+    encode_catalogue(mnemonic, ops)
+}
+
+/// Look the operand shape up in the generated catalogue and pack it. A form
+/// only matches when every written `sp` lands in a slot its `sp` mask marks,
+/// which is what selects the extended-register add/sub over the shifted one.
+/// The extended-register forms are tried second: an operand list that both
+/// can express (no `sp`, no written extend) takes the shifted encoding, as the
+/// assembler does.
+fn encode_catalogue(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // The catalogue is sorted by mnemonic (enforced by the generator and the
     // `catalogue_is_sorted` test): binary-search to the mnemonic's run of forms.
     let forms = super::isa_a64_table::FORMS;
     let start = forms.partition_point(|f| f.mnemonic < mnemonic);
-    for f in &forms[start..] {
-        if f.mnemonic != mnemonic {
-            break;
-        }
-        // Match, allowing a trailing OptLsl slot to be absent.
-        let required = f.ops.iter().filter(|o| **o != A64Op::OptLsl).count();
-        if ops.len() < required || ops.len() > f.ops.len() {
-            continue;
-        }
-        if f.ops
-            .iter()
-            .zip(ops.iter())
-            .all(|(&p, &o)| op_matches(p, o))
-            && mem_offsets_consumed(f, ops)
-        {
+    let mut sp_rejected = false;
+    for extended in [false, true] {
+        for f in &forms[start..] {
+            if f.mnemonic != mnemonic {
+                break;
+            }
+            if f.ops.contains(&A64Op::OptExt) != extended {
+                continue;
+            }
+            // Match, allowing a trailing optional shift/extend slot to be absent.
+            let required = f
+                .ops
+                .iter()
+                .filter(|o| !matches!(o, A64Op::OptLsl | A64Op::OptShift | A64Op::OptExt))
+                .count();
+            if ops.len() < required || ops.len() > f.ops.len() {
+                continue;
+            }
+            if !f
+                .ops
+                .iter()
+                .zip(ops.iter())
+                .all(|(&p, &o)| op_matches(p, o))
+                || !mem_offsets_consumed(f, ops)
+            {
+                continue;
+            }
+            if !sp_slots_allowed(f, ops) {
+                sp_rejected = true;
+                continue;
+            }
             return match pack(f, ops) {
                 // An offset the scaled uimm12 field rejects may still have the
                 // sibling's unscaled simm9 encoding; keep the scaled form's
@@ -1742,9 +1849,23 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             };
         }
     }
+    if sp_rejected {
+        return Err(format!(
+            "inline asm: `{mnemonic}` reads register 31 as the zero register here, not sp"
+        ));
+    }
     Err(format!(
         "inline asm: no A64 encoding for `{mnemonic}` with these operands"
     ))
+}
+
+/// Every operand written as `sp`/`wsp` must land in a slot the form encodes as
+/// the stack pointer.
+fn sp_slots_allowed(f: &Form, ops: &[Opnd]) -> bool {
+    ops.iter().enumerate().all(|(i, o)| match *o {
+        Opnd::Reg { sp: true, .. } => f.sp & (1 << i) != 0,
+        _ => true,
+    })
 }
 
 fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
@@ -1901,6 +2022,50 @@ fn pack(f: &Form, ops: &[Opnd]) -> Result<u32, String> {
                     c
                 };
                 word |= ((c as u32) & 15) << 12;
+            }
+            Field::Shift { op, is64, ror } => {
+                let (kind, amount) = match ops.get(op as usize) {
+                    None => (0u8, 0u32),
+                    Some(Opnd::Lsl(n)) => (0, *n),
+                    Some(Opnd::Shift { kind, amount }) => (*kind, *amount as u32),
+                    Some(_) => return Err(String::from("inline asm: shift operand expected")),
+                };
+                if kind == 3 && !ror {
+                    return Err(String::from(
+                        "inline asm: ror is not a valid shift for this instruction",
+                    ));
+                }
+                if amount >= if is64 { 64 } else { 32 } {
+                    return Err(String::from("inline asm: shift amount out of range"));
+                }
+                word |= ((kind as u32) << 22) | (amount << 10);
+            }
+            Field::Extend { op, rm, is64 } => {
+                let ident = if is64 { 3u8 } else { 2 };
+                let (option, amount) = match ops.get(op as usize) {
+                    None => (ident, 0u8),
+                    Some(Opnd::Lsl(n)) => (ident, u8::try_from(*n).unwrap_or(u8::MAX)),
+                    Some(Opnd::Extend { option, amount }) => (*option, *amount),
+                    Some(_) => return Err(String::from("inline asm: extend operand expected")),
+                };
+                if amount > 4 {
+                    return Err(String::from("inline asm: extend amount out of range"));
+                }
+                // The option fixes the extended register's width: the
+                // doubleword extends (uxtx/sxtx) take an X register, the
+                // narrowing ones a W. A 32-bit instruction extends from W
+                // whatever the option.
+                let want64 = is64 && (option & 3) == 3;
+                match ops.get(rm as usize) {
+                    Some(Opnd::Reg { is64: w, .. }) if *w == want64 => {}
+                    Some(Opnd::Reg { .. }) => {
+                        return Err(String::from(
+                            "inline asm: extended register width does not match the extend",
+                        ));
+                    }
+                    _ => return Err(String::from("inline asm: extended register expected")),
+                }
+                word |= ((option as u32) << 13) | ((amount as u32) << 10);
             }
         }
     }

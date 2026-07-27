@@ -381,37 +381,45 @@ struct SectionPlan {
     counts: [usize; 20],
 }
 
+/// Which optional sections an image carries. `dwarf` is a count because
+/// the `.debug_*` run contributes several headers to one slot.
+#[derive(Clone, Copy, Default)]
+struct SectionsPresent {
+    versions: bool,
+    rodata: bool,
+    tdata: bool,
+    data: bool,
+    tbss: bool,
+    bss: bool,
+    dwarf: usize,
+    plt_symtab: bool,
+}
+
 impl SectionPlan {
-    fn new(
-        has_versions: bool,
-        has_rodata: bool,
-        has_tdata: bool,
-        has_data: bool,
-        has_tbss: bool,
-        has_bss: bool,
-        dwarf_sections: usize,
-        has_plt_symtab: bool,
-    ) -> Self {
+    fn new(p: SectionsPresent) -> Self {
         let mut counts = [1usize; 20];
         let mut set =
             |s: Sec, n: usize| counts[SECTION_ORDER.iter().position(|&x| x == s).unwrap()] = n;
-        set(Sec::GnuVersion, has_versions as usize);
-        set(Sec::GnuVersionR, has_versions as usize);
-        set(Sec::RoData, has_rodata as usize);
-        set(Sec::Tdata, has_tdata as usize);
-        set(Sec::Data, has_data as usize);
-        set(Sec::Tbss, has_tbss as usize);
-        set(Sec::Bss, has_bss as usize);
-        set(Sec::Debug, dwarf_sections);
-        set(Sec::Symtab, has_plt_symtab as usize);
-        set(Sec::Strtab, has_plt_symtab as usize);
+        set(Sec::GnuVersion, p.versions as usize);
+        set(Sec::GnuVersionR, p.versions as usize);
+        set(Sec::RoData, p.rodata as usize);
+        set(Sec::Tdata, p.tdata as usize);
+        set(Sec::Data, p.data as usize);
+        set(Sec::Tbss, p.tbss as usize);
+        set(Sec::Bss, p.bss as usize);
+        set(Sec::Debug, p.dwarf);
+        set(Sec::Symtab, p.plt_symtab as usize);
+        set(Sec::Strtab, p.plt_symtab as usize);
         Self { counts }
     }
 
     /// Plan carrying only the sections that precede `.text`, for the
     /// early `text_shndx` the symbol tables need.
     fn prefix(has_versions: bool) -> Self {
-        Self::new(has_versions, false, false, false, false, false, 0, false)
+        Self::new(SectionsPresent {
+            versions: has_versions,
+            ..Default::default()
+        })
     }
 
     fn len(&self) -> usize {
@@ -2171,16 +2179,16 @@ pub(super) fn write(
     // optional .data, .tbss, .bss. Used to attribute each .dynsym export
     // to its real section. `ver_shdrs` / `text_shndx` are computed near
     // `has_versions` above so the PLT symtab can share the shifted index.
-    let plan = SectionPlan::new(
-        has_versions,
-        has_rodata,
-        has_tdata,
-        has_data,
-        has_tbss,
-        has_bss,
-        if emit_dwarf { 5 } else { 0 },
-        emit_plt_symtab,
-    );
+    let plan = SectionPlan::new(SectionsPresent {
+        versions: has_versions,
+        rodata: has_rodata,
+        tdata: has_tdata,
+        data: has_data,
+        tbss: has_tbss,
+        bss: has_bss,
+        dwarf: if emit_dwarf { 5 } else { 0 },
+        plt_symtab: emit_plt_symtab,
+    });
     let data_shndx: u16 = plan.index_of(Sec::Data);
     let bss_shndx: u16 = plan.index_of(Sec::Bss);
     let n_section_headers: u64 = plan.len() as u64;
@@ -3308,16 +3316,16 @@ mod tests {
     #[test]
     fn section_indices_resolve_to_their_own_section() {
         for bits in 0u8..128 {
-            let plan = SectionPlan::new(
-                bits & 1 != 0,
-                bits & 64 != 0,
-                bits & 2 != 0,
-                bits & 4 != 0,
-                bits & 8 != 0,
-                bits & 16 != 0,
-                if bits & 32 != 0 { 5 } else { 0 },
-                bits & 1 != 0,
-            );
+            let plan = SectionPlan::new(SectionsPresent {
+                versions: bits & 1 != 0,
+                rodata: bits & 64 != 0,
+                tdata: bits & 2 != 0,
+                data: bits & 4 != 0,
+                tbss: bits & 8 != 0,
+                bss: bits & 16 != 0,
+                dwarf: if bits & 32 != 0 { 5 } else { 0 },
+                plt_symtab: bits & 1 != 0,
+            });
             // Independent restatement of the unconditional set: NULL,
             // .interp, .dynsym, .dynstr, .hash, .rela.dyn, .text, .dynamic,
             // .got, .shstrtab.

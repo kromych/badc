@@ -28,6 +28,11 @@ use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
 
+/// One concatenated file-backed stream: its bytes, the alignment the
+/// merged blob must be placed at, and each contributing section's base
+/// within it.
+type ConcatStream = (Vec<u8>, usize, Vec<(usize, u64)>);
+
 // ELF64 on-disk constants. Kept verbatim from
 // `codegen/elf_reloc.rs` so the encoder and decoder share a
 // single source of truth; a future refactor can lift them into
@@ -825,33 +830,32 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     // difference is which merged blob and alignment the bytes join.
     // Honoring `sh_addralign` matters for e.g. `.rodata.cst16`, which
     // carries 16 for SSE constants.
-    let concat_progbits =
-        |indices: &[usize], what: &str| -> Result<(Vec<u8>, usize, Vec<(usize, u64)>), C5Error> {
-            let mut out: Vec<u8> = Vec::new();
-            let mut out_align: usize = 1;
-            let mut base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(indices.len());
-            for &sh_i in indices {
-                let sh = &shdrs[sh_i];
-                if sh.sh_type == SHT_NOBITS {
-                    return Err(err(&format!(
-                        "{what}-family section at index {sh_i} has sh_type SHT_NOBITS \
+    let concat_progbits = |indices: &[usize], what: &str| -> Result<ConcatStream, C5Error> {
+        let mut out: Vec<u8> = Vec::new();
+        let mut out_align: usize = 1;
+        let mut base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(indices.len());
+        for &sh_i in indices {
+            let sh = &shdrs[sh_i];
+            if sh.sh_type == SHT_NOBITS {
+                return Err(err(&format!(
+                    "{what}-family section at index {sh_i} has sh_type SHT_NOBITS \
                      (must hold file bytes)",
-                    )));
-                }
-                let align = sh.sh_addralign.max(1) as usize;
-                if !align.is_power_of_two() {
-                    return Err(err(&format!(
-                        "{what}-family section at index {sh_i} has non-power-of-two \
-                     sh_addralign {align}",
-                    )));
-                }
-                out_align = out_align.max(align);
-                out.resize(out.len().next_multiple_of(align), 0);
-                base_per_shndx.push((sh_i, out.len() as u64));
-                out.extend_from_slice(section_slice(bytes, sh)?);
+                )));
             }
-            Ok((out, out_align, base_per_shndx))
-        };
+            let align = sh.sh_addralign.max(1) as usize;
+            if !align.is_power_of_two() {
+                return Err(err(&format!(
+                    "{what}-family section at index {sh_i} has non-power-of-two \
+                     sh_addralign {align}",
+                )));
+            }
+            out_align = out_align.max(align);
+            out.resize(out.len().next_multiple_of(align), 0);
+            base_per_shndx.push((sh_i, out.len() as u64));
+            out.extend_from_slice(section_slice(bytes, sh)?);
+        }
+        Ok((out, out_align, base_per_shndx))
+    };
     let (rodata_bytes, rodata_align, rodata_base_per_shndx) =
         concat_progbits(&rodata_section_indices, "rodata")?;
     let (data_bytes, data_align, data_base_per_shndx) =
@@ -1450,10 +1454,8 @@ impl ShndxMap {
             (debug_line_idx, NativeSymSection::DebugLine),
             (debug_str_idx, NativeSymSection::DebugStr),
         ] {
-            if let Some(i) = idx {
-                if i < entries.len() {
-                    entries[i] = Some((kind, 0));
-                }
+            if let Some(i) = idx.filter(|&i| i < entries.len()) {
+                entries[i] = Some((kind, 0));
             }
         }
         Self { entries }

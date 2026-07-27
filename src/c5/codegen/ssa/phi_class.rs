@@ -127,13 +127,10 @@ impl PhiClasses {
 /// Whether any member of `a` interferes with any member of the class
 /// rooted at `b_root`.
 ///
-/// A value's row in `ig` is exactly the set of values it interferes with,
-/// so the test costs the adjacency of `a` rather than the product of the
-/// two classes. Callers pass the smaller class as `a`; with union by size
-/// that puts each value on the scanned side O(log n) times, so the whole
-/// construction is linear in the edge count up to that factor. The pairwise
-/// form it replaces re-tested every member of the growing class against
-/// each newly merged one, which is quadratic in the class size.
+/// A value's row in `ig` is the set of values it interferes with, so the
+/// test costs the adjacency of `a` rather than the product of the two
+/// classes. Callers pass the smaller class as `a`; union by size then puts
+/// each value on the scanned side O(log n) times.
 fn classes_interfere(
     ig: &Interference,
     classes: &mut PhiClasses,

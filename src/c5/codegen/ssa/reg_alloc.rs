@@ -1026,6 +1026,26 @@ fn pool_size_limits() -> (usize, usize) {
     }
 }
 
+/// Values of each congruence class, keyed by the class root and laid
+/// out CSR: row `r` is `values[offsets[r]..offsets[r + 1]]`, ascending.
+fn class_members(node_of: &[ValueId]) -> (Vec<u32>, Vec<ValueId>) {
+    let n = node_of.len();
+    let mut offsets = vec![0u32; n + 1];
+    for &r in node_of {
+        offsets[r as usize + 1] += 1;
+    }
+    for i in 0..n {
+        offsets[i + 1] += offsets[i];
+    }
+    let mut cursor = offsets[..n].to_vec();
+    let mut values = vec![0 as ValueId; n];
+    for (v, &r) in node_of.iter().enumerate() {
+        values[cursor[r as usize] as usize] = v as ValueId;
+        cursor[r as usize] += 1;
+    }
+    (offsets, values)
+}
+
 /// Assign a register or spill slot to every constrained node so that
 /// no two interfering nodes share a register, then propagate each
 /// node's placement to its class members. Greedy coloring: nodes are
@@ -1037,9 +1057,11 @@ fn pool_size_limits() -> (usize, usize) {
 /// it must be callee-saved, otherwise a callee-saved register, and
 /// spills when its bank offers no free register. Because the coldest
 /// remaining node is colored last, it is the one left to spill when a
-/// bank fills. The interference graph (built from CFG liveness) is the
-/// sole source of conflicts, so a value live across a back-edge
-/// passthrough block is never given a register that block reuses.
+/// bank fills. `interference` (built from CFG liveness) is the sole
+/// source of conflicts, so a value live across a back-edge passthrough
+/// block is never given a register that block reuses; it holds the
+/// relation over individual values, and a node's conflicts are its
+/// members' rows mapped through `node_of`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn color_graph(
     interference: &super::liveness::Interference,
@@ -1054,26 +1076,6 @@ pub(crate) fn color_graph(
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
     let mut spill_count: u32 = 0;
-    /// Values of each congruence class, keyed by the class root and laid
-    /// out CSR: row `r` is `values[offsets[r]..offsets[r + 1]]`, ascending.
-    fn class_members(node_of: &[ValueId]) -> (Vec<u32>, Vec<ValueId>) {
-        let n = node_of.len();
-        let mut offsets = vec![0u32; n + 1];
-        for &r in node_of {
-            offsets[r as usize + 1] += 1;
-        }
-        for i in 0..n {
-            offsets[i + 1] += offsets[i];
-        }
-        let mut cursor = offsets[..n].to_vec();
-        let mut values = vec![0 as ValueId; n];
-        for (v, &r) in node_of.iter().enumerate() {
-            values[cursor[r as usize] as usize] = v as ValueId;
-            cursor[r as usize] += 1;
-        }
-        (offsets, values)
-    }
-
     // Coloring order: highest spill weight first, so the coldest values
     // are the ones left without a register when a bank fills. The id
     // tie-break is a total order, keeping the output host-independent.

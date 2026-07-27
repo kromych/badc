@@ -595,7 +595,13 @@ impl Compiler {
         }
         let final_array = self.symbols[loc_idx].array_size;
         let fam_tail = self.symbols[loc_idx].fam_init_bytes;
-        let reserved = if final_array > 0 {
+        // A zero-length array holds no element, so its record takes the
+        // slot the allocator actually reserved rather than one element's
+        // worth; an element-sized span would run into the next object.
+        let zero_len = self.symbols[loc_idx].is_zero_len_array;
+        let reserved = if zero_len {
+            self.symbols[loc_idx].reserved_data_bytes
+        } else if final_array > 0 {
             ((self.size_of_type(ty) as i64 * final_array + 7) / 8 * 8).max(8)
         } else {
             ((self.slots_of_type(ty) * 8).max(8) + fam_tail + 7) / 8 * 8
@@ -615,6 +621,7 @@ impl Compiler {
             type_: ty,
             val: self.symbols[loc_idx].val,
             array_size: final_array,
+            is_zero_len_array: zero_len,
             reserved_data_bytes: reserved,
             fam_init_bytes: fam_tail,
             data_align: self.symbols[loc_idx].data_align,
@@ -628,6 +635,17 @@ impl Compiler {
         self.symbol_index.record(hash);
         self.apply_symbol_attributes(record_idx);
         self.pending_block_static_syms.push(record_idx);
+    }
+
+    /// Record a deferred-size block-scope static's parsed element count,
+    /// as the file-scope allocator does for `T x[] = { ... };`. An empty
+    /// initializer yields a zero-length array, which reserves no storage;
+    /// the placement model identifies objects by start offset, so it still
+    /// takes a slot of its own rather than sharing the next object's.
+    fn set_deferred_static_local_count(&mut self, loc_idx: usize, count: i64) {
+        self.symbols[loc_idx].array_size = count;
+        self.symbols[loc_idx].is_zero_len_array = count == 0;
+        self.reserve_zero_length_array_slot(loc_idx);
     }
 
     pub(super) fn allocate_static_local(
@@ -788,7 +806,7 @@ impl Compiler {
                             self.accept(',')?;
                         }
                         self.next()?; // outer `}`
-                        self.symbols[loc_idx].array_size = count * inner_dim;
+                        self.set_deferred_static_local_count(loc_idx, count * inner_dim);
                         if let Some(first) = self.symbols[loc_idx].array_dims.first_mut()
                             && *first == 0
                         {
@@ -826,7 +844,7 @@ impl Compiler {
                         self.accept(',')?;
                     }
                     self.next()?;
-                    self.symbols[loc_idx].array_size = count;
+                    self.set_deferred_static_local_count(loc_idx, count);
                     while !self.data.len().is_multiple_of(8) {
                         self.data.push(0);
                     }
@@ -835,7 +853,6 @@ impl Compiler {
                 self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
                 let elements = self.collect_array_initializer(ty)?;
                 let final_size = elements.len() as i64;
-                self.symbols[loc_idx].array_size = final_size;
                 let total_bytes = (self.size_of_type(ty) as i64) * final_size;
                 let aligned = ((total_bytes + 7) / 8) * 8;
                 if self.size_of_type(ty) > 1 {
@@ -847,6 +864,7 @@ impl Compiler {
                     self.data.push(0);
                 }
                 self.write_array_init_into_data(off, ty, &elements);
+                self.set_deferred_static_local_count(loc_idx, final_size);
             } else if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
                 // Known-size static-local array of structs. Each element
                 // is a (possibly brace-elided, C99 6.7.8p20) struct

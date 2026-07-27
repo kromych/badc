@@ -5,6 +5,28 @@ use crate::c5::headers::embedded_header;
 use alloc::format;
 use alloc::string::{String, ToString};
 
+/// Which header-search rule a `#include`-family construct follows.
+#[derive(Clone, Copy)]
+pub(super) struct IncludeForm {
+    /// The `"header"` spelling, which searches the including file's
+    /// directory first.
+    pub(super) quoted: bool,
+    /// The `_next` form, which resumes past the current file's entry.
+    pub(super) next: bool,
+}
+
+impl IncludeForm {
+    pub(super) fn plain(quoted: bool) -> Self {
+        IncludeForm {
+            quoted,
+            next: false,
+        }
+    }
+    pub(super) fn next(quoted: bool) -> Self {
+        IncludeForm { quoted, next: true }
+    }
+}
+
 impl Preprocessor {
     /// `#include <name>` / `#include "name"` -- splice the named
     /// header's processed contents into the output.
@@ -43,24 +65,7 @@ impl Preprocessor {
         //      isn't a hard failure; the user sees the warning
         //      and can decide whether the missing surface
         //      matters.
-        // A quoted include (`#include "header"`) searches the
-        // directory of the including file before the system search
-        // paths (C99 6.10.2p2); an angle include skips that step.
-        // `filename` carries the including file's path (the top-level
-        // source path, or the resolved path threaded through a nested
-        // include), so its parent directory is the search base.
-        let source_dir = if quoted {
-            include_parent_dir(filename)
-        } else {
-            None
-        };
-        // The result is owned `String` because filesystem-loaded
-        // bodies don't have static lifetime; the embedded path
-        // copies its `&'static str` into one to share the type. The
-        // second element is the path the body resolved to, threaded
-        // as the new file's name so a nested quoted include resolves
-        // against the right directory.
-        let resolved: Option<(String, String)> = self.find_include(name, source_dir.as_deref());
+        let resolved = self.resolve_include(name, IncludeForm::plain(quoted), filename);
         self.finish_include(resolved, name, line_no, filename, out)
     }
 
@@ -74,11 +79,46 @@ impl Preprocessor {
         name: &str,
         line_no: usize,
         filename: &str,
-        _quoted: bool,
+        quoted: bool,
         out: &mut String,
     ) -> Result<(), C5Error> {
-        let resolved = self.find_include_next(name, filename);
+        let resolved = self.resolve_include(name, IncludeForm::next(quoted), filename);
         self.finish_include(resolved, name, line_no, filename, out)
+    }
+
+    /// Resolve `name` the way the matching directive would. Shared by
+    /// `#include` / `#include_next` and by the `__has_include` /
+    /// `__has_include_next` operators, which keep only the answer.
+    ///
+    /// The body is an owned `String` because filesystem-loaded bodies
+    /// have no static lifetime; the embedded path copies its
+    /// `&'static str` into one. The second element is the path the body
+    /// resolved to, threaded as the new file's name so a nested quoted
+    /// include resolves against the right directory.
+    pub(super) fn resolve_include(
+        &self,
+        name: &str,
+        form: IncludeForm,
+        filename: &str,
+    ) -> Option<(String, String)> {
+        if form.next {
+            // `#include_next` resumes past the search-path entry that
+            // supplied the current file, so the including file's own
+            // directory is not a search base.
+            return self.find_include_next(name, filename);
+        }
+        // A quoted include (`#include "header"`) searches the directory
+        // of the including file before the system search paths (C99
+        // 6.10.2p2); an angle include skips that step. `filename` carries
+        // the including file's path (the top-level source path, or the
+        // resolved path threaded through a nested include), so its parent
+        // directory is the search base.
+        let source_dir = if form.quoted {
+            include_parent_dir(filename)
+        } else {
+            None
+        };
+        self.find_include(name, source_dir.as_deref())
     }
 
     /// Shared tail of `process_include` / `process_include_next`: error on
@@ -248,12 +288,17 @@ impl Preprocessor {
         #[cfg(feature = "std")]
         {
             // Skip the search-path entries up to and including the one whose
-            // directory holds the current file.
+            // directory holds the current file. The current directory is
+            // resolved once for both loops below: `path_dirs_equal` used to
+            // canonicalize it again per search-path entry.
             let cur_dir = include_parent_dir(current_file);
+            let cur_dir = cur_dir
+                .as_deref()
+                .map(|d| (d, std::fs::canonicalize(d).ok()));
             let mut start = 0usize;
-            if let Some(ref cd) = cur_dir {
+            if let Some((cd, ccd)) = cur_dir.as_ref() {
                 for (i, path) in self.search_paths.iter().enumerate() {
-                    if path_dirs_equal(path, cd) {
+                    if path_dirs_equal(path, cd, ccd.as_deref()) {
                         start = i + 1;
                         break;
                     }
@@ -274,8 +319,8 @@ impl Preprocessor {
                 // absolute `-I`, or a symlink) would re-resolve this same
                 // file rather than the next one; skip it.
                 if cur_dir
-                    .as_deref()
-                    .is_some_and(|cd| path_dirs_equal(path, cd))
+                    .as_ref()
+                    .is_some_and(|(cd, ccd)| path_dirs_equal(path, cd, ccd.as_deref()))
                 {
                     continue;
                 }
@@ -310,12 +355,14 @@ pub(super) fn include_parent_dir(filename: &str) -> Option<alloc::string::String
 /// Whether two directory paths name the same directory. Canonicalizes
 /// both when possible (so `a/b` and `./a/b` and an absolute spelling
 /// compare equal); falls back to a trailing-slash-insensitive string
-/// compare when a path cannot be resolved. Used by `#include_next` to
-/// locate the search-path entry that supplied the current file.
+/// compare when a path cannot be resolved. `canon_b` is `b` already
+/// resolved, so a loop over search paths resolves the fixed side once.
+/// Used by `#include_next` to locate the search-path entry that supplied
+/// the current file.
 #[cfg(feature = "std")]
-pub(super) fn path_dirs_equal(a: &str, b: &str) -> bool {
-    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
-        (Ok(pa), Ok(pb)) => pa == pb,
+pub(super) fn path_dirs_equal(a: &str, b: &str, canon_b: Option<&std::path::Path>) -> bool {
+    match (std::fs::canonicalize(a), canon_b) {
+        (Ok(pa), Some(pb)) => pa == pb,
         _ => a.trim_end_matches(['/', '\\']) == b.trim_end_matches(['/', '\\']),
     }
 }

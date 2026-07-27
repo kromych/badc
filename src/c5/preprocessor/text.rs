@@ -60,17 +60,7 @@ pub(super) fn strip_c_comments(source: &str) -> String {
         if c == b'"' || c == b'\'' {
             // Quoted literals stay in the retained span so `"//"` etc.
             // survive; only the bounds are skipped here.
-            i += 1;
-            while i < bytes.len() && bytes[i] != c {
-                if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-            if i < bytes.len() {
-                i += 1;
-            }
+            i = skip_literal(bytes, i);
             continue;
         }
         i += 1;
@@ -440,6 +430,28 @@ pub(super) fn literal_prefix_len(bytes: &[u8], at: usize) -> Option<usize> {
         }
         _ => None,
     }
+}
+
+/// Index just past a string or character literal starting at the quote
+/// at `at`, honoring `\` escapes; an unterminated literal runs to the
+/// end of the buffer. The single literal skipper: every phase-2 / -3 /
+/// expansion / pragma scanner that must step over a literal calls it, so
+/// they cannot disagree about escapes or the end-of-buffer bound.
+pub(super) fn skip_literal(bytes: &[u8], at: usize) -> usize {
+    let quote = bytes[at];
+    let mut i = at + 1;
+    while i < bytes.len() {
+        if bytes[i] == b'\\' && i + 1 < bytes.len() {
+            i += 2;
+            continue;
+        }
+        let closed = bytes[i] == quote;
+        i += 1;
+        if closed {
+            break;
+        }
+    }
+    i
 }
 
 pub(super) fn is_ident(s: &str) -> bool {

@@ -401,88 +401,9 @@ impl Preprocessor {
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros: HashMap<String, String> = HashMap::new();
         let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
-        // GCC bit-count / byte-swap builtins are available with no header
-        // (they are compiler builtins, not library functions), matching
-        // gcc/clang. The call-site lowering in the walker expands each to a
-        // portable shift / mask sequence. __builtin_unreachable marks a
-        // point control must not reach; it lowers to the trap intrinsic so
-        // a reached unreachable aborts rather than continuing.
-        let mut intrinsics: alloc::collections::BTreeMap<String, i64> =
-            alloc::collections::BTreeMap::new();
-        for (name, kind) in [
-            ("__builtin_clz", super::op::Intrinsic::Clz),
-            ("__builtin_ctz", super::op::Intrinsic::Ctz),
-            ("__builtin_popcount", super::op::Intrinsic::Popcount),
-            ("__builtin_clzll", super::op::Intrinsic::Clzll),
-            ("__builtin_ctzll", super::op::Intrinsic::Ctzll),
-            ("__builtin_popcountll", super::op::Intrinsic::Popcountll),
-            ("__builtin_bswap16", super::op::Intrinsic::Bswap16),
-            ("__builtin_bswap32", super::op::Intrinsic::Bswap32),
-            ("__builtin_bswap64", super::op::Intrinsic::Bswap64),
-            ("__builtin_clrsb", super::op::Intrinsic::Clrsb),
-            ("__builtin_clrsbll", super::op::Intrinsic::Clrsbll),
-            ("__builtin_parity", super::op::Intrinsic::Parity),
-            ("__builtin_parityll", super::op::Intrinsic::Parityll),
-            ("__builtin_ffs", super::op::Intrinsic::Ffs),
-            ("__builtin_ffsll", super::op::Intrinsic::Ffsll),
-            ("__builtin_unreachable", super::op::Intrinsic::Trap),
-            (
-                "__builtin_frame_address",
-                super::op::Intrinsic::FrameAddress,
-            ),
-            (
-                "__builtin_return_address",
-                super::op::Intrinsic::ReturnAddress,
-            ),
-            // The variadic-access builtins are likewise available with
-            // no header (freestanding code typedefs `__builtin_va_list`
-            // and calls them directly); <stdarg.h>'s va_* macros map
-            // onto the same names.
-            ("__builtin_va_start", super::op::Intrinsic::VaStart),
-            ("__builtin_va_arg", super::op::Intrinsic::VaArg),
-            ("__builtin_va_end", super::op::Intrinsic::VaEnd),
-            ("__builtin_va_copy", super::op::Intrinsic::VaCopy),
-        ] {
-            intrinsics.insert(name.to_string(), kind as i64);
-        }
-        // The `l` (long) bit-builtins operate on `unsigned long`, whose
-        // width is the target's: 8 bytes on LP64 (so they match the
-        // `ll` 64-bit intrinsics), 4 bytes on LLP64 (so they match the
-        // plain 32-bit intrinsics).
-        let (clzl, ctzl, popcountl) = if target.long_width_bytes() == 8 {
-            (
-                super::op::Intrinsic::Clzll,
-                super::op::Intrinsic::Ctzll,
-                super::op::Intrinsic::Popcountll,
-            )
-        } else {
-            (
-                super::op::Intrinsic::Clz,
-                super::op::Intrinsic::Ctz,
-                super::op::Intrinsic::Popcount,
-            )
-        };
-        intrinsics.insert("__builtin_clzl".to_string(), clzl as i64);
-        intrinsics.insert("__builtin_ctzl".to_string(), ctzl as i64);
-        intrinsics.insert("__builtin_popcountl".to_string(), popcountl as i64);
-        let clrsbl = if target.long_width_bytes() == 8 {
-            super::op::Intrinsic::Clrsbll
-        } else {
-            super::op::Intrinsic::Clrsb
-        };
-        intrinsics.insert("__builtin_clrsbl".to_string(), clrsbl as i64);
-        let parityl = if target.long_width_bytes() == 8 {
-            super::op::Intrinsic::Parityll
-        } else {
-            super::op::Intrinsic::Parity
-        };
-        intrinsics.insert("__builtin_parityl".to_string(), parityl as i64);
-        let ffsl = if target.long_width_bytes() == 8 {
-            super::op::Intrinsic::Ffsll
-        } else {
-            super::op::Intrinsic::Ffs
-        };
-        intrinsics.insert("__builtin_ffsl".to_string(), ffsl as i64);
+        let intrinsics: alloc::collections::BTreeMap<String, i64> = builtins::preseeded(target)
+            .map(|(name, id)| (name.to_string(), id))
+            .collect();
         // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
         // declaration decorators carrying hints the dialect does not act
         // on, except for the `packed` attribute, which changes aggregate
@@ -1449,10 +1370,10 @@ impl Preprocessor {
 
     /// C99 6.10.1 `defined`: any macro of either kind, plus the
     /// `__has_*` operator names the preprocessor implements.
-    fn is_defined_name(&self, name: &str) -> bool {
+    pub(super) fn is_defined_name(&self, name: &str) -> bool {
         self.macros.contains_key(name)
             || self.fn_macros.contains_key(name)
-            || is_builtin_operator_name(name)
+            || is_operator_name(name)
     }
 
     /// Install a function-like macro definition. A trailing `...`
@@ -1512,6 +1433,7 @@ impl Preprocessor {
     }
 }
 
+mod builtins;
 mod cond;
 mod directive;
 mod expand;
@@ -1522,7 +1444,7 @@ mod text;
 #[cfg(test)]
 mod tests;
 
-use cond::is_builtin_operator_name;
+use builtins::is_operator_name;
 use directive::{
     CondFrame, Directive, apply_elif, apply_else, apply_endif, elif_eligible, format_line_marker,
     parse_directive,

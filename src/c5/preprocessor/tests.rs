@@ -1777,3 +1777,280 @@ fn directive_keyword_requires_a_word_boundary() {
     let out = process("#define Z 3\n#undef Z\nint c = Z;\n");
     assert!(out.contains("int c = Z;"), "`#undef Z` must work: {out}");
 }
+
+/// One builtin table answers all three questions. The three predicates
+/// used to be separate hardcoded lists and disagreed: `#pragma
+/// intrinsic("__builtin_bswap64")` rejected a name badc lowers, and
+/// `__has_builtin(__builtin_trap)` reported 1 for a name that was
+/// unusable without <assert.h>. C23 6.10.1 makes `__has_builtin` 1 when
+/// the builtin is supported, so the no-header groups below report 1 --
+/// as gcc-16 and clang do for the same names -- and the library group,
+/// which badc supplies only through its header, reports 0.
+#[test]
+fn builtin_table_answers_all_three_roles() {
+    use super::builtins;
+    let pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    // Registry entries usable with no header are seeded, answer 1 to
+    // `__has_builtin`, and are accepted by `#pragma intrinsic`.
+    for name in [
+        "__builtin_clz",
+        "__builtin_clzl",
+        "__builtin_bswap16",
+        "__builtin_bswap32",
+        "__builtin_bswap64",
+        "__builtin_unreachable",
+        "__builtin_trap",
+        "__builtin_alloca",
+        "__builtin_frame_address",
+        "__builtin_va_start",
+    ] {
+        assert!(pp.intrinsics.contains_key(name), "`{name}` must be seeded");
+        assert!(
+            builtins::has_builtin(name),
+            "__has_builtin({name}) must be 1"
+        );
+        assert!(
+            builtins::intrinsic_id(name, Target::MacOSAarch64).is_some(),
+            "`#pragma intrinsic(\"{name}\")` must resolve"
+        );
+    }
+    // Builtins the parser handles have no registry id, yet `#pragma
+    // intrinsic` accepts them and `__has_builtin` reports 1.
+    for name in [
+        "__builtin_constant_p",
+        "__builtin_choose_expr",
+        "__builtin_types_compatible_p",
+        "__builtin_object_size",
+        "__builtin_add_overflow",
+        "__builtin_expect",
+        "__builtin_prefetch",
+    ] {
+        assert!(
+            builtins::has_builtin(name),
+            "__has_builtin({name}) must be 1"
+        );
+        assert!(
+            builtins::is_builtin(name),
+            "`{name}` must be a known builtin"
+        );
+        assert!(
+            builtins::intrinsic_id(name, Target::MacOSAarch64).is_none(),
+            "`{name}` has no registry id"
+        );
+    }
+    // Library names a header binds: not seeded and not reported by
+    // `__has_builtin`, but `#pragma intrinsic` registers them.
+    for name in [
+        "alloca",
+        "sqrt",
+        "fma",
+        "atomic_load",
+        "__c5_aarch64_setjmp",
+    ] {
+        assert!(
+            !pp.intrinsics.contains_key(name),
+            "`{name}` must need its header"
+        );
+        assert!(
+            !builtins::has_builtin(name),
+            "__has_builtin({name}) must be 0"
+        );
+        assert!(
+            builtins::intrinsic_id(name, Target::MacOSAarch64).is_some(),
+            "`#pragma intrinsic(\"{name}\")` must resolve"
+        );
+    }
+    assert!(!builtins::is_builtin("__builtin_bitreverse32"));
+    assert!(!builtins::has_builtin("__builtin_bswap128"));
+}
+
+/// The `l`-suffixed bit builtins follow the target's `long` width, and
+/// the seeded id matches what `#pragma intrinsic` would record.
+#[test]
+fn long_width_builtins_track_the_target() {
+    use super::builtins;
+    use crate::c5::op::Intrinsic;
+    for (target, spec, want) in [
+        (Target::MacOSAarch64, "macos-aarch64", Intrinsic::Clzll),
+        (Target::WindowsX64, "windows-x64", Intrinsic::Clz),
+    ] {
+        let pp = Preprocessor::new(spec, target, "0.1.0");
+        assert_eq!(pp.intrinsics.get("__builtin_clzl"), Some(&(want as i64)));
+        assert_eq!(
+            builtins::intrinsic_id("__builtin_clzl", target),
+            Some(want as i64)
+        );
+    }
+}
+
+/// `#pragma intrinsic` accepts every name in the builtin table. The
+/// quoted form used to reject names badc lowers unconditionally.
+#[test]
+fn pragma_intrinsic_accepts_every_table_name() {
+    for name in [
+        "__builtin_bswap64",
+        "__builtin_unreachable",
+        "__builtin_clz",
+        "__builtin_expect",
+        "__builtin_object_size",
+    ] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.process(&format!("#pragma intrinsic(\"{name}\")\nint x;\n"))
+            .unwrap_or_else(|e| panic!("`#pragma intrinsic(\"{name}\")` rejected: {e}"));
+    }
+    // A name badc does not provide is still a hard error, so a typo is
+    // not a silent no-op.
+    let err = process_err("#pragma intrinsic(\"__builtin_nope\")\n");
+    assert!(err.contains("not a builtin"), "unexpected message: {err}");
+}
+
+/// `#ifdef X` and `defined(X)` answer the same question for every name,
+/// including the feature-test operators and function-like macros.
+#[test]
+fn ifdef_and_defined_agree_on_every_name() {
+    for name in [
+        "__has_include",
+        "__has_include_next",
+        "__has_builtin",
+        "__has_attribute",
+        "__builtin_expect",
+        "OBJ",
+        "FN",
+        "NOPE",
+    ] {
+        let src = format!(
+            "#define OBJ 1\n#define FN(a) a\n\
+             #ifdef {name}\nifdef_yes\n#endif\n\
+             #if defined({name})\ndefined_yes\n#endif\n"
+        );
+        let out = process(&src);
+        assert_eq!(
+            out.contains("ifdef_yes"),
+            out.contains("defined_yes"),
+            "`#ifdef {name}` and `defined({name})` disagree: {out}"
+        );
+    }
+}
+
+/// The `__has_*` and `defined` operand scanners are one scanner, so
+/// every spelling of the operand parses the same way.
+#[test]
+fn operator_operands_accept_the_same_spellings() {
+    for form in [
+        "__has_attribute(packed)",
+        "__has_attribute ( packed )",
+        "__has_attribute\t(packed)",
+    ] {
+        let out = process(&format!("#if {form}\nyes\n#endif\n"));
+        assert!(out.contains("yes"), "`{form}` must resolve to 1: {out}");
+    }
+    // A word-boundary violation is not the operator: the glued name is
+    // an ordinary undefined identifier, so the operand is left unparsed.
+    let err = process_err("#if x__has_attribute_y(packed)\nyes\n#endif\n");
+    assert!(err.contains("(packed)"), "glued name must not match: {err}");
+    // Reached through a macro alias, the operator still resolves --
+    // that path runs the same scanner after substitution.
+    let out = process("#define ALIAS __has_attribute\n#if ALIAS(packed)\nyes\n#endif\n");
+    assert!(out.contains("yes"), "alias must resolve: {out}");
+}
+
+/// C99 6.10.1p4: `#if` operands are integer constants. The token extent
+/// comes from `pp_number_len`, so a pp-number that is not one is
+/// diagnosed whole instead of splitting into a number and an identifier.
+#[test]
+fn if_rejects_non_integer_pp_numbers() {
+    for src in [
+        "#if 1.5\n#endif\n",
+        "#if 1e5\n#endif\n",
+        "#if 0x1p+3\n#endif\n",
+    ] {
+        let err = process_err(src);
+        assert!(
+            err.contains("not an integer constant") || err.contains("malformed integer"),
+            "unexpected diagnostic for {src:?}: {err}"
+        );
+    }
+    // `0x1e+5` is one pp-number, not `0x1e` `+` `5`; gcc-16 and clang
+    // both reject it ("invalid suffix `+5` on integer constant") rather
+    // than folding it to 35.
+    let err = process_err("#if 0x1e+5 == 35\nyes\n#endif\n");
+    assert!(err.contains("0x1e+5"), "unexpected diagnostic: {err}");
+    // Through a macro the operand is already three tokens, so the sum
+    // folds, as it does in both references.
+    assert!(process("#define M 0x1e\n#if M+5 == 35\nyes\n#endif\n").contains("yes"));
+    // The integer forms still parse, including the suffixes and the
+    // widest-unsigned case.
+    assert!(process("#if 0x10ULL == 16\nyes\n#endif\n").contains("yes"));
+    assert!(process("#if 18446744073709551615U > 0\nyes\n#endif\n").contains("yes"));
+    assert!(process("#if 1 << 4 == 16\nyes\n#endif\n").contains("yes"));
+}
+
+/// The serializer's adjacency test must cover every two-byte punctuator
+/// `punct_len` lexes; a punctuator added to the table without one used
+/// to paste silently across an expansion seam.
+#[test]
+fn merge_test_covers_every_punctuator_pair() {
+    use super::expand::pp_tokens_would_merge;
+    for a in 0u8..=255 {
+        for b in 0u8..=255 {
+            if super::expand::punct_len(&[a, b], 0) == 2 {
+                assert!(
+                    pp_tokens_would_merge(super::expand::TokKind::Punct, a, b),
+                    "punctuator {:?} is not separated by the serializer",
+                    core::str::from_utf8(&[a, b]).unwrap_or("<non-utf8>")
+                );
+            }
+        }
+    }
+}
+
+/// A pp-number must not absorb what follows it across an expansion seam:
+/// `0x10` then `...` re-lexes as one pp-number (C99 6.4.8) unless the
+/// serializer separates them. gcc-16 and clang both emit the space.
+/// An identifier ending in the same bytes needs no separation.
+#[test]
+fn serializer_separates_only_real_pastes() {
+    let out = process("#define LO 0x10\n#define HI 0x20\nint x[] = { LO...HI };\n");
+    assert!(
+        out.contains("0x10 ..."),
+        "a pp-number must not absorb `...`: {out}"
+    );
+    let out = process("#define P p\n#define E e\nint y = P->a + E->b + P++ + E++;\n");
+    assert!(
+        out.contains("p->a + e->b + p++ + e++"),
+        "identifiers need no separation before `-`/`+`: {out}"
+    );
+    // The paste-preventing spaces the byte-level rules do call for.
+    let out = process("#define PLUS +\nint z = PLUS+1;\n");
+    assert!(out.contains("+ +1"), "`+` `+` must not paste: {out}");
+}
+
+/// `__has_include` resolves through the same code path as `#include`,
+/// so the operator cannot answer differently from what the directive
+/// would find. The quoted form probes the including file's directory
+/// (C99 6.10.2p2); the angle form does not.
+#[test]
+fn has_include_matches_what_include_resolves() {
+    let base = std::env::temp_dir().join(format!("badc-hasincl-{}", std::process::id()));
+    let sub = base.join("sub");
+    std::fs::create_dir_all(&sub).unwrap();
+    std::fs::write(sub.join("beside.h"), "int beside;\n").unwrap();
+    std::fs::write(
+        sub.join("probe.h"),
+        "#if __has_include(\"beside.h\")\n#include \"beside.h\"\n#endif\n\
+         #if __has_include(<beside.h>)\nangle_found\n#endif\n",
+    )
+    .unwrap();
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.add_search_path(base.to_str().unwrap());
+    let out = pp.process("#include <sub/probe.h>\n").unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert!(
+        out.contains("int beside;"),
+        "quoted `__has_include` must agree with `#include \"...\"`: {out}"
+    );
+    assert!(
+        !out.contains("angle_found"),
+        "the angle form must not search the including file's directory: {out}"
+    );
+}

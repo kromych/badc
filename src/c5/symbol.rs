@@ -636,10 +636,10 @@ impl crate::c5::layout::DataOffsets for Symbol {
             defined_here,
             is_extern_decl: _,
             saw_noninline_decl: _,
-            saw_plain_inline_decl: _,   // linkage model input, not an offset
-            saw_extern_inline_decl: _,  // linkage model input, not an offset
-            is_gnu_inline: _,           // linkage model selector
-            is_inline_definition: _,    // linkage model result
+            saw_plain_inline_decl: _,  // linkage model input, not an offset
+            saw_extern_inline_decl: _, // linkage model input, not an offset
+            is_gnu_inline: _,          // linkage model selector
+            is_inline_definition: _,   // linkage model result
             saw_static_decl: _,
             block_extern_active: _,
             is_scope_static: _,

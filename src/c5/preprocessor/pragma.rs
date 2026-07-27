@@ -1,4 +1,5 @@
-use super::text::{is_ident, is_ident_byte};
+use super::builtins;
+use super::text::{is_ident, is_ident_byte, skip_literal};
 use super::{Binding, DylibSpec, Preprocessor, Subsystem};
 use crate::c5::error::C5Error;
 use alloc::borrow::Cow;
@@ -32,18 +33,7 @@ impl Preprocessor {
         while i < bytes.len() {
             let c = bytes[i];
             if c == b'"' || c == b'\'' {
-                i += 1;
-                while i < bytes.len() {
-                    if bytes[i] == b'\\' {
-                        i += 2;
-                        continue;
-                    }
-                    let closed = bytes[i] == c;
-                    i += 1;
-                    if closed {
-                        break;
-                    }
-                }
+                i = skip_literal(bytes, i);
                 continue;
             }
             let is_operator = c == b'_'
@@ -470,49 +460,6 @@ impl Preprocessor {
     /// whose spellings collide with c5 keywords don't trip
     /// the identifier parser; the body uses `is_ident` to
     /// stay strict.
-    /// Map an intrinsic name to its [`Intrinsic`] discriminant, or `None`
-    /// when the name is not one c5 lowers specially.
-    pub(super) fn intrinsic_id(name: &str) -> Option<i64> {
-        let id = match name {
-            "alloca" | "__builtin_alloca" => crate::c5::op::Intrinsic::Alloca as i64,
-            // C11 7.17 atomic generic operations. Lowered at the call
-            // site to load / store / read-modify-write, not to an
-            // `Inst::Intrinsic`.
-            "atomic_load" => crate::c5::op::Intrinsic::AtomicLoad as i64,
-            "atomic_store" => crate::c5::op::Intrinsic::AtomicStore as i64,
-            "atomic_exchange" => crate::c5::op::Intrinsic::AtomicExchange as i64,
-            "atomic_fetch_add" => crate::c5::op::Intrinsic::AtomicFetchAdd as i64,
-            "atomic_fetch_sub" => crate::c5::op::Intrinsic::AtomicFetchSub as i64,
-            "atomic_fetch_and" => crate::c5::op::Intrinsic::AtomicFetchAnd as i64,
-            "atomic_fetch_or" => crate::c5::op::Intrinsic::AtomicFetchOr as i64,
-            "atomic_fetch_xor" => crate::c5::op::Intrinsic::AtomicFetchXor as i64,
-            "atomic_compare_exchange_strong" => {
-                crate::c5::op::Intrinsic::AtomicCompareExchangeStrong as i64
-            }
-            "__c5_aarch64_setjmp" => crate::c5::op::Intrinsic::SetjmpAArch64 as i64,
-            "__c5_aarch64_longjmp" => crate::c5::op::Intrinsic::LongjmpAArch64 as i64,
-            "__builtin_va_start" => crate::c5::op::Intrinsic::VaStart as i64,
-            "__builtin_va_arg" => crate::c5::op::Intrinsic::VaArg as i64,
-            "__builtin_va_end" => crate::c5::op::Intrinsic::VaEnd as i64,
-            "__builtin_va_copy" => crate::c5::op::Intrinsic::VaCopy as i64,
-            "fma" => crate::c5::op::Intrinsic::Fma as i64,
-            "fmaf" => crate::c5::op::Intrinsic::Fmaf as i64,
-            "sqrt" => crate::c5::op::Intrinsic::Sqrt as i64,
-            "sqrtf" => crate::c5::op::Intrinsic::Sqrtf as i64,
-            "fabs" => crate::c5::op::Intrinsic::Fabs as i64,
-            "fabsf" => crate::c5::op::Intrinsic::Fabsf as i64,
-            "floor" => crate::c5::op::Intrinsic::Floor as i64,
-            "floorf" => crate::c5::op::Intrinsic::Floorf as i64,
-            "ceil" => crate::c5::op::Intrinsic::Ceil as i64,
-            "ceilf" => crate::c5::op::Intrinsic::Ceilf as i64,
-            "trunc" => crate::c5::op::Intrinsic::Trunc as i64,
-            "truncf" => crate::c5::op::Intrinsic::Truncf as i64,
-            "__builtin_trap" => crate::c5::op::Intrinsic::Trap as i64,
-            _ => return None,
-        };
-        Some(id)
-    }
-
     pub(super) fn parse_pragma_intrinsic(
         &mut self,
         inner: &str,
@@ -541,24 +488,21 @@ impl Preprocessor {
                         ),
                     )));
                 }
-                let Some(id) = Self::intrinsic_id(name) else {
+                if !builtins::is_builtin(name) {
                     return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
                         filename,
                         line_no,
                         &format!(
-                            "`#pragma intrinsic(\"{name}\")` -- unknown \
-                             intrinsic; supported today: alloca, \
-                             __builtin_alloca, __c5_aarch64_setjmp, \
-                             __c5_aarch64_longjmp, __builtin_va_start, \
-                             __builtin_va_arg, __builtin_va_end, \
-                             __builtin_va_copy, fma, fmaf, sqrt, sqrtf, \
-                             fabs, fabsf, and the C11 atomic_* operations"
+                            "`#pragma intrinsic(\"{name}\")` -- `{name}` is not a \
+                             builtin badc provides"
                         ),
                     )));
-                };
-                self.intrinsics.insert(name.to_string(), id);
+                }
+                if let Some(id) = builtins::intrinsic_id(name, self.target) {
+                    self.intrinsics.insert(name.to_string(), id);
+                }
             } else if is_ident(item) {
-                if let Some(id) = Self::intrinsic_id(item) {
+                if let Some(id) = builtins::intrinsic_id(item, self.target) {
                     self.intrinsics.insert(item.to_string(), id);
                 }
             } else {
@@ -831,21 +775,7 @@ pub(super) fn parse_msvc_pragma_args(text: &str, start: usize) -> Option<(String
     i = inner_start;
     while i < bytes.len() {
         match bytes[i] {
-            b'"' | b'\'' => {
-                let q = bytes[i];
-                i += 1;
-                while i < bytes.len() {
-                    if bytes[i] == b'\\' {
-                        i += 2;
-                        continue;
-                    }
-                    let closed = bytes[i] == q;
-                    i += 1;
-                    if closed {
-                        break;
-                    }
-                }
-            }
+            b'"' | b'\'' => i = skip_literal(bytes, i),
             b'(' => {
                 depth += 1;
                 i += 1;

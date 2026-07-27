@@ -129,7 +129,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     terminator Jmp(b6)
   block 14  start_pc=0
     terminator Jmp(b4)
-info: auto-including <alloca.h> for undeclared `__builtin_alloca`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

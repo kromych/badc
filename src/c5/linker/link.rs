@@ -448,10 +448,9 @@ pub fn link_native_objects_with_shared_libs(
         data_bases.push(data.len());
         data.extend_from_slice(&obj.data);
         // Each unit's bss offsets carry an alignment residue modulo the
-        // `.bss` sh_addralign the per-unit writer claims, which tracks
-        // the unit's widest object alignment; a unit base aligned to the
-        // same value preserves it.
-        bss_size = align_usize(bss_size, obj.data_align.max(16));
+        // widest `.bss` sh_addralign the unit claims; a unit base aligned
+        // to the same value preserves it.
+        bss_size = align_usize(bss_size, obj.bss_align.max(16));
         bss_bases.push(bss_size);
         bss_size += obj.bss_size;
     }
@@ -1029,7 +1028,10 @@ pub fn link_native_objects_with_shared_libs(
                             sym.name,
                         ))
                     })?;
-                    let bss_off = def.value as i64 + reloc.addend;
+                    // `def.value` is bss-relative, so it needs the same
+                    // `data.len()` bias the Bss arms apply to reach a
+                    // unified data-byte offset.
+                    let bss_off = data.len() as i64 + def.value as i64 + reloc.addend;
                     park_data_ref(machine, &mut pending_imports, patch_offset, reloc, bss_off);
                 }
                 NativeSymSection::Tls => {
@@ -2752,6 +2754,7 @@ mod tests {
             data: alloc::vec::Vec::new(),
             data_align: 1,
             bss_size: 0,
+            bss_align: 1,
             tls_data: alloc::vec::Vec::new(),
             tls_bss_size: 0,
             symbols: alloc::vec![
@@ -2811,6 +2814,93 @@ mod tests {
         );
     }
 
+    /// A reloc against an SHN_COMMON symbol parks a *unified* data-byte
+    /// offset, the same as one against a `.bss`-defined symbol: the
+    /// coalesced slot offset is bss-relative, so it needs the merged
+    /// `.data` length added. Without the bias the reference lands
+    /// `data.len()` bytes low, inside `.data`.
+    #[test]
+    fn common_symbol_reloc_is_biased_past_merged_data() {
+        let mk_unit = |data: alloc::vec::Vec<u8>, with_reloc: bool| NativeObject {
+            text_align: 16,
+            machine: NativeMachine::X86_64,
+            text: alloc::vec![0u8; 16],
+            data,
+            data_align: 1,
+            bss_size: 0,
+            bss_align: 1,
+            tls_data: alloc::vec::Vec::new(),
+            tls_bss_size: 0,
+            symbols: alloc::vec![
+                super::super::object::NativeSymbol {
+                    name: alloc::string::String::new(),
+                    section: NativeSymSection::Undef,
+                    value: 0,
+                    size: 0,
+                    binding: 0,
+                    kind: 0,
+                },
+                super::super::object::NativeSymbol {
+                    name: "common_var".to_string(),
+                    section: NativeSymSection::Common,
+                    value: 4,
+                    size: 4,
+                    binding: 1,
+                    kind: 1,
+                },
+            ],
+            text_relocs: if with_reloc {
+                alloc::vec![super::super::object::NativeReloc {
+                    offset: 4,
+                    sym_idx: 1,
+                    rtype: R_X86_64_PC32,
+                    addend: -4,
+                }]
+            } else {
+                alloc::vec::Vec::new()
+            },
+            data_relocs: alloc::vec::Vec::new(),
+            init_funcs: alloc::vec::Vec::new(),
+            dylibs: alloc::vec::Vec::new(),
+            import_dylib_map: alloc::vec::Vec::new(),
+            exports: alloc::vec::Vec::new(),
+            tls_index_fixups: alloc::vec::Vec::new(),
+            macho_tlv_descriptors: alloc::vec::Vec::new(),
+            macho_tlv_fixups: alloc::vec::Vec::new(),
+            tls_symbols: alloc::vec::Vec::new(),
+            macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+            elf_tpoff_fixups: alloc::vec::Vec::new(),
+            copy_relocs: alloc::vec::Vec::new(),
+            debug_info: alloc::vec::Vec::new(),
+            debug_abbrev: alloc::vec::Vec::new(),
+            debug_line: alloc::vec::Vec::new(),
+            debug_str: alloc::vec::Vec::new(),
+            debug_info_relocs: alloc::vec::Vec::new(),
+            debug_line_relocs: alloc::vec::Vec::new(),
+        };
+        // Unit A contributes 24 `.data` bytes; unit B holds the reloc.
+        let merged = link_native_objects(&[
+            mk_unit(alloc::vec![7u8; 24], false),
+            mk_unit(Vec::new(), true),
+        ])
+        .expect("link");
+        assert_eq!(merged.data.len(), 24, "merged .data from unit A");
+        let def = merged.defined.get("common_var").expect("coalesced");
+        assert_eq!(def.value, 0, "common slot at the start of the bss extent");
+        let parked: Vec<&PendingImportReloc> = merged
+            .pending_imports
+            .iter()
+            .filter(|p| p.import_index == usize::MAX)
+            .collect();
+        assert_eq!(parked.len(), 1, "one parked reference to the common slot");
+        assert!(matches!(parked[0].target_section, NativeSymSection::Data));
+        assert_eq!(
+            parked[0].addend,
+            merged.data.len() as i64 + def.value as i64 - 4,
+            "parked offset must clear the merged .data extent"
+        );
+    }
+
     /// SHN_COMMON tentative def + strong (Data) definition of
     /// the same name: per C99 6.9.2 the strong def wins, the
     /// Common is silently dropped. The linker must not error on
@@ -2824,6 +2914,7 @@ mod tests {
             data: alloc::vec::Vec::new(),
             data_align: 1,
             bss_size: 0,
+            bss_align: 1,
             tls_data: alloc::vec::Vec::new(),
             tls_bss_size: 0,
             symbols: alloc::vec![
@@ -2871,6 +2962,7 @@ mod tests {
             data: alloc::vec![0u8; 4],
             data_align: 1,
             bss_size: 0,
+            bss_align: 1,
             tls_data: alloc::vec::Vec::new(),
             tls_bss_size: 0,
             symbols: alloc::vec![
@@ -2948,6 +3040,7 @@ mod tests {
                 data,
                 data_align: 1,
                 bss_size: 0,
+                bss_align: 1,
                 tls_data: alloc::vec::Vec::new(),
                 tls_bss_size: 0,
                 symbols,
@@ -3108,6 +3201,7 @@ mod tests {
             data: alloc::vec::Vec::new(),
             data_align: 1,
             bss_size: 0,
+            bss_align: 1,
             tls_data: alloc::vec::Vec::new(),
             tls_bss_size: 0,
             symbols: alloc::vec::Vec::new(),
@@ -3184,6 +3278,7 @@ mod tests {
             data: alloc::vec::Vec::new(),
             data_align: 1,
             bss_size: 0,
+            bss_align: 1,
             tls_data: alloc::vec::Vec::new(),
             tls_bss_size: 0,
             symbols: alloc::vec::Vec::new(),

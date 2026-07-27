@@ -201,8 +201,20 @@ pub(super) fn format_line_marker(line: usize, file: &str) -> String {
     format!("# {line} \"{escaped}\"\n")
 }
 
+/// Strip a directive keyword, requiring a word boundary after it. C99
+/// 6.10 makes the directive name one preprocessing token, so `#undefX`
+/// names no directive rather than meaning `#undef X`.
+fn strip_keyword<'a>(rest: &'a str, kw: &str) -> Option<&'a str> {
+    let after = rest.strip_prefix(kw)?;
+    after
+        .chars()
+        .next()
+        .is_none_or(|c| !c.is_ascii_alphanumeric() && c != '_')
+        .then_some(after)
+}
+
 pub(super) fn parse_directive(rest: &str) -> Directive<'_> {
-    if let Some(after) = rest.strip_prefix("define") {
+    if let Some(after) = strip_keyword(rest, "define") {
         let after = after.trim_start();
         let (name, rest_after_name) = split_ident(after);
         // Comments were removed in translation phase 3 (C99 5.1.1.2)
@@ -229,36 +241,24 @@ pub(super) fn parse_directive(rest: &str) -> Directive<'_> {
         }
         return Directive::Define(name, rest_after_name.trim());
     }
-    if let Some(after) = rest.strip_prefix("undef") {
+    if let Some(after) = strip_keyword(rest, "undef") {
         return Directive::Undef(after.trim());
     }
-    if let Some(after) = rest.strip_prefix("ifdef") {
+    if let Some(after) = strip_keyword(rest, "ifdef") {
         return Directive::Ifdef(after.trim());
     }
-    if let Some(after) = rest.strip_prefix("ifndef") {
+    if let Some(after) = strip_keyword(rest, "ifndef") {
         return Directive::Ifndef(after.trim());
     }
-    if let Some(after) = rest.strip_prefix("elif") {
+    if let Some(after) = strip_keyword(rest, "elif") {
         // `#elif EXPR` -- treated as `#else` followed by a re-evaluated
         // `#if EXPR`, but only if no preceding branch was taken.
-        if after
-            .chars()
-            .next()
-            .is_none_or(|c| !c.is_ascii_alphanumeric() && c != '_')
-        {
-            return Directive::Elif(after);
-        }
+        return Directive::Elif(after);
     }
-    if let Some(after) = rest.strip_prefix("if") {
-        // Discriminate `#if` from `#ifdef`/`#ifndef` -- the latter
-        // were caught above.
-        if after
-            .chars()
-            .next()
-            .is_none_or(|c| !c.is_ascii_alphanumeric() && c != '_')
-        {
-            return Directive::If(after);
-        }
+    // `#ifdef` / `#ifndef` were caught above; the word boundary keeps
+    // them out of this branch anyway.
+    if let Some(after) = strip_keyword(rest, "if") {
+        return Directive::If(after);
     }
     if rest.trim_start().starts_with("else") {
         let tail = rest.trim_start().trim_start_matches("else");
@@ -272,7 +272,7 @@ pub(super) fn parse_directive(rest: &str) -> Directive<'_> {
             return Directive::Endif;
         }
     }
-    if let Some(after) = rest.strip_prefix("pragma") {
+    if let Some(after) = strip_keyword(rest, "pragma") {
         return Directive::Pragma(after.trim());
     }
     if let Some(after) = rest.strip_prefix("error") {
@@ -292,7 +292,7 @@ pub(super) fn parse_directive(rest: &str) -> Directive<'_> {
             return Directive::Warning(after.trim_start());
         }
     }
-    if let Some(after) = rest.strip_prefix("line") {
+    if let Some(after) = strip_keyword(rest, "line") {
         let trimmed = after.trim();
         // Line number is required.
         let mut split = trimmed.splitn(2, char::is_whitespace);
@@ -319,7 +319,7 @@ pub(super) fn parse_directive(rest: &str) -> Directive<'_> {
     // `include_next` must be tested before `include`: the latter is a
     // prefix of the former, so the `include` branch would otherwise treat
     // `_next <...>` as a macro-form operand.
-    if let Some(after) = rest.strip_prefix("include_next") {
+    if let Some(after) = strip_keyword(rest, "include_next") {
         let trimmed = after.trim();
         if let Some(name) = trimmed.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
             return Directive::IncludeNext {
@@ -334,7 +334,7 @@ pub(super) fn parse_directive(rest: &str) -> Directive<'_> {
             };
         }
     }
-    if let Some(after) = rest.strip_prefix("include") {
+    if let Some(after) = strip_keyword(rest, "include") {
         let trimmed = after.trim();
         // Strip the `<...>` or `"..."` wrapping when the operand
         // is already in one of the two literal forms, recording which

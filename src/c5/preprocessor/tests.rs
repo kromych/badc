@@ -1,6 +1,7 @@
 use super::include::include_parent_dir;
 use super::text::{
-    ends_in_open_block_comment_once, scan_steps_taken, unfold_line_continuations, unfold_ref,
+    ends_in_open_block_comment_once, scan_steps_taken, strip_c_comments, strip_c_comments_ref,
+    unfold_line_continuations, unfold_ref,
 };
 use super::*;
 
@@ -1668,4 +1669,111 @@ fn unfold_80k_line_block_comment_is_fast() {
     // the comment survives.
     assert_eq!(out.matches('\n').count(), s.lines().count());
     assert!(out.contains("code;"));
+}
+
+/// Deterministic pseudo-random source generator for the phase-2 /
+/// phase-3 differential tests: emits the byte classes that drive the
+/// scanners (quotes, escapes, slashes, stars, newlines, backslash
+/// continuations, non-ASCII) at rates high enough to hit every state
+/// transition.
+fn fuzz_source(seed: u64, len: usize) -> String {
+    const ALPHABET: [&str; 20] = [
+        "a", " ", "\n", "/", "*", "\"", "'", "\\", "x", "\t", "/*", "*/", "//", "\\\n", ";", "#",
+        "define", "(", ")", "\u{e9}",
+    ];
+    let mut state = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
+    let mut s = String::with_capacity(len * 2);
+    while s.len() < len {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        s.push_str(ALPHABET[(state % ALPHABET.len() as u64) as usize]);
+    }
+    s
+}
+
+/// The span-copying `strip_c_comments` must agree byte for byte with
+/// the byte-at-a-time reference over every embedded libc header and
+/// over 6000 generated sources.
+#[test]
+fn strip_c_comments_matches_reference_over_corpus_and_fuzz() {
+    for (name, body) in crate::c5::headers::embedded_headers() {
+        assert_eq!(
+            strip_c_comments(body),
+            strip_c_comments_ref(body),
+            "strip_c_comments diverged on embedded header `{name}`"
+        );
+    }
+    for seed in 0..6000u64 {
+        let src = fuzz_source(seed, 200);
+        assert_eq!(
+            strip_c_comments(&src),
+            strip_c_comments_ref(&src),
+            "strip_c_comments diverged on seed {seed}: {src:?}"
+        );
+    }
+}
+
+/// `unfold_line_continuations` short-circuits lines that neither
+/// continue nor open a block comment; it must still agree with the
+/// full-rescan reference over the same corpus and generated sources.
+#[test]
+fn unfold_matches_reference_over_corpus_and_fuzz() {
+    for (name, body) in crate::c5::headers::embedded_headers() {
+        assert_eq!(
+            unfold_line_continuations(body),
+            unfold_ref(body),
+            "unfold diverged on embedded header `{name}`"
+        );
+    }
+    for seed in 0..6000u64 {
+        let src = fuzz_source(seed, 200);
+        assert_eq!(
+            unfold_line_continuations(&src),
+            unfold_ref(&src),
+            "unfold diverged on seed {seed}: {src:?}"
+        );
+    }
+}
+
+/// Phase 3 must not re-encode source bytes. A non-ASCII byte outside a
+/// string or char literal used to be widened from Latin-1 to UTF-8, so
+/// the identifier reaching the lexer no longer matched its definition.
+#[test]
+fn strip_c_comments_preserves_non_ascii_outside_literals() {
+    let src = "int \u{e9}v = 1; /* c */ char *s = \"\u{e9}k\";";
+    let out = strip_c_comments(src);
+    assert!(out.contains('\u{e9}'), "non-ASCII must survive: {out:?}");
+    assert_eq!(
+        out.matches('\u{e9}').count(),
+        2,
+        "both occurrences pass through unchanged: {out:?}"
+    );
+    assert_eq!(process(src).matches('\u{e9}').count(), 2);
+}
+
+/// C99 6.10: a directive name is one preprocessing token, so a
+/// keyword run together with what follows names no directive. Before
+/// the shared word-boundary check only `if`, `elif`, `else`, `endif`,
+/// `error` and `warning` enforced it, so `#undefX` silently undefined
+/// `X` and `#definex FOO 1` defined a macro named `x`.
+#[test]
+fn directive_keyword_requires_a_word_boundary() {
+    let out = process("#define X 1\n#undefX\nint a = X;\n");
+    assert!(
+        out.contains("int a = 1;"),
+        "`#undefX` must not undefine `X`: {out}"
+    );
+    let out = process("#definex FOO 1\nint b = x;\n");
+    assert!(
+        out.contains("int b = x;"),
+        "`#definex` must not define `x`: {out}"
+    );
+    // The boundary rule admits every operand form that is not an
+    // identifier continuation.
+    assert!(process("#define Y 2\n#if(Y)\nok\n#endif\n").contains("ok"));
+    assert!(process("#include<stddef.h>\n").contains("size_t"));
+    // And the real spellings still parse.
+    let out = process("#define Z 3\n#undef Z\nint c = Z;\n");
+    assert!(out.contains("int c = Z;"), "`#undef Z` must work: {out}");
 }

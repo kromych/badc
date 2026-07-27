@@ -12,6 +12,7 @@
 //! per-line arena ([`Exp`]) and tokens hold indices, so splicing and
 //! rescanning move plain bytes with no reference-count traffic.
 
+use alloc::borrow::Cow;
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
@@ -687,8 +688,14 @@ impl<'a> Exp<'a> {
 
     /// C99 6.10.8 dynamic predefines (plus the `__COUNTER__`
     /// extension); true when `tok` was one and its expansion pushed.
+    /// Its name set is `is_dynamic_predefine`, which the pre-scan in
+    /// `line_mentions_macro` shares -- a name in one and not the other
+    /// would never reach the expander.
     fn dynamic_predefine(&mut self, tok: Tok, out: &mut Vec<Tok>) -> bool {
         let (line_no, filename) = (self.line_no, self.filename);
+        if !is_dynamic_predefine(self.text(tok)) {
+            return false;
+        }
         match self.text(tok) {
             "__LINE__" => {
                 let t = self.synth(format!("{line_no}"), TokKind::Number, tok.space);
@@ -705,7 +712,9 @@ impl<'a> Exp<'a> {
                 let t = self.synth(format!("{n}"), TokKind::Number, tok.space);
                 out.push(t);
             }
-            _ => return false,
+            // `is_dynamic_predefine` already admitted the name, so a
+            // miss here means the two drifted.
+            other => unreachable!("no expansion for dynamic predefine `{other}`"),
         }
         true
     }
@@ -939,9 +948,14 @@ impl Preprocessor {
     /// Substitute every macro invocation in `line`. `filename` and
     /// `line_no` feed `__FILE__` / `__LINE__`, whose expansion changes
     /// per line and so can't live in the static macro table.
-    pub(super) fn substitute(&self, line: &str, filename: &str, line_no: usize) -> String {
+    pub(super) fn substitute<'l>(
+        &self,
+        line: &'l str,
+        filename: &str,
+        line_no: usize,
+    ) -> Cow<'l, str> {
         if !self.line_mentions_macro(line) {
-            return line.to_string();
+            return Cow::Borrowed(line);
         }
         let mut scratch = self.exp_scratch.borrow_mut();
         let mut ex = Exp::new(self, filename, line_no, &mut scratch);
@@ -956,7 +970,7 @@ impl Preprocessor {
         let mut out = String::from(indent);
         ex.serialize_into(&expanded, &mut out);
         ex.put_vec(expanded);
-        out
+        Cow::Owned(out)
     }
 
     /// Pre-scan: most lines name no macro at all, and copying them
@@ -987,7 +1001,7 @@ impl Preprocessor {
                     i += 1;
                 }
                 let ident = &line[start..i];
-                if matches!(ident, "__LINE__" | "__FILE__" | "__COUNTER__")
+                if is_dynamic_predefine(ident)
                     || self.macros.contains_key(ident)
                     || self.fn_macros.contains_key(ident)
                 {
@@ -1081,6 +1095,12 @@ impl Preprocessor {
 /// boundaries -- whitespace between tokens never changes phase-7
 /// semantics -- so substituted text cannot paste onto its neighbors
 /// (C99 6.10.3.3 reserves pasting for `##`).
+/// Names `dynamic_predefine` expands from context rather than from the
+/// macro table.
+pub(super) fn is_dynamic_predefine(name: &str) -> bool {
+    matches!(name, "__LINE__" | "__FILE__" | "__COUNTER__")
+}
+
 pub(super) fn pp_tokens_would_merge(prev: u8, next: u8) -> bool {
     if is_ident_byte(prev) && is_ident_byte(next) {
         return true;

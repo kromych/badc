@@ -473,6 +473,9 @@ pub struct NativeObject {
     /// allocate bytes for it (the writer doesn't either --
     /// `SHT_NOBITS` records size but no file content).
     pub bss_size: usize,
+    /// Largest sh_addralign among the bss-family sections. The linker
+    /// aligns this object's base in the merged `.bss` to it.
+    pub bss_align: usize,
     /// Concatenated bytes from every `.tdata*` section
     /// (initialised TLS storage). Empty for objects without
     /// `_Thread_local` data.
@@ -812,6 +815,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         data_bytes.extend_from_slice(section_slice(bytes, sh)?);
     }
     let mut bss_size: usize = 0;
+    let mut bss_align: usize = 1;
     let mut bss_base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(bss_section_indices.len());
     for &sh_i in &bss_section_indices {
         let sh = &shdrs[sh_i];
@@ -820,6 +824,17 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                 "bss-family section at index {sh_i} is not SHT_NOBITS",
             )));
         }
+        // Same rule as the data-family loop above: honor sh_addralign
+        // when concatenating and carry the maximum outward, so the
+        // linker aligns this object's base in the merged `.bss`.
+        let align = sh.sh_addralign.max(1) as usize;
+        if !align.is_power_of_two() {
+            return Err(err(&format!(
+                "bss-family section at index {sh_i} has non-power-of-two sh_addralign {align}",
+            )));
+        }
+        bss_align = bss_align.max(align);
+        bss_size = bss_size.next_multiple_of(align);
         bss_base_per_shndx.push((sh_i, bss_size as u64));
         bss_size += sh.sh_size as usize;
     }
@@ -1254,6 +1269,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         data: data_bytes,
         data_align,
         bss_size,
+        bss_align,
         tls_data: tls_data_bytes,
         tls_bss_size,
         symbols,
@@ -1669,6 +1685,7 @@ mod tests {
         /// Override `sh_size` -- needed for SHT_NOBITS where
         /// the file body is empty but the runtime size isn't.
         sh_size_override: Option<u64>,
+        sh_addralign: u64,
     }
 
     impl<'a> SecPlan<'a> {
@@ -1681,6 +1698,7 @@ mod tests {
                 sh_info: 0,
                 sh_entsize: 0,
                 sh_size_override: None,
+                sh_addralign: 0,
             }
         }
         fn nobits(name: &'a str, size: u64) -> Self {
@@ -1692,6 +1710,7 @@ mod tests {
                 sh_info: 0,
                 sh_entsize: 0,
                 sh_size_override: Some(size),
+                sh_addralign: 0,
             }
         }
         fn symtab(name: &'a str, body: Vec<u8>, link: u32, info: u32) -> Self {
@@ -1703,6 +1722,7 @@ mod tests {
                 sh_info: info,
                 sh_entsize: ELF64_SYM_SIZE as u64,
                 sh_size_override: None,
+                sh_addralign: 0,
             }
         }
         fn strtab(name: &'a str, body: Vec<u8>) -> Self {
@@ -1714,7 +1734,12 @@ mod tests {
                 sh_info: 0,
                 sh_entsize: 0,
                 sh_size_override: None,
+                sh_addralign: 0,
             }
+        }
+        fn aligned(mut self, align: u64) -> Self {
+            self.sh_addralign = align;
+            self
         }
         fn rela(name: &'a str, body: Vec<u8>, link: u32, info: u32) -> Self {
             Self {
@@ -1725,6 +1750,7 @@ mod tests {
                 sh_info: info,
                 sh_entsize: ELF64_RELA_SIZE as u64,
                 sh_size_override: None,
+                sh_addralign: 0,
             }
         }
     }
@@ -1850,7 +1876,7 @@ mod tests {
                     sh_size: p.sh_size_override.unwrap_or(p.body.len() as u64),
                     sh_link: p.sh_link,
                     sh_info: p.sh_info,
-                    sh_addralign: 0,
+                    sh_addralign: p.sh_addralign,
                     sh_entsize: p.sh_entsize,
                 },
             );
@@ -2152,6 +2178,42 @@ mod tests {
         assert_eq!(obj.symbols[3].value, 0);
     }
 
+    /// A `.bss` subsection's `sh_addralign` must be honored when the
+    /// bss family is concatenated, the same as the data family: a
+    /// 4-byte `.bss.small` followed by a 64-aligned `.bss.wide` puts
+    /// the second at offset 64, not 4. The widest alignment is carried
+    /// out on `bss_align` so the linker can align this object's base
+    /// in the merged `.bss`.
+    #[test]
+    fn bss_subsection_alignment_is_honored() {
+        let mut strtab: Vec<u8> = vec![0];
+        let small_off = strtab.len() as u32;
+        strtab.extend_from_slice(b"small\0");
+        let wide_off = strtab.len() as u32;
+        strtab.extend_from_slice(b"wide\0");
+        let mut symtab = Vec::new();
+        push_test_sym(&mut symtab, 0, 0, 0, 0, 0);
+        // shndx 5 = .bss.small, 6 = .bss.wide.
+        push_test_sym(&mut symtab, small_off, 0x11, 5, 0, 4);
+        push_test_sym(&mut symtab, wide_off, 0x11, 6, 0, 32);
+        let plans = [
+            SecPlan::strtab(".strtab", strtab),
+            SecPlan::symtab(".symtab", symtab, 2, 1),
+            SecPlan::progbits(".text", Vec::new()),
+            SecPlan::nobits(".bss.small", 4).aligned(4),
+            SecPlan::nobits(".bss.wide", 32).aligned(64),
+        ];
+        let bytes = build_test_elf(EM_AARCH64, &plans);
+        let obj = parse_native_elf(&bytes).expect("parse aligned-bss fixture");
+        assert_eq!(obj.bss_align, 64, "widest bss sh_addralign is carried out");
+        assert_eq!(obj.bss_size, 96, "64-aligned base plus 32 bytes");
+        assert_eq!(obj.symbols[1].value, 0, "`small` at the bss base");
+        assert_eq!(
+            obj.symbols[2].value, 64,
+            "`wide` must land on its 64-byte boundary, not at offset 4"
+        );
+    }
+
     /// Same shape as `rodata_section_lands_in_merged_data_blob`
     /// but the section is named `.rodata.str.1.1` (clang's
     /// per-string subsection layout under `-fdata-sections`).
@@ -2231,6 +2293,7 @@ mod tests {
                 sh_info: 0,
                 sh_entsize: ELF64_SYM_SIZE as u64,
                 sh_size_override: None,
+                sh_addralign: 0,
             },
             SecPlan {
                 name: ".dynamic",
@@ -2240,6 +2303,7 @@ mod tests {
                 sh_info: 0,
                 sh_entsize: core::mem::size_of::<Elf64Dyn>() as u64,
                 sh_size_override: None,
+                sh_addralign: 0,
             },
         ];
         let bytes = build_test_elf(EM_X86_64, &plans);

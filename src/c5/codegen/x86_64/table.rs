@@ -206,7 +206,21 @@ fn wbytes(w: W, opw: u8) -> Option<u8> {
     }
 }
 
-fn pat_matches(p: OpPat, o: Opnd, opw: u8) -> bool {
+/// Encoded width of an immediate field in bytes, or `None` for the implicit
+/// `1` operand, which encodes nothing.
+fn imm_field_bytes(c: ImmC, opw: u8) -> Option<u8> {
+    Some(match c {
+        ImmC::Ib | ImmC::Imms8 => 1,
+        ImmC::Iw => 2,
+        ImmC::Id => 4,
+        ImmC::Iv if opw == 2 => 2,
+        ImmC::Iv => 4,
+        ImmC::Iq => 8,
+        ImmC::One => return None,
+    })
+}
+
+fn pat_matches(p: OpPat, o: Opnd, opw: u8, opw_known: bool) -> bool {
     match (p, o) {
         (OpPat::Reg(w), Opnd::Reg { width, .. }) => wbytes(w, opw) == Some(width),
         (OpPat::Rm(w), Opnd::Reg { width, .. }) => wbytes(w, opw) == Some(width),
@@ -230,21 +244,27 @@ fn pat_matches(p: OpPat, o: Opnd, opw: u8) -> bool {
         // An immediate must fit its field as the instruction will read it
         // (byte fields take either signedness; a 32-bit field under a 64-bit
         // operation sign-extends), or a narrow form would win on length and
-        // silently truncate the value.
-        (OpPat::Imm(c), Opnd::Imm(v)) => match c {
-            ImmC::Ib => (-0x80..=0xff).contains(&v),
-            ImmC::Imms8 => (-0x80..=0x7f).contains(&v),
-            ImmC::Iw => (-0x8000..=0xffff).contains(&v),
-            ImmC::Id if opw == 8 => (-0x8000_0000..=0x7fff_ffff).contains(&v),
-            ImmC::Id => (-0x8000_0000..=0xffff_ffff).contains(&v),
-            ImmC::Iv => match opw {
-                2 => (-0x8000..=0xffff).contains(&v),
-                8 => (-0x8000_0000..=0x7fff_ffff).contains(&v),
-                _ => (-0x8000_0000..=0xffff_ffff).contains(&v),
-            },
-            ImmC::Iq => true,
-            ImmC::One => v == 1,
-        },
+        // silently truncate the value. A field at least as wide as the
+        // operation takes any value: the assembler reduces the expression to
+        // the operation width there (`movl $~0xfa1e0ff3, %eax`), so only a
+        // field narrower than the operation constrains the choice of form.
+        (OpPat::Imm(c), Opnd::Imm(v)) => {
+            let fits = match c {
+                ImmC::Ib => (-0x80..=0xff).contains(&v),
+                ImmC::Imms8 => (-0x80..=0x7f).contains(&v),
+                ImmC::Iw => (-0x8000..=0xffff).contains(&v),
+                ImmC::Id if opw == 8 => (-0x8000_0000..=0x7fff_ffff).contains(&v),
+                ImmC::Id => (-0x8000_0000..=0xffff_ffff).contains(&v),
+                ImmC::Iv => match opw {
+                    2 => (-0x8000..=0xffff).contains(&v),
+                    8 => (-0x8000_0000..=0x7fff_ffff).contains(&v),
+                    _ => (-0x8000_0000..=0xffff_ffff).contains(&v),
+                },
+                ImmC::Iq => true,
+                ImmC::One => v == 1,
+            };
+            fits || (opw_known && imm_field_bytes(c, opw).is_some_and(|f| f >= opw))
+        }
         // A relative offset must fit its field, or the short branch form
         // would win with a truncated displacement.
         (OpPat::Rel(sz), Opnd::Imm(v)) => match sz {
@@ -254,6 +274,15 @@ fn pat_matches(p: OpPat, o: Opnd, opw: u8) -> bool {
         },
         _ => false,
     }
+}
+
+/// Whether the operation width is established rather than defaulted: an
+/// explicit size suffix, or an operand that carries one. An immediate-only
+/// instruction (`push $imm`) has neither, and the assembler's default-64
+/// operation width for that group is not modelled, so an out-of-range
+/// immediate there stays a diagnostic instead of being reduced.
+fn width_known(ops: &[Opnd], override_w: Option<u8>) -> bool {
+    override_w.is_some() || ops.iter().any(|o| o.width().is_some())
 }
 
 /// Operation width in bytes: the widest register / memory operand, defaulting
@@ -350,12 +379,12 @@ impl InsnBuf {
     }
 }
 
-fn form_matches(f: &Form, ops: &[Opnd], opw: u8) -> bool {
+fn form_matches(f: &Form, ops: &[Opnd], opw: u8, opw_known: bool) -> bool {
     f.ops.len() == ops.len()
         && f.ops
             .iter()
             .zip(ops.iter())
-            .all(|(&p, &o)| pat_matches(p, o, opw))
+            .all(|(&p, &o)| pat_matches(p, o, opw, opw_known))
 }
 
 impl Mnem {
@@ -369,6 +398,25 @@ impl Mnem {
     }
 }
 
+/// Operand shapes in AT&T order, for a diagnostic naming what was rejected.
+fn describe_operands(ops: &[Opnd]) -> String {
+    let mut out = String::new();
+    for (i, o) in ops.iter().enumerate() {
+        if i > 0 {
+            out.push_str(", ");
+        }
+        match *o {
+            Opnd::Reg { num, width } => out.push_str(&format!("r{num}:{width}")),
+            Opnd::Mem { width, .. } => out.push_str(&format!("mem:{width}")),
+            Opnd::RipRel { width, .. } => out.push_str(&format!("riprel:{width}")),
+            Opnd::AbsMem { width, .. } => out.push_str(&format!("absmem:{width}")),
+            Opnd::IndexMem { width, .. } => out.push_str(&format!("indexmem:{width}")),
+            Opnd::Imm(v) => out.push_str(&format!("imm({v})")),
+        }
+    }
+    out
+}
+
 /// Encode one instruction. `width_override` forces the operation width (an
 /// AT&T size suffix); otherwise it comes from the operands. Among the forms
 /// that match, the shortest encoding is chosen (ties broken by catalogue
@@ -380,12 +428,16 @@ pub(crate) fn encode(
     ops: &[Opnd],
 ) -> Result<Vec<u8>, String> {
     let opw = op_width(ops, width_override);
-    let (best, matched) = encode_best(mnem, opw, ops);
+    let (best, matched) = encode_best(mnem, opw, width_known(ops, width_override), ops);
     match best {
         Some(b) => Ok(b.as_slice().to_vec()),
-        None if matched => Err(format!("inline asm: `{mnem:?}` operand form not encodable")),
+        None if matched => Err(format!(
+            "inline asm: `{mnem:?}` operand form not encodable ({})",
+            describe_operands(ops)
+        )),
         None => Err(format!(
-            "inline asm: no encoding for `{mnem:?}` with these operands"
+            "inline asm: no encoding for `{mnem:?}` with these operands ({})",
+            describe_operands(ops)
         )),
     }
 }
@@ -400,7 +452,7 @@ pub(crate) fn encode_into(
     ops: &[Opnd],
 ) {
     let opw = op_width(ops, width_override);
-    match encode_best(mnem, opw, ops).0 {
+    match encode_best(mnem, opw, width_known(ops, width_override), ops).0 {
         Some(b) => code.extend_from_slice(b.as_slice()),
         None => panic!("native emit: no encoding for `{mnem:?}` with these operands"),
     }
@@ -410,7 +462,7 @@ pub(crate) fn encode_into(
 /// distinguish "no such form" from "form matched but not encodable"). The
 /// catalogue is sorted by mnemonic and `Mnem`'s Ord matches that order, so this
 /// binary-searches on the integer discriminant to the mnemonic's run of forms.
-fn encode_best(mnem: Mnem, opw: u8, ops: &[Opnd]) -> (Option<InsnBuf>, bool) {
+fn encode_best(mnem: Mnem, opw: u8, opw_known: bool, ops: &[Opnd]) -> (Option<InsnBuf>, bool) {
     let forms = super::isa_x86_table::FORMS;
     let start = forms.partition_point(|f| f.mnem < mnem);
     let mut best: Option<InsnBuf> = None;
@@ -418,7 +470,7 @@ fn encode_best(mnem: Mnem, opw: u8, ops: &[Opnd]) -> (Option<InsnBuf>, bool) {
     let generated = forms[start..].iter().take_while(|f| f.mnem == mnem);
     let supplemental = FORMS_SUPPLEMENT.iter().filter(|f| f.mnem == mnem);
     for f in generated.chain(supplemental) {
-        if !form_matches(f, ops, opw) {
+        if !form_matches(f, ops, opw, opw_known) {
             continue;
         }
         matched = true;

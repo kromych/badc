@@ -2226,6 +2226,61 @@ fn asm_label_address_immediate_relocates_absolute() {
     );
 }
 
+#[test]
+fn asm_label_address_immediate_into_register_relocates_absolute() {
+    // `movq $1f, %reg` takes a template-local label's address as an absolute
+    // immediate the same way `pushq $1f` does. gas encodes it as the
+    // sign-extended imm32 form (`48 C7 C0+r`) and relocates the field
+    // `R_X86_64_32S`; the label may sit in a pushed section, in which case the
+    // reference binds that section's symbol instead of `.text`. Both
+    // encodings are byte-identical to the reference assembler.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_32S: u32 = 11;
+    let src = r#"
+        const void *f(void) {
+            const void *p;
+            __asm__ volatile(
+                "movq $1f,%0\n"
+                ".section .probe_addrs,\"a\"\n"
+                "1:\t.word 7\n\t"
+                ".previous"
+                : "=r"(p));
+            return p;
+        }
+        int main(void) { return f() != 0; }
+    "#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    // `mov r64, imm32` is `48 C7 C0+r` then a zeroed field the relocation
+    // fills; the imm64 (`movabs`) form is longer and gas does not pick it.
+    let mov = obj
+        .text
+        .windows(7)
+        .position(|w| w[0] == 0x48 && w[1] == 0xc7 && w[3..] == [0, 0, 0, 0])
+        .expect("`movq $1f,%reg` must encode as `48 c7 c0+r 00000000`");
+    let reloc = obj
+        .text_relocs
+        .iter()
+        .find(|r| r.offset == (mov + 3) as u64)
+        .expect("the imm32 field must carry a relocation");
+    assert_eq!(
+        reloc.rtype, R_X86_64_32S,
+        "a label-address immediate relocates as absolute 32S, not PC-relative"
+    );
+    assert_eq!(
+        reloc.addend, 0,
+        "the label sits at the start of the pushed section"
+    );
+}
+
 /// Read `st_other` (visibility byte) of the first `.symtab` entry named
 /// `want` from a raw ELF64 object. `parse_native_elf` drops visibility, so
 /// the byte is read directly.
@@ -5775,6 +5830,105 @@ fn asm_section_align_fill_byte() {
         "exec .p2align fill must be 0xcc: {body:02x?}"
     );
     assert_eq!(body[32], 0x33);
+}
+
+#[test]
+fn asm_section_space_and_fill_family() {
+    // The GNU as space-and-fill family inside a named section. `.skip` and
+    // `.space` are the same directive, `.zero` fixes the fill at zero, and
+    // `.fill repeat, size, value` repeats the low `size` bytes of the value
+    // zero-extended to eight. The expected bytes are the reference
+    // assembler's output for the same directives.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int f(void) {\n\
+            __asm__ volatile(\".pushsection .fill_probe,\\\"a\\\"\\n\"\n\
+                \".skip 4, 0x90\\n\"\n\
+                \".space 3, 0x41\\n\"\n\
+                \".zero 5\\n\"\n\
+                \".fill 3\\n\"\n\
+                \".fill 2, 4, 0x11223344\\n\"\n\
+                \".fill 2, 8, 0x11223344\\n\"\n\
+                \".fill 1, 3, 0xaabbccdd\\n\"\n\
+                \".fill 1, 12, 0x11223344\\n\"\n\
+                \".skip 2\\n\"\n\
+                \".popsection\\n\");\n\
+            return 0;\n\
+        }\n\
+        int main(void) { return f(); }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let sec = sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".fill_probe")
+        .expect(".fill_probe section missing");
+    #[rustfmt::skip]
+    let want: &[u8] = &[
+        0x90, 0x90, 0x90, 0x90,
+        0x41, 0x41, 0x41,
+        0, 0, 0, 0, 0,
+        0, 0, 0,
+        0x44, 0x33, 0x22, 0x11, 0x44, 0x33, 0x22, 0x11,
+        0x44, 0x33, 0x22, 0x11, 0, 0, 0, 0,
+        0x44, 0x33, 0x22, 0x11, 0, 0, 0, 0,
+        0xdd, 0xcc, 0xbb,
+        0x44, 0x33, 0x22, 0x11, 0, 0, 0, 0,
+        0, 0,
+    ];
+    assert_eq!(sec.3, want, "section body: {:02x?}", sec.3);
+}
+
+#[test]
+fn asm_section_local_binding_and_elf_type_spelling() {
+    // `.local` completes the binding family beside `.globl` / `.weak`, and
+    // GNU as accepts the ELF constant spellings (`STT_OBJECT`) of a `.type`
+    // alongside `@object`. A `.zero`-sized object declared this way must come
+    // out as a local `STT_OBJECT` symbol of the stated size.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        int f(void) {\n\
+            __asm__ volatile(\".pushsection .idlist,\\\"a\\\"\\n\"\n\
+                \".local probe_id\\n\"\n\
+                \".type probe_id, STT_OBJECT\\n\"\n\
+                \".size probe_id, 4\\n\"\n\
+                \"probe_id:\\n\"\n\
+                \".zero 4\\n\"\n\
+                \".popsection\\n\");\n\
+            return 0;\n\
+        }\n\
+        int main(void) { return f(); }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let sec = sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".idlist")
+        .expect(".idlist section missing");
+    assert_eq!(sec.3, vec![0u8; 4], "`.zero 4` must emit four zero bytes");
+    let obj = crate::c5::linker::parse_native_elf(&bytes).expect("parse ET_REL");
+    let sym = obj
+        .symbols
+        .iter()
+        .find(|s| s.name == "probe_id")
+        .expect("`probe_id` must be a symbol");
+    const STT_OBJECT: u8 = 1;
+    const STB_LOCAL: u8 = 0;
+    assert_eq!(sym.kind, STT_OBJECT, "`STT_OBJECT` spelling honored");
+    assert_eq!(sym.binding, STB_LOCAL, "`.local` keeps local binding");
+    assert_eq!(sym.size, 4, "`.size` applies to the local object");
 }
 
 #[test]

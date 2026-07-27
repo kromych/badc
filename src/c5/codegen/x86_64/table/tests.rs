@@ -127,6 +127,77 @@ fn double_precision_and_ext_moves() {
 }
 
 #[test]
+fn immediate_reduced_to_operation_width() {
+    // An immediate wider than the operation is reduced to the operation
+    // width, as both reference assemblers do (GNU as warns "shortened to";
+    // clang is silent). Form selection still sees the value as written, so a
+    // short imm8 form is chosen only when the untruncated value fits it.
+    // Every expected encoding below was taken from the reference assemblers.
+    let imm = |v: i64| Opnd::Imm(v);
+    // mov: no imm8 form, so the imm32/imm16/imm8 field truncates.
+    assert_eq!(
+        enc("mov", &[r(0, 4), imm(!0xfa1e_0ff3i64)]),
+        [0xb8, 0x0c, 0xf0, 0xe1, 0x05]
+    );
+    assert_eq!(
+        enc("mov", &[r(0, 2), imm(0x12345)]),
+        [0x66, 0xb8, 0x45, 0x23]
+    );
+    assert_eq!(enc("mov", &[r(0, 1), imm(0x1234)]), [0xb0, 0x34]);
+    // A 64-bit mov of a value beyond imm32 takes the imm64 (movabs) form.
+    assert_eq!(
+        enc("mov", &[r(0, 8), imm(0x1_ffff_ffff)]),
+        [0x48, 0xb8, 0xff, 0xff, 0xff, 0xff, 0x01, 0x00, 0x00, 0x00]
+    );
+    // The accumulator imm32 forms, truncated.
+    assert_eq!(
+        enc("add", &[r(0, 4), imm(0x1_ffff_ffff)]),
+        [0x05, 0xff, 0xff, 0xff, 0xff]
+    );
+    assert_eq!(
+        enc("and", &[r(0, 4), imm(!0xffi64)]),
+        [0x25, 0x00, 0xff, 0xff, 0xff]
+    );
+    // -256 fits imm32 under a 64-bit operation: no truncation, no movabs.
+    assert_eq!(
+        enc("and", &[r(0, 8), imm(!0xffi64)]),
+        [0x48, 0x25, 0x00, 0xff, 0xff, 0xff]
+    );
+    // -16 fits imm8, so the short form wins over the truncating imm32 one.
+    assert_eq!(enc("or", &[r(0, 4), imm(-16)]), [0x83, 0xc8, 0xf0]);
+    // 0x100000001 does not fit imm8 as written, so the imm32 form is chosen
+    // and only then truncated -- not the 3-byte `83 f8 01`.
+    assert_eq!(
+        enc("cmp", &[r(0, 4), imm(0x1_0000_0001)]),
+        [0x3d, 0x01, 0x00, 0x00, 0x00]
+    );
+    assert_eq!(
+        enc("sub", &[r(1, 4), imm(0x1_ffff_ff01)]),
+        [0x81, 0xe9, 0x01, 0xff, 0xff, 0xff]
+    );
+    // A byte operation reduces to one byte whatever the field carries, shift
+    // counts included. GNU as takes these (warning "shortened to") and the
+    // bytes below are its output; clang's integrated assembler is stricter
+    // and rejects the shift forms.
+    assert_eq!(enc("shl", &[r(0, 1), imm(0x1234)]), [0xc0, 0xe0, 0x34]);
+    assert_eq!(enc("rol", &[r(0, 1), imm(0x1ff)]), [0xc0, 0xc0, 0xff]);
+    assert_eq!(enc("add", &[r(0, 1), imm(0x1234)]), [0x04, 0x34]);
+}
+
+#[test]
+fn immediate_narrower_than_operation_is_rejected() {
+    // A field narrower than the operation still has to hold the value as
+    // written; both reference assemblers reject these rather than truncate.
+    let m = |n: &str| Mnem::from_name(n).unwrap();
+    // add r64, imm32 (sign-extended): no imm64 form to fall back on.
+    assert!(encode(m("add"), None, &[r(0, 8), Opnd::Imm(0x1_ffff_ffff)]).is_err());
+    // shl r32, imm8: the field is a byte whatever the operation width.
+    assert!(encode(m("shl"), None, &[r(0, 4), Opnd::Imm(0x101)]).is_err());
+    // push imm32 under the 64-bit default operation width.
+    assert!(encode(m("push"), None, &[Opnd::Imm(0x1_ffff_ffff)]).is_err());
+}
+
+#[test]
 fn setcc_byte_forms() {
     // 0F 90+cc /0 with an r/m8 operand; the reg field is a zero extension.
     // High byte registers (sil, r10b) take the REX / REX.B prefix, verified

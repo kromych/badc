@@ -71,11 +71,14 @@ pub(crate) enum Mnemonic {
     /// An SSE move `mov{dqa,dqu,aps,ups,sd,ss}` between xmm and xmm / memory. The
     /// register-register and load (memory-source) forms use `load_op`; the store
     /// (memory-destination) form uses `store_op`. The xmm register is always
-    /// ModRM.reg; the other operand is r/m.
+    /// ModRM.reg; the other operand is r/m. A non-temporal move has only one
+    /// direction, so the other opcode is `None`. `map` selects the opcode map
+    /// (1 = 0F, 2 = 0F 38).
     SseMov {
         prefix: u8,
-        load_op: u8,
-        store_op: u8,
+        load_op: Option<u8>,
+        store_op: Option<u8>,
+        map: u8,
     },
     /// A packed shuffle-with-immediate `<op> $imm8, %xmm_src, %xmm_dst`, encoded
     /// as `<prefix> [REX] 0F <opcode> /r ib` (destination in ModRM.reg, source in
@@ -932,24 +935,55 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         .map(|&(_, prefix, opcode)| Mnemonic::Sse2Rr { prefix, opcode })
 }
 
-/// SSE move ops as `(name, prefix, load-opcode, store-opcode)`: the register-
-/// register and load forms use the load opcode, the store form the store one.
+/// One row of the SSE move table.
+struct SseMovRow {
+    name: &'static str,
+    prefix: u8,
+    load_op: Option<u8>,
+    store_op: Option<u8>,
+    map: u8,
+}
+
+/// SSE move ops: the register-register and load forms use the load opcode,
+/// the store form the store one. The non-temporal moves have a single
+/// direction; `movntdqa` is the only load among them and the only one in the
+/// 0F 38 map.
 fn sse_mov(name: &str) -> Option<Mnemonic> {
-    #[rustfmt::skip]
-    const MOVS: &[(&str, u8, u8, u8)] = &[
-        ("movdqa", 0x66, 0x6F, 0x7F),
-        ("movdqu", 0xF3, 0x6F, 0x7F),
-        ("movaps", 0x00, 0x28, 0x29),
-        ("movups", 0x00, 0x10, 0x11),
-        ("movsd",  0xF2, 0x10, 0x11),
-        ("movss",  0xF3, 0x10, 0x11),
-    ];
-    MOVS.iter()
-        .find(|(n, _, _, _)| *n == name)
-        .map(|&(_, prefix, load_op, store_op)| Mnemonic::SseMov {
+    const fn row(
+        name: &'static str,
+        prefix: u8,
+        load_op: Option<u8>,
+        store_op: Option<u8>,
+        map: u8,
+    ) -> SseMovRow {
+        SseMovRow {
+            name,
             prefix,
             load_op,
             store_op,
+            map,
+        }
+    }
+    #[rustfmt::skip]
+    const MOVS: &[SseMovRow] = &[
+        row("movdqa",   0x66, Some(0x6F), Some(0x7F), 1),
+        row("movdqu",   0xF3, Some(0x6F), Some(0x7F), 1),
+        row("movaps",   0x00, Some(0x28), Some(0x29), 1),
+        row("movups",   0x00, Some(0x10), Some(0x11), 1),
+        row("movsd",    0xF2, Some(0x10), Some(0x11), 1),
+        row("movss",    0xF3, Some(0x10), Some(0x11), 1),
+        row("movntdqa", 0x66, Some(0x2A), None,       2),
+        row("movntdq",  0x66, None,       Some(0xE7), 1),
+        row("movntps",  0x00, None,       Some(0x2B), 1),
+        row("movntpd",  0x66, None,       Some(0x2B), 1),
+    ];
+    MOVS.iter()
+        .find(|r| r.name == name)
+        .map(|r| Mnemonic::SseMov {
+            prefix: r.prefix,
+            load_op: r.load_op,
+            store_op: r.store_op,
+            map: r.map,
         })
 }
 
@@ -1927,23 +1961,23 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             });
             continue;
         }
-        // `.skip count, fill`: emit `count` fill bytes. `count` is a constant
-        // expression over labels resolved at emit time (an ALTERNATIVE pads its
-        // old site to the replacement length); the fill defaults to zero.
-        if let Some(rest) = piece.strip_prefix(".skip")
-            && (rest.is_empty() || rest.starts_with(char::is_whitespace))
+        // The space-and-fill family (`.skip` / `.space` / `.zero` / `.fill`)
+        // repeats a unit of bytes. The count is a constant expression over
+        // labels resolved at emit time (an ALTERNATIVE pads its old site to the
+        // replacement length); `bytes` carries the unit to repeat.
+        if let Some((dir, rest)) = piece
+            .split_once(char::is_whitespace)
+            .or(Some((piece, "")))
+            .filter(|(d, _)| super::super::ssa::emit_common::is_fill_directive(d))
         {
-            let rest = rest.trim();
-            let (count_expr, fill) = match rest.rsplit_once(',') {
-                Some((c, f)) => (c.trim(), parse_int(f.trim()).unwrap_or(0)),
-                None => (rest, 0),
-            };
+            let (count_expr, unit, value) =
+                super::super::ssa::emit_common::parse_fill_operands(dir, rest.trim())?;
             insns.push(AsmInsn {
                 mnemonic: Mnemonic::Skip,
                 suffix: None,
                 seg: None,
                 operands: Vec::new(),
-                bytes: alloc::vec![fill as u8],
+                bytes: (value as u64).to_le_bytes()[..unit as usize].to_vec(),
                 sym_target: Some(String::from(count_expr)),
                 label_def: None,
             });
@@ -2753,6 +2787,7 @@ pub(crate) fn encode(
             prefix,
             load_op,
             store_op,
+            map,
         } => {
             // `mov* %src, %dst`: the xmm register is always ModRM.reg; a
             // `(%base)` memory operand is r/m. reg<-reg and reg<-mem (load) use
@@ -2767,26 +2802,39 @@ pub(crate) fn encode(
             if prefix != 0 {
                 code.push(prefix);
             }
+            let dir = |op: Option<u8>, what: &str| {
+                op.ok_or_else(|| alloc::format!("inline asm: this SSE move has no {what} form"))
+            };
+            let opcode = |code: &mut Vec<u8>, op: u8| {
+                code.push(0x0F);
+                if map == 2 {
+                    code.push(0x38);
+                }
+                code.push(op);
+            };
             match (xmm(&src), MemRm::of(&src), xmm(&dst), MemRm::of(&dst)) {
                 (Some(sn), _, Some(dn), _) => {
+                    let op = dir(load_op, "register")?;
                     if dn >= 8 || sn >= 8 {
                         code.push(rex(false, dn >= 8, false, sn >= 8));
                     }
-                    code.extend_from_slice(&[0x0F, load_op]);
+                    opcode(code, op);
                     code.push(modrm_reg(dn & 7, sn & 7));
                 }
                 (None, Some(mr), Some(dn), _) => {
+                    let op = dir(load_op, "load")?;
                     if dn >= 8 || mr.rex_b() {
                         code.push(rex(false, dn >= 8, false, mr.rex_b()));
                     }
-                    code.extend_from_slice(&[0x0F, load_op]);
+                    opcode(code, op);
                     mr.emit(code, dn & 7);
                 }
                 (Some(sn), _, None, Some(mr)) => {
+                    let op = dir(store_op, "store")?;
                     if sn >= 8 || mr.rex_b() {
                         code.push(rex(false, sn >= 8, false, mr.rex_b()));
                     }
-                    code.extend_from_slice(&[0x0F, store_op]);
+                    opcode(code, op);
                     mr.emit(code, sn & 7);
                 }
                 _ => {
@@ -3912,8 +3960,9 @@ mod tests {
         };
         let mov = |p, l, s| Mnemonic::SseMov {
             prefix: p,
-            load_op: l,
-            store_op: s,
+            load_op: Some(l),
+            store_op: Some(s),
+            map: 1,
         };
         // reg-reg and load use the load opcode; store uses the store opcode; the
         // xmm register is always ModRM.reg.
@@ -3938,11 +3987,53 @@ mod tests {
             sse_mov("movdqa"),
             Some(Mnemonic::SseMov {
                 prefix: 0x66,
-                load_op: 0x6F,
-                store_op: 0x7F
+                load_op: Some(0x6F),
+                store_op: Some(0x7F),
+                map: 1,
             })
         );
         assert_eq!(sse_mov("not_a_mov"), None);
+        // The non-temporal moves have one direction each; `movntdqa` is the
+        // only load and the only 0F 38 form. Encodings match the assembler.
+        let nt = |n: &str| sse_mov(n).unwrap();
+        assert_eq!(
+            enc(nt("movntdqa"), None, &[mem(0), xmm(1)]),
+            [0x66, 0x0F, 0x38, 0x2A, 0x08]
+        ); // movntdqa (%rax),%xmm1
+        // A high xmm takes REX.R ahead of the map bytes, not between them.
+        assert_eq!(
+            enc(
+                nt("movntdqa"),
+                None,
+                &[
+                    Concrete::Mem {
+                        base: 0,
+                        index: None,
+                        scale: 1,
+                        disp: 16,
+                        size: AsmRegSize::Quad
+                    },
+                    xmm(9)
+                ]
+            ),
+            [0x66, 0x44, 0x0F, 0x38, 0x2A, 0x48, 0x10]
+        ); // movntdqa 16(%rax),%xmm9
+        assert_eq!(
+            enc(nt("movntdq"), None, &[xmm(1), mem(0)]),
+            [0x66, 0x0F, 0xE7, 0x08]
+        ); // movntdq %xmm1,(%rax)
+        assert_eq!(
+            enc(nt("movntps"), None, &[xmm(1), mem(0)]),
+            [0x0F, 0x2B, 0x08]
+        ); // movntps %xmm1,(%rax)
+        assert_eq!(
+            enc(nt("movntpd"), None, &[xmm(1), mem(0)]),
+            [0x66, 0x0F, 0x2B, 0x08]
+        ); // movntpd %xmm1,(%rax)
+        // A direction the instruction does not have is rejected, not encoded
+        // as the other one.
+        assert!(encode(&mut Vec::new(), nt("movntdqa"), None, &[xmm(1), mem(0)]).is_err());
+        assert!(encode(&mut Vec::new(), nt("movntdq"), None, &[mem(0), xmm(1)]).is_err());
     }
 
     #[test]

@@ -1728,6 +1728,9 @@ pub(crate) struct AsmSectionTextRef {
     /// Addend applied on top of the label's placed offset; -4 for a 4-byte
     /// PC-relative field, whose displacement is measured from its own end.
     pub addend: i64,
+    /// The field holds the label's absolute address (a `$LABEL` immediate)
+    /// rather than a PC-relative displacement. x86_64 only.
+    pub absolute: bool,
 }
 
 /// Relocation for an inline-asm instruction taking a template-local label's

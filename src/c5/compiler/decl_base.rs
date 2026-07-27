@@ -1537,8 +1537,8 @@ impl Compiler {
     /// Consume the specifiers that may trail the base-type keyword:
     /// int modifiers fold into `m` (the caller re-derives the base
     /// tag), qualifier bits are returned for the caller to fold into
-    /// the type, and `inline` / `_Noreturn` set the same pending
-    /// flags as in leading position.
+    /// the type, and `const` / `inline` / `_Noreturn` set the same
+    /// pending flags as in leading position.
     pub(super) fn consume_trailing_decl_modifiers(
         &mut self,
         m: &mut IntModifiers,
@@ -1567,6 +1567,7 @@ impl Compiler {
                 continue;
             }
             qual_bits |= self.lex_qualifier_bits();
+            self.pending.base_is_const |= self.lex_is_const_qual();
             self.next()?;
         }
         Ok((saw_int_mod, qual_bits))

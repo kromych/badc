@@ -2129,6 +2129,14 @@ fn block_scope_extern() {
 }
 
 #[test]
+fn decl_specifier_order_const_after_type() {
+    // C99 6.7.1p1: specifiers may appear in any order, so `T const x`
+    // qualifies the object as `const T x` does. The trailing form must
+    // fold into a later constant expression at every scope.
+    assert_eq!(run_fixture("decl_specifier_order_const_after_type.c"), 0);
+}
+
+#[test]
 fn inline_struct_param_mutated() {
     // A helper that mutates its by-value struct parameter stays out of
     // line; the caller's copy is unaffected.

@@ -6,7 +6,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-2)                                    -> x0
     v2   ImmData(40)                                      -> x1
-    v3   Mcpy { dst=v1, src=v2, size=16 }                 -> x0
+    v3   Mcpy { dst=v1, src=v2, size=16, align=8 }        -> x0
     v4   LocalAddr(-2)                                    -> x0
     v5   Load { addr=v4, disp=0, kind=I64 }               -> x0
     terminator Return(v5)   (exit_acc=v5)
@@ -63,7 +63,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
   block 10  start_pc=0
     v5   LocalAddr(-2)                                    -> x0
     v6   ImmData(15)                                      -> x1
-    v7   Mcpy { dst=v5, src=v6, size=16 }                 -> x0
+    v7   Mcpy { dst=v5, src=v6, size=16, align=1 }        -> x0
     v8   LocalAddr(-2)                                    -> x0
     v9   LocalAddr(-2)                                    -> x0
     v10  Load { addr=v9, disp=0, kind=I64 }               -> x0

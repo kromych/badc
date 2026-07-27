@@ -2344,7 +2344,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=323
     v2120 Imm(0)                                           -> x0
     v2121 LocalAddr(-306)                                  -> x0
     v2122 ImmData(48)                                      -> x1
-    v2123 Mcpy { dst=v2121, src=v2122, size=16 }           -> x0
+    v2123 Mcpy { dst=v2121, src=v2122, size=16, align=8 }  -> x0
     v2124 LocalAddr(-304)                                  -> x0
     v2125 Load { addr=v2124, disp=0, kind=I64 }            -> x1
     v2126 BinopI { op=add, lhs=v2124, rhs_imm=8 }          -> x1

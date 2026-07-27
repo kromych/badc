@@ -66,7 +66,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=6
   block 10  start_pc=0
     v41  LocalAddr(-3)                                    -> x0
     v42  ImmData(8)                                       -> x1
-    v43  Mcpy { dst=v41, src=v42, size=24 }               -> x0
+    v43  Mcpy { dst=v41, src=v42, size=24, align=8 }      -> x0
     v44  Imm(1117913088)                                  -> x0 [f32]
     v45  StoreLocal { off=-6, value=v44, kind=F32 }       -> -
     v46  Imm(1086115021)                                  -> x0 [f32]

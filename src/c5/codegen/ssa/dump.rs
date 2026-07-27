@@ -240,7 +240,12 @@ fn fmt_inst(inst: &Inst) -> String {
             )
         }
         TailExt(b) => format!("TailExt({b})"),
-        Mcpy { dst, src, size } => format!("Mcpy {{ dst=v{dst}, src=v{src}, size={size} }}"),
+        Mcpy {
+            dst,
+            src,
+            size,
+            align,
+        } => format!("Mcpy {{ dst=v{dst}, src=v{src}, size={size}, align={align} }}"),
         AtomicRmw {
             op,
             addr,

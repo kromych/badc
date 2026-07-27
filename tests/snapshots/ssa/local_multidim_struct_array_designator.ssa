@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> x0
     v2   ImmData(8)                                       -> x1
-    v3   Mcpy { dst=v1, src=v2, size=32 }                 -> x0
+    v3   Mcpy { dst=v1, src=v2, size=32, align=8 }        -> x0
     v4   LocalAddr(-4)                                    -> x0
     v5   Imm(0)                                           -> x1
     v6   Imm(8)                                           -> x1
@@ -162,7 +162,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
   block 24  start_pc=0
     v109 LocalAddr(-12)                                   -> x0
     v110 ImmData(72)                                      -> x1
-    v111 Mcpy { dst=v109, src=v110, size=64 }             -> x0
+    v111 Mcpy { dst=v109, src=v110, size=64, align=8 }    -> x0
     v112 LocalAddr(-12)                                   -> x0
     v113 Imm(32)                                          -> x1
     v114 BinopI { op=add, lhs=v112, rhs_imm=32 }          -> x1
@@ -248,7 +248,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
   block 36  start_pc=0
     v171 LocalAddr(-16)                                   -> x0
     v172 ImmData(136)                                     -> x1
-    v173 Mcpy { dst=v171, src=v172, size=32 }             -> x0
+    v173 Mcpy { dst=v171, src=v172, size=32, align=8 }    -> x0
     v174 LocalAddr(-16)                                   -> x0
     v175 Imm(0)                                           -> x1
     v176 Imm(8)                                           -> x1
@@ -278,7 +278,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
   block 40  start_pc=0
     v193 LocalAddr(-20)                                   -> x0
     v194 ImmData(168)                                     -> x1
-    v195 Mcpy { dst=v193, src=v194, size=32 }             -> x0
+    v195 Mcpy { dst=v193, src=v194, size=32, align=8 }    -> x0
     v196 LocalAddr(-20)                                   -> x0
     v197 Imm(0)                                           -> x1
     v198 Load { addr=v196, disp=0, kind=I32 }             -> x0

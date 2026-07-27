@@ -103,7 +103,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=3
   block 18  start_pc=0
     v41  LocalAddr(-2)                                    -> x0
     v42  ImmData(52)                                      -> x1
-    v43  Mcpy { dst=v41, src=v42, size=16 }               -> x0
+    v43  Mcpy { dst=v41, src=v42, size=16, align=4 }      -> x0
     v44  Imm(119)                                         -> x1
     v45  LocalAddr(-2)                                    -> x0
     v46  BinopI { op=add, lhs=v45, rhs_imm=4 }            -> x2

@@ -210,7 +210,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
   block 22  start_pc=0
     v86  LocalAddr(-1)                                    -> x0
     v87  ImmData(68)                                      -> x1
-    v88  Mcpy { dst=v86, src=v87, size=6 }                -> x0
+    v88  Mcpy { dst=v86, src=v87, size=6, align=4 }       -> x0
     v89  LocalAddr(-1)                                    -> x0
     v90  Imm(0)                                           -> x1
     v91  Load { addr=v89, disp=0, kind=I8 }               -> x0
@@ -250,7 +250,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
   block 28  start_pc=0
     v114 LocalAddr(-3)                                    -> x0
     v115 ImmData(81)                                      -> x1
-    v116 Mcpy { dst=v114, src=v115, size=6 }              -> x0
+    v116 Mcpy { dst=v114, src=v115, size=6, align=1 }     -> x0
     v117 LocalAddr(-3)                                    -> x0
     terminator Jmp(b29)
   block 29  start_pc=0

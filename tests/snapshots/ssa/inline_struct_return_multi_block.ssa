@@ -94,12 +94,12 @@ fn ent_pc=6 n_params=0 variadic=false locals=23
   block 11  start_pc=0
     v306 Imm(0)                                           -> x6
     v307 BinopI { op=add, lhs=v304, rhs_imm=0 }           -> x2
-    v308 Mcpy { dst=v86, src=v307, size=24 }              -> x2
+    v308 Mcpy { dst=v86, src=v307, size=24, align=8 }     -> x2
     terminator Jmp(b12)   (exit_acc=v86)
   block 12  start_pc=0
     v90  LocalAddr(-15)                                   -> x1
     v91  LocalAddr(-18)                                   -> x2
-    v92  Mcpy { dst=v91, src=v90, size=24 }               -> x1
+    v92  Mcpy { dst=v91, src=v90, size=24, align=8 }      -> x1
     v93  LocalAddr(-18)                                   -> x1
     v94  Load { addr=v93, disp=0, kind=U32 }              -> x1
     terminator Jmp(b13)
@@ -201,12 +201,12 @@ fn ent_pc=6 n_params=0 variadic=false locals=23
   block 32  start_pc=0
     v345 Imm(24)                                          -> x6
     v346 BinopI { op=add, lhs=v343, rhs_imm=24 }          -> x2
-    v347 Mcpy { dst=v124, src=v346, size=24 }             -> x2
+    v347 Mcpy { dst=v124, src=v346, size=24, align=8 }    -> x2
     terminator Jmp(b33)   (exit_acc=v124)
   block 33  start_pc=0
     v128 LocalAddr(-15)                                   -> x1
     v129 LocalAddr(-18)                                   -> x2
-    v130 Mcpy { dst=v129, src=v128, size=24 }             -> x1
+    v130 Mcpy { dst=v129, src=v128, size=24, align=8 }    -> x1
     v131 LocalAddr(-18)                                   -> x1
     v132 Load { addr=v131, disp=0, kind=U32 }             -> x1
     terminator Jmp(b34)
@@ -308,12 +308,12 @@ fn ent_pc=6 n_params=0 variadic=false locals=23
   block 53  start_pc=0
     v384 Imm(72)                                          -> x6
     v385 BinopI { op=add, lhs=v382, rhs_imm=72 }          -> x2
-    v386 Mcpy { dst=v162, src=v385, size=24 }             -> x2
+    v386 Mcpy { dst=v162, src=v385, size=24, align=8 }    -> x2
     terminator Jmp(b54)   (exit_acc=v162)
   block 54  start_pc=0
     v166 LocalAddr(-15)                                   -> x1
     v167 LocalAddr(-18)                                   -> x2
-    v168 Mcpy { dst=v167, src=v166, size=24 }             -> x1
+    v168 Mcpy { dst=v167, src=v166, size=24, align=8 }    -> x1
     v169 LocalAddr(-18)                                   -> x1
     v170 Load { addr=v169, disp=0, kind=U32 }             -> x1
     terminator Jmp(b55)
@@ -413,15 +413,15 @@ fn ent_pc=6 n_params=0 variadic=false locals=23
   block 74  start_pc=0
     v496 Imm(0)                                           -> x6
     v497 BinopI { op=add, lhs=v494, rhs_imm=0 }           -> x2
-    v498 Mcpy { dst=v461, src=v497, size=24 }             -> x2
+    v498 Mcpy { dst=v461, src=v497, size=24, align=8 }    -> x2
     terminator Jmp(b75)   (exit_acc=v461)
   block 75  start_pc=0
     v465 LocalAddr(-12)                                   -> x1
     v466 LocalAddr(-3)                                    -> x2
-    v467 Mcpy { dst=v466, src=v465, size=24 }             -> x1
+    v467 Mcpy { dst=v466, src=v465, size=24, align=8 }    -> x1
     v468 LocalAddr(-3)                                    -> x1
     v469 LocalAddr(-9)                                    -> x2
-    v470 Mcpy { dst=v469, src=v468, size=24 }             -> x1
+    v470 Mcpy { dst=v469, src=v468, size=24, align=8 }    -> x1
     v471 LocalAddr(-3)                                    -> x1
     v472 Load { addr=v471, disp=0, kind=U32 }             -> x2
     v473 LocalAddr(-9)                                    -> x1
@@ -517,15 +517,15 @@ fn ent_pc=6 n_params=0 variadic=false locals=23
   block 89  start_pc=0
     v569 Imm(48)                                          -> x6
     v570 BinopI { op=add, lhs=v567, rhs_imm=48 }          -> x2
-    v571 Mcpy { dst=v534, src=v570, size=24 }             -> x2
+    v571 Mcpy { dst=v534, src=v570, size=24, align=8 }    -> x2
     terminator Jmp(b90)   (exit_acc=v534)
   block 90  start_pc=0
     v538 LocalAddr(-12)                                   -> x1
     v539 LocalAddr(-3)                                    -> x2
-    v540 Mcpy { dst=v539, src=v538, size=24 }             -> x1
+    v540 Mcpy { dst=v539, src=v538, size=24, align=8 }    -> x1
     v541 LocalAddr(-3)                                    -> x1
     v542 LocalAddr(-9)                                    -> x2
-    v543 Mcpy { dst=v542, src=v541, size=24 }             -> x1
+    v543 Mcpy { dst=v542, src=v541, size=24, align=8 }    -> x1
     v544 LocalAddr(-3)                                    -> x1
     v545 Load { addr=v544, disp=0, kind=U32 }             -> x2
     v546 LocalAddr(-9)                                    -> x1
@@ -639,12 +639,12 @@ fn ent_pc=6 n_params=0 variadic=false locals=23
   block 107  start_pc=0
     v423 BinopI { op=mul, lhs=v455, rhs_imm=24 }          -> x1
     v424 Binop { op=add, lhs=v421, rhs=v423 }             -> x1
-    v425 Mcpy { dst=v200, src=v424, size=24 }             -> x1
+    v425 Mcpy { dst=v200, src=v424, size=24, align=8 }    -> x1
     terminator Jmp(b108)   (exit_acc=v200)
   block 108  start_pc=0
     v204 LocalAddr(-15)                                   -> x1
     v205 LocalAddr(-18)                                   -> x2
-    v206 Mcpy { dst=v205, src=v204, size=24 }             -> x1
+    v206 Mcpy { dst=v205, src=v204, size=24, align=8 }    -> x1
     v207 LocalAddr(-18)                                   -> x1
     v208 Load { addr=v207, disp=0, kind=U32 }             -> x1
     terminator Jmp(b109)

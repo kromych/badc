@@ -229,7 +229,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=74
     v434 Imm(0)                                           -> x0
     v435 LocalAddr(-2)                                    -> x0
     v436 ImmData(40)                                      -> x7
-    v437 Mcpy { dst=v435, src=v42, size=16 }              -> x0
+    v437 Mcpy { dst=v435, src=v42, size=16, align=8 }     -> x0
     v438 LocalAddr(-2)                                    -> x0
     v439 Store { addr=v438, disp=0, value=v427, kind=I64 } -> -
     v440 LocalAddr(-2)                                    -> x0
@@ -301,7 +301,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=74
     v485 Imm(0)                                           -> x0
     v486 LocalAddr(-2)                                    -> x0
     v487 ImmData(40)                                      -> x7
-    v488 Mcpy { dst=v486, src=v42, size=16 }              -> x0
+    v488 Mcpy { dst=v486, src=v42, size=16, align=8 }     -> x0
     v489 LocalAddr(-2)                                    -> x0
     v490 Store { addr=v489, disp=0, value=v478, kind=I64 } -> -
     v491 LocalAddr(-2)                                    -> x0
@@ -382,7 +382,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=74
     v564 Imm(0)                                           -> x0
     v565 LocalAddr(-4)                                    -> x0
     v566 ImmData(40)                                      -> x7
-    v567 Mcpy { dst=v565, src=v42, size=16 }              -> x0
+    v567 Mcpy { dst=v565, src=v42, size=16, align=8 }     -> x0
     v568 LocalAddr(-4)                                    -> x0
     v569 Store { addr=v568, disp=0, value=v559, kind=I64 } -> -
     v570 LocalAddr(-4)                                    -> x0

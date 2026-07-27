@@ -189,7 +189,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
   block 4  start_pc=0
     v9   LocalAddr(-4)                                    -> x0
     v10  ImmData(8)                                       -> x1
-    v11  Mcpy { dst=v9, src=v10, size=28 }                -> x0
+    v11  Mcpy { dst=v9, src=v10, size=28, align=8 }       -> x0
     v12  LocalAddr(-4)                                    -> x7
     v13  Call { target_pc=1, args=[v12], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v14  BinopI { op=ne, lhs=v13, rhs_imm=7 }             -> x0

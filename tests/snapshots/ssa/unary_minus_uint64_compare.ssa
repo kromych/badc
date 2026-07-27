@@ -13,7 +13,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
   block 1  start_pc=0
     v7   LocalAddr(-1)                                    -> x0
     v8   ImmData(8)                                       -> x1
-    v9   Mcpy { dst=v7, src=v8, size=8 }                  -> x0
+    v9   Mcpy { dst=v7, src=v8, size=8, align=8 }         -> x0
     v10  LocalAddr(-1)                                    -> x0
     v11  Load { addr=v10, disp=0, kind=I64 }              -> x0
     v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1

@@ -95,9 +95,14 @@ fn forward_kind(sk: StoreKind, lk: LoadKind) -> LoadForward {
     }
 }
 
-pub(crate) fn run(funcs: &mut [FunctionSsa]) {
+/// `strict_align` withholds the promotion when the copy's proven
+/// alignment is under the 8-byte store the rewrite would emit: the
+/// destination is an arbitrary pointer, so a wider access than the
+/// `Mcpy` itself was allowed to use is exactly the widening the flag
+/// forbids.
+pub(crate) fn run(funcs: &mut [FunctionSsa], strict_align: bool) {
     for func in funcs {
-        run_one(func);
+        run_one(func, strict_align);
     }
 }
 
@@ -129,7 +134,7 @@ impl SlotUse {
     }
 }
 
-fn run_one(func: &mut FunctionSsa) {
+fn run_one(func: &mut FunctionSsa, strict_align: bool) {
     // A copy out of one slot can leave a second slot in the single-store
     // shape (`S r = f();` copies the return slot into r's slot, then reads
     // r). Re-run until stable so a forwarding chain fully collapses; both
@@ -137,7 +142,7 @@ fn run_one(func: &mut FunctionSsa) {
     // instruction count bounds the iterations. The one-word pass runs
     // first each round so it keeps every slot it fully handles.
     let mut rounds = func.insts.len() + 1;
-    while rounds > 0 && (promote_once(func) || promote_pieces_once(func)) {
+    while rounds > 0 && (promote_once(func, strict_align) || promote_pieces_once(func)) {
         rounds -= 1;
     }
 }
@@ -247,7 +252,7 @@ fn multi_block_slots(func: &FunctionSsa, addrs: &BTreeMap<ValueId, (i64, i64)>) 
     multi_block
 }
 
-fn promote_once(func: &mut FunctionSsa) -> bool {
+fn promote_once(func: &mut FunctionSsa, strict_align: bool) -> bool {
     let n = func.insts.len();
     if n == 0 {
         return false;
@@ -322,10 +327,15 @@ fn promote_once(func: &mut FunctionSsa) -> bool {
                         }
                     }
                 }
-                Inst::Mcpy { dst, src, size } => {
+                Inst::Mcpy {
+                    dst,
+                    src,
+                    size,
+                    align,
+                } => {
                     // A whole-slot copy out of the slot is a read.
                     if let Some(&(s, _)) = la_slot.get(src) {
-                        if *size == 8 {
+                        if *size == 8 && !(strict_align && *align < 8) {
                             slots
                                 .entry(s)
                                 .or_insert_with(SlotUse::empty)
@@ -736,7 +746,7 @@ fn scan_block(
                     }
                 }
             }
-            Inst::Mcpy { dst, src, size } => match (tracked(dst), tracked(src)) {
+            Inst::Mcpy { dst, src, size, .. } => match (tracked(dst), tracked(src)) {
                 // A copy between two tracked slots carries the source's
                 // covered pieces to the destination; bytes the source
                 // does not track become unknown there.

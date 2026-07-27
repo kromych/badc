@@ -713,6 +713,7 @@ pub(crate) fn emit_function(
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     no_fp_regs: bool,
+    strict_align: bool,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -733,6 +734,7 @@ pub(crate) fn emit_function(
     let abi = {
         let mut a = target.abi();
         a.no_fp_varargs = no_fp_regs;
+        a.strict_align = strict_align;
         a
     };
     let frame = compute_frame(func, alloc, abi, target);
@@ -4020,7 +4022,19 @@ fn emit_inst(
             dst: d,
             src: s,
             size,
-        } => emit_mcpy(code, dst, *d, *s, *size, alloc, frame, scratch),
+            align,
+        } => emit_mcpy(
+            code,
+            dst,
+            *d,
+            *s,
+            *size,
+            *align,
+            abi.strict_align,
+            alloc,
+            frame,
+            scratch,
+        ),
         Inst::AtomicRmw {
             op,
             addr,
@@ -6021,12 +6035,37 @@ fn emit_call_indirect(
 /// [dst]; emits 8-byte ldr/str pairs for whole words and a
 /// ldrb/strb tail for any sub-word remainder. The defined value
 /// is `dst` -- mirrors C's `memcpy(dst, src, size)` return.
+/// One load / store pair of `width` bytes (8, 4, 2 or 1) moving
+/// `[sbase + off]` to `[dbase + off]` through `temp`.
+fn emit_copy_unit(code: &mut Vec<u8>, width: u32, temp: Reg, sbase: Reg, dbase: Reg, off: u32) {
+    let (ld, st) = match width {
+        8 => (enc_ldr_imm(temp, sbase, off), enc_str_imm(temp, dbase, off)),
+        4 => (
+            super::encode::enc_ldr32_imm(temp, sbase, off),
+            super::encode::enc_str32_imm(temp, dbase, off),
+        ),
+        2 => (
+            enc_ldrh_imm(temp, sbase, off),
+            enc_strh_imm(temp, dbase, off),
+        ),
+        _ => (
+            enc_ldrb_imm(temp, sbase, off),
+            enc_strb_imm(temp, dbase, off),
+        ),
+    };
+    emit(code, ld);
+    emit(code, st);
+}
+
+#[allow(clippy::too_many_arguments)]
 fn emit_mcpy(
     code: &mut Vec<u8>,
     dst_place: Place,
     dst_val: u32,
     src_val: u32,
     size: i64,
+    align: u32,
+    strict_align: bool,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
@@ -6081,15 +6120,17 @@ fn emit_mcpy(
     // exceed that must advance the base pointers. `WINDOW` is 8-aligned and
     // below 4096, keeping every word and tail offset in range and letting a
     // single `add` (12-bit immediate) step both bases between windows.
+    // Below 4096 the narrower units reach it too: their scaled immediates
+    // cover 8190 (halfword) and 4095 (byte).
     const WINDOW: u32 = 4088;
+    let unit = super::super::access_chunk(align, strict_align, 8);
     let copy_run = |code: &mut Vec<u8>, sbase: Reg, dbase: Reg, run: u32| {
-        let words = run / 8;
+        let words = run / unit;
         for w in 0..words {
-            let off = w * 8;
-            emit(code, enc_ldr_imm(temp, sbase, off));
-            emit(code, enc_str_imm(temp, dbase, off));
+            let off = w * unit;
+            emit_copy_unit(code, unit, temp, sbase, dbase, off);
         }
-        let tail_start = words * 8;
+        let tail_start = words * unit;
         for i in 0..(run - tail_start) {
             let off = tail_start + i;
             emit(code, enc_ldrb_imm(temp, sbase, off));

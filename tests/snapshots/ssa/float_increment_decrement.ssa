@@ -137,7 +137,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
   block 18  start_pc=0
     v96  LocalAddr(-2)                                    -> x0
     v97  ImmData(16)                                      -> x1
-    v98  Mcpy { dst=v96, src=v97, size=16 }               -> x0
+    v98  Mcpy { dst=v96, src=v97, size=16, align=8 }      -> x0
     v99  LocalAddr(-2)                                    -> x0
     v100 Load { addr=v99, disp=0, kind=F32 }              -> d0 [f32]
     v101 Imm(4607182418800017408)                         -> x1
@@ -191,7 +191,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
   block 24  start_pc=0
     v138 LocalAddr(-5)                                    -> x0
     v139 ImmData(32)                                      -> x1
-    v140 Mcpy { dst=v138, src=v139, size=24 }             -> x0
+    v140 Mcpy { dst=v138, src=v139, size=24, align=8 }    -> x0
     v141 LocalAddr(-5)                                    -> x0
     v142 Imm(8)                                           -> x1
     v143 BinopI { op=add, lhs=v141, rhs_imm=8 }           -> x1

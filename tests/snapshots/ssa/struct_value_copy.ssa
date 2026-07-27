@@ -19,7 +19,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v13  Store { addr=v11, disp=4, value=v9, kind=I32 }   -> -
     v14  LocalAddr(-2)                                    -> x0
     v15  LocalAddr(-1)                                    -> x1
-    v16  Mcpy { dst=v14, src=v15, size=8 }                -> x0
+    v16  Mcpy { dst=v14, src=v15, size=8, align=4 }       -> x0
     v17  LocalAddr(-2)                                    -> x0
     v18  Load { addr=v17, disp=0, kind=I32 }              -> x0
     v19  BinopI { op=ne, lhs=v18, rhs_imm=1 }             -> x0
@@ -101,7 +101,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v76  Store { addr=v73, disp=4, value=v75, kind=I32 }  -> -
     v77  LocalAddr(-1)                                    -> x0
     v78  LocalAddr(-1)                                    -> x1
-    v79  Mcpy { dst=v77, src=v78, size=8 }                -> x0
+    v79  Mcpy { dst=v77, src=v78, size=8, align=4 }       -> x0
     v80  LocalAddr(-1)                                    -> x0
     v81  Load { addr=v80, disp=0, kind=I32 }              -> x0
     v82  BinopI { op=ne, lhs=v81, rhs_imm=50 }            -> x0

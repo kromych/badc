@@ -1994,6 +1994,36 @@ pub struct NativeOptions {
     /// register file (`-mno-sse` on x86_64, `-mgeneral-regs-only` on
     /// aarch64). See [`Abi::no_fp_varargs`], which this sets.
     pub no_fp_regs: bool,
+    /// Keep every compiler-generated memory access naturally aligned for
+    /// its width (`-mstrict-align`). Code that runs with the MMU off maps
+    /// memory as Device type, where an unaligned access raises an
+    /// alignment fault rather than being fixed up in hardware. The
+    /// byte-moving lowerings (aggregate copy, by-value aggregate argument
+    /// and return marshalling) then cap their transfer width at the
+    /// alignment the operand types guarantee instead of using 8-byte
+    /// units. See [`access_chunk`].
+    pub strict_align: bool,
+}
+
+/// Widest transfer unit a byte-moving lowering may use over storage of
+/// alignment `align`, capped at `max` bytes. Without `strict_align` the
+/// full `max` applies: the targets fix unaligned accesses up in
+/// hardware. With it, the unit is the largest power of two that both
+/// divides `align` and does not exceed `max`, so every access the
+/// sequence emits is naturally aligned.
+pub(crate) fn access_chunk(align: u32, strict_align: bool, max: u32) -> u32 {
+    debug_assert!(max.is_power_of_two());
+    if !strict_align {
+        return max;
+    }
+    // A non-power-of-two alignment guarantees only the power of two
+    // below it.
+    let usable = if align == 0 {
+        1
+    } else {
+        1u32 << (u32::BITS - 1 - align.leading_zeros())
+    };
+    usable.min(max)
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -2045,6 +2075,7 @@ impl NativeOptions {
             inline_cap: 64,
             bss_segregate: true,
             no_fp_regs: false,
+            strict_align: false,
         }
     }
 
@@ -2444,6 +2475,10 @@ pub(crate) struct Abi {
     /// Per-run (from [`NativeOptions::no_fp_regs`]), not a `Target::abi`
     /// row property.
     pub no_fp_varargs: bool,
+    /// Every compiler-generated memory access must be naturally aligned
+    /// for its width. Per-run (from [`NativeOptions::strict_align`]), not
+    /// a `Target::abi` row property; see [`access_chunk`].
+    pub strict_align: bool,
 }
 
 impl Abi {
@@ -2524,6 +2559,7 @@ impl Target {
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
+                strict_align: false,
             },
             Target::LinuxAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -2534,6 +2570,7 @@ impl Target {
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
+                strict_align: false,
             },
             Target::LinuxX64 => Abi {
                 arch: Arch::X86_64,
@@ -2544,6 +2581,7 @@ impl Target {
                 position_indexed_args: false,
                 variadic_zero_xmm_count: true,
                 no_fp_varargs: false,
+                strict_align: false,
             },
             Target::WindowsX64 => Abi {
                 arch: Arch::X86_64,
@@ -2554,6 +2592,7 @@ impl Target {
                 position_indexed_args: true,
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
+                strict_align: false,
             },
             Target::WindowsAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -2564,6 +2603,7 @@ impl Target {
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
+                strict_align: false,
             },
         }
     }

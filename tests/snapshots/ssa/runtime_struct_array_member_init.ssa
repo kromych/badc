@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=22
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-21)                                   -> x0
     v2   ImmData(79)                                      -> x1
-    v3   Mcpy { dst=v1, src=v2, size=168 }                -> x0
+    v3   Mcpy { dst=v1, src=v2, size=168, align=1 }       -> x0
     v4   ImmData(39)                                      -> x0
     v5   LocalAddr(-21)                                   -> x1
     v6   Store { addr=v5, disp=0, value=v4, kind=I64 }    -> -

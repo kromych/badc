@@ -186,7 +186,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
                     *e = (*e).max(off + *disp as i64 + 8);
                 }
             }
-            Inst::Mcpy { dst, src, size } => {
+            Inst::Mcpy { dst, src, size, .. } => {
                 if let Some(&(base, off)) = la_base.get(dst) {
                     let e = extent.entry(base).or_insert(0);
                     *e = (*e).max(off + *size);

@@ -1255,8 +1255,14 @@ mod tests {
             thread_jumps(&mut f, &mut JumpChains::default());
             start.elapsed().as_secs_f64()
         };
-        let small = (0..3).map(|_| run(8000)).fold(f64::MAX, f64::min);
-        let large = (0..3).map(|_| run(32000)).fold(f64::MAX, f64::min);
+        // Interleaved so a load excursion on a shared machine skews
+        // both sizes rather than only the later batch; the suite runs
+        // its tests in parallel, so the two are never measured alone.
+        let (mut small, mut large) = (f64::MAX, f64::MAX);
+        for _ in 0..3 {
+            small = small.min(run(8000));
+            large = large.min(run(32000));
+        }
         assert!(
             large < small * 8.0,
             "4x the chain cost {:.1}x, past the 8x headroom over linear",

@@ -3937,8 +3937,14 @@ mod tests {
             );
             t
         };
-        let small = (0..3).map(|_| run_once(500)).fold(f64::MAX, f64::min);
-        let large = (0..3).map(|_| run_once(2000)).fold(f64::MAX, f64::min);
+        // Interleaved so a load excursion on a shared machine skews
+        // both sizes rather than only the later batch; the suite runs
+        // its tests in parallel, so the two are never measured alone.
+        let (mut small, mut large) = (f64::MAX, f64::MAX);
+        for _ in 0..3 {
+            small = small.min(run_once(500));
+            large = large.min(run_once(2000));
+        }
         assert!(
             large < small * 8.0,
             "4x the module cost {:.1}x, past the 8x headroom over linear",

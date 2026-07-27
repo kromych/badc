@@ -785,12 +785,22 @@ mod jit_impl {
         // saw.
         let imports = ResolvedImports::resolve(program)?;
         let mut build = match target {
-            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-                aarch64::lower(program, target, options, &imports, None)?
-            }
-            Target::LinuxX64 | Target::WindowsX64 => {
-                x86_64::lower(program, target, options, &imports, None)?
-            }
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => aarch64::lower(
+                program,
+                target,
+                options,
+                &imports,
+                None,
+                crate::c5::codegen::LowerMode::Full,
+            )?,
+            Target::LinuxX64 | Target::WindowsX64 => x86_64::lower(
+                program,
+                target,
+                options,
+                &imports,
+                None,
+                crate::c5::codegen::LowerMode::Full,
+            )?,
         };
         build.imports = imports;
         build.abi = target.abi();

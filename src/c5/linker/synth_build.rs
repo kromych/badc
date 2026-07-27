@@ -347,6 +347,7 @@ fn synth_program_and_build(
 
     let build = Build {
         orphaned_data: None,
+        stopped_at_data_liveness: false,
         ssa_dump: alloc::string::String::new(),
         asm_sections: Vec::new(),
         asm_section_text_refs: Vec::new(),

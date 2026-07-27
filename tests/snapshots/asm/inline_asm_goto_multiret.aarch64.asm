@@ -13,12 +13,8 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0xb                // =11
-               	sub	sp, sp, #0x10
-               	str	x0, [sp]
                	b	<addr>
-               	add	sp, sp, #0x10
                	b	<addr>
-               	add	sp, sp, #0x10
                	b	<addr>
                	mov	x0, #0x3                // =3
                	cmp	x0, #0x4
@@ -26,22 +22,15 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x16               // =22
-               	sub	sp, sp, #0x10
-               	str	x0, [sp]
                	nop
-               	add	sp, sp, #0x10
                	mov	x0, #0x5                // =5
                	cmp	x0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	mov	x0, #0x21               // =33
-               	sub	sp, sp, #0x10
-               	str	x0, [sp]
                	b	<addr>
-               	add	sp, sp, #0x10
                	b	<addr>
-               	add	sp, sp, #0x10
                	b	<addr>
                	mov	x0, #0x8                // =8
                	cmp	x0, #0x9

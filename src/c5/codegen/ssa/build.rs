@@ -163,6 +163,8 @@ impl SsaBuilder {
             is_always_inline: false,
             is_naked: false,
             is_weak: false,
+            is_internal: false,
+            const_params: 0,
             insts: Vec::new(),
             inst_src: Vec::new(),
             blocks: Vec::new(),

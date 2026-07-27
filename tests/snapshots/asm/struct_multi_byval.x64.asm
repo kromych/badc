@@ -39,7 +39,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movslq	0x4(%rax), %rax
                	addq	%rcx, %rax
-               	addq	%rsi, %rax
+               	addq	$0x3e8, %rax            # imm = 0x3E8
                	leaq	-0x18(%rbp), %rcx
                	movslq	(%rcx), %rcx
                	addq	%rcx, %rax
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %rcx
                	movslq	0xc(%rcx), %rcx
                	addq	%rcx, %rax
-               	addq	%r9, %rax
+               	addq	$0x7d0, %rax            # imm = 0x7D0
                	leaq	-0x48(%rbp), %rcx
                	movslq	(%rcx), %rcx
                	addq	%rcx, %rax

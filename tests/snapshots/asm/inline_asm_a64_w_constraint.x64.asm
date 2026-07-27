@@ -32,14 +32,15 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	popq	%rdx
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rdi, (%rax)
+               	movabsq	$0x4045000000000000, %rax # imm = 0x4045000000000000
+               	leaq	-0x8(%rbp), %rcx
+               	leaq	<rip>, %rdx
+               	pushq	%rax
+               	movq	(%rdx), %rax
+               	movq	%rax, (%rcx)
+               	popq	%rax
+               	leaq	-0x8(%rbp), %rcx
+               	movq	%rax, (%rcx)
                	leaq	-0x8(%rbp), %rax
                	movsd	(%rax,%riz), %xmm0
                	addq	$0x10, %rsp

@@ -10,6 +10,7 @@ pub(crate) mod drop_redundant_extend;
 pub(crate) mod fma;
 pub(crate) mod index_fold;
 pub(crate) mod inline;
+pub(crate) mod ipa_const_param;
 pub(crate) mod layout;
 pub(crate) mod prune_unreachable;
 pub(crate) mod remap_blocks;

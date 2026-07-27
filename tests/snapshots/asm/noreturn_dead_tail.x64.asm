@@ -13,13 +13,6 @@ Disassembly of section .text:
 <f>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
-               	cmpq	$0x2a, %rdi
-               	jne	<addr>
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	ud2
                	leaq	<rip>, %rcx
                	movl	$0x5, %eax
                	movl	%eax, (%rcx)

@@ -19,7 +19,6 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%rdi, -0x10(%rbp)
                	movsd	%xmm0, -0x8(%rbp,%riz)
-               	movslq	%esi, %rsi
                	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rax
                	xorps	%xmm1, %xmm1
@@ -32,7 +31,7 @@ Disassembly of section .text:
                	movapd	%xmm1, %xmm0
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	cvttsd2si	%xmm0, %rax
-               	addq	%rsi, %rax
+               	addq	$0x2, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	popq	%r11
@@ -51,15 +50,9 @@ Disassembly of section .text:
                	movq	%r10, -0x10(%rbp)
                	movq	0x88(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
-               	leaq	(%rdi,%rsi), %rax
-               	addq	%rdx, %rax
-               	addq	%rcx, %rax
-               	addq	%r8, %rax
-               	addq	%r9, %rax
-               	movslq	%eax, %rax
-               	leaq	-0x10(%rbp), %rcx
-               	movq	(%rcx), %rcx
-               	addq	%rax, %rcx
+               	leaq	-0x10(%rbp), %rax
+               	movq	(%rax), %rax
+               	leaq	0x15(%rax), %rcx
                	leaq	-0x10(%rbp), %rax
                	movsd	0x8(%rax,%riz), %xmm0
                	cvttsd2si	%xmm0, %rax

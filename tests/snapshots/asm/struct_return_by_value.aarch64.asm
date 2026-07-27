@@ -69,17 +69,14 @@ Disassembly of section .text:
                	ret
 
 <small_round>:
-               	add	x1, x0, #0x1
-               	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x1, w1
-               	sxtw	x0, w1
+               	mov	x0, #0x7                // =7
                	ret
 
 <big_round>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
+               	mov	x0, #0x5                // =5
                	sub	x8, x29, #0x18
                	bl	<addr>
                	sub	x0, x29, #0x18

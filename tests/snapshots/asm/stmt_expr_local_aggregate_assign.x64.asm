@@ -26,13 +26,10 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rdx
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
-               	movl	%edi, %eax
-               	movl	$0xfffffff0, %r11d      # imm = 0xFFFFFFF0
-               	andq	%r11, %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movl	(%rcx), %ecx
-               	andq	$0xf, %rcx
-               	orq	%rcx, %rax
+               	leaq	-0x8(%rbp), %rax
+               	movl	(%rax), %eax
+               	andq	$0xf, %rax
+               	orq	$0xa0, %rax
                	movl	%eax, %eax
                	addq	$0x10, %rsp
                	popq	%rbp

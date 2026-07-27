@@ -28,19 +28,20 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Jmp(b2)   (exit_acc=v20)
   block 2  start_pc=0
     v22  Imm(168)                                         -> x0
-    v23  Imm(0)                                           -> x0
-    v24  Imm(168)                                         -> x0
-    v25  Imm(42)                                          -> x0
-    v26  Imm(180388626432)                                -> x0
-    v27  Imm(42)                                          -> x0
-    v28  Imm(0)                                           -> x0
-    v29  Imm(180388626432)                                -> x0
-    v30  Imm(42)                                          -> x0
-    v31  Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v31)
+    v23  Imm(168)                                         -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Imm(168)                                         -> x0
+    v26  Imm(42)                                          -> x0
+    v27  Imm(180388626432)                                -> x0
+    v28  Imm(42)                                          -> x0
+    v29  Imm(0)                                           -> x0
+    v30  Imm(180388626432)                                -> x0
+    v31  Imm(42)                                          -> x0
+    v32  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v32)
   block 3  start_pc=0
-    v33  Imm(42)                                          -> x0
-    terminator Return(v33)   (exit_acc=v33)
+    v34  Imm(42)                                          -> x0
+    terminator Return(v34)   (exit_acc=v34)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

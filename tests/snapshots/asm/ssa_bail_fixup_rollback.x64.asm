@@ -371,18 +371,8 @@ Disassembly of section .text:
                	movq	%r14, 0x18(%rsp)
                	movq	%rdi, %r12
                	movq	%r8, %r14
-               	movq	%rdx, %r13
-               	movq	%rsi, %rbx
-               	testq	%r13, %r13
-               	jne	<addr>
-               	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	movq	0x18(%rsp), %r14
-               	addq	$0x80, %rsp
-               	popq	%rbp
-               	retq
+               	xorq	%rbx, %rbx
+               	movl	$0x40, %r13d
                	leaq	-0x10(%rbp), %rax
                	addq	$0x0, %rax
                	xorq	%rdx, %rdx

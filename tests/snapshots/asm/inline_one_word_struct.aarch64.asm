@@ -13,16 +13,14 @@ Disassembly of section .text:
 
 <sum_sr>:
                	mov	x3, x0
-               	mov	x4, x1
-               	sxtw	x4, w4
                	mov	x0, #0x0                // =0
                	mov	x2, x0
                	b	<addr>
-               	ldr	x5, [x3, x1, lsl #3]
-               	add	x2, x2, x5
+               	ldr	x4, [x3, x1, lsl #3]
+               	add	x2, x2, x4
                	add	x0, x1, #0x1
                	sxtw	x1, w0
-               	cmp	x1, x4
+               	cmp	x1, #0x5
                	b.lt	<addr>
                	mov	x0, x2
                	ret

@@ -923,6 +923,37 @@ fn in_block_mask(func: &FunctionSsa) -> Vec<bool> {
     mask
 }
 
+/// Parameter cells a splice of `callee` has to give frame slots of its
+/// own: those the body spills and then reads back through a slot.
+fn relocated_param_cells(callee: &FunctionSsa, callee_used: &[bool]) -> BTreeSet<i64> {
+    let spilled = spilled_param_cells(callee);
+    callee
+        .insts
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, inst)| match inst {
+            Inst::LocalAddr(s) if *s >= 2 => Some(*s),
+            Inst::LoadLocal { off, volatile, .. } | Inst::StoreLocal { off, volatile, .. }
+                if *off >= 2 && (*volatile || callee_used[idx]) =>
+            {
+                Some(*off)
+            }
+            _ => None,
+        })
+        .filter(|s| spilled.contains(s))
+        .collect()
+}
+
+/// Frame slots one splice of `callee` relocates into the caller: the
+/// callee's own locals plus the parameter cells it keeps in the frame.
+/// This is what the splice allocates, so it is what the frame gates
+/// measure; a body that reads its parameters out of the argument values
+/// and holds nothing in the frame costs nothing.
+fn splice_frame_cost(callee: &FunctionSsa) -> i64 {
+    let used = value_use_mask(callee);
+    callee.locals + relocated_param_cells(callee, &used).len() as i64
+}
+
 /// Per-value "referenced by an operand" mask: instruction operands,
 /// terminator values (Return payload, Bz / Bnz cond), block exit
 /// accumulators, and phi-incoming values all mark their value used.
@@ -1358,22 +1389,7 @@ fn splice_multi_block(
     // established drop; the candidate filter rejects live accesses to
     // unspilled cells.
     let callee_used = value_use_mask(callee);
-    let spilled = spilled_param_cells(callee);
-    let param_cells: alloc::collections::BTreeSet<i64> = callee
-        .insts
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, inst)| match inst {
-            Inst::LocalAddr(s) if *s >= 2 => Some(*s),
-            Inst::LoadLocal { off, volatile, .. } | Inst::StoreLocal { off, volatile, .. }
-                if *off >= 2 && (*volatile || callee_used[idx]) =>
-            {
-                Some(*off)
-            }
-            _ => None,
-        })
-        .filter(|s| spilled.contains(s))
-        .collect();
+    let param_cells = relocated_param_cells(callee, &callee_used);
     // Parameter cells whose reads resolve to the call-site argument
     // instead of a frame slot; disjoint from `param_cells`.
     let forwarded = forwarded_param_cells(callee, &callee_used);
@@ -2088,6 +2104,8 @@ fn splice_multi_block(
         is_always_inline: original.is_always_inline,
         is_naked: original.is_naked,
         is_weak: original.is_weak,
+        is_internal: original.is_internal,
+        const_params: original.const_params,
         insts: new_insts,
         inst_src: new_inst_src,
         blocks: new_blocks,
@@ -2602,7 +2620,7 @@ fn inline_caller(
                     && (c.ret_agg.is_none() || *ret_slot_local != 0)
                 {
                     if !c.is_always_inline
-                        && caller.locals + c.locals + c.n_params as i64 > CALLER_FRAME_ABS_SLOTS
+                        && caller.locals + splice_frame_cost(c) > CALLER_FRAME_ABS_SLOTS
                     {
                         unaffordable.insert(*target_pc);
                         continue;
@@ -2734,14 +2752,16 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
                 local.retain(|_, c| c.is_inline);
             }
             // Once a caller's frame has grown past CALLER_FRAME_SLOTS and
-            // multiplied its pre-inline size, keep only a mandatory
-            // request. The absolute bound is enforced per splice (see
+            // multiplied its pre-inline size, keep a mandatory request and
+            // any candidate whose splice relocates no frame slots -- the
+            // gate bounds frame growth, and such a candidate causes none.
+            // The absolute bound is enforced per splice (see
             // `inline_caller_multi_block`), where the growth is known
             // exactly.
             if caller.locals > CALLER_FRAME_SLOTS
                 && caller.locals > orig_locals[fi].saturating_mul(FRAME_GROWTH_FACTOR)
             {
-                local.retain(|_, c| c.is_always_inline);
+                local.retain(|_, c| c.is_always_inline || splice_frame_cost(c) == 0);
             }
             if local.is_empty() {
                 continue;
@@ -3040,45 +3060,52 @@ mod tests {
     }
 
     /// The caller frame gate: once a caller's locals exceed both bounds,
-    /// only an always_inline callee is still spliced.
+    /// an optional callee that relocates frame slots is no longer
+    /// spliced. A mandatory request is honoured, and so is a callee that
+    /// relocates no slots -- the gate bounds frame growth, which such a
+    /// callee does not cause.
     #[test]
     fn caller_frame_gate_blocks_optional_inlining() {
         let abi = Target::LinuxX64.abi();
         for always in [false, true] {
-            let leaf = FunctionSsa {
-                ent_pc: 600,
-                is_inline: always,
-                is_always_inline: always,
-                insts: alloc::vec![Inst::Imm(7)],
-                inst_src: alloc::vec![(0, 0)],
-                f32_values: alloc::vec![false],
-                blocks: alloc::vec![Block {
-                    start_pc: 0,
-                    inst_range: 0..1,
-                    terminator: Terminator::Return(0),
-                    exit_acc: 0,
-                }],
-                ..Default::default()
-            };
-            // Iteration 1 splices the 400-slot callee (gate not yet hit),
-            // materializing its inner call; iteration 2 re-checks the gate
-            // at 402 slots and admits only a mandatory request.
-            let mut funcs = alloc::vec![
-                multi_call_caller(1, 2, 500, 1),
-                calling_callee(500, 400, 600),
-                leaf,
-            ];
-            run(&mut funcs, 32, abi);
-            let leaf_calls = funcs[0]
-                .insts
-                .iter()
-                .filter(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 600))
-                .count();
-            assert_eq!(
-                leaf_calls,
-                usize::from(!always),
-                "always={always}: gate must block exactly the optional case"
-            );
+            for leaf_locals in [0, 4] {
+                let leaf = FunctionSsa {
+                    ent_pc: 600,
+                    is_inline: always,
+                    is_always_inline: always,
+                    locals: leaf_locals,
+                    insts: alloc::vec![Inst::Imm(7)],
+                    inst_src: alloc::vec![(0, 0)],
+                    f32_values: alloc::vec![false],
+                    blocks: alloc::vec![Block {
+                        start_pc: 0,
+                        inst_range: 0..1,
+                        terminator: Terminator::Return(0),
+                        exit_acc: 0,
+                    }],
+                    ..Default::default()
+                };
+                // Iteration 1 splices the 400-slot callee (gate not yet
+                // hit), materializing its inner call; iteration 2
+                // re-checks the gate at 402 slots.
+                let mut funcs = alloc::vec![
+                    multi_call_caller(1, 2, 500, 1),
+                    calling_callee(500, 400, 600),
+                    leaf,
+                ];
+                run(&mut funcs, 32, abi);
+                let leaf_calls = funcs[0]
+                    .insts
+                    .iter()
+                    .filter(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 600))
+                    .count();
+                assert_eq!(
+                    leaf_calls,
+                    usize::from(!always && leaf_locals > 0),
+                    "always={always} leaf_locals={leaf_locals}: \
+                     gate must block exactly the optional frame-growing case"
+                );
+            }
         }
     }
 

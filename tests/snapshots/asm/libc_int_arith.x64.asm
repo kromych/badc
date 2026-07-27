@@ -13,7 +13,8 @@ Disassembly of section .text:
 <strtoimax>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edx, %rdx
+               	xorq	%rsi, %rsi
+               	movl	$0xa, %edx
                	xorl	%eax, %eax
                	callq	<addr>
                	popq	%rbp
@@ -22,7 +23,8 @@ Disassembly of section .text:
 <strtoumax>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edx, %rdx
+               	xorq	%rsi, %rsi
+               	movl	$0x10, %edx
                	xorl	%eax, %eax
                	callq	<addr>
                	popq	%rbp

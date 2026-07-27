@@ -29,20 +29,18 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x30]!
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x5, x1
+               	mov	x2, x1
+               	mov	x4, x3
+               	mov	x3, #0x5                // =5
+               	mov	x5, #0x9                // =9
                	mov	x1, #0x0                // =0
                	stur	w1, [x29, #-0x8]
                	ldr	x1, [x0]
                	sub	x6, x29, #0x8
-               	add	x5, x5, #0x10
-               	add	x3, x3, #0x10
+               	add	x2, x2, #0x10
+               	add	x4, x4, #0x10
                	mov	x9, x1
                	mov	x1, x6
-               	mov	x16, x4
-               	mov	x4, x3
-               	mov	x3, x2
-               	mov	x2, x5
-               	mov	x5, x16
                	blr	x9
                	ldursw	x1, [x29, #-0x8]
                	add	x0, x0, x1

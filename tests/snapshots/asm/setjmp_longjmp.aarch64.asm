@@ -15,7 +15,7 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	sxtw	x1, w1
+               	mov	x1, #0x7                // =7
                	str	w1, [x0, #0x200]
                	bl	<addr>
                	uxtb	w0, w0

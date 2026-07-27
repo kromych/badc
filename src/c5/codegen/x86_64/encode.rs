@@ -1865,6 +1865,17 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::unroll::run (x86_64)", || {
             crate::c5::codegen::passes::unroll::run(&mut ssa_funcs);
         });
+        // Seed a parameter every call site of an internal function
+        // agrees a constant for. After unrolling and before inlining:
+        // a callee the inliner absorbs gets the same constant by
+        // argument substitution, so this is what reaches the bodies
+        // that stay out of line.
+        super::ssa::emit_common::time_pass("passes::ipa_const_param::run (x86_64)", || {
+            let escaping = crate::c5::codegen::passes::ipa_const_param::escaping_functions(
+                &ssa_funcs, program,
+            );
+            crate::c5::codegen::passes::ipa_const_param::run(&mut ssa_funcs, &escaping);
+        });
         // Inline after mem2reg so the candidate filter sees the
         // promoted form: dead cell loads / stores are gone and the
         // callee's body reads its parameters via `ParamRef`.

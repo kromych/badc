@@ -40,8 +40,8 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0xa0]
                	add	x29, sp, #0xa0
-               	mov	x2, #0x100000           // =1048576
-               	add	x17, x2, #0xf
+               	mov	x0, #0x100000           // =1048576
+               	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x1, sp
                	sub	x1, x1, x17
@@ -52,15 +52,16 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x1
-               	mov	x5, #0x7                // =7
+               	mov	x4, #0x7                // =7
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	add	x3, x1, x0
-               	mov	x4, #0x7                // =7
-               	strb	w4, [x3]
+               	add	x2, x1, x0
+               	mov	x3, #0x7                // =7
+               	strb	w3, [x2]
                	mov	x17, #0x1000            // =4096
                	add	x0, x0, x17
-               	cmp	x0, x2
+               	mov	x17, #0x100000          // =1048576
+               	cmp	x0, x17
                	b.lt	<addr>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xf, lsl #16
@@ -77,7 +78,7 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
                	mov	x3, #0x3                // =3
-               	mov	x4, #0x4                // =4
+               	mov	x5, #0x4                // =4
                	mov	x6, #0x5                // =5
                	mov	x7, #0x6                // =6
                	mov	x8, #0x8                // =8
@@ -93,11 +94,12 @@ Disassembly of section .text:
                	mov	x0, x1
                	mov	x1, x2
                	mov	x2, x3
-               	mov	x3, x4
-               	mov	x4, x6
-               	mov	x6, x5
+               	mov	x3, x5
                	mov	x5, x7
                	mov	x7, x8
+               	mov	x16, x6
+               	mov	x6, x4
+               	mov	x4, x16
                	blr	x11
                	add	sp, sp, #0x10
                	cmp	x20, #0xf

@@ -11,7 +11,49 @@ Disassembly of section .text:
                	ud2
 
 <via_global_scalar>:
+               	movl	$0x9, %eax
+               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rsi
+               	pushq	%rax
+               	movq	(%rsi), %rax
+               	movq	%rax, (%rdx)
+               	movzbq	0x8(%rsi), %rax
+               	movb	%al, 0x8(%rdx)
+               	movzbq	0x9(%rsi), %rax
+               	movb	%al, 0x9(%rdx)
+               	movzbq	0xa(%rsi), %rax
+               	movb	%al, 0xa(%rdx)
+               	movzbq	0xb(%rsi), %rax
+               	movb	%al, 0xb(%rdx)
+               	popq	%rax
+               	movl	%eax, (%rcx)
+               	movslq	%eax, %rax
+               	retq
+
+<via_global_member>:
+               	movl	$0x3, %ecx
                	leaq	<rip>, %rax
+               	leaq	<rip>, %rdx
+               	pushq	%rcx
+               	movq	(%rdx), %rcx
+               	movq	%rcx, (%rax)
+               	movzbq	0x8(%rdx), %rcx
+               	movb	%cl, 0x8(%rax)
+               	movzbq	0x9(%rdx), %rcx
+               	movb	%cl, 0x9(%rax)
+               	movzbq	0xa(%rdx), %rcx
+               	movb	%cl, 0xa(%rax)
+               	movzbq	0xb(%rdx), %rcx
+               	movb	%cl, 0xb(%rax)
+               	popq	%rcx
+               	movq	%rax, %rdx
+               	movb	%cl, (%rax)
+               	movslq	0x4(%rax), %rax
+               	retq
+
+<via_deref>:
+               	movl	$0x1, %eax
                	leaq	<rip>, %rcx
                	leaq	<rip>, %rdx
                	pushq	%rax
@@ -26,47 +68,8 @@ Disassembly of section .text:
                	movzbq	0xb(%rdx), %rax
                	movb	%al, 0xb(%rcx)
                	popq	%rax
-               	movl	%edi, (%rax)
-               	movslq	%edi, %rax
-               	retq
-
-<via_global_member>:
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movzbq	0x8(%rcx), %rdx
-               	movb	%dl, 0x8(%rax)
-               	movzbq	0x9(%rcx), %rdx
-               	movb	%dl, 0x9(%rax)
-               	movzbq	0xa(%rcx), %rdx
-               	movb	%dl, 0xa(%rax)
-               	movzbq	0xb(%rcx), %rdx
-               	movb	%dl, 0xb(%rax)
-               	popq	%rdx
-               	movq	%rax, %rcx
-               	movb	%dil, (%rax)
-               	movslq	0x4(%rax), %rax
-               	retq
-
-<via_deref>:
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movzbq	0x8(%rcx), %rdx
-               	movb	%dl, 0x8(%rax)
-               	movzbq	0x9(%rcx), %rdx
-               	movb	%dl, 0x9(%rax)
-               	movzbq	0xa(%rcx), %rdx
-               	movb	%dl, 0xa(%rax)
-               	movzbq	0xb(%rcx), %rdx
-               	movb	%dl, 0xb(%rax)
-               	popq	%rdx
-               	movb	%dil, (%rsi)
-               	movsbq	%dil, %rax
+               	movb	%al, (%rsi)
+               	movsbq	%al, %rax
                	retq
 
 <main>:

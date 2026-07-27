@@ -91,13 +91,14 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%rdx, -0x10(%rbp)
                	movq	%rcx, -0x8(%rbp)
-               	movq	%r8, %rcx
-               	movq	%r9, %r8
-               	movslq	%r8d, %r8
-               	leaq	-0x10(%rbp), %rax
+               	xorq	%rax, %rax
+               	movl	$0x1, %edx
+               	movl	$0x5, %ecx
+               	leaq	-0x10(%rbp), %rsi
                	movq	%rdi, %r9
-               	movq	%rsi, %rdi
-               	movq	%rax, %rsi
+               	movq	%rax, %rdi
+               	movq	%rcx, %r8
+               	movq	%rdx, %rcx
                	movq	0x8(%rsi), %rdx
                	movq	(%rsi), %rsi
                	callq	*%r9
@@ -117,14 +118,13 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movsd	%xmm0, -0x10(%rbp,%riz)
                	movsd	%xmm1, -0x8(%rbp,%riz)
-               	movq	%rsi, %rdx
-               	movslq	%edx, %rdx
+               	movl	$0x1, %esi
                	leaq	-0x10(%rbp), %rax
                	movq	%rdi, %rcx
                	movq	%rax, %r10
                	movsd	(%r10,%riz), %xmm0
                	movsd	0x8(%r10,%riz), %xmm1
-               	movq	%rdx, %rdi
+               	movq	%rsi, %rdi
                	callq	*%rcx
                	addq	$0x10, %rsp
                	popq	%rbp

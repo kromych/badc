@@ -4,21 +4,21 @@ fn ent_pc=0 n_params=8 variadic=false locals=9
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(1, kind=I32)                            -> x6
+    v1   Imm(1000)                                        -> x0
     v2   Imm(0)                                           -> x0
-    v3   ParamRef(5, kind=I32)                            -> x9
+    v3   Imm(2000)                                        -> x0
     v4   Imm(0)                                           -> x0
     v5   ImmData(104)                                     -> x2
     v6   LocalAddr(-1)                                    -> x0
     v7   Load { addr=v6, disp=0, kind=I32 }               -> x1
     v8   LocalAddr(-1)                                    -> x0
-    v9   BinopI { op=add, lhs=v8, rhs_imm=4 }             -> x7
+    v9   BinopI { op=add, lhs=v8, rhs_imm=4 }             -> x6
     v10  Load { addr=v8, disp=4, kind=I32 }               -> x0
     v11  Binop { op=add, lhs=v7, rhs=v10 }                -> x0
     v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
     v13  Extend { value=v11, kind=I32 }                   -> x1
     v14  LoadLocal { off=3, kind=I32 }                    -> x1
-    v15  Binop { op=add, lhs=v11, rhs=v1 }                -> x0
+    v15  BinopI { op=add, lhs=v11, rhs_imm=1000 }         -> x0
     v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x1
     v17  Extend { value=v15, kind=I32 }                   -> x1
     v18  LocalAddr(-3)                                    -> x1
@@ -67,7 +67,7 @@ fn ent_pc=0 n_params=8 variadic=false locals=9
     v61  BinopI { op=shl, lhs=v60, rhs_imm=32 }           -> x1
     v62  Extend { value=v60, kind=I32 }                   -> x1
     v63  LoadLocal { off=7, kind=I32 }                    -> x1
-    v64  Binop { op=add, lhs=v60, rhs=v3 }                -> x0
+    v64  BinopI { op=add, lhs=v60, rhs_imm=2000 }         -> x0
     v65  BinopI { op=shl, lhs=v64, rhs_imm=32 }           -> x1
     v66  Extend { value=v64, kind=I32 }                   -> x1
     v67  LocalAddr(-9)                                    -> x1

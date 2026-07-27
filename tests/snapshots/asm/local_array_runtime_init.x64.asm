@@ -11,11 +11,10 @@ Disassembly of section .text:
                	ud2
 
 <probe_short>:
-               	movslq	%edi, %rdi
                	leaq	<rip>, %rax
-               	movzwq	(%rax,%rdi,2), %rcx
+               	movzwq	0xa(%rax), %rcx
                	leaq	<rip>, %rax
-               	movzwq	(%rax,%rdi,2), %rdx
+               	movzwq	0xa(%rax), %rdx
                	movq	%rcx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
@@ -27,24 +26,11 @@ Disassembly of section .text:
                	retq
 
 <probe_int>:
-               	leaq	(%rdi,%rsi), %rax
-               	movq	%rdi, %rcx
-               	subq	%rsi, %rcx
-               	movq	%rdi, %rdx
-               	imulq	%rsi, %rdx
-               	addq	%rcx, %rax
-               	addq	%rdx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movl	$0x12, %eax
                	retq
 
 <probe_long>:
-               	leaq	(%rdi,%rsi), %rcx
-               	movq	%rdi, %rdx
-               	subq	%rsi, %rdx
-               	leaq	(%rcx,%rdx), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movl	$0x14, %eax
                	retq
 
 <probe_char>:
@@ -63,15 +49,13 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rdx
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
-               	leaq	0x61(%rdi), %rax
-               	movslq	%eax, %rcx
-               	leaq	-0x8(%rbp), %rax
-               	movb	%cl, (%rax)
+               	movl	$0x63, %eax
+               	leaq	-0x8(%rbp), %rcx
+               	movb	%al, (%rcx)
                	movl	$0x62, %ecx
                	leaq	-0x8(%rbp), %rax
                	movb	%cl, 0x1(%rax)
-               	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rcx
+               	movl	$0x3, %ecx
                	leaq	-0x8(%rbp), %rax
                	movb	%cl, 0x2(%rax)
                	movl	$0x64, %ecx

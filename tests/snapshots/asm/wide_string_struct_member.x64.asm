@@ -11,37 +11,13 @@ Disassembly of section .text:
                	ud2
 
 <check_runtime>:
-               	movslq	%edi, %rdi
-               	xorq	%rax, %rax
-               	movslq	%edi, %rcx
-               	cmpq	%rdi, %rcx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
                	movl	$0x1, %eax
-               	xorq	%rcx, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x1, %ecx
-               	xorq	%rax, %rax
-               	testq	%rcx, %rcx
-               	je	<addr>
                	movl	$0x1, %eax
-               	testq	%rax, %rax
-               	je	<addr>
                	movl	$0x1, %eax
-               	testq	%rax, %rax
-               	je	<addr>
+               	movl	$0x1, %eax
                	xorq	%rax, %rax
-               	movslq	%eax, %rax
+               	xorq	%rax, %rax
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

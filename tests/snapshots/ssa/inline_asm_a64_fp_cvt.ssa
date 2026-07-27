@@ -5,15 +5,16 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(42)                                          -> x0
-    v2   Imm(0)                                           -> x1
-    v3   FpCast { kind=IntToFp, value=v1 }                -> d0
-    v4   Imm(0)                                           -> x0
-    v5   FpCast { kind=FpToInt, value=v3 }                -> x0
-    v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x1
-    v7   Extend { value=v5, kind=I32 }                    -> x1
-    v8   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x0
-    v9   Extend { value=v7, kind=I32 }                    -> x0
-    terminator Return(v9)   (exit_acc=v9)
+    v2   Imm(42)                                          -> x0
+    v3   Imm(0)                                           -> x1
+    v4   FpCast { kind=IntToFp, value=v2 }                -> d0
+    v5   Imm(0)                                           -> x0
+    v6   FpCast { kind=FpToInt, value=v4 }                -> x0
+    v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x1
+    v8   Extend { value=v6, kind=I32 }                    -> x1
+    v9   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x0
+    v10  Extend { value=v8, kind=I32 }                    -> x0
+    terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

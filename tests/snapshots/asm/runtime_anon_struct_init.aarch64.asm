@@ -12,32 +12,26 @@ Disassembly of section .text:
                	brk	#0x1
 
 <check_anon_struct>:
-               	mov	x2, x0
-               	cmp	x2, x2
-               	cset	x0, ne
-               	cmp	x0, #0x0
-               	cset	x3, ne
-               	mov	x0, #0x1                // =1
-               	cbnz	x3, <addr>
+               	mov	x1, x0
                	cmp	x1, x1
-               	cset	x0, ne
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x1                // =1
-               	ret
-               	cmp	x2, x2
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x2, ne
                	mov	x0, #0x1                // =1
                	cbnz	x2, <addr>
+               	mov	x0, #0x0                // =0
+               	cbnz	x0, <addr>
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
+               	mov	x0, #0x1                // =1
+               	ret
                	cmp	x1, x1
                	cset	x0, ne
                	cmp	x0, #0x0
-               	cset	x0, ne
+               	cset	x1, ne
+               	mov	x0, #0x1                // =1
+               	cbnz	x1, <addr>
+               	mov	x0, #0x0                // =0
                	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
                	cbz	x0, <addr>
@@ -51,18 +45,15 @@ Disassembly of section .text:
                	b	<addr>
 
 <check_nested>:
-               	mov	x2, x0
+               	mov	x1, x0
                	mov	x0, #0x1                // =1
-               	cmp	x2, x2
-               	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x2, ne
-               	mov	x0, #0x0                // =0
-               	cbz	x2, <addr>
                	cmp	x1, x1
                	cset	x0, eq
                	cmp	x0, #0x0
-               	cset	x0, ne
+               	cset	x1, ne
+               	mov	x0, #0x0                // =0
+               	cbz	x1, <addr>
+               	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>

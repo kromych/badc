@@ -73,6 +73,8 @@ const COMPILE_SKIPLIST: &[&str] = &[
     "select_operand_guard_folds.c",
     "const_scalar_load_folds.c",
     "unroll_const_trip_index_literal.c",
+    "inline_zero_frame_callee_past_gate.c",
+    "ipa_const_param_guard.c",
 ];
 
 /// Fixtures whose body carries inline asm specific to one ISA. The
@@ -88,6 +90,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_a64_dp.c", "linux-x64"), // aarch64 mul/csel (x86 mul is 1-operand)
     ("inline_asm_a64_sp_operand.c", "linux-x64"), // aarch64 sp-operand add/sub
     ("inline_asm_a64_labels.c", "linux-x64"), // aarch64 local-label branches
+    ("asm_goto_immediate_operand_no_frame.c", "linux-x64"), // aarch64 asm goto + .align 3
     ("inline_asm_a64_barriers.c", "linux-x64"), // aarch64 dmb/dsb/isb/clrex
     ("inline_asm_a64_acqrel.c", "linux-x64"), // aarch64 ldar/stlr via `Q`
     ("inline_asm_a64_llsc.c", "linux-x64"), // aarch64 ldxr/stxr loop via `+Q`
@@ -275,6 +278,8 @@ fn dead_branch_calls_are_eliminated_under_optimize() {
         "select_operand_guard_folds.c",
         "const_scalar_load_folds.c",
         "unroll_const_trip_index_literal.c",
+        "inline_zero_frame_callee_past_gate.c",
+        "ipa_const_param_guard.c",
     ] {
         let src = root.join(name);
         let stem = name.trim_end_matches(".c");

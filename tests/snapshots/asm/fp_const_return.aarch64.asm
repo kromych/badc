@@ -13,18 +13,18 @@ Disassembly of section .text:
 
 <sum_zero>:
                	mov	x2, x0
-               	sxtw	x1, w1
-               	sxtw	x3, w1
+               	mov	x0, #0x8                // =8
+               	sxtw	x3, w0
                	cmp	x3, #0x0
-               	cset	x0, gt
-               	cbz	x0, <addr>
-               	sub	x0, x1, #0x1
-               	sxtw	x0, w0
-               	ldr	x0, [x2, x0, lsl #3]
-               	cmp	x0, #0x0
-               	cset	x0, eq
-               	cbz	x0, <addr>
-               	sub	x1, x3, #0x1
+               	cset	x1, gt
+               	cbz	x1, <addr>
+               	sub	x1, x0, #0x1
+               	sxtw	x1, w1
+               	ldr	x1, [x2, x1, lsl #3]
+               	cmp	x1, #0x0
+               	cset	x1, eq
+               	cbz	x1, <addr>
+               	sub	x0, x3, #0x1
                	b	<addr>
                	b	<addr>
                	cmp	x3, #0x0
@@ -32,7 +32,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	fmov	d0, x0
                	ret
-               	sub	x0, x1, #0x1
+               	sub	x0, x0, #0x1
                	sxtw	x0, w0
                	ldr	x0, [x2, x0, lsl #3]
                	scvtf	d0, x0

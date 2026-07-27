@@ -45,38 +45,11 @@ Disassembly of section .text:
                	b	<addr>
 
 <check_runtime>:
-               	mov	x2, x1
-               	sxtw	x0, w0
-               	mul	x1, x0, x2
-               	sxtw	x3, w1
-               	mov	x17, #0xff              // =255
-               	and	x1, x0, x17
-               	mov	x17, #0xff              // =255
-               	and	x4, x0, x17
-               	cmp	x1, x4
-               	cset	x1, ne
-               	cbnz	x1, <addr>
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
-               	mul	x1, x0, x2
-               	sxtw	x1, w1
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
-               	cmp	x3, x1
-               	cset	x1, ne
-               	cbz	x1, <addr>
-               	mov	x0, #0xa                // =10
-               	ret
-               	mov	x1, #0x0                // =0
-               	sxtw	x1, w0
-               	cmp	x1, x0
-               	cset	x0, ne
-               	cbz	x0, <addr>
-               	mov	x0, #0xb                // =11
-               	ret
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
                	ret
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

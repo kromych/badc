@@ -12,32 +12,13 @@ Disassembly of section .text:
                	brk	#0x1
 
 <check_runtime>:
-               	mov	x1, x0
-               	sxtw	x1, w1
-               	mov	x0, #0x0                // =0
-               	sxtw	x2, w1
-               	cmp	x2, x1
-               	cset	x1, eq
-               	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
-               	mov	x1, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x1, #0x1                // =1
-               	mov	x0, #0x0                // =0
-               	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
-               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	cbz	x0, <addr>
+               	mov	x0, #0x1                // =1
                	mov	x0, #0x0                // =0
-               	sxtw	x0, w0
+               	mov	x0, #0x0                // =0
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

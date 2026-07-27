@@ -1864,6 +1864,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("attribute_cleanup.c", 0),
     ("array_compound_literal_static_init.c", 0),
     ("const_address_cast_and_arith.c", 0),
+    ("const_addr_same_object_compare.c", 0),
     ("const_conditional_address_init.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
     ("sizeof_abstract_fn_ptr.c", 0),

@@ -2293,9 +2293,9 @@ fn runtime_symbol_offset(build: &Build, name: &str) -> Result<u32, C5Error> {
         .iter()
         .position(|n| n == name)
         .ok_or_else(|| {
-            C5Error::Compile(format!(
+            C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
                 "PE entry stub references `{name}`, which the linked runtime does not define"
-            ))
+            )))
         })?;
     let ent_pc = build.func_ent_pcs[idx];
     Ok(build.pc_to_native[ent_pc] as u32)

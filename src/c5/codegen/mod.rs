@@ -2120,8 +2120,8 @@ impl NativeOptions {
 
 /// Lower the program for `target`, returning the per-arch `Build`
 /// without writing to any container. The emit driver goes through
-/// [`lower_for_data_liveness_probe`] instead; this is the writer tests'
-/// entry, which inspects the lowered bytes directly.
+/// [`lower_for_with_prebuilt`], picking its own [`LowerMode`]; this is
+/// the writer tests' entry, which inspects the lowered bytes directly.
 #[cfg(test)]
 pub(crate) fn lower_for(
     program: &Program,
@@ -2142,24 +2142,9 @@ pub(crate) enum LowerMode {
     /// everything a backend run would have produced for the old layout,
     /// so the probe does not produce it. A report of `None` means the
     /// layout is final and the lowering runs to completion as in
-    /// [`LowerMode::Full`].
+    /// [`LowerMode::Full`]. Only a caller that can act on the report may
+    /// ask for this mode; a stopped probe returns no image.
     DataLivenessProbe,
-}
-
-/// Lower the program for `target`, stopping at the post-inline
-/// data-liveness report (see [`LowerMode::DataLivenessProbe`]) and
-/// returning the per-arch `Build` without writing to any container.
-///
-/// Resolves the import set once up front (so the per-arch lowerings
-/// share an enumeration with the writer) and stitches it onto the
-/// returned [`Build`] before handing it back.
-#[cfg(feature = "native-emit")]
-pub(crate) fn lower_for_data_liveness_probe(
-    program: &Program,
-    target: Target,
-    options: NativeOptions,
-) -> Result<Build, C5Error> {
-    lower_for_with_prebuilt(program, target, options, None, LowerMode::DataLivenessProbe)
 }
 
 /// Write out a build's buffered `--dump-ssa` text, once the build is known

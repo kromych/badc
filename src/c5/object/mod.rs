@@ -452,19 +452,31 @@ pub fn emit_native_with_options_named(
 /// Only the report survives that first lowering -- the code it emits is
 /// against the `.data` the recompaction replaces -- so the first pass
 /// runs as a probe and stops there, leaving one backend run either way.
+/// It probes only when the compaction produced a plan to replay the
+/// report against. A compaction that declined (a unit with no function
+/// to walk, an empty `.data`) has nothing to narrow, and a probe that
+/// stopped anyway would leave the writer a `Build` with no image.
 #[cfg(feature = "native-emit")]
 fn compact_and_lower(
     program: &Program,
     target: Target,
     options: NativeOptions,
 ) -> Result<(Program, i64, Build), C5Error> {
+    use crate::c5::codegen::LowerMode;
     use crate::c5::codegen::ssa::shadow;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
     let first = shadow::compact_program_data(program, target, segregate, options.optimize)?;
+    let mode = match first.plan {
+        Some(_) => LowerMode::DataLivenessProbe,
+        None => LowerMode::Full,
+    };
     let mut build =
-        crate::c5::codegen::lower_for_data_liveness_probe(&first.program, target, options)?;
+        crate::c5::codegen::lower_for_with_prebuilt(&first.program, target, options, None, mode)?;
     let (Some(mut orphaned), Some(plan)) = (build.orphaned_data.take(), first.plan.as_ref()) else {
-        debug_assert!(!build.stopped_at_data_liveness);
+        assert!(
+            !build.stopped_at_data_liveness,
+            "a stopped probe carries no image and cannot be the emitted build",
+        );
         crate::c5::codegen::emit_ssa_dump(&mut build);
         return Ok((first.program, first.bss_size, build));
     };

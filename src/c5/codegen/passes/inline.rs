@@ -944,14 +944,43 @@ fn relocated_param_cells(callee: &FunctionSsa, callee_used: &[bool]) -> BTreeSet
         .collect()
 }
 
-/// Frame slots one splice of `callee` relocates into the caller: the
-/// callee's own locals plus the parameter cells it keeps in the frame.
-/// This is what the splice allocates, so it is what the frame gates
-/// measure; a body that reads its parameters out of the argument values
-/// and holds nothing in the frame costs nothing.
-fn splice_frame_cost(callee: &FunctionSsa) -> i64 {
+/// Per-callee body facts the frame gates and the splice read. Each is
+/// a pure function of the body, so the pass derives them once per
+/// candidate per fixpoint iteration (the candidate bodies are the
+/// iteration's immutable snapshot) instead of per caller and per call
+/// site.
+struct CalleeFacts {
+    /// Parameter cells a splice gives frame slots of its own.
+    relocated: BTreeSet<i64>,
+    /// Parameter cells whose reads resolve to the call-site argument.
+    forwarded: BTreeSet<i64>,
+    /// Frame slots one splice relocates into the caller: the callee's
+    /// own locals plus the parameter cells it keeps in the frame. A
+    /// body that reads its parameters out of the argument values and
+    /// holds nothing in the frame costs nothing.
+    frame_cost: i64,
+}
+
+/// Facts keyed by callee entry pc.
+type FactsMap = BTreeMap<usize, CalleeFacts>;
+
+/// A splice target: the callee body with the facts derived from it.
+#[derive(Clone, Copy)]
+struct Callee<'a> {
+    body: &'a FunctionSsa,
+    facts: &'a CalleeFacts,
+}
+
+fn callee_facts(callee: &FunctionSsa) -> CalleeFacts {
     let used = value_use_mask(callee);
-    callee.locals + relocated_param_cells(callee, &used).len() as i64
+    let relocated = relocated_param_cells(callee, &used);
+    let forwarded = forwarded_param_cells(callee, &used);
+    let frame_cost = callee.locals + relocated.len() as i64;
+    CalleeFacts {
+        relocated,
+        forwarded,
+        frame_cost,
+    }
 }
 
 /// Per-value "referenced by an operand" mask: instruction operands,
@@ -1276,13 +1305,17 @@ fn piece_kinds(size: u32) -> (LoadKind, StoreKind) {
 
 fn splice_multi_block(
     caller: &mut FunctionSsa,
-    callee: &FunctionSsa,
+    callee: Callee<'_>,
     splice_block_idx: usize,
     call_pc: u32,
     call_args: &[ValueId],
     ret_slot: i64,
     placement: &mut SlotPlacement<'_>,
 ) {
+    let Callee {
+        body: callee,
+        facts,
+    } = callee;
     let SlotPlacement {
         regions,
         cyclic,
@@ -1388,11 +1421,10 @@ fn splice_multi_block(
     // non-volatile accesses (the leftover spill itself) keeps the
     // established drop; the candidate filter rejects live accesses to
     // unspilled cells.
-    let callee_used = value_use_mask(callee);
-    let param_cells = relocated_param_cells(callee, &callee_used);
+    let param_cells = &facts.relocated;
     // Parameter cells whose reads resolve to the call-site argument
     // instead of a frame slot; disjoint from `param_cells`.
-    let forwarded = forwarded_param_cells(callee, &callee_used);
+    let forwarded = &facts.forwarded;
     // Region backing the callee's relocated slots, shared across call
     // sites when sound (see `CallerRegions`). A cycle member appends, and
     // so does any splice whose caller or callee can come to execute
@@ -2219,18 +2251,12 @@ fn needs_reloc_splice(c: &FunctionSsa) -> bool {
 fn inline_caller(
     caller: &mut FunctionSsa,
     callees: &BTreeMap<usize, &FunctionSsa>,
+    facts: &FactsMap,
     placement: &mut SlotPlacement<'_>,
 ) {
     let mut new_insts: Vec<Inst> = Vec::with_capacity(caller.insts.len());
     let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(caller.inst_src.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(caller.insts.len());
-    // Per-callee parameter cells whose reads resolve to the call-site
-    // argument. A property of the callee body, so it is computed once
-    // here rather than per call site inside the emission fixpoint.
-    let forwarded_cells: BTreeMap<usize, BTreeSet<i64>> = callees
-        .iter()
-        .map(|(&pc, c)| (pc, forwarded_param_cells(c, &value_use_mask(c))))
-        .collect();
     // `remap[old_id]` is the new ValueId in the spliced caller. An
     // inlined Call's slot maps to the callee's translated Return value.
     let mut remap: Vec<ValueId> = vec![NO_VALUE; caller.insts.len()];
@@ -2338,7 +2364,7 @@ fn inline_caller(
                     // Parameter cells whose reads resolve to the call-site
                     // argument rather than being dropped with the rest of
                     // the cell traffic.
-                    let forwarded = &forwarded_cells[&callee.ent_pc];
+                    let forwarded = &facts[&callee.ent_pc].forwarded;
                     for ce_pc in callee_block.inst_range.start..callee_block.inst_range.end {
                         let cinst = &callee.insts[ce_pc as usize];
                         match cinst {
@@ -2620,7 +2646,7 @@ fn inline_caller(
                     && (c.ret_agg.is_none() || *ret_slot_local != 0)
                 {
                     if !c.is_always_inline
-                        && caller.locals + splice_frame_cost(c) > CALLER_FRAME_ABS_SLOTS
+                        && caller.locals + facts[target_pc].frame_cost > CALLER_FRAME_ABS_SLOTS
                     {
                         unaffordable.insert(*target_pc);
                         continue;
@@ -2642,7 +2668,18 @@ fn inline_caller(
                 n = caller.name
             );
         }
-        splice_multi_block(caller, callee, b_idx, pc, &args, ret_slot, placement);
+        splice_multi_block(
+            caller,
+            Callee {
+                body: callee,
+                facts: &facts[&callee.ent_pc],
+            },
+            b_idx,
+            pc,
+            &args,
+            ret_slot,
+            placement,
+        );
         steps += 1;
     }
 }
@@ -2725,6 +2762,13 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
         if candidates.is_empty() {
             break;
         }
+        // The candidate bodies are fixed for this iteration, so their
+        // splice facts are derived once here rather than per caller and
+        // per call site.
+        let facts: FactsMap = candidates
+            .iter()
+            .map(|(&pc, c)| (pc, callee_facts(c)))
+            .collect();
         let mut changed = false;
         for (fi, caller) in funcs.iter_mut().enumerate() {
             // Drop self-recursive inlines: a recursive call would
@@ -2761,7 +2805,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             if caller.locals > CALLER_FRAME_SLOTS
                 && caller.locals > orig_locals[fi].saturating_mul(FRAME_GROWTH_FACTOR)
             {
-                local.retain(|_, c| c.is_always_inline || splice_frame_cost(c) == 0);
+                local.retain(|_, c| c.is_always_inline || facts[&c.ent_pc].frame_cost == 0);
             }
             if local.is_empty() {
                 continue;
@@ -2780,6 +2824,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             inline_caller(
                 caller,
                 &local,
+                &facts,
                 &mut SlotPlacement {
                     regions: regions.entry(caller.ent_pc).or_default(),
                     cyclic: &cyclic,

@@ -770,7 +770,9 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
         let (index, idx_is64) = match parse_operand(parts[1])? {
             // The index field reads 31 as the zero register, never as SP.
             AsmOpndA64::Reg { sp: true, .. } => {
-                return Err(format!("inline asm: sp is not an index register `[{inner}]`"));
+                return Err(format!(
+                    "inline asm: sp is not an index register `[{inner}]`"
+                ));
             }
             AsmOpndA64::Reg { num, is64, .. } => (MemBase::Reg(num), is64),
             AsmOpndA64::Ref { idx, is64 } => (MemBase::Ref(idx), is64.unwrap_or(true)),
@@ -1523,7 +1525,8 @@ mod tests {
             insns[0].operands,
             [AsmOpndA64::Reg {
                 num: 30,
-                is64: true
+                is64: true,
+                sp: false
             }]
         );
     }
@@ -1583,7 +1586,11 @@ mod tests {
         assert_eq!(
             insns[0].operands,
             [
-                AsmOpndA64::Reg { num: 3, is64: true },
+                AsmOpndA64::Reg {
+                    num: 3,
+                    is64: true,
+                    sp: false
+                },
                 AsmOpndA64::Imm(0x1234),
                 AsmOpndA64::Lsl(16),
             ]
@@ -1597,7 +1604,8 @@ mod tests {
                 },
                 AsmOpndA64::Reg {
                     num: 31,
-                    is64: false
+                    is64: false,
+                    sp: false,
                 },
             ]
         );
@@ -1668,17 +1676,23 @@ mod tests {
 
     #[test]
     fn parse_mov_stack_pointer_rewrite() {
-        // `mov Rd, sp` / `mov sp, Rn` become `add ..., #0` (only the raw token
-        // separates `sp` from `xzr`); a register move stays `mov`.
+        // `mov Rd, sp` / `mov sp, Rn` become `add ..., #0`; a register move
+        // stays `mov`. The rewritten operand keeps the `sp` spelling, which is
+        // what makes the encoder read register 31 as the stack pointer.
         let insns = parse_template(b"mov x0, sp; mov sp, x1; mov x2, x3").unwrap();
         assert_eq!(insns[0].mnemonic, "add");
         assert_eq!(
             insns[0].operands,
             [
-                AsmOpndA64::Reg { num: 0, is64: true },
+                AsmOpndA64::Reg {
+                    num: 0,
+                    is64: true,
+                    sp: false
+                },
                 AsmOpndA64::Reg {
                     num: 31,
-                    is64: true
+                    is64: true,
+                    sp: true,
                 },
                 AsmOpndA64::Imm(0),
             ]
@@ -1688,7 +1702,8 @@ mod tests {
             insns[1].operands[0],
             AsmOpndA64::Reg {
                 num: 31,
-                is64: true
+                is64: true,
+                sp: true,
             }
         );
         assert_eq!(insns[2].mnemonic, "mov"); // register move kept for the encoder
@@ -1713,7 +1728,11 @@ mod tests {
         assert_eq!(
             insns[1].operands,
             [
-                AsmOpndA64::Reg { num: 3, is64: true },
+                AsmOpndA64::Reg {
+                    num: 3,
+                    is64: true,
+                    sp: false
+                },
                 AsmOpndA64::Mem {
                     base: MemBase::Reg(4),
                     off: 0,
@@ -1927,7 +1946,11 @@ mod tests {
         assert_eq!(
             insns[0].operands,
             [
-                AsmOpndA64::Reg { num: 0, is64: true },
+                AsmOpndA64::Reg {
+                    num: 0,
+                    is64: true,
+                    sp: false
+                },
                 AsmOpndA64::VReg { num: 1, is_d: true },
             ]
         );
@@ -1940,7 +1963,8 @@ mod tests {
                 },
                 AsmOpndA64::Reg {
                     num: 3,
-                    is64: false
+                    is64: false,
+                    sp: false,
                 },
             ]
         );
@@ -2000,7 +2024,8 @@ mod tests {
                 },
                 AsmOpndA64::Reg {
                     num: 2,
-                    is64: false
+                    is64: false,
+                    sp: false,
                 },
             ]
         );
@@ -2071,7 +2096,14 @@ mod tests {
         let insns = parse_template(b"dc cvac, x0; tlbi vmalle1; dc civac, %0").unwrap();
         assert_eq!(insns[0].mnemonic, "dc");
         assert_eq!(insns[0].operands[0], AsmOpndA64::SysOp(0xD50B_7A20));
-        assert_eq!(insns[0].operands[1], AsmOpndA64::Reg { num: 0, is64: true });
+        assert_eq!(
+            insns[0].operands[1],
+            AsmOpndA64::Reg {
+                num: 0,
+                is64: true,
+                sp: false
+            }
+        );
         assert_eq!(insns[1].operands, [AsmOpndA64::SysOp(0xD508_8700)]); // no register
         assert_eq!(insns[2].operands[0], AsmOpndA64::SysOp(0xD50B_7E20));
         assert!(matches!(
@@ -2169,9 +2201,21 @@ mod tests {
         assert_eq!(
             insns[0].operands,
             [
-                AsmOpndA64::Reg { num: 0, is64: true },
-                AsmOpndA64::Reg { num: 1, is64: true },
-                AsmOpndA64::Reg { num: 1, is64: true },
+                AsmOpndA64::Reg {
+                    num: 0,
+                    is64: true,
+                    sp: false
+                },
+                AsmOpndA64::Reg {
+                    num: 1,
+                    is64: true,
+                    sp: false
+                },
+                AsmOpndA64::Reg {
+                    num: 1,
+                    is64: true,
+                    sp: false
+                },
                 AsmOpndA64::Cond(1), // ne == invert(eq)
             ]
         );

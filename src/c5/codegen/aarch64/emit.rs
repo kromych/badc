@@ -2657,7 +2657,9 @@ fn build_label_branch(
             }
         }
         "adr" if insn.operands.len() == 2 => match conv(&insn.operands[0])? {
-            Opnd::Reg { num, is64: true, .. } => LabelBranch::Adr { rd: num },
+            Opnd::Reg {
+                num, is64: true, ..
+            } => LabelBranch::Adr { rd: num },
             _ => {
                 return Err(String::from(
                     "aarch64 inline asm: adr destination must be a 64-bit register",

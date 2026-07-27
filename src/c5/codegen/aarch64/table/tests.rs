@@ -9,11 +9,26 @@
 use super::*;
 
 fn x(n: u8) -> Opnd {
-    Opnd::Reg { num: n, is64: true, .. }
+    Opnd::Reg {
+        num: n,
+        is64: true,
+        sp: false,
+    }
+}
+/// The stack pointer written as `sp` / `wsp` (register 31, SP spelling).
+fn sp(is64: bool) -> Opnd {
+    Opnd::Reg {
+        num: 31,
+        is64,
+        sp: true,
+    }
 }
 fn w(n: u8) -> Opnd {
-    Opnd::Reg { num: n,
-        is64: false,, .. }
+    Opnd::Reg {
+        num: n,
+        is64: false,
+        sp: false,
+    }
 }
 fn m(base: u8) -> Opnd {
     Opnd::Mem {
@@ -901,7 +916,11 @@ fn simd_ld_st_single_lane() {
 #[test]
 fn poly_multiply() {
     let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
-    let x = |n: u8| Opnd::Reg { num: n, is64: true, .. };
+    let x = |n: u8| Opnd::Reg {
+        num: n,
+        is64: true,
+        sp: false,
+    };
     // Byte form widens .8b/.16b to .8h; pmull2 reads the upper 64-bit halves.
     assert_eq!(
         enc("pmull", &[v(0, 1, true), v(1, 0, false), v(2, 0, false)]),
@@ -1513,7 +1532,11 @@ mod differential {
     }
 
     fn xn(n: u8) -> Opnd {
-        Opnd::Reg { num: n, is64: true, .. }
+        Opnd::Reg {
+            num: n,
+            is64: true,
+            sp: false,
+        }
     }
 
     fn cond_name(c: u8) -> &'static str {
@@ -1531,10 +1554,13 @@ mod differential {
             | Field::ScaledUImm { op, .. }
             | Field::ScaledSImm { op, .. }
             | Field::LogicalImm { op, .. }
+            | Field::LogicalImmNot { op, .. }
             | Field::MovImm { op }
             | Field::MovHw { op }
             | Field::LslAlias { op, .. }
             | Field::ShrAlias { op }
+            | Field::Shift { op, .. }
+            | Field::Extend { op, .. }
             | Field::Cond { op, .. } => op as usize == idx,
             _ => false,
         })
@@ -1582,7 +1608,7 @@ mod differential {
                 let (max, scale) = ((1i64 << width) - 1, scale as i64);
                 [scale, max * scale].iter().map(|&v| imm(v)).collect()
             }
-            Some(Field::LogicalImm { is64, .. }) => if is64 {
+            Some(Field::LogicalImm { is64, .. } | Field::LogicalImmNot { is64, .. }) => if is64 {
                 &[
                     0xFFi64,
                     1,
@@ -1612,6 +1638,50 @@ mod differential {
                 let w = if is64 { 64 } else { 32 };
                 [1i64, 4, w - 1].iter().map(|&v| imm(v)).collect()
             }
+            Some(Field::Shift { is64, ror, .. }) => {
+                let w = if is64 { 64 } else { 32 };
+                let mut vs = alloc::vec![
+                    None,
+                    Some((String::from("lsl #1"), Opnd::Lsl(1))),
+                    Some((String::from("lsr #3"), Opnd::Shift { kind: 1, amount: 3 },)),
+                    Some((
+                        alloc::format!("asr #{}", w - 1),
+                        Opnd::Shift {
+                            kind: 2,
+                            amount: w - 1,
+                        },
+                    )),
+                ];
+                if ror {
+                    vs.push(Some((
+                        String::from("ror #5"),
+                        Opnd::Shift { kind: 3, amount: 5 },
+                    )));
+                }
+                vs
+            }
+            // The extend is always written out: an absent one would leave an
+            // operand list the shifted-register form also expresses, and the
+            // assembler (like the encoder) prefers that form there.
+            Some(Field::Extend { is64, .. }) => {
+                let e = |t: &str, option: u8, amount: u8| {
+                    Some((String::from(t), Opnd::Extend { option, amount }))
+                };
+                let mut vs = alloc::vec![
+                    e("uxtb", 0, 0),
+                    e("uxth #1", 1, 1),
+                    e("uxtw #4", 2, 4),
+                    e("sxtb #2", 4, 2),
+                    e("sxth", 5, 0),
+                    e("sxtw #3", 6, 3),
+                    e("uxtx", 3, 0),
+                    e("sxtx #1", 7, 1),
+                ];
+                if is64 {
+                    vs.push(Some((String::from("lsl #2"), Opnd::Lsl(2))));
+                }
+                vs
+            }
             Some(Field::Cond { inv, .. }) => {
                 let mut cs = alloc::vec![1u8, 11];
                 if !inv {
@@ -1638,53 +1708,87 @@ mod differential {
         }
         let regsets: [[u8; 4]; 3] = [[1, 2, 3, 4], [9, 10, 11, 12], [20, 21, 22, 23]];
         let mut cases: Vec<(String, Vec<Opnd>, &'static str)> = Vec::new();
+        let mut sp_cases: Vec<(String, Vec<Opnd>, &'static str)> = Vec::new();
         for f in isa_a64_table::FORMS {
             let cands: Vec<Vec<Option<(String, Opnd)>>> = f
                 .ops
                 .iter()
                 .enumerate()
                 .map(|(i, p)| match p {
-                    A64Op::X | A64Op::W | A64Op::Mem | A64Op::MemPre | A64Op::MemReg => Vec::new(),
+                    A64Op::X
+                    | A64Op::W
+                    | A64Op::RegAny
+                    | A64Op::Mem
+                    | A64Op::MemPre
+                    | A64Op::MemReg => Vec::new(),
                     _ => slot_cands(f, i),
                 })
                 .collect();
-            let build = |regs: &[u8; 4], slot: usize, pick: usize| {
+            let build = |regs: &[u8; 4], slot: usize, pick: usize, sp_slot: usize| {
                 let mut txt: Vec<String> = Vec::new();
                 let mut ops: Vec<Opnd> = Vec::new();
+                // The extended register's width follows the written extend.
+                let ext_is64 = f
+                    .ops
+                    .iter()
+                    .position(|p| matches!(p, A64Op::OptExt))
+                    .and_then(|e| cands[e].get(if e == slot { pick } else { 0 })?.as_ref())
+                    .is_some_and(|(_, o)| match o {
+                        Opnd::Extend { option, .. } => option & 3 == 3,
+                        _ => true, // `lsl` in an extended group is uxtx
+                    });
                 for (i, p) in f.ops.iter().enumerate() {
                     match p {
-                        A64Op::X | A64Op::W => {
-                            let is64 = matches!(p, A64Op::X);
-                            txt.push(alloc::format!(
-                                "{}{}",
-                                if is64 { 'x' } else { 'w' },
-                                regs[i]
-                            ));
-                            ops.push(Opnd::Reg { num: regs[i], is64, .. });
+                        A64Op::X | A64Op::W | A64Op::RegAny => {
+                            let is64 = match p {
+                                A64Op::X => true,
+                                A64Op::W => false,
+                                _ => ext_is64,
+                            };
+                            let sp = i == sp_slot;
+                            txt.push(match (sp, is64) {
+                                (true, true) => String::from("sp"),
+                                (true, false) => String::from("wsp"),
+                                (false, _) => {
+                                    alloc::format!("{}{}", if is64 { 'x' } else { 'w' }, regs[i])
+                                }
+                            });
+                            ops.push(Opnd::Reg {
+                                num: if sp { 31 } else { regs[i] },
+                                is64,
+                                sp,
+                            });
                         }
-                        A64Op::Mem => match mem_off(f, i) {
-                            Some(off) => {
-                                txt.push(alloc::format!("[x{}, #{off}]", regs[i]));
-                                ops.push(Opnd::Mem {
-                                    base: regs[i],
-                                    off,
-                                    pre: false,
-                                });
-                            }
-                            None => {
-                                txt.push(alloc::format!("[x{}]", regs[i]));
-                                ops.push(Opnd::Mem {
-                                    base: regs[i],
-                                    off: 0,
-                                    pre: false,
-                                });
-                            }
-                        },
-                        A64Op::MemPre => {
+                        A64Op::Mem => {
+                            let base = if i == sp_slot { 31 } else { regs[i] };
+                            let bt = if i == sp_slot {
+                                String::from("sp")
+                            } else {
+                                alloc::format!("x{}", regs[i])
+                            };
                             let off = mem_off(f, i).unwrap_or(0);
-                            txt.push(alloc::format!("[x{}, #{off}]!", regs[i]));
+                            txt.push(if off == 0 {
+                                alloc::format!("[{bt}]")
+                            } else {
+                                alloc::format!("[{bt}, #{off}]")
+                            });
                             ops.push(Opnd::Mem {
-                                base: regs[i],
+                                base,
+                                off,
+                                pre: false,
+                            });
+                        }
+                        A64Op::MemPre => {
+                            let base = if i == sp_slot { 31 } else { regs[i] };
+                            let bt = if i == sp_slot {
+                                String::from("sp")
+                            } else {
+                                alloc::format!("x{}", regs[i])
+                            };
+                            let off = mem_off(f, i).unwrap_or(0);
+                            txt.push(alloc::format!("[{bt}, #{off}]!"));
+                            ops.push(Opnd::Mem {
+                                base,
                                 off,
                                 pre: true,
                             });
@@ -1692,16 +1796,23 @@ mod differential {
                         // x7 is outside every regset, so the index never
                         // collides with a base or data register.
                         A64Op::MemReg => {
-                            txt.push(alloc::format!("[x{}, x7]", regs[i]));
+                            let base = if i == sp_slot { 31 } else { regs[i] };
+                            let bt = if i == sp_slot {
+                                String::from("sp")
+                            } else {
+                                alloc::format!("x{}", regs[i])
+                            };
+                            txt.push(alloc::format!("[{bt}, x7]"));
                             ops.push(Opnd::MemReg {
-                                base: regs[i],
+                                base,
                                 index: 7,
                                 option: 0b011,
                                 shift: None,
                             });
                         }
                         _ => {
-                            if let Some((t, o)) = &cands[i][if i == slot { pick } else { 0 }] {
+                            let c = cands[i].get(if i == slot { pick } else { 0 });
+                            if let Some(Some((t, o))) = c {
                                 txt.push(t.clone());
                                 ops.push(*o);
                             }
@@ -1715,13 +1826,32 @@ mod differential {
                 };
                 (txt, ops, f.mnemonic)
             };
-            let has_regs = f.ops.iter().any(|p| matches!(p, A64Op::X | A64Op::W));
+            let has_regs = f
+                .ops
+                .iter()
+                .any(|p| matches!(p, A64Op::X | A64Op::W | A64Op::RegAny));
             for regs in regsets.iter().take(if has_regs { 3 } else { 1 }) {
-                cases.push(build(regs, usize::MAX, 0));
+                cases.push(build(regs, usize::MAX, 0, usize::MAX));
             }
             for (i, c) in cands.iter().enumerate() {
                 for pick in 1..c.len() {
-                    cases.push(build(&regsets[0], i, pick));
+                    cases.push(build(&regsets[0], i, pick, usize::MAX));
+                }
+            }
+            // Every register and memory slot written as `sp`: the assembler
+            // and the encoder must agree on whether register 31 names the
+            // stack pointer there, and on the word when it does.
+            for (i, p) in f.ops.iter().enumerate() {
+                if matches!(
+                    p,
+                    A64Op::X
+                        | A64Op::W
+                        | A64Op::RegAny
+                        | A64Op::Mem
+                        | A64Op::MemPre
+                        | A64Op::MemReg
+                ) {
+                    sp_cases.push(build(&regsets[0], usize::MAX, 0, i));
                 }
             }
             // Register-offset extend variants: every option, both S encodings.
@@ -1738,7 +1868,7 @@ mod differential {
                     (String::from("x7, sxtx"), 0b111, None),
                 ];
                 for (itxt, option, shift) in variants {
-                    let (txt, mut ops, m) = build(&regsets[0], usize::MAX, 0);
+                    let (txt, mut ops, m) = build(&regsets[0], usize::MAX, 0, usize::MAX);
                     let txt = txt.replace("x7]", &alloc::format!("{itxt}]"));
                     ops[mi] = Opnd::MemReg {
                         base: regsets[0][mi],
@@ -1777,6 +1907,35 @@ mod differential {
                 }
             }
         }
+        // An `sp` operand must encode exactly where the assembler encodes one
+        // and be rejected exactly where the assembler rejects it; a silently
+        // zero-register encoding is the failure this guards.
+        let (mut sp_ok, mut sp_bad) = (0, 0);
+        for (txt, ops, m) in &sp_cases {
+            if skipped.contains(m) {
+                continue;
+            }
+            match (clang_word(txt), encode(m, ops)) {
+                (Some(want), Ok(got)) if got == want => sp_ok += 1,
+                (None, Err(_)) => sp_ok += 1,
+                (want, got) => {
+                    sp_bad += 1;
+                    if fails.len() < 40 {
+                        fails.push(alloc::format!(
+                            "{txt}: got {} want {}",
+                            match got {
+                                Ok(w) => alloc::format!("{w:08x}"),
+                                Err(e) => e,
+                            },
+                            match want {
+                                Some(w) => alloc::format!("{w:08x}"),
+                                None => String::from("(rejected)"),
+                            }
+                        ));
+                    }
+                }
+            }
+        }
         for f in &fails {
             std::eprintln!("  FAIL {f}");
         }
@@ -1784,15 +1943,18 @@ mod differential {
             std::eprintln!("  GAP {g}");
         }
         std::eprintln!(
-            "a64 differential_sweep: forms={} cases={} OK={ok} BAD={bad} GAP={gap} SKIP={skip}",
+            "a64 differential_sweep: forms={} cases={} OK={ok} BAD={bad} GAP={gap} SKIP={skip} \
+             sp_cases={} sp_OK={sp_ok} sp_BAD={sp_bad}",
             isa_a64_table::FORMS.len(),
-            cases.len()
+            cases.len(),
+            sp_cases.len()
         );
         if !skipped.is_empty() {
             let names: Vec<&str> = skipped.into_iter().collect();
             std::eprintln!("  skipped (assembler rejects): {}", names.join(" "));
         }
         assert_eq!(bad, 0, "A64 catalogue words disagree with the assembler");
+        assert_eq!(sp_bad, 0, "sp operands disagree with the assembler");
         assert_eq!(gap, 0, "synthesized catalogue operands failed to encode");
     }
 

@@ -451,9 +451,15 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     if let "casp" | "caspa" | "caspl" | "caspal" = mnemonic {
         let [
             Opnd::Reg { num: rs, is64, .. },
-            Opnd::Reg { num: rs2, is64: w1, .. },
-            Opnd::Reg { num: rt, is64: w2, .. },
-            Opnd::Reg { num: rt2, is64: w3, .. },
+            Opnd::Reg {
+                num: rs2, is64: w1, ..
+            },
+            Opnd::Reg {
+                num: rt, is64: w2, ..
+            },
+            Opnd::Reg {
+                num: rt2, is64: w3, ..
+            },
             Opnd::Mem {
                 base: rn,
                 off: 0,
@@ -489,11 +495,17 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // widths (Xd<->Dn, Wd<->Sn); Rn/Rd sit at their usual positions.
     if mnemonic == "fmov" {
         return match ops {
-            [Opnd::Reg { num: rd, is64, .. }, Opnd::VReg { num: vn, is_d }] if is64 == is_d => {
+            [
+                Opnd::Reg { num: rd, is64, .. },
+                Opnd::VReg { num: vn, is_d },
+            ] if is64 == is_d => {
                 let base = if *is64 { 0x9E66_0000u32 } else { 0x1E26_0000 };
                 Ok(base | ((*vn as u32) << 5) | (*rd as u32))
             }
-            [Opnd::VReg { num: vd, is_d }, Opnd::Reg { num: rn, is64, .. }] if is64 == is_d => {
+            [
+                Opnd::VReg { num: vd, is_d },
+                Opnd::Reg { num: rn, is64, .. },
+            ] if is64 == is_d => {
                 let base = if *is_d { 0x9E67_0000u32 } else { 0x1E27_0000 };
                 Ok(base | ((*rn as u32) << 5) | (*vd as u32))
             }
@@ -607,7 +619,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "ucvtf" => Some(0x1_0000),
         _ => None,
     } {
-        let [Opnd::VReg { num: rd, is_d }, Opnd::Reg { num: rn, is64, .. }] = *ops else {
+        let [
+            Opnd::VReg { num: rd, is_d },
+            Opnd::Reg { num: rn, is64, .. },
+        ] = *ops
+        else {
             return Err(String::from("inline asm: bad scvtf/ucvtf operands"));
         };
         let base = if is64 { 0x8000_0000u32 } else { 0 }
@@ -622,7 +638,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fcvtzu" => Some(0x1_0000),
         _ => None,
     } {
-        let [Opnd::Reg { num: rd, is64, .. }, Opnd::VReg { num: rn, is_d }] = *ops else {
+        let [
+            Opnd::Reg { num: rd, is64, .. },
+            Opnd::VReg { num: rn, is_d },
+        ] = *ops
+        else {
             return Err(String::from("inline asm: bad fcvtzs/fcvtzu operands"));
         };
         let base = if is64 { 0x8000_0000u32 } else { 0 }
@@ -1414,7 +1434,9 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     if let "ubfx" | "sbfx" | "bfxil" | "ubfiz" | "sbfiz" | "bfi" = mnemonic {
         let [
             Opnd::Reg { num: rd, is64, .. },
-            Opnd::Reg { num: rn, is64: n2, .. },
+            Opnd::Reg {
+                num: rn, is64: n2, ..
+            },
             Opnd::Imm(lsb),
             Opnd::Imm(width),
         ] = *ops
@@ -1551,7 +1573,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 }
                 (31, 1u32 << 23)
             }
-            [Opnd::Reg { num, is64: true, .. }] => (*num as u32, 1u32 << 23),
+            [
+                Opnd::Reg {
+                    num, is64: true, ..
+                },
+            ] => (*num as u32, 1u32 << 23),
             _ => {
                 return Err(String::from(
                     "inline asm: bad ld1/st1 post-index (want `, #imm` or `, Xm`)",
@@ -1609,7 +1635,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 }
                 (31, 1u32 << 23)
             }
-            [Opnd::Reg { num, is64: true, .. }] => (*num as u32, 1u32 << 23),
+            [
+                Opnd::Reg {
+                    num, is64: true, ..
+                },
+            ] => (*num as u32, 1u32 << 23),
             _ => {
                 return Err(String::from(
                     "inline asm: bad ldNr post-index (want `, #imm` or `, Xm`)",
@@ -1666,7 +1696,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 }
                 (31, 1u32 << 23)
             }
-            [Opnd::Reg { num, is64: true, .. }] => (*num as u32, 1u32 << 23),
+            [
+                Opnd::Reg {
+                    num, is64: true, ..
+                },
+            ] => (*num as u32, 1u32 << 23),
             _ => {
                 return Err(String::from(
                     "inline asm: bad single-lane post-index (want `, #imm` or `, Xm`)",
@@ -1764,48 +1798,56 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
 /// Look the operand shape up in the generated catalogue and pack it. A form
 /// only matches when every written `sp` lands in a slot its `sp` mask marks,
 /// which is what selects the extended-register add/sub over the shifted one.
+/// The extended-register forms are tried second: an operand list that both
+/// can express (no `sp`, no written extend) takes the shifted encoding, as the
+/// assembler does.
 fn encode_catalogue(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // The catalogue is sorted by mnemonic (enforced by the generator and the
     // `catalogue_is_sorted` test): binary-search to the mnemonic's run of forms.
     let forms = super::isa_a64_table::FORMS;
     let start = forms.partition_point(|f| f.mnemonic < mnemonic);
     let mut sp_rejected = false;
-    for f in &forms[start..] {
-        if f.mnemonic != mnemonic {
-            break;
+    for extended in [false, true] {
+        for f in &forms[start..] {
+            if f.mnemonic != mnemonic {
+                break;
+            }
+            if f.ops.contains(&A64Op::OptExt) != extended {
+                continue;
+            }
+            // Match, allowing a trailing optional shift/extend slot to be absent.
+            let required = f
+                .ops
+                .iter()
+                .filter(|o| !matches!(o, A64Op::OptLsl | A64Op::OptShift | A64Op::OptExt))
+                .count();
+            if ops.len() < required || ops.len() > f.ops.len() {
+                continue;
+            }
+            if !f
+                .ops
+                .iter()
+                .zip(ops.iter())
+                .all(|(&p, &o)| op_matches(p, o))
+                || !mem_offsets_consumed(f, ops)
+            {
+                continue;
+            }
+            if !sp_slots_allowed(f, ops) {
+                sp_rejected = true;
+                continue;
+            }
+            return match pack(f, ops) {
+                // An offset the scaled uimm12 field rejects may still have the
+                // sibling's unscaled simm9 encoding; keep the scaled form's
+                // error when the sibling rejects too.
+                Err(e) => match unscaled_sibling(mnemonic) {
+                    Some(sib) => encode(sib, ops).map_err(|_| e),
+                    None => Err(e),
+                },
+                ok => ok,
+            };
         }
-        // Match, allowing a trailing optional shift/extend slot to be absent.
-        let required = f
-            .ops
-            .iter()
-            .filter(|o| !matches!(o, A64Op::OptLsl | A64Op::OptShift | A64Op::OptExt))
-            .count();
-        if ops.len() < required || ops.len() > f.ops.len() {
-            continue;
-        }
-        if !f
-            .ops
-            .iter()
-            .zip(ops.iter())
-            .all(|(&p, &o)| op_matches(p, o))
-            || !mem_offsets_consumed(f, ops)
-        {
-            continue;
-        }
-        if !sp_slots_allowed(f, ops) {
-            sp_rejected = true;
-            continue;
-        }
-        return match pack(f, ops) {
-            // An offset the scaled uimm12 field rejects may still have the
-            // sibling's unscaled simm9 encoding; keep the scaled form's
-            // error when the sibling rejects too.
-            Err(e) => match unscaled_sibling(mnemonic) {
-                Some(sib) => encode(sib, ops).map_err(|_| e),
-                None => Err(e),
-            },
-            ok => ok,
-        };
     }
     if sp_rejected {
         return Err(format!(

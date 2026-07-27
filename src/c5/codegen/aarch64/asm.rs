@@ -2108,6 +2108,30 @@ mod tests {
     }
 
     #[test]
+    fn generated_name_tables_are_sorted() {
+        // The lookups binary-search these; the generator emits them sorted.
+        use super::super::sysreg_a64_table as t;
+        for (what, rows) in [
+            ("SYSREGS", t::SYSREGS),
+            ("DC_OPS", t::DC_OPS),
+            ("IC_OPS", t::IC_OPS),
+            ("AT_OPS", t::AT_OPS),
+            ("TLBI_OPS", t::TLBI_OPS),
+        ] {
+            assert!(
+                rows.windows(2).all(|w| w[0].0 < w[1].0),
+                "{what} not sorted"
+            );
+            assert!(
+                rows.iter().all(|&(n, _)| n
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')),
+                "{what} holds a name the case-insensitive lookup cannot match"
+            );
+        }
+    }
+
+    #[test]
     fn shift_and_immediate_accept_gas_spellings() {
         // GAS makes `#` optional on a shift amount, and an immediate is a
         // constant expression, not just a literal.

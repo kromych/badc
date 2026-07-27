@@ -57,7 +57,7 @@ Disassembly of section .text:
                	movq	%rdx, -0x20(%rbp)
                	movq	-0x30(%rbp), %rbx
                	movq	-0x28(%rbp), %r11
-               	movq	%r11, (%rbx)
+               	movq	%r11, <rip>
                	movq	-0x20(%rbp), %r10
                	callq	*%r10
                	movq	-0x80(%rbp), %rax

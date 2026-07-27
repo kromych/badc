@@ -110,7 +110,7 @@ Disassembly of section .text:
                	movq	-0x240(%rbp), %rbx
                	movq	-0x238(%rbp), %rcx
                	movd	%ebx, %xmm0
-               	paddd	(%rcx), %xmm0
+               	paddd	<rip>, %xmm0
                	movd	%xmm0, %eax
                	movq	-0x248(%rbp), %r10
                	movl	%eax, (%r10)
@@ -262,7 +262,7 @@ Disassembly of section .text:
                	movq	%rcx, -0x248(%rbp)
                	movq	-0x250(%rbp), %rax
                	movq	-0x248(%rbp), %rbx
-               	movdqu	(%rbx), %xmm0
+               	movdqu	<rip>, %xmm0
                	cvtdq2ps	%xmm0, %xmm0
                	cvtps2dq	%xmm0, %xmm0
                	shufps	$0x1b, %xmm0, %xmm0     # xmm0 = xmm0[3,2,1,0]
@@ -397,7 +397,7 @@ Disassembly of section .text:
                	movq	%rcx, -0x248(%rbp)
                	movq	-0x250(%rbp), %rax
                	movq	-0x248(%rbp), %rbx
-               	vmovdqu	(%rbx), %xmm0
+               	vmovdqu	<rip>, %xmm0
                	vmovdqu	%xmm0, (%rax)
                	movq	-0x260(%rbp), %rax
                	movq	-0x258(%rbp), %rbx
@@ -422,7 +422,7 @@ Disassembly of section .text:
                	movq	-0x240(%rbp), %r10
                	movups	(%r10,%riz), %xmm1
                	movq	-0x238(%rbp), %rax
-               	vpaddd	(%rax), %xmm1, %xmm0
+               	vpaddd	<rip>, %xmm1, %xmm0 # 0x402160
                	movq	-0x248(%rbp), %r10
                	movups	%xmm0, (%r10,%riz)
                	movq	-0x250(%rbp), %rax

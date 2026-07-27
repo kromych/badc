@@ -200,8 +200,9 @@ fn parse_pragma_pack_line(body: &[u8]) -> Option<PackDirective> {
     inner.parse::<usize>().ok().map(PackDirective::Set)
 }
 
-/// Snapshot of the lexer's positional state. See
-/// [`Lexer::snapshot`] / [`Lexer::restore`].
+/// Snapshot of the lexer's positional state plus every attribute
+/// `next()` produces for the current token. See [`Lexer::snapshot`] /
+/// [`Lexer::restore`].
 #[derive(Clone, Copy)]
 pub(crate) struct LexerSnapshot {
     pos: usize,
@@ -209,6 +210,13 @@ pub(crate) struct LexerSnapshot {
     tk: Tok,
     ival: i64,
     curr_id_idx: usize,
+    int_suffix_long: u8,
+    int_suffix_unsigned: bool,
+    int_is_decimal: bool,
+    float_suffix_f32: bool,
+    char_is_wide: bool,
+    str_is_wide: bool,
+    str_elem_bytes: usize,
 }
 
 /// Marker-aware map from (file, line) to the line's byte span in
@@ -810,17 +818,34 @@ impl Lexer {
             tk: self.tk,
             ival: self.ival,
             curr_id_idx: self.curr_id_idx,
+            int_suffix_long: self.int_suffix_long,
+            int_suffix_unsigned: self.int_suffix_unsigned,
+            int_is_decimal: self.int_is_decimal,
+            float_suffix_f32: self.float_suffix_f32,
+            char_is_wide: self.char_is_wide,
+            str_is_wide: self.str_is_wide,
+            str_elem_bytes: self.str_elem_bytes,
         }
     }
 
     /// Restore a previously taken [`Self::snapshot`]. The lexer
     /// returns to the exact state it had at the snapshot point.
+    /// The attributes travel with `tk`/`ival` because they type the
+    /// token (C99 6.4.4.1); leaving them behind would retype the
+    /// restored token from whatever the abandoned parse lexed last.
     pub fn restore(&mut self, s: LexerSnapshot) {
         self.pos = s.pos;
         self.line = s.line;
         self.tk = s.tk;
         self.ival = s.ival;
         self.curr_id_idx = s.curr_id_idx;
+        self.int_suffix_long = s.int_suffix_long;
+        self.int_suffix_unsigned = s.int_suffix_unsigned;
+        self.int_is_decimal = s.int_is_decimal;
+        self.float_suffix_f32 = s.float_suffix_f32;
+        self.char_is_wide = s.char_is_wide;
+        self.str_is_wide = s.str_is_wide;
+        self.str_elem_bytes = s.str_elem_bytes;
     }
 
     /// True if the next non-whitespace byte is the start of a

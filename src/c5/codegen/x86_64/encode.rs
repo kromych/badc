@@ -1730,6 +1730,9 @@ pub(crate) fn lower(
     prebuilt: Option<super::ssa::shadow::PrebuiltSsa>,
     mode: super::LowerMode,
 ) -> Result<Build, C5Error> {
+    // Asm label numbering restarts per lowering; see
+    // `emit_common::reset_asm_instance`.
+    super::ssa::emit_common::reset_asm_instance();
     let mut code: Vec<u8> = Vec::new();
     let mut func_ent_pcs: Vec<usize> = Vec::new();
     let mut func_names: Vec<alloc::string::String> = Vec::new();

@@ -3270,6 +3270,37 @@ fn elf_sections(bytes: &[u8]) -> Vec<(String, u32, u64)> {
         .collect()
 }
 
+/// `SHT_SYMTAB` entries of an ELF64 image as
+/// `(name, st_value, st_size, st_shndx)`.
+fn elf_symbols(bytes: &[u8]) -> Vec<(String, u64, u64, u16)> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]);
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd64(0x28) as usize;
+    let e_shentsize = rd16(0x3a) as usize;
+    let e_shnum = rd16(0x3c) as usize;
+    let sh = |i: usize| e_shoff + i * e_shentsize;
+    let symtab = (0..e_shnum)
+        .find(|&i| rd32(sh(i) + 4) == 2)
+        .expect("no .symtab");
+    let str_off = rd64(sh(rd32(sh(symtab) + 40) as usize) + 24) as usize;
+    let off = rd64(sh(symtab) + 24) as usize;
+    let count = rd64(sh(symtab) + 32) as usize / 24;
+    (0..count)
+        .map(|i| {
+            let e = off + i * 24;
+            let n = str_off + rd32(e) as usize;
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap() + n;
+            (
+                String::from_utf8_lossy(&bytes[n..end]).into_owned(),
+                rd64(e + 8),
+                rd64(e + 16),
+                rd16(e + 6),
+            )
+        })
+        .collect()
+}
+
 /// Program headers of an ELF64 image as `(p_type, p_flags)`.
 fn elf_segments(bytes: &[u8]) -> Vec<(u32, u32)> {
     let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
@@ -3368,6 +3399,57 @@ fn const_globals_land_in_read_only_rodata() {
         .find(|(n, ..)| n == ".data")
         .expect(".data section missing");
     assert_eq!(data.2, SHF_ALLOC | SHF_WRITE);
+}
+
+/// A zero-length array (`T x[] = {}` and `T x[0]`, the GNU extension
+/// C99 6.7.5.2 leaves out) occupies no storage: it reports `st_size` 0
+/// and shares the address of the object that follows it, as gcc does.
+/// Sizing it from its element width instead gave it a range that ran
+/// into that object, which the `.rodata` carve rejects as an overlap.
+#[test]
+fn zero_length_arrays_occupy_no_storage() {
+    let dir = tempdir("zero-len-array");
+    let src = write_source(
+        &dir,
+        "z.c",
+        "const unsigned empty_pins[] = {};\n\
+         const unsigned zerodim[0] = {};\n\
+         const unsigned filled_pins[] = { 1, 2, 3, 4, 5, 6 };\n",
+    );
+    for target in ["linux-x64", "linux-aarch64"] {
+        let out = dir.join(format!("z-{target}.o"));
+        run(
+            Command::new(badc())
+                .args(["-c", &format!("--target={target}"), "-o"])
+                .arg(&out)
+                .arg(&src)
+                .current_dir(&dir),
+            "compile zero-length arrays",
+        );
+        let bytes = std::fs::read(&out).expect("read .o");
+        let syms = elf_symbols(&bytes);
+        let get = |n: &str| {
+            syms.iter()
+                .find(|(s, ..)| s == n)
+                .unwrap_or_else(|| panic!("{n} missing from {target}"))
+        };
+        let filled = get("filled_pins");
+        assert_eq!(filled.2, 24, "{target}: sized array keeps its size");
+        for n in ["empty_pins", "zerodim"] {
+            let z = get(n);
+            assert_eq!(z.2, 0, "{target}: {n} occupies no storage");
+            assert_eq!(
+                (z.1, z.3),
+                (filled.1, filled.3),
+                "{target}: {n} shares the address of the object after it",
+            );
+        }
+        let secs = elf_sections(&bytes);
+        assert_eq!(
+            secs[filled.3 as usize].0, ".rodata",
+            "{target}: const arrays are carved into .rodata",
+        );
+    }
 }
 
 /// The linked image keeps the read-only payload out of the writable

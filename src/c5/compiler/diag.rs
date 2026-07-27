@@ -15,8 +15,8 @@ use super::super::ir::BinOp;
 use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
-    VOLATILE_MASK, is_floating_scalar, is_pointer_ty, is_struct_ty, strip_unsigned,
-    struct_ptr_depth,
+    VOLATILE_MASK, is_floating_scalar, is_pointer_ty, is_struct_ty, is_struct_value_ty,
+    strip_unsigned, struct_ptr_depth,
 };
 
 impl Compiler {
@@ -500,8 +500,7 @@ impl Compiler {
         // The GCC 128-bit integer against an integer or pointer is a
         // value conversion (C99 6.3.1.3), not a struct mismatch.
         let is_int128 = |ty: i64| {
-            is_struct_ty(ty)
-                && struct_ptr_depth(ty) == 0
+            is_struct_value_ty(ty)
                 && structs
                     .get(super::types::struct_id_of(ty))
                     .is_some_and(|s| s.name == "__int128")

@@ -420,8 +420,7 @@ impl Compiler {
     fn constant_p_operand_defers(&self, id: super::super::ast::ExprId) -> bool {
         use super::super::ast::{Expr, UnOp};
         use super::super::ir::BinOp;
-        use super::types::{is_struct_ty, is_volatile_ty, segment_of_ty, struct_ptr_depth};
-        let struct_value = |ty: i64| is_struct_ty(ty) && struct_ptr_depth(ty) == 0;
+        use super::types::{is_struct_value_ty, is_volatile_ty, segment_of_ty};
         match self.ast.expr(id) {
             Expr::IntLit { .. } | Expr::FloatLit { .. } | Expr::Sizeof(_) => true,
             Expr::Ident {
@@ -437,7 +436,7 @@ impl Compiler {
                     && !*is_thread_local
                     && !is_volatile_ty(*ty)
                     && segment_of_ty(*ty).is_none()
-                    && !struct_value(*ty)
+                    && !is_struct_value_ty(*ty)
                     && !self
                         .symbols
                         .get(*sym as usize)
@@ -467,7 +466,7 @@ impl Compiler {
                     && self.constant_p_operand_defers(*else_e)
             }
             Expr::Cast { child, to_ty } => {
-                !struct_value(*to_ty) && self.constant_p_operand_defers(*child)
+                !is_struct_value_ty(*to_ty) && self.constant_p_operand_defers(*child)
             }
             _ => false,
         }

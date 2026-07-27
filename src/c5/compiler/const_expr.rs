@@ -34,8 +34,8 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, integer_promote, is_floating_ty, is_pointer_ty, is_struct_ty, is_unsigned_ty,
-    narrow_const_int, strip_unsigned, struct_id_of, struct_ptr_depth,
+    UNSIGNED_BIT, integer_promote, is_floating_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty,
+    is_unsigned_ty, narrow_const_int, strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
 /// Compile-time arithmetic value of a constant expression. Integer
@@ -1372,7 +1372,7 @@ impl Compiler {
                 // C99 6.5.2.5 struct-typed compound literal `(T){ ... }`: an
                 // anonymous static object, an lvalue whose address is the
                 // constant. A non-brace operand is an ordinary cast.
-                if self.lex.tk == '{' && is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                if self.lex.tk == '{' && is_struct_value_ty(ty) {
                     let (off, sym) = self.emit_compound_literal_body(ty)?;
                     return Ok(ConstDesig {
                         value: off,

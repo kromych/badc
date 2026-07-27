@@ -617,7 +617,7 @@ pub(crate) enum Decl {
 /// the param count + variadic flag for the function prologue,
 /// and the post-parse local slot high-water mark for frame
 /// sizing.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct FinishedFunction {
     pub ast: Ast,
     pub ent_pc: usize,

@@ -4,7 +4,7 @@
 //! "reserve frame storage + emit any initializer" responsibilities
 //! of a local declaration line at function-body scope:
 //!
-//!   * `parse_function_body_local_decl` -- parse one declaration
+//!   * `parse_local_decl` -- parse one declaration
 //!     line at the top of a function body. Drives the per-
 //!     declarator allocator dispatch (static-promote vs. stack-
 //!     local).
@@ -31,7 +31,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{apply_qual_bits, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{apply_qual_bits, is_pointer_ty, is_struct_value_ty, struct_id_of};
 
 /// Alignment facts a block-scope declarator carries into its storage
 /// allocation. Produced once per declarator by
@@ -47,6 +47,36 @@ pub(super) struct DeclAlign {
     /// `auto_align` exceeds the 8-byte frame slot, so the object needs the
     /// prologue-realigned region.
     pub realign_auto: bool,
+}
+
+/// Which scope a declaration parsed by [`Compiler::parse_local_decl`]
+/// belongs to. It decides where the outer binding of a redeclared name is
+/// saved and what "already declared in this scope" (C99 6.7p3) means.
+pub(super) enum DeclScope<'a> {
+    /// The function body's outermost scope, which C99 6.2.1p4 shares with
+    /// the parameters. Every binding in it lives in the per-symbol `h_*`
+    /// shadow slot the function-close pass restores, so an existing `Loc`
+    /// binding of the name is a redeclaration in the same scope.
+    FunctionBody,
+    /// A nested block or a `for` init clause. Its bindings are saved on a
+    /// per-entry stack the scope's exit unwinds; that stack also lists
+    /// exactly the names this scope has bound so far.
+    Block(&'a mut alloc::vec::Vec<super::stmt::BlockShadow>),
+}
+
+impl DeclScope<'_> {
+    /// Whether `idx` already has a binding made by this scope.
+    fn binds_in_this_scope(&self, symbols: &[crate::c5::symbol::Symbol], idx: usize) -> bool {
+        match self {
+            // A parameter or an earlier top-level declarator holds `Loc`;
+            // a file-scope register-asm variable self-shadows and is not a
+            // redeclaration.
+            DeclScope::FunctionBody => {
+                symbols[idx].class == Token::Loc as i64 && !symbols[idx].is_global_register
+            }
+            DeclScope::Block(saved) => saved.iter().any(|b| b.idx == idx),
+        }
+    }
 }
 
 impl Compiler {
@@ -231,102 +261,60 @@ impl Compiler {
         Ok(())
     }
 
-    pub(super) fn parse_function_body_local_decl(
+    /// Parse one declaration inside a function body: the declaration
+    /// specifiers, then a comma-separated declarator list each with an
+    /// optional initializer. `scope` selects only how an outer binding is
+    /// saved and what a redeclaration is checked against; every other rule
+    /// is shared by the function-body top level and the blocks in it.
+    pub(super) fn parse_local_decl(
         &mut self,
         maybe_unused: bool,
+        scope: &mut DeclScope<'_>,
     ) -> Result<(), C5Error> {
         let mut is_static = false;
         let mut is_extern = false;
-        // Block-scope `_Thread_local` / `__thread` gives a `static` object
-        // thread storage duration (C11 6.7.1).
         let mut is_thread_local = false;
         let mut saw_specifier = false;
         let mut qual_bits: i64 = 0;
-        // Reset the const carrier for this declaration; the leading
-        // qualifier loop here consumes `const` (a TypeQual) before the
-        // base-type parse, so record it as we go.
+        // Reset the per-declaration carriers; a stale one from the
+        // enclosing function would bleed onto a static's emission record.
         self.pending.base_is_const = false;
         self.pending.saw_register_storage = false;
-        // The file-scope statement loop resets these; at block scope a
-        // stale carrier (the enclosing function's own attributes) would
-        // otherwise bleed onto a block-scope static's emission record.
         self.pending.attr_used = false;
         self.pending.attr_section = None;
         self.pending.attr_weak = false;
         self.pending.attr_hidden = false;
-        while self.lex.tk == Token::Extern
-            || self.lex.tk == Token::Static
-            || self.lex.tk == Token::ThreadLocal
-            || self.lex.tk == Token::FuncSpec
-            || self.lex.tk == Token::TypeQual
-        {
-            if self.lex.tk == Token::Static {
-                is_static = true;
-            }
-            if self.lex.tk == Token::Extern {
-                is_extern = true;
-            }
-            if self.lex.tk == Token::ThreadLocal {
-                is_thread_local = true;
-            }
-            if self.lex_is_register_storage() {
-                self.pending.saw_register_storage = true;
-            }
-            // `volatile` qualifies the declared type (C99 6.7.3); `const`
-            // is recorded out-of-band for value folding.
-            qual_bits |= self.lex_qualifier_bits();
-            self.pending.base_is_const |= self.lex_is_const_qual();
-            saw_specifier = true;
-            self.next()?;
-        }
-        // A block-scope thread-local has static storage duration.
+        saw_specifier |= self.consume_local_decl_specifiers(
+            &mut is_static,
+            &mut is_extern,
+            &mut is_thread_local,
+            &mut qual_bits,
+        )?;
+        // C11 6.7.1: a block-scope thread-local has static storage duration.
         if is_thread_local && !is_extern {
             is_static = true;
         }
-        // C89 / K&R implicit int (`register n = ...;`): a declaration
-        // that carries a storage-class or qualifier but no type names an
-        // int object. Only applies after an explicit specifier so a
-        // mistyped type name still surfaces as an error.
+        // K&R implicit int (`register n = ...;`). Gated on an explicit
+        // specifier so a mistyped type name still surfaces as an error.
         let base = if !self.lex_is_type_start() && saw_specifier {
             Ty::Int as i64
         } else {
             self.parse_decl_base_type()?
         };
-        // C99 6.7.1: a storage-class or qualifier specifier may trail the
-        // type specifier (`INTN STATIC x;`, `int const y;`). Consume any that
-        // follow the base type; the leading run handles the usual order.
-        while self.lex.tk == Token::Extern
-            || self.lex.tk == Token::Static
-            || self.lex.tk == Token::ThreadLocal
-            || self.lex.tk == Token::FuncSpec
-            || self.lex.tk == Token::TypeQual
-        {
-            if self.lex.tk == Token::Static {
-                is_static = true;
-            }
-            if self.lex.tk == Token::Extern {
-                is_extern = true;
-            }
-            if self.lex.tk == Token::ThreadLocal {
-                is_thread_local = true;
-            }
-            if self.lex_is_register_storage() {
-                self.pending.saw_register_storage = true;
-            }
-            qual_bits |= self.lex_qualifier_bits();
-            self.pending.base_is_const |= self.lex_is_const_qual();
-            self.next()?;
-        }
+        // C99 6.7.1: specifiers may also trail the type (`int const y;`).
+        self.consume_local_decl_specifiers(
+            &mut is_static,
+            &mut is_extern,
+            &mut is_thread_local,
+            &mut qual_bits,
+        )?;
         if is_thread_local && !is_extern {
             is_static = true;
         }
         let lbt = apply_qual_bits(base, qual_bits);
         // A function-pointer typedef base type contributes its lineage to
-        // every declarator in the list (`fn_t a, b;` makes both a and b
-        // function pointers). The per-declarator symbol creation consumes
-        // these pending fields, so capture them and re-seed each iteration;
-        // otherwise only the first declarator keeps the lineage and a call
-        // through a later one defaults its result type to int.
+        // every declarator (`fn_t a, b;`), but per-declarator symbol
+        // creation consumes the carriers, so re-seed them each iteration.
         let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
         let base_is_function_type = self.pending.base_is_function_type;
         let base_typedef_fn_proto = self.pending.typedef_fn_proto;
@@ -337,56 +325,35 @@ impl Compiler {
         if self.try_parse_block_fn_prototype(lbt, is_static)? {
             return Ok(());
         }
-        // `__attribute__((cleanup(fn)))` leading the declaration applies to
-        // every declarator (the scope-guard / auto-cleanup idiom).
+        // A leading `cleanup(fn)` applies to every declarator; one written
+        // after a declarator applies to it alone.
         let leading_cleanup = self.pending.attr_cleanup.take();
         while self.lex.tk != ';' {
-            // Re-seed the base type's function-pointer lineage for this
-            // declarator; the previous declarator's symbol creation took it.
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
             self.pending.base_is_function_type = base_is_function_type;
             self.pending.typedef_fn_proto = base_typedef_fn_proto;
             self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
-            // C99 6.7.6.2: a non-constant array dimension at block scope
-            // is a variable-length array.
+            // C99 6.7.6.2: a non-constant dimension here is a VLA.
             self.pending.vla_allowed = true;
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = false;
             let asm_reg = self.parse_register_asm_binding(is_static, is_extern)?;
             // Trailing cleanup wins for this declarator; else the leading one.
             let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
-            // C23 6.7.13.5 `[[maybe_unused]]` / GNU
-            // `__attribute__((unused))` on the declaration suppresses
-            // the unused-variable diagnostic for the names it declares.
             if maybe_unused && loc_idx != usize::MAX {
                 self.symbols[loc_idx].maybe_unused = true;
             }
-            // Function-pointer lineage carries through to local
-            // bindings -- pick up the side-channel parse_declarator
-            // (or the typedef base type) populated. Used by the
-            // unary `*` handler to recognise function-pointer
-            // decay (C99 6.3.2.1p4) as a no-op rather than a
-            // through-pointer load.
+            // Take the fn-pointer carriers before any initializer is parsed:
+            // an initializer cast runs a base-type parse that clears them,
+            // which would drop a variadic fn-pointer's prototype.
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
-            // Capture the function-pointer prototype before the initializer
-            // is parsed: an initializer cast (`= (void *)f`) runs a base-type
-            // parse that clears these pending fields, so reading them after
-            // `allocate_local_with_init` would lose a variadic fn-pointer's
-            // prototype and emit the indirect call as non-variadic.
             let fnptr_proto = self.pending.typedef_fn_proto.take();
             let fnptr_param_types = self.pending.fn_ptr_param_types.take();
-            // Array typedef carries its dimension when the
-            // declarator stayed at the typedef's element type --
-            // i.e., no `[N]` brackets and no leading `*`. A
-            // declarator that added a pointer level (`T *p` where
-            // `T` is an array typedef) names a pointer to the
-            // typedef's element type; the array dimension is part
-            // of the pointee and must not be re-applied to the
-            // declarator (C99 6.7.7p3 + 6.7.6.1). Peek the
-            // carrier without clearing so every declarator in the
-            // comma list sees the same dimension; the outer
-            // parse_block / decl-loop resets it on the next
-            // declaration.
+            // C99 6.7.7p3 + 6.7.6.1: an array typedef contributes its
+            // dimension only when the declarator stayed at the element type;
+            // a `*` names a pointer-to-element and the dimension belongs to
+            // the pointee. Peek without clearing so the rest of the comma
+            // list keeps it.
             let typedef_dim = self.pending.typedef_base_array_size;
             if typedef_dim > 0 && array_size == 0 && self.pending.declarator_leading_ptr_count == 0
             {
@@ -394,103 +361,100 @@ impl Compiler {
                 self.apply_typedef_array_dims(loc_idx);
             }
             self.ty = ty;
-            // C99 6.2.2p4: a block-scope `extern` declaration of an
-            // object has external linkage and refers to the file-scope
-            // object of the same name; it allocates no local storage and
-            // does not shadow the outer binding. Leave an existing
-            // file-scope (Glo) or function binding intact; otherwise
-            // record an undefined external reference the linker resolves.
-            if is_extern {
-                if self.symbols[loc_idx].class != Token::Glo as i64
-                    && self.symbols[loc_idx].class != Token::Fun as i64
-                {
-                    self.symbols[loc_idx].class = Token::Glo as i64;
-                    self.symbols[loc_idx].type_ = ty;
-                    // `extern T name[N];` names an array; record its dimension
-                    // so a subscript decays it to a pointer (6.7.6.2) rather
-                    // than seeing a scalar. The declarator parse has already
-                    // set `inner_array_size` for a multi-dimensional extern.
-                    // `-1` (unsized `extern T name[];`) is kept as at file
-                    // scope: an incomplete array still decays to a pointer;
-                    // collapsing it to 0 reads the name as a scalar and loads
-                    // the array's first bytes where its address belongs.
-                    self.symbols[loc_idx].array_size = array_size;
-                    self.symbols[loc_idx].is_extern_decl = true;
-                    // External linkage is what routes `&name` through
-                    // `live_glo_addr`'s `GloAddr::Extern` arm to a
-                    // name-keyed `extern_imm_data_refs` relocation. Without
-                    // it the address producer falls back to the tentative
-                    // `val` (0 for an object defined in another unit), so
-                    // every block-scope extern collapses to the same
-                    // `.data` base address.
-                    self.symbols[loc_idx].linkage = crate::c5::symbol::Linkage::External;
-                }
-                // A block-scope `extern T x __attribute__((weak,
-                // visibility("hidden")));` carries binding/visibility onto
-                // the symbol whether it is new or an existing file-scope
-                // Glo/Fun (the `symbol_get` idiom redeclares an already-known
-                // name weak+hidden). Without this the reference stays
-                // STB_GLOBAL STV_DEFAULT and an undefined weak fails the link.
-                self.apply_symbol_attributes(loc_idx);
-                if self.lex.tk == ',' {
-                    self.next()?;
-                    continue;
-                }
-                break;
-            }
-            if self.symbols[loc_idx].class == Token::Loc as i64
-                && !self.symbols[loc_idx].is_global_register
-            {
+
+            // C99 6.2.1p4 / 6.2.2p4: a block-scope `extern` names the
+            // file-scope entity. Three prior states differ -- an existing
+            // `Glo`/`Fun` binding is that entity already; a never-declared
+            // name (`Id`) is converted and left bound past the scope, since
+            // this is its only binding; any other bound name (local,
+            // parameter, enum constant, typedef) must be saved and restored,
+            // with in-scope references routed through `block_extern_refs`.
+            let prior_class = self.symbols[loc_idx].class;
+            let convert_extern =
+                is_extern && prior_class != Token::Glo as i64 && prior_class != Token::Fun as i64;
+            let extern_shadows_binding = convert_extern && prior_class != Token::Id as i64;
+
+            // An extern naming an existing entity declares nothing new, so
+            // none of the per-declarator writes below apply to it.
+            let rebinds_slot = !is_extern || convert_extern;
+
+            // C99 6.7p3: an identifier with no linkage is declared once per
+            // scope; `DeclScope` supplies what that scope is. An `extern`
+            // redeclaration has linkage and is exempt.
+            if !is_extern && scope.binds_in_this_scope(&self.symbols, loc_idx) {
                 return Err(self.compile_err("duplicate local definition"));
             }
+            // Save the outer binding of any name this declarator rebinds.
+            // The two exempt cases both leave nothing to restore: an extern
+            // naming an existing entity writes nothing, and one naming a
+            // never-declared name is deliberately left bound past the scope.
+            if !is_extern || extern_shadows_binding {
+                match scope {
+                    DeclScope::FunctionBody => self.shadow_symbol(loc_idx),
+                    DeclScope::Block(saved) => {
+                        let snap = self.capture_block_shadow(loc_idx);
+                        saved.push(snap);
+                    }
+                }
+            }
 
-            self.shadow_symbol(loc_idx);
+            // A block-scope `extern` allocates no storage (C11 6.7.5).
+            let decl_align = if is_extern {
+                None
+            } else {
+                Some(self.resolve_decl_align(ty, is_static)?)
+            };
 
-            let DeclAlign {
-                req_align,
-                obj_is_pointer,
-                auto_align,
-                realign_auto,
-            } = self.resolve_decl_align(ty, is_static)?;
-
-            if is_static {
+            if is_extern {
+                if convert_extern {
+                    self.symbols[loc_idx].class = Token::Glo as i64;
+                    self.symbols[loc_idx].type_ = ty;
+                    // Record the dimension so a subscript sees an array
+                    // (6.7.6.2). `-1` (unsized `extern T name[];`) is kept as
+                    // at file scope: an incomplete array still decays to a
+                    // pointer, while 0 would read the name as a scalar.
+                    self.symbols[loc_idx].array_size = array_size;
+                    if extern_shadows_binding {
+                        // Carry no in-unit offset and leave `is_extern_decl`
+                        // / `linkage` untouched so the restore is exact.
+                        self.symbols[loc_idx].val = 0;
+                        self.symbols[loc_idx].block_extern_active = true;
+                    } else {
+                        // External linkage routes `&name` to a name-keyed
+                        // relocation; without it every block-scope extern
+                        // collapses onto the same `.data` base.
+                        self.symbols[loc_idx].is_extern_decl = true;
+                        self.symbols[loc_idx].linkage = crate::c5::symbol::Linkage::External;
+                    }
+                }
+                // `weak` / `visibility("hidden")` are not part of the shadow
+                // snapshot, so they persist to the object symbol table. A
+                // shadowed bound name never reaches it, so skip that case.
+                if !extern_shadows_binding {
+                    self.apply_symbol_attributes(loc_idx);
+                }
+            } else if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;
                 self.symbols[loc_idx].type_ = ty;
                 self.symbols[loc_idx].is_thread_local = is_thread_local;
-                // Block scope with static storage (C99 6.2.4p3): the
-                // symbol carries `Glo` class for its `.data` slot but
-                // must be unbound at function exit so a file-scope
-                // object of the same name reappears. The `Loc`-gated
-                // cleanup would skip it, so mark it for restore.
-                self.symbols[loc_idx].is_scope_static = true;
-                // A block-scope `static const` integer folds its value in
-                // later constant expressions (read from `.data`), so
-                // `char buf[N * 2 + 1]` is a fixed array, not a VLA.
+                // C99 6.2.4p3: static storage, block scope. The function-body
+                // scope's restore pass is gated on class `Loc`, which a
+                // static local no longer carries, so mark it; a nested block
+                // unbinds it from its own shadow stack instead.
+                self.symbols[loc_idx].is_scope_static = matches!(scope, DeclScope::FunctionBody);
+                // A `static const` integer folds its `.data` value into a
+                // later constant expression, so `char buf[N * 2 + 1]` is a
+                // fixed array rather than a VLA. Static storage plus a const
+                // object type also makes the initializer the value for the
+                // whole execution, as at file scope.
                 self.symbols[loc_idx].is_const_qualified = self.pending.base_is_const
                     && array_size == 0
                     && super::types::is_integer_scalar_ty(ty);
-                // Static storage duration and a const-qualified object type
-                // make the initializer the object's value for the whole
-                // execution, as at file scope; the pointer-indirection
-                // exclusion is the same.
                 self.symbols[loc_idx].storage_is_const =
                     self.pending.base_is_const && !super::types::is_pointer_ty(ty);
-                // As for a file-scope object: the type's own alignment
-                // counts even when the declarator carries no attribute. A
-                // block-scope static shares the `.data` / `.bss` placement of
-                // a file-scope object, so the type's alignment holds up to
-                // MAX_STATIC_ALIGN. A GNU `aligned(N)` type attribute on the
-                // typedef base raises the placement like an explicit request.
-                self.apply_static_local_align(
-                    loc_idx,
-                    ty,
-                    &DeclAlign {
-                        req_align,
-                        obj_is_pointer,
-                        auto_align,
-                        realign_auto,
-                    },
-                );
+                if let Some(a) = &decl_align {
+                    self.apply_static_local_align(loc_idx, ty, a);
+                }
                 self.allocate_static_local(loc_idx, ty, array_size)?;
                 self.push_block_static_record(loc_idx, ty);
                 self.ast_emit_static_local_decl(loc_idx as u32);
@@ -502,75 +466,51 @@ impl Compiler {
                 let decl_file = self.intern_source_file() as u32;
                 self.symbols[loc_idx].decl_file = decl_file;
                 self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
-                // Unconditional write so a reused symbol slot does not
-                // leak a stale binding from an outer name.
+                // Unconditional write so a reused symbol slot does not leak
+                // a stale binding from an outer name.
                 self.symbols[loc_idx].asm_register = asm_reg;
                 self.check_register_asm_init(asm_reg)?;
-                self.pending_local_init_ast = None;
-                self.pending_local_aggregate_ast = None;
-                self.pending_local_runtime_elements.clear();
-                self.allocate_local_with_init(loc_idx, ty, array_size)?;
-                // C11 6.7.5: an automatic object whose alignment exceeds the
-                // frame's 16-byte guarantee (a declarator request or an
-                // `aligned(N)`-raised type) is placed in the prologue's
-                // realigned region. Record its slot, alignment, and byte size
-                // now that the slot is assigned. A variable-length array and
-                // `alloca` both move sp and cannot share the region, so that
-                // combination is rejected (here for the VLA, at function close
-                // for a separate `alloca`).
-                if realign_auto {
-                    self.record_over_aligned_local(loc_idx, ty, auto_align)?;
+                // This declaration can sit inside an enclosing aggregate's
+                // element initializer (an element that is a statement
+                // expression), so keep the carriers reentrant.
+                let saved = self.take_pending_local_carriers();
+                let r = self.allocate_local_with_init(loc_idx, ty, array_size);
+                if r.is_ok() {
+                    self.finalize_local_init(loc_idx);
                 }
-                // Dual-emit: push `Decl::Local { sym, slot_off,
-                // init }`. The init flavour comes from whichever
-                // cross-helper carry the inner allocator filled:
-                // * scalar carry  -> `LocalInit::Scalar(ExprId)`
-                // * aggregate     -> `LocalInit::Aggregate`     (Mcpy)
-                // * runtime elems -> `LocalInit::Runtime`       (per-element stores,
-                //                                                 plus the optional
-                //                                                 Mcpy-zero prelude
-                //                                                 from `aggregate`)
-                // Static locals (promoted to Glo class) skip --
-                // their storage is laid out in .data at TU-load
-                // time, not in the function's frame.
-                self.finalize_local_init(loc_idx);
+                self.restore_pending_local_carriers(saved);
+                r?;
+                // C11 6.7.5: an automatic object aligned past the frame's
+                // 16-byte guarantee goes in the prologue-realigned region,
+                // recorded now that its slot is assigned.
+                if let Some(a) = decl_align.as_ref().filter(|a| a.realign_auto) {
+                    self.record_over_aligned_local(loc_idx, ty, a.auto_align)?;
+                }
             }
-            // A deferred-size local (`T x[]`, `array_size == -1`) whose
-            // initializer resolved to zero elements is a zero-length array:
-            // keep the array-ness the `array_size == 0` scalar encoding
-            // would drop, so it still decays to a pointer and `sizeof` is 0.
-            // Assigned (not just set) so a reused symbol slot does not leak
-            // a stale flag from an outer binding of the same name.
-            self.symbols[loc_idx].is_zero_len_array =
-                array_size == -1 && self.symbols[loc_idx].array_size == 0;
-            // Unconditional write: a stale fn-ptr lineage from a
-            // prior binding of this name must not leak into a
-            // plain scalar/pointer rebind, or the unary `*` handler
-            // mistakes a `*p = ...` for a fn-ptr decay no-op (the
-            // `shadow_symbol` saved the prior value into
-            // `h_fn_ptr_indirection`, so block-exit will restore it).
-            self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
-            // Inherit a variadic function-pointer prototype onto the
-            // local so an indirect call through it knows the callee's
-            // named-parameter count and routes the variadic tail per
-            // the host variadic ABI. Only variadic prototypes are
-            // recorded: a non-variadic indirect call places every
-            // argument as fixed regardless, and synthesising
-            // placeholder parameter types would feed the call-site
-            // argument type-check a spurious mismatch.
-            if let Some(types) = fnptr_param_types {
-                self.symbols[loc_idx].params = types;
-                self.symbols[loc_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
-            } else if let Some((proto_fixed, true)) = fnptr_proto {
-                self.symbols[loc_idx].params = alloc::vec![0i64; proto_fixed];
-                self.symbols[loc_idx].is_variadic = true;
+            // Written after any initializer parse, so an init expression's
+            // own symbol lookups cannot clobber them, and unconditionally, so
+            // a reused slot leaks no stale flag from an outer binding. `T x[]`
+            // whose initializer resolved to zero elements keeps its
+            // array-ness through `is_zero_len_array`; the fn-pointer
+            // prototype is inherited only when variadic, since a non-variadic
+            // indirect call places every argument as fixed and placeholder
+            // parameter types would fail the argument check.
+            if rebinds_slot {
+                self.symbols[loc_idx].is_zero_len_array =
+                    array_size == -1 && self.symbols[loc_idx].array_size == 0;
+                self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
+                if let Some(types) = fnptr_param_types {
+                    self.symbols[loc_idx].params = types;
+                    self.symbols[loc_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
+                } else if let Some((proto_fixed, true)) = fnptr_proto {
+                    self.symbols[loc_idx].params = alloc::vec![0i64; proto_fixed];
+                    self.symbols[loc_idx].is_variadic = true;
+                }
             }
 
-            // Register `__attribute__((cleanup))` after the binding is
-            // final (the automatic branch reset `was_referenced`). It
-            // requires automatic storage (C has no such feature; the
-            // GCC/Clang extension), so a static / extern declarator's
-            // cleanup is inert.
+            // After the binding is final (the automatic branch reset
+            // `was_referenced`). The attribute requires automatic storage,
+            // so a static / extern declarator's cleanup is inert.
             if let Some(fn_sym) = cleanup_fn
                 && !is_static
                 && !is_extern
@@ -586,6 +526,47 @@ impl Compiler {
         self.next()?;
         self.pending.auto_type_single_declarator = false;
         Ok(())
+    }
+
+    /// Consume a run of storage-class specifiers, function specifiers and
+    /// type qualifiers, folding them into the declaration's accumulators.
+    /// C99 6.7.1 lets them appear before or after the type specifier, so
+    /// the caller runs this on both sides of the base-type parse. Returns
+    /// whether the run consumed anything.
+    fn consume_local_decl_specifiers(
+        &mut self,
+        is_static: &mut bool,
+        is_extern: &mut bool,
+        is_thread_local: &mut bool,
+        qual_bits: &mut i64,
+    ) -> Result<bool, C5Error> {
+        let mut saw = false;
+        while self.lex.tk == Token::Extern
+            || self.lex.tk == Token::Static
+            || self.lex.tk == Token::ThreadLocal
+            || self.lex.tk == Token::FuncSpec
+            || self.lex.tk == Token::TypeQual
+        {
+            if self.lex.tk == Token::Static {
+                *is_static = true;
+            }
+            if self.lex.tk == Token::Extern {
+                *is_extern = true;
+            }
+            if self.lex.tk == Token::ThreadLocal {
+                *is_thread_local = true;
+            }
+            if self.lex_is_register_storage() {
+                self.pending.saw_register_storage = true;
+            }
+            // `volatile` qualifies the type (C99 6.7.3); `const` is recorded
+            // out of band for value folding.
+            *qual_bits |= self.lex_qualifier_bits();
+            self.pending.base_is_const |= self.lex_is_const_qual();
+            saw = true;
+            self.next()?;
+        }
+        Ok(saw)
     }
 
     /// Promote a `static T name [ = init];` local to a Glo-class
@@ -1325,7 +1306,7 @@ impl Compiler {
                 break;
             }
             let is_elem = match self.peek_expr_type() {
-                Ok(t) => is_struct_ty(t) && struct_ptr_depth(t) == 0 && struct_id_of(t) == sid,
+                Ok(t) => is_struct_value_ty(t) && struct_id_of(t) == sid,
                 Err(_) => false,
             };
             if is_elem {
@@ -2238,7 +2219,7 @@ impl Compiler {
         if s.class != Token::Glo as i64 || s.array_size > 0 {
             return false;
         }
-        !(is_struct_ty(s.type_) && struct_ptr_depth(s.type_) == 0)
+        !(is_struct_value_ty(s.type_))
     }
 
     /// Whether an identifier value in an automatic-storage initializer

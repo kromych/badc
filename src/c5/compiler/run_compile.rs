@@ -25,8 +25,8 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::types::{
-    apply_qual_bits, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty, is_void_ty,
-    strip_unsigned, struct_id_of, struct_ptr_depth,
+    apply_qual_bits, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty,
+    is_struct_value_ty, is_void_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
 impl Compiler {
@@ -1549,7 +1549,10 @@ impl Compiler {
                             self.parse_block_typedef(None)?;
                         } else if self.lex_is_type_start() {
                             let item_before = self.ast_stmts_snapshot();
-                            self.parse_function_body_local_decl(leading_maybe_unused)?;
+                            self.parse_local_decl(
+                                leading_maybe_unused,
+                                &mut super::locals::DeclScope::FunctionBody,
+                            )?;
                             let item_after = self.ast.stmts.len();
                             // Skip any statement-expression sub-statements
                             // interleaved by an initializer; they are
@@ -1646,8 +1649,7 @@ impl Compiler {
                         })
                         .collect();
                     let ret_ty_for_finish = self.current_func_return_ty;
-                    let returns_struct_finish =
-                        is_struct_ty(ret_ty_for_finish) && struct_ptr_depth(ret_ty_for_finish) == 0;
+                    let returns_struct_finish = is_struct_value_ty(ret_ty_for_finish);
                     let return_struct_size_finish = if returns_struct_finish {
                         self.size_of_type(ret_ty_for_finish) as i64
                     } else {
@@ -1868,13 +1870,15 @@ impl Compiler {
                     // read or branch is unambiguously dead.
                     self.emit_dead_stores_and_flush();
                     for sym in self.symbols.iter_mut() {
-                        // Block-scope locals (`Loc`) and `static` locals
-                        // (promoted to `Glo` but block-scoped) both unbind
-                        // at function exit so a file-scope object of the
-                        // same name reappears.
+                        // Block-scope locals (`Loc`), `static` locals
+                        // (promoted to `Glo` but block-scoped) and an
+                        // `extern` that converted a bound file-scope name
+                        // all unbind at function exit so the outer binding
+                        // of the same name reappears.
                         if sym.class == Token::Loc as i64
                             || sym.is_scope_static
                             || sym.is_scope_typedef
+                            || sym.block_extern_active
                         {
                             Self::restore_shadowed_symbol(sym);
                         }
@@ -2000,8 +2004,7 @@ impl Compiler {
                     // flipping it undefined here would drop the symbol.
                     if was_extern_only_decl
                         && !self.symbols[id_idx].defined_here
-                        && is_struct_ty(ty)
-                        && struct_ptr_depth(ty) == 0
+                        && is_struct_value_ty(ty)
                         && (self.structs[struct_id_of(ty)].fields.is_empty()
                             || self.structs[struct_id_of(ty)]
                                 .fields

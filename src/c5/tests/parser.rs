@@ -1992,3 +1992,31 @@ fn stack_pointer_register_variable_as_asm_operand() {
         "unexpected error: {err}"
     );
 }
+
+#[test]
+fn nested_block_declaration_diagnostics_match_the_function_body() {
+    // A declaration inside a nested block goes through the same parser as
+    // one at the function-body top level, so it is held to the same
+    // constraints.
+
+    // C99 6.7p3: an identifier with no linkage is declared once per scope.
+    expect_compile_error(
+        "int main(void) { { int a = 1; int a = 2; return a; } }",
+        "duplicate local definition",
+    );
+    // A second identifier after a declarator ends the declaration; it is a
+    // syntax error, not another declarator. This is how an unrecognized
+    // type qualifier reads, so accepting it silently declares an extra
+    // object of the base type.
+    expect_compile_error(
+        "int main(void) { { int a b; return 0; } }",
+        "expected `,` or `;` after declarator",
+    );
+    // Redeclaring in an inner scope stays legal (C99 6.2.1p4).
+    let shadowing = "int main(void) { int a = 1; { int a = 2; if (a != 2) return 1; } \
+                     return a == 1 ? 0 : 2; }";
+    assert!(
+        Compiler::new(shadowing.to_string()).compile().is_ok(),
+        "an inner-scope redeclaration must stay accepted"
+    );
+}

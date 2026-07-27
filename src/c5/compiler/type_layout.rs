@@ -16,9 +16,9 @@ use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_MASK, is_pointer_ty, is_struct_ty, is_type_start_token,
-    pointee_size_no_struct, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
-    usual_arith_common_ty,
+    UNSIGNED_BIT, VOLATILE_MASK, is_pointer_ty, is_struct_ty, is_struct_value_ty,
+    is_type_start_token, pointee_size_no_struct, strip_unsigned, struct_id_of, struct_ptr_depth,
+    struct_ty_for, usual_arith_common_ty,
 };
 use super::{StructDef, StructField};
 
@@ -300,7 +300,7 @@ impl Compiler {
     /// layout machinery but initializes as a single scalar leaf, so a
     /// brace list must not spend a sibling's value on its halves.
     pub(super) fn is_traversable_aggregate_ty(&self, t: i64) -> bool {
-        is_struct_ty(t) && struct_ptr_depth(t) == 0 && !self.is_int128_ty(t)
+        is_struct_value_ty(t) && !self.is_int128_ty(t)
     }
 
     /// C99 6.3.1.8 usual arithmetic conversions, with the GCC 128-bit
@@ -592,7 +592,7 @@ impl Compiler {
     /// `loc_offs += 1` patterns map to `loc_offs += slots_of(ty)`
     /// without changing emit semantics.
     pub(super) fn slots_of_type(&self, ty: i64) -> i64 {
-        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+        if is_struct_value_ty(ty) {
             // Struct fields are 8-byte aligned (see parse_struct_body),
             // so the size is already a multiple of 8 -- the +7 round
             // is defensive in case a future change adds sub-8-byte
@@ -645,7 +645,7 @@ pub(crate) fn flatten_struct_fields(
     let sd = &structs[struct_id];
     for f in &sd.fields {
         let elem_ty = f.ty;
-        let is_struct_value = is_struct_ty(elem_ty) && struct_ptr_depth(elem_ty) == 0;
+        let is_struct_value = is_struct_value_ty(elem_ty);
         let elem_size = if is_struct_value {
             structs[struct_id_of(elem_ty)].size as u32
         } else {

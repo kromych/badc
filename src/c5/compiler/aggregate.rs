@@ -20,8 +20,8 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::decl_base;
 use super::types::{
-    UNSIGNED_BIT, is_decl_modifier, is_pointer_ty, is_struct_ty, round_up, struct_id_of,
-    struct_ptr_depth, struct_ty_for,
+    UNSIGNED_BIT, is_decl_modifier, is_pointer_ty, is_struct_value_ty, round_up, struct_id_of,
+    struct_ty_for,
 };
 use super::{Compiler, StructDef, StructField};
 
@@ -631,7 +631,7 @@ impl Compiler {
                 // side-channel so it cannot leak to the next field.
                 let field_is_variadic = !field_params.is_empty()
                     && matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
-                let is_aggregate_value = is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
+                let is_aggregate_value = is_struct_value_ty(field_ty);
                 // C99 6.7.2.1: a member must have complete type, and an
                 // array of an incomplete type is itself incomplete. Only a
                 // forward-declared tag is incomplete; size cannot stand in
@@ -757,8 +757,7 @@ impl Compiler {
                     // storage and no alignment (GCC): the following member
                     // shares its offset, which is what the `__DECLARE_FLEX_ARRAY`
                     // idiom (`struct {} __empty; T arr[];`) relies on.
-                    let is_empty_aggregate = is_struct_ty(field_ty)
-                        && struct_ptr_depth(field_ty) == 0
+                    let is_empty_aggregate = is_struct_value_ty(field_ty)
                         && self.structs[struct_id_of(field_ty)].fields.is_empty();
                     let field_storage = if is_empty_aggregate {
                         0

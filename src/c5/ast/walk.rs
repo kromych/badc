@@ -13,14 +13,14 @@ use alloc::string::String;
 use super::super::codegen::Target;
 use super::super::codegen::ssa::build::SsaBuilder;
 use super::super::compiler::types::{
-    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_pointer_ty, is_struct_ty, is_vector_ty,
-    is_volatile_object_ty, is_volatile_ty, load_kind, segment_of_ty, strip_unsigned,
-    struct_ptr_depth,
+    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_pointer_ty, is_struct_ty,
+    is_struct_value_ty, is_vector_ty, is_volatile_object_ty, is_volatile_ty, load_kind,
+    segment_of_ty, strip_unsigned, struct_ptr_depth,
 };
 use super::super::ir::{AsmSeg, AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind, ValueId};
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
-use super::{AtomicKind, Expr, ExprId, Stmt, StmtId, UnOp};
+use super::{AtomicKind, Expr, ExprId, FinishedFunction, Stmt, StmtId, UnOp};
 
 /// The low and high 64-bit halves of a 128-bit value, in that order.
 type Halves = (ValueId, ValueId);
@@ -87,26 +87,33 @@ impl WalkError {
 /// identifier -- the SSA emit threads it through so the
 /// post-link codegen can resolve call-site fixups against the
 /// same identifier the linker rebased.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn walk_function(
-    ast: &super::Ast,
+    fun: &FinishedFunction,
     symbols: &[Symbol],
     structs: &[crate::c5::compiler::StructDef],
     target: Target,
-    ent_pc: usize,
-    end_pc: usize,
-    n_params: usize,
-    is_variadic: bool,
-    n_locals: i64,
-    param_tys: &[i64],
-    param_local_slots: &[i64],
-    returns_struct: bool,
-    return_struct_size: i64,
-    return_ty: i64,
-    alloca_top_slot: i64,
-    over_aligned_slots: &[(i64, i64, i64)],
     optimize: bool,
 ) -> Result<FunctionSsa, WalkError> {
+    let FinishedFunction {
+        ast,
+        ent_pc,
+        end_pc,
+        n_params,
+        is_variadic,
+        n_locals,
+        param_tys,
+        param_local_slots,
+        returns_struct,
+        return_struct_size,
+        return_ty,
+        alloca_top_slot,
+        over_aligned_slots,
+        ..
+    } = fun;
+    let (ent_pc, end_pc, n_params) = (*ent_pc, *end_pc, *n_params);
+    let (is_variadic, n_locals) = (*is_variadic, *n_locals);
+    let (returns_struct, return_struct_size) = (*returns_struct, *return_struct_size);
+    let (return_ty, alloca_top_slot) = (*return_ty, *alloca_top_slot);
     let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
     b.set_end_pc(end_pc);
     // C11 6.7.5: automatic objects whose alignment exceeds the 8-byte frame
@@ -2371,7 +2378,7 @@ impl<'a> Walker<'a> {
                 // rvalues). A scalar source of a 128-bit `__int128` slot is
                 // widened into it instead -- `v` is then a value, not an
                 // address, so an Mcpy from it would fault.
-                if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                if is_struct_value_ty(ty) {
                     let dst = b.local_addr(slot);
                     let src_ty = expr_ty(self.ast.expr(*init_id)).unwrap_or(ty);
                     if self.is_int128_value_ty(ty) && !is_struct_ty(src_ty) {
@@ -2440,7 +2447,7 @@ impl<'a> Walker<'a> {
                             } else {
                                 b.binop_imm(BinOp::Add, base, src_off)
                             };
-                            let scalar = !(is_struct_ty(elem.ty) && struct_ptr_depth(elem.ty) == 0);
+                            let scalar = !(is_struct_value_ty(elem.ty));
                             let kinds = match bytes {
                                 1 => Some((LoadKind::U8, StoreKind::I8)),
                                 2 => Some((LoadKind::U16, StoreKind::I16)),
@@ -2491,7 +2498,7 @@ impl<'a> Walker<'a> {
                     // source's bytes. `v` is the source address (the
                     // walker's address-as-value routing for struct rvalues),
                     // so this needs an Mcpy, not a scalar store.
-                    if is_struct_ty(elem.ty) && struct_ptr_depth(elem.ty) == 0 {
+                    if is_struct_value_ty(elem.ty) {
                         let size = self.struct_size(elem.ty);
                         b.mcpy(addr, v, size, self.struct_align(elem.ty));
                         continue;
@@ -3964,8 +3971,7 @@ impl<'a> Walker<'a> {
                                 } else {
                                     match expr_ty(self.ast.expr(args[i])) {
                                         Some(aty)
-                                            if is_struct_ty(aty)
-                                                && struct_ptr_depth(aty) == 0
+                                            if is_struct_value_ty(aty)
                                                 && self.struct_size(aty) <= 8 =>
                                         {
                                             arg_vals[i] = b
@@ -4266,8 +4272,7 @@ impl<'a> Walker<'a> {
                                     None => continue,
                                 }
                             };
-                            if is_struct_ty(arg_ty)
-                                && struct_ptr_depth(arg_ty) == 0
+                            if is_struct_value_ty(arg_ty)
                                 && let Some(desc) = crate::c5::compiler::host_abi_agg_desc(
                                     self.structs,
                                     self.target,
@@ -4401,7 +4406,7 @@ impl<'a> Walker<'a> {
                     let Some(aty) = expr_ty(self.ast.expr(args[i])) else {
                         continue;
                     };
-                    if !(is_struct_ty(aty) && struct_ptr_depth(aty) == 0) {
+                    if !(is_struct_value_ty(aty)) {
                         continue;
                     }
                     if let Some(desc) =
@@ -4975,8 +4980,7 @@ impl<'a> Walker<'a> {
                 // array decays to (and a struct is passed by) the
                 // object's address; a scalar literal yields the
                 // loaded value.
-                let address_only =
-                    array_size != 0 || (is_struct_ty(ty) && struct_ptr_depth(ty) == 0);
+                let address_only = array_size != 0 || (is_struct_value_ty(ty));
                 if address_only {
                     Ok(b.local_addr(slot))
                 } else {
@@ -6035,7 +6039,7 @@ impl<'a> Walker<'a> {
                 // struct's address. Skip the trailing load --
                 // the enclosing site (struct Assign / Mcpy /
                 // Member chain) consumes the address.
-                if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                if is_struct_value_ty(ty) {
                     return Ok(addr);
                 }
                 // A read through a `__seg_gs` / `__seg_fs` pointer rides a
@@ -6183,13 +6187,13 @@ impl<'a> Walker<'a> {
         // type), is consumed as its address rather than its
         // contents -- no trailing load. `array_size != 0` flags
         // arrays; the type tag indicates a struct value when
-        // `is_struct_ty(ty) && struct_ptr_depth(ty) == 0`. Both
+        // `is_struct_value_ty(ty)`. Both
         // shapes route through the lvalue helper so the walker
         // emits just the address producer. The fields are
         // snapshotted at parse time on `Expr::Ident` so this
         // path keeps working after the function-end shadow
         // restoration unbinds the symbol's outer-scope value.
-        let address_only = array_size != 0 || (is_struct_ty(ty) && struct_ptr_depth(ty) == 0);
+        let address_only = array_size != 0 || (is_struct_value_ty(ty));
         if address_only {
             if class == Token::Loc as i64 {
                 return Ok(b.local_addr(val));
@@ -6910,22 +6914,15 @@ mod tests {
         ast.body = Some(__ret);
 
         let func = walk_function(
-            &ast,
+            &FinishedFunction {
+                ast,
+                n_locals: 0,
+                return_ty: Ty::Int as i64,
+                ..Default::default()
+            },
             &empty_symbols(),
             &[],
             Target::LinuxAarch64,
-            0,
-            0,
-            0,
-            false,
-            0,
-            &[],
-            &[],
-            false,
-            0,
-            Ty::Int as i64,
-            0,
-            &[],
             false,
         )
         .expect("walk");
@@ -6977,22 +6974,14 @@ mod tests {
         ast.body = Some(__ret);
 
         let func = walk_function(
-            &ast,
+            &FinishedFunction {
+                ast,
+                n_locals: 8,
+                ..Default::default()
+            },
             &syms,
             &[],
             Target::LinuxAarch64,
-            0,
-            0,
-            0,
-            false,
-            8,
-            &[],
-            &[],
-            false,
-            0,
-            0,
-            0,
-            &[],
             false,
         )
         .expect("walk");
@@ -7052,22 +7041,14 @@ mod tests {
         ast.body = Some(__ret);
 
         let func = walk_function(
-            &ast,
+            &FinishedFunction {
+                ast,
+                n_locals: 8,
+                ..Default::default()
+            },
             &syms,
             &[],
             Target::LinuxAarch64,
-            0,
-            0,
-            0,
-            false,
-            8,
-            &[],
-            &[],
-            false,
-            0,
-            0,
-            0,
-            &[],
             false,
         )
         .expect("walk");
@@ -7119,22 +7100,14 @@ mod tests {
         ast.body = Some(__ret);
 
         let func = walk_function(
-            &ast,
+            &FinishedFunction {
+                ast,
+                n_locals: 0,
+                ..Default::default()
+            },
             &empty_symbols(),
             &[],
             Target::LinuxAarch64,
-            0,
-            0,
-            0,
-            false,
-            0,
-            &[],
-            &[],
-            false,
-            0,
-            0,
-            0,
-            &[],
             false,
         )
         .expect("walk");
@@ -7166,22 +7139,14 @@ mod tests {
         ast.body = Some(asm_id);
 
         let err = walk_function(
-            &ast,
+            &FinishedFunction {
+                ast,
+                n_locals: 0,
+                ..Default::default()
+            },
             &empty_symbols(),
             &[],
             Target::LinuxAarch64,
-            0,
-            0,
-            0,
-            false,
-            0,
-            &[],
-            &[],
-            false,
-            0,
-            0,
-            0,
-            &[],
             false,
         )
         .expect_err("Asm must surface as unsupported");

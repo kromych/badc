@@ -784,6 +784,16 @@ fn section_attr_aligned_placement() {
 }
 
 #[test]
+fn section_attr_flexible_array_tail() {
+    // C99 6.7.2.1p16: a flexible array member is out of `sizeof`, but a
+    // definition initializing it occupies those bytes, so the next
+    // object in the same named section starts past them. Read back
+    // through a table in that section, at file scope and for a
+    // block-scope static. Matched against GCC and clang.
+    assert_eq!(run_fixture("section_attr_flexible_array_tail.c"), 0);
+}
+
+#[test]
 fn max_alignment_placement() {
     // The widest static alignment badc honors (64 KiB) lands on its
     // boundary for bare, initialised, and block-scope-static storage. Off

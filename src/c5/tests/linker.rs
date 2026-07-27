@@ -5209,6 +5209,74 @@ fn named_section_members_pack_in_declaration_order() {
     assert_eq!(sections[".bss"].0, 0, "no ghost bytes in .bss");
 }
 
+#[test]
+#[cfg(feature = "native-emit")]
+fn named_section_object_keeps_its_flexible_array_tail() {
+    // C99 6.7.2.1p16 leaves a flexible array member out of `sizeof`, but
+    // a definition that initializes it occupies the element bytes: the
+    // object's size is `sizeof` plus them, and the next object in the
+    // named section starts past them rather than over them. `gcc -c` on
+    // the same source gives `.fam` sh_size 0x78, `st_size` 32 / 65 / 16
+    // for head / tail / table, and 0x48 from the tail object's start to
+    // the next object's; the tail object's 65 bytes are the same.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        struct over { unsigned long v; };\n\
+        struct desc {\n\
+            char name[20];\n\
+            union { struct over *ptr; signed int off; } over;\n\
+            struct { char field[10]; unsigned char shift; } regs[];\n\
+        };\n\
+        static struct over t1, t2;\n\
+        #define SEC __attribute__((section(\".fam\"), aligned(8)))\n\
+        SEC const struct desc head = { .name = \"head\", .over = { &t1 } };\n\
+        SEC const struct desc tail = { .name = \"tail\", .over = { &t2 },\n\
+            .regs = { {\"aa\", 1}, {\"bb\", 2}, {\"cc\", 3} } };\n\
+        SEC const struct desc *const table[] = { &head, &tail };\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            src.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let (sections, _) = elf_layout(&bytes);
+        assert_eq!(sections[".fam"], (0x78, 8), "{target:?}: section extent");
+        let syms = elf_symbols(&bytes);
+        let by_name = |n: &str| {
+            let s = syms.iter().find(|s| s.0 == n).expect("symbol");
+            (s.3, s.4)
+        };
+        assert_eq!(by_name("head"), (0x00, 32), "{target:?}: head");
+        assert_eq!(by_name("tail"), (0x20, 65), "{target:?}: tail");
+        assert_eq!(by_name("table"), (0x68, 16), "{target:?}: table");
+        let body = elf_sections(&bytes)
+            .into_iter()
+            .find(|(n, ..)| n == ".fam")
+            .expect(".fam section")
+            .3;
+        // The tail object: name, the 8-byte union slot the relocation
+        // fills, then the three initialized elements (11 bytes each).
+        let mut want = alloc::vec![0u8; 65];
+        want[..4].copy_from_slice(b"tail");
+        for (i, (name, shift)) in [("aa", 1u8), ("bb", 2), ("cc", 3)].iter().enumerate() {
+            let at = 32 + i * 11;
+            want[at..at + name.len()].copy_from_slice(name.as_bytes());
+            want[at + 10] = *shift;
+        }
+        let got = &body[0x20..0x20 + 65];
+        assert_eq!(&got[..24], &want[..24], "{target:?}: fixed fields");
+        assert_eq!(&got[32..], &want[32..], "{target:?}: initialized elements");
+    }
+}
+
 /// Minimal ELF64 section-header walk for the tests below: returns
 /// `(name, sh_type, sh_flags, bytes)` per section.
 fn elf_sections(bytes: &[u8]) -> alloc::vec::Vec<(String, u32, u64, alloc::vec::Vec<u8>)> {

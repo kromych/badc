@@ -567,6 +567,121 @@ fn token_paste_joins_tokens() {
     );
 }
 
+// C99 6.10.3.3p2 applies `##` to both macro forms, so the object-like
+// replacement list pastes exactly as the function-like one does.
+#[test]
+fn token_paste_in_object_like_body() {
+    let out = process("#define CAT a ## b\n#define PRE NV ## 907D\nint CAT; int PRE;\n");
+    assert!(
+        out.contains("int ab; int NV907D;"),
+        "object-like ## should paste:\n{out}"
+    );
+}
+
+#[test]
+fn token_paste_chain_in_object_like_body() {
+    let out = process("#define CHAIN a ## b ## c\nint CHAIN;\n");
+    assert!(
+        out.contains("int abc;"),
+        "several ## in one list paste left to right:\n{out}"
+    );
+}
+
+// The paste result is not rescanned as part of the paste, but the
+// ordinary C99 6.10.3.4 rescan of the replacement list expands it.
+#[test]
+fn object_like_paste_result_is_rescanned() {
+    let out = process("#define FOO 42\n#define MK F ## OO\nint x = MK;\n");
+    assert!(
+        out.contains("int x = 42;"),
+        "a pasted macro name expands on rescan:\n{out}"
+    );
+}
+
+#[test]
+fn object_like_paste_through_function_like_argument() {
+    let src = "#define OBJ x ## y\n#define ID(a) a\n#define STR(a) #a\n#define XSTR(a) STR(a)\n\
+               int p = ID(OBJ); const char *s = XSTR(OBJ); const char *t = STR(OBJ);\n";
+    let out = process(src);
+    assert!(
+        out.contains("int p = xy;") && out.contains("\"xy\"") && out.contains("\"OBJ\""),
+        "object-like paste must survive argument expansion and stringizing:\n{out}"
+    );
+}
+
+// C99 6.10.3.2 gives `#` meaning only in a function-like replacement
+// list; in an object-like one it stays an ordinary punctuator.
+#[test]
+fn hash_is_not_stringize_in_object_like_body() {
+    let out = process("#define TWOHASH a # b\nint v = TWOHASH;\n");
+    assert!(
+        out.contains("int v = a # b;"),
+        "object-like # is literal:\n{out}"
+    );
+}
+
+// C99 6.10.3.3p1 constraint, stated for either form of definition.
+#[test]
+fn paste_at_replacement_list_end_is_an_error() {
+    for src in [
+        "#define LEAD ## b\n",
+        "#define TRAIL a ##\n",
+        "#define FL(a) ## a\n",
+        "#define FT(a) a ##\n",
+    ] {
+        let e = process_err(src);
+        assert!(
+            e.contains("`##` cannot appear at either end"),
+            "{src:?} must be diagnosed, got: {e}"
+        );
+    }
+}
+
+// `##` between the comma and the variadic tail is mid-list, so the
+// constraint above must not fire on it.
+#[test]
+fn paste_before_variadic_tail_is_accepted() {
+    let out = process("#define P(f, ...) pr(f, ## __VA_ARGS__)\nP(\"x\");\nP(\"x\", 1);\n");
+    assert!(
+        out.contains("pr(\"x\");") && out.contains("pr(\"x\", 1);"),
+        "mid-list ## stays legal:\n{out}"
+    );
+}
+
+// The variadic tail after `, ##` is a paste operand, so it substitutes
+// unexpanded (C99 6.10.3.1p1). A macro name in it must survive to the
+// rescan, where a further `##` operand keeps it and a plain position
+// expands it.
+#[test]
+fn comma_paste_tail_substitutes_unexpanded() {
+    let src = "#define FALSE (1 == 0)\n#define P(a, b) a ## _ ## b\n\
+               #define Q(A...) P(x, ##A)\n#define R(A...) f(0, ##A)\n\
+               int v = Q(FALSE); int w = R(FALSE);\n";
+    let out = process(src);
+    assert!(
+        out.contains("int v = x_FALSE;"),
+        "a ## operand must reach the paste unexpanded:\n{out}"
+    );
+    assert!(
+        out.contains("(1 == 0)"),
+        "a plain position still expands on rescan:\n{out}"
+    );
+}
+
+// Each `, ##` use substitutes the tail afresh, so a tail whose
+// expansion is not idempotent yields a separate result per use.
+#[test]
+fn comma_paste_tail_expands_once_per_use() {
+    let src = "#define P(a,b) a##b\n#define Q(a,b) P(a,b)\n#define U(p) Q(Q(id_, p), __COUNTER__)\n\
+               #define TWICE(f, ...) do { g(f, ##__VA_ARGS__); h(f, ##__VA_ARGS__); } while (0)\n\
+               TWICE(\"m\", U(x_));\n";
+    let out = process(src);
+    assert!(
+        out.contains("g(\"m\", id_x_0)") && out.contains("h(\"m\", id_x_1)"),
+        "each use must draw its own __COUNTER__:\n{out}"
+    );
+}
+
 #[test]
 fn variadic_macro_expands_va_args() {
     let out = process("#define CALL(...) f(__VA_ARGS__)\nCALL(1, 2, 3);\n");

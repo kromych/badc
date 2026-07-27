@@ -346,25 +346,41 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
                 .collect()
         })
         .collect();
+    // Off a worklist: a block is recomputed only when a successor's
+    // live-in grew, so the sweep count tracks loop depth rather than the
+    // block count. The dataflow is monotone from the empty set, so its
+    // least fixed point -- and hence the result -- does not depend on
+    // the visit order.
+    let mut preds: Vec<Vec<usize>> = alloc::vec![Vec::new(); nb];
+    for (b, ss) in succ.iter().enumerate() {
+        for &s in ss {
+            preds[s].push(b);
+        }
+    }
     let mut live_in = alloc::vec![0u64; nb * words];
     let mut live_out = alloc::vec![0u64; nb * words];
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for b in (0..nb).rev() {
-            for w in 0..words {
-                let mut out = 0u64;
-                for &s in &succ[b] {
-                    out |= live_in[s * words + w];
-                }
-                if out != live_out[b * words + w] {
-                    live_out[b * words + w] = out;
-                    changed = true;
-                }
-                let v = gen_bits[b * words + w] | (out & !kill[b * words + w]);
-                if v != live_in[b * words + w] {
-                    live_in[b * words + w] = v;
-                    changed = true;
+    let mut work: Vec<usize> = (0..nb).collect();
+    let mut queued = alloc::vec![true; nb];
+    while let Some(b) = work.pop() {
+        queued[b] = false;
+        let mut grew = false;
+        for w in 0..words {
+            let mut out = 0u64;
+            for &s in &succ[b] {
+                out |= live_in[s * words + w];
+            }
+            live_out[b * words + w] = out;
+            let v = gen_bits[b * words + w] | (out & !kill[b * words + w]);
+            if v != live_in[b * words + w] {
+                live_in[b * words + w] = v;
+                grew = true;
+            }
+        }
+        if grew {
+            for &p in &preds[b] {
+                if !queued[p] {
+                    queued[p] = true;
+                    work.push(p);
                 }
             }
         }
@@ -407,18 +423,28 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
         }
     }
 
-    // Greedy colouring: interfering slots get distinct colours.
+    // Greedy colouring: interfering slots get distinct colours. Each
+    // row is walked over its set bits, and the colours its already-
+    // coloured neighbours hold are marked in a stamp array refreshed by
+    // bumping the stamp, so the search costs the row's degree rather
+    // than the candidate count times a set insertion.
     let mut color = alloc::vec![usize::MAX; n];
+    let mut color_used = alloc::vec![0u32; n + 1];
     let mut ncolors = 0usize;
     for i in 0..n {
-        let mut used: BTreeSet<usize> = BTreeSet::new();
-        for j in 0..n {
-            if color[j] != usize::MAX && interfere[i * words + j / 64] & (1u64 << (j % 64)) != 0 {
-                used.insert(color[j]);
+        let stamp = i as u32 + 1;
+        for w in 0..words {
+            let mut bits = interfere[i * words + w];
+            while bits != 0 {
+                let j = w * 64 + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                if color[j] != usize::MAX {
+                    color_used[color[j]] = stamp;
+                }
             }
         }
         let mut c = 0;
-        while used.contains(&c) {
+        while color_used[c] == stamp {
             c += 1;
         }
         color[i] = c;

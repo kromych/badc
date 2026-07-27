@@ -45,7 +45,9 @@ static void guards(void) {
     // whole address.
     BUILD_BUG_ON((char *)&nest.node < (char *)&nest, 3);
     BUILD_BUG_ON((char *)&nest.tail[0] <= (char *)&nest.node, 4);
-    BUILD_BUG_ON((unsigned long)&nest.tail[7] >= (unsigned long)(&nest + 1), 5);
+    // An integer cast keeps the whole address only in a pointer-sized
+    // type; `unsigned long` is 32-bit on LLP64.
+    BUILD_BUG_ON((unsigned long long)&nest.tail[7] >= (unsigned long long)(&nest + 1), 5);
     // Constant array subscripts, including the row-major ordering of a
     // two-dimensional array.
     BUILD_BUG_ON(&grid[0][0] != (int *)&grid, 6);

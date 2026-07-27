@@ -189,9 +189,32 @@ sections (`__jump_table`, `.altinstructions`, `__ex_table`, `.smp_locks`).
 A minimal initramfs whose `/init` prints a marker and powers off makes the
 boot a pass/fail check under `qemu-system-x86_64 -nographic`.
 
+## Regression gate
+
+`verify.py` runs the hybrid build above with no fallback list and boots the
+result, as a pass/fail check rather than a measurement:
+
+```sh
+python3 demos/linux/verify.py --kernel-dir <writable tree> \
+    --initramfs <image> --expect-units 1912 --report verify-x86_64.json
+```
+
+It fails on any unit badc cannot compile, any unit that fell back to the
+reference compiler, any undefined reference at link, any boot that does not
+reach the marker, and on a build that compiled fewer units than
+`--expect-units` -- make skips units whose objects are current, so without a
+floor a tree that rebuilt nothing would pass while testing nothing. For the
+same reason the tree is rebuilt from clean by default.
+
+Per-arch differences (target triple, image path, qemu machine and console)
+are a table in the script; `--arch` selects the row and defaults to the host.
+Run it on the box whose corpus matches, and against a copy: the build writes
+into the tree.
+
 ## Scope
 
 The sweep gates nothing; it is a measurement. A unit that gcc compiles and
 badc rejects is a candidate gap; crashes and timeouts get their own buckets
 and are bugs by definition. Passing units prove nothing about runtime
-correctness; the hybrid build above is the link-and-boot check.
+correctness; the hybrid build above is the link-and-boot check, and
+`verify.py` is that check wired as a gate.

@@ -3689,3 +3689,60 @@ fn elf_text(bytes: &[u8]) -> alloc::vec::Vec<u8> {
     }
     alloc::vec::Vec::new()
 }
+
+/// The staged brace-list template an `Inst::Mcpy` copies into a frame
+/// local is 8-aligned, so that copy keeps its 8-byte transfer unit even
+/// under `-mstrict-align`. A template landing 1- or 2-aligned made the
+/// copy read 8 bytes from an under-aligned address.
+#[test]
+fn staged_aggregate_template_is_eight_aligned() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    // The odd-sized array ahead of the compound literals leaves the data
+    // cursor unaligned unless the staging site realigns it.
+    const SRC: &str = "typedef struct { unsigned long v; } w_t;\n\
+         void take(w_t);\n\
+         char msg[5] = \"abcd\";\n\
+         void f(void) { take((w_t){ 0x1122334455667788UL }); }\n\
+         void g(void) { take((w_t){ 0x99aabbccddeeff00UL }); }\n";
+    let prog = crate::Compiler::with_options(
+        SRC.to_string(),
+        Target::LinuxAarch64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile staged aggregate");
+    let obj = emit_native_with_options(
+        &prog,
+        Target::LinuxAarch64,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            strict_align: true,
+            ..NativeOptions::default()
+        },
+    )
+    .expect("emit object");
+    // One `ldr x` / `str x` pair per staged copy. A narrowed copy shows
+    // `ldrb` / `strb` (0x39400000 / 0x39000000) or `ldrh` / `strh`
+    // (0x79400000 / 0x79000000); the fixture emits no other subword
+    // access, so any is a narrowed template copy.
+    let count = |want: u32| -> usize {
+        elf_text(&obj)
+            .chunks_exact(4)
+            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .filter(|insn| insn & 0xFFC0_0000 == want)
+            .count()
+    };
+    let narrow: usize = [0x3940_0000, 0x3900_0000, 0x7940_0000, 0x7900_0000]
+        .into_iter()
+        .map(count)
+        .sum();
+    assert_eq!(
+        narrow, 0,
+        "a staged template copy narrowed, so its data offset was under-aligned"
+    );
+    assert!(
+        count(0xF940_0000) >= 2,
+        "expected one 8-byte load per staged aggregate copy"
+    );
+}

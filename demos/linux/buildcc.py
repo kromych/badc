@@ -20,18 +20,7 @@ Environment: BADC (badc binary, required once a kernel unit appears),
 BADC_REAL_CC (default gcc), BADC_TARGET (default linux-x64),
 BADC_FALLBACK (file of kernel-relative source paths to leave to gcc),
 BADC_MANIFEST (append `badc|fallback|fail<TAB>source[<TAB>detail]` per
-kernel unit), BADC_TIMEOUT (seconds per badc run, default 300),
-BADC_WEAKEN (comma-separated symbols demoted to STB_WEAK in each badc
-object via objcopy).
-
-BADC_WEAKEN compensates for a badc gap: a GNU89 extern-inline function
-(`extern inline` with `__gnu_inline__`) must provide no external
-definition, but badc emits a strong global one per instantiating unit,
-which collides with the real out-of-line definition at link time.
-Weakening the copies makes every symbolic reference bind to the one
-strong definition, as the semantics require; the dead weak copies only
-cost bytes. TODO: implement the inline linkage model in badc and drop
-this.
+kernel unit), BADC_TIMEOUT (seconds per badc run, default 300).
 """
 
 from __future__ import annotations
@@ -165,12 +154,6 @@ def main(argv: list[str]) -> int:
         rc_b, err = r.returncode, r.stderr
     except subprocess.TimeoutExpired:
         rc_b, err = 900, f"timeout after {timeout:.0f}s"
-    weaken = [s for s in os.environ.get("BADC_WEAKEN", "").split(",") if s]
-    if rc_b == 0 and os.path.isfile(tmp) and weaken:
-        wcmd = ["objcopy"] + [f"--weaken-symbol={s}" for s in weaken] + [tmp]
-        w = subprocess.run(wcmd, capture_output=True, text=True)
-        if w.returncode != 0:
-            rc_b, err = w.returncode, "objcopy: " + w.stderr
     if rc_b == 0 and os.path.isfile(tmp):
         os.replace(tmp, obj)
         manifest("badc", src)

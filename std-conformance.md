@@ -72,13 +72,26 @@ indirection as a single scalar on the flat type, so `p` and
 `int (**)(int)` collapse to the same encoding, and the indirect-call result
 type drops the return type's own function-pointer level.
 
+### An inline definition is materialized unit-locally, severity 5
+
+C99 6.7.4p6-p7 decides whether a definition is an *inline definition*: it
+is when every file-scope declaration of the function includes `inline` and
+none includes `extern`. An inline definition provides no external
+definition, and badc emits none. Where gcc leaves the un-inlined reference
+undefined, for the program's external definition to satisfy, badc gives the
+definition internal linkage and binds the reference to the unit-local body
+-- the alternative 6.7.4p6 grants the translator ("an alternative to an
+external definition, which a translator may use to implement any call to
+the function in the same translation unit"). Consequence: `&f` in such a
+unit is that unit's copy, so it need not compare equal to a pointer another
+unit takes.
+
 ### Not implemented, severity 4-5
 
 C99 features rejected (all rare in current source): `_Complex` /
 `_Imaginary` (6.2.5), universal character names (6.4.3), digraphs and
 trigraphs (6.4.6 / 5.2.1.1), and K&R identifier-list function declarators
 (obsolescent, 6.11.7).
-`inline` / `__inline` / `__inline__` set a hint the `-O` inliner reads.
 `_Noreturn` is recorded on the function symbol and propagated: a call to a
 `_Noreturn` function does not reach its continuation in the fall-through
 reachability analysis (which also errors on a non-`void`, non-`main`
@@ -153,6 +166,11 @@ is C99 plus the C11 features real code gates on this macro (`_Static_assert`,
   the MSVC `__declspec(thread)` / `dllexport`. Other attributes are parsed
   and discarded as advisory hints.
 - GCC named-rest variadic macro (`#define foo(args...)`)
+- The GNU89 inline linkage model, per function via
+  `__attribute__((gnu_inline))` and per unit via `-fgnu89-inline`: `extern
+  inline` provides no external definition and a plain `inline` does, the
+  inverse of C99 6.7.4p6. With `--gnu`, `__GNUC_STDC_INLINE__` or
+  `__GNUC_GNU_INLINE__` reports which model is in force.
 
 ### MSVC-compatible
 

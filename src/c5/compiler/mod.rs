@@ -302,12 +302,22 @@ pub struct CompileOptions {
     /// single flag selects release semantics (optimization passes plus
     /// asserts compiled out). Explicit `-D` / `-U` flags override.
     pub optimize: bool,
+    /// `-fgnu89-inline` -- make [`InlineModel::Gnu89`] the unit's
+    /// default inline linkage model instead of C99's, and predefine
+    /// `__GNUC_GNU_INLINE__` in place of `__GNUC_STDC_INLINE__`.
+    pub gnu89_inline: bool,
 }
 
 impl CompileOptions {
     /// Enable the `--gnu` GCC identity predefines.
     pub fn with_gnu(mut self, gnu: bool) -> Self {
         self.gnu = gnu;
+        self
+    }
+    /// Select the GNU89 inline linkage model as the unit default
+    /// (`-fgnu89-inline`).
+    pub fn with_gnu89_inline(mut self, on: bool) -> Self {
+        self.gnu89_inline = on;
         self
     }
     /// Replace the `-D` predefine list.
@@ -1011,6 +1021,18 @@ pub struct Compiler {
     /// request (`__attribute__((always_inline))` / MSVC
     /// `__forceinline`); implies `pending_is_inline`.
     pending_is_always_inline: bool,
+
+    /// True when the most recent decl-spec parse consumed an `inline`
+    /// function specifier -- `inline` / `__inline` / `__inline__` or
+    /// MSVC `__forceinline`. Distinct from [`Self::pending_is_inline`],
+    /// which `__attribute__((always_inline))` also sets: that is an
+    /// attribute, not a specifier, and the linkage model reads the
+    /// specifier the source spelled.
+    pending_saw_inline_specifier: bool,
+
+    /// Set by `__attribute__((gnu_inline))` on the current declaration;
+    /// selects the GNU89 inline model for the declared function.
+    pending_is_gnu_inline: bool,
     /// Set by `__attribute__((naked))`; the next function emits no
     /// prologue/epilogue and no implicit return -- its body is its full
     /// machine code (inline asm).
@@ -1358,6 +1380,12 @@ pub struct Compiler {
     /// export list so a `--shared` consumer can `dlsym` it.
     export_all_functions: bool,
 
+    /// The unit's default inline linkage model, from
+    /// [`CompileOptions::gnu89_inline`]. A function carrying
+    /// `__attribute__((gnu_inline))` uses [`InlineModel::Gnu89`]
+    /// regardless.
+    inline_model: crate::c5::symbol::InlineModel,
+
     /// File-name table. Index 0 is the user's translation unit;
     /// every distinct filename observed via the lexer's
     /// `(file, line)` state (i.e. crossing a GNU line marker on
@@ -1544,7 +1572,7 @@ impl Compiler {
     fn configure_preprocessor(target: Target, opts: &CompileOptions) -> Preprocessor {
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
         if opts.gnu {
-            pp.enable_gnu();
+            pp.enable_gnu(opts.gnu89_inline);
         }
         pp.set_source_label(&opts.source_label);
         pp.set_show_includes(opts.show_includes);
@@ -1713,6 +1741,8 @@ impl Compiler {
             stmt_expr_arena_ranges: Vec::new(),
             pending_is_inline: false,
             pending_is_always_inline: false,
+            pending_saw_inline_specifier: false,
+            pending_is_gnu_inline: false,
             pending_is_naked: false,
             pending_noreturn: false,
             const_unevaluated: 0,
@@ -1764,6 +1794,11 @@ impl Compiler {
             data_align: 8,
             implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
+            inline_model: if opts.gnu89_inline {
+                crate::c5::symbol::InlineModel::Gnu89
+            } else {
+                crate::c5::symbol::InlineModel::C99
+            },
             source_files: Vec::new(),
             source_label: opts.source_label.clone(),
             variables: Vec::new(),

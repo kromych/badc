@@ -349,15 +349,30 @@ pub(crate) struct Symbol {
     /// waiting to resolve.
     pub is_extern_decl: bool,
 
-    /// Sticky across all file-scope declarations of a function in the
-    /// translation unit. `saw_noninline_decl` records that at least one
-    /// declaration omitted `inline`; `saw_static_decl` records `static`
-    /// on any declaration. C99 6.7.4p7: a function all of whose
-    /// declarations are `inline` without `extern` provides no external
-    /// definition in this unit (internal linkage); a single non-inline
-    /// or `extern` declaration makes the definition external.
+    /// Per-name census of the file-scope declarations of a function in
+    /// the translation unit, sticky across all of them. Each records
+    /// that at least one declaration had the named shape:
+    /// `saw_noninline_decl` no `inline`; `saw_static_decl` `static`;
+    /// `saw_plain_inline_decl` `inline` without `extern`;
+    /// `saw_extern_inline_decl` `inline` with `extern`. Together with
+    /// `is_gnu_inline` they decide, per [`InlineModel`], whether the
+    /// unit's definition is an inline definition; see
+    /// [`inline_definition`].
     pub saw_noninline_decl: bool,
     pub saw_static_decl: bool,
+    pub saw_plain_inline_decl: bool,
+    pub saw_extern_inline_decl: bool,
+
+    /// `__attribute__((gnu_inline))` on any declaration of this
+    /// function: the GNU89 inline model applies to it whatever the
+    /// unit's default model is.
+    pub is_gnu_inline: bool,
+
+    /// The definition in this unit is an inline definition and provides
+    /// no external definition (C99 6.7.4p6). Computed once per unit
+    /// after the last declaration is in; drives internal linkage and
+    /// suppresses the unused-function diagnostic.
+    pub is_inline_definition: bool,
 
     /// True while a block-scope `extern` declaration that shadows an
     /// enclosing local (or other bound name) holds this slot. The slot
@@ -511,4 +526,46 @@ pub enum Linkage {
     /// references. Visible to other translation units through
     /// the link-unit symbol table.
     External,
+}
+
+/// Which set of rules decides whether a unit's `inline` definition
+/// also provides that function's external definition. The two are
+/// inverted with respect to each other, so the model in force has to
+/// be explicit at every decision point.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum InlineModel {
+    /// C99 6.7.4p6-p7. If every file-scope declaration of the function
+    /// includes `inline` and none includes `extern`, the definition is
+    /// an inline definition and provides no external definition;
+    /// otherwise it provides one. badc's default, reported to headers
+    /// as `__GNUC_STDC_INLINE__`.
+    #[default]
+    C99,
+    /// GNU89, selected by `-fgnu89-inline` for the whole unit or by
+    /// `__attribute__((gnu_inline))` per function. `extern inline` is
+    /// inline-only and never provides an external definition; a plain
+    /// `inline` does provide one. Reported as `__GNUC_GNU_INLINE__`.
+    Gnu89,
+}
+
+/// True when this function's definition is an inline definition -- it
+/// provides no external definition for the name in this unit.
+/// `static` never reaches here: internal linkage is decided first and
+/// is orthogonal to both models.
+pub fn inline_definition(sym: &Symbol, model: InlineModel) -> bool {
+    if !sym.saw_plain_inline_decl && !sym.saw_extern_inline_decl {
+        return false;
+    }
+    let gnu89 = sym.is_gnu_inline || model == InlineModel::Gnu89;
+    if gnu89 {
+        // GCC's `gnu_inline` contract: `extern inline` is used only for
+        // inlining, and a declaration spelling `inline` without
+        // `extern` cancels that back to a standalone definition.
+        sym.saw_extern_inline_decl && !sym.saw_plain_inline_decl
+    } else {
+        // C99 6.7.4p6: every declaration `inline`, none `extern`. A
+        // non-inline declaration sets `saw_noninline_decl`, so only the
+        // `extern inline` shape needs its own term.
+        !sym.saw_noninline_decl && !sym.saw_extern_inline_decl
+    }
 }

@@ -26,6 +26,8 @@ mod deferred;
 #[cfg(feature = "full")]
 mod dwarf;
 mod inline_asm;
+#[cfg(feature = "full")]
+mod inline_linkage;
 mod intrinsics;
 mod jit;
 mod lexer;

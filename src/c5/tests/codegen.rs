@@ -3746,3 +3746,67 @@ fn staged_aggregate_template_is_eight_aligned() {
         "expected one 8-byte load per staged aggregate copy"
     );
 }
+
+#[test]
+#[cfg(feature = "full")]
+fn auto_include_retry_emits_what_the_force_include_would() {
+    // C99 7.1.4p2: a standard library function may be used without a
+    // visible declaration. The driver recovers by re-running the compile
+    // with the declaring header force-included, so the retry's object
+    // must equal the one a caller gets by naming that header up front.
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+    let src = "
+        int probe(const void *a, const void *b, unsigned long n)
+        {
+            return __builtin_memcmp(a, b, n);
+        }
+        int main(void)
+        {
+            char x[2];
+            x[0] = 1;
+            x[1] = 2;
+            return probe(x, x, 2);
+        }
+    ";
+    let target = Target::LinuxX64;
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+
+    let retried = Compiler::with_options(src.to_string(), target, CompileOptions::default())
+        .compile()
+        .expect("auto-include retry recovers the undeclared builtin");
+    assert!(
+        retried
+            .auto_includes
+            .iter()
+            .any(|n| n == "__builtin_memcmp"),
+        "expected the retry to record the recovered name, got {:?}",
+        retried.auto_includes
+    );
+
+    let headers: Vec<String> = retried
+        .auto_includes
+        .iter()
+        .map(|n| {
+            crate::c5::headers::header_declaring(n)
+                .expect("the recovered name names a header")
+                .to_string()
+        })
+        .collect();
+    let forced = CompileOptions::default().with_force_includes(headers);
+    let direct = Compiler::with_options(src.to_string(), target, forced)
+        .compile()
+        .expect("the same unit compiles with the header named up front");
+    assert!(direct.auto_includes.is_empty(), "no retry was needed");
+
+    let a = emit_native_with_options(&retried, target, opts).expect("emit retried object");
+    let b = emit_native_with_options(&direct, target, opts).expect("emit direct object");
+    assert_eq!(
+        a, b,
+        "the retry's object differs from the force-included one"
+    );
+}

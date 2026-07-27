@@ -1603,26 +1603,16 @@ impl Compiler {
     }
 
     pub fn with_options(source: String, target: Target, opts: CompileOptions) -> Self {
-        Self::with_options_inner(source, target, opts, true)
-    }
-
-    fn with_options_inner(
-        source: String,
-        target: Target,
-        opts: CompileOptions,
-        allow_auto_include_retry: bool,
-    ) -> Self {
-        let retry_state = if allow_auto_include_retry {
-            Some((source.clone(), opts.clone()))
-        } else {
-            None
-        };
-        let mut this = Self::build(source, target, opts);
-        this.retry_state = retry_state;
+        // The retry re-runs the compile from this source, so it is kept
+        // rather than copied; only the options, which the retry extends
+        // with a force-include, need a copy.
+        let retry_opts = opts.clone();
+        let mut this = Self::build(&source, target, opts);
+        this.retry_state = Some((source, retry_opts));
         this
     }
 
-    fn build(source: String, target: Target, opts: CompileOptions) -> Self {
+    fn build(source: &str, target: Target, opts: CompileOptions) -> Self {
         // Run the preprocessor first so we know the
         // `#pragma binding(...)` set before seeding the symbol
         // table. The bindings come from whichever standard headers
@@ -1634,7 +1624,7 @@ impl Compiler {
         let mut pp = Self::configure_preprocessor(target, &opts);
         #[cfg(feature = "codegen_test")]
         let pp_start = std::time::Instant::now();
-        let (preprocessed, deferred_error) = match pp.process(&source) {
+        let (preprocessed, deferred_error) = match pp.process(source) {
             Ok(s) => (s, None),
             Err(e) => (String::new(), Some(e)),
         };
@@ -2000,8 +1990,7 @@ impl Compiler {
                 "info: auto-including <{header}> for undeclared `{name}`"
             ));
             auto_names.push(name);
-            result = Compiler::with_options_inner(source.clone(), target, opts.clone(), false)
-                .compile_one_pass();
+            result = Self::build(&source, target, opts.clone()).compile_one_pass();
         }
     }
 

@@ -3095,11 +3095,13 @@ fn emit_inline_asm_aarch64(
         }
     };
     // Registers the block overwrites: the operand registers plus the explicit
-    // clobber list. GP operands and clobbers land in the x0..x15 save set; `w`
-    // operands and FP clobbers are in the independent d0..d7 file and are saved
-    // separately. A `w` operand must be a double (the SSA model's only FP width
-    // is f64).
-    let mut used_mask: u32 = asm.clobber_regs & 0xFFFF;
+    // clobber list. Every general register is saved and restored around the
+    // block, since the allocator may hold a live value in any of them; x16 /
+    // x17 are excluded because they are this lowering's own scratch, reloaded
+    // after the template rather than carried across it. `w` operands and FP
+    // clobbers are in the independent d0..d7 file and are saved separately. A
+    // `w` operand must be a double (the SSA model's only FP width is f64).
+    let mut used_mask: u32 = asm.clobber_regs & 0x7FFF_FFFF & !0x0003_0000;
     let mut fp_used_mask: u32 = asm.clobber_fp_regs & 0xFF;
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };

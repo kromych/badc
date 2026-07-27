@@ -31,8 +31,10 @@
 
 #![allow(dead_code)]
 
+use alloc::collections::BinaryHeap;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cmp::Reverse;
 
 use super::super::ir::{
     BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
@@ -1893,17 +1895,127 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
 /// phi result drops to a self-move that `schedule_int_reg_moves`
 /// drops outright, eliminating the move.
 ///
-/// The pass is a fixpoint loop: a phi whose incoming is itself a
-/// phi inherits through the chain. Each iteration picks the first
-/// existing hint within the group and assigns it to every still-
-/// unhinted member; iteration stops when no member changes.
+/// The pass is a fixpoint over the phis: a phi whose incoming is
+/// itself a phi inherits through the chain. Visiting a phi picks the
+/// first existing hint within its group and assigns it to every
+/// still-unhinted member.
+///
+/// A hint is written once, so a phi whose group members all kept their
+/// hint since its last visit cannot change anything. Only the phis a
+/// write reached are therefore revisited, ordered by instruction index
+/// within a sweep and deferred to the next sweep once the sweep has
+/// passed them -- the visit order a rescan of every phi per sweep
+/// produces, without its cost on a long propagation chain. The order
+/// decides which hint a group keeps when two reach it.
+///
 /// The allocator's hint policy is advisory; an unsuitable hint
 /// (register live elsewhere at the pick site) falls through to the
 /// default policy without compromising correctness.
 fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
-    // Sweep the phis alone rather than the whole tape: the round trips
-    // are bounded by the propagation chain, so rescanning every
-    // instruction each time costs the function's size per hop.
+    let phis: Vec<usize> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter(|(_, i)| matches!(i, Inst::Phi { .. }))
+        .map(|(v, _)| v)
+        .collect();
+    if phis.is_empty() {
+        return;
+    }
+    let n = func.insts.len();
+    let lim = hints.len().min(n);
+    let operand = move |src: &ValueId| *src != NO_VALUE && (*src as usize) < lim;
+    // Phis a write to a given value can unblock, CSR by value: the phis
+    // naming it as an incoming, plus the value's own phi.
+    let mut watch_off = vec![0u32; n + 1];
+    for &v in &phis {
+        let Inst::Phi { incoming, .. } = &func.insts[v] else {
+            continue;
+        };
+        watch_off[v + 1] += 1;
+        for (_, src) in incoming.iter().filter(|(_, s)| operand(s)) {
+            watch_off[*src as usize + 1] += 1;
+        }
+    }
+    for i in 0..n {
+        watch_off[i + 1] += watch_off[i];
+    }
+    let mut cursor = watch_off[..n].to_vec();
+    let mut watchers = vec![0u32; watch_off[n] as usize];
+    for (rank, &v) in phis.iter().enumerate() {
+        let Inst::Phi { incoming, .. } = &func.insts[v] else {
+            continue;
+        };
+        let mut put = |slot: usize| {
+            watchers[cursor[slot] as usize] = rank as u32;
+            cursor[slot] += 1;
+        };
+        put(v);
+        for (_, src) in incoming.iter().filter(|(_, s)| operand(s)) {
+            put(*src as usize);
+        }
+    }
+    // Two rank-ordered queues: the sweep in progress and the next one.
+    // A phi ahead of the cursor rejoins the current sweep, one already
+    // passed waits for the next.
+    let mut cur: BinaryHeap<Reverse<u32>> = (0..phis.len() as u32).map(Reverse).collect();
+    let mut next: BinaryHeap<Reverse<u32>> = BinaryHeap::new();
+    let mut queued = vec![true; phis.len()];
+    let mut queued_next = vec![false; phis.len()];
+    loop {
+        while let Some(Reverse(rank)) = cur.pop() {
+            queued[rank as usize] = false;
+            let v = phis[rank as usize];
+            let Inst::Phi { incoming, .. } = &func.insts[v] else {
+                continue;
+            };
+            let group_hint = hints[v].or_else(|| {
+                incoming
+                    .iter()
+                    .filter(|(_, s)| operand(s))
+                    .find_map(|(_, src)| hints[*src as usize])
+            });
+            let Some(r) = group_hint else { continue };
+            let mut wake = |slot: usize,
+                            cur: &mut BinaryHeap<Reverse<u32>>,
+                            next: &mut BinaryHeap<Reverse<u32>>| {
+                for &w in &watchers[watch_off[slot] as usize..watch_off[slot + 1] as usize] {
+                    if w > rank {
+                        if !queued[w as usize] {
+                            queued[w as usize] = true;
+                            cur.push(Reverse(w));
+                        }
+                    } else if !queued_next[w as usize] {
+                        queued_next[w as usize] = true;
+                        next.push(Reverse(w));
+                    }
+                }
+            };
+            if hints[v].is_none() {
+                hints[v] = Some(r);
+                wake(v, &mut cur, &mut next);
+            }
+            for (_, src) in incoming.iter().filter(|(_, s)| operand(s)) {
+                if hints[*src as usize].is_none() {
+                    hints[*src as usize] = Some(r);
+                    wake(*src as usize, &mut cur, &mut next);
+                }
+            }
+        }
+        if next.is_empty() {
+            break;
+        }
+        core::mem::swap(&mut cur, &mut next);
+        core::mem::swap(&mut queued, &mut queued_next);
+    }
+}
+
+/// Rescan every phi per sweep until no hint changes. Same relation as
+/// [`populate_phi_hints`], including the visit order that decides which
+/// hint a group keeps; this is the reference the test below holds the
+/// worklist to.
+#[cfg(test)]
+fn populate_phi_hints_by_rescan(func: &FunctionSsa, hints: &mut [Option<u8>]) {
     let phis: Vec<usize> = func
         .insts
         .iter()
@@ -3148,5 +3260,91 @@ int main(void) { return 0; }
                 }
             }
         }
+    }
+
+    /// A phi tape holding `chain` links plus `extra` hint sources, in
+    /// the shape the walker emits for a chain of loops: phi `k` names
+    /// phi `k - 1` as an incoming.
+    fn phi_chain(chain: usize) -> FunctionSsa {
+        let mut insts: Vec<Inst> = alloc::vec![Inst::Imm(0)];
+        for k in 0..chain {
+            let prev = k as ValueId; // Imm at 0, then phi k - 1
+            insts.push(Inst::Phi {
+                incoming: alloc::vec![(0, prev), (1, (k + 1) as ValueId)],
+                kind: crate::c5::ir::LoadKind::I64,
+            });
+        }
+        let n = insts.len();
+        FunctionSsa {
+            inst_src: alloc::vec![(0, 0); n],
+            f32_values: alloc::vec![false; n],
+            insts,
+            blocks: alloc::vec![crate::c5::ir::Block {
+                start_pc: 0,
+                inst_range: 0..n as u32,
+                terminator: Terminator::Return(NO_VALUE),
+                exit_acc: NO_VALUE,
+            }],
+            ..FunctionSsa::default()
+        }
+    }
+
+    /// The worklist must reproduce the rescan's assignment exactly: the
+    /// hint a group keeps depends on which candidate reaches it first,
+    /// so any visit-order drift changes register assignments.
+    #[test]
+    fn phi_hints_match_the_rescan_reference() {
+        for chain in [0usize, 1, 2, 5, 17, 64] {
+            let func = phi_chain(chain);
+            let n = func.insts.len();
+            // Seed competing hints at several positions, including one
+            // past the chain's head, so propagation runs both with and
+            // against the sweep direction.
+            for seed in [alloc::vec![], alloc::vec![(0usize, 3u8)], alloc::vec![(n - 1, 7u8)], {
+                let mut v = alloc::vec![(0usize, 3u8)];
+                if n > 2 {
+                    v.push((n / 2, 5u8));
+                }
+                v.push((n - 1, 7u8));
+                v
+            }] {
+                let mut a: Vec<Option<u8>> = alloc::vec![None; n];
+                let mut b: Vec<Option<u8>> = alloc::vec![None; n];
+                for &(i, r) in &seed {
+                    a[i] = Some(r);
+                    b[i] = Some(r);
+                }
+                populate_phi_hints(&func, &mut a);
+                populate_phi_hints_by_rescan(&func, &mut b);
+                assert_eq!(a, b, "chain={chain} seed={seed:?}");
+            }
+        }
+    }
+
+    /// The rescan costs the function's phi count per propagation hop, so
+    /// a chain of N phis costs N^2; the worklist visits a phi only when
+    /// a write reached it. Quadrupling the chain must not quadruple the
+    /// cost -- 16x is what the rescan would spend.
+    #[test]
+    fn phi_hint_propagation_is_not_quadratic_in_the_chain() {
+        let run = |chain: usize| {
+            let func = phi_chain(chain);
+            let n = func.insts.len();
+            let start = std::time::Instant::now();
+            for _ in 0..4 {
+                let mut hints: Vec<Option<u8>> = alloc::vec![None; n];
+                hints[n - 1] = Some(7);
+                populate_phi_hints(&func, &mut hints);
+                assert!(hints.iter().all(|h| h.is_some()));
+            }
+            start.elapsed().as_secs_f64()
+        };
+        let small = (0..3).map(|_| run(2000)).fold(f64::MAX, f64::min);
+        let large = (0..3).map(|_| run(8000)).fold(f64::MAX, f64::min);
+        assert!(
+            large < small * 8.0,
+            "4x the chain cost {:.1}x, past the 8x headroom over linear",
+            large / small,
+        );
     }
 }

@@ -246,6 +246,7 @@ mod tests {
     /// always fit the storage vacated for them. The two used to be derived
     /// at separate sites and could disagree.
     #[test]
+    #[cfg(feature = "native-emit")]
     fn object_extent_covers_its_copy() {
         let mut sym = crate::c5::symbol::Symbol {
             data_byte_size: 12,

@@ -133,10 +133,16 @@ such a feature, selected by a `// trigger: <substring>` line matched against
 the probe source; a matching probe is answered by compiling the probe and the
 corroboration together. This strengthens the kernel's probe instead of
 overriding its verdict, and it is re-verified on every run rather than
-asserted once. Each file states the evidence for its own existence -- the
-`CC_HAS_NAMED_AS` one records that badc accepts `int __seg_fs fs;`, reading
-the qualifier as the declarator name, while rejecting the qualifier-leading
-form the percpu headers use.
+asserted once.
+
+Each file must state the evidence for its own existence, because that
+evidence is a claim about badc and decays as badc changes. When the claim
+stops holding the file has to go: the directory is empty whenever badc
+handles every form the corresponding feature is spelled with, and an empty
+directory is the normal state, not a missing one. The `CC_HAS_NAMED_AS`
+corroboration was removed once badc emitted the segment override for both
+the qualifier-leading declaration and the dereference of a segment-qualified
+pointer, which is the form the percpu headers read through.
 
 ## Hybrid build (link + boot)
 

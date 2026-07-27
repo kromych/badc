@@ -758,6 +758,10 @@ impl Compiler {
                 "r10" | "r10d" => {
                     // r10 is the emitter's reserved asm-staging scratch
                     // (SCRATCH_R10); a binding there cannot be honored.
+                    // TODO: honoring it needs the fixed scratch pair to be
+                    // chosen per function rather than baked into the emit
+                    // handlers, so a hypercall-style ABI that names r10 can
+                    // bind it. Rejecting is correct meanwhile, not silent.
                     return Err(self.compile_err(format!(
                         "register `{n}` is reserved and cannot hold a register variable"
                     )));

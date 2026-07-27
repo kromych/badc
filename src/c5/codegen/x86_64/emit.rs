@@ -653,6 +653,12 @@ fn bail_msg(reason: &str) {
 }
 
 /// Report a bail and yield the handler's `false` result.
+/// Placeholder for a `$LABEL` immediate: outside the signed-byte range, so
+/// form selection takes the 32-bit immediate field the relocation needs, and
+/// distinctive enough to confirm the field landed at the end of the encoding.
+const ABS_LABEL_PLACEHOLDER: i64 = 0x1234_5678;
+const ABS_LABEL_PLACEHOLDER_BYTES: [u8; 4] = (ABS_LABEL_PLACEHOLDER as u32).to_le_bytes();
+
 fn fail(reason: &str) -> bool {
     bail_msg(reason);
     false
@@ -7316,8 +7322,14 @@ fn emit_inline_asm(
             if count < 0 {
                 return fail("inline asm: `.skip` count is negative");
             }
-            let fill = insn.bytes.first().copied().unwrap_or(0);
-            code.resize(code.len() + count as usize, fill);
+            let unit: &[u8] = if insn.bytes.is_empty() {
+                &[0]
+            } else {
+                &insn.bytes
+            };
+            for _ in 0..count {
+                code.extend_from_slice(unit);
+            }
             continue;
         }
         // `.align` / `.p2align` / `.balign`: pad `code` (the unit's whole
@@ -7421,18 +7433,16 @@ fn emit_inline_asm(
             label_fixups.push((code.len() - 4, num, forward));
             continue;
         }
-        // `pushq $LABEL`: push the label's address as an absolute immediate.
-        // `68` pushes a sign-extended imm32; the field carries an `R_X86_64_32S`
-        // relocation against the label's text offset, recorded once the
-        // definition is known. The imm8 form (`6A`) has no room for the reloc.
-        if let Some(&AsmOpnd::ImmLabel { num, forward }) = insn.operands.first() {
-            if !matches!(insn.mnemonic, super::asm::Mnemonic::Table("push")) {
-                return fail("inline asm: a label address immediate requires `push`");
-            }
-            code.extend_from_slice(&[0x68, 0, 0, 0, 0]);
-            abs_label_fixups.push((code.len() - 4, num, forward));
-            continue;
-        }
+        // A `$LABEL` operand (`pushq $1f`, `movq $1f, %rax`) is the label's
+        // address as an absolute immediate. It resolves through the ordinary
+        // operand path below with a placeholder that forces the 32-bit
+        // immediate field; the field then carries an `R_X86_64_32S` relocation
+        // against the label's text offset, recorded once the definition is
+        // known. A narrower field has no room for the relocation.
+        let abs_label = match insn.operands.first() {
+            Some(&AsmOpnd::ImmLabel { num, forward }) => Some((num, forward)),
+            _ => None,
+        };
         // `lea LABEL(%rip), %reg`: materialize a template-local label's
         // address. The table emits the RIP-relative form with a zero rel32
         // (its last four bytes); the label fixup pass patches it like the
@@ -7852,12 +7862,12 @@ fn emit_inline_asm(
                         "inline asm: `$symbol` address immediate is only supported in file-scope asm",
                     );
                 }
+                // A label address immediate encodes as a placeholder wide
+                // enough to force the imm32 field; the relocation replaces it.
+                AsmOpnd::ImmLabel { .. } => Concrete::Imm(ABS_LABEL_PLACEHOLDER),
                 // Handled above (jmp / jcc / lea referencing a local label); a
                 // label reaching operand resolution rode an unsupported form.
-                AsmOpnd::Label { .. }
-                | AsmOpnd::LabelAddr { .. }
-                | AsmOpnd::ImmLabel { .. }
-                | AsmOpnd::GotoLabel(_) => {
+                AsmOpnd::Label { .. } | AsmOpnd::LabelAddr { .. } | AsmOpnd::GotoLabel(_) => {
                     return fail("inline asm: misplaced label reference");
                 }
             };
@@ -7870,6 +7880,15 @@ fn emit_inline_asm(
         if riprel_reloc.is_some() && concrete.iter().any(|c| matches!(c, Concrete::Imm(_))) {
             return fail("inline asm: `%a` symbolic operand with an immediate");
         }
+        if abs_label.is_some()
+            && concrete
+                .iter()
+                .filter(|c| matches!(c, Concrete::Imm(_)))
+                .count()
+                > 1
+        {
+            return fail("inline asm: a label address immediate with a second immediate");
+        }
         // A segment override is a legacy prefix preceding the opcode. It comes
         // from a template `%gs:` / `%fs:` or from a `__seg_gs` / `__seg_fs`
         // memory operand; the two never conflict on one instruction.
@@ -7879,6 +7898,16 @@ fn emit_inline_asm(
         if let Err(m) = super::asm::encode(code, insn.mnemonic, insn.suffix, &concrete) {
             bail_msg(&m);
             return false;
+        }
+        // The label address immediate occupies the last four bytes; the
+        // placeholder confirms the chosen form put it there.
+        if let Some((num, forward)) = abs_label {
+            if code.len() < 4 || code[code.len() - 4..] != ABS_LABEL_PLACEHOLDER_BYTES {
+                return fail("inline asm: a label address immediate requires a wider form");
+            }
+            let at = code.len() - 4;
+            code[at..].fill(0);
+            abs_label_fixups.push((at, num, forward));
         }
         // Record the RIP-relative relocation against the operand's symbol.
         // The disp32 occupies the last four bytes of the instruction just
@@ -7912,6 +7941,8 @@ fn emit_inline_asm(
     // A reference with no main-stream definition may name a label placed in
     // one of the template's pushed sections; defer it to the section pass.
     let mut pending_xsec: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
+    // The same, for `$LABEL` address immediates, whose field is absolute.
+    let mut pending_abs_xsec: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
     // The main-stream definition a label reference at `at` binds to: a named
     // label has one definition; a forward `Nf` the nearest after `at`, a
     // backward `Nb` the nearest at or before it.
@@ -7943,14 +7974,15 @@ fn emit_inline_asm(
     }
     // A `$LABEL` immediate binds to the same main-stream definition, but the
     // field carries an absolute `.text` relocation rather than an in-stream
-    // displacement. A cross-section target is out of scope here.
+    // displacement. A label the main stream does not define is deferred to the
+    // pushed sections, as a branch displacement is.
     for &(at, num, forward) in &abs_label_fixups {
         match resolve_label(at, num, forward) {
             Some(target) => asm_text_abs_refs.push(super::AsmTextAbsRef {
                 field_offset: at,
                 target_offset: target,
             }),
-            None => return fail("inline asm: `$LABEL` address immediate names no local label"),
+            None => pending_abs_xsec.push((at, num, forward)),
         }
     }
     // A named label defined in the main stream is a definition of the unit,
@@ -8058,14 +8090,45 @@ fn emit_inline_asm(
                     section_index: d.section_index,
                     section_offset: d.offset,
                     addend: -4,
+                    absolute: false,
                 }),
                 None => return fail("inline asm: undefined local label"),
+            }
+        }
+        // The absolute form of the same binding: no end skew, and the field
+        // takes an absolute relocation against the section symbol.
+        for (at, num, forward) in pending_abs_xsec.drain(..) {
+            let name = if num >= super::asm::NAMED_LABEL_BASE {
+                match code_label_names.get((num - super::asm::NAMED_LABEL_BASE) as usize) {
+                    Some(n) => alloc::string::String::from(*n),
+                    None => return fail("inline asm: undefined local label"),
+                }
+            } else {
+                alloc::format!("{num}")
+            };
+            match forward
+                .then(|| defined.iter().find(|d| d.name == name))
+                .flatten()
+            {
+                Some(d) => asm_section_text_refs.push(super::AsmSectionTextRef {
+                    instr_offset: at,
+                    section_index: d.section_index,
+                    section_offset: d.offset,
+                    addend: 0,
+                    absolute: true,
+                }),
+                None => {
+                    return fail("inline asm: `$LABEL` address immediate names no local label");
+                }
             }
         }
     }
     // A deferred reference with no section to resolve against is undefined.
     if !pending_xsec.is_empty() {
         return fail("inline asm: undefined local label");
+    }
+    if !pending_abs_xsec.is_empty() {
+        return fail("inline asm: `$LABEL` address immediate names no local label");
     }
 
     // Flag outputs: the template's condition flags are still live here (the

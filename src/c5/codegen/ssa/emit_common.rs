@@ -870,6 +870,17 @@ pub(crate) enum AsmSectionItem {
         label: alloc::string::String,
         addend: alloc::string::String,
     },
+    /// `.skip` / `.space` / `.zero` / `.fill`: `count` repetitions of the low
+    /// `unit` bytes of `value`. `.skip n, f` and `.space n, f` repeat the fill
+    /// byte, `.zero n` fixes the value at zero, `.fill r, s, v` gives all
+    /// three. GNU as renders the value as the low bytes of a zero-extended
+    /// 32-bit number, so a unit above four pads with zeros. `count` is an
+    /// expression resolved at materialize time.
+    Fill {
+        count: alloc::string::String,
+        unit: u8,
+        value: u32,
+    },
     /// `.ascii` / `.asciz` / `.string` payload (NUL included when the
     /// directive appends one).
     Bytes(alloc::vec::Vec<u8>),
@@ -878,6 +889,9 @@ pub(crate) enum AsmSectionItem {
     /// `.globl name` / `.global name`: give the named label external
     /// binding. May precede or follow the label's definition.
     Global(alloc::string::String),
+    /// `.local name`: force local binding. A section label is local by
+    /// default, so this only cancels a `.globl` on the same name.
+    Local(alloc::string::String),
     /// `.type name, @function|@object`: set the named label's ELF symbol
     /// type. The label must be defined in this section.
     Type {
@@ -2371,6 +2385,10 @@ fn parse_section_item(
                 addend: alloc::string::String::from(addend),
             })
         }
+        // The space-and-fill family. `.skip` and `.space` are the same
+        // directive on ELF targets; `.zero` fixes the fill at zero; `.fill`
+        // repeats a multi-byte unit.
+        ".skip" | ".space" | ".zero" | ".fill" => parse_fill_directive(tok, rest),
         ".ascii" | ".asciz" | ".string" => {
             let s = rest
                 .strip_prefix('"')
@@ -2414,6 +2432,13 @@ fn parse_section_item(
             }
             Ok(AsmSectionItem::Weak(alloc::string::String::from(name)))
         }
+        ".local" => {
+            let name = rest.trim();
+            if !is_asm_symbol_name(name) {
+                return Err(alloc::format!("inline asm: bad `{tok}` operand `{rest}`"));
+            }
+            Ok(AsmSectionItem::Local(alloc::string::String::from(name)))
+        }
         // A `.set` / `.equ` with a constant value is consumed by the macro
         // expander; the symbol-valued form (`.set alias, target`) survives it.
         ".set" | ".equ" => {
@@ -2451,6 +2476,84 @@ fn parse_section_item(
     }
 }
 
+/// Parse the space-and-fill family into a single repetition item.
+///
+/// `.skip count[, fill]` and `.space count[, fill]` repeat one fill byte
+/// (zero by default). `.zero count` fixes the fill at zero. `.fill
+/// repeat[, size[, value]]` repeats the low `size` bytes of `value`, with
+/// `size` defaulting to one and clamped to eight as GNU as does. The count is
+/// kept as an expression: it may reference an operand constant, and is
+/// resolved once the operand values are known.
+pub(crate) fn parse_fill_operands<'a>(
+    tok: &str,
+    rest: &'a str,
+) -> Result<(&'a str, u8, u32), alloc::string::String> {
+    let mut fields = rest.split(',').map(str::trim);
+    let count = fields.next().unwrap_or("").trim();
+    if count.is_empty() {
+        return Err(alloc::format!("inline asm: `{tok}` needs a count"));
+    }
+    let num = |f: Option<&str>| -> Result<Option<i64>, alloc::string::String> {
+        match f {
+            Some(s) if !s.is_empty() => Ok(Some(parse_raw_int(s).ok_or_else(|| {
+                alloc::format!("inline asm: `{tok}` operand `{s}` is not a constant")
+            })?)),
+            _ => Ok(None),
+        }
+    };
+    let (unit, value) = match tok {
+        ".fill" => {
+            let size = num(fields.next())?.unwrap_or(1);
+            if size < 0 {
+                return Err(alloc::format!("inline asm: bad `.fill` size `{size}`"));
+            }
+            // GNU as clamps a unit above eight rather than rejecting it.
+            (size.min(8) as u8, num(fields.next())?.unwrap_or(0) as u32)
+        }
+        ".zero" => (1u8, 0u32),
+        _ => (1u8, num(fields.next())?.unwrap_or(0) as u32 & 0xff),
+    };
+    if fields.next().is_some() {
+        return Err(alloc::format!("inline asm: too many `{tok}` operands"));
+    }
+    Ok((count, unit, value))
+}
+
+/// True for a directive of the space-and-fill family.
+pub(crate) fn is_fill_directive(tok: &str) -> bool {
+    matches!(tok, ".skip" | ".space" | ".zero" | ".fill")
+}
+
+fn parse_fill_directive(tok: &str, rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
+    let (count, unit, value) = parse_fill_operands(tok, rest)?;
+    Ok(AsmSectionItem::Fill {
+        count: alloc::string::String::from(count),
+        unit,
+        value,
+    })
+}
+
+/// Resolve a `.skip` / `.fill` repetition count. A negative count emits
+/// nothing, as GNU as does for `.skip` of a negative expression.
+fn eval_fill_count(
+    expr: &str,
+    const_of: &dyn Fn(u8) -> Option<i64>,
+) -> Result<i64, alloc::string::String> {
+    let n = eval_asm_count(expr, const_of).ok_or_else(|| {
+        alloc::format!("inline asm: fill count `{expr}` is not a constant expression")
+    })?;
+    Ok(n.max(0))
+}
+
+/// Append `count` repetitions of one fill unit: the low `unit` bytes of the
+/// value zero-extended to eight, little-endian, as GNU as renders it.
+pub(crate) fn push_fill(out: &mut alloc::vec::Vec<u8>, count: i64, unit: u8, value: u32) {
+    let bytes = (value as u64).to_le_bytes();
+    for _ in 0..count {
+        out.extend_from_slice(&bytes[..unit as usize]);
+    }
+}
+
 /// `.type name, @function|@object`. GNU as also spells the type with a
 /// leading `%` on some targets and accepts a bare word; only `function`
 /// and `object` occur in inline asm, any other is rejected.
@@ -2464,8 +2567,9 @@ fn parse_type_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::Str
     }
     let ty = ty.trim();
     let sym_type = match ty.strip_prefix(['@', '%']).unwrap_or(ty) {
-        "function" => AsmSymType::Func,
-        "object" => AsmSymType::Object,
+        // GNU as accepts the ELF constant spellings alongside the bare names.
+        "function" | "STT_FUNC" => AsmSymType::Func,
+        "object" | "STT_OBJECT" => AsmSymType::Object,
         _ => return Err(alloc::format!("inline asm: unsupported `.type` `{ty}`")),
     };
     Ok(AsmSectionItem::Type {
@@ -3204,9 +3308,13 @@ pub(crate) fn measure_asm_section_offsets(
                 | AsmSectionItem::Type { .. }
                 | AsmSectionItem::Size { .. }
                 | AsmSectionItem::Weak(_)
+                | AsmSectionItem::Local(_)
                 | AsmSectionItem::SymSet { .. } => {}
                 AsmSectionItem::Data { width, values } => {
                     at += *width as i64 * values.len() as i64;
+                }
+                AsmSectionItem::Fill { count, unit, .. } => {
+                    at += eval_fill_count(count, const_of)? * *unit as i64;
                 }
                 AsmSectionItem::Bytes(bs) => at += bs.len() as i64,
                 AsmSectionItem::CodeBytes { bytes, .. } => at += bytes.len() as i64,
@@ -3412,6 +3520,10 @@ pub(crate) fn materialize_asm_sections(
                     sec.bytes.resize(*n as usize, 0);
                 }
                 AsmSectionItem::Bytes(bs) => sec.bytes.extend_from_slice(bs),
+                AsmSectionItem::Fill { count, unit, value } => {
+                    let n = eval_fill_count(count, const_of)?;
+                    push_fill(&mut sec.bytes, n, *unit, *value);
+                }
                 AsmSectionItem::Label(name) => {
                     // A numeric label carries its per-instance-unique symbol.
                     let orig = name.clone();
@@ -3450,6 +3562,21 @@ pub(crate) fn materialize_asm_sections(
                 // parse records both, the operand emit paths reject them.
                 AsmSectionItem::Weak(name) => weak_names.push(name.clone()),
                 AsmSectionItem::SymSet { .. } => {}
+                // A section label is local unless `.globl` marked it; record a
+                // pending entry so the definition below keeps that binding.
+                AsmSectionItem::Local(name) => {
+                    match sec.labels.iter_mut().find(|l| l.name == *name) {
+                        Some(l) => l.global = false,
+                        None => sec.labels.push(AsmSectionLabel {
+                            name: name.clone(),
+                            offset: PENDING_LABEL,
+                            global: false,
+                            weak: false,
+                            sym_type: AsmSymType::NoType,
+                            size: None,
+                        }),
+                    }
+                }
                 AsmSectionItem::Global(name) => {
                     match sec.labels.iter_mut().find(|l| l.name == *name) {
                         // `.globl` may precede its label; record the pending name
@@ -3518,14 +3645,19 @@ pub(crate) fn materialize_asm_sections(
                     let tname = numeric_label_digits(name)
                         .and_then(|d| num_unique.get(d).map(alloc::string::String::as_str))
                         .unwrap_or(name);
-                    let l = sec
-                        .labels
-                        .iter_mut()
-                        .find(|l| l.name == *tname && l.offset != PENDING_LABEL)
-                        .ok_or_else(|| {
-                            alloc::format!("inline asm: `.size` names undefined label `{name}`")
-                        })?;
-                    l.size = Some(val as u64);
+                    // `.size` may precede its label, as `.globl` and `.type`
+                    // may; carry the size on a pending entry until then.
+                    match sec.labels.iter_mut().find(|l| l.name == *tname) {
+                        Some(l) => l.size = Some(val as u64),
+                        None => sec.labels.push(AsmSectionLabel {
+                            name: alloc::string::String::from(tname),
+                            offset: PENDING_LABEL,
+                            global: false,
+                            weak: false,
+                            sym_type: AsmSymType::NoType,
+                            size: Some(val as u64),
+                        }),
+                    }
                 }
                 AsmSectionItem::Data { width, values } => {
                     for v in values {
@@ -3533,16 +3665,37 @@ pub(crate) fn materialize_asm_sections(
                             AsmSectionValue::Const(c) => sec
                                 .bytes
                                 .extend_from_slice(&(*c as u64).to_le_bytes()[..*width as usize]),
-                            AsmSectionValue::OperandConst(idx) => {
-                                let c = const_of(*idx).ok_or_else(|| {
-                                    alloc::string::String::from(
-                                        "inline asm: non-constant section data value",
-                                    )
-                                })?;
-                                sec.bytes.extend_from_slice(
+                            AsmSectionValue::OperandConst(idx) => match const_of(*idx) {
+                                Some(c) => sec.bytes.extend_from_slice(
                                     &(c as u64).to_le_bytes()[..*width as usize],
-                                );
-                            }
+                                ),
+                                // An `i`-class operand that is not an integer
+                                // constant names a link-time address, as it
+                                // does in the `%cN - .` form: the field takes
+                                // an absolute relocation against it.
+                                None => {
+                                    let (target, add) = operand_sym(*idx).ok_or_else(|| {
+                                        alloc::string::String::from(
+                                            "inline asm: non-constant section data value",
+                                        )
+                                    })?;
+                                    if !matches!(width, 4 | 8) {
+                                        return Err(alloc::string::String::from(
+                                            "inline asm: section reference needs a 4- or 8-byte field",
+                                        ));
+                                    }
+                                    sec.relocs.push(AsmSectionReloc {
+                                        offset: sec.bytes.len() as u32,
+                                        width: *width,
+                                        pcrel: false,
+                                        branch: false,
+                                        signed: false,
+                                        target,
+                                        addend: add,
+                                    });
+                                    sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
+                                }
+                            },
                             AsmSectionValue::Expr(text) => {
                                 let c = eval_const_expr_ops(text, &|idx| const_of(idx))
                                     .ok_or_else(|| {
@@ -4201,9 +4354,16 @@ pub(crate) fn eval_const_expr_ops(s: &str, op: &dyn Fn(u8) -> Option<i64>) -> Op
 /// which bind looser than the arithmetic operators (GNU as convention). A
 /// non-zero result is true. `None` when the condition is not a constant.
 pub(crate) fn eval_asm_if_condition(s: &str) -> Option<i64> {
+    eval_asm_count(s, &|_| None)
+}
+
+/// Evaluate a relational-capable constant expression whose leaves may include
+/// `%N` / `%cN` operand references, resolved through `op`. This is the form a
+/// `.skip` / `.fill` count takes.
+pub(crate) fn eval_asm_count(s: &str, op: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
     let b = s.as_bytes();
     let mut i = 0usize;
-    let v = const_relational(b, &mut i, &|_| None)?;
+    let v = const_relational(b, &mut i, op)?;
     skip_ws(b, &mut i);
     (i == b.len()).then_some(v)
 }

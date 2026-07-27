@@ -139,7 +139,8 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_mmx_fpu.c", "linux-aarch64"),             // x86-64 MMX movq + fwait
     ("inline_asm_x64_bug_table_org.c", "linux-aarch64"),       // x86-64 ud2 bug-table entry
     ("inline_asm_x64_jump_label.c", "linux-aarch64"),          // x86-64 jmp %l jump-table entry
-    ("inline_asm_a64_bug_table_labels.c", "linux-x64"),        // aarch64 brk bug-table entry
+    ("inline_asm_x64_m_global_call.c", "linux-aarch64"), // x86-64 indirect call through an "m" operand
+    ("inline_asm_a64_bug_table_labels.c", "linux-x64"),  // aarch64 brk bug-table entry
 ];
 
 #[test]

@@ -928,6 +928,9 @@ pub(crate) fn emit_function(
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
+    // Template `%lK` branches that reach their label's block with no operand
+    // frame in the way; encoded against `block_offsets` once it is final.
+    let mut direct_goto_branches: Vec<AsmGotoDirectBranch> = Vec::new();
     // GCC `&&label`: each `Inst::BlockAddr` emits an `ADR rd, .`
     // placeholder; `(site, target_block, rd)` is resolved against the
     // final `block_offsets` once every block has been laid out.
@@ -1031,6 +1034,7 @@ pub(crate) fn emit_function(
                     Some(AsmGotoCtxA64 {
                         row: &func.jump_tables[table as usize],
                         branch_fixups: &mut branch_fixups,
+                        direct_goto: &mut direct_goto_branches,
                     }),
                 ) {
                     code.truncate(snapshot);
@@ -1554,6 +1558,30 @@ pub(crate) fn emit_function(
                     macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                     return false;
                 }
+            }
+        }
+    }
+    // Encode each template `%l[...]` branch that reaches its label's block
+    // with no operand frame in the way, now that the layout is final.
+    for gb in &direct_goto_branches {
+        let delta = block_offsets[gb.target as usize] as i64 - gb.site as i64;
+        match label_branch_word(&gb.kind, delta) {
+            Ok(w) => code[gb.site..gb.site + 4].copy_from_slice(&w.to_le_bytes()),
+            Err(m) => {
+                bail_msg(&m);
+                code.truncate(snapshot);
+                fixups.truncate(fixups_snapshot);
+                plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                data_fixups.truncate(data_fixups_snapshot);
+                user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
+                pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
+                macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
+                return false;
             }
         }
     }
@@ -2480,12 +2508,24 @@ struct FnCtx<'a> {
 
 /// Block-target branch context for an `asm goto` statement: the
 /// `jump_tables` row (`[fall_through, label targets...]`) and the
-/// enclosing function's branch-fixup list. Template `%lK` branches
-/// land on local restore trampolines whose final `b` is patched to the
-/// label's block like any other block-local branch.
+/// enclosing function's branch-fixup lists. A template `%lK` branch lands
+/// on a local restore trampoline whose final `b` is patched to the label's
+/// block like any other block-local branch; with no operand frame to
+/// release it is recorded in `direct_goto` and patched to the block
+/// itself, so it and a `.long %lK - .` section field name one address.
 struct AsmGotoCtxA64<'a> {
     row: &'a [super::super::ir::BlockId],
     branch_fixups: &'a mut Vec<BranchFixup>,
+    direct_goto: &'a mut Vec<AsmGotoDirectBranch>,
+}
+
+/// A template `%lK` branch resolved straight to its label's block: the
+/// branch's byte offset in the function's code, its form, and the block.
+/// Encoded once the block layout is final.
+struct AsmGotoDirectBranch {
+    site: usize,
+    kind: LabelBranch,
+    target: u32,
 }
 
 /// A deferred ALTERNATIVE replacement region (`.subsection 1`): the encoded
@@ -3633,12 +3673,13 @@ fn emit_inline_asm_aarch64(
     // fall-through exit sequence instead.
     if let Some(ctx) = goto_ctx {
         let mut tramp_at: Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
-        // Label indices needing a teardown trampoline. An out-of-line
-        // replacement (`.subsection`) `%lK` branch shares these trampolines
-        // when the asm has an operand frame to restore; frameless, it reaches
-        // its block directly (recorded below).
-        let mut tramp_ks: Vec<usize> = goto_sites.iter().map(|&(_, _, k)| k).collect();
+        // Label indices needing a teardown trampoline. Frameless, a `%lK`
+        // branch -- in the template or in an out-of-line replacement
+        // (`.subsection`) -- reaches its block directly; with an operand frame
+        // to release, both go through the trampolines built here.
+        let mut tramp_ks: Vec<usize> = Vec::new();
         if size > 0 {
+            tramp_ks.extend(goto_sites.iter().map(|&(_, _, k)| k));
             tramp_ks.extend(deferred_goto_sites.iter().map(|&(_, _, k)| k as usize));
         }
         if tramp_ks.iter().any(|&k| ctx.row[1 + k] != ctx.row[0]) {
@@ -3666,6 +3707,14 @@ fn emit_inline_asm_aarch64(
             code[skip_site..skip_site + 4].copy_from_slice(&word.to_le_bytes());
         }
         for &(site, ref kind, k) in &goto_sites {
+            if size == 0 {
+                ctx.direct_goto.push(AsmGotoDirectBranch {
+                    site,
+                    kind: *kind,
+                    target: ctx.row[1 + k],
+                });
+                continue;
+            }
             let target = tramp_at[k].unwrap_or(exit_start);
             match label_branch_word(kind, target as i64 - site as i64) {
                 Ok(word) => code[site..site + 4].copy_from_slice(&word.to_le_bytes()),

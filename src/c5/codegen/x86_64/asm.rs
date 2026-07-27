@@ -1145,22 +1145,24 @@ fn movq_xmm(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
             code.push(modrm_reg(d & 7, s & 7));
         }
         // mem -> xmm (load).
-        (None, Some(d), Concrete::Mem { base, disp, .. }, _) => {
+        (None, Some(d), ref m, _) if MemRm::of(m).is_some() => {
+            let Some(mr) = MemRm::of(m) else { return false };
             code.push(0xF3);
-            if d >= 8 || base >= 8 {
-                code.push(rex(false, d >= 8, false, base >= 8));
+            if d >= 8 || mr.rex_b() {
+                code.push(rex(false, d >= 8, false, mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x7E]);
-            modrm_mem(code, d & 7, base, disp);
+            mr.emit(code, d & 7);
         }
         // xmm -> mem (store).
-        (Some(s), None, _, Concrete::Mem { base, disp, .. }) => {
+        (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
+            let Some(mr) = MemRm::of(m) else { return false };
             code.push(0x66);
-            if s >= 8 || base >= 8 {
-                code.push(rex(false, s >= 8, false, base >= 8));
+            if s >= 8 || mr.rex_b() {
+                code.push(rex(false, s >= 8, false, mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0xD6]);
-            modrm_mem(code, s & 7, base, disp);
+            mr.emit(code, s & 7);
         }
         // No xmm operand: a plain GP move.
         _ => return false,
@@ -1185,19 +1187,21 @@ fn movq_mmx(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
             code.extend_from_slice(&[0x0F, 0x6F]);
             code.push(modrm_reg(d, s));
         }
-        (None, Some(d), Concrete::Mem { base, disp, .. }, _) => {
-            if base >= 8 {
+        (None, Some(d), ref m, _) if MemRm::of(m).is_some() => {
+            let Some(mr) = MemRm::of(m) else { return false };
+            if mr.rex_b() {
                 code.push(rex(false, false, false, true));
             }
             code.extend_from_slice(&[0x0F, 0x6F]);
-            modrm_mem(code, d, base, disp);
+            mr.emit(code, d);
         }
-        (Some(s), None, _, Concrete::Mem { base, disp, .. }) => {
-            if base >= 8 {
+        (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
+            let Some(mr) = MemRm::of(m) else { return false };
+            if mr.rex_b() {
                 code.push(rex(false, false, false, true));
             }
             code.extend_from_slice(&[0x0F, 0x7F]);
-            modrm_mem(code, s, base, disp);
+            mr.emit(code, s);
         }
         (None, Some(d), Concrete::Reg { reg: g, .. }, _) if g < MMX_BASE => {
             code.push(rex(true, false, false, g >= 8));
@@ -2198,6 +2202,51 @@ fn modrm_mem(code: &mut Vec<u8>, reg: u8, base: u8, disp: i32) {
     }
 }
 
+/// The r/m addressing of a memory operand for the arms below, which reach
+/// `disp(%base)` and the RIP-relative form. A scaled index is rejected
+/// before them.
+#[derive(Clone, Copy)]
+struct MemRm {
+    /// Base register, or `None` for a RIP-relative reference.
+    base: Option<u8>,
+    disp: i32,
+}
+
+impl MemRm {
+    fn of(c: &Concrete) -> Option<MemRm> {
+        match *c {
+            Concrete::Mem {
+                base,
+                index: None,
+                disp,
+                ..
+            } => Some(MemRm {
+                base: Some(base),
+                disp,
+            }),
+            Concrete::RipRel { disp, .. } => Some(MemRm { base: None, disp }),
+            _ => None,
+        }
+    }
+
+    /// REX.B, set by a high base register. RIP-relative names no register.
+    fn rex_b(self) -> bool {
+        self.base.is_some_and(|b| b >= 8)
+    }
+
+    /// Emit the ModR/M (plus SIB / displacement) with ModRM.reg = `reg`.
+    /// RIP-relative is mod=00, r/m=101 with a disp32.
+    fn emit(self, code: &mut Vec<u8>, reg: u8) {
+        match self.base {
+            Some(base) => modrm_mem(code, reg, base, self.disp),
+            None => {
+                code.push(((reg & 7) << 3) | 5);
+                code.extend_from_slice(&self.disp.to_le_bytes());
+            }
+        }
+    }
+}
+
 /// Emit any needed operand-size / REX prefix for an instruction whose
 /// operands are `size`-wide and use ModR/M.reg = `reg`, r/m = `rm`.
 /// The 16-bit operand-size prefix (0x66) precedes REX per the SDM.
@@ -2538,7 +2587,7 @@ pub(crate) fn encode(
             osz,
             rex_w,
         } => {
-            let Some(Concrete::Mem { base, disp, .. }) = ops.first() else {
+            let Some(mr) = ops.first().and_then(MemRm::of) else {
                 return Err(String::from(
                     "inline asm: this instruction takes a memory operand",
                 ));
@@ -2546,25 +2595,25 @@ pub(crate) fn encode(
             if osz {
                 code.push(0x66);
             }
-            if rex_w || *base >= 8 {
-                code.push(rex(rex_w, false, false, *base >= 8));
+            if rex_w || mr.rex_b() {
+                code.push(rex(rex_w, false, false, mr.rex_b()));
             }
             code.push(opcode);
-            modrm_mem(code, ext, *base, *disp);
+            mr.emit(code, ext);
             Ok(())
         }
         Mnemonic::MemExt0F { opcode, ext, rex_w } => {
-            let Some(Concrete::Mem { base, disp, .. }) = ops.first() else {
+            let Some(mr) = ops.first().and_then(MemRm::of) else {
                 return Err(String::from(
                     "inline asm: this instruction takes a memory operand",
                 ));
             };
-            if rex_w || *base >= 8 {
-                code.push(rex(rex_w, false, false, *base >= 8));
+            if rex_w || mr.rex_b() {
+                code.push(rex(rex_w, false, false, mr.rex_b()));
             }
             code.push(0x0F);
             code.push(opcode);
-            modrm_mem(code, ext, *base, *disp);
+            mr.emit(code, ext);
             Ok(())
         }
         Mnemonic::InvMem { opcode } => {
@@ -2578,17 +2627,17 @@ pub(crate) fn encode(
                     "inline asm: general register expected for this instruction",
                 ));
             }
-            let Concrete::Mem { base, disp, .. } = mem else {
+            let Some(mr) = MemRm::of(&mem) else {
                 return Err(String::from(
                     "inline asm: this instruction takes a memory operand",
                 ));
             };
             code.push(0x66);
-            if gpr >= 8 || base >= 8 {
-                code.push(rex(false, gpr >= 8, false, base >= 8));
+            if gpr >= 8 || mr.rex_b() {
+                code.push(rex(false, gpr >= 8, false, mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x38, opcode]);
-            modrm_mem(code, gpr & 7, base, disp);
+            mr.emit(code, gpr & 7);
             Ok(())
         }
         Mnemonic::Pushfq => {
@@ -2640,20 +2689,17 @@ pub(crate) fn encode(
                     code.extend_from_slice(&[0x0F, opcode]);
                     code.push(modrm_reg(v_field & 7, gp_reg & 7));
                 }
-                Concrete::Mem { base, disp, .. } => {
-                    if v_field >= 8 || base >= 8 {
-                        code.push(rex(false, v_field >= 8, false, base >= 8));
+                _ => {
+                    let Some(mr) = MemRm::of(&other) else {
+                        return Err(String::from(
+                            "inline asm: `movd` operand must be a register or memory",
+                        ));
+                    };
+                    if v_field >= 8 || mr.rex_b() {
+                        code.push(rex(false, v_field >= 8, false, mr.rex_b()));
                     }
                     code.extend_from_slice(&[0x0F, opcode]);
-                    modrm_mem(code, v_field & 7, base, disp);
-                }
-                Concrete::Imm(_)
-                | Concrete::AbsMem { .. }
-                | Concrete::RipRel { .. }
-                | Concrete::IndexMem { .. } => {
-                    return Err(String::from(
-                        "inline asm: `movd` operand must be a register or memory",
-                    ));
+                    mr.emit(code, v_field & 7);
                 }
             }
             Ok(())
@@ -2680,23 +2726,22 @@ pub(crate) fn encode(
             if prefix != 0 {
                 code.push(prefix);
             }
-            match src {
-                _ if xmm(&src).is_some() => {
-                    let s = xmm(&src).unwrap();
+            match (xmm(&src), MemRm::of(&src)) {
+                (Some(s), _) => {
                     if d >= 8 || s >= 8 {
                         code.push(rex(false, d >= 8, false, s >= 8));
                     }
                     code.extend_from_slice(&[0x0F, opcode]);
                     code.push(modrm_reg(d & 7, s & 7));
                 }
-                Concrete::Mem { base, disp, .. } => {
-                    if d >= 8 || base >= 8 {
-                        code.push(rex(false, d >= 8, false, base >= 8));
+                (None, Some(mr)) => {
+                    if d >= 8 || mr.rex_b() {
+                        code.push(rex(false, d >= 8, false, mr.rex_b()));
                     }
                     code.extend_from_slice(&[0x0F, opcode]);
-                    modrm_mem(code, d & 7, base, disp);
+                    mr.emit(code, d & 7);
                 }
-                _ => {
+                (None, None) => {
                     return Err(String::from(
                         "inline asm: this SSE op's source must be an XMM register or memory",
                     ));
@@ -2722,30 +2767,27 @@ pub(crate) fn encode(
             if prefix != 0 {
                 code.push(prefix);
             }
-            match (src, dst) {
-                (s, d) if xmm(&s).is_some() && xmm(&d).is_some() => {
-                    let (sn, dn) = (xmm(&s).unwrap(), xmm(&d).unwrap());
+            match (xmm(&src), MemRm::of(&src), xmm(&dst), MemRm::of(&dst)) {
+                (Some(sn), _, Some(dn), _) => {
                     if dn >= 8 || sn >= 8 {
                         code.push(rex(false, dn >= 8, false, sn >= 8));
                     }
                     code.extend_from_slice(&[0x0F, load_op]);
                     code.push(modrm_reg(dn & 7, sn & 7));
                 }
-                (Concrete::Mem { base, disp, .. }, d) if xmm(&d).is_some() => {
-                    let dn = xmm(&d).unwrap();
-                    if dn >= 8 || base >= 8 {
-                        code.push(rex(false, dn >= 8, false, base >= 8));
+                (None, Some(mr), Some(dn), _) => {
+                    if dn >= 8 || mr.rex_b() {
+                        code.push(rex(false, dn >= 8, false, mr.rex_b()));
                     }
                     code.extend_from_slice(&[0x0F, load_op]);
-                    modrm_mem(code, dn & 7, base, disp);
+                    mr.emit(code, dn & 7);
                 }
-                (s, Concrete::Mem { base, disp, .. }) if xmm(&s).is_some() => {
-                    let sn = xmm(&s).unwrap();
-                    if sn >= 8 || base >= 8 {
-                        code.push(rex(false, sn >= 8, false, base >= 8));
+                (Some(sn), _, None, Some(mr)) => {
+                    if sn >= 8 || mr.rex_b() {
+                        code.push(rex(false, sn >= 8, false, mr.rex_b()));
                     }
                     code.extend_from_slice(&[0x0F, store_op]);
-                    modrm_mem(code, sn & 7, base, disp);
+                    mr.emit(code, sn & 7);
                 }
                 _ => {
                     return Err(String::from(
@@ -2829,18 +2871,18 @@ pub(crate) fn encode(
                     code.push(opcode);
                     code.push(modrm_reg(d & 7, s2 & 7));
                 }
-                Concrete::Mem { base, disp, .. } => {
+                _ => {
                     // src2 is a memory operand: VEX.B carries the base's high bit;
                     // L comes from the register operands.
+                    let Some(mr) = MemRm::of(src2) else {
+                        return Err(String::from(
+                            "inline asm: VEX src2 must be xmm/ymm or memory",
+                        ));
+                    };
                     let l = u8::from(dy || s1y);
-                    emit_vex(code, d >= 8, false, *base >= 8, map, w, s1, l, pp);
+                    emit_vex(code, d >= 8, false, mr.rex_b(), map, w, s1, l, pp);
                     code.push(opcode);
-                    modrm_mem(code, d & 7, *base, *disp);
-                }
-                _ => {
-                    return Err(String::from(
-                        "inline asm: VEX src2 must be xmm/ymm or memory",
-                    ));
+                    mr.emit(code, d & 7);
                 }
             }
             Ok(())
@@ -2871,12 +2913,17 @@ pub(crate) fn encode(
                         code.push(load_op);
                         code.push(modrm_reg(d & 7, s & 7));
                     }
-                    Concrete::Mem { base, disp, .. } => {
+                    _ => {
+                        let Some(mr) = MemRm::of(&src) else {
+                            return Err(String::from(
+                                "inline asm: VEX move source must be xmm/ymm/mem",
+                            ));
+                        };
                         emit_vex(
                             code,
                             d >= 8,
                             false,
-                            *base >= 8,
+                            mr.rex_b(),
                             1,
                             false,
                             0,
@@ -2884,22 +2931,16 @@ pub(crate) fn encode(
                             pp,
                         );
                         code.push(load_op);
-                        modrm_mem(code, d & 7, *base, *disp);
-                    }
-                    _ => {
-                        return Err(String::from(
-                            "inline asm: VEX move source must be xmm/ymm/mem",
-                        ));
+                        mr.emit(code, d & 7);
                     }
                 }
-            } else if let (Some((s, sy)), Concrete::Mem { base, disp, .. }) = (vec_reg(&src), &dst)
-            {
+            } else if let (Some((s, sy)), Some(mr)) = (vec_reg(&src), MemRm::of(&dst)) {
                 // store: the source register rides ModRM.reg, memory the r/m.
                 emit_vex(
                     code,
                     s >= 8,
                     false,
-                    *base >= 8,
+                    mr.rex_b(),
                     1,
                     false,
                     0,
@@ -2907,7 +2948,7 @@ pub(crate) fn encode(
                     pp,
                 );
                 code.push(store_op);
-                modrm_mem(code, s & 7, *base, *disp);
+                mr.emit(code, s & 7);
             } else {
                 return Err(String::from("inline asm: unsupported VEX move operands"));
             }
@@ -2936,12 +2977,17 @@ pub(crate) fn encode(
                     code.push(opcode);
                     code.push(modrm_reg(d & 7, s & 7));
                 }
-                Concrete::Mem { base, disp, .. } => {
+                _ => {
+                    let Some(mr) = MemRm::of(&src) else {
+                        return Err(String::from(
+                            "inline asm: VEX2 source must be xmm/ymm or memory",
+                        ));
+                    };
                     emit_vex(
                         code,
                         d >= 8,
                         false,
-                        *base >= 8,
+                        mr.rex_b(),
                         map,
                         false,
                         0,
@@ -2949,12 +2995,7 @@ pub(crate) fn encode(
                         pp,
                     );
                     code.push(opcode);
-                    modrm_mem(code, d & 7, *base, *disp);
-                }
-                _ => {
-                    return Err(String::from(
-                        "inline asm: VEX2 source must be xmm/ymm or memory",
-                    ));
+                    mr.emit(code, d & 7);
                 }
             }
             Ok(())
@@ -2983,16 +3024,16 @@ pub(crate) fn encode(
                     code.push(opcode);
                     code.push(modrm_reg(d & 7, s2 & 7));
                 }
-                Concrete::Mem { base, disp, .. } => {
-                    let l = u8::from(dy || s1y);
-                    emit_vex(code, d >= 8, false, *base >= 8, map, false, s1, l, pp);
-                    code.push(opcode);
-                    modrm_mem(code, d & 7, *base, *disp);
-                }
                 _ => {
-                    return Err(String::from(
-                        "inline asm: VEX shuffle src2 must be xmm/ymm or memory",
-                    ));
+                    let Some(mr) = MemRm::of(src2) else {
+                        return Err(String::from(
+                            "inline asm: VEX shuffle src2 must be xmm/ymm or memory",
+                        ));
+                    };
+                    let l = u8::from(dy || s1y);
+                    emit_vex(code, d >= 8, false, mr.rex_b(), map, false, s1, l, pp);
+                    code.push(opcode);
+                    mr.emit(code, d & 7);
                 }
             }
             code.push(*ib as u8);
@@ -3022,12 +3063,17 @@ pub(crate) fn encode(
                     code.push(opcode);
                     code.push(modrm_reg(d & 7, s & 7));
                 }
-                Concrete::Mem { base, disp, .. } => {
+                _ => {
+                    let Some(mr) = MemRm::of(src) else {
+                        return Err(String::from(
+                            "inline asm: VEX shuffle source must be xmm/ymm or memory",
+                        ));
+                    };
                     emit_vex(
                         code,
                         d >= 8,
                         false,
-                        *base >= 8,
+                        mr.rex_b(),
                         map,
                         false,
                         0,
@@ -3035,12 +3081,7 @@ pub(crate) fn encode(
                         pp,
                     );
                     code.push(opcode);
-                    modrm_mem(code, d & 7, *base, *disp);
-                }
-                _ => {
-                    return Err(String::from(
-                        "inline asm: VEX shuffle source must be xmm/ymm or memory",
-                    ));
+                    mr.emit(code, d & 7);
                 }
             }
             code.push(*ib as u8);

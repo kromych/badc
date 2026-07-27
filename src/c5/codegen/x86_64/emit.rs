@@ -2212,14 +2212,14 @@ pub(crate) fn emit_function(
         // if any, reset the body-appended buffers and re-emit. A pass that
         // finds nothing to shorten produces the final layout.
         if branch_short.is_empty() {
-            let branches: Vec<(usize, usize, usize)> = branch_fixups
+            let branches: Vec<(usize, usize, usize, bool)> = branch_fixups
                 .iter()
                 .map(|fx| {
                     let (opcode_start, long_size) = match fx.kind {
                         LocalBranchKind::Jmp => (fx.site - 1, 5),
                         LocalBranchKind::Jcc(_) => (fx.site - 2, 6),
                     };
-                    (opcode_start, long_size, fx.target as usize)
+                    (opcode_start, long_size, fx.target as usize, fx.pinned_long)
                 })
                 .collect();
             branch_short = relax_branches(&branches, &block_offsets);
@@ -2333,6 +2333,9 @@ struct BranchFixup {
     kind: LocalBranchKind,
     /// `true` when the branch was emitted in the 2-byte rel8 form.
     short: bool,
+    /// `true` when the branch sits in an inline-asm template, whose bytes
+    /// are emitted before relaxation runs and may not change length.
+    pinned_long: bool,
 }
 
 /// Emit a local branch to `target`, choosing the 2-byte rel8 short form
@@ -2357,6 +2360,7 @@ fn emit_local_branch(
                 target,
                 kind,
                 short,
+                pinned_long: false,
             });
             if short {
                 super::encode::emit_jmp_rel8(code, 0);
@@ -2376,6 +2380,7 @@ fn emit_local_branch(
                 target,
                 kind,
                 short,
+                pinned_long: false,
             });
             if short {
                 super::encode::emit_jcc_rel8(code, cc, 0);
@@ -2392,16 +2397,28 @@ enum LocalBranchKind {
     Jcc(Cc),
 }
 
+impl LocalBranchKind {
+    /// Bytes preceding the displacement field in the rel32 form: `E9` for
+    /// `jmp`, `0F 8x` for `jcc`.
+    fn opcode_len(self) -> usize {
+        match self {
+            LocalBranchKind::Jmp => 1,
+            LocalBranchKind::Jcc(_) => 2,
+        }
+    }
+}
+
 /// Decide, per local branch, whether its target is close enough to use
 /// the 2-byte rel8 encoding (`EB`/`7x`) instead of the 5/6-byte rel32
 /// form (`E9`/`0F 8x`).
 ///
-/// Each entry of `branches` is `(opcode_start, long_size, target_block)`
-/// in emission order, where `opcode_start` is the all-long byte offset
-/// of the instruction's first byte, `long_size` is 5 (jmp) or 6 (jcc),
-/// and `block_offsets` holds each block's all-long byte offset. Both
-/// short forms are 2 bytes, so a shortened branch removes
-/// `long_size - 2` bytes at its `opcode_start`.
+/// Each entry of `branches` is `(opcode_start, long_size, target_block,
+/// pinned_long)` in emission order, where `opcode_start` is the all-long
+/// byte offset of the instruction's first byte, `long_size` is 5 (jmp) or
+/// 6 (jcc), and `block_offsets` holds each block's all-long byte offset.
+/// Both short forms are 2 bytes, so a shortened branch removes
+/// `long_size - 2` bytes at its `opcode_start`. A pinned branch keeps the
+/// long form whatever its displacement.
 ///
 /// Shortening one branch only reduces the magnitude of every other
 /// branch's displacement, so the shortenable set is a monotone fixpoint:
@@ -2411,7 +2428,7 @@ enum LocalBranchKind {
 /// excludes a forward branch's own saving, so the estimate is never
 /// optimistic: a branch marked short fits in the final layout.
 fn relax_branches(
-    branches: &[(usize, usize, usize)],
+    branches: &[(usize, usize, usize, bool)],
     block_offsets: &[usize],
 ) -> alloc::vec::Vec<bool> {
     let n = branches.len();
@@ -2428,10 +2445,10 @@ fn relax_branches(
             |off: usize| -> usize { prefix[branches.partition_point(|b| b.0 < off)] };
         let mut changed = false;
         for i in 0..n {
-            if short[i] {
+            if short[i] || branches[i].3 {
                 continue;
             }
-            let (opcode_start, _long, target) = branches[i];
+            let (opcode_start, _long, target, _) = branches[i];
             let instr_end = (opcode_start - saved_before(opcode_start)) + 2;
             let tgt = block_offsets[target] - saved_before(block_offsets[target]);
             let rel = tgt as i64 - instr_end as i64;
@@ -7175,6 +7192,17 @@ fn emit_inline_asm(
     }
     let save_list: alloc::vec::Vec<u8> = (0u8..16).filter(|r| used & (1 << r) != 0).collect();
     let fp_save_list: alloc::vec::Vec<u8> = (0u8..16).filter(|r| fp_used & (1 << r) != 0).collect();
+    // With nothing to run on the way out -- no register outputs to store
+    // back, no saved registers to restore -- a `%lK` branch goes straight to
+    // the label's block instead of a teardown trampoline, so the template
+    // branch and a `.long %lK - .` section field name one address. Runtime
+    // patchers that read the section entry and rewrite the branch require
+    // that.
+    let goto_direct = save_list.is_empty()
+        && fp_save_list.is_empty()
+        && !asm.operands.iter().any(|op| {
+            op.is_output && !matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::Bound(_))
+        });
     // Register saves and operand captures live in the frame's asm scratch
     // region (rbp-relative), never below rsp: a setjmp-style template saves
     // rsp mid-block and a later longjmp-style one resumes it after the
@@ -7247,11 +7275,12 @@ fn emit_inline_asm(
     // resolved to an absolute `.text` relocation once every definition's
     // offset is known.
     let mut abs_label_fixups: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
-    // `asm goto` label branches: `(rel32_site, opcode_len, label_index)`
-    // per `%lK` reference, patched to the label's restore trampoline
-    // (or to the shared fall-through restore when the label target is
-    // the fall-through block).
-    let mut goto_sites: alloc::vec::Vec<(usize, usize, usize)> = alloc::vec::Vec::new();
+    // `asm goto` label branches: `(rel32_site, branch_kind, label_index)`
+    // per `%lK` reference, patched to the label's block directly when
+    // `goto_direct`, else to the label's teardown trampoline (or to the
+    // shared fall-through teardown when the label target is the
+    // fall-through block).
+    let mut goto_sites: alloc::vec::Vec<(usize, LocalBranchKind, usize)> = alloc::vec::Vec::new();
     // The constant value of an `i`-class operand reference, if any.
     let const_of = |idx: u8| -> Option<i64> {
         let arg = *args.get(idx as usize)?;
@@ -7511,8 +7540,11 @@ fn emit_inline_asm(
                 Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
                 None => super::encode::emit_jmp_rel32(code, 0),
             }
-            let opcode_len = if cc.is_some() { 2 } else { 1 };
-            goto_sites.push((site, opcode_len, k as usize));
+            let kind = match cc {
+                Some(cc) => LocalBranchKind::Jcc(cc),
+                None => LocalBranchKind::Jmp,
+            };
+            goto_sites.push((site, kind, k as usize));
             continue;
         }
         // A direct `call` / `jmp` to a symbol: resolve the name to its entry
@@ -7580,6 +7612,14 @@ fn emit_inline_asm(
         // the target and the operand's template displacement (folded into the
         // reloc addend). At most one memory operand per instruction.
         let mut riprel_reloc: Option<(AsmRipSym, i64)> = None;
+        // An immediate encodes after the memory operand's disp32, so a
+        // RIP-relative form would put the relocation on the wrong bytes.
+        // Instructions carrying one keep the register-indirect addressing.
+        let has_imm_operand = insn.operands.iter().any(|o| match *o {
+            AsmOpnd::Imm(_) | AsmOpnd::RefConst { .. } => true,
+            AsmOpnd::Ref { idx, .. } => op_reg.get(idx as usize).copied().flatten().is_none(),
+            _ => false,
+        });
         for o in &insn.operands {
             let c = match *o {
                 AsmOpnd::Imm(val) => Concrete::Imm(val),
@@ -7638,12 +7678,30 @@ fn emit_inline_asm(
                                 AsmSeg::Fs => Some(0x64),
                                 AsmSeg::None => operand_seg,
                             };
-                            Concrete::Mem {
-                                base: r,
-                                index: None,
-                                scale: 1,
-                                disp: 0,
-                                size,
+                            // A file-scope object addresses RIP-relative, as
+                            // gcc does; the captured-address register serves
+                            // a local, a computed address, and the segment
+                            // forms, whose base is not a link-time address.
+                            let sym = if has_imm_operand
+                                || !matches!(asm.operands[idx as usize].seg, AsmSeg::None)
+                            {
+                                None
+                            } else {
+                                args.get(idx as usize)
+                                    .and_then(|a| asm_riprel_target(func, extern_data_names, *a))
+                            };
+                            match sym {
+                                Some(sym) => {
+                                    riprel_reloc = Some((sym, 0));
+                                    Concrete::RipRel { disp: 0, size }
+                                }
+                                None => Concrete::Mem {
+                                    base: r,
+                                    index: None,
+                                    scale: 1,
+                                    disp: 0,
+                                    size,
+                                },
                             }
                         }
                         Some(r)
@@ -8105,8 +8163,22 @@ fn emit_inline_asm(
     // it lands on a trampoline that repeats them and jumps to the
     // label's block through the enclosing function's branch fixups. A
     // label whose target is the fall-through block reuses the
-    // fall-through exit sequence instead.
-    if let Some(ctx) = goto_ctx.as_mut() {
+    // fall-through exit sequence instead. With an empty exit sequence
+    // (`goto_direct`) the template branch itself rides the enclosing
+    // function's branch fixups, pinned to its already-emitted long form.
+    if let Some(ctx) = goto_ctx.as_mut()
+        && goto_direct
+    {
+        for &(site, kind, k) in &goto_sites {
+            ctx.branch_fixups.push(BranchFixup {
+                site: site + kind.opcode_len(),
+                target: ctx.row[1 + k],
+                kind,
+                short: false,
+                pinned_long: true,
+            });
+        }
+    } else if let Some(ctx) = goto_ctx.as_mut() {
         let mut tramp_at: alloc::vec::Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
         if goto_sites
             .iter()
@@ -8132,9 +8204,9 @@ fn emit_inline_asm(
             let rel = (code.len() - (skip_site + 4)) as i32;
             code[skip_site..skip_site + 4].copy_from_slice(&rel.to_le_bytes());
         }
-        for &(site, opcode_len, k) in &goto_sites {
+        for &(site, kind, k) in &goto_sites {
             let target = tramp_at[k].unwrap_or(exit_start);
-            let at = site + opcode_len;
+            let at = site + kind.opcode_len();
             let rel = target as i64 - (at + 4) as i64;
             code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());
         }
@@ -9713,21 +9785,21 @@ mod relax_branches_tests {
     fn near_forward_branch_shortens() {
         // Single jmp at offset 0 to a block 100 bytes ahead: short rel
         // = 100 - 2 = 98, within i8.
-        let short = relax_branches(&[(0, 5, 1)], &[0, 100]);
+        let short = relax_branches(&[(0, 5, 1, false)], &[0, 100]);
         assert_eq!(short, vec![true]);
     }
 
     #[test]
     fn far_forward_branch_stays_long() {
         // Target 200 bytes ahead: short rel = 198, out of i8 range.
-        let short = relax_branches(&[(0, 5, 1)], &[0, 200]);
+        let short = relax_branches(&[(0, 5, 1, false)], &[0, 200]);
         assert_eq!(short, vec![false]);
     }
 
     #[test]
     fn backward_branch_shortens() {
         // jmp at offset 50 back to offset 0: short rel = 0 - 52 = -52.
-        let short = relax_branches(&[(50, 5, 0)], &[0, 50]);
+        let short = relax_branches(&[(50, 5, 0, false)], &[0, 50]);
         assert_eq!(short, vec![true]);
     }
 
@@ -9735,8 +9807,8 @@ mod relax_branches_tests {
     fn forward_boundary_127_shortens_128_does_not() {
         // Short instr ends at offset 2; target 129 -> rel 127 (fits),
         // target 130 -> rel 128 (does not).
-        assert_eq!(relax_branches(&[(0, 5, 1)], &[0, 129]), vec![true]);
-        assert_eq!(relax_branches(&[(0, 5, 1)], &[0, 130]), vec![false]);
+        assert_eq!(relax_branches(&[(0, 5, 1, false)], &[0, 129]), vec![true]);
+        assert_eq!(relax_branches(&[(0, 5, 1, false)], &[0, 130]), vec![false]);
     }
 
     #[test]
@@ -9746,10 +9818,21 @@ mod relax_branches_tests {
         // bytes before branch0's target. branch0's short rel then
         // becomes 132 - 3 - 2 = 127 -> fits. A single all-long pass
         // (rel 130) would have missed branch0.
-        let short = relax_branches(&[(0, 5, 2), (5, 5, 1)], &[0, 10, 132]);
+        let short = relax_branches(&[(0, 5, 2, false), (5, 5, 1, false)], &[0, 10, 132]);
         assert_eq!(short, vec![true, true]);
         // One more byte of distance defeats the cascade for branch0.
-        let short = relax_branches(&[(0, 5, 2), (5, 5, 1)], &[0, 10, 133]);
+        let short = relax_branches(&[(0, 5, 2, false), (5, 5, 1, false)], &[0, 10, 133]);
+        assert_eq!(short, vec![false, true]);
+    }
+
+    #[test]
+    fn pinned_branch_keeps_the_long_form() {
+        // An inline-asm template branch is emitted before relaxation runs, so
+        // it stays long however close its target is.
+        let short = relax_branches(&[(0, 5, 1, true)], &[0, 10]);
+        assert_eq!(short, vec![false]);
+        // Its bytes still count for the branches around it.
+        let short = relax_branches(&[(0, 5, 1, true), (5, 5, 2, false)], &[0, 10, 20]);
         assert_eq!(short, vec![false, true]);
     }
 
@@ -9760,12 +9843,18 @@ mod relax_branches_tests {
         // block layout: b0@0, b1@4, b2@8, b3@140.
         // branch0@0 -> b3(140): all-long rel 138; after the two inner
         // jccs shorten (save 8), rel = 140 - 8 - 2 = 130 -> still out.
-        let short = relax_branches(&[(0, 6, 3), (8, 6, 1), (16, 6, 2)], &[0, 4, 8, 140]);
+        let short = relax_branches(
+            &[(0, 6, 3, false), (8, 6, 1, false), (16, 6, 2, false)],
+            &[0, 4, 8, 140],
+        );
         assert!(short[1]);
         assert!(short[2]);
         assert!(!short[0]);
         // Pull the target in by 3 so the saving is enough: 134 - 8 - 2 = 124.
-        let short = relax_branches(&[(0, 6, 3), (8, 6, 1), (16, 6, 2)], &[0, 4, 8, 134]);
+        let short = relax_branches(
+            &[(0, 6, 3, false), (8, 6, 1, false), (16, 6, 2, false)],
+            &[0, 4, 8, 134],
+        );
         assert!(short[0]);
     }
 }

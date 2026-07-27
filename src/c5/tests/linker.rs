@@ -6789,6 +6789,124 @@ fn aarch64_asm_replacement_goto_branch_targets_label_block() {
 }
 
 #[test]
+fn asm_goto_branch_and_section_field_name_one_address() {
+    // The jump-label patching contract: a runtime patcher reads the label
+    // address from the pushed section (`.long %l[l_yes] - .`) and rewrites the
+    // template's own branch to it, so the two must already agree. Decode the
+    // branch at the recorded `1b` and check it reaches the recorded label
+    // address, as the patcher's own comparison does.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for (target, jump) in [(Target::LinuxX64, "jmp"), (Target::LinuxAarch64, "b")] {
+        let src = alloc::format!(
+            "static inline __attribute__((always_inline)) int probe(int b) {{\n\
+                 __asm__ goto(\"1:\\t{jump} %l[l_yes]\\n\"\n\
+                     \".pushsection .jt,\\\"aw\\\"\\n\"\n\
+                     \".balign 8\\n\"\n\
+                     \".long 1b - .\\n\"\n\
+                     \".long %l[l_yes] - .\\n\"\n\
+                     \".popsection\\n\" : : \"i\"(b) : : l_yes);\n\
+                 return 0;\n\
+             l_yes:\n\
+                 return 1;\n\
+             }}\n\
+             int main(void) {{ return probe(1); }}\n"
+        );
+        let program = Compiler::with_target(src, target)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let text = &sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".text")
+            .expect(".text missing")
+            .3;
+        let rela = &sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.jt")
+            .expect(".rela.jt missing")
+            .3;
+        assert_eq!(rela.len(), 2 * 24, "{target:?}: two `.long` relocs");
+        // A `- .` field relocates PC-relative against the `.text` section
+        // symbol, so its addend is the target's text offset.
+        let addend =
+            |k: usize| i64::from_le_bytes(rela[k * 24 + 16..k * 24 + 24].try_into().unwrap());
+        let (code_off, label_off) = (addend(0) as usize, addend(1));
+        let reached = if matches!(target, Target::LinuxAarch64) {
+            let w = u32::from_le_bytes(text[code_off..code_off + 4].try_into().unwrap());
+            assert_eq!(w & 0xfc00_0000, 0x1400_0000, "{target:?}: `1b` holds a `b`");
+            let off = ((w & 0x03ff_ffff) << 6) as i32 >> 6;
+            code_off as i64 + off as i64 * 4
+        } else {
+            assert_eq!(
+                text[code_off], 0xE9,
+                "{target:?}: `1b` holds the 5-byte jmp"
+            );
+            let rel = i32::from_le_bytes(text[code_off + 1..code_off + 5].try_into().unwrap());
+            code_off as i64 + 5 + rel as i64
+        };
+        assert_eq!(
+            reached, label_off,
+            "{target:?}: the template branch and the section field name different addresses"
+        );
+    }
+}
+
+#[test]
+fn x64_asm_m_operand_on_a_global_is_rip_relative() {
+    // `call *%[op]` on a file-scope object encodes `FF 15 disp32` with a
+    // PC-relative relocation, gcc's form and the one an indirect-call patcher
+    // recognises. gcc's addend is the field's offset in the object less the
+    // 4-byte end skew.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        struct ops { long pad; void (*fn)(void); };\n\
+        extern struct ops o;\n\
+        void probe(void) { __asm__ volatile(\"call *%[op]\" : : [op] \"m\"(o.fn) : \"memory\"); }\n\
+        int main(void) { return 0; }\n";
+    let program = Compiler::new(String::from(src)).compile().expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let text = &sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".text")
+        .expect(".text missing")
+        .3;
+    let at = text
+        .windows(6)
+        .position(|w| w[0] == 0xFF && w[1] == 0x15 && w[2..] == [0, 0, 0, 0])
+        .expect("no `FF 15 disp32` indirect call");
+    let rela = &sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".rela.text")
+        .expect(".rela.text missing")
+        .3;
+    let hit = (0..rela.len() / 24)
+        .map(|k| {
+            let f =
+                |o: usize| u64::from_le_bytes(rela[k * 24 + o..k * 24 + o + 8].try_into().unwrap());
+            (f(0), f(8) & 0xffff_ffff, f(16) as i64)
+        })
+        .find(|&(off, _, _)| off as usize == at + 2)
+        .expect("no relocation on the call's disp32");
+    const R_X86_64_PC32: u64 = 2;
+    assert_eq!(hit.1, R_X86_64_PC32, "PC-relative relocation");
+    assert_eq!(
+        hit.2,
+        8 - 4,
+        "addend is the member offset less the end skew"
+    );
+}
+
+#[test]
 fn asm_goto_section_reloc_survives_branch_relaxation() {
     // An `asm goto` section field in a function that also relaxes a branch:
     // the section sink is restored before each re-emit, so the entry is not

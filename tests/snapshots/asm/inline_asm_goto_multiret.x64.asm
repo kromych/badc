@@ -17,8 +17,6 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	movq	%rax, -0x10(%rbp)
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	movl	$0x3, %eax
                	cmpq	$0x4, %rax
                	je	<addr>
@@ -38,8 +36,6 @@ Disassembly of section .text:
                	retq
                	movl	$0x21, %eax
                	movq	%rax, -0x10(%rbp)
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x8, %eax
                	cmpq	$0x9, %rax

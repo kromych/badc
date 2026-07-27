@@ -19,8 +19,6 @@ Disassembly of section .text:
                	movq	%rax, -0x10(%rbp)
                	movq	%rcx, -0x8(%rbp)
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	movl	$0x2, %eax
                	movslq	%eax, %rax
                	addq	$0x10, %rsp

@@ -14,8 +14,6 @@ Disassembly of section .text:
 <main>:
                	mov	x0, #0xb                // =11
                	b	<addr>
-               	b	<addr>
-               	b	<addr>
                	mov	x0, #0x3                // =3
                	cmp	x0, #0x4
                	b.eq	<addr>
@@ -29,8 +27,6 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ret
                	mov	x0, #0x21               // =33
-               	b	<addr>
-               	b	<addr>
                	b	<addr>
                	mov	x0, #0x8                // =8
                	cmp	x0, #0x9

@@ -1,6 +1,7 @@
 use super::Preprocessor;
-use super::include::include_parent_dir;
-use super::text::strip_c_comments;
+use super::builtins;
+use super::include::IncludeForm;
+use super::text::{is_ident_byte, literal_prefix_len, pp_number_len, strip_c_comments};
 use crate::c5::error::C5Error;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -17,141 +18,27 @@ impl Preprocessor {
         let bytes = expr.as_bytes();
         let mut i = 0;
         while i < bytes.len() {
-            // Skip whitespace.
             if (bytes[i] as char).is_ascii_whitespace() {
                 out.push(bytes[i] as char);
                 i += 1;
                 continue;
             }
-            // Comments were removed in phase 3; the literal-aware
-            // strip after substitution covers macro-introduced ones.
-            // Match `defined` keyword (must be a complete word).
-            if bytes[i..].starts_with(b"defined") {
-                let after = i + b"defined".len();
-                let prev_is_word =
-                    i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
-                let next_is_word = bytes
-                    .get(after)
-                    .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_');
-                if !prev_is_word && !next_is_word {
-                    let mut j = after;
-                    while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
-                        j += 1;
-                    }
-                    let with_paren = bytes.get(j) == Some(&b'(');
-                    if with_paren {
-                        j += 1;
-                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
-                            j += 1;
-                        }
-                    }
-                    let name_start = j;
-                    while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_')
-                    {
-                        j += 1;
-                    }
-                    let name = &expr[name_start..j];
-                    if with_paren {
-                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
-                            j += 1;
-                        }
-                        if bytes.get(j) == Some(&b')') {
-                            j += 1;
-                        }
-                    }
-                    if !name.is_empty() {
-                        // `__has_include` / `__has_include_next` are
-                        // always-available operators, so the guard
-                        // `defined(__has_include)` is true.
-                        let v = name == "__has_include"
-                            || name == "__has_include_next"
-                            || name == "__has_builtin"
-                            || name == "__has_attribute"
-                            || self.macros.contains_key(name)
-                            || self.fn_macros.contains_key(name);
-                        out.push_str(if v { "1" } else { "0" });
-                        i = j;
-                        continue;
-                    }
-                }
+            // Comments were removed in phase 3; the literal-aware strip
+            // after substitution covers macro-introduced ones.
+            //
+            // `defined(NAME)` / `defined NAME` (C99 6.10.1p1) resolves to
+            // 1 or 0 here, before substitution, because `substitute`
+            // would otherwise expand NAME away.
+            if let Some((name, next)) = operator_operand(expr, i, "defined", Parens::Optional) {
+                out.push_str(if self.is_defined_name(name) { "1" } else { "0" });
+                i = next;
+                continue;
             }
-            // `__has_builtin(NAME)` (C23 6.10.1 / universal practice): 1
-            // when the compiler provides builtin NAME, else 0. Resolved
-            // before substitution so the builtin name is not expanded.
-            if bytes[i..].starts_with(b"__has_builtin") {
-                let after = i + b"__has_builtin".len();
-                let prev_is_word =
-                    i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
-                let next_is_word = bytes
-                    .get(after)
-                    .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_');
-                if !prev_is_word && !next_is_word {
-                    let mut j = after;
-                    while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
-                        j += 1;
-                    }
-                    if bytes.get(j) == Some(&b'(') {
-                        j += 1;
-                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
-                            j += 1;
-                        }
-                        let name_start = j;
-                        while j < bytes.len()
-                            && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_')
-                        {
-                            j += 1;
-                        }
-                        let name = &expr[name_start..j];
-                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
-                            j += 1;
-                        }
-                        if bytes.get(j) == Some(&b')') && !name.is_empty() {
-                            j += 1;
-                            out.push_str(if is_known_builtin(name) { "1" } else { "0" });
-                            i = j;
-                            continue;
-                        }
-                    }
-                }
-            }
-            // `__has_attribute(NAME)`: 1 when the compiler recognizes the
-            // GCC/Clang attribute NAME, else 0. A header may gate a
-            // `cleanup`-attribute helper on `#if <alias>(cleanup)`.
-            if bytes[i..].starts_with(b"__has_attribute") {
-                let after = i + b"__has_attribute".len();
-                let prev_is_word =
-                    i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
-                let next_is_word = bytes
-                    .get(after)
-                    .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_');
-                if !prev_is_word && !next_is_word {
-                    let mut j = after;
-                    while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
-                        j += 1;
-                    }
-                    if bytes.get(j) == Some(&b'(') {
-                        j += 1;
-                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
-                            j += 1;
-                        }
-                        let name_start = j;
-                        while j < bytes.len()
-                            && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_')
-                        {
-                            j += 1;
-                        }
-                        let name = &expr[name_start..j];
-                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
-                            j += 1;
-                        }
-                        if bytes.get(j) == Some(&b')') && !name.is_empty() {
-                            j += 1;
-                            out.push_str(if is_known_attribute(name) { "1" } else { "0" });
-                            i = j;
-                            continue;
-                        }
-                    }
-                }
+            // `__has_builtin` / `__has_attribute` likewise take an
+            // unexpanded identifier operand.
+            if let Some(next) = resolve_has_operator(expr, i, &mut out) {
+                i = next;
+                continue;
             }
             // Bytes with no operator meaning pass through as a UTF-8
             // slice; a per-byte `as char` would widen non-ASCII.
@@ -353,6 +240,15 @@ impl<'a> IfExprParser<'a> {
         } else {
             false
         }
+    }
+    /// The identifier at the cursor, empty when none starts there.
+    /// Shares the pp-token identifier rule with the text scanners.
+    fn scan_ident(&mut self) -> &'a str {
+        let start = self.pos;
+        while self.peek_byte().is_some_and(is_ident_byte) {
+            self.pos += 1;
+        }
+        &self.src[start..self.pos]
     }
     fn eat_byte(&mut self, b: u8) -> bool {
         self.skip_ws();
@@ -687,6 +583,13 @@ impl<'a> IfExprParser<'a> {
             }
             return Ok(v);
         }
+        // C99 6.4.4.4 / 6.4.5: a character constant or string literal may
+        // carry an encoding prefix. In a `#if` controlling expression the
+        // value is the character code either way, so the prefix is
+        // consumed and the literal read as below.
+        if let Some(plen) = literal_prefix_len(self.src.as_bytes(), self.pos) {
+            self.pos += plen;
+        }
         if self.eat_byte(b'"') {
             // String literal -- read to closing `"`. No escape
             // handling beyond plain bytes; the c5 use cases compare
@@ -703,16 +606,6 @@ impl<'a> IfExprParser<'a> {
             return Err(C5Error::Compile(
                 "preprocessor: unterminated string in `#if` expression".to_string(),
             ));
-        }
-        // C11 6.4.4.4: a character constant may carry an `L`, `u`, or
-        // `U` encoding prefix (`L'/'`). In a `#if` controlling
-        // expression its value is the character code, so the prefix is
-        // consumed and the literal read as below.
-        if let Some(&p) = self.src.as_bytes().get(self.pos)
-            && matches!(p, b'L' | b'u' | b'U')
-            && self.src.as_bytes().get(self.pos + 1) == Some(&b'\'')
-        {
-            self.pos += 1;
         }
         if self.eat_byte(b'\'') {
             // Character literal. Multi-char (`'AB'`) is
@@ -806,9 +699,14 @@ impl<'a> IfExprParser<'a> {
         )))
     }
 
+    /// C99 6.10.1p4: the controlling expression's operands are integer
+    /// constants. The token extent comes from `pp_number_len` (6.4.8) so
+    /// a pp-number that is not an integer constant is diagnosed whole
+    /// instead of splitting into a number and a stray identifier.
     fn parse_int_literal(&mut self) -> Result<IfValue, C5Error> {
         let bytes = self.src.as_bytes();
         let start = self.pos;
+        let token_end = start + pp_number_len(bytes, start);
         let mut radix: u32 = 10;
         if bytes.get(self.pos) == Some(&b'0') {
             if bytes.get(self.pos + 1) == Some(&b'x') || bytes.get(self.pos + 1) == Some(&b'X') {
@@ -824,7 +722,6 @@ impl<'a> IfExprParser<'a> {
                 self.pos += 1;
             }
         }
-        let body_start = self.pos;
         while let Some(b) = self.peek_byte() {
             let is_digit = match radix {
                 16 => b.is_ascii_hexdigit(),
@@ -845,6 +742,13 @@ impl<'a> IfExprParser<'a> {
             } else {
                 break;
             }
+        }
+        if self.pos != token_end {
+            let token = &self.src[start..token_end];
+            self.pos = token_end;
+            return Err(C5Error::Compile(alloc::format!(
+                "preprocessor: `{token}` is not an integer constant in `#if`",
+            )));
         }
         let body = self.src[start..self.pos].trim_end_matches(['u', 'U', 'l', 'L']);
         // C99 6.10.1p4: preprocessor expressions evaluate in
@@ -877,7 +781,6 @@ impl<'a> IfExprParser<'a> {
         } else {
             Err(())
         };
-        let _ = body_start;
         match v {
             Ok((n, uns)) => Ok(IfValue::with_sign(n, uns)),
             Err(()) => Err(C5Error::Compile(alloc::format!(
@@ -887,34 +790,18 @@ impl<'a> IfExprParser<'a> {
     }
 
     fn parse_ident_or_defined(&mut self) -> Result<IfValue, C5Error> {
-        let start = self.pos;
-        while let Some(b) = self.peek_byte() {
-            if b.is_ascii_alphanumeric() || b == b'_' {
-                self.pos += 1;
-            } else {
-                break;
-            }
-        }
-        let name = &self.src[start..self.pos];
+        let name = self.scan_ident();
         if name == "defined" {
             // `defined NAME` or `defined(NAME)` -- both are valid.
             self.skip_ws();
             let with_paren = self.eat_byte(b'(');
             self.skip_ws();
-            let id_start = self.pos;
-            while let Some(b) = self.peek_byte() {
-                if b.is_ascii_alphanumeric() || b == b'_' {
-                    self.pos += 1;
-                } else {
-                    break;
-                }
-            }
-            if id_start == self.pos {
+            let id = self.scan_ident().to_string();
+            if id.is_empty() {
                 return Err(C5Error::Compile(
                     "preprocessor: identifier expected after `defined`".to_string(),
                 ));
             }
-            let id = self.src[id_start..self.pos].to_string();
             if with_paren {
                 self.skip_ws();
                 if !self.eat_byte(b')') {
@@ -923,7 +810,7 @@ impl<'a> IfExprParser<'a> {
                     ));
                 }
             }
-            return Ok(IfValue::signed(self.pp.macros.contains_key(&id) as i64));
+            return Ok(IfValue::signed(self.pp.is_defined_name(&id) as i64));
         }
         // C23 6.10.1 / universal compiler practice: `__has_include(<h>)`
         // and `__has_include("h")` evaluate to 1 when the header is
@@ -963,22 +850,18 @@ impl<'a> IfExprParser<'a> {
                     "preprocessor: missing `)` in `__has_include`".to_string(),
                 ));
             }
-            // Resolve exactly as the matching directive would: the
-            // quoted form probes the including file's directory first
-            // (C99 6.10.2p2), and `__has_include_next` resumes past
-            // the search-path entry that supplied the current file.
-            let found = if name == "__has_include_next" {
-                self.pp.find_include_next(&header, self.filename).is_some()
+            // Resolve exactly as the matching directive would; only the
+            // answer is kept.
+            let quoted = close == b'"';
+            let form = if name == "__has_include_next" {
+                IncludeForm::next(quoted)
             } else {
-                let source_dir = if close == b'"' {
-                    include_parent_dir(self.filename)
-                } else {
-                    None
-                };
-                self.pp
-                    .find_include(&header, source_dir.as_deref())
-                    .is_some()
+                IncludeForm::plain(quoted)
             };
+            let found = self
+                .pp
+                .resolve_include(&header, form, self.filename)
+                .is_some();
             return Ok(IfValue::signed(found as i64));
         }
         // Identifier -- look up in the macro table. Function-like
@@ -1033,58 +916,6 @@ pub(super) fn if_value_lt(a: &IfValue, b: &IfValue) -> bool {
     }
 }
 
-/// True when badc provides the named GCC/Clang compiler builtin (with the
-/// `__builtin_` prefix), so `__has_builtin(NAME)` reports 1. Names not
-/// listed report 0, which routes feature-testing headers to their
-/// portable fallbacks. Only genuine compiler intrinsics and the
-/// always-defined `<_builtins.h>` thunks are listed; forms that a header
-/// must fall back to portable C for (e.g. `__builtin_bitreverse*`,
-/// `__builtin_addcll`, `__builtin_bswap128`) are deliberately absent.
-pub(super) fn is_known_builtin(name: &str) -> bool {
-    matches!(
-        name,
-        "__builtin_clz"
-            | "__builtin_clzl"
-            | "__builtin_clzll"
-            | "__builtin_ctz"
-            | "__builtin_ctzl"
-            | "__builtin_ctzll"
-            | "__builtin_popcount"
-            | "__builtin_popcountl"
-            | "__builtin_popcountll"
-            | "__builtin_bswap16"
-            | "__builtin_bswap32"
-            | "__builtin_bswap64"
-            | "__builtin_clrsb"
-            | "__builtin_clrsbl"
-            | "__builtin_clrsbll"
-            | "__builtin_parity"
-            | "__builtin_parityl"
-            | "__builtin_parityll"
-            | "__builtin_ffs"
-            | "__builtin_ffsl"
-            | "__builtin_ffsll"
-            | "__builtin_expect"
-            | "__builtin_unreachable"
-            | "__builtin_trap"
-            | "__builtin_alloca"
-            | "__builtin_frame_address"
-            | "__builtin_return_address"
-            | "__builtin_constant_p"
-            | "__builtin_choose_expr"
-            | "__builtin_types_compatible_p"
-            | "__builtin_prefetch"
-            | "__builtin_assume_aligned"
-            | "__builtin_add_overflow"
-            | "__builtin_sub_overflow"
-            | "__builtin_mul_overflow"
-            | "__builtin_va_start"
-            | "__builtin_va_arg"
-            | "__builtin_va_end"
-            | "__builtin_va_copy"
-    )
-}
-
 /// Replace every `__has_builtin(NAME)` / `__has_attribute(NAME)` in `s`
 /// with `1` or `0`. Run after macro substitution as well as before, so a
 /// header that reaches the operator through a macro alias
@@ -1094,68 +925,104 @@ pub(super) fn replace_has_operators(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut i = 0;
     while i < bytes.len() {
-        let mut matched = false;
-        for (op, is_known) in [
-            ("__has_builtin", is_known_builtin as fn(&str) -> bool),
-            ("__has_attribute", is_known_attribute as fn(&str) -> bool),
-        ] {
-            if !bytes[i..].starts_with(op.as_bytes()) {
-                continue;
-            }
-            let prev_word = i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
-            let after = i + op.len();
-            let next_word = bytes
-                .get(after)
-                .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_');
-            if prev_word || next_word {
-                continue;
-            }
-            let mut j = after;
-            while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
-                j += 1;
-            }
-            if bytes.get(j) != Some(&b'(') {
-                continue;
-            }
-            j += 1;
-            while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
-                j += 1;
-            }
-            let name_start = j;
-            while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_') {
-                j += 1;
-            }
-            let name = &s[name_start..j];
-            while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
-                j += 1;
-            }
-            if bytes.get(j) == Some(&b')') && !name.is_empty() {
-                out.push_str(if is_known(name) { "1" } else { "0" });
-                i = j + 1;
-                matched = true;
-                break;
-            }
+        if let Some(next) = resolve_has_operator(s, i, &mut out) {
+            i = next;
+            continue;
         }
-        if !matched {
-            let start = i;
+        let start = i;
+        i += 1;
+        while i < bytes.len() && !bytes[i].is_ascii() {
             i += 1;
-            while i < bytes.len() && !bytes[i].is_ascii() {
-                i += 1;
-            }
-            out.push_str(&s[start..i]);
         }
+        out.push_str(&s[start..i]);
     }
     out
 }
 
-/// The built-in feature-test operators badc provides. They are not
-/// macros, but `#ifdef` / `defined(...)` on their names reports true so
-/// headers can guard `#ifdef __has_attribute` before using the operator.
-pub(super) fn is_builtin_operator_name(name: &str) -> bool {
-    matches!(
-        name,
-        "__has_include" | "__has_include_next" | "__has_builtin" | "__has_attribute"
-    )
+/// Whether the operator's identifier operand must be parenthesised.
+/// `defined` accepts both forms (C99 6.10.1p1); `__has_builtin` and
+/// `__has_attribute` require the parentheses.
+#[derive(Clone, Copy, PartialEq)]
+enum Parens {
+    Required,
+    Optional,
+}
+
+/// Parse `kw ( NAME )` at `at`: `kw` must sit at a word boundary (C99
+/// 6.10: a directive operand is one preprocessing token), then optional
+/// white space, the operand, and the closing `)`. Returns the operand
+/// and the index just past the call. `Parens::Optional` also accepts the
+/// bare `kw NAME` form and tolerates a missing `)`.
+fn operator_operand<'a>(
+    s: &'a str,
+    at: usize,
+    kw: &str,
+    parens: Parens,
+) -> Option<(&'a str, usize)> {
+    let bytes = s.as_bytes();
+    if !bytes[at..].starts_with(kw.as_bytes()) {
+        return None;
+    }
+    let after = at + kw.len();
+    let prev_word = at > 0 && is_ident_byte(bytes[at - 1]);
+    let next_word = bytes.get(after).copied().is_some_and(is_ident_byte);
+    if prev_word || next_word {
+        return None;
+    }
+    let skip_ws = |mut j: usize| {
+        while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+            j += 1;
+        }
+        j
+    };
+    let mut j = skip_ws(after);
+    let open = bytes.get(j) == Some(&b'(');
+    if open {
+        j = skip_ws(j + 1);
+    } else if parens == Parens::Required {
+        return None;
+    }
+    let name_start = j;
+    while j < bytes.len() && is_ident_byte(bytes[j]) {
+        j += 1;
+    }
+    let name = &s[name_start..j];
+    if name.is_empty() {
+        return None;
+    }
+    if open {
+        j = skip_ws(j);
+        match bytes.get(j) {
+            Some(&b')') => j += 1,
+            // A required-paren operator with no `)` is not a call; the
+            // optional-paren form tolerates it, as it did before.
+            _ if parens == Parens::Required => return None,
+            _ => {}
+        }
+    }
+    Some((name, j))
+}
+
+/// The `#if` operators whose identifier operand is resolved textually,
+/// before and after macro substitution.
+type HasOperator = (&'static str, fn(&str) -> bool);
+
+const HAS_OPERATORS: [HasOperator; 2] = [
+    ("__has_builtin", builtins::has_builtin),
+    ("__has_attribute", is_known_attribute),
+];
+
+/// Resolve a `__has_*` operator at `i`, appending `1` or `0` to `out`.
+/// Returns the index just past the call, or `None` when no operator
+/// starts there.
+fn resolve_has_operator(s: &str, i: usize, out: &mut String) -> Option<usize> {
+    for (op, is_known) in HAS_OPERATORS {
+        if let Some((name, next)) = operator_operand(s, i, op, Parens::Required) {
+            out.push_str(if is_known(name) { "1" } else { "0" });
+            return Some(next);
+        }
+    }
+    None
 }
 
 /// True when badc recognizes the GCC/Clang attribute NAME, so

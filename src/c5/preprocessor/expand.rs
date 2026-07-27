@@ -19,7 +19,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use hashbrown::HashMap;
 
-use super::text::{is_ident_byte, literal_prefix_len, pp_number_len};
+use super::text::{is_ident_byte, literal_prefix_len, pp_number_len, skip_literal};
 use super::{FnMacro, Preprocessor};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -93,90 +93,33 @@ pub(super) struct CachedBody {
     toks: Rc<Vec<Tok>>,
 }
 
+/// The C99 6.4.6 punctuators badc lexes, longest first. `punct_len` and
+/// the serializer's adjacency test both read this table, so a punctuator
+/// added here cannot be missed by either.
+const PUNCT3: [&[u8]; 3] = [b"<<=", b">>=", b"..."];
+const PUNCT2: [&[u8]; 20] = [
+    b"##", b"->", b"++", b"--", b"<<", b">>", b"<=", b">=", b"==", b"!=", b"&&", b"||", b"+=",
+    b"-=", b"*=", b"/=", b"%=", b"&=", b"^=", b"|=",
+];
+const PUNCT1: &[u8] = b"()[]{},;:?~!%^&*-+=<>|/.#";
+
+/// Byte pairs that are not badc punctuators yet still re-lex as one
+/// token when written adjacent: the C99 6.4.6 digraphs, the two comment
+/// openers (6.4.9), and the first two bytes of `...`. The serializer
+/// separates them; nothing else consults the set.
+const MERGE_ONLY2: [&[u8]; 8] = [b"<:", b":>", b"<%", b"%>", b"%:", b"//", b"/*", b".."];
+
 /// Length of the punctuator starting at `at`, longest match first
 /// (C99 6.4.6), or 0.
-fn punct_len(bytes: &[u8], at: usize) -> usize {
+pub(super) fn punct_len(bytes: &[u8], at: usize) -> usize {
     let rest = &bytes[at..];
-    for p in [b"<<=".as_slice(), b">>=", b"..."] {
-        if rest.starts_with(p) {
-            return 3;
-        }
+    if PUNCT3.iter().any(|p| rest.starts_with(p)) {
+        return 3;
     }
-    for p in [
-        b"##".as_slice(),
-        b"->",
-        b"++",
-        b"--",
-        b"<<",
-        b">>",
-        b"<=",
-        b">=",
-        b"==",
-        b"!=",
-        b"&&",
-        b"||",
-        b"+=",
-        b"-=",
-        b"*=",
-        b"/=",
-        b"%=",
-        b"&=",
-        b"^=",
-        b"|=",
-    ] {
-        if rest.starts_with(p) {
-            return 2;
-        }
+    if PUNCT2.iter().any(|p| rest.starts_with(p)) {
+        return 2;
     }
-    if matches!(
-        rest[0],
-        b'(' | b')'
-            | b'['
-            | b']'
-            | b'{'
-            | b'}'
-            | b','
-            | b';'
-            | b':'
-            | b'?'
-            | b'~'
-            | b'!'
-            | b'%'
-            | b'^'
-            | b'&'
-            | b'*'
-            | b'-'
-            | b'+'
-            | b'='
-            | b'<'
-            | b'>'
-            | b'|'
-            | b'/'
-            | b'.'
-            | b'#'
-    ) {
-        return 1;
-    }
-    0
-}
-
-/// Index just past a string / char literal starting at the quote,
-/// honoring `\` escapes; an unterminated literal runs to the end.
-fn skip_literal(bytes: &[u8], at: usize) -> usize {
-    let quote = bytes[at];
-    let mut i = at + 1;
-    while i < bytes.len() {
-        if bytes[i] == b'\\' && i + 1 < bytes.len() {
-            i += 2;
-            continue;
-        }
-        let closed = bytes[i] == quote;
-        i += 1;
-        if closed {
-            break;
-        }
-    }
-    i
+    if PUNCT1.contains(&rest[0]) { 1 } else { 0 }
 }
 
 fn lex_into(text: &str, buf: u32, out: &mut Vec<Tok>) {
@@ -448,14 +391,20 @@ impl<'a> Exp<'a> {
         }
         out.reserve(cap);
         let first_at = out.len();
+        let mut prev_kind = TokKind::Other;
         for &t in toks {
             if out.len() > first_at
                 && (t.space
-                    || pp_tokens_would_merge(*out.as_bytes().last().unwrap(), self.first_byte(t)))
+                    || pp_tokens_would_merge(
+                        prev_kind,
+                        *out.as_bytes().last().unwrap(),
+                        self.first_byte(t),
+                    ))
             {
                 out.push(' ');
             }
             out.push_str(self.text(t));
+            prev_kind = t.kind;
         }
     }
 
@@ -1089,39 +1038,41 @@ impl Preprocessor {
     }
 }
 
-/// True when `prev` directly followed by `next` would re-lex as part
-/// of a single preprocessing token even though the two bytes end and
-/// begin distinct tokens. The serializer inserts one space at such
-/// boundaries -- whitespace between tokens never changes phase-7
-/// semantics -- so substituted text cannot paste onto its neighbors
-/// (C99 6.10.3.3 reserves pasting for `##`).
 /// Names `dynamic_predefine` expands from context rather than from the
 /// macro table.
 pub(super) fn is_dynamic_predefine(name: &str) -> bool {
     matches!(name, "__LINE__" | "__FILE__" | "__COUNTER__")
 }
 
-pub(super) fn pp_tokens_would_merge(prev: u8, next: u8) -> bool {
+/// True when the token ending in `prev` directly followed by a token
+/// starting with `next` would re-lex as one preprocessing token. The
+/// serializer inserts one space at such boundaries -- white space
+/// between tokens never changes phase-7 semantics -- so substituted text
+/// cannot paste onto its neighbours (C99 6.10.3.3 reserves pasting for
+/// `##`). `prev_kind` is the preceding token's kind, which decides
+/// whether the pp-number continuation rules apply.
+///
+/// Every case is read off a token-grammar rule rather than listed:
+/// identifier and pp-number continuation (6.4.2.1 / 6.4.8), the
+/// punctuator table `punct_len` matches, and the merge-only pairs.
+pub(super) fn pp_tokens_would_merge(prev_kind: TokKind, prev: u8, next: u8) -> bool {
     if is_ident_byte(prev) && is_ident_byte(next) {
         return true;
     }
-    (prev == b'.' && next.is_ascii_digit())
-        || matches!(
-            (prev, next),
-            (b'-', b'-' | b'>' | b'=')
-                | (b'+', b'+' | b'=')
-                | (b'<', b'<' | b'=' | b':' | b'%')
-                | (b'>', b'>' | b'=')
-                | (b'&', b'&' | b'=')
-                | (b'|', b'|' | b'=')
-                | (b'=' | b'!' | b'*' | b'^', b'=')
-                | (b'/', b'/' | b'*' | b'=')
-                | (b'%', b'=' | b'>' | b':')
-                | (b'#', b'#')
-                | (b':', b'>')
-                | (b'.', b'.')
-                | (b'e' | b'E' | b'p' | b'P', b'+' | b'-')
-        )
+    // 6.4.8: a pp-number runs on through `.` and through a sign after an
+    // exponent marker, so only a preceding pp-number merges with those.
+    if prev_kind == TokKind::Number
+        && (next == b'.'
+            || (matches!(prev, b'e' | b'E' | b'p' | b'P') && matches!(next, b'+' | b'-')))
+    {
+        return true;
+    }
+    let pair = [prev, next];
+    // A `.` before a digit opens a pp-number.
+    if prev == b'.' && pp_number_len(&pair, 0) == 2 {
+        return true;
+    }
+    punct_len(&pair, 0) == 2 || MERGE_ONLY2.iter().any(|p| *p == pair)
 }
 
 /// Incremental joiner state: decides whether the logical line still

@@ -309,6 +309,12 @@ impl Liveness {
         }
     }
 
+    /// The block-level live-in / live-out sets this analysis solved, for
+    /// a caller that needs them directly rather than through a query.
+    pub(crate) fn block_liveness(&self) -> &BlockLiveness {
+        &self.blocks
+    }
+
     fn live_in(&self, b: BlockId, v: ValueId) -> bool {
         self.blocks.live_in(b, v)
     }
@@ -405,6 +411,10 @@ impl Liveness {
     /// Whether `a` and `b` are ever simultaneously live. Two
     /// single-definition values interfere iff one definition lies in
     /// the other's live range.
+    /// The per-pair form of the relation [`Liveness::interference`] builds
+    /// a graph of. The passes read the graph; this is the reference the
+    /// congruence-class test holds it to.
+    #[cfg(test)]
     pub(crate) fn interfere(&self, func: &FunctionSsa, a: ValueId, b: ValueId) -> bool {
         if a == b {
             return false;

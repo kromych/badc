@@ -386,7 +386,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     }
 
     let banks = RegBanks::for_target(target);
-    let last_use = compute_last_use(func);
     // Phi class union-find: every phi result and its incoming sources
     // join one equivalence class. The allocator places the first-
     // allocated member of a class, then routes every other member to
@@ -396,7 +395,15 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // last-use is the max over all members so a value stays live
     // until every member of its class is dead.
     let liveness = super::liveness::Liveness::compute(func);
-    let mut classes = super::phi_class::PhiClasses::build(func, &liveness);
+    // Reads the block-level live-out sets the analysis above solved.
+    let last_use = compute_last_use(func, liveness.block_liveness());
+    // Interference over individual values, the relation the coalescer
+    // tests classes against. `node_of` is the identity here because no
+    // class exists yet; the colourer's graph below is the same sweep over
+    // the class roots this produces.
+    let value_of: Vec<ValueId> = (0..func.insts.len() as ValueId).collect();
+    let value_interference = liveness.interference(func, &value_of);
+    let mut classes = super::phi_class::PhiClasses::build(func, &value_interference);
     let mut calls_after_def = compute_calls_after_def(func, &liveness, target);
     // Promote per-value `calls_after_def` to the class: members share
     // one register, so a member whose own range does not cross a call
@@ -423,7 +430,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
         .map(|v| classes.find(v))
         .collect();
-    let interference = liveness.interference(func, &node_of);
     let param_incoming_forbid = compute_param_incoming_forbid(func, target);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
@@ -447,7 +453,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let (max_gpr, max_fpr) = pool_size_limits();
     let spill_weights = compute_spill_weights(func, &node_of);
     let coloring = color_graph(
-        &interference,
+        &value_interference,
         &node_of,
         &node_cons,
         &banks,
@@ -1048,6 +1054,26 @@ pub(crate) fn color_graph(
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
     let mut spill_count: u32 = 0;
+    /// Values of each congruence class, keyed by the class root and laid
+    /// out CSR: row `r` is `values[offsets[r]..offsets[r + 1]]`, ascending.
+    fn class_members(node_of: &[ValueId]) -> (Vec<u32>, Vec<ValueId>) {
+        let n = node_of.len();
+        let mut offsets = vec![0u32; n + 1];
+        for &r in node_of {
+            offsets[r as usize + 1] += 1;
+        }
+        for i in 0..n {
+            offsets[i + 1] += offsets[i];
+        }
+        let mut cursor = offsets[..n].to_vec();
+        let mut values = vec![0 as ValueId; n];
+        for (v, &r) in node_of.iter().enumerate() {
+            values[cursor[r as usize] as usize] = v as ValueId;
+            cursor[r as usize] += 1;
+        }
+        (offsets, values)
+    }
+
     // Coloring order: highest spill weight first, so the coldest values
     // are the ones left without a register when a bank fills. The id
     // tie-break is a total order, keeping the output host-independent.
@@ -1063,6 +1089,11 @@ pub(crate) fn color_graph(
     // not a linear scan of the neighbour list.
     let mut slot_used: Vec<u32> = vec![0u32; n];
     let mut stamp: u32 = 0;
+    // `interference` is over individual values, so a node's neighbouring
+    // nodes are its members' neighbours mapped through `node_of`. Members
+    // by root, CSR, so the walk is one pass over the node's own rows
+    // rather than a second graph built over the roots.
+    let (memb_off, memb_val) = class_members(node_of);
     for &node in &order {
         let Some(c) = constraints[node] else {
             continue;
@@ -1072,12 +1103,18 @@ pub(crate) fn color_graph(
         // A spill slot is 8 bytes of stack shared bank-agnostically (FP
         // and integer spills both store/reload 8 bytes), so a slot held
         // by any interfering neighbour is off-limits regardless of bank.
-        for &nb in interference.neighbors(node as ValueId) {
-            match color[nb as usize] {
-                Place::IntReg(r) if !c.is_fp => forbidden[r as usize] = true,
-                Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
-                Place::Spill(s) => slot_used[s as usize] = stamp,
-                _ => {}
+        for &m in &memb_val[memb_off[node] as usize..memb_off[node + 1] as usize] {
+            for &nb in interference.neighbors(m) {
+                let root = node_of[nb as usize];
+                if root as usize == node {
+                    continue;
+                }
+                match color[root as usize] {
+                    Place::IntReg(r) if !c.is_fp => forbidden[r as usize] = true,
+                    Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
+                    Place::Spill(s) => slot_used[s as usize] = stamp,
+                    _ => {}
+                }
             }
         }
         // Registers excluded beyond interference: the incoming argument
@@ -1862,10 +1899,20 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
 /// (register live elsewhere at the pick site) falls through to the
 /// default policy without compromising correctness.
 fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
+    // Sweep the phis alone rather than the whole tape: the round trips
+    // are bounded by the propagation chain, so rescanning every
+    // instruction each time costs the function's size per hop.
+    let phis: Vec<usize> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter(|(_, i)| matches!(i, Inst::Phi { .. }))
+        .map(|(v, _)| v)
+        .collect();
     loop {
         let mut changed = false;
-        for (v, inst) in func.insts.iter().enumerate() {
-            let Inst::Phi { incoming, .. } = inst else {
+        for &v in &phis {
+            let Inst::Phi { incoming, .. } = &func.insts[v] else {
                 continue;
             };
             let mut group_hint = hints[v];
@@ -1904,7 +1951,7 @@ fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
 /// For each value, the PC index of its last use across the
 /// function. Defaults to the value's own PC (so a value with no
 /// uses still has a single-PC interval).
-fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
+fn compute_last_use(func: &FunctionSsa, live: &super::liveness::BlockLiveness) -> Vec<u32> {
     let n = func.insts.len();
     let mut last_use: Vec<u32> = (0..n as u32).collect();
     for (idx, inst) in func.insts.iter().enumerate() {
@@ -1946,7 +1993,7 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
             _ => {}
         }
     }
-    extend_last_use_across_blocks(func, &mut last_use);
+    extend_last_use_across_blocks(func, live, &mut last_use);
     last_use
 }
 
@@ -1959,13 +2006,16 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
 /// liveness over the control-flow graph captures that. The pass only
 /// raises `last_use`, so a value that is not live across a back edge
 /// or an out-of-order block keeps the range the scan computed.
-fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
+fn extend_last_use_across_blocks(
+    func: &FunctionSsa,
+    live: &super::liveness::BlockLiveness,
+    last_use: &mut [u32],
+) {
     if func.blocks.is_empty() {
         return;
     }
     // A value live-out of a block must survive to the end of that
     // block's instruction range.
-    let live = super::liveness::BlockLiveness::compute(func);
     for (b, blk) in func.blocks.iter().enumerate() {
         let end = blk.inst_range.end;
         live.for_each_live_out(b as crate::c5::ir::BlockId, |v| {
@@ -2015,14 +2065,16 @@ fn promote_calls_after_def_to_classes(
     classes: &mut super::phi_class::PhiClasses,
     calls_after_def: &mut [bool],
 ) {
-    let mut class_must_callee: alloc::collections::BTreeMap<ValueId, bool> =
-        alloc::collections::BTreeMap::new();
+    // Roots index the flag directly: the class ids are value ids, so an
+    // array covers them without the per-value map node an ordered map
+    // costs.
+    let mut class_must_callee = alloc::vec![false; calls_after_def.len()];
     for (v, &crosses) in calls_after_def.iter().enumerate() {
         let root = classes.find(v as ValueId);
-        *class_must_callee.entry(root).or_insert(false) |= crosses;
+        class_must_callee[root as usize] |= crosses;
     }
     for (v, entry) in calls_after_def.iter_mut().enumerate() {
-        if class_must_callee[&classes.find(v as ValueId)] {
+        if class_must_callee[classes.find(v as ValueId) as usize] {
             *entry = true;
         }
     }
@@ -2692,7 +2744,10 @@ int main(void) { return 0; }
         let v_tls_idx = v_tls as usize;
         assert!(v_imm_idx < v_tls_idx, "v_imm must be defined before v_tls");
 
-        let last_use = compute_last_use(&func);
+        let last_use = compute_last_use(
+            &func,
+            &crate::c5::codegen::ssa::liveness::BlockLiveness::compute(&func),
+        );
         assert!(
             last_use[v_imm_idx] > v_tls_idx as u32,
             "v_imm's last use ({}) must cross the TlsAddr at pc {v_tls_idx}",
@@ -3056,7 +3111,11 @@ int main(void) { return 0; }
             for f in &funcs {
                 let alloc = allocate(f, target);
                 let live = crate::c5::codegen::ssa::liveness::Liveness::compute(f);
-                let mut classes = crate::c5::codegen::ssa::phi_class::PhiClasses::build(f, &live);
+                let ids: Vec<ValueId> = (0..f.insts.len() as ValueId).collect();
+                let mut classes = crate::c5::codegen::ssa::phi_class::PhiClasses::build(
+                    f,
+                    &live.interference(f, &ids),
+                );
                 let mut non_singleton_root = alloc::vec![false; f.insts.len()];
                 for v in 0..f.insts.len() {
                     let root = classes.find(v as ValueId) as usize;

@@ -104,17 +104,126 @@ pub(crate) fn successors(
 /// Predecessor block ids for every block, indexed by `BlockId`.
 /// Built by inverting each block's terminator successors.
 pub(crate) fn predecessors(func: &FunctionSsa) -> Vec<Vec<BlockId>> {
+    let graph = SuccGraph::new(func);
     let mut preds: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); func.blocks.len()];
-    for (idx, block) in func.blocks.iter().enumerate() {
-        for succ in successors(
-            &block.terminator,
-            &func.computed_goto_targets,
-            &func.jump_tables,
-        ) {
-            preds[succ as usize].push(idx as BlockId);
+    for b in 0..func.blocks.len() {
+        for &succ in graph.of(b as BlockId) {
+            preds[succ as usize].push(b as BlockId);
         }
     }
     preds
+}
+
+/// Successor adjacency for a function's CFG in flat form: block `b`'s
+/// successors, in branch order, are `targets[offsets[b]..offsets[b+1]]`.
+/// Built once per walk so a CFG traversal does not re-derive -- and
+/// re-allocate -- a successor list at every visit.
+pub(crate) struct SuccGraph {
+    offsets: Vec<u32>,
+    targets: Vec<BlockId>,
+    preds: Vec<u32>,
+    pred_offsets: Vec<u32>,
+}
+
+impl SuccGraph {
+    pub(crate) fn new(func: &FunctionSsa) -> Self {
+        let n = func.blocks.len();
+        let mut offsets: Vec<u32> = Vec::with_capacity(n + 1);
+        let mut targets: Vec<BlockId> = Vec::with_capacity(n * 2);
+        let mut pred_counts: Vec<u32> = alloc::vec![0; n + 1];
+        for block in &func.blocks {
+            offsets.push(targets.len() as u32);
+            for s in successors(
+                &block.terminator,
+                &func.computed_goto_targets,
+                &func.jump_tables,
+            ) {
+                targets.push(s);
+                pred_counts[s as usize] += 1;
+            }
+        }
+        offsets.push(targets.len() as u32);
+        // Counting sort of the reversed edge set into CSR form.
+        let mut pred_offsets: Vec<u32> = Vec::with_capacity(n + 1);
+        let mut acc = 0u32;
+        for c in &pred_counts[..n] {
+            pred_offsets.push(acc);
+            acc += c;
+        }
+        pred_offsets.push(acc);
+        let mut fill = pred_offsets.clone();
+        let mut preds: Vec<u32> = alloc::vec![0; targets.len()];
+        for b in 0..n {
+            for &s in &targets[offsets[b] as usize..offsets[b + 1] as usize] {
+                preds[fill[s as usize] as usize] = b as u32;
+                fill[s as usize] += 1;
+            }
+        }
+        Self {
+            offsets,
+            targets,
+            preds,
+            pred_offsets,
+        }
+    }
+
+    pub(crate) fn of(&self, b: BlockId) -> &[BlockId] {
+        &self.targets[self.offsets[b as usize] as usize..self.offsets[b as usize + 1] as usize]
+    }
+
+    pub(crate) fn preds_of(&self, b: BlockId) -> &[u32] {
+        &self.preds
+            [self.pred_offsets[b as usize] as usize..self.pred_offsets[b as usize + 1] as usize]
+    }
+
+    /// Depth-first postorder of the blocks reachable from the entry.
+    pub(crate) fn postorder(&self) -> Vec<BlockId> {
+        let n = self.offsets.len() - 1;
+        let mut order: Vec<BlockId> = Vec::with_capacity(n);
+        if n == 0 {
+            return order;
+        }
+        let mut visited = alloc::vec![false; n];
+        let mut stack: Vec<(BlockId, usize)> = Vec::new();
+        visited[0] = true;
+        stack.push((0, 0));
+        while let Some(&(b, si)) = stack.last() {
+            let succ = self.of(b);
+            if si < succ.len() {
+                stack.last_mut().unwrap().1 += 1;
+                let s = succ[si];
+                if !visited[s as usize] {
+                    visited[s as usize] = true;
+                    stack.push((s, 0));
+                }
+            } else {
+                order.push(b);
+                stack.pop();
+            }
+        }
+        order
+    }
+
+    /// Visit order for a backward dataflow: every block once, starting
+    /// in postorder so a block's successors are settled before it where
+    /// the CFG is acyclic, with the blocks unreachable from the entry
+    /// appended (they reach no reachable block, so their order is
+    /// immaterial). Pop from the back.
+    pub(crate) fn backward_worklist(&self) -> Vec<BlockId> {
+        let n = self.offsets.len() - 1;
+        let mut order = self.postorder();
+        let mut seen = alloc::vec![false; n];
+        for &b in &order {
+            seen[b as usize] = true;
+        }
+        for (b, &reached) in seen.iter().enumerate() {
+            if !reached {
+                order.push(b as BlockId);
+            }
+        }
+        order.reverse();
+        order
+    }
 }
 
 /// Sentinel for an undefined / unreachable immediate dominator.
@@ -123,36 +232,7 @@ const NO_BLOCK: BlockId = BlockId::MAX;
 /// Depth-first postorder of the blocks reachable from the entry
 /// (block 0). Blocks unreachable from the entry do not appear.
 pub(crate) fn postorder(func: &FunctionSsa) -> Vec<BlockId> {
-    let n = func.blocks.len();
-    let mut order: Vec<BlockId> = Vec::with_capacity(n);
-    let mut visited = alloc::vec![false; n];
-    // Iterative DFS: stack holds (block, next-successor-index) so a
-    // block is appended to the postorder only after all successors.
-    let mut stack: Vec<(BlockId, usize)> = Vec::new();
-    if n == 0 {
-        return order;
-    }
-    visited[0] = true;
-    stack.push((0, 0));
-    while let Some(&(b, si)) = stack.last() {
-        let succ = successors(
-            &func.blocks[b as usize].terminator,
-            &func.computed_goto_targets,
-            &func.jump_tables,
-        );
-        if si < succ.len() {
-            stack.last_mut().unwrap().1 += 1;
-            let s = succ[si];
-            if !visited[s as usize] {
-                visited[s as usize] = true;
-                stack.push((s, 0));
-            }
-        } else {
-            order.push(b);
-            stack.pop();
-        }
-    }
-    order
+    SuccGraph::new(func).postorder()
 }
 
 /// Immediate dominator of every block, indexed by `BlockId`
@@ -246,10 +326,15 @@ pub(crate) fn dominance_frontiers(func: &FunctionSsa, idom: &[BlockId]) -> Vec<B
 /// holding a `StoreLocal` to it). Standard worklist closure -- a
 /// freshly placed phi is itself a definition, so its block re-enters
 /// the frontier walk.
+///
+/// `live` is the caller's live-in analysis over a slot set that
+/// contains `promotable`; the dataflow decomposes per slot, so a
+/// superset analysis answers `promotable`'s queries unchanged.
 pub(crate) fn phi_placement(
     func: &FunctionSsa,
     promotable: &BTreeSet<i64>,
     df: &[BTreeSet<BlockId>],
+    live: &SlotLiveIn,
 ) -> alloc::collections::BTreeMap<i64, BTreeSet<BlockId>> {
     use alloc::collections::BTreeMap;
     // Definition blocks per slot.
@@ -270,14 +355,13 @@ pub(crate) fn phi_placement(
     // where the slot is undefined, so it carries an incomplete
     // `incoming` and the per-arch lowering reads stack residue on the
     // first traversal of that edge.
-    let slot_live_in = slot_live_in_sets(func, promotable);
     let mut result: BTreeMap<i64, BTreeSet<BlockId>> = BTreeMap::new();
     for (slot, defs) in &def_blocks {
         let mut worklist: Vec<BlockId> = defs.iter().copied().collect();
         let mut phis: BTreeSet<BlockId> = BTreeSet::new();
         while let Some(b) = worklist.pop() {
             for &frontier in &df[b as usize] {
-                if slot_live_in[frontier as usize].contains(slot) && phis.insert(frontier) {
+                if live.contains(frontier, *slot) && phis.insert(frontier) {
                     worklist.push(frontier);
                 }
             }
@@ -289,61 +373,100 @@ pub(crate) fn phi_placement(
     result
 }
 
+/// Per-block live-in sets over promotable slots, held as a dense
+/// bitset: `bits[b * words .. (b + 1) * words]` is block `b`'s set,
+/// indexed by each slot's rank in the analysed slot set.
+pub(crate) struct SlotLiveIn {
+    rank: alloc::collections::BTreeMap<i64, usize>,
+    words: usize,
+    bits: Vec<u64>,
+}
+
+impl SlotLiveIn {
+    pub(crate) fn contains(&self, block: BlockId, slot: i64) -> bool {
+        match self.rank.get(&slot) {
+            Some(&r) => self.bits[block as usize * self.words + r / 64] & (1u64 << (r % 64)) != 0,
+            None => false,
+        }
+    }
+}
+
 /// Per-block live-in sets over promotable slots. A slot is live on
 /// entry to a block when some path from there reaches a `LoadLocal` of
 /// the slot before a `StoreLocal` overwrites it. Standard backward
 /// live-variable dataflow with each store treated as a full
 /// definition. Promotable slots are address-free, so `LoadLocal` /
 /// `StoreLocal` are their only accesses and this captures every use.
-fn slot_live_in_sets(func: &FunctionSsa, promotable: &BTreeSet<i64>) -> Vec<BTreeSet<i64>> {
+///
+/// Blocks are visited in postorder (every successor before its
+/// predecessors where the CFG is acyclic) off a worklist that re-queues
+/// a block's predecessors when its live-in grows, so the iteration
+/// count tracks loop depth rather than the block count.
+fn slot_live_in_sets(func: &FunctionSsa, promotable: &BTreeSet<i64>) -> SlotLiveIn {
     let nblocks = func.blocks.len();
+    let rank: alloc::collections::BTreeMap<i64, usize> = promotable
+        .iter()
+        .enumerate()
+        .map(|(i, &s)| (s, i))
+        .collect();
+    let words = promotable.len().div_ceil(64).max(1);
     // gen_set[B]: slots with an upward-exposed load (loaded before any
     // store of that slot in B). kill[B]: slots stored in B.
-    let mut gen_set: Vec<BTreeSet<i64>> = alloc::vec![BTreeSet::new(); nblocks];
-    let mut kill: Vec<BTreeSet<i64>> = alloc::vec![BTreeSet::new(); nblocks];
+    let mut gen_set: Vec<u64> = alloc::vec![0; nblocks * words];
+    let mut kill: Vec<u64> = alloc::vec![0; nblocks * words];
+    let mut stored: Vec<u64> = alloc::vec![0; words];
     for (b, block) in func.blocks.iter().enumerate() {
-        let mut stored: BTreeSet<i64> = BTreeSet::new();
+        stored.fill(0);
         for inst in &func.insts[block.inst_range.start as usize..block.inst_range.end as usize] {
             match inst {
-                Inst::LoadLocal { off, .. } if promotable.contains(off) => {
-                    if !stored.contains(off) {
-                        gen_set[b].insert(*off);
+                Inst::LoadLocal { off, .. } => {
+                    if let Some(&r) = rank.get(off)
+                        && stored[r / 64] & (1u64 << (r % 64)) == 0
+                    {
+                        gen_set[b * words + r / 64] |= 1u64 << (r % 64);
                     }
                 }
-                Inst::StoreLocal { off, .. } if promotable.contains(off) => {
-                    stored.insert(*off);
-                    kill[b].insert(*off);
+                Inst::StoreLocal { off, .. } => {
+                    if let Some(&r) = rank.get(off) {
+                        stored[r / 64] |= 1u64 << (r % 64);
+                        kill[b * words + r / 64] |= 1u64 << (r % 64);
+                    }
                 }
                 _ => {}
             }
         }
     }
-    let mut live_in: Vec<BTreeSet<i64>> = alloc::vec![BTreeSet::new(); nblocks];
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for b in (0..nblocks).rev() {
-            let mut live_out: BTreeSet<i64> = BTreeSet::new();
-            for s in successors(
-                &func.blocks[b].terminator,
-                &func.computed_goto_targets,
-                &func.jump_tables,
-            ) {
-                live_out.extend(live_in[s as usize].iter().copied());
+    let graph = SuccGraph::new(func);
+    let mut live_in: Vec<u64> = alloc::vec![0; nblocks * words];
+    let mut queued: Vec<bool> = alloc::vec![true; nblocks];
+    let mut worklist: Vec<BlockId> = graph.backward_worklist();
+    let mut acc: Vec<u64> = alloc::vec![0; words];
+    while let Some(b) = worklist.pop() {
+        let bi = b as usize;
+        queued[bi] = false;
+        acc.copy_from_slice(&gen_set[bi * words..(bi + 1) * words]);
+        for &s in graph.of(b) {
+            let si = s as usize;
+            for w in 0..words {
+                acc[w] |= live_in[si * words + w] & !kill[bi * words + w];
             }
-            let mut ni = gen_set[b].clone();
-            for &s in &live_out {
-                if !kill[b].contains(&s) {
-                    ni.insert(s);
+        }
+        let cur = &mut live_in[bi * words..(bi + 1) * words];
+        if cur != acc.as_slice() {
+            cur.copy_from_slice(&acc);
+            for &p in graph.preds_of(b) {
+                if !queued[p as usize] {
+                    queued[p as usize] = true;
+                    worklist.push(p);
                 }
-            }
-            if ni != live_in[b] {
-                live_in[b] = ni;
-                changed = true;
             }
         }
     }
-    live_in
+    SlotLiveIn {
+        rank,
+        words,
+        bits: live_in,
+    }
 }
 
 // TODO: per-arch lowering of `Inst::Phi`: IR position is a no-op;
@@ -479,42 +602,126 @@ pub(crate) fn insert_phis(
 /// load to the stored value would skip that truncate-then-extend, so
 /// sub-width slots stay in memory until the rewrite can materialize
 /// the extension at each use.
-/// Whether every load and store of `slot` uses an integer kind (no
+/// Per-slot access summary: everything the promotion filters need
+/// about one slot's `LoadLocal` / `StoreLocal` traffic. Collected for
+/// every promotable slot in one pass over the instruction tape
+/// ([`slot_accesses`]) so the filters cost O(insts) in total rather
+/// than one tape scan per slot.
+#[derive(Default)]
+struct SlotAccess {
+    has_load: bool,
+    has_store: bool,
+    /// First load / store kind seen and whether every later one matched.
+    load_kind: Option<LoadKind>,
+    load_kind_uniform: bool,
+    store_kind: Option<StoreKind>,
+    store_kind_uniform: bool,
+    /// Set when any access uses an FP kind.
+    fp_kind_access: bool,
+    /// A store whose value operand is not an FP-producing instruction.
+    int_store: bool,
+    /// Width-tagged FP store kind (`F32` stays `F32`, anything else is
+    /// `F64`), and whether every FP store agreed on it.
+    fp_store_kind: Option<LoadKind>,
+    fp_store_kind_uniform: bool,
+    fp_load: bool,
+    non_fp_load: bool,
+    fp_load_kind: Option<LoadKind>,
+    fp_load_kind_uniform: bool,
+}
+
+impl SlotAccess {
+    fn new() -> Self {
+        Self {
+            load_kind_uniform: true,
+            store_kind_uniform: true,
+            fp_store_kind_uniform: true,
+            fp_load_kind_uniform: true,
+            ..Default::default()
+        }
+    }
+}
+
+/// One tape pass collecting [`SlotAccess`] for every slot in `slots`.
+fn slot_accesses(
+    func: &FunctionSsa,
+    slots: &BTreeSet<i64>,
+) -> alloc::collections::BTreeMap<i64, SlotAccess> {
+    let mut out: alloc::collections::BTreeMap<i64, SlotAccess> =
+        slots.iter().map(|&s| (s, SlotAccess::new())).collect();
+    for inst in &func.insts {
+        match inst {
+            Inst::LoadLocal { off, kind, .. } => {
+                let Some(a) = out.get_mut(off) else { continue };
+                a.has_load = true;
+                match a.load_kind {
+                    None => a.load_kind = Some(*kind),
+                    Some(k) if k == *kind => {}
+                    Some(_) => a.load_kind_uniform = false,
+                }
+                if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                    a.fp_kind_access = true;
+                    a.fp_load = true;
+                    match a.fp_load_kind {
+                        None => a.fp_load_kind = Some(*kind),
+                        Some(k) if k == *kind => {}
+                        Some(_) => a.fp_load_kind_uniform = false,
+                    }
+                } else {
+                    a.non_fp_load = true;
+                }
+            }
+            Inst::StoreLocal {
+                off, value, kind, ..
+            } => {
+                let is_fp = super::reg_alloc::produces_fp_result(&func.insts[*value as usize]);
+                let Some(a) = out.get_mut(off) else { continue };
+                a.has_store = true;
+                match a.store_kind {
+                    None => a.store_kind = Some(*kind),
+                    Some(k) if k == *kind => {}
+                    Some(_) => a.store_kind_uniform = false,
+                }
+                if matches!(kind, StoreKind::F32 | StoreKind::F64) {
+                    a.fp_kind_access = true;
+                }
+                if is_fp {
+                    // A full-width FP store kind selects the slot's
+                    // width. A narrowing FP store cannot occur (there is
+                    // no sub-width FP store kind), so the store kind is
+                    // F32 or F64 directly.
+                    let k = match kind {
+                        StoreKind::F32 => LoadKind::F32,
+                        _ => LoadKind::F64,
+                    };
+                    match a.fp_store_kind {
+                        None => a.fp_store_kind = Some(k),
+                        Some(prev) if prev == k => {}
+                        Some(_) => a.fp_store_kind_uniform = false,
+                    }
+                } else {
+                    a.int_store = true;
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Whether every load and store of the slot uses an integer kind (no
 /// `F32` / `F64`). A mixed-width promotion redirects each load to the
 /// reaching store value; an FP-kind access carries the value through
 /// the FP register file, so such a slot is left to the FP class path.
-fn slot_has_only_int_kinds(func: &FunctionSsa, slot: i64) -> bool {
-    for inst in &func.insts {
-        match inst {
-            Inst::LoadLocal { off, kind, .. } if *off == slot => {
-                if matches!(kind, LoadKind::F32 | LoadKind::F64) {
-                    return false;
-                }
-            }
-            Inst::StoreLocal { off, kind, .. } if *off == slot => {
-                if matches!(kind, StoreKind::F32 | StoreKind::F64) {
-                    return false;
-                }
-            }
-            _ => {}
-        }
-    }
-    true
+fn slot_has_only_int_kinds(a: &SlotAccess) -> bool {
+    !a.fp_kind_access
 }
 
-fn slot_is_full_width(func: &FunctionSsa, slot: i64) -> bool {
-    for inst in &func.insts {
-        match inst {
-            Inst::LoadLocal { off, kind, .. } if *off == slot && *kind != LoadKind::I64 => {
-                return false;
-            }
-            Inst::StoreLocal { off, kind, .. } if *off == slot && *kind != StoreKind::I64 => {
-                return false;
-            }
-            _ => {}
-        }
-    }
-    true
+fn slot_is_full_width(a: &SlotAccess) -> bool {
+    a.load_kind.map(|k| k == LoadKind::I64).unwrap_or(true)
+        && a.load_kind_uniform
+        && a.store_kind.map(|k| k == StoreKind::I64).unwrap_or(true)
+        && a.store_kind_uniform
 }
 
 /// For a slot read only through one narrow `LoadKind` and written
@@ -532,27 +739,13 @@ fn slot_is_full_width(func: &FunctionSsa, slot: i64) -> bool {
 /// A `LoadLocal { kind: U8 }` paired with `StoreLocal { kind: I64 }` reads the
 /// low byte of the 64-bit store via `BinopI(And, value, 0xff)` and is therefore
 /// promotable.
-fn slot_narrow_load_kind(func: &FunctionSsa, slot: i64) -> Option<LoadKind> {
-    let mut load_kind: Option<LoadKind> = None;
-    let mut store_kind: Option<StoreKind> = None;
-    for inst in &func.insts {
-        match inst {
-            Inst::LoadLocal { off, kind, .. } if *off == slot => match load_kind {
-                None => load_kind = Some(*kind),
-                Some(k) if k == *kind => {}
-                Some(_) => return None,
-            },
-            Inst::StoreLocal { off, kind, .. } if *off == slot => match store_kind {
-                None => store_kind = Some(*kind),
-                Some(k) if k == *kind => {}
-                Some(_) => return None,
-            },
-            _ => {}
-        }
+fn slot_narrow_load_kind(a: &SlotAccess) -> Option<LoadKind> {
+    if !a.load_kind_uniform || !a.store_kind_uniform {
+        return None;
     }
-    let lk = load_kind?;
+    let lk = a.load_kind?;
     let lw = load_byte_width(lk)?;
-    let sw = store_byte_width(store_kind?)?;
+    let sw = store_byte_width(a.store_kind?)?;
     if lw < 8 && sw >= lw { Some(lk) } else { None }
 }
 
@@ -659,51 +852,14 @@ enum SlotClass {
 /// A slot with no stores (write-free) is treated as integer-classed;
 /// such a slot is read before any definition and the rename pass
 /// records it in `failed`, leaving it in memory.
-fn slot_class(func: &FunctionSsa, slot: i64) -> Option<SlotClass> {
-    let mut saw_int_store = false;
-    let mut fp_store_kind: Option<LoadKind> = None;
-    let mut saw_fp_load = false;
-    let mut saw_non_fp_load = false;
-    let mut fp_load_kind: Option<LoadKind> = None;
-    for inst in &func.insts {
-        match inst {
-            Inst::StoreLocal {
-                off, value, kind, ..
-            } if *off == slot => {
-                if super::reg_alloc::produces_fp_result(&func.insts[*value as usize]) {
-                    // A full-width FP store kind selects the slot's
-                    // width. A narrowing FP store cannot occur (there is
-                    // no sub-width FP store kind), so the store kind is
-                    // F32 or F64 directly.
-                    let k = match kind {
-                        StoreKind::F32 => LoadKind::F32,
-                        _ => LoadKind::F64,
-                    };
-                    match fp_store_kind {
-                        None => fp_store_kind = Some(k),
-                        // A slot written at two FP widths would need a
-                        // width-changing phi; keep it in memory.
-                        Some(prev) if prev != k => return None,
-                        Some(_) => {}
-                    }
-                } else {
-                    saw_int_store = true;
-                }
-            }
-            Inst::LoadLocal { off, kind, .. } if *off == slot => match kind {
-                LoadKind::F32 | LoadKind::F64 => {
-                    saw_fp_load = true;
-                    match fp_load_kind {
-                        None => fp_load_kind = Some(*kind),
-                        Some(prev) if prev != *kind => return None,
-                        Some(_) => {}
-                    }
-                }
-                _ => saw_non_fp_load = true,
-            },
-            _ => {}
-        }
+fn slot_class(a: &SlotAccess) -> Option<SlotClass> {
+    // A slot written at two FP widths would need a width-changing phi,
+    // and one read at two FP widths is a type-pun; keep both in memory.
+    if !a.fp_store_kind_uniform || !a.fp_load_kind_uniform {
+        return None;
     }
+    let (saw_int_store, fp_store_kind) = (a.int_store, a.fp_store_kind);
+    let (saw_fp_load, saw_non_fp_load, fp_load_kind) = (a.fp_load, a.non_fp_load, a.fp_load_kind);
     match (saw_int_store, fp_store_kind) {
         // FP-classed stores only: promote as FP only when every load is
         // also FP and at the same width as the store. Any integer load
@@ -810,10 +966,14 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // that still holds a register and drives a predecessor-exit move.
     // Exclude such slots so they stay entirely in memory; this is the
     // up-front form of the rename's `failed` detection.
-    let entry_live_in = slot_live_in_sets(func, &promotable)[0].clone();
+    // One live-in analysis serves both the entry filter and the phi
+    // placement below: the dataflow decomposes per slot, so the sets
+    // computed over the unfiltered slot set answer the filtered set's
+    // queries unchanged.
+    let live = slot_live_in_sets(func, &promotable);
     let promotable: BTreeSet<i64> = promotable
         .into_iter()
-        .filter(|s| !entry_live_in.contains(s))
+        .filter(|s| !live.contains(0, *s))
         .collect();
     if promotable.is_empty() {
         return Vec::new();
@@ -823,21 +983,12 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // such store to `Inst::Imm(0)`; the dead-pure check in the emit
     // drops it, the frame slot remains allocated by the prologue but
     // costs no per-call memory traffic.
-    let mut dead_slots: BTreeSet<i64> = BTreeSet::new();
-    for &slot in &promotable {
-        let mut has_load = false;
-        let mut has_store = false;
-        for inst in &func.insts {
-            match inst {
-                Inst::LoadLocal { off, .. } if *off == slot => has_load = true,
-                Inst::StoreLocal { off, .. } if *off == slot => has_store = true,
-                _ => {}
-            }
-        }
-        if has_store && !has_load {
-            dead_slots.insert(slot);
-        }
-    }
+    let access = slot_accesses(func, &promotable);
+    let dead_slots: BTreeSet<i64> = access
+        .iter()
+        .filter(|(_, a)| a.has_store && !a.has_load)
+        .map(|(&s, _)| s)
+        .collect();
     if !dead_slots.is_empty() {
         for inst in func.insts.iter_mut() {
             if let Inst::StoreLocal { off, .. } = inst
@@ -849,7 +1000,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     }
     let idom = dominators(func);
     let df = dominance_frontiers(func, &idom);
-    let phi_blocks = phi_placement(func, &promotable, &df);
+    let phi_blocks = phi_placement(func, &promotable, &df, &live);
     // Multi-block merges promote through an SSA phi at each join: the
     // per-arch emit reads `Inst::Phi` and emits the predecessor-exit
     // moves the parallel-copy lowering expects, and the allocator
@@ -885,7 +1036,8 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
         .copied()
         .filter(|s| phi_promote || !phi_blocks.contains_key(s))
         .filter(|s| {
-            match slot_class(func, *s) {
+            let a = &access[s];
+            match slot_class(a) {
                 // Mixed int + fp stores (a union / type-pun): keep
                 // frame-resident.
                 None => false,
@@ -896,10 +1048,10 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                     true
                 }
                 Some(SlotClass::Int) => {
-                    if slot_is_full_width(func, *s) {
+                    if slot_is_full_width(a) {
                         return true;
                     }
-                    if let Some(kind) = slot_narrow_load_kind(func, *s) {
+                    if let Some(kind) = slot_narrow_load_kind(a) {
                         narrow_load.insert(*s, kind);
                         return true;
                     }
@@ -910,7 +1062,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                     // holding a double's bits stored at `F64`); leave it
                     // frame-resident so the FP consumer keeps reading an
                     // FP register, as the uniform-width gates already do.
-                    if !phi_blocks.contains_key(s) && slot_has_only_int_kinds(func, *s) {
+                    if !phi_blocks.contains_key(s) && slot_has_only_int_kinds(a) {
                         mixed_slots.insert(*s);
                         return true;
                     }
@@ -1842,7 +1994,8 @@ mod tests {
         assert!(promotable.contains(&-1));
         let idom = dominators(&f);
         let df = dominance_frontiers(&f, &idom);
-        let phis = phi_placement(&f, &promotable, &df);
+        let live = slot_live_in_sets(&f, &promotable);
+        let phis = phi_placement(&f, &promotable, &df, &live);
         assert_eq!(phis.get(&-1), Some(&BTreeSet::from([3])));
     }
 
@@ -1913,7 +2066,8 @@ mod tests {
         let promotable = BTreeSet::from([-1i64]);
         let idom = dominators(&f);
         let df = dominance_frontiers(&f, &idom);
-        let phi_blocks = phi_placement(&f, &promotable, &df);
+        let live = slot_live_in_sets(&f, &promotable);
+        let phi_blocks = phi_placement(&f, &promotable, &df, &live);
         let mut slot_kind = alloc::collections::BTreeMap::new();
         slot_kind.insert(-1i64, LoadKind::I64);
         let phi_id_at = insert_phis(&mut f, &phi_blocks, &slot_kind);
@@ -2036,7 +2190,8 @@ mod tests {
         let promotable = BTreeSet::from([-1i64]);
         let idom = dominators(&f);
         let df = dominance_frontiers(&f, &idom);
-        let phi_blocks = phi_placement(&f, &promotable, &df);
+        let live = slot_live_in_sets(&f, &promotable);
+        let phi_blocks = phi_placement(&f, &promotable, &df, &live);
         let mut slot_kind = alloc::collections::BTreeMap::new();
         slot_kind.insert(-1i64, LoadKind::I64);
         insert_phis(&mut f, &phi_blocks, &slot_kind);
@@ -2384,5 +2539,47 @@ mod tests {
              slot -1; instead got v{ret_v} = {:?}",
             f.insts[ret_v as usize],
         );
+    }
+
+    /// Live-in dataflow over a CFG whose block indices run opposite to
+    /// the control flow: block 0 jumps to the highest index, which
+    /// falls through down to block 1, where the slot is loaded. Every
+    /// edge therefore runs from a higher index to a lower one, so a
+    /// descending-index sweep advances the analysis by one block per
+    /// pass and needs as many passes as there are blocks. The slot is
+    /// live in at every block on the chain and the entry.
+    #[test]
+    fn slot_live_in_converges_on_reverse_block_layout() {
+        const N: usize = 512;
+        let insts = alloc::vec![Inst::LoadLocal {
+            off: -1,
+            kind: LoadKind::I64,
+            volatile: false,
+        }];
+        // b0 -> b(N-1) -> b(N-2) -> ... -> b1, with the load in b1.
+        let mut blocks = alloc::vec![empty_block(Terminator::Jmp((N - 1) as BlockId))];
+        blocks.push(Block {
+            start_pc: 0,
+            inst_range: 0..1,
+            terminator: Terminator::Return(0),
+            exit_acc: NO_VALUE,
+        });
+        for b in 2..N {
+            blocks.push(empty_block(Terminator::Jmp((b - 1) as BlockId)));
+        }
+        let f = func_with(insts, blocks);
+        let promotable = BTreeSet::from([-1i64]);
+        let live = slot_live_in_sets(&f, &promotable);
+        for b in 0..N {
+            assert!(
+                live.contains(b as BlockId, -1),
+                "slot -1 must be live in at block {b}"
+            );
+        }
+        // A slot live in at the entry is read before any definition, so
+        // `run` leaves it in memory rather than injecting a phi with an
+        // undefined predecessor edge.
+        let mut f = f;
+        assert!(run(&mut f).is_empty());
     }
 }

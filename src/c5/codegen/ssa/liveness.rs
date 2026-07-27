@@ -20,12 +20,232 @@ use alloc::vec::Vec;
 
 use super::super::ir::{BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 
-pub(crate) struct Liveness {
+/// Sentinel for a value outside the live-set universe.
+const NO_RANK: u32 = u32::MAX;
+
+/// Per-block live-in / live-out sets over the CFG.
+///
+/// The bit universe is the set of values that cross a block boundary:
+/// those referenced from a block other than the one defining them, plus
+/// those a phi names on an incoming edge. Every other value is defined
+/// and dies inside one block, so it can never appear in a live-in or
+/// live-out set -- the dataflow's least fixed point only ever admits
+/// members of that set. Excluding the rest shrinks the per-block bitset
+/// from the function's value count to the crossing count, which is what
+/// keeps the storage off `blocks * values`.
+pub(crate) struct BlockLiveness {
     words: usize,
-    /// `live_in[b*words .. ]` / `live_out[b*words .. ]`: bitset of
-    /// values live on entry to / exit from block `b`.
+    /// Value id -> bit index, `NO_RANK` outside the universe.
+    rank: Vec<u32>,
+    /// Bit index -> value id.
+    universe: Vec<ValueId>,
     live_in: Vec<u64>,
     live_out: Vec<u64>,
+}
+
+impl BlockLiveness {
+    pub(crate) fn compute(func: &FunctionSsa) -> Self {
+        let nblocks = func.blocks.len();
+        let n = func.insts.len();
+        // Universe: upward-exposed operands and phi-incoming values.
+        let mut crossing = vec![false; n];
+        for blk in &func.blocks {
+            let (start, end) = (blk.inst_range.start, blk.inst_range.end);
+            for idx in start..end {
+                if let Inst::Phi { incoming, .. } = &func.insts[idx as usize] {
+                    for (_, v) in incoming {
+                        if *v != NO_VALUE && (*v as usize) < n {
+                            crossing[*v as usize] = true;
+                        }
+                    }
+                    continue;
+                }
+                super::reg_alloc::for_each_operand(&func.insts[idx as usize], |v| {
+                    if v != NO_VALUE && (v < start || v >= end) && (v as usize) < n {
+                        crossing[v as usize] = true;
+                    }
+                });
+            }
+            let mut mark = |v: ValueId| {
+                if v != NO_VALUE && (v < start || v >= end) && (v as usize) < n {
+                    crossing[v as usize] = true;
+                }
+            };
+            if blk.exit_acc != NO_VALUE {
+                mark(blk.exit_acc);
+            }
+            match &blk.terminator {
+                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
+                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
+                    if *target != NO_VALUE =>
+                {
+                    mark(*target)
+                }
+                Terminator::Return(v) if *v != NO_VALUE => mark(*v),
+                _ => {}
+            }
+        }
+        let mut rank: Vec<u32> = vec![NO_RANK; n];
+        let mut universe: Vec<ValueId> = Vec::new();
+        for (v, &c) in crossing.iter().enumerate() {
+            if c {
+                rank[v] = universe.len() as u32;
+                universe.push(v as ValueId);
+            }
+        }
+        let words = universe.len().div_ceil(64).max(1);
+        if nblocks == 0 {
+            return Self {
+                words,
+                rank,
+                universe,
+                live_in: Vec::new(),
+                live_out: Vec::new(),
+            };
+        }
+        let set = |bits: &mut [u64], base: usize, r: u32| {
+            bits[base + (r as usize) / 64] |= 1u64 << ((r as usize) % 64);
+        };
+        // used_set: universe values referenced in a block but defined
+        // outside it. kill: universe values defined in the block.
+        // phi_live_out: per-predecessor phi-operand values that must be
+        // live at that predecessor's exit.
+        let mut used_set = vec![0u64; nblocks * words];
+        let mut kill = vec![0u64; nblocks * words];
+        let mut phi_live_out = vec![0u64; nblocks * words];
+        for (b, blk) in func.blocks.iter().enumerate() {
+            let base = b * words;
+            let (start, end) = (blk.inst_range.start, blk.inst_range.end);
+            for v in start..end {
+                if let Some(&r) = rank.get(v as usize)
+                    && r != NO_RANK
+                {
+                    set(&mut kill, base, r);
+                }
+            }
+            let mut mark = |v: ValueId| {
+                if v != NO_VALUE
+                    && (v < start || v >= end)
+                    && let Some(&r) = rank.get(v as usize)
+                    && r != NO_RANK
+                {
+                    set(&mut used_set, base, r);
+                }
+            };
+            for idx in start..end {
+                if let Inst::Phi { incoming, .. } = &func.insts[idx as usize] {
+                    for (pred, v) in incoming {
+                        if *v != NO_VALUE
+                            && let Some(&r) = rank.get(*v as usize)
+                            && r != NO_RANK
+                        {
+                            set(&mut phi_live_out, (*pred as usize) * words, r);
+                        }
+                    }
+                    continue;
+                }
+                super::reg_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
+            }
+            if blk.exit_acc != NO_VALUE {
+                mark(blk.exit_acc);
+            }
+            match &blk.terminator {
+                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
+                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
+                    if *target != NO_VALUE =>
+                {
+                    mark(*target)
+                }
+                Terminator::Return(v) if *v != NO_VALUE => mark(*v),
+                _ => {}
+            }
+        }
+        // Backward dataflow off a postorder worklist: a block is
+        // revisited only when a successor's live-in grew, so the
+        // iteration count tracks loop depth rather than the block count.
+        //   live_out[b] = phi_live_out[b] | U live_in[succ];
+        //   live_in[b]  = used_set[b] | (live_out[b] & ~kill[b]).
+        let graph = super::mem2reg::SuccGraph::new(func);
+        let mut live_in = vec![0u64; nblocks * words];
+        let mut live_out = vec![0u64; nblocks * words];
+        let mut scratch = vec![0u64; words];
+        let mut worklist = graph.backward_worklist();
+        let mut queued = vec![true; nblocks];
+        while let Some(bb) = worklist.pop() {
+            let b = bb as usize;
+            queued[b] = false;
+            let base = b * words;
+            scratch.iter_mut().for_each(|w| *w = 0);
+            for &s in graph.of(bb) {
+                let sb = s as usize * words;
+                for w in 0..words {
+                    scratch[w] |= live_in[sb + w];
+                }
+            }
+            let mut changed = false;
+            for w in 0..words {
+                scratch[w] |= phi_live_out[base + w];
+                live_out[base + w] = scratch[w];
+                let ni = used_set[base + w] | (scratch[w] & !kill[base + w]);
+                if ni != live_in[base + w] {
+                    live_in[base + w] = ni;
+                    changed = true;
+                }
+            }
+            if changed {
+                for &p in graph.preds_of(bb) {
+                    if !queued[p as usize] {
+                        queued[p as usize] = true;
+                        worklist.push(p);
+                    }
+                }
+            }
+        }
+        Self {
+            words,
+            rank,
+            universe,
+            live_in,
+            live_out,
+        }
+    }
+
+    fn is_set(bits: &[u64], base: usize, r: u32) -> bool {
+        bits[base + (r as usize) / 64] & (1u64 << ((r as usize) % 64)) != 0
+    }
+
+    pub(crate) fn live_in(&self, b: BlockId, v: ValueId) -> bool {
+        match self.rank.get(v as usize) {
+            Some(&r) if r != NO_RANK => Self::is_set(&self.live_in, b as usize * self.words, r),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn live_out(&self, b: BlockId, v: ValueId) -> bool {
+        match self.rank.get(v as usize) {
+            Some(&r) if r != NO_RANK => Self::is_set(&self.live_out, b as usize * self.words, r),
+            _ => false,
+        }
+    }
+
+    /// Every value live on exit from `b`, in ascending value order.
+    pub(crate) fn for_each_live_out(&self, b: BlockId, mut f: impl FnMut(ValueId)) {
+        let base = b as usize * self.words;
+        for w in 0..self.words {
+            let mut bits = self.live_out[base + w];
+            while bits != 0 {
+                let r = w * 64 + bits.trailing_zeros() as usize;
+                f(self.universe[r]);
+                bits &= bits - 1;
+            }
+        }
+    }
+}
+
+pub(crate) struct Liveness {
+    /// Per-block live-in / live-out sets over the values that cross a
+    /// block boundary.
+    blocks: BlockLiveness,
     /// Defining block per value.
     block_of: Vec<BlockId>,
     /// Last program position at which each value is used, excluding phi
@@ -38,9 +258,7 @@ pub(crate) struct Liveness {
 
 impl Liveness {
     pub(crate) fn compute(func: &FunctionSsa) -> Self {
-        let nblocks = func.blocks.len();
         let n = func.insts.len();
-        let words = n.div_ceil(64).max(1);
 
         let mut block_of: Vec<BlockId> = vec![0; n];
         for (b, blk) in func.blocks.iter().enumerate() {
@@ -82,113 +300,21 @@ impl Liveness {
             }
         }
 
-        if nblocks == 0 {
-            return Self {
-                words,
-                live_in: Vec::new(),
-                live_out: Vec::new(),
-                block_of,
-                last_use_pos,
-            };
-        }
-
-        let set = |bits: &mut [u64], base: usize, v: u32| {
-            bits[base + (v as usize) / 64] |= 1u64 << ((v as usize) % 64);
-        };
-        // used_set: values referenced in a block but defined outside it
-        // (upward exposed). kill: values defined in the block.
-        // phi_live_out: per-predecessor phi-operand values that must be
-        // live at that predecessor's exit.
-        let mut used_set = vec![0u64; nblocks * words];
-        let mut kill = vec![0u64; nblocks * words];
-        let mut phi_live_out = vec![0u64; nblocks * words];
-        for (b, blk) in func.blocks.iter().enumerate() {
-            let base = b * words;
-            let (start, end) = (blk.inst_range.start, blk.inst_range.end);
-            for v in start..end {
-                set(&mut kill, base, v);
-            }
-            let mut mark = |v: ValueId| {
-                if v != NO_VALUE && (v < start || v >= end) {
-                    set(&mut used_set, base, v);
-                }
-            };
-            for idx in start..end {
-                if let Inst::Phi { incoming, .. } = &func.insts[idx as usize] {
-                    for (pred, v) in incoming {
-                        if *v != NO_VALUE {
-                            set(&mut phi_live_out, (*pred as usize) * words, *v);
-                        }
-                    }
-                    continue;
-                }
-                super::reg_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
-            }
-            if blk.exit_acc != NO_VALUE {
-                mark(blk.exit_acc);
-            }
-            match &blk.terminator {
-                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
-                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
-                    if *target != NO_VALUE =>
-                {
-                    mark(*target)
-                }
-                Terminator::Return(v) if *v != NO_VALUE => mark(*v),
-                _ => {}
-            }
-        }
-
-        let mut live_in = vec![0u64; nblocks * words];
-        let mut live_out = vec![0u64; nblocks * words];
-        let mut scratch = vec![0u64; words];
-        let mut changed = true;
-        while changed {
-            changed = false;
-            for b in (0..nblocks).rev() {
-                let base = b * words;
-                scratch.iter_mut().for_each(|w| *w = 0);
-                for s in super::mem2reg::successors(
-                    &func.blocks[b].terminator,
-                    &func.computed_goto_targets,
-                    &func.jump_tables,
-                ) {
-                    let sb = s as usize * words;
-                    for w in 0..words {
-                        scratch[w] |= live_in[sb + w];
-                    }
-                }
-                for w in 0..words {
-                    scratch[w] |= phi_live_out[base + w];
-                    live_out[base + w] = scratch[w];
-                    let ni = used_set[base + w] | (scratch[w] & !kill[base + w]);
-                    if ni != live_in[base + w] {
-                        live_in[base + w] = ni;
-                        changed = true;
-                    }
-                }
-            }
-        }
+        let blocks = BlockLiveness::compute(func);
 
         Self {
-            words,
-            live_in,
-            live_out,
+            blocks,
             block_of,
             last_use_pos,
         }
     }
 
-    fn is_set(bits: &[u64], base: usize, v: ValueId) -> bool {
-        bits[base + (v as usize) / 64] & (1u64 << ((v as usize) % 64)) != 0
-    }
-
     fn live_in(&self, b: BlockId, v: ValueId) -> bool {
-        Self::is_set(&self.live_in, b as usize * self.words, v)
+        self.blocks.live_in(b, v)
     }
 
     fn live_out(&self, b: BlockId, v: ValueId) -> bool {
-        Self::is_set(&self.live_out, b as usize * self.words, v)
+        self.blocks.live_out(b, v)
     }
 
     /// Whether `x` is live at the program point immediately after `y`
@@ -312,12 +438,11 @@ impl Liveness {
         let n = func.insts.len();
         // Edges packed (low << 32) | high: one-word sort + dedup.
         let mut pairs: Vec<u64> = Vec::new();
-        let mut live = LiveNodeSet::new(n, self.words);
+        let mut live = LiveNodeSet::new(n, n.div_ceil(64).max(1));
         for (b, blk) in func.blocks.iter().enumerate() {
-            live.seed(
-                &self.live_out[b * self.words..(b + 1) * self.words],
-                node_of,
-            );
+            live.clear();
+            self.blocks
+                .for_each_live_out(b as BlockId, |v| live.insert(v, node_of));
             if blk.exit_acc != NO_VALUE && (blk.exit_acc as usize) < n {
                 live.insert(blk.exit_acc, node_of);
             }
@@ -385,11 +510,13 @@ impl Liveness {
     ) -> Vec<bool> {
         let n = func.insts.len();
         let mut out = vec![false; n];
-        let mut live: Vec<u64> = vec![0; self.words];
+        let words = n.div_ceil(64).max(1);
+        let mut live: Vec<u64> = vec![0; words];
         let set = |live: &mut [u64], v: ValueId| live[v as usize / 64] |= 1 << (v % 64);
         for (b, blk) in func.blocks.iter().enumerate() {
-            let base = b * self.words;
-            live.copy_from_slice(&self.live_out[base..base + self.words]);
+            live.iter_mut().for_each(|w| *w = 0);
+            self.blocks
+                .for_each_live_out(b as BlockId, |v| set(&mut live, v));
             if blk.exit_acc != NO_VALUE && (blk.exit_acc as usize) < n {
                 set(&mut live, blk.exit_acc);
             }
@@ -515,22 +642,14 @@ impl LiveNodeSet {
         }
     }
 
-    /// Reset to a block's live-out row.
-    fn seed(&mut self, live_out: &[u64], node_of: &[ValueId]) {
+    /// Drop every member, ready to be re-seeded.
+    fn clear(&mut self) {
         for &nd in &self.nodes {
             self.count[nd as usize] = 0;
             self.pos[nd as usize] = u32::MAX;
         }
         self.nodes.clear();
-        self.bits.copy_from_slice(live_out);
-        for (w, &word) in live_out.iter().enumerate() {
-            let mut bits = word;
-            while bits != 0 {
-                let v = (w as u32) * 64 + bits.trailing_zeros();
-                bits &= bits - 1;
-                self.enter(node_of[v as usize]);
-            }
-        }
+        self.bits.iter_mut().for_each(|w| *w = 0);
     }
 
     fn enter(&mut self, nd: ValueId) {

@@ -1960,109 +1960,19 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
 /// raises `last_use`, so a value that is not live across a back edge
 /// or an out-of-order block keeps the range the scan computed.
 fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
-    let nblocks = func.blocks.len();
-    let n = func.insts.len();
-    let words = n.div_ceil(64);
-    if nblocks == 0 || words == 0 {
+    if func.blocks.is_empty() {
         return;
-    }
-    let bit = |bits: &mut [u64], base: usize, v: u32| {
-        bits[base + (v as usize) / 64] |= 1u64 << ((v as usize) % 64);
-    };
-    // used_set: values referenced in a block but defined outside it
-    // (upward exposed). kill: values defined in the block's range.
-    // phi_live_out: per-predecessor set of phi-incoming values --
-    // these must be live at the end of the predecessor regardless
-    // of where they are defined (a loop body whose phi reads a value
-    // defined in that same body needs the value to survive the back
-    // edge, but `~kill[B]` would otherwise drop it).
-    let mut used_set = vec![0u64; nblocks * words];
-    let mut kill = vec![0u64; nblocks * words];
-    let mut phi_live_out = vec![0u64; nblocks * words];
-    for (b, blk) in func.blocks.iter().enumerate() {
-        let base = b * words;
-        let (start, end) = (blk.inst_range.start, blk.inst_range.end);
-        for v in start..end {
-            bit(&mut kill, base, v);
-        }
-        let mut mark = |v: ValueId| {
-            if v != NO_VALUE && (v < start || v >= end) {
-                bit(&mut used_set, base, v);
-            }
-        };
-        for idx in start..end {
-            if let Inst::Phi { incoming, .. } = &func.insts[idx as usize] {
-                for (pred, v) in incoming {
-                    if *v != NO_VALUE {
-                        bit(&mut phi_live_out, (*pred as usize) * words, *v);
-                    }
-                }
-                continue;
-            }
-            for_each_operand(&func.insts[idx as usize], &mut mark);
-        }
-        if blk.exit_acc != NO_VALUE {
-            mark(blk.exit_acc);
-        }
-        match &blk.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
-            Terminator::Return(v) if *v != NO_VALUE => mark(*v),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
-                if *target != NO_VALUE =>
-            {
-                mark(*target)
-            }
-            _ => {}
-        }
-    }
-    // Backward dataflow to a fixed point:
-    //   live_out[b] = phi_live_out[b] | U live_in[succ];
-    //   live_in[b]  = gen[b] | (live_out[b] & ~kill[b]).
-    let mut live_in = vec![0u64; nblocks * words];
-    let mut live_out = vec![0u64; nblocks * words];
-    let mut scratch = vec![0u64; words];
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for b in (0..nblocks).rev() {
-            let base = b * words;
-            scratch.iter_mut().for_each(|w| *w = 0);
-            for s in super::mem2reg::successors(
-                &func.blocks[b].terminator,
-                &func.computed_goto_targets,
-                &func.jump_tables,
-            ) {
-                let sb = s as usize * words;
-                for w in 0..words {
-                    scratch[w] |= live_in[sb + w];
-                }
-            }
-            for w in 0..words {
-                scratch[w] |= phi_live_out[base + w];
-                live_out[base + w] = scratch[w];
-                let ni = used_set[base + w] | (scratch[w] & !kill[base + w]);
-                if ni != live_in[base + w] {
-                    live_in[base + w] = ni;
-                    changed = true;
-                }
-            }
-        }
     }
     // A value live-out of a block must survive to the end of that
     // block's instruction range.
+    let live = super::liveness::BlockLiveness::compute(func);
     for (b, blk) in func.blocks.iter().enumerate() {
-        let base = b * words;
         let end = blk.inst_range.end;
-        for w in 0..words {
-            let mut bits = live_out[base + w];
-            while bits != 0 {
-                let v = (w * 64) as u32 + bits.trailing_zeros();
-                if last_use[v as usize] < end {
-                    last_use[v as usize] = end;
-                }
-                bits &= bits - 1;
+        live.for_each_live_out(b as crate::c5::ir::BlockId, |v| {
+            if last_use[v as usize] < end {
+                last_use[v as usize] = end;
             }
-        }
+        });
     }
 }
 

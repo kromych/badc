@@ -74,7 +74,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=17
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-6)                                    -> x0
     v6   ImmData(24)                                      -> x1
-    v7   Mcpy { dst=v5, src=v6, size=16 }                 -> x0
+    v7   Mcpy { dst=v5, src=v6, size=16, align=8 }        -> x0
     v8   LoadLocal { off=-15, kind=I32 }                  -> x0
     v9   FpCast { kind=IntToFp, value=v1 }                -> d0
     v10  LocalAddr(-6)                                    -> x0
@@ -108,7 +108,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=17
   block 4  start_pc=0
     v31  LocalAddr(-10)                                   -> x0
     v32  ImmData(40)                                      -> x1
-    v33  Mcpy { dst=v31, src=v32, size=32 }               -> x0
+    v33  Mcpy { dst=v31, src=v32, size=32, align=8 }      -> x0
     v34  Imm(0)                                           -> x0
     v35  LocalAddr(-10)                                   -> x1
     v36  Store { addr=v35, disp=0, value=v34, kind=F64 }  -> -
@@ -151,7 +151,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=17
   block 8  start_pc=0
     v66  LocalAddr(-12)                                   -> x0
     v67  ImmData(72)                                      -> x1
-    v68  Mcpy { dst=v66, src=v67, size=16 }               -> x0
+    v68  Mcpy { dst=v66, src=v67, size=16, align=8 }      -> x0
     v69  LoadLocal { off=-15, kind=I32 }                  -> x0
     v70  FpCast { kind=IntToFp, value=v1 }                -> d0
     v71  LocalAddr(-12)                                   -> x0
@@ -222,7 +222,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=17
     v120 StoreLocal { off=-16, value=v119, kind=F32 }     -> -
     v121 LocalAddr(-13)                                   -> x0
     v122 ImmData(96)                                      -> x1
-    v123 Mcpy { dst=v121, src=v122, size=4 }              -> x0
+    v123 Mcpy { dst=v121, src=v122, size=4, align=8 }     -> x0
     v124 LoadLocal { off=-17, kind=F64 }                  -> d0
     v125 Imm(0)                                           -> x0
     v126 Binop { op=fadd, lhs=v124, rhs=v125 }            -> d0
@@ -260,8 +260,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=17
     terminator Return(v147)   (exit_acc=v147)
   block 22  start_pc=0
     v148 LocalAddr(-4)                                    -> x0
-    v149 ImmData(100)                                     -> x1
-    v150 Mcpy { dst=v148, src=v149, size=32 }             -> x0
+    v149 ImmData(104)                                     -> x1
+    v150 Mcpy { dst=v148, src=v149, size=32, align=8 }    -> x0
     v151 Imm(0)                                           -> x0
     v152 LocalAddr(-4)                                    -> x1
     v153 Store { addr=v152, disp=0, value=v151, kind=F64 } -> -

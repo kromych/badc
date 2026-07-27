@@ -155,6 +155,9 @@ def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
         elif a == "-mno-sse":
             out.append(a)  # badc implements it; kernel code must stay off XMM
             i += 1
+        elif a == "-mstrict-align":
+            out.append(a)  # MMU-off units need naturally-aligned accesses
+            i += 1
         elif a.startswith("-O"):
             opt = a  # last one wins, as with gcc
             i += 1

@@ -56,7 +56,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=3
   block 4  start_pc=0
     v47  LocalAddr(-1)                                    -> x0
     v48  ImmData(8)                                       -> x1
-    v49  Mcpy { dst=v47, src=v48, size=4 }                -> x0
+    v49  Mcpy { dst=v47, src=v48, size=4, align=8 }       -> x0
     v50  LocalAddr(-1)                                    -> x0
     v51  LocalAddr(-3)                                    -> x1
     v52  BinopI { op=add, lhs=v51, rhs_imm=8 }            -> x2

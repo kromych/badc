@@ -9,7 +9,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v3   ImmData(72)                                      -> x0
     v4   ImmData(40)                                      -> x1
     v5   ImmData(8)                                       -> x2
-    v6   Mcpy { dst=v4, src=v5, size=12 }                 -> x1
+    v6   Mcpy { dst=v4, src=v5, size=12, align=4 }        -> x1
     v7   LoadLocal { off=2, kind=I32 }                    -> x1
     v8   Store { addr=v3, disp=0, value=v1, kind=I32 }    -> -
     v9   Extend { value=v1, kind=I32 }                    -> x0
@@ -26,7 +26,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   ImmData(56)                                      -> x0
     v4   ImmData(8)                                       -> x1
-    v5   Mcpy { dst=v3, src=v4, size=12 }                 -> x1
+    v5   Mcpy { dst=v3, src=v4, size=12, align=4 }        -> x1
     v6   LoadLocal { off=2, kind=I32 }                    -> x1
     v7   Store { addr=v3, disp=0, value=v1, kind=I8 }     -> -
     v8   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x1
@@ -48,7 +48,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v5   LoadLocal { off=3, kind=I64 }                    -> x0
     v6   ImmData(40)                                      -> x0
     v7   ImmData(8)                                       -> x1
-    v8   Mcpy { dst=v6, src=v7, size=12 }                 -> x0
+    v8   Mcpy { dst=v6, src=v7, size=12, align=4 }        -> x0
     v9   LoadLocal { off=2, kind=I32 }                    -> x0
     v10  Store { addr=v3, disp=0, value=v1, kind=I8 }     -> -
     v11  BinopI { op=shl, lhs=v1, rhs_imm=56 }            -> x0

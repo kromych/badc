@@ -1885,7 +1885,7 @@ pub(crate) fn lower(
         // register value. Runs after the inliner produces the slot and
         // before store-forwarding cleans up any second-hop reload.
         super::ssa::emit_common::time_pass("passes::struct_return_reg::run (x86_64)", || {
-            crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs);
+            crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs, native.strict_align);
         });
         // Constant folding over the post-inline tape: `Extend(Imm)` /
         // `Binop(Imm, Imm)` chains left by parameter substitution fold
@@ -2182,6 +2182,7 @@ pub(crate) fn lower(
                 &mut asm_text_abs_refs,
                 &mut asm_text_labels,
                 native.no_fp_regs,
+                native.strict_align,
             )
         };
         #[cfg(feature = "std")]

@@ -1554,6 +1554,7 @@ pub(crate) fn emit_function(
     asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     no_fp_regs: bool,
+    strict_align: bool,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -1612,6 +1613,7 @@ pub(crate) fn emit_function(
     let abi = {
         let mut a = target.abi();
         a.no_fp_varargs = no_fp_regs;
+        a.strict_align = strict_align;
         a
     };
     let frame = compute_frame(func, alloc, abi);
@@ -3280,7 +3282,18 @@ fn emit_inst(
             dst: d,
             src: s,
             size,
-        } => emit_mcpy(code, dst, *d, *s, *size, alloc, frame),
+            align,
+        } => emit_mcpy(
+            code,
+            dst,
+            *d,
+            *s,
+            *size,
+            *align,
+            abi.strict_align,
+            alloc,
+            frame,
+        ),
         Inst::AtomicRmw {
             op,
             addr,
@@ -8964,12 +8977,38 @@ fn emit_imm_ext_code(
     true
 }
 
+/// One load / store pair of `width` bytes (8, 4, 2 or 1) moving
+/// `[src + disp]` to `[dst + disp]` through `temp`.
+fn emit_copy_unit(code: &mut Vec<u8>, width: u32, temp: Reg, src: Reg, dst: Reg, disp: i32) {
+    match width {
+        8 => {
+            emit_mov_r_mem(code, temp, src, disp);
+            emit_mov_mem_r(code, dst, disp, temp);
+        }
+        4 => {
+            super::encode::emit_mov_r_mem32(code, temp, src, disp);
+            super::encode::emit_mov_mem32_r(code, dst, disp, temp);
+        }
+        2 => {
+            super::encode::emit_movzx_r_mem16(code, temp, src, disp);
+            super::encode::emit_mov_mem16_r(code, dst, disp, temp);
+        }
+        _ => {
+            super::encode::emit_movzx_r_mem8(code, temp, src, disp);
+            super::encode::emit_mov_mem8_r(code, dst, disp, temp);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn emit_mcpy(
     code: &mut Vec<u8>,
     dst_place: Place,
     dst_val: u32,
     src_val: u32,
     size: i64,
+    align: u32,
+    strict_align: bool,
     alloc: &Allocation,
     frame: Frame,
 ) -> bool {
@@ -9013,15 +9052,15 @@ fn emit_mcpy(
     };
     emit_push_r(code, temp);
     let bytes = size as u32;
-    let words = bytes / 8;
+    let unit = super::super::access_chunk(align, strict_align, 8);
+    let words = bytes / unit;
     for w in 0..words {
         // After push, [base + off] still resolves correctly
         // because the bases are register-typed (not sp-relative).
-        let off = (w * 8) as i32;
-        emit_mov_r_mem(code, temp, src_r, off);
-        emit_mov_mem_r(code, dst_r, off, temp);
+        let off = (w * unit) as i32;
+        emit_copy_unit(code, unit, temp, src_r, dst_r, off);
     }
-    let tail_start = words * 8;
+    let tail_start = words * unit;
     for i in 0..(bytes - tail_start) {
         let off = (tail_start + i) as i32;
         super::encode::emit_movzx_r_mem8(code, temp, src_r, off);

@@ -23,7 +23,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   block 4  start_pc=0
     v10  LocalAddr(-1)                                    -> x0
     v11  ImmData(304)                                     -> x1
-    v12  Mcpy { dst=v10, src=v11, size=8 }                -> x0
+    v12  Mcpy { dst=v10, src=v11, size=8, align=8 }       -> x0
     v13  Imm(0)                                           -> x0
     v14  Imm(0)                                           -> x1
     terminator Jmp(b7)   (exit_acc=v13)

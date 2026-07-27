@@ -32,7 +32,7 @@ fn ent_pc=1 n_params=1 variadic=true locals=6
     v18  Imm(16)                                          -> x1
     v19  Intrinsic { kind=5, args=[v17, v18] }            -> x0
     v20  LocalAddr(-2)                                    -> x1
-    v21  Mcpy { dst=v20, src=v19, size=16 }               -> x0
+    v21  Mcpy { dst=v20, src=v19, size=16, align=8 }      -> x0
     v22  LocalAddr(-5)                                    -> x0
     v23  Imm(8)                                           -> x1
     v24  Intrinsic { kind=5, args=[v22, v23] }            -> x0

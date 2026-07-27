@@ -1474,3 +1474,44 @@ fn variadic_prologue_no_fp_regs_omits_vector_save_aarch64() {
         "no_fp_regs object still contains the vector save stores"
     );
 }
+
+/// Executed companion to the encoding check: the narrowed copy must
+/// still move every byte. Runs the strict-align lowering over struct
+/// alignments 8, 4, 2 and 1 -- one transfer width each -- plus a size
+/// that leaves a sub-unit tail.
+#[test]
+fn strict_align_aggregate_copy_moves_every_byte_aarch64() {
+    const SRC: &str = "struct A8 { long long a, b; };\n\
+         struct A4 { int a, b, c; };\n\
+         struct A2 { short a[5]; };\n\
+         struct A1 { char a[13]; };\n\
+         int check(void) {\n\
+         \tstruct A8 s8 = {0x1122334455667788LL, 0x99aabbccddeeff00LL}, d8;\n\
+         \tstruct A4 s4 = {0x11223344, 0x55667788, 0x99aabbcc}, d4;\n\
+         \tstruct A2 s2 = {{1, 2, 3, 4, 5}}, d2;\n\
+         \tstruct A1 s1 = {{1,2,3,4,5,6,7,8,9,10,11,12,13}}, d1;\n\
+         \td8 = s8; d4 = s4; d2 = s2; d1 = s1;\n\
+         \tconst char *p = (const char *)&s8, *q = (const char *)&d8;\n\
+         \tfor (int i = 0; i < (int)sizeof s8; i++) if (p[i] != q[i]) return 1;\n\
+         \tp = (const char *)&s4; q = (const char *)&d4;\n\
+         \tfor (int i = 0; i < (int)sizeof s4; i++) if (p[i] != q[i]) return 2;\n\
+         \tp = (const char *)&s2; q = (const char *)&d2;\n\
+         \tfor (int i = 0; i < (int)sizeof s2; i++) if (p[i] != q[i]) return 3;\n\
+         \tp = (const char *)&s1; q = (const char *)&d1;\n\
+         \tfor (int i = 0; i < (int)sizeof s1; i++) if (p[i] != q[i]) return 4;\n\
+         \treturn 42;\n\
+         }\n\
+         int main(void) { return check(); }\n";
+    for optimize in [false, true] {
+        let opts = NativeOptions {
+            strict_align: true,
+            optimize,
+            ..NativeOptions::default()
+        };
+        let outcome = build_and_run_outcome_with_options(SRC, "strict-align-copy", opts);
+        assert!(
+            outcome.matches(42),
+            "strict-align struct copy (optimize={optimize}): {outcome:?}"
+        );
+    }
+}

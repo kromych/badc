@@ -285,6 +285,7 @@ fn run() {
     // are quieted.
     let mut quiet = false;
     let mut mno_fp_regs = false;
+    let mut mstrict_align = false;
     // `--export-all` exports every non-static function in the dynamic
     // symbol table / export trie of native output, so a runtime
     // `dlopen` consumer can `dlsym` it without a source-level `#pragma
@@ -496,6 +497,13 @@ fn run() {
             // (OS kernels) run with that register file trapped, so any
             // access faults; see `NativeOptions::no_fp_regs`.
             "-mno-sse" | "-mgeneral-regs-only" => mno_fp_regs = true,
+            // Keep every compiler-generated memory access naturally
+            // aligned for its width. Code that runs with the MMU off
+            // sees Device-typed memory, where an unaligned access
+            // raises an alignment fault instead of being fixed up;
+            // see `NativeOptions::strict_align`.
+            "-mstrict-align" => mstrict_align = true,
+            "-mno-strict-align" => mstrict_align = false,
             // Export every non-static function (dlopen/dlsym visibility).
             "--export-all" => export_all = true,
             // Export every defined non-static global (function and data)
@@ -1027,6 +1035,7 @@ fn run() {
             .with_debug_info(emit_debug_info)
             .with_inline_cap(inline_cap);
         reloc_opts.no_fp_regs = mno_fp_regs;
+        reloc_opts.strict_align = mstrict_align;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -1573,6 +1582,7 @@ fn run() {
             .with_debug_info(emit_debug_info)
             .with_inline_cap(inline_cap);
         reloc_opts.no_fp_regs = mno_fp_regs;
+        reloc_opts.strict_align = mstrict_align;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -1692,6 +1702,7 @@ fn run() {
             .with_debug_info(emit_debug_info)
             .with_inline_cap(inline_cap);
         reloc_opts.no_fp_regs = mno_fp_regs;
+        reloc_opts.strict_align = mstrict_align;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }

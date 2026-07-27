@@ -25,6 +25,23 @@ use super::{AtomicKind, Expr, ExprId, Stmt, StmtId, UnOp};
 /// The low and high 64-bit halves of a 128-bit value, in that order.
 type Halves = (ValueId, ValueId);
 
+/// Alignment guaranteed for a frame slot address and for the `.data`
+/// staging area a brace-list initializer is laid into: both are
+/// 8-byte slotted. An `Inst::Mcpy` between two such addresses may be
+/// transferred 8 bytes at a time whatever the copied type's own
+/// alignment is.
+const SLOT_ALIGN: u32 = 8;
+
+/// Alignment of storage that is `base` aligned and then advanced by
+/// `off` bytes -- the largest power of two dividing both.
+fn offset_align(base: u32, off: i64) -> u32 {
+    if off == 0 {
+        return base.max(1);
+    }
+    let step = 1u32 << off.unsigned_abs().trailing_zeros().min(31);
+    base.min(step).max(1)
+}
+
 /// Diagnostic for a shape the walker can't lower yet. Carries
 /// enough context to point at the offending AST node so the
 /// caller can route the gap back to a parser site.
@@ -399,10 +416,11 @@ pub(crate) fn walk_function(
                 continue;
             }
             let size = structs[id].size as i64;
+            let align = structs[id].align.max(1) as u32;
             let arg_slot = (i as i64) + arg_slot_base;
             let dst = b.local_addr(local_slot);
             let src = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
-            b.mcpy(dst, src, size);
+            b.mcpy(dst, src, size, align);
             continue;
         }
         // `float`-by-value param. The parser repointed the symbol to a
@@ -755,6 +773,23 @@ impl<'a> Walker<'a> {
             self.structs[id].size as i64
         } else {
             0
+        }
+    }
+
+    /// Alignment of the struct type encoded by `ty`, for the `Inst::Mcpy`
+    /// transfer-width bound. Falls back to 1 -- the alignment every
+    /// object satisfies -- when the id is out of range or the layout has
+    /// not been finished, so a lookup miss cannot claim more than the
+    /// C99 6.2.8 minimum.
+    fn struct_align(&self, ty: i64) -> u32 {
+        let stripped = strip_unsigned(ty);
+        if stripped < STRUCT_BASE {
+            return 1;
+        }
+        let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
+        match self.structs.get(id) {
+            Some(s) if s.align > 0 => s.align as u32,
+            _ => 1,
         }
     }
     /// True when `ty` is the GCC 128-bit `__int128` as a value (not a
@@ -1673,7 +1708,12 @@ impl<'a> Walker<'a> {
                     let out_ptr = b.load_local(2, super::super::ir::LoadKind::I64);
                     let src = self.walk_expr_rvalue(b, *e)?;
                     if self.return_struct_size > 0 {
-                        b.mcpy(out_ptr, src, self.return_struct_size);
+                        // The out-pointer is the caller's result temp, so
+                        // only the returned type's own alignment holds.
+                        let align = expr_ty(self.ast.expr(*e))
+                            .map(|t| self.struct_align(t))
+                            .unwrap_or(1);
+                        b.mcpy(out_ptr, src, self.return_struct_size, align);
                     }
                     b.return_(out_ptr);
                     return Ok(true);
@@ -2330,7 +2370,7 @@ impl<'a> Walker<'a> {
                         return Ok(());
                     }
                     let size = self.struct_size(ty);
-                    b.mcpy(dst, v, size);
+                    b.mcpy(dst, v, size, self.struct_align(ty));
                     return Ok(());
                 }
                 let kind = store_kind_for(ty, self.target);
@@ -2346,7 +2386,12 @@ impl<'a> Walker<'a> {
             } => {
                 let dst = b.local_addr(slot);
                 let src = b.imm_data(*src_data_off);
-                b.mcpy(dst, src, *size_bytes);
+                b.mcpy(
+                    dst,
+                    src,
+                    *size_bytes,
+                    offset_align(SLOT_ALIGN, *src_data_off),
+                );
                 Ok(())
             }
             super::super::ast::LocalInit::Runtime {
@@ -2359,7 +2404,12 @@ impl<'a> Walker<'a> {
                 if let Some((src_data_off, size_bytes)) = zero_init {
                     let dst = b.local_addr(slot);
                     let src = b.imm_data(*src_data_off);
-                    b.mcpy(dst, src, *size_bytes);
+                    b.mcpy(
+                        dst,
+                        src,
+                        *size_bytes,
+                        offset_align(SLOT_ALIGN, *src_data_off),
+                    );
                 }
                 for elem in elements {
                     let value = match elem.value {
@@ -2395,7 +2445,15 @@ impl<'a> Walker<'a> {
                                     let v = b.load_vol(src, lk, vol);
                                     b.store_vol(dst, v, sk, vol);
                                 }
-                                _ => b.mcpy(dst, src, bytes),
+                                // Both ends are offsets into the same
+                                // 8-aligned frame slot.
+                                _ => b.mcpy(
+                                    dst,
+                                    src,
+                                    bytes,
+                                    offset_align(SLOT_ALIGN, elem.offset)
+                                        .min(offset_align(SLOT_ALIGN, src_off)),
+                                ),
                             }
                             continue;
                         }
@@ -2426,7 +2484,7 @@ impl<'a> Walker<'a> {
                     // so this needs an Mcpy, not a scalar store.
                     if is_struct_ty(elem.ty) && struct_ptr_depth(elem.ty) == 0 {
                         let size = self.struct_size(elem.ty);
-                        b.mcpy(addr, v, size);
+                        b.mcpy(addr, v, size, self.struct_align(elem.ty));
                         continue;
                     }
                     let kind = store_kind_for(elem.ty, self.target);
@@ -3518,7 +3576,7 @@ impl<'a> Walker<'a> {
                     let dst = self.walk_expr_lvalue(b, *lhs)?;
                     let src = self.walk_expr_rvalue(b, *rhs)?;
                     let size = self.struct_size(*ty);
-                    b.mcpy(dst, src, size);
+                    b.mcpy(dst, src, size, self.struct_align(*ty));
                     return Ok(dst);
                 }
                 // Local-target shortcut: a Token::Loc-class Ident

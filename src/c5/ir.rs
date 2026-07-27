@@ -325,6 +325,13 @@ pub(crate) enum Inst {
         dst: ValueId,
         src: ValueId,
         size: i64,
+        /// Alignment both endpoints are known to satisfy, in bytes: the
+        /// aggregate type's alignment, or a larger value the walker can
+        /// prove (a frame slot and a `.data` staging offset are both
+        /// 8-aligned). The per-arch lowering caps its transfer width at
+        /// this under `-mstrict-align`; without the flag it copies in
+        /// 8-byte units regardless.
+        align: u32,
     },
     /// Atomic read-modify-write on the `width`-byte object at `addr`
     /// (C11 7.17.7.2-7.17.7.5). `op` selects the operator; the operand

@@ -1732,7 +1732,7 @@ pub(crate) fn lower(
         // Forward an inlined one-word struct return out of its frame slot;
         // see x86_64.rs's matching block for the rationale.
         super::ssa::emit_common::time_pass("passes::struct_return_reg::run (aarch64)", || {
-            crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs);
+            crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs, native.strict_align);
         });
         // Constant folding over the post-inline tape; see x86_64.rs's
         // matching block for the rationale.
@@ -1995,6 +1995,7 @@ pub(crate) fn lower(
                 &mut macho_tlv_descriptors,
                 &name2entpc,
                 native.no_fp_regs,
+                native.strict_align,
             )
         };
         if !ok {

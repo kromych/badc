@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
     v2   ImmData(8)                                       -> x1
-    v3   Mcpy { dst=v1, src=v2, size=1 }                  -> x0
+    v3   Mcpy { dst=v1, src=v2, size=1, align=8 }         -> x0
     v4   LocalAddr(-1)                                    -> x0
     v5   Load { addr=v4, disp=0, kind=U8 }                -> x0
     v6   BinopI { op=and, lhs=v5, rhs_imm=3 }             -> x0
@@ -47,8 +47,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     terminator Return(v26)   (exit_acc=v26)
   block 8  start_pc=0
     v27  LocalAddr(-2)                                    -> x0
-    v28  ImmData(9)                                       -> x1
-    v29  Mcpy { dst=v27, src=v28, size=4 }                -> x0
+    v28  ImmData(16)                                      -> x1
+    v29  Mcpy { dst=v27, src=v28, size=4, align=8 }       -> x0
     v30  LocalAddr(-2)                                    -> x0
     v31  Load { addr=v30, disp=0, kind=U32 }              -> x0
     v32  BinopI { op=and, lhs=v31, rhs_imm=255 }          -> x0
@@ -79,8 +79,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     terminator Return(v46)   (exit_acc=v46)
   block 14  start_pc=0
     v47  LocalAddr(-3)                                    -> x0
-    v48  ImmData(13)                                      -> x1
-    v49  Mcpy { dst=v47, src=v48, size=1 }                -> x0
+    v48  ImmData(24)                                      -> x1
+    v49  Mcpy { dst=v47, src=v48, size=1, align=8 }       -> x0
     v50  LocalAddr(-3)                                    -> x0
     v51  Load { addr=v50, disp=0, kind=U8 }               -> x0
     v52  BinopI { op=and, lhs=v51, rhs_imm=7 }            -> x0
@@ -111,8 +111,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     terminator Return(v66)   (exit_acc=v66)
   block 20  start_pc=0
     v67  LocalAddr(-4)                                    -> x0
-    v68  ImmData(14)                                      -> x1
-    v69  Mcpy { dst=v67, src=v68, size=1 }                -> x0
+    v68  ImmData(32)                                      -> x1
+    v69  Mcpy { dst=v67, src=v68, size=1, align=8 }       -> x0
     v70  LocalAddr(-4)                                    -> x0
     v71  Load { addr=v70, disp=0, kind=U8 }               -> x0
     v72  BinopI { op=and, lhs=v71, rhs_imm=3 }            -> x0

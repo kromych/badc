@@ -1028,7 +1028,7 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = stored;
             return Ok(());
         }
-        Inst::Mcpy { dst, src, size } => {
+        Inst::Mcpy { dst, src, size, .. } => {
             let dst_addr = frame.regs[*dst as usize];
             let src_addr = frame.regs[*src as usize];
             if dst_addr & CODE_ADDR_MASK != 0 || src_addr & CODE_ADDR_MASK != 0 {

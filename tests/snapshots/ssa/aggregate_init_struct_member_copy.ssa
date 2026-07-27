@@ -8,7 +8,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=4
     v2   Imm(0)                                           -> x0
     v3   LocalAddr(-4)                                    -> x0
     v4   ImmData(24)                                      -> x1
-    v5   Mcpy { dst=v3, src=v4, size=32 }                 -> x0
+    v5   Mcpy { dst=v3, src=v4, size=32, align=8 }        -> x0
     v6   Imm(0)                                           -> x0
     v7   LocalAddr(-4)                                    -> x1
     v8   Store { addr=v7, disp=0, value=v6, kind=I64 }    -> -
@@ -21,7 +21,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=4
     v15  LoadLocal { off=2, kind=I64 }                    -> x0
     v16  LocalAddr(-4)                                    -> x0
     v17  BinopI { op=add, lhs=v16, rhs_imm=16 }           -> x0
-    v18  Mcpy { dst=v17, src=v1, size=16 }                -> x0
+    v18  Mcpy { dst=v17, src=v1, size=16, align=8 }       -> x0
     v19  LocalAddr(-4)                                    -> x0
     v20  BinopI { op=add, lhs=v19, rhs_imm=16 }           -> x1
     v21  BinopI { op=add, lhs=v19, rhs_imm=24 }           -> x1
@@ -37,7 +37,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=4
     v2   Imm(0)                                           -> x0
     v3   LocalAddr(-4)                                    -> x0
     v4   ImmData(56)                                      -> x1
-    v5   Mcpy { dst=v3, src=v4, size=32 }                 -> x0
+    v5   Mcpy { dst=v3, src=v4, size=32, align=8 }        -> x0
     v6   Imm(0)                                           -> x0
     v7   LocalAddr(-4)                                    -> x1
     v8   Store { addr=v7, disp=0, value=v6, kind=I64 }    -> -
@@ -50,7 +50,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=4
     v15  LoadLocal { off=2, kind=I64 }                    -> x0
     v16  LocalAddr(-4)                                    -> x0
     v17  BinopI { op=add, lhs=v16, rhs_imm=16 }           -> x0
-    v18  Mcpy { dst=v17, src=v1, size=16 }                -> x0
+    v18  Mcpy { dst=v17, src=v1, size=16, align=8 }       -> x0
     v19  LocalAddr(-4)                                    -> x0
     v20  BinopI { op=add, lhs=v19, rhs_imm=16 }           -> x1
     v21  BinopI { op=add, lhs=v19, rhs_imm=24 }           -> x1
@@ -64,7 +64,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=6
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-6)                                    -> x0
     v2   ImmData(88)                                      -> x1
-    v3   Mcpy { dst=v1, src=v2, size=32 }                 -> x0
+    v3   Mcpy { dst=v1, src=v2, size=32, align=8 }        -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-6)                                    -> x1
     v6   Store { addr=v5, disp=0, value=v4, kind=I64 }    -> -
@@ -77,7 +77,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=6
     v13  LocalAddr(-2)                                    -> x0
     v14  LocalAddr(-6)                                    -> x1
     v15  BinopI { op=add, lhs=v14, rhs_imm=16 }           -> x1
-    v16  Mcpy { dst=v15, src=v13, size=16 }               -> x0
+    v16  Mcpy { dst=v15, src=v13, size=16, align=8 }      -> x0
     v17  LocalAddr(-6)                                    -> x0
     v18  BinopI { op=add, lhs=v17, rhs_imm=16 }           -> x1
     v19  BinopI { op=add, lhs=v17, rhs_imm=24 }           -> x1
@@ -93,11 +93,11 @@ fn ent_pc=3 n_params=1 variadic=false locals=3
     v2   Imm(0)                                           -> x0
     v3   LocalAddr(-3)                                    -> x0
     v4   ImmData(120)                                     -> x1
-    v5   Mcpy { dst=v3, src=v4, size=24 }                 -> x0
+    v5   Mcpy { dst=v3, src=v4, size=24, align=8 }        -> x0
     v6   LoadLocal { off=2, kind=I64 }                    -> x0
     v7   Imm(0)                                           -> x0
     v8   LocalAddr(-3)                                    -> x0
-    v9   Mcpy { dst=v8, src=v1, size=16 }                 -> x0
+    v9   Mcpy { dst=v8, src=v1, size=16, align=8 }        -> x0
     v10  Imm(7)                                           -> x1
     v11  LocalAddr(-3)                                    -> x0
     v12  BinopI { op=add, lhs=v11, rhs_imm=16 }           -> x2
@@ -118,10 +118,10 @@ fn ent_pc=4 n_params=1 variadic=false locals=4
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> x0
     v2   ImmData(144)                                     -> x1
-    v3   Mcpy { dst=v1, src=v2, size=16 }                 -> x0
+    v3   Mcpy { dst=v1, src=v2, size=16, align=8 }        -> x0
     v4   LocalAddr(-2)                                    -> x0
     v5   LocalAddr(-4)                                    -> x1
-    v6   Mcpy { dst=v5, src=v4, size=16 }                 -> x0
+    v6   Mcpy { dst=v5, src=v4, size=16, align=8 }        -> x0
     v7   LocalAddr(-4)                                    -> x0
     v8   Load { addr=v7, disp=0, kind=I64 }               -> x1
     v9   LocalAddr(-4)                                    -> x0

@@ -1496,6 +1496,7 @@ impl Compiler {
                     let var_name = self.symbols[loc_idx].name.clone();
                     // Zero the whole slot (6.7.8p19 omitted-entries rule),
                     // then overlay each element's explicit fields.
+                    self.align_data_to_8();
                     let zero_off = self.data.len();
                     for _ in 0..(count as usize * elem_size) {
                         self.data.push(0);
@@ -1623,6 +1624,7 @@ impl Compiler {
                     // static-storage zero-init. Seed the slot from a staged
                     // zero block before the per-element stores.
                     let full_bytes = self.size_of_type(ty) * final_size.max(0) as usize;
+                    self.align_data_to_8();
                     let zero_off = self.data.len();
                     for _ in 0..full_bytes {
                         self.data.push(0);
@@ -1681,6 +1683,7 @@ impl Compiler {
                     // outer brace list works the same way as a
                     // single-struct `{ ... }` initializer.
                     let needs_runtime = self.struct_init_needs_runtime()?;
+                    self.align_data_to_8();
                     let staged_off = self.data.len();
                     for _ in 0..(declared_array_size as usize * elem_size) {
                         self.data.push(0);
@@ -1924,6 +1927,7 @@ impl Compiler {
                     // with a Mcpy from a staged zero block
                     // before the per-element runtime stores
                     // overlay the explicit prefix.
+                    self.align_data_to_8();
                     let zero_off = self.data.len();
                     for _ in 0..full_bytes {
                         self.data.push(0);
@@ -1979,6 +1983,7 @@ impl Compiler {
                 let sid = struct_id_of(ty);
                 let needs_runtime = self.struct_init_needs_runtime()?;
                 let elem_size = self.size_of_type(ty);
+                self.align_data_to_8();
                 let staged_off = self.data.len();
                 for _ in 0..elem_size {
                     self.data.push(0);
@@ -2059,6 +2064,7 @@ impl Compiler {
                 slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
                 if needs_runtime {
                     let full = elem_size * count as usize;
+                    self.align_data_to_8();
                     let zero_off = self.data.len();
                     for _ in 0..full {
                         self.data.push(0);
@@ -2083,6 +2089,7 @@ impl Compiler {
                 let full = elem_size * count as usize;
                 slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
                 if self.lex.tk == '{' && self.array_init_needs_runtime()? {
+                    self.align_data_to_8();
                     let zero_off = self.data.len();
                     for _ in 0..full {
                         self.data.push(0);
@@ -2130,6 +2137,7 @@ impl Compiler {
                 self.multi_cell_temps.push((slot, cl_slots));
             }
             let needs_runtime = self.struct_init_needs_runtime()?;
+            self.align_data_to_8();
             let staged = self.data.len();
             for _ in 0..elem_size {
                 self.data.push(0);

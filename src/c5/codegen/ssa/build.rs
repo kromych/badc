@@ -1196,11 +1196,17 @@ impl SsaBuilder {
     /// `Inst::Mcpy` -- whole-struct / aggregate memory copy of
     /// `size` bytes from `src` to `dst`. Used by the AST walker's
     /// `LocalInit::Aggregate` lowering when a brace-list
-    /// initializer's bytes were staged in `.data`. dst may alias
-    /// any escaped local; invalidate the CSE cache.
-    pub(crate) fn mcpy(&mut self, dst: ValueId, src: ValueId, size: i64) {
+    /// initializer's bytes were staged in `.data`. `align` is the
+    /// alignment both endpoints satisfy. dst may alias any escaped
+    /// local; invalidate the CSE cache.
+    pub(crate) fn mcpy(&mut self, dst: ValueId, src: ValueId, size: i64, align: u32) {
         self.local_cache.clear();
-        self.push(Inst::Mcpy { dst, src, size });
+        self.push(Inst::Mcpy {
+            dst,
+            src,
+            size,
+            align,
+        });
     }
 
     /// `Inst::AtomicRmw` -- atomic read-modify-write on the `width`-byte

@@ -713,6 +713,7 @@ pub(crate) fn emit_function(
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     no_fp_regs: bool,
+    strict_align: bool,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -733,6 +734,7 @@ pub(crate) fn emit_function(
     let abi = {
         let mut a = target.abi();
         a.no_fp_varargs = no_fp_regs;
+        a.strict_align = strict_align;
         a
     };
     let frame = compute_frame(func, alloc, abi, target);
@@ -4028,7 +4030,19 @@ fn emit_inst(
             dst: d,
             src: s,
             size,
-        } => emit_mcpy(code, dst, *d, *s, *size, alloc, frame, scratch),
+            align,
+        } => emit_mcpy(
+            code,
+            dst,
+            *d,
+            *s,
+            *size,
+            *align,
+            abi.strict_align,
+            alloc,
+            frame,
+            scratch,
+        ),
         Inst::AtomicRmw {
             op,
             addr,
@@ -5495,7 +5509,7 @@ fn emit_call_ext(
     let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
     emit_stack_alloc(code, plan.scratch_bytes, None);
     if !marshal_args(
-        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     ) {
         return false;
     }
@@ -5696,7 +5710,7 @@ fn emit_call(
             super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         emit_stack_alloc(code, plan.scratch_bytes, None);
         if !marshal_args(
-            code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+            code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
         ) {
             return false;
         }
@@ -5743,7 +5757,7 @@ fn emit_call(
     let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
     emit_stack_alloc(code, plan.scratch_bytes, None);
     if !marshal_args(
-        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     ) {
         return false;
     }
@@ -5996,7 +6010,7 @@ fn emit_call_indirect(
         emit_sp_str_x_auto(code, target_reg, off);
     }
     if !marshal_args(
-        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs,
+        code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     ) {
         return false;
     }
@@ -6029,12 +6043,49 @@ fn emit_call_indirect(
 /// [dst]; emits 8-byte ldr/str pairs for whole words and a
 /// ldrb/strb tail for any sub-word remainder. The defined value
 /// is `dst` -- mirrors C's `memcpy(dst, src, size)` return.
+/// One load / store pair of `width` bytes (8, 4, 2 or 1) moving
+/// `[sbase + soff]` to `[dbase + doff]` through `temp`.
+#[allow(clippy::too_many_arguments)]
+fn emit_copy_unit(
+    code: &mut Vec<u8>,
+    width: u32,
+    temp: Reg,
+    sbase: Reg,
+    soff: u32,
+    dbase: Reg,
+    doff: u32,
+) {
+    let (ld, st) = match width {
+        8 => (
+            enc_ldr_imm(temp, sbase, soff),
+            enc_str_imm(temp, dbase, doff),
+        ),
+        4 => (
+            super::encode::enc_ldr32_imm(temp, sbase, soff),
+            super::encode::enc_str32_imm(temp, dbase, doff),
+        ),
+        2 => (
+            enc_ldrh_imm(temp, sbase, soff),
+            enc_strh_imm(temp, dbase, doff),
+        ),
+        _ => (
+            enc_ldrb_imm(temp, sbase, soff),
+            enc_strb_imm(temp, dbase, doff),
+        ),
+    };
+    emit(code, ld);
+    emit(code, st);
+}
+
+#[allow(clippy::too_many_arguments)]
 fn emit_mcpy(
     code: &mut Vec<u8>,
     dst_place: Place,
     dst_val: u32,
     src_val: u32,
     size: i64,
+    align: u32,
+    strict_align: bool,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
@@ -6089,15 +6140,17 @@ fn emit_mcpy(
     // exceed that must advance the base pointers. `WINDOW` is 8-aligned and
     // below 4096, keeping every word and tail offset in range and letting a
     // single `add` (12-bit immediate) step both bases between windows.
+    // Below 4096 the narrower units reach it too: their scaled immediates
+    // cover 8190 (halfword) and 4095 (byte).
     const WINDOW: u32 = 4088;
+    let unit = super::super::access_chunk(align, strict_align, 8);
     let copy_run = |code: &mut Vec<u8>, sbase: Reg, dbase: Reg, run: u32| {
-        let words = run / 8;
+        let words = run / unit;
         for w in 0..words {
-            let off = w * 8;
-            emit(code, enc_ldr_imm(temp, sbase, off));
-            emit(code, enc_str_imm(temp, dbase, off));
+            let off = w * unit;
+            emit_copy_unit(code, unit, temp, sbase, off, dbase, off);
         }
-        let tail_start = words * 8;
+        let tail_start = words * unit;
         for i in 0..(run - tail_start) {
             let off = tail_start + i;
             emit(code, enc_ldrb_imm(temp, sbase, off));
@@ -8518,6 +8571,7 @@ fn marshal_args(
     frame: Frame,
     arg_aggs: &[Option<u32>],
     agg_descs: &[super::super::ir::AggDesc],
+    abi: super::Abi,
 ) -> bool {
     let arg_place = |i: usize| -> Place {
         alloc
@@ -8573,14 +8627,27 @@ fn marshal_args(
             if src.0 != scratch.primary.0 {
                 emit_mov_reg(code, scratch.primary, src);
             }
+            // The outgoing stack slot is 8-aligned (AAPCS64 5.4.2); the
+            // source is the caller's object, so its own alignment bounds
+            // the unit.
+            let align = arg_aggs
+                .get(i)
+                .copied()
+                .flatten()
+                .map_or(1, |k| agg_descs[k as usize].align);
+            let unit = super::super::access_chunk(align, abi.strict_align, 8);
             let mut copied = 0u32;
-            while copied + 8 <= size {
-                emit(
+            while copied + unit <= size {
+                emit_copy_unit(
                     code,
-                    enc_ldr_imm(scratch.secondary, scratch.primary, copied),
+                    unit,
+                    scratch.secondary,
+                    scratch.primary,
+                    copied,
+                    Reg(31),
+                    off + copied,
                 );
-                emit(code, enc_str_imm(scratch.secondary, Reg(31), off + copied));
-                copied += 8;
+                copied += unit;
             }
             while copied < size {
                 emit(
@@ -9034,6 +9101,7 @@ mod tests {
                 &mut tlv_desc,
                 &alloc::collections::BTreeMap::new(),
                 false,
+                false,
             )
         };
         assert!(
@@ -9209,6 +9277,7 @@ mod tests {
                 &mut tlv_desc,
                 &alloc::collections::BTreeMap::new(),
                 false,
+                false,
             )
         };
         assert!(ok, "binop handler should cover Add + Shl + Shr");
@@ -9282,6 +9351,7 @@ mod tests {
                 &mut tlv_fx,
                 &mut tlv_desc,
                 &alloc::collections::BTreeMap::new(),
+                false,
                 false,
             )
         };

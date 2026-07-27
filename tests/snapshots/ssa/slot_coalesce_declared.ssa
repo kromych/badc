@@ -24,7 +24,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=4
     v18  Store { addr=v14, disp=24, value=v17, kind=I64 } -> -
     v19  LoadLocal { off=2, kind=I64 }                    -> x0
     v20  LocalAddr(-4)                                    -> x1
-    v21  Mcpy { dst=v19, src=v20, size=32 }               -> x1
+    v21  Mcpy { dst=v19, src=v20, size=32, align=8 }      -> x1
     terminator Return(v19)   (exit_acc=v19)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=useq
@@ -189,7 +189,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=9
     v97  LoadLocal { off=2, kind=I64 }                    -> x6
     v98  LocalAddr(-8)                                    -> x7
     v99  ImmData(40)                                      -> x8
-    v100 Mcpy { dst=v98, src=v99, size=64 }               -> x7
+    v100 Mcpy { dst=v98, src=v99, size=64, align=8 }      -> x7
     v101 LoadLocal { off=3, kind=I64 }                    -> x7
     v102 LocalAddr(-8)                                    -> x8
     v103 Store { addr=v102, disp=0, value=v101, kind=I64 } -> -
@@ -237,7 +237,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=9
     v145 BinopI { op=add, lhs=v144, rhs_imm=56 }          -> x2
     v146 Store { addr=v144, disp=56, value=v143, kind=I64 } -> -
     v147 LocalAddr(-8)                                    -> x0
-    v148 Mcpy { dst=v97, src=v147, size=64 }              -> x0
+    v148 Mcpy { dst=v97, src=v147, size=64, align=8 }     -> x0
     terminator Return(v97)   (exit_acc=v97)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
@@ -609,7 +609,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=44
     v256 Call { target_pc=0, args=[v252, v255], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v257 LocalAddr(-12)                                   -> x0
     v258 LocalAddr(-32)                                   -> x1
-    v259 Mcpy { dst=v258, src=v257, size=32 }             -> x0
+    v259 Mcpy { dst=v258, src=v257, size=32, align=8 }    -> x0
     v260 Imm(21806)                                       -> x0
     v261 Imm(21929)                                       -> x0
     v262 Imm(94184337833984)                              -> x0
@@ -672,7 +672,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=44
     v307 Call { target_pc=5, args=[v303, v306], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v308 LocalAddr(-8)                                    -> x0
     v309 LocalAddr(-20)                                   -> x1
-    v310 Mcpy { dst=v309, src=v308, size=64 }             -> x0
+    v310 Mcpy { dst=v309, src=v308, size=64, align=8 }    -> x0
     v311 Extend { value=v300, kind=I32 }                  -> x1
     v312 Imm(0)                                           -> x0
     v313 Imm(0)                                           -> x2

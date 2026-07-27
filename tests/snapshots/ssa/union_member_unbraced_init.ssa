@@ -151,7 +151,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
   block 26  start_pc=0
     v95  LocalAddr(-3)                                    -> x0
     v96  ImmData(112)                                     -> x1
-    v97  Mcpy { dst=v95, src=v96, size=24 }               -> x0
+    v97  Mcpy { dst=v95, src=v96, size=24, align=8 }      -> x0
     v98  LocalAddr(-3)                                    -> x0
     v99  Load { addr=v98, disp=0, kind=F64 }              -> d0
     v100 Imm(4613937818241073152)                         -> x0
@@ -175,7 +175,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
   block 30  start_pc=0
     v111 LocalAddr(-6)                                    -> x0
     v112 ImmData(136)                                     -> x1
-    v113 Mcpy { dst=v111, src=v112, size=24 }             -> x0
+    v113 Mcpy { dst=v111, src=v112, size=24, align=8 }    -> x0
     v114 LocalAddr(-6)                                    -> x0
     v115 Load { addr=v114, disp=0, kind=F64 }             -> d0
     v116 Imm(4618441417868443648)                         -> x0

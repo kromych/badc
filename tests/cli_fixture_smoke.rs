@@ -90,6 +90,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_a64_dp.c", "linux-x64"), // aarch64 mul/csel (x86 mul is 1-operand)
     ("inline_asm_a64_sp_operand.c", "linux-x64"), // aarch64 sp-operand add/sub
     ("inline_asm_a64_labels.c", "linux-x64"), // aarch64 local-label branches
+    ("asm_goto_immediate_operand_no_frame.c", "linux-x64"), // aarch64 asm goto + .align 3
     ("inline_asm_a64_barriers.c", "linux-x64"), // aarch64 dmb/dsb/isb/clrex
     ("inline_asm_a64_acqrel.c", "linux-x64"), // aarch64 ldar/stlr via `Q`
     ("inline_asm_a64_llsc.c", "linux-x64"), // aarch64 ldxr/stxr loop via `+Q`

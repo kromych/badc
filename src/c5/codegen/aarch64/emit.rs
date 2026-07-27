@@ -3033,9 +3033,30 @@ fn emit_inline_asm_aarch64(
     let n = asm.operands.len();
     let n_saved = save_list.len();
     let n_fp_saved = fp_save_list.len();
-    // Stack region: captures at [sp + i*8], then the saved GP registers, then
-    // the saved FP registers. Kept 16-byte aligned per AAPCS64.
-    let size = (((n + n_saved + n_fp_saved) * 8) as u32 + 15) & !15;
+    // An immediate-only operand is substituted into the template text and
+    // has no runtime storage, so it takes no capture slot. Keeping the
+    // region empty for a template whose only operands are immediates
+    // matters beyond the saved bytes: the region is released on the paths
+    // out of the template, and an `asm goto` label reached by a branch
+    // planted at run time -- a jump-label or alternative patch site, whose
+    // `%l` is a data reference rather than a branch in the template --
+    // bypasses every one of them.
+    let needs_cap: Vec<bool> = asm
+        .operands
+        .iter()
+        .map(|o| !matches!(o.constraint, AsmConstraint::Imm))
+        .collect();
+    let mut cap_slot: Vec<usize> = alloc::vec![0; n];
+    let mut n_cap = 0usize;
+    for (i, &c) in needs_cap.iter().enumerate() {
+        if c {
+            cap_slot[i] = n_cap;
+            n_cap += 1;
+        }
+    }
+    // Stack region: captures first, then the saved GP registers, then the
+    // saved FP registers. Kept 16-byte aligned per AAPCS64.
+    let size = (((n_cap + n_saved + n_fp_saved) * 8) as u32 + 15) & !15;
     if size > MAX_UNPROBED_STACK_STEP {
         bail_msg("aarch64 inline asm: operand frame too large");
         return false;
@@ -3043,9 +3064,9 @@ fn emit_inline_asm_aarch64(
     if size > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), size));
     }
-    let cap_off = |i: usize| (i * 8) as u32;
-    let save_off = |j: usize| ((n + j) * 8) as u32;
-    let fp_save_off = |k: usize| ((n + n_saved + k) * 8) as u32;
+    let cap_off = |i: usize| (cap_slot[i] * 8) as u32;
+    let save_off = |j: usize| ((n_cap + j) * 8) as u32;
+    let fp_save_off = |k: usize| ((n_cap + n_saved + k) * 8) as u32;
 
     // Save the clobbered registers, then capture each operand's value (input) /
     // address (output) -- both before any operand register is overwritten.
@@ -3056,6 +3077,9 @@ fn emit_inline_asm_aarch64(
         emit_sp_str_d_auto(code, r, fp_save_off(k));
     }
     for (i, &a) in args.iter().enumerate() {
+        if !needs_cap.get(i).copied().unwrap_or(true) {
+            continue;
+        }
         let Some(place) = alloc.places.get(a as usize).copied() else {
             bail_msg("aarch64 inline asm: operand place missing");
             return false;

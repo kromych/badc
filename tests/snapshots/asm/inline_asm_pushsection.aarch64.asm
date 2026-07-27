@@ -13,11 +13,8 @@ Disassembly of section .text:
 
 <probe>:
                	mov	x1, #0x2a               // =42
-               	sub	sp, sp, #0x10
-               	str	x1, [sp]
                	nop
                	nop
-               	add	sp, sp, #0x10
                	add	x0, x0, #0x1
                	sxtw	x1, w0
                	sxtw	x0, w1
@@ -33,11 +30,8 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x2a               // =42
-               	sub	sp, sp, #0x10
-               	str	x0, [sp]
                	nop
                	nop
-               	add	sp, sp, #0x10
                	nop
                	nop
                	mov	x0, #0x2a               // =42

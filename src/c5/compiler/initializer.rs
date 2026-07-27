@@ -1446,6 +1446,19 @@ impl Compiler {
             // prototype (C99 6.7p7 -- a prior declaration satisfies the
             // type), so this rejects only genuinely undeclared names.
             if class == 0 {
+                // The name may be an implementation builtin folding to an
+                // integer constant expression (C99 6.6p10). That evaluator
+                // owns which builtins fold, so defer rather than keep a
+                // second set here; what it cannot fold is undeclared.
+                let snap = self.lex.snapshot();
+                let data_snap = self.data.len();
+                let nonconst = self.pending.const_expr_nonconst;
+                if let Ok(v) = self.parse_constant_i128() {
+                    return Ok((v, InitElemReloc::None));
+                }
+                self.restore_lex(snap);
+                self.truncate_data(data_snap);
+                self.pending.const_expr_nonconst = nonconst;
                 let name = self.symbols[idx].name.clone();
                 return Err(self.compile_err(
                     match super::super::headers::header_declaring(&name) {
@@ -2117,11 +2130,7 @@ impl Compiler {
             }
             let here = base + i * stride;
             if dims.len() == 1 {
-                if self.lex.tk == '{' {
-                    self.collect_struct_initializer(struct_id, here)?;
-                } else {
-                    self.fill_struct_fields(struct_id, here, false)?;
-                }
+                self.init_struct_array_element(struct_id, here)?;
             } else {
                 self.collect_struct_array_data(struct_id, here, &dims[1..], struct_size)?;
             }
@@ -2146,6 +2155,11 @@ impl Compiler {
             if self.lex.tk != '(' {
                 break;
             }
+        }
+        // C99 6.7.7p1: a type-name is a specifier-qualifier-list, so
+        // qualifiers may lead it without changing the type it names.
+        while self.lex.tk == Token::TypeQual {
+            self.next()?;
         }
         let sid = if self.lex.tk == Token::Struct as i64 || self.lex.tk == Token::Union as i64 {
             self.next()?;
@@ -2419,12 +2433,7 @@ impl Compiler {
             if elem_is_struct {
                 let here = field_base + idx * elem_size;
                 grow_to(&mut self.data, here + elem_size);
-                let sid = struct_id_of(elem_ty);
-                if self.lex.tk == '{' {
-                    self.collect_struct_initializer(sid, here as i64)?;
-                } else {
-                    self.fill_struct_fields(sid, here as i64, false)?;
-                }
+                self.init_struct_array_element(struct_id_of(elem_ty), here as i64)?;
             } else {
                 let (value, reloc) = self.parse_constant_init_value()?;
                 for i in idx..=range_hi {

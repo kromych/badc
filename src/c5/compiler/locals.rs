@@ -2173,6 +2173,16 @@ impl Compiler {
         // Restore the enclosing declaration's carriers (the literal's own
         // carriers were just drained into `init`).
         self.restore_pending_local_carriers(saved_carriers);
+        // C99 6.3.2.1p3 exempts a `sizeof` / `typeof` operand from
+        // array-to-pointer conversion, so publish the undecayed extent the
+        // way a string literal does; `-1` marks a genuine zero count.
+        if is_array {
+            self.pending.last_array_decay_size = if final_array_size > 0 {
+                final_array_size
+            } else {
+                -1
+            };
+        }
         self.ty = value_ty;
         Ok(())
     }

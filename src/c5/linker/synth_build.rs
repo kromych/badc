@@ -43,7 +43,7 @@ use crate::c5::error::C5Error;
 use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
-use super::link::{MergedNative, PltTrampoline};
+use super::link::{MergedNative, MergedTarget, PltTrampoline};
 use super::object::{NativeMachine, NativeSymSection};
 
 /// Synthesize a Program + Build for `merged` against `target` and
@@ -358,6 +358,7 @@ fn synth_program_and_build(
         text: merged.text.clone(),
         text_align: merged.text_align,
         data: merged.data.clone(),
+        data_ro_len: merged.data_ro_len,
         data_align: merged.data_align,
         bss_size: merged.bss_size as i64,
         init_fini_arrays: merged.init_fini_arrays,
@@ -838,32 +839,23 @@ fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
     let mut data_relocs: Vec<DataReloc> = Vec::new();
     let mut code_relocs: Vec<CodeReloc> = Vec::new();
     for r in &merged.data_abs_relocs {
-        match r.target_section {
-            NativeSymSection::Data => {
+        // `MergedTarget::Data` is already the unified data-byte offset
+        // the per-format writers' data-offset-to-vaddr map takes, zero-
+        // fill tail included; no per-section bias is applied here.
+        match r.target {
+            MergedTarget::Data(off) => {
                 data_relocs.push(DataReloc {
                     data_offset: r.slot_offset,
-                    target_offset: r.target_offset,
-                    target_anchor: r.target_offset,
+                    target_offset: off as u64,
+                    target_anchor: off as u64,
                 });
             }
-            NativeSymSection::Bss => {
-                // Bss sits past `.data` at runtime; the per-format writer
-                // maps a data offset >= data length into the zero-fill
-                // tail, so shift the bss-relative target by the merged
-                // data length (mirrors image::patch_data_abs_relocs).
-                data_relocs.push(DataReloc {
-                    data_offset: r.slot_offset,
-                    target_offset: merged.data.len() as u64 + r.target_offset,
-                    target_anchor: merged.data.len() as u64 + r.target_offset,
-                });
-            }
-            NativeSymSection::Text => {
+            MergedTarget::Text(off) => {
                 code_relocs.push(CodeReloc {
                     data_offset: r.slot_offset,
-                    target_ent_pc: r.target_offset,
+                    target_ent_pc: off as u64,
                 });
             }
-            _ => {}
         }
     }
     (data_relocs, code_relocs)
@@ -1007,6 +999,7 @@ mod tests {
             // aarch64: `mov w0, #42; ret`.
             text: alloc::vec![0x40, 0x05, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6],
             data: alloc::vec![],
+            data_ro_len: 0,
             data_align: 8,
             bss_size: 0,
             defined,

@@ -1414,6 +1414,22 @@ fn resolve_import_version_reqs(
     alloc::vec![None; imports.imports.len()]
 }
 
+/// Index of a relocated 8-byte slot within the writable data payload.
+/// A slot below the read-only prefix would need a load-time write to a
+/// page the loader maps without write permission, so the producer's
+/// segregation is checked rather than assumed.
+fn reloc_slot_in_data(data_offset: u64, ro_len: u64, kind: &str) -> Result<usize, C5Error> {
+    if data_offset < ro_len {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!(
+                "ELF: {kind} reloc slot {data_offset:#x} lies in the read-only data prefix \
+                 (len {ro_len:#x})"
+            ),
+        )));
+    }
+    Ok((data_offset - ro_len) as usize)
+}
+
 pub(super) fn write(
     program: &Program,
     build: &Build,
@@ -1682,7 +1698,12 @@ pub(super) fn write(
     // zero-filled (no file storage) and accounted for via PT_TLS's
     // `p_memsz - p_filesz` only.
     let has_tls = !build.tls_data.is_empty();
-    let n_program_headers = N_BASE_PROGRAM_HEADERS + if has_tls { 1 } else { 0 };
+    // `build.data[..data_ro_len]` gets a PF_R load of its own (see the
+    // read-only layout pass); an empty prefix emits no header.
+    let ro_len = build.data_ro_len.min(build.data.len()) as u64;
+    let has_rodata = ro_len > 0;
+    let n_program_headers =
+        N_BASE_PROGRAM_HEADERS + if has_tls { 1 } else { 0 } + if has_rodata { 1 } else { 0 };
     let phoff = ELF_HEADER_SIZE;
     let phsize = n_program_headers * PROGRAM_HEADER_SIZE;
 
@@ -1761,9 +1782,22 @@ pub(super) fn write(
     let seg = seg_align(machine);
     let segment1_end = round_up(segment1_filesize, seg);
 
+    // ---- Layout pass 1.5: read-only data segment. ----
+    // `build.data[..data_ro_len]` is `const`-qualified storage with no
+    // relocated slot, so it gets its own PF_R load rather than sharing
+    // the writable one. Its own segment (not the R+X one) keeps it
+    // non-executable as well as non-writable.
+    let rodata_off = segment1_end;
+    let rodata_end = if ro_len > 0 {
+        round_up(rodata_off + ro_len, seg)
+    } else {
+        rodata_off
+    };
+    let rodata_vmaddr = TEXT_VMADDR_BASE + rodata_off;
+
     // ---- Layout pass 2: rw segment (.dynamic, .got, build.data,
     //      .tdata, .tbss). ----
-    let segment2_off = segment1_end;
+    let segment2_off = rodata_end;
     let dynamic_off = segment2_off;
     // `build_dynamic` emits one DT_NEEDED per resolved dylib plus
     // 11 fixed tags (DT_HASH, DT_STRTAB, ..., DT_NULL terminator).
@@ -1782,7 +1816,7 @@ pub(super) fn write(
     // segment, so aligning the file offset aligns the vaddr.
     let data_align = build.data_align.max(8) as u64;
     let data_off = round_up(got_off + got_size, data_align);
-    let data_size = build.data.len() as u64;
+    let data_size = build.data.len() as u64 - ro_len;
     // An object wider than the arch page size needs the RW segment's
     // p_align raised to it: the image is a PIE, and the loader aligns the
     // load bias down to the maximum PT_LOAD p_align, so a page-only value
@@ -1811,6 +1845,7 @@ pub(super) fn write(
     // `bss_vmaddr + (offset - data_size)`, which the loader zero-fills
     // through `p_memsz > p_filesz`.
     let bss_vmaddr = TEXT_VMADDR_BASE + segment2_off + segment2_filesize + tbss_size;
+    let file_data_len = build.data.len() as u64;
     // The PT_LOAD's p_memsz must cover `.tbss` and `.bss` even though
     // neither has file backing -- the loader zero-fills the difference.
     let segment2_memsize = segment2_filesize + tbss_size + build.bss_size as u64;
@@ -1839,10 +1874,12 @@ pub(super) fn write(
     // Runtime VA of a data-segment byte: `.data` for an offset within the
     // file image, otherwise the zero-fill `.bss` tail past it.
     let data_off_to_vaddr = |off: u64| -> u64 {
-        if off < data_size {
-            data_vmaddr + off
+        if off < ro_len {
+            rodata_vmaddr + off
+        } else if off < file_data_len {
+            data_vmaddr + (off - ro_len)
         } else {
-            bss_vmaddr + (off - data_size)
+            bss_vmaddr + (off - file_data_len)
         }
     };
 
@@ -2001,6 +2038,7 @@ pub(super) fn write(
         ".gnu.version_r",
         ".rela.dyn",
         ".text",
+        ".rodata",
         ".tdata",
         ".dynamic",
         ".got",
@@ -2052,7 +2090,7 @@ pub(super) fn write(
     // .hash + .rela.dyn + .text + (optional .tdata) +
     // .dynamic + .got + (optional .data) + (optional .tbss) +
     // (optional .bss) + 5 .debug_* + .shstrtab. Counted dynamically.
-    let has_data = !build.data.is_empty();
+    let has_data = data_size > 0;
     let has_tdata = has_tls && tdata_size > 0;
     let has_tbss = has_tls && tbss_size > 0;
     let has_bss = build.bss_size > 0;
@@ -2061,8 +2099,8 @@ pub(super) fn write(
     // optional .data, .tbss, .bss. Used to attribute each .dynsym export
     // to its real section. `ver_shdrs` / `text_shndx` are computed near
     // `has_versions` above so the PLT symtab can share the shifted index.
-    let data_shndx: u16 = 9 + ver_shdrs + has_tdata as u16;
-    let bss_shndx: u16 = 9 + ver_shdrs + has_tdata as u16 + has_data as u16 + has_tbss as u16;
+    let data_shndx: u16 = 9 + ver_shdrs + has_rodata as u16 + has_tdata as u16;
+    let bss_shndx: u16 = data_shndx + has_data as u16 + has_tbss as u16;
     let n_section_headers: u64 = 1 // NULL
         + 1 // .interp
         + 1 // .dynsym
@@ -2071,6 +2109,7 @@ pub(super) fn write(
         + ver_shdrs as u64 // .gnu.version + .gnu.version_r
         + 1 // .rela.dyn
         + 1 // .text
+        + (if has_rodata { 1 } else { 0 }) // .rodata
         + (if has_tdata { 1 } else { 0 }) // .tdata
         + 1 // .dynamic
         + 1 // .got
@@ -2163,6 +2202,23 @@ pub(super) fn write(
         seg,
     );
 
+    // PT_LOAD r-- -- .rodata. Only emitted when the data image has a
+    // read-only prefix; a segment of its own is what keeps the bytes
+    // both non-writable (unlike the RW load) and non-executable
+    // (unlike the R+X one).
+    if has_rodata {
+        write_phdr(
+            &mut out,
+            PT_LOAD,
+            PF_R,
+            rodata_off,
+            rodata_vmaddr,
+            ro_len,
+            ro_len,
+            seg,
+        );
+    }
+
     // PT_LOAD rw -- .dynamic, .got, .data, .tdata, [.tbss memsz].
     write_phdr(
         &mut out,
@@ -2239,7 +2295,7 @@ pub(super) fn write(
             if cr.is_bss {
                 bss_vmaddr + cr.local_offset
             } else {
-                data_vmaddr + cr.local_offset
+                data_off_to_vaddr(cr.local_offset)
             }
         })
         .collect();
@@ -2295,7 +2351,7 @@ pub(super) fn write(
             write_struct(
                 &mut rela,
                 &Elf64Rela {
-                    r_offset: data_vmaddr + r.data_offset,
+                    r_offset: data_off_to_vaddr(r.data_offset),
                     r_info: r_type,
                     r_addend: addend as i64,
                 },
@@ -2311,7 +2367,7 @@ pub(super) fn write(
             write_struct(
                 &mut rela,
                 &Elf64Rela {
-                    r_offset: data_vmaddr + r.data_offset,
+                    r_offset: data_off_to_vaddr(r.data_offset),
                     r_info: r_type,
                     r_addend: addend as i64,
                 },
@@ -2356,6 +2412,15 @@ pub(super) fn write(
         out.push(0);
     }
 
+    // .rodata -- the read-only prefix of the data image, in its own
+    // PF_R load. It carries no relocated slot by construction, so the
+    // bytes are final and no `.rela.dyn` entry targets them.
+    debug_assert_eq!(out.len() as u64, rodata_off);
+    out.extend_from_slice(&build.data[..ro_len as usize]);
+    while (out.len() as u64) < rodata_end {
+        out.push(0);
+    }
+
     // .dynamic
     let dynamic = build_dynamic(
         &lib_strtab_offsets,
@@ -2378,11 +2443,11 @@ pub(super) fn write(
             init_array: build
                 .init_fini_arrays
                 .init
-                .map(|(off, len)| (data_vmaddr + off, len)),
+                .map(|(off, len)| (data_off_to_vaddr(off), len)),
             fini_array: build
                 .init_fini_arrays
                 .fini
-                .map(|(off, len)| (data_vmaddr + off, len)),
+                .map(|(off, len)| (data_off_to_vaddr(off), len)),
         },
     );
     debug_assert_eq!(dynamic.len() as u64, dynamic_size);
@@ -2403,10 +2468,10 @@ pub(super) fn write(
     // `.rela.dyn` R_*_RELATIVE entry (built above) whose addend is this same
     // VA; the RELA loader overwrites the slot with `load_bias + addend`. The
     // baked value is the pre-slide initializer.
-    let mut data_with_relocs = build.data.clone();
+    let mut data_with_relocs = build.data[ro_len as usize..].to_vec();
     for r in &build.data_relocs {
         let absolute = data_off_to_vaddr(r.target_offset);
-        let off = r.data_offset as usize;
+        let off = reloc_slot_in_data(r.data_offset, ro_len, "data")?;
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
@@ -2436,7 +2501,7 @@ pub(super) fn write(
             )));
         }
         let absolute = code_vmaddr + stub_len + native_off as u64;
-        let off = r.data_offset as usize;
+        let off = reloc_slot_in_data(r.data_offset, ro_len, "code")?;
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
@@ -2682,6 +2747,26 @@ pub(super) fn write(
             sh_entsize: 0,
         },
     );
+
+    // [optional] .rodata -- read-only data. `SHF_ALLOC` without
+    // `SHF_WRITE`; its own PF_R load keeps it non-executable too.
+    if has_rodata {
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: name_off(".rodata"),
+                sh_type: SHT_PROGBITS,
+                sh_flags: SHF_ALLOC,
+                sh_addr: rodata_vmaddr,
+                sh_offset: rodata_off,
+                sh_size: ro_len,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: build.data_align.max(8) as u64,
+                sh_entsize: 0,
+            },
+        );
+    }
 
     // [optional] .tdata -- TLS image template (when has_tdata).
     if has_tdata {
@@ -3146,6 +3231,7 @@ mod tests {
             copy_relocs: Default::default(),
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
+            data_ro_len: 0,
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),

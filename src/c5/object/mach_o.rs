@@ -2868,6 +2868,7 @@ mod tests {
             // movz x0, #42 ; ret
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
+            data_ro_len: 0,
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),

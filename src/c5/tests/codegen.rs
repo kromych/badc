@@ -2335,9 +2335,10 @@ fn foreign_cst16_section_lands_sixteen_aligned_in_image() {
         0xaf,
     ];
     let foreign = parse_native_elf(&foreign_et_rel_with_cst16(&mask)).expect("parse foreign");
-    assert_eq!(foreign.data_align, 16, "sh_addralign must be recorded");
+    // Both sections are read-only, so they join the rodata stream.
+    assert_eq!(foreign.rodata_align, 16, "sh_addralign must be recorded");
     // Intra-object: the 4-byte `.rodata` ahead forces 12 bytes of pad.
-    assert_eq!(&foreign.data[16..32], &mask);
+    assert_eq!(&foreign.rodata[16..32], &mask);
 
     // A badc unit with an import so the image carries `.dynamic` and a
     // non-empty `.got` ahead of `.data` (the placement the alignment
@@ -2373,13 +2374,16 @@ fn foreign_cst16_section_lands_sixteen_aligned_in_image() {
         None,
     )
     .expect("write executable");
-    let (data_addr, data_off) = elf64_shdr_addr_off(&exe, ".data").expect(".data section header");
+    // The constant is read-only, so the image places it in `.rodata`;
+    // `sym_value` is its offset in the merged data-byte space, whose
+    // read-only prefix starts at that section.
+    let (ro_addr, ro_off) = elf64_shdr_addr_off(&exe, ".rodata").expect(".rodata section header");
     assert_eq!(
-        (data_addr + sym_value) % 16,
+        (ro_addr + sym_value) % 16,
         0,
         "the 16-byte constant's runtime address must be 16-aligned"
     );
-    let at = (data_off + sym_value) as usize;
+    let at = (ro_off + sym_value) as usize;
     assert_eq!(
         &exe[at..at + 16],
         &mask,
@@ -3466,9 +3470,11 @@ fn post_inline_orphaned_static_and_its_relocations_drop() {
         );
 
         // The survivor kept its bytes, and the code that names it points
-        // at where the repack put it. `.data` leads with the 8-byte NULL
-        // guard, so `kept_tag` follows it.
+        // at where the repack put it. `kept_tag` is `const` and holds no
+        // relocated slot, so it is carved into `.rodata` and `.data`
+        // keeps only the 8-byte NULL guard.
         let data = elf64_section(&obj, ".data").expect("no .data section");
+        let rodata = elf64_section(&obj, ".rodata").expect("no .rodata section");
         let (value, size) =
             elf_data_symbol_value_size(&obj, "kept_tag").expect("kept_tag symtab entry");
         assert_eq!(
@@ -3477,15 +3483,15 @@ fn post_inline_orphaned_static_and_its_relocations_drop() {
         );
         assert_eq!(
             data.len(),
-            16,
-            "{target:?}: .data should hold only the NULL guard and `kept_tag`"
+            8,
+            "{target:?}: .data should hold only the NULL guard"
         );
         assert_eq!(
-            value, 8,
+            value, 0,
             "{target:?}: `kept_tag` moved to an unexpected offset"
         );
         assert_eq!(
-            &data[value as usize..value as usize + 5],
+            &rodata[value as usize..value as usize + 5],
             b"kept\0",
             "{target:?}: `kept_tag` bytes did not move with its symbol"
         );

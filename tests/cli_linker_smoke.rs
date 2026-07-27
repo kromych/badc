@@ -3245,3 +3245,205 @@ fn extern_data_load_is_not_folded_against_local_const_image() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+/// Section headers of an ELF64 image as `(name, sh_type, sh_flags)`.
+fn elf_sections(bytes: &[u8]) -> Vec<(String, u32, u64)> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd64(0x28) as usize;
+    let e_shentsize = rd16(0x3a);
+    let e_shnum = rd16(0x3c);
+    let e_shstrndx = rd16(0x3e);
+    let str_off = rd64(e_shoff + e_shstrndx * e_shentsize + 0x18) as usize;
+    (0..e_shnum)
+        .map(|i| {
+            let sh = e_shoff + i * e_shentsize;
+            let n = str_off + rd32(sh) as usize;
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap() + n;
+            (
+                String::from_utf8_lossy(&bytes[n..end]).into_owned(),
+                rd32(sh + 4),
+                rd64(sh + 8),
+            )
+        })
+        .collect()
+}
+
+/// Program headers of an ELF64 image as `(p_type, p_flags)`.
+fn elf_segments(bytes: &[u8]) -> Vec<(u32, u32)> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_phoff = rd64(0x20) as usize;
+    let e_phentsize = rd16(0x36);
+    let e_phnum = rd16(0x38);
+    (0..e_phnum)
+        .map(|i| {
+            let ph = e_phoff + i * e_phentsize;
+            (rd32(ph), rd32(ph + 4))
+        })
+        .collect()
+}
+
+const SHF_WRITE: u64 = 0x1;
+const SHF_ALLOC: u64 = 0x2;
+
+/// A named section carries `SHF_WRITE` only when some member of it is
+/// writable: an all-`const` section is read-only, matching gcc and
+/// clang. The flags of members sharing a name union, so one writable
+/// member makes the whole section writable.
+#[test]
+fn named_section_flags_follow_member_constness() {
+    let dir = tempdir("named-section-const");
+    let src = write_source(
+        &dir,
+        "s.c",
+        "__attribute__((section(\".ro.tab\"))) const int ro_only[4] = {1,2,3,4};\n\
+         __attribute__((section(\".rw.tab\"))) int rw_tab[4] = {1,2,3,4};\n\
+         __attribute__((section(\".mixed\"))) const int mixed_c[2] = {1,2};\n\
+         __attribute__((section(\".mixed\"))) int mixed_w[2] = {3,4};\n\
+         int main(void) { return ro_only[0] + rw_tab[0] + mixed_c[0] + mixed_w[0]; }\n",
+    );
+    let out = dir.join("s.o");
+    run(
+        Command::new(badc())
+            .args(["-c", "--target=linux-x64", "-o"])
+            .arg(&out)
+            .arg(&src)
+            .current_dir(&dir),
+        "compile named sections",
+    );
+    let bytes = std::fs::read(&out).expect("read .o");
+    let flags = |name: &str| -> u64 {
+        elf_sections(&bytes)
+            .into_iter()
+            .find(|(n, ..)| n == name)
+            .unwrap_or_else(|| panic!("section {name} missing"))
+            .2
+    };
+    assert_eq!(
+        flags(".ro.tab"),
+        SHF_ALLOC,
+        "all-const section is read-only"
+    );
+    assert_eq!(flags(".rw.tab"), SHF_ALLOC | SHF_WRITE);
+    assert_eq!(
+        flags(".mixed"),
+        SHF_ALLOC | SHF_WRITE,
+        "one writable member makes the section writable",
+    );
+}
+
+/// `const`-qualified file-scope storage with no relocated slot lands
+/// in a read-only `.rodata`, not in writable `.data`.
+#[test]
+fn const_globals_land_in_read_only_rodata() {
+    let dir = tempdir("rodata-carve");
+    let src = write_source(
+        &dir,
+        "r.c",
+        "const int ctab[4] = {1,2,3,4};\n\
+         int wtab[4] = {5,6,7,8};\n\
+         int main(void) { return ctab[0] + wtab[0]; }\n",
+    );
+    let out = dir.join("r.o");
+    run(
+        Command::new(badc())
+            .args(["-c", "--target=linux-x64", "-o"])
+            .arg(&out)
+            .arg(&src)
+            .current_dir(&dir),
+        "compile const globals",
+    );
+    let bytes = std::fs::read(&out).expect("read .o");
+    let secs = elf_sections(&bytes);
+    let ro = secs
+        .iter()
+        .find(|(n, ..)| n == ".rodata")
+        .expect(".rodata section missing");
+    assert_eq!(ro.2, SHF_ALLOC, ".rodata must not be writable");
+    let data = secs
+        .iter()
+        .find(|(n, ..)| n == ".data")
+        .expect(".data section missing");
+    assert_eq!(data.2, SHF_ALLOC | SHF_WRITE);
+}
+
+/// The linked image keeps the read-only payload out of the writable
+/// load: `.rodata` is `SHF_ALLOC` without `SHF_WRITE` and gets a
+/// `PT_LOAD` whose `p_flags` is `PF_R` alone -- neither writable nor
+/// executable.
+#[test]
+fn linked_image_maps_rodata_read_only() {
+    let dir = tempdir("rodata-image");
+    write_source(
+        &dir,
+        "a.c",
+        "extern int helper(void);\n\
+         const int tab[8] = {1,2,3,4,5,6,7,8};\n\
+         int rw[4] = {9,9,9,9};\n\
+         int main(void) { return tab[3] + rw[0] + helper(); }\n",
+    );
+    write_source(
+        &dir,
+        "b.c",
+        "const char note[] = \"helper\";\n\
+         int helper(void) { return (int)note[0]; }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .args(["--target=linux-x64", "-o"])
+            .arg(&exe)
+            .arg(dir.join("a.c"))
+            .arg(dir.join("b.c"))
+            .current_dir(&dir),
+        "link rodata image",
+    );
+    let bytes = std::fs::read(&exe).expect("read image");
+    let ro = elf_sections(&bytes)
+        .into_iter()
+        .find(|(n, ..)| n == ".rodata")
+        .expect(".rodata section missing from linked image");
+    assert_eq!(ro.2, SHF_ALLOC, ".rodata must not be writable");
+    // PT_LOAD = 1, PF_X = 1, PF_W = 2, PF_R = 4.
+    let loads: Vec<u32> = elf_segments(&bytes)
+        .into_iter()
+        .filter(|&(t, _)| t == 1)
+        .map(|(_, f)| f)
+        .collect();
+    assert!(
+        loads.contains(&4),
+        "expected a read-only PT_LOAD; got p_flags {loads:?}",
+    );
+}
+
+/// An assembler section flag letter the object writer cannot
+/// reproduce is a diagnostic, not a silent drop that would emit a
+/// section with the wrong permissions.
+#[test]
+fn unknown_asm_section_flag_is_diagnosed() {
+    let dir = tempdir("asm-section-flag");
+    let src = write_source(
+        &dir,
+        "t.c",
+        "__asm__(\".pushsection .tls.tab,\\\"awT\\\",@progbits\\n\"\n\
+         \"       .long 1\\n\"\n\
+         \"       .popsection\\n\");\n\
+         int main(void) { return 0; }\n",
+    );
+    let out = Command::new(badc())
+        .args(["-c", "--target=linux-x64", "-o"])
+        .arg(dir.join("t.o"))
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(!out.status.success(), "expected the T flag to be rejected");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("TLS") && err.contains(".tls.tab"),
+        "diagnostic should name the section and the flag: {err}",
+    );
+}

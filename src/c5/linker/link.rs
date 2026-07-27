@@ -67,8 +67,16 @@ pub struct MergedNative {
     /// section alignment, at least 16. The image writers place the
     /// text stream at a multiple of this.
     pub text_align: usize,
-    /// Concatenated `.data` bytes.
+    /// Concatenated file-backed data bytes, read-only payload first:
+    /// `[.rodata of every unit][.data of every unit]`. One offset
+    /// space, so every parked reference and every data relocation
+    /// speaks the same kind of offset.
     pub data: Vec<u8>,
+    /// Length of the read-only prefix of [`Self::data`]. The image
+    /// writers place `data[..data_ro_len]` in a section the loader
+    /// maps without write permission and `data[data_ro_len..]` plus
+    /// the `.bss` tail in the writable one.
+    pub data_ro_len: usize,
     /// Base alignment the merged `.data` requires: the largest input
     /// section alignment, at least 8. The image writers place the
     /// data stream at a multiple of this.
@@ -235,15 +243,56 @@ pub struct DataAbsReloc {
     /// Byte offset within `MergedNative::data` of the 8-byte
     /// slot to patch.
     pub slot_offset: u64,
-    /// Byte offset within the merged image's section of the
-    /// pointed-at target.
-    pub target_offset: u64,
-    /// Section the target lives in. `Data` -> writer patches
-    /// `data_vaddr + target_offset`; `Text` -> writer patches
-    /// `text_vaddr + target_offset`; `Bss` -> writer patches
-    /// `data_vaddr + data_size + target_offset` (bss sits past
-    /// `.data` in the runtime image).
-    pub target_section: NativeSymSection,
+    /// Where the slot points, in the merged image. The writer maps a
+    /// [`MergedTarget::Data`] offset through its data-offset-to-vaddr
+    /// map and a [`MergedTarget::Text`] offset through `text_vaddr`.
+    pub target: MergedTarget,
+}
+
+/// Which merged stream a resolved reference lands in, and where.
+///
+/// The merged image has two offset spaces: `.text`, and the
+/// file-backed data plus its zero-fill tail. Both places that resolve
+/// a `.rela.text` entry -- against the referencing unit's own symbol
+/// and against another unit's definition -- answer the question
+/// through [`merged_target`], so neither can drift from the other.
+#[derive(Debug, Clone, Copy)]
+pub enum MergedTarget {
+    /// Byte offset within `MergedNative::text`.
+    Text(i64),
+    /// Byte offset within the merged data-byte space:
+    /// `[read-only prefix][writable data][zero-fill tail]`.
+    Data(i64),
+}
+
+/// Resolve `(section, value)` -- a section-relative offset already
+/// rebased by its unit's base -- into the merged image, applying the
+/// `data.len()` bias that puts a `.bss` offset past the writable data.
+///
+/// `RoData` and `Data` share the data-byte space by construction (Pass
+/// 1 lays the read-only payload down first), so a caller never has to
+/// know which side of the boundary a reference fell on.
+fn merged_target(
+    section: NativeSymSection,
+    value: i64,
+    addend: i64,
+    data_len: usize,
+) -> Result<MergedTarget, C5Error> {
+    match section {
+        NativeSymSection::Text => Ok(MergedTarget::Text(value + addend)),
+        NativeSymSection::RoData | NativeSymSection::Data => Ok(MergedTarget::Data(value + addend)),
+        NativeSymSection::Bss => Ok(MergedTarget::Data(data_len as i64 + value + addend)),
+        NativeSymSection::Undef
+        | NativeSymSection::Abs
+        | NativeSymSection::Common
+        | NativeSymSection::Tls
+        | NativeSymSection::DebugAbbrev
+        | NativeSymSection::DebugLine
+        | NativeSymSection::DebugStr => Err(err(&format!(
+            "link_native_objects: reference resolves to {section:?}, which has no merged \
+             text or data offset"
+        ))),
+    }
 }
 
 /// Where a defined symbol lives in the merged image.
@@ -425,26 +474,48 @@ pub fn link_native_objects_with_shared_libs(
         }
     }
 
-    // Pass 1 -- layout. Compute each unit's `.text` / `.data` /
-    // `.bss` base in the merged image. 16-byte alignment for
+    // Pass 1 -- layout. Compute each unit's `.text` / `.rodata` /
+    // `.data` / `.bss` base in the merged image. 16-byte alignment for
     // `.text` (matches the writer's section header) and 8-byte
     // for `.data` / `.bss`, raised to a unit's own data alignment
     // (a foreign object's high-align sections, e.g. `.rodata.cst16`).
+    //
+    // The file-backed data of every unit forms one offset space:
+    // every unit's read-only payload first, then every unit's writable
+    // payload, then the zero-fill tail. `data_ro_len` marks the
+    // boundary, which is what the image writers place on a read-only
+    // page. Keeping one space means a parked data reference carries
+    // one kind of offset no matter which side of the boundary it hits.
     let mut text_bases: Vec<usize> = Vec::with_capacity(objs.len());
+    let mut rodata_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut data_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut bss_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut text: Vec<u8> = Vec::new();
     let mut data: Vec<u8> = Vec::new();
     let mut bss_size: usize = 0;
     let mut data_align: usize = 8;
+    let mut rodata_align: usize = 8;
     let mut text_align: usize = 16;
     for obj in objs {
         align_up(&mut text, obj.text_align.max(16));
         text_align = text_align.max(obj.text_align);
         text_bases.push(text.len());
         text.extend_from_slice(&obj.text);
-        align_up(&mut data, obj.data_align.max(8));
+        align_up(&mut data, obj.rodata_align.max(8));
+        rodata_align = rodata_align.max(obj.rodata_align);
+        rodata_bases.push(data.len());
+        data.extend_from_slice(&obj.rodata);
         data_align = data_align.max(obj.data_align);
+    }
+    // One alignment covers the whole data image: the writers place both
+    // regions from it, and the writable side starts at a multiple of it
+    // so a unit's data base keeps the residue its `sh_addralign` asked
+    // for once the region is placed.
+    data_align = data_align.max(rodata_align).max(8);
+    align_up(&mut data, data_align);
+    let data_ro_len = data.len();
+    for obj in objs {
+        align_up(&mut data, obj.data_align.max(8));
         data_bases.push(data.len());
         data.extend_from_slice(&obj.data);
         // Each unit's bss offsets carry an alignment residue modulo the
@@ -545,14 +616,29 @@ pub fn link_native_objects_with_shared_libs(
             if sym.name.is_empty() {
                 continue;
             }
-            let base = match sym.section {
-                NativeSymSection::Text => text_bases[i],
-                NativeSymSection::Data => data_bases[i],
-                NativeSymSection::Bss => bss_bases[i],
-                _ => continue,
+            // `RoData` normalises to `Data`: Pass 1 laid the read-only
+            // payload down first, so a rodata offset is already a
+            // data-byte offset and the merged table speaks one space.
+            let (section, base) = match sym.section {
+                NativeSymSection::Text => (NativeSymSection::Text, text_bases[i]),
+                NativeSymSection::RoData => (NativeSymSection::Data, rodata_bases[i]),
+                NativeSymSection::Data => (NativeSymSection::Data, data_bases[i]),
+                NativeSymSection::Bss => (NativeSymSection::Bss, bss_bases[i]),
+                // A `_Thread_local` definition reaches the merged image
+                // through the TLS symbol table, a DWARF section symbol
+                // through the debug-section rebasing; neither belongs in
+                // the address-resolving table. `Undef` / `Abs` were
+                // filtered above.
+                NativeSymSection::Tls
+                | NativeSymSection::DebugAbbrev
+                | NativeSymSection::DebugLine
+                | NativeSymSection::DebugStr
+                | NativeSymSection::Undef
+                | NativeSymSection::Abs
+                | NativeSymSection::Common => continue,
             };
             let merged = MergedSymbol {
-                section: sym.section,
+                section,
                 value: base as u64 + sym.value,
                 size: sym.size,
             };
@@ -589,6 +675,17 @@ pub fn link_native_objects_with_shared_libs(
     // CFA output.
     let mut prologue_ends: BTreeMap<u64, u64> = BTreeMap::new();
     for (i, obj) in objs.iter().enumerate() {
+        // STT_FUNC = 2. One pass builds the unit's function index so the
+        // anchor pass is a lookup rather than a scan per anchor.
+        let mut text_funcs: BTreeMap<&str, u64> = BTreeMap::new();
+        for sym in &obj.symbols {
+            if sym.kind == 2
+                && !sym.name.is_empty()
+                && matches!(sym.section, NativeSymSection::Text)
+            {
+                text_funcs.entry(sym.name.as_str()).or_insert(sym.value);
+            }
+        }
         for sym in &obj.symbols {
             if !matches!(sym.section, NativeSymSection::Text) {
                 continue;
@@ -596,17 +693,11 @@ pub fn link_native_objects_with_shared_libs(
             let Some(fn_name) = sym.name.strip_prefix(PROLOGUE_END_PREFIX) else {
                 continue;
             };
-            if fn_name.is_empty() {
-                continue;
-            }
-            // STT_FUNC = 2.
-            let Some(fsym) = obj.symbols.iter().find(|s| {
-                s.kind == 2 && matches!(s.section, NativeSymSection::Text) && s.name == fn_name
-            }) else {
+            let Some(&fn_value) = text_funcs.get(fn_name) else {
                 continue;
             };
             prologue_ends.insert(
-                text_bases[i] as u64 + fsym.value,
+                text_bases[i] as u64 + fn_value,
                 text_bases[i] as u64 + sym.value,
             );
         }
@@ -820,33 +911,30 @@ pub fn link_native_objects_with_shared_libs(
                 sym.section
             };
             match sym_section {
-                NativeSymSection::Text => {
-                    let target = text_bases[i] as i64 + sym.value as i64 + reloc.addend;
-                    if is_aarch64_text_pageref(machine, reloc.rtype) {
-                        park_section_ref(
-                            machine,
-                            &mut pending_imports,
-                            patch_offset,
-                            reloc,
-                            target,
-                            NativeSymSection::Text,
-                        );
-                    } else {
-                        apply_reloc(machine, &mut text, patch_offset, reloc, target)?;
-                    }
-                }
-                NativeSymSection::Data => {
-                    // Resolved data offset within `merged.data`
-                    // for the writer. We can't apply the reloc
-                    // yet because the runtime vmaddr gap
-                    // between `.text` and `.data` is unknown
-                    // until the final-image writer commits a
-                    // layout. Park the offset in the reloc's
-                    // addend so the writer reads it back
-                    // without rebuilding the per-unit base
-                    // table.
-                    let data_off = data_bases[i] as i64 + sym.value as i64 + reloc.addend;
-                    park_data_ref(machine, &mut pending_imports, patch_offset, reloc, data_off);
+                NativeSymSection::Text
+                | NativeSymSection::RoData
+                | NativeSymSection::Data
+                | NativeSymSection::Bss => {
+                    let base = match sym_section {
+                        NativeSymSection::Text => text_bases[i],
+                        NativeSymSection::RoData => rodata_bases[i],
+                        NativeSymSection::Data => data_bases[i],
+                        _ => bss_bases[i],
+                    };
+                    let target = merged_target(
+                        sym_section,
+                        base as i64 + sym.value as i64,
+                        reloc.addend,
+                        data.len(),
+                    )?;
+                    resolve_merged_target(
+                        machine,
+                        &mut text,
+                        &mut pending_imports,
+                        patch_offset,
+                        reloc,
+                        target,
+                    )?;
                 }
                 NativeSymSection::Undef => {
                     if let Some(def) = defined.get(&sym.name) {
@@ -859,61 +947,23 @@ pub fn link_native_objects_with_shared_libs(
                         // writer's `.text`-to-`.data` gap, so
                         // park them through the same path that
                         // local data refs use.
-                        match def.section {
-                            NativeSymSection::Text => {
-                                let target = def.value as i64 + reloc.addend;
-                                if is_aarch64_text_pageref(machine, reloc.rtype) {
-                                    park_section_ref(
-                                        machine,
-                                        &mut pending_imports,
-                                        patch_offset,
-                                        reloc,
-                                        target,
-                                        NativeSymSection::Text,
-                                    );
-                                } else {
-                                    apply_reloc(machine, &mut text, patch_offset, reloc, target)?;
-                                }
-                            }
-                            NativeSymSection::Data => {
-                                let data_off = def.value as i64 + reloc.addend;
-                                park_data_ref(
-                                    machine,
-                                    &mut pending_imports,
-                                    patch_offset,
-                                    reloc,
-                                    data_off,
-                                );
-                            }
-                            NativeSymSection::Bss => {
-                                // `.bss` sits past the merged `.data`; park a
-                                // unified data-byte offset so the writer's
-                                // data-offset-to-vaddr map lands the reference
-                                // in the zero-fill tail. `data.len()` is final
-                                // after Pass 1.
-                                let bss_off = data.len() as i64 + def.value as i64 + reloc.addend;
-                                park_data_ref(
-                                    machine,
-                                    &mut pending_imports,
-                                    patch_offset,
-                                    reloc,
-                                    bss_off,
-                                );
-                            }
-                            NativeSymSection::Undef
-                            | NativeSymSection::Abs
-                            | NativeSymSection::Common
-                            | NativeSymSection::Tls
-                            | NativeSymSection::DebugAbbrev
-                            | NativeSymSection::DebugLine
-                            | NativeSymSection::DebugStr => {
-                                return Err(err(&format!(
-                                    "link_native_objects: defined entry for `{}` has \
-                                     non-progbits section {:?}",
-                                    sym.name, def.section,
-                                )));
-                            }
-                        }
+                        let target =
+                            merged_target(def.section, def.value as i64, reloc.addend, data.len())
+                                .map_err(|_| {
+                                    err(&format!(
+                                        "link_native_objects: defined entry for `{}` has \
+                                         non-progbits section {:?}",
+                                        sym.name, def.section,
+                                    ))
+                                })?;
+                        resolve_merged_target(
+                            machine,
+                            &mut text,
+                            &mut pending_imports,
+                            patch_offset,
+                            reloc,
+                            target,
+                        )?;
                     } else if !sym.name.is_empty() {
                         // STB_GLOBAL UNDEF that doesn't resolve
                         // against any defining unit is a
@@ -995,15 +1045,6 @@ pub fn link_native_objects_with_shared_libs(
                         )));
                     }
                 }
-                NativeSymSection::Bss => {
-                    // `.bss` sits past `.data` in the merged image; park a
-                    // unified data-byte offset (data length + bss-relative
-                    // position) so the writer's data-offset-to-vaddr map
-                    // resolves it into the zero-fill tail.
-                    let bss_off =
-                        data.len() as i64 + bss_bases[i] as i64 + sym.value as i64 + reloc.addend;
-                    park_data_ref(machine, &mut pending_imports, patch_offset, reloc, bss_off);
-                }
                 NativeSymSection::Abs => {
                     // Absolute symbol -- the value goes in
                     // directly. None of our writer's symbols
@@ -1017,22 +1058,24 @@ pub fn link_native_objects_with_shared_libs(
                 }
                 NativeSymSection::Common => {
                     // C99 6.9.2 tentative definition: Pass 2.5
-                    // coalesced this name into a `.bss` slot.
-                    // Look the resolved Bss offset up in
-                    // `defined` and route through `park_data_ref`
-                    // -- same flow a cross-unit reference to a
-                    // Bss-defined symbol takes.
+                    // coalesced this name into a `.bss` slot, so the
+                    // merged table already answers where it lands.
                     let def = defined.get(&sym.name).ok_or_else(|| {
                         err(&format!(
                             "link_native_objects: SHN_COMMON `{}` not coalesced (internal: Pass 2.5 missed it)",
                             sym.name,
                         ))
                     })?;
-                    // `def.value` is bss-relative, so it needs the same
-                    // `data.len()` bias the Bss arms apply to reach a
-                    // unified data-byte offset.
-                    let bss_off = data.len() as i64 + def.value as i64 + reloc.addend;
-                    park_data_ref(machine, &mut pending_imports, patch_offset, reloc, bss_off);
+                    let target =
+                        merged_target(def.section, def.value as i64, reloc.addend, data.len())?;
+                    resolve_merged_target(
+                        machine,
+                        &mut text,
+                        &mut pending_imports,
+                        patch_offset,
+                        reloc,
+                        target,
+                    )?;
                 }
                 NativeSymSection::Tls => {
                     return Err(link_err(&format!(
@@ -1241,10 +1284,13 @@ pub fn link_native_objects_with_shared_libs(
                 }
                 other => other,
             };
+            // The referencing unit's own definition rebases by that
+            // unit's base; a resolved cross-unit one is already merged.
             let resolved_value = match sym.section {
                 NativeSymSection::Undef | NativeSymSection::Common => {
                     defined.get(&sym.name).map(|d| d.value as i64).unwrap()
                 }
+                NativeSymSection::RoData => rodata_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Data => data_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Bss => bss_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Text => text_bases[i] as i64 + sym.value as i64,
@@ -1270,26 +1316,24 @@ pub fn link_native_objects_with_shared_libs(
                     )));
                 }
             };
-            let target_offset = resolved_value + reloc.addend;
-            if target_offset < 0 {
+            let target = merged_target(resolved_section, resolved_value, reloc.addend, data.len())
+                .map_err(|_| {
+                    err(&format!(
+                        "link_native_objects: .rela.data target `{}` lives in {:?}",
+                        sym.name, resolved_section,
+                    ))
+                })?;
+            let off = match target {
+                MergedTarget::Text(o) | MergedTarget::Data(o) => o,
+            };
+            if off < 0 {
                 return Err(err(&format!(
-                    "link_native_objects: .rela.data resolved to negative offset {}",
-                    target_offset,
-                )));
-            }
-            if !matches!(
-                resolved_section,
-                NativeSymSection::Data | NativeSymSection::Bss | NativeSymSection::Text
-            ) {
-                return Err(err(&format!(
-                    "link_native_objects: .rela.data target `{}` lives in {:?}",
-                    sym.name, resolved_section,
+                    "link_native_objects: .rela.data resolved to negative offset {off}",
                 )));
             }
             data_abs_relocs.push(DataAbsReloc {
                 slot_offset,
-                target_offset: target_offset as u64,
-                target_section: resolved_section,
+                target,
             });
         }
     }
@@ -1300,15 +1344,13 @@ pub fn link_native_objects_with_shared_libs(
     for (k, &(_, text_off)) in init_entries.iter().enumerate() {
         data_abs_relocs.push(DataAbsReloc {
             slot_offset: init_array_start + (k * 8) as u64,
-            target_offset: text_off,
-            target_section: NativeSymSection::Text,
+            target: MergedTarget::Text(text_off as i64),
         });
     }
     for (k, &(_, text_off)) in fini_entries.iter().enumerate() {
         data_abs_relocs.push(DataAbsReloc {
             slot_offset: fini_array_start + (k * 8) as u64,
-            target_offset: text_off,
-            target_section: NativeSymSection::Text,
+            target: MergedTarget::Text(text_off as i64),
         });
     }
 
@@ -1556,6 +1598,7 @@ pub fn link_native_objects_with_shared_libs(
         text,
         text_align,
         data,
+        data_ro_len,
         data_align,
         bss_size,
         defined,
@@ -1861,8 +1904,7 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
         };
         merged.data_abs_relocs.push(DataAbsReloc {
             slot_offset: slot,
-            target_offset: stub as u64,
-            target_section: NativeSymSection::Text,
+            target: MergedTarget::Text(stub as i64),
         });
     }
 
@@ -2019,8 +2061,7 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
         };
         merged.data_abs_relocs.push(DataAbsReloc {
             slot_offset: slot,
-            target_offset: stub as u64,
-            target_section: NativeSymSection::Text,
+            target: MergedTarget::Text(stub as i64),
         });
     }
 
@@ -2243,6 +2284,42 @@ fn park_data_ref(
         target_offset,
         NativeSymSection::Data,
     );
+}
+
+/// Apply or park a `.rela.text` entry that [`merged_target`] resolved.
+/// A `.text` target can be patched in place because the text segment's
+/// vmaddr is anchored before the merge runs (except the aarch64 page
+/// form, whose two halves the writer patches together); a data target
+/// depends on the final-image writer's `.text`-to-`.data` gap, so it
+/// is parked with the offset in the reloc's addend.
+fn resolve_merged_target(
+    machine: NativeMachine,
+    text: &mut [u8],
+    pending: &mut Vec<PendingImportReloc>,
+    patch_offset: usize,
+    reloc: &NativeReloc,
+    target: MergedTarget,
+) -> Result<(), C5Error> {
+    match target {
+        MergedTarget::Text(off) => {
+            if is_aarch64_text_pageref(machine, reloc.rtype) {
+                park_section_ref(
+                    machine,
+                    pending,
+                    patch_offset,
+                    reloc,
+                    off,
+                    NativeSymSection::Text,
+                );
+            } else {
+                apply_reloc(machine, text, patch_offset, reloc, off)?;
+            }
+        }
+        MergedTarget::Data(off) => {
+            park_data_ref(machine, pending, patch_offset, reloc, off);
+        }
+    }
+    Ok(())
 }
 
 // ---- helpers ----
@@ -2749,6 +2826,8 @@ mod tests {
     fn common_symbols_coalesce_to_single_bss_slot() {
         let mk_unit = |size: u64, align: u64| NativeObject {
             text_align: 16,
+            rodata: Vec::new(),
+            rodata_align: 8,
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),
@@ -2823,6 +2902,8 @@ mod tests {
     fn common_symbol_reloc_is_biased_past_merged_data() {
         let mk_unit = |data: alloc::vec::Vec<u8>, with_reloc: bool| NativeObject {
             text_align: 16,
+            rodata: Vec::new(),
+            rodata_align: 8,
             machine: NativeMachine::X86_64,
             text: alloc::vec![0u8; 16],
             data,
@@ -2909,6 +2990,8 @@ mod tests {
     fn common_yields_to_strong_definition() {
         let unit_common = NativeObject {
             text_align: 16,
+            rodata: Vec::new(),
+            rodata_align: 8,
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),
@@ -2957,6 +3040,8 @@ mod tests {
         };
         let unit_strong = NativeObject {
             text_align: 16,
+            rodata: Vec::new(),
+            rodata_align: 8,
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec![0u8; 4],
@@ -3035,6 +3120,8 @@ mod tests {
          -> NativeObject {
             NativeObject {
                 text_align: 16,
+                rodata: Vec::new(),
+                rodata_align: 8,
                 machine: NativeMachine::X86_64,
                 text,
                 data,
@@ -3169,7 +3256,7 @@ mod tests {
             merged
                 .data_abs_relocs
                 .iter()
-                .any(|r| matches!(r.target_section, NativeSymSection::Bss)),
+                .any(|r| matches!(r.target, MergedTarget::Data(_))),
             "gp initializer must target the bss section"
         );
 
@@ -3196,6 +3283,8 @@ mod tests {
     fn conflicting_import_dylib_routing_errors() {
         let mk = |dylib: &str| NativeObject {
             text_align: 16,
+            rodata: Vec::new(),
+            rodata_align: 8,
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),
@@ -3273,6 +3362,8 @@ mod tests {
         use super::super::object::{NativeReloc, NativeSymbol};
         let base = || NativeObject {
             text_align: 16,
+            rodata: Vec::new(),
+            rodata_align: 8,
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),

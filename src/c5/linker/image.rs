@@ -290,7 +290,6 @@ fn patch_data_abs_relocs(
     data_vaddr: u64,
     relocs: &[super::link::DataAbsReloc],
 ) -> Result<(), C5Error> {
-    use crate::c5::linker::object::NativeSymSection;
     for r in relocs {
         let slot = r.slot_offset as usize;
         if slot + 8 > data.len() {
@@ -300,16 +299,12 @@ fn patch_data_abs_relocs(
                 data.len()
             )));
         }
-        let value = match r.target_section {
-            NativeSymSection::Data => data_vaddr + r.target_offset,
-            NativeSymSection::Text => text_vaddr + r.target_offset,
-            NativeSymSection::Bss => data_vaddr + data.len() as u64 + r.target_offset,
-            other => {
-                return Err(err(&format!(
-                    "data abs reloc at slot 0x{:x} has unsupported target section {:?}",
-                    slot, other,
-                )));
-            }
+        // `MergedTarget::Data` spans the file-backed data and the
+        // zero-fill tail past it in one offset space, so `.bss` needs
+        // no separate bias here.
+        let value = match r.target {
+            super::link::MergedTarget::Data(off) => data_vaddr.wrapping_add(off as u64),
+            super::link::MergedTarget::Text(off) => text_vaddr.wrapping_add(off as u64),
         };
         data[slot..slot + 8].copy_from_slice(&value.to_le_bytes());
     }
@@ -851,10 +846,14 @@ fn patch_data_refs(
             continue;
         }
         let site_vaddr = text_vaddr + r.text_offset;
+        // A parked reference carries a unified data-byte offset in its
+        // addend (`park_data_ref`), so the read-only prefix, the
+        // writable data and the zero-fill tail share one base.
         let target_base = match r.target_section {
             NativeSymSection::Text => text_vaddr as i64,
-            NativeSymSection::Data => data_vaddr as i64,
-            NativeSymSection::Bss => data_vaddr as i64,
+            NativeSymSection::RoData | NativeSymSection::Data | NativeSymSection::Bss => {
+                data_vaddr as i64
+            }
             NativeSymSection::Undef
             | NativeSymSection::Abs
             | NativeSymSection::Common
@@ -1034,6 +1033,7 @@ mod tests {
             // x86_64: `mov eax, 42; ret` -- minimal main body.
             text: alloc::vec![0xb8, 0x2a, 0x00, 0x00, 0x00, 0xc3],
             data: alloc::vec![],
+            data_ro_len: 0,
             data_align: 8,
             bss_size: 0,
             defined,

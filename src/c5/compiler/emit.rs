@@ -696,6 +696,7 @@ impl Compiler {
         sym.is_global_register = sym.h_is_global_register;
         sym.is_scope_static = false;
         sym.is_scope_typedef = false;
+        sym.block_extern_active = false;
         // The register-asm binding belongs to the block-scope local
         // being unbound, never to the restored outer symbol.
     }

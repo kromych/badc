@@ -1549,7 +1549,10 @@ impl Compiler {
                             self.parse_block_typedef(None)?;
                         } else if self.lex_is_type_start() {
                             let item_before = self.ast_stmts_snapshot();
-                            self.parse_function_body_local_decl(leading_maybe_unused)?;
+                            self.parse_local_decl(
+                                leading_maybe_unused,
+                                &mut super::locals::DeclScope::FunctionBody,
+                            )?;
                             let item_after = self.ast.stmts.len();
                             // Skip any statement-expression sub-statements
                             // interleaved by an initializer; they are
@@ -1868,13 +1871,15 @@ impl Compiler {
                     // read or branch is unambiguously dead.
                     self.emit_dead_stores_and_flush();
                     for sym in self.symbols.iter_mut() {
-                        // Block-scope locals (`Loc`) and `static` locals
-                        // (promoted to `Glo` but block-scoped) both unbind
-                        // at function exit so a file-scope object of the
-                        // same name reappears.
+                        // Block-scope locals (`Loc`), `static` locals
+                        // (promoted to `Glo` but block-scoped) and an
+                        // `extern` that converted a bound file-scope name
+                        // all unbind at function exit so the outer binding
+                        // of the same name reappears.
                         if sym.class == Token::Loc as i64
                             || sym.is_scope_static
                             || sym.is_scope_typedef
+                            || sym.block_extern_active
                         {
                             Self::restore_shadowed_symbol(sym);
                         }

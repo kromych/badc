@@ -9,7 +9,7 @@
 //!     (empty stmt) -- plus the expression-statement default.
 //!   * The block statement `{ ... }` and its block-scope
 //!     declaration handlers (`parse_block_typedef`,
-//!     `parse_block_local_decl`) which save shadowed bindings
+//!     `parse_local_decl`) which save shadowed bindings
 //!     into a per-block vector and restore them on exit.
 //!   * `consume(byte, msg)` -- the canonical single-byte-token
 //!     consumer with a labelled error on mismatch. Used from
@@ -27,6 +27,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
+use super::locals::DeclScope;
 use super::types::{is_struct_ty, struct_ptr_depth};
 
 /// The outer binding a nested block saved before rebinding a name, restored
@@ -35,7 +36,7 @@ use super::types::{is_struct_ty, struct_ptr_depth};
 /// snapshot; it carries every field that a block-local declarator can retype
 /// on the reused symbol slot (C99 6.2.1 nested scopes).
 pub(super) struct BlockShadow {
-    idx: usize,
+    pub(super) idx: usize,
     class: i64,
     type_: i64,
     val: i64,
@@ -151,7 +152,7 @@ impl Compiler {
         // declaration. The declared identifier's scope is the
         // entire for statement, so a fresh `block_symbols`
         // vector lets us shadow and restore in the same shape
-        // as `parse_block_stmt`. `parse_block_local_decl`
+        // as `parse_block_stmt`. `parse_local_decl`
         // consumes its own trailing `;`; the expression branch
         // does it explicitly.
         let mut for_init_symbols: Vec<BlockShadow> = Vec::new();
@@ -160,7 +161,7 @@ impl Compiler {
             self.next()?;
         } else if self.lex_is_type_start() {
             // C99 6.8.5.3p1 admits `declaration` as the for-init.
-            // `parse_block_local_decl` pushes one or more
+            // `parse_local_decl` pushes one or more
             // `Stmt::Decl(d)` wrappers onto the AST stmt arena;
             // capture them into a single BlockItem so the walker
             // gets the same shape it would for an expression
@@ -168,11 +169,11 @@ impl Compiler {
             // and the declared counter never reaches the
             // SSA prologue.
             let init_before = self.ast_stmts_snapshot();
-            self.parse_block_local_decl(&mut for_init_symbols)?;
+            self.parse_local_decl(false, &mut DeclScope::Block(&mut for_init_symbols))?;
             let init_after = self.ast.stmts.len();
             // C99 6.7p1: a declaration's init-declarator-list may name
             // several declarators (`for (int i = 0, l = n; ...)`).
-            // `parse_block_local_decl` pushes one top-level `Stmt::Decl`
+            // `parse_local_decl` pushes one top-level `Stmt::Decl`
             // per declarator, so every pushed id must reach the walker.
             // `ast_wrap_stmts_since` keeps only the last arena entry
             // (correct for a single nested statement, not for sibling
@@ -443,317 +444,6 @@ impl Compiler {
         Ok(())
     }
 
-    /// Parse a single block-scope declaration line:
-    ///   `int x = 1, *p = q, c;`
-    /// Each declarator is recorded in `block_symbols` so the enclosing
-    /// `parse_block_stmt` can restore shadowed bindings on exit. An
-    /// optional `= initializer` after each declarator emits the
-    /// matching store sequence via `emit_local_init_store`.
-    fn parse_block_local_decl(
-        &mut self,
-        block_symbols: &mut Vec<BlockShadow>,
-    ) -> Result<(), C5Error> {
-        // Storage-class prefixes. `static` at function scope promotes
-        // the declarator to a Glo symbol with persistent data-segment
-        // storage; `extern` (C99 6.2.2p4) gives it external linkage
-        // referring to a definition in this or another unit, with no
-        // local storage.
-        let mut is_static = false;
-        let mut is_extern = false;
-        // Block-scope `_Thread_local` / `__thread` gives a `static` object
-        // thread storage duration (C11 6.7.1); an automatic thread-local is
-        // ill-formed, so it always pairs with `static`.
-        let mut is_thread_local = false;
-        // Reset the const carrier for this declaration; `parse_decl_base_type`
-        // below records `const` as it consumes the base specifiers.
-        self.pending.base_is_const = false;
-        self.pending.saw_register_storage = false;
-        // As in `parse_function_body_local_decl`: a stale file-scope
-        // carrier must not bleed onto a static's emission record.
-        self.pending.attr_used = false;
-        self.pending.attr_section = None;
-        self.pending.attr_weak = false;
-        self.pending.attr_hidden = false;
-        while self.lex.tk == Token::Extern
-            || self.lex.tk == Token::Static
-            || self.lex.tk == Token::ThreadLocal
-        {
-            if self.lex.tk == Token::Static {
-                is_static = true;
-            } else if self.lex.tk == Token::Extern {
-                is_extern = true;
-            } else {
-                is_thread_local = true;
-            }
-            self.next()?;
-        }
-        // A block-scope thread-local has static storage duration (C11 6.7.1):
-        // `__thread T x;` behaves as `static __thread T x;`.
-        if is_thread_local && !is_extern {
-            is_static = true;
-        }
-        let lbt = self.parse_decl_base_type()?;
-        // C99 6.7.1: a storage-class specifier may trail the type specifier
-        // (`INTN STATIC x;`), so consume any that follow the base type. The
-        // leading run above handles the usual `static INTN x;` order.
-        while self.lex.tk == Token::Extern
-            || self.lex.tk == Token::Static
-            || self.lex.tk == Token::ThreadLocal
-        {
-            if self.lex.tk == Token::Static {
-                is_static = true;
-            } else if self.lex.tk == Token::Extern {
-                is_extern = true;
-            } else {
-                is_thread_local = true;
-            }
-            self.next()?;
-        }
-        if is_thread_local && !is_extern {
-            is_static = true;
-        }
-        // A function-pointer typedef base type contributes its lineage to
-        // every declarator in the list; the per-declarator symbol creation
-        // consumes these pending fields, so capture and re-seed each one.
-        let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
-        let base_is_function_type = self.pending.base_is_function_type;
-        let base_typedef_fn_proto = self.pending.typedef_fn_proto;
-        let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
-        // C99 6.7p1 / 6.2.2p5: a block-scope `[*]name(params);` is a
-        // function declaration with external (internal if `static`)
-        // linkage; bind it and let the call resolve at link time.
-        if self.try_parse_block_fn_prototype(lbt, is_static)? {
-            return Ok(());
-        }
-        // A `__attribute__((cleanup(fn)))` written before the type applies to
-        // every declarator in the list (the scope-guard / auto-cleanup
-        // idiom); one written after a declarator applies to it alone.
-        let leading_cleanup = self.pending.attr_cleanup.take();
-        while self.lex.tk != ';' {
-            self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
-            self.pending.base_is_function_type = base_is_function_type;
-            self.pending.typedef_fn_proto = base_typedef_fn_proto;
-            self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
-            // C99 6.7.6.2: a non-constant array dimension at block scope
-            // is a variable-length array.
-            self.pending.vla_allowed = true;
-            let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
-            self.pending.vla_allowed = false;
-            let asm_reg = self.parse_register_asm_binding(is_static, is_extern)?;
-            // Trailing cleanup wins for this declarator; otherwise the
-            // leading one (if any) applies.
-            let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
-            // C99 6.3.2.1p4: a function-pointer rvalue auto-decays
-            // through any unary `*` chain. The `Symbol::fn_ptr_indirection`
-            // side-channel records how many indirection levels sit between
-            // the variable's loaded value and the function pointer itself
-            // so the unary-`*` handler can recognise the decay. The
-            // function-body-top path picks this up in `parse_function_body_local_decl`;
-            // an inside-block decl (`else { fn_ptr_t kf = ...; }`) reaches
-            // here and the lineage must propagate equivalently or downstream
-            // `(*kf)(...)` is lowered as `Load { kind = result_tag }` and
-            // dereferences the function pointer's bit pattern.
-            let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
-            // Capture the function-pointer prototype before the initializer
-            // is parsed: an initializer cast (`= (void *)f`) runs a base-type
-            // parse that clears these pending fields, so a variadic
-            // fn-pointer declared with an initializer would otherwise lose
-            // its prototype and emit the indirect call as non-variadic.
-            let fnptr_proto = self.pending.typedef_fn_proto.take();
-            let fnptr_param_types = self.pending.fn_ptr_param_types.take();
-            // C99 6.7.7p3 + 6.7.6.1: an array typedef contributes
-            // its dimension only when the declarator stayed at
-            // the typedef's element type. A `*` in the declarator
-            // names a pointer-to-element-type; the array
-            // dimension is part of the pointee and must not be
-            // re-applied to the declarator. Peek without
-            // clearing so the rest of the comma list keeps the
-            // dimension; the carrier is reset on the next
-            // declaration.
-            let typedef_dim = self.pending.typedef_base_array_size;
-            if typedef_dim > 0 && array_size == 0 && self.pending.declarator_leading_ptr_count == 0
-            {
-                array_size = typedef_dim;
-                self.apply_typedef_array_dims(loc_idx);
-            }
-            self.ty = ty;
-
-            // A block-scope `extern` converts the slot to a Glo external
-            // reference for the block. Three prior states differ (C99
-            // 6.2.1p4 / 6.2.2p4):
-            //   * an existing file-scope `Glo` / function `Fun` binding --
-            //     the extern names the same entity; nothing is converted
-            //     and the slot restores normally.
-            //   * a fresh, never-declared name (`Id` class) -- the slot is
-            //     left `Glo`/extern past the block so a later `&name`
-            //     resolves through `live_glo_addr` and the linker emits an
-            //     undefined data symbol keyed by name (this is the only
-            //     binding of the name, so leaking it is harmless).
-            //   * a *bound* enclosing name (a local, parameter, or enum
-            //     constant) -- converting in place would destroy it. Save
-            //     the prior binding for restore at block exit and mark the
-            //     slot so in-block references resolve by name (or to the
-            //     same-TU definition) through `Ast::block_extern_refs`,
-            //     independent of the restored class at walk time.
-            let prior_class = self.symbols[loc_idx].class;
-            let convert_extern =
-                is_extern && prior_class != Token::Glo as i64 && prior_class != Token::Fun as i64;
-            let extern_shadows_binding = convert_extern && prior_class != Token::Id as i64;
-            if !convert_extern || extern_shadows_binding {
-                let snap = self.capture_block_shadow(loc_idx);
-                block_symbols.push(snap);
-            }
-
-            // C11 6.7.5 applies to a declaration inside any block, not just
-            // the one opening a function body; resolve it through the same
-            // helper that path uses. A block-scope `extern` allocates no
-            // storage, so it skips the resolution there and here.
-            let decl_align = if is_extern {
-                None
-            } else {
-                Some(self.resolve_decl_align(ty, is_static)?)
-            };
-
-            if is_extern {
-                if convert_extern {
-                    self.symbols[loc_idx].class = Token::Glo as i64;
-                    self.symbols[loc_idx].type_ = ty;
-                    // A block-scope `extern T name[N];` names an array object;
-                    // record its dimension so a subscript in the block sees an
-                    // array (6.7.6.2), not a scalar. `inner_array_size` for a
-                    // multi-dimensional extern is already set on the symbol by
-                    // the declarator parse. Only the freshly converted `Glo`
-                    // needs this; an extern naming an existing file-scope
-                    // binding keeps that binding's dimension. `-1` (unsized
-                    // `extern T name[];`) is kept as at file scope: an
-                    // incomplete array still decays to a pointer; collapsing
-                    // it to 0 reads the name as a scalar and loads the
-                    // array's first bytes where its address belongs.
-                    self.symbols[loc_idx].array_size = array_size;
-                    if extern_shadows_binding {
-                        // Carry no in-unit offset; the prior binding's
-                        // `is_extern_decl` / `linkage` stay untouched so the
-                        // block-exit restore is exact. References resolve
-                        // through `block_extern_refs`.
-                        self.symbols[loc_idx].val = 0;
-                        self.symbols[loc_idx].block_extern_active = true;
-                    } else {
-                        // External linkage routes `&name` through
-                        // `live_glo_addr`'s `GloAddr::Extern` arm to a
-                        // name-keyed relocation; without it every block-scope
-                        // extern collapses onto the same `.data` base.
-                        self.symbols[loc_idx].is_extern_decl = true;
-                        self.symbols[loc_idx].linkage = crate::c5::symbol::Linkage::External;
-                    }
-                }
-                // Carry `weak` / `visibility("hidden")` onto the symbol. The
-                // block shadow snapshot does not save these, so they persist
-                // to the object symbol table (the `symbol_get` idiom is a
-                // nested-block extern redeclaring a file-scope name). The
-                // shadowing case restores a bound local, which never reaches
-                // the symbol table, so skip it.
-                if !extern_shadows_binding {
-                    self.apply_symbol_attributes(loc_idx);
-                }
-            } else if is_static {
-                self.symbols[loc_idx].class = Token::Glo as i64;
-                self.symbols[loc_idx].type_ = ty;
-                self.symbols[loc_idx].is_thread_local = is_thread_local;
-                // A nested-block `static const` integer folds its value in
-                // later constant expressions (read from `.data`).
-                self.symbols[loc_idx].is_const_qualified = self.pending.base_is_const
-                    && array_size == 0
-                    && super::types::is_integer_scalar_ty(ty);
-                // As at file scope: a const-qualified object with static
-                // storage holds its initializer for the whole execution,
-                // unless the qualifier only reaches a pointee.
-                self.symbols[loc_idx].storage_is_const =
-                    self.pending.base_is_const && !super::types::is_pointer_ty(ty);
-                if let Some(a) = &decl_align {
-                    self.apply_static_local_align(loc_idx, ty, a);
-                }
-                self.allocate_static_local(loc_idx, ty, array_size)?;
-                self.push_block_static_record(loc_idx, ty);
-                self.ast_emit_static_local_decl(loc_idx as u32);
-            } else {
-                self.symbols[loc_idx].class = Token::Loc as i64;
-                self.symbols[loc_idx].type_ = ty;
-                self.symbols[loc_idx].was_referenced = false;
-                self.symbols[loc_idx].decl_line = self.lex.line;
-                let decl_file = self.intern_source_file() as u32;
-                self.symbols[loc_idx].decl_file = decl_file;
-                self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
-                // Unconditional write so a reused symbol slot does not
-                // leak a stale binding from an outer name.
-                self.symbols[loc_idx].asm_register = asm_reg;
-                self.check_register_asm_init(asm_reg)?;
-                // Save any enclosing aggregate's in-progress initializer
-                // carriers -- this declaration can be nested inside one when
-                // an aggregate element is a statement expression that
-                // declares a local -- so this declaration's finalize does not
-                // drain the outer aggregate's runtime elements. `take_*`
-                // leaves the carriers empty for this declaration.
-                let saved = self.take_pending_local_carriers();
-                let r = self.allocate_local_with_init(loc_idx, ty, array_size);
-                if r.is_ok() {
-                    self.finalize_local_init(loc_idx);
-                }
-                self.restore_pending_local_carriers(saved);
-                r?;
-                if let Some(a) = decl_align.as_ref().filter(|a| a.realign_auto) {
-                    self.record_over_aligned_local(loc_idx, ty, a.auto_align)?;
-                }
-            }
-            // A deferred-size local (`T x[]`) whose initializer resolved to
-            // zero elements keeps its array-ness (decay, sizeof 0) through
-            // this flag; the `array_size == 0` encoding alone reads as a
-            // scalar. Assigned unconditionally so a reused symbol slot does
-            // not leak a stale flag (mirrors the function-body decl path).
-            self.symbols[loc_idx].is_zero_len_array =
-                array_size == -1 && self.symbols[loc_idx].array_size == 0;
-            // Write the lineage tag after `allocate_local_with_init`
-            // (which may have parsed an initializer) so it can't be
-            // clobbered by the init expression's symbol lookups.
-            // Static locals (promoted to Glo class) carry the same
-            // tag -- the codegen reads it at the same Ident-load
-            // site regardless of storage class.
-            self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
-            // Inherit a variadic function-pointer prototype onto the
-            // local so an indirect call through it knows the callee's
-            // named-parameter count and routes the variadic tail per
-            // the host variadic ABI. Only variadic prototypes are
-            // recorded (see the equivalent site in
-            // `parse_function_body_local_decl`).
-            if let Some(types) = fnptr_param_types {
-                self.symbols[loc_idx].params = types;
-                self.symbols[loc_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
-            } else if let Some((proto_fixed, true)) = fnptr_proto {
-                self.symbols[loc_idx].params = alloc::vec![0i64; proto_fixed];
-                self.symbols[loc_idx].is_variadic = true;
-            }
-
-            // Register the cleanup after the binding is final (the
-            // automatic-storage branch above resets `was_referenced`).
-            // C99 6.7.2.1 has no such attribute; GCC/Clang require an
-            // object with automatic storage, so a `static` / `extern`
-            // declarator's cleanup is inert.
-            if let Some(fn_sym) = cleanup_fn
-                && !is_static
-                && !is_extern
-            {
-                self.register_cleanup_var(loc_idx, fn_sym);
-            }
-
-            if self.pending.auto_type_single_declarator && self.lex.tk == ',' {
-                return Err(self.compile_err("`__auto_type` declaration takes a single declarator"));
-            }
-            self.accept(',')?;
-        }
-        self.next()?;
-        self.pending.auto_type_single_declarator = false;
-        Ok(())
-    }
-
     /// Register a `__attribute__((cleanup(fn)))` variable in the current
     /// block scope. `fn(&var)` then runs on every exit from the scope.
     /// The variable and the function are marked referenced so neither
@@ -985,19 +675,13 @@ impl Compiler {
                 self.parse_static_assert()?;
             } else if self.lex_is_type_start() {
                 let item_before = self.ast_stmts_snapshot();
-                let sym_before = block_symbols.len();
                 let vla_before = self.func_vla_decls;
-                self.parse_block_local_decl(&mut block_symbols)?;
+                self.parse_local_decl(
+                    leading_maybe_unused,
+                    &mut DeclScope::Block(&mut block_symbols),
+                )?;
                 if self.func_vla_decls > vla_before {
                     block_has_vla = true;
-                }
-                if leading_maybe_unused {
-                    // C23 6.7.13.5: `[[maybe_unused]]` on a declaration
-                    // suppresses the unused diagnostics for the names it
-                    // introduces.
-                    for b in &block_symbols[sym_before..] {
-                        self.symbols[b.idx].maybe_unused = true;
-                    }
                 }
                 let item_after = self.ast.stmts.len();
                 // A local decl pushes one stmt-id-wrapping Decl

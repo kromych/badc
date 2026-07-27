@@ -1020,8 +1020,28 @@ pub(super) fn write_relocatable(
             by_val.sort_unstable();
             for w in by_val.windows(2) {
                 if w[0].0 + w[0].1 > w[1].0 {
+                    // Cold path: name the objects at each offset. A bare
+                    // offset does not identify them, and several
+                    // symbols can share one start.
+                    let at = |off: u64| {
+                        let names: Vec<&str> = program
+                            .symbols
+                            .iter()
+                            .filter(|s| s.val as u64 == off && s.defined_here && !s.name.is_empty())
+                            .map(|s| s.name.as_str())
+                            .collect();
+                        if names.is_empty() {
+                            alloc::string::String::from("<unnamed>")
+                        } else {
+                            names.join("/")
+                        }
+                    };
                     return Err(internal(format!(
-                        "named-section data ranges overlap at offset {}",
+                        "named-section data ranges overlap: {} at offset {} runs {} bytes into {} at offset {}",
+                        at(w[0].0),
+                        w[0].0,
+                        w[0].0 + w[0].1 - w[1].0,
+                        at(w[1].0),
                         w[1].0
                     )));
                 }

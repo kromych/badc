@@ -103,12 +103,19 @@ pub(crate) fn bss_image_align(declared: usize) -> usize {
 /// A struct or union with neither returns 0 -- its storage size needs
 /// type layout the object writers do not carry, and consumers then see
 /// an unsized symbol.
+///
+/// A zero-length array (`T x[] = {}`, `T x[0]`) is the one object whose
+/// recorded size is a real zero rather than an absent record, so it is
+/// answered before the fallback runs.
 #[cfg(feature = "native-emit")]
 pub(crate) fn data_object_byte_size(sym: &crate::c5::symbol::Symbol) -> u64 {
     use crate::c5::compiler::types::{is_pointer_ty, strip_unsigned};
     use crate::c5::token::Ty;
     if sym.data_byte_size > 0 {
         return sym.data_byte_size as u64;
+    }
+    if sym.is_zero_len_array {
+        return 0;
     }
     let ty = sym.type_;
     let elem: u64 = if is_pointer_ty(ty) {
@@ -267,6 +274,27 @@ mod tests {
         sym.reserved_data_bytes = 0;
         sym.type_ = crate::c5::token::Ty::Int as i64 + 1000;
         assert!(data_object_extent(&sym).is_none());
+    }
+
+    /// A zero-length array records a size of zero, which is not the
+    /// "no size recorded" that the width fallback answers. It reserves
+    /// no storage, so it is not a placeable object and cannot be given
+    /// a range that runs into the object sharing its start offset.
+    #[test]
+    #[cfg(feature = "native-emit")]
+    fn zero_length_array_reserves_no_storage() {
+        let mut sym = crate::c5::symbol::Symbol {
+            type_: crate::c5::token::Ty::Int as i64,
+            is_zero_len_array: true,
+            ..Default::default()
+        };
+        assert_eq!(data_object_byte_size(&sym), 0);
+        assert!(data_object_extent(&sym).is_none());
+
+        // Without the flag the same symbol is an unrecorded scalar, and
+        // the width fallback answers one element.
+        sym.is_zero_len_array = false;
+        assert_eq!(data_object_byte_size(&sym), 4);
     }
 
     #[test]

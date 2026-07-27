@@ -1516,6 +1516,10 @@ pub(crate) struct Build {
     /// at -O0, where the pipeline leaves the function set the compaction
     /// saw untouched.
     pub orphaned_data: Option<super::codegen::ssa::shadow::OrphanedData>,
+    /// Set when [`LowerMode::DataLivenessProbe`] stopped the lowering at
+    /// the report above. Every field but `orphaned_data` is then unset,
+    /// and only the recompaction retry's caller may read it.
+    pub stopped_at_data_liveness: bool,
     /// `--dump-ssa` text for this lowering, buffered rather than written
     /// straight to stderr: a build discarded by the recompaction retry
     /// must not leave its dump behind next to the final one.
@@ -2115,19 +2119,47 @@ impl NativeOptions {
 }
 
 /// Lower the program for `target`, returning the per-arch `Build`
-/// without writing to any container. Used by both [`emit_native`]
-/// (which then runs the container writer) and the listing-dump path
-/// (which inspects the lowered bytes directly).
-///
-/// Resolves the import set once up front (so the per-arch lowerings
-/// share an enumeration with the writer) and stitches it onto the
-/// returned [`Build`] before handing it back.
+/// without writing to any container. The emit driver goes through
+/// [`lower_for_data_liveness_probe`] instead; this is the writer tests'
+/// entry, which inspects the lowered bytes directly.
+#[cfg(test)]
 pub(crate) fn lower_for(
     program: &Program,
     target: Target,
     options: NativeOptions,
 ) -> Result<Build, C5Error> {
-    lower_for_with_prebuilt(program, target, options, None)
+    lower_for_with_prebuilt(program, target, options, None, LowerMode::Full)
+}
+
+/// How far a lowering runs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum LowerMode {
+    /// Run to completion and return the emitted image.
+    Full,
+    /// Stop as soon as the post-inline data-liveness report exists and
+    /// says the compaction was too coarse. The caller recompacts and
+    /// lowers the reported bodies against the new `.data`, discarding
+    /// everything a backend run would have produced for the old layout,
+    /// so the probe does not produce it. A report of `None` means the
+    /// layout is final and the lowering runs to completion as in
+    /// [`LowerMode::Full`].
+    DataLivenessProbe,
+}
+
+/// Lower the program for `target`, stopping at the post-inline
+/// data-liveness report (see [`LowerMode::DataLivenessProbe`]) and
+/// returning the per-arch `Build` without writing to any container.
+///
+/// Resolves the import set once up front (so the per-arch lowerings
+/// share an enumeration with the writer) and stitches it onto the
+/// returned [`Build`] before handing it back.
+#[cfg(feature = "native-emit")]
+pub(crate) fn lower_for_data_liveness_probe(
+    program: &Program,
+    target: Target,
+    options: NativeOptions,
+) -> Result<Build, C5Error> {
+    lower_for_with_prebuilt(program, target, options, None, LowerMode::DataLivenessProbe)
 }
 
 /// Write out a build's buffered `--dump-ssa` text, once the build is known
@@ -2154,6 +2186,7 @@ pub(crate) fn lower_for_with_prebuilt(
     target: Target,
     options: NativeOptions,
     prebuilt: Option<ssa::shadow::PrebuiltSsa>,
+    mode: LowerMode,
 ) -> Result<Build, C5Error> {
     // Prebuilt bodies replace the AST walk, so they -- not the ASTs --
     // decide which imports the object references.
@@ -2226,12 +2259,15 @@ pub(crate) fn lower_for_with_prebuilt(
     }
     let mut build = match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            aarch64::lower(program, target, options, &imports, prebuilt)?
+            aarch64::lower(program, target, options, &imports, prebuilt, mode)?
         }
         Target::LinuxX64 | Target::WindowsX64 => {
-            x86_64::lower(program, target, options, &imports, prebuilt)?
+            x86_64::lower(program, target, options, &imports, prebuilt, mode)?
         }
     };
+    if build.stopped_at_data_liveness {
+        return Ok(build);
+    }
     build.imports = imports;
     build.abi = target.abi();
     build.data_relocs = program.data_relocs.clone();

@@ -1581,7 +1581,11 @@ pub(crate) fn lower(
     #[cfg_attr(not(feature = "std"), allow(unused_variables))] native: NativeOptions,
     imports: &super::ResolvedImports,
     prebuilt: Option<super::ssa::shadow::PrebuiltSsa>,
+    mode: super::LowerMode,
 ) -> Result<Build, C5Error> {
+    // Asm label numbering restarts per lowering; see
+    // `emit_common::reset_asm_instance`.
+    super::ssa::emit_common::reset_asm_instance();
     let mut code = Vec::new();
     let mut func_ent_pcs: Vec<usize> = Vec::new();
     let mut func_names: Vec<alloc::string::String> = Vec::new();
@@ -1832,6 +1836,15 @@ pub(crate) fn lower(
         );
         if let Some(o) = &mut orphaned_data {
             o.ssa.promoted_local_slots = promoted_local_slots.clone();
+        }
+        // A probe caller relowers the reported bodies against a `.data`
+        // this run cannot know, so everything below would be discarded.
+        if orphaned_data.is_some() && mode == super::LowerMode::DataLivenessProbe {
+            return Ok(Build {
+                orphaned_data,
+                stopped_at_data_liveness: true,
+                ..Default::default()
+            });
         }
         // Frame compaction after inlining, promotion, and the branch
         // folds; see x86_64.rs's matching block for the rationale and
@@ -2270,6 +2283,7 @@ pub(crate) fn lower(
         // imports ride `ResolvedImports::data_bindings`, not `imports`).
         plt_trampoline_offsets: plt_trampoline_offsets.into_iter().map(Some).collect(),
         orphaned_data,
+        stopped_at_data_liveness: false,
         ssa_dump,
     })
 }

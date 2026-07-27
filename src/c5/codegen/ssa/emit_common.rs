@@ -2233,7 +2233,7 @@ pub(crate) fn rewrite_multidef_local_labels(text: &str) -> Option<alloc::string:
     if def_counts.values().all(|&c| c < 2) {
         return None;
     }
-    let uniq = ASM_INSTANCE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    let uniq = next_asm_instance();
     // Each multiply-defined number's definitions in source order, paired with
     // the unique name assigned to that definition.
     let mut defs: alloc::collections::BTreeMap<
@@ -3289,7 +3289,7 @@ pub(crate) fn materialize_asm_sections(
     // definition to a per-instance-unique symbol. Built once for the whole
     // call so a reference in one block resolves a definition in another (the
     // bug table's `.long 14472b - .` reaches a label defined in `.rodata.str`).
-    let uniq = ASM_INSTANCE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    let uniq = next_asm_instance();
     let mut num_unique: alloc::collections::BTreeMap<&str, alloc::string::String> =
         alloc::collections::BTreeMap::new();
     for name in blocks
@@ -4040,8 +4040,49 @@ pub(crate) fn strip_asm_comments(text: &str, syntax: AsmComments) -> Option<allo
     Some(out)
 }
 
-/// Per-process counter behind the `%=` template escape.
+// Numbering behind the `%=` template escape and the two asm-label
+// uniquifiers. `reset_asm_instance` restarts it at the head of every
+// lowering, so the names an object carries are a function of the program
+// rather than of how much the process emitted before it; GNU likewise
+// documents `%=` as unique per asm instance in one compilation. The labels
+// are `STB_LOCAL` and separately compiled objects already number from
+// zero, so restarting adds no collision the link does not handle.
+// Thread-local under `std`: lowerings run concurrently under the test
+// harness and must not share a sequence a peer can reset.
+#[cfg(feature = "std")]
+std::thread_local! {
+    static ASM_INSTANCE: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
+}
+
+/// Next value of the per-lowering asm-instance sequence.
+#[cfg(feature = "std")]
+fn next_asm_instance() -> u32 {
+    ASM_INSTANCE.with(|c| {
+        let v = c.get();
+        c.set(v.wrapping_add(1));
+        v
+    })
+}
+
+/// Restart the asm-instance sequence. Called once per lowering.
+#[cfg(feature = "std")]
+pub(crate) fn reset_asm_instance() {
+    ASM_INSTANCE.with(|c| c.set(0));
+}
+
+/// no_std has no thread-local storage; the sequence is a plain atomic.
+#[cfg(not(feature = "std"))]
 static ASM_INSTANCE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+#[cfg(not(feature = "std"))]
+fn next_asm_instance() -> u32 {
+    ASM_INSTANCE.fetch_add(1, core::sync::atomic::Ordering::Relaxed)
+}
+
+#[cfg(not(feature = "std"))]
+pub(crate) fn reset_asm_instance() {
+    ASM_INSTANCE.store(0, core::sync::atomic::Ordering::Relaxed);
+}
 
 /// Expand the `%=` template escape: every occurrence in one template gets the
 /// same number, unique per expansion (GCC gives each asm instance its own).
@@ -4051,7 +4092,7 @@ pub(crate) fn expand_template_uniq(text: &str) -> Option<alloc::string::String> 
     if !text.contains("%=") {
         return None;
     }
-    let uniq = ASM_INSTANCE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    let uniq = next_asm_instance();
     let mut out = alloc::string::String::with_capacity(text.len() + 8);
     let mut it = text.chars().peekable();
     while let Some(c) = it.next() {

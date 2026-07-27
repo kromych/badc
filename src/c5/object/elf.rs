@@ -3137,6 +3137,7 @@ mod tests {
         Build {
             text_align: 16,
             orphaned_data: None,
+            stopped_at_data_liveness: false,
             ssa_dump: alloc::string::String::new(),
             asm_sections: Vec::new(),
             asm_section_text_refs: Vec::new(),

@@ -27,12 +27,14 @@ use crate::c5::program::Program;
 
 // Codegen output-contract types the writers and the emit driver consume,
 // re-exported at object level so the moved files' `super::<item>` paths resolve.
+#[cfg(all(test, feature = "native-emit"))]
+pub(crate) use crate::c5::codegen::lower_for;
 #[cfg(feature = "native-emit")]
 pub(crate) use crate::c5::codegen::{
     Abi, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection, ElfTpoffFixup,
     ElfTpoffTarget, FnUnwind, FuncFixup, GotFixup, Machine, MachoTlvDescriptor, MachoTlvFixup,
     NativeOptions, OutputKind, ResolvedImport, ResolvedImports, Target, TlsIndexFixup, aarch64,
-    lower_for, x86_64,
+    x86_64,
 };
 
 /// Write the runtime address of a text-targeting DWARF
@@ -446,6 +448,10 @@ pub fn emit_native_with_options_named(
 /// out of the image. The second pass is the fixed point: the report is a
 /// joint function + data reachability result and the repack maps every
 /// reference one-to-one. The assertion below checks that.
+///
+/// Only the report survives that first lowering -- the code it emits is
+/// against the `.data` the recompaction replaces -- so the first pass
+/// runs as a probe and stops there, leaving one backend run either way.
 #[cfg(feature = "native-emit")]
 fn compact_and_lower(
     program: &Program,
@@ -455,8 +461,10 @@ fn compact_and_lower(
     use crate::c5::codegen::ssa::shadow;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
     let first = shadow::compact_program_data(program, target, segregate, options.optimize)?;
-    let mut build = lower_for(&first.program, target, options)?;
+    let mut build =
+        crate::c5::codegen::lower_for_data_liveness_probe(&first.program, target, options)?;
     let (Some(mut orphaned), Some(plan)) = (build.orphaned_data.take(), first.plan.as_ref()) else {
+        debug_assert!(!build.stopped_at_data_liveness);
         crate::c5::codegen::emit_ssa_dump(&mut build);
         return Ok((first.program, first.bss_size, build));
     };
@@ -467,6 +475,7 @@ fn compact_and_lower(
         target,
         options,
         Some(orphaned.ssa),
+        crate::c5::codegen::LowerMode::Full,
     )?;
     crate::c5::codegen::emit_ssa_dump(&mut build);
     debug_assert!(

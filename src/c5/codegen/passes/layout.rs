@@ -177,7 +177,10 @@ pub(super) fn rpo_numbers(func: &FunctionSsa) -> Vec<usize> {
 }
 
 /// Whether `a` dominates `b`, walking `b` up the immediate-dominator
-/// tree to the entry.
+/// tree to the entry. [`DomOrder`] answers the same question without the
+/// walk and is what the passes call; this is the reference the test below
+/// holds it to.
+#[cfg(test)]
 fn dominates(a: BlockId, b: BlockId, idom: &[BlockId]) -> bool {
     if a == b {
         return true;
@@ -196,16 +199,88 @@ fn dominates(a: BlockId, b: BlockId, idom: &[BlockId]) -> bool {
     a == 0 && idom[b as usize] != NO_BLOCK
 }
 
+/// Entry / exit numbering of the immediate-dominator forest, so an
+/// ancestor test is two comparisons instead of a walk up the chain.
+/// A per-edge query against the walk costs the tree depth, which on a
+/// long chain of sequential regions is the block count.
+struct DomOrder {
+    /// Preorder entry number per block; `u32::MAX` for a block the
+    /// forest walk never reached (no valid immediate dominator).
+    tin: Vec<u32>,
+    /// Exit number: the largest `tin` in the block's subtree.
+    tout: Vec<u32>,
+}
+
+impl DomOrder {
+    fn build(idom: &[BlockId]) -> Self {
+        let n = idom.len();
+        // Children per block, plus the roots: a block whose immediate
+        // dominator is absent or itself heads its own tree.
+        let mut child_head: Vec<u32> = alloc::vec![u32::MAX; n];
+        let mut child_next: Vec<u32> = alloc::vec![u32::MAX; n];
+        let mut roots: Vec<BlockId> = Vec::new();
+        for b in (0..n).rev() {
+            let up = idom[b];
+            if up == NO_BLOCK || up as usize == b || up as usize >= n {
+                roots.push(b as BlockId);
+            } else {
+                child_next[b] = child_head[up as usize];
+                child_head[up as usize] = b as u32;
+            }
+        }
+        let mut tin = alloc::vec![u32::MAX; n];
+        let mut tout = alloc::vec![0u32; n];
+        let mut clock = 0u32;
+        let mut stack: Vec<(BlockId, bool)> = Vec::new();
+        for &r in &roots {
+            stack.push((r, false));
+            while let Some((b, done)) = stack.pop() {
+                if done {
+                    tout[b as usize] = clock - 1;
+                    continue;
+                }
+                if tin[b as usize] != u32::MAX {
+                    continue; // a cycle in `idom` reaches this twice
+                }
+                tin[b as usize] = clock;
+                clock += 1;
+                stack.push((b, true));
+                let mut c = child_head[b as usize];
+                while c != u32::MAX {
+                    stack.push((c as BlockId, false));
+                    c = child_next[c as usize];
+                }
+            }
+        }
+        DomOrder { tin, tout }
+    }
+
+    /// Same relation as [`dominates`], read off the numbering.
+    fn dominates(&self, a: BlockId, b: BlockId, idom: &[BlockId]) -> bool {
+        if a == b {
+            return true;
+        }
+        let (ta, tb) = (self.tin[a as usize], self.tin[b as usize]);
+        if ta != u32::MAX && tb != u32::MAX && ta < tb && tb <= self.tout[a as usize] {
+            return true;
+        }
+        // A chain that breaks before the entry block leaves the walk
+        // short of it; the entry still dominates every reachable block.
+        a == 0 && idom[b as usize] != NO_BLOCK
+    }
+}
+
 /// A retreating edge (target at or before the source in RPO) whose
 /// target does not dominate its source enters a loop past its
 /// header; such a multiple-entry loop has no rotation-safe header.
 fn is_irreducible(func: &FunctionSsa, idom: &[BlockId], rpo: &[usize]) -> bool {
+    let dom = DomOrder::build(idom);
     for (b, block) in func.blocks.iter().enumerate() {
         if rpo[b] == usize::MAX {
             continue;
         }
         for s in successors(&block.terminator, &[], &func.jump_tables) {
-            if rpo[s as usize] <= rpo[b] && !dominates(s, b as BlockId, idom) {
+            if rpo[s as usize] <= rpo[b] && !dom.dominates(s, b as BlockId, idom) {
                 return true;
             }
         }
@@ -236,11 +311,10 @@ pub(super) fn natural_loops(
     preds: &[Vec<BlockId>],
     rpo: &[usize],
 ) -> Vec<NaturalLoop> {
-    // Membership rides one bitset row per header (merging the bodies
-    // of multiple back edges); the rows convert to sorted lists at
-    // the end.
-    let words = func.blocks.len().div_ceil(64).max(1);
-    let mut bodies: BTreeMap<BlockId, Vec<u64>> = BTreeMap::new();
+    // Back-edge sources grouped by header, so one header's bodies merge
+    // in a single traversal.
+    let mut back_srcs: BTreeMap<BlockId, Vec<BlockId>> = BTreeMap::new();
+    let dom = DomOrder::build(idom);
     for (b, block) in func.blocks.iter().enumerate() {
         if rpo[b] == usize::MAX {
             continue;
@@ -248,35 +322,48 @@ pub(super) fn natural_loops(
         let b = b as BlockId;
         for s in successors(&block.terminator, &[], &func.jump_tables) {
             // `b -> s` is a back edge iff the header `s` dominates `b`.
-            if dominates(s, b, idom) {
-                let body = bodies.entry(s).or_insert_with(|| alloc::vec![0u64; words]);
-                collect_loop_body(s, b, preds, body);
+            if dom.dominates(s, b, idom) {
+                back_srcs.entry(s).or_default().push(b);
             }
         }
     }
-    bodies
-        .into_iter()
-        .map(|(header, bits)| {
-            let mut body: Vec<BlockId> = Vec::new();
-            for (w, &word) in bits.iter().enumerate() {
-                let mut rest = word;
-                while rest != 0 {
-                    body.push((w as u32) * 64 + rest.trailing_zeros());
-                    rest &= rest - 1;
-                }
-            }
-            NaturalLoop { header, body }
-        })
-        .collect()
+    // Membership rides one bitset reused across headers, cleared through
+    // the member list each header produced. A row per header would cost
+    // the function's whole block count per loop.
+    let mut seen = alloc::vec![0u64; func.blocks.len().div_ceil(64).max(1)];
+    let mut out: Vec<NaturalLoop> = Vec::with_capacity(back_srcs.len());
+    for (header, srcs) in back_srcs {
+        let mut body: Vec<BlockId> = Vec::new();
+        for src in srcs {
+            collect_loop_body(header, src, preds, &mut seen, &mut body);
+        }
+        for &b in &body {
+            seen[b as usize / 64] &= !(1u64 << (b % 64));
+        }
+        body.sort_unstable();
+        out.push(NaturalLoop { header, body });
+    }
+    out
 }
 
 /// Add the header and every block reaching `back_src` without passing
-/// through the header to the `body` bitset.
-fn collect_loop_body(header: BlockId, back_src: BlockId, preds: &[Vec<BlockId>], body: &mut [u64]) {
-    let insert = |v: BlockId, body: &mut [u64]| {
+/// through the header to `seen` / `body`. `seen` carries the membership
+/// already collected for this header, so a second back edge extends the
+/// same body instead of re-walking it.
+fn collect_loop_body(
+    header: BlockId,
+    back_src: BlockId,
+    preds: &[Vec<BlockId>],
+    seen: &mut [u64],
+    body: &mut Vec<BlockId>,
+) {
+    let mut insert = |v: BlockId, body: &mut Vec<BlockId>| {
         let (w, m) = (v as usize / 64, 1u64 << (v % 64));
-        let fresh = body[w] & m == 0;
-        body[w] |= m;
+        let fresh = seen[w] & m == 0;
+        if fresh {
+            seen[w] |= m;
+            body.push(v);
+        }
         fresh
     };
     insert(header, body);
@@ -595,6 +682,34 @@ mod tests {
             insts,
             blocks,
             ..FunctionSsa::default()
+        }
+    }
+
+    /// `DomOrder` answers the dominance query the reference walk does,
+    /// over a chain, a diamond, a loop nest and an unreachable block.
+    #[test]
+    fn dom_order_matches_the_reference_walk() {
+        let shapes: Vec<Vec<BlockId>> = vec![
+            // idom arrays: index is the block, value its immediate dominator.
+            vec![0, 0, 1, 2, 3, 4],             // chain
+            vec![0, 0, 0, 0],                   // star from the entry
+            vec![0, 0, 1, 1, 0],                // diamond
+            vec![0, 0, 1, 1, 3, 3, 1],          // nest
+            vec![0, 0, 1, NO_BLOCK, 1],         // one unreachable block
+            vec![0, 0, 1, 2, 1, 4, 5, 0, 7, 8], // two chains off the entry
+        ];
+        for idom in shapes {
+            let n = idom.len();
+            let dom = DomOrder::build(&idom);
+            for a in 0..n as BlockId {
+                for b in 0..n as BlockId {
+                    assert_eq!(
+                        dom.dominates(a, b, &idom),
+                        dominates(a, b, &idom),
+                        "idom={idom:?} a={a} b={b}",
+                    );
+                }
+            }
         }
     }
 

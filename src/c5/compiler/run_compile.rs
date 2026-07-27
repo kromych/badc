@@ -2419,25 +2419,10 @@ impl Compiler {
                         // member's data). Only the defining `= {` form
                         // reserves extra; a bare / tentative declaration keeps
                         // the fixed size.
-                        if is_struct_ty(ty)
-                            && struct_ptr_depth(ty) == 0
-                            && self.lex.tk == Token::Assign
-                        {
-                            let sid = struct_id_of(ty);
-                            let fam_elem_ty = self.structs[sid]
-                                .fields
-                                .iter()
-                                .find(|f| f.array_size < 0)
-                                .map(|f| f.ty);
-                            if let Some(elem_ty) = fam_elem_ty {
-                                let elem = self.size_of_type(elem_ty) as i64;
-                                let snap = self.lex.snapshot();
-                                self.next()?; // `=`
-                                let count = self.flexible_array_init_count(sid)? as i64;
-                                self.restore_lex(snap);
-                                bytes += count * elem;
-                                bytes = ((bytes + 7) / 8) * 8;
-                            }
+                        let fam_tail = self.flexible_array_init_tail_bytes(ty)?;
+                        if fam_tail > 0 {
+                            self.symbols[id_idx].fam_init_bytes = fam_tail;
+                            bytes = ((bytes + fam_tail + 7) / 8) * 8;
                         }
                         // `extern T x;` -- C99 6.9.2 says no
                         // tentative definition. We still

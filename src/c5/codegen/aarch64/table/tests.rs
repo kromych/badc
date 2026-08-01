@@ -554,6 +554,53 @@ fn simd_vector() {
         enc("mul", &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]),
         0x4EA2_9C20
     );
+    // Polynomial multiply (byte arrangement only; reference words from the
+    // reference assembler).
+    assert_eq!(
+        enc("pmul", &[v(0, 0, true), v(1, 0, true), v(2, 0, true)]),
+        0x6E22_9C20
+    );
+    assert_eq!(
+        enc("pmul", &[v(5, 0, false), v(6, 0, false), v(7, 0, false)]),
+        0x2E27_9CC5
+    );
+    assert_eq!(
+        enc("pmul", &[v(31, 0, true), v(30, 0, true), v(29, 0, true)]),
+        0x6E3D_9FDF
+    );
+    assert!(encode("pmul", &[v(0, 1, true), v(1, 1, true), v(2, 1, true)]).is_err());
+    // SHA3 eor3 (three-source xor, .16b only).
+    assert_eq!(
+        enc(
+            "eor3",
+            &[v(0, 0, true), v(1, 0, true), v(2, 0, true), v(3, 0, true)]
+        ),
+        0xCE02_0C20
+    );
+    assert_eq!(
+        enc(
+            "eor3",
+            &[
+                v(31, 0, true),
+                v(30, 0, true),
+                v(29, 0, true),
+                v(28, 0, true)
+            ]
+        ),
+        0xCE1D_73DF
+    );
+    assert!(
+        encode(
+            "eor3",
+            &[
+                v(0, 0, false),
+                v(1, 0, false),
+                v(2, 0, false),
+                v(3, 0, false)
+            ]
+        )
+        .is_err()
+    );
     // Compares and min/max (also three-same, on .4s here).
     let t = |m: &str| enc(m, &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]);
     assert_eq!(t("cmeq"), 0x6EA2_8C20);

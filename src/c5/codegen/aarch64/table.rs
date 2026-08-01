@@ -708,6 +708,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "add" => Some((0x0E20_8400u32, 0u32, 0u8, 3u8)),
         "sub" => Some((0x0E20_8400, 1, 0, 3)),
         "mul" => Some((0x0E20_9C00, 0, 0, 2)),
+        "pmul" => Some((0x0E20_9C00, 1, 0, 0)),
         "cmeq" => Some((0x0E20_8C00, 1, 0, 3)),
         "cmgt" => Some((0x0E20_3400, 0, 0, 3)),
         "cmge" => Some((0x0E20_3C00, 0, 0, 3)),
@@ -1727,6 +1728,43 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((field4 & 0b11) << 10)
             | ((base as u32) << 5)
             | (*rt as u32));
+    }
+    // SHA3 three-source xor `eor3 Vd.16b, Vn.16b, Vm.16b, Va.16b`
+    // (FEAT_SHA3): Vd = Vn ^ Vm ^ Va, .16b only.
+    if let (
+        "eor3",
+        [
+            Opnd::VecReg {
+                num: rd,
+                size: 0,
+                q: true,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: 0,
+                q: true,
+            },
+            Opnd::VecReg {
+                num: rm,
+                size: 0,
+                q: true,
+            },
+            Opnd::VecReg {
+                num: ra,
+                size: 0,
+                q: true,
+            },
+        ],
+    ) = (mnemonic, ops)
+    {
+        return Ok(0xCE00_0000
+            | ((*rm as u32) << 16)
+            | ((*ra as u32) << 10)
+            | ((*rn as u32) << 5)
+            | (*rd as u32));
+    }
+    if mnemonic == "eor3" {
+        return Err(String::from("inline asm: eor3 operands must be .16b"));
     }
     // SIMD table lookup `<tbl|tbx> Vd.T, {Vn.16b, ..}, Vm.T` (T = 8b/16b): each
     // byte of the index Vm selects a byte from the table register list. `len`

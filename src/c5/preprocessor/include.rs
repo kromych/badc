@@ -230,6 +230,18 @@ impl Preprocessor {
                     }
                 }
             }
+            // A compiler-owned intrinsic header (built on badc's own inline-asm
+            // encoders) resolves to the embedded copy before the search paths:
+            // a foreign toolchain's copy on `-I` (a kernel-style
+            // `-isystem $(cc -print-file-name=include)` folded into `-I`) is
+            // written against that compiler's builtins and can never compile
+            // here. The quoted source-directory step above still precedes it
+            // per C99 6.10.2p2. Ordinary headers keep `-I`-shadows-embedded.
+            if crate::c5::headers::compiler_owned_header(name)
+                && let Some(body) = embedded_header(name)
+            {
+                return Some((body.to_string(), name.to_string()));
+            }
             for path in &self.search_paths {
                 let candidate = join(path);
                 if let Ok(body) = std::fs::read_to_string(&candidate) {

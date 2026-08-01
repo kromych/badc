@@ -835,6 +835,20 @@ pub(crate) fn enc_str_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
     enc_ldst_scaled(0xFD00_0000, 3, Reg(dt), rn, imm)
 }
 
+/// `LDR <Qt>, [<Xn|SP>, #imm]` -- 128-bit unsigned-offset FP/SIMD
+/// load. The offset is byte-addressed but encoded as `imm/16`.
+pub(crate) fn enc_ldr_q_imm(qt: u8, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(qt < 32);
+    enc_ldst_scaled(0x3DC0_0000, 4, Reg(qt), rn, imm)
+}
+
+/// `STR <Qt>, [<Xn|SP>, #imm]` -- 128-bit unsigned-offset FP/SIMD
+/// store, the partner of [`enc_ldr_q_imm`].
+pub(crate) fn enc_str_q_imm(qt: u8, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(qt < 32);
+    enc_ldst_scaled(0x3D80_0000, 4, Reg(qt), rn, imm)
+}
+
 /// `ADR <Xd>, label` -- compute a PC-relative byte address (signed
 /// 21-bit offset) into `Xd`. Used by the AArch64 setjmp intrinsic
 /// to capture the resume address that a later longjmp branches to.

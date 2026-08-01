@@ -1302,6 +1302,17 @@ fn expand_gas_statements(
         if s.is_empty() {
             continue;
         }
+        // A label may share a statement with what follows it (`1: .irp ...`).
+        // Peel it so the directive is the first token; emitting it as its own
+        // statement names the same address.
+        let (labels, s) = split_leading_labels(s);
+        if !labels.is_empty() && emitting(&cond) {
+            out.push_str(labels);
+            out.push('\n');
+        }
+        if s.is_empty() {
+            continue;
+        }
         let (tok, rest) = split_first_token(s);
         // Conditional directives are tracked whether or not the enclosing
         // branch emits, so nesting stays balanced across dead branches.
@@ -1920,6 +1931,33 @@ fn base_section_shorthand(tok: &str) -> bool {
         tok,
         ".text" | ".data" | ".data1" | ".sdata" | ".rodata" | ".bss" | ".sbss"
     )
+}
+
+/// Peel the labels leading a statement from the rest of it. GNU as lets any
+/// number of labels share a statement with the directive or instruction that
+/// follows (`1: .irp num,...`), so the first token is not always the
+/// directive. Returns the label text, empty when there is none, and the
+/// remainder, empty when the statement is labels only.
+fn split_leading_labels(s: &str) -> (&str, &str) {
+    let mut end = 0usize;
+    loop {
+        let rest = s[end..].trim_start();
+        let off = s.len() - rest.len();
+        let name = rest
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '$'))
+            .unwrap_or(rest.len());
+        if name == 0 || !rest[name..].starts_with(':') {
+            break;
+        }
+        // `name::` is the global-label spelling; both colons belong to it.
+        let colons = if rest[name + 1..].starts_with(':') {
+            2
+        } else {
+            1
+        };
+        end = off + name + colons;
+    }
+    (s[..end].trim_end(), s[end..].trim_start())
 }
 
 /// Split off the first whitespace-delimited token and the trimmed remainder.

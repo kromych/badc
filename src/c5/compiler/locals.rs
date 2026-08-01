@@ -337,6 +337,52 @@ impl Compiler {
             self.pending.vla_allowed = true;
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = false;
+            // C99 6.7.1p5 + 6.9.1: a declarator of bare function type (a
+            // function-TYPE typedef with no pointer level) declares a
+            // function, not an object; classifying it as data would make a
+            // use of the name load code bytes. Bind it as
+            // `try_parse_block_fn_prototype` binds the `name(params)` form.
+            if core::mem::take(&mut self.pending.bare_function_type_declarator) {
+                let params = self.pending.fn_ptr_param_types.take().unwrap_or_default();
+                let is_variadic = self
+                    .pending
+                    .typedef_fn_proto
+                    .take()
+                    .map(|(_, variadic)| variadic)
+                    .unwrap_or(false);
+                self.pending.fn_ptr_indirection = None;
+                if loc_idx == usize::MAX {
+                    self.accept_declarator_separator()?;
+                    continue;
+                }
+                let c = self.symbols[loc_idx].class;
+                let known = c == Token::Sys as i64
+                    || c == Token::Fun as i64
+                    || c == Token::Glo as i64
+                    || c == Token::Loc as i64;
+                if !known {
+                    let sym = &mut self.symbols[loc_idx];
+                    sym.class = Token::Fun as i64;
+                    // Undo the typedef's pre-decay to pointer-to-function.
+                    sym.type_ = ty - Ty::Ptr as i64;
+                    sym.params = params;
+                    sym.is_variadic = is_variadic;
+                    sym.is_extern_decl = true;
+                    sym.linkage = if is_static {
+                        crate::c5::symbol::Linkage::Internal
+                    } else {
+                        crate::c5::symbol::Linkage::External
+                    };
+                }
+                // The declaration names the file-scope entity unless it
+                // shadows a local; attributes (`weak`, visibility) attach
+                // to that entity, as on the extern-object path.
+                if c != Token::Loc as i64 {
+                    self.apply_symbol_attributes(loc_idx);
+                }
+                self.accept_declarator_separator()?;
+                continue;
+            }
             let asm_reg = self.parse_register_asm_binding(is_static, is_extern)?;
             // Trailing cleanup wins for this declarator; else the leading one.
             let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);

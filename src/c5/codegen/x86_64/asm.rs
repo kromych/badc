@@ -1718,11 +1718,7 @@ fn parse_sym_mem<'a>(tok: &'a str, labels: &[&str]) -> Option<(&'a str, AsmOpnd)
     let inner = tok[open + 1..tok.len() - 1].trim();
     let (sym, addend) = parse_sym_disp(prefix, labels)?;
     let disp = i32::try_from(addend).ok()?;
-    if inner
-        .strip_prefix("%%")
-        .or_else(|| inner.strip_prefix('%'))
-        == Some("rip")
-    {
+    if inner.strip_prefix("%%").or_else(|| inner.strip_prefix('%')) == Some("rip") {
         return Some((sym, AsmOpnd::SymRipRel { disp }));
     }
     let parts = split_asm_operands(inner);

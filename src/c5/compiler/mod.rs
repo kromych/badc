@@ -1491,6 +1491,10 @@ pub struct Compiler {
     /// `DW_LNE_define_file` per entry and switches with the
     /// walker's per-Inst `inst_src` file index.
     source_files: Vec<String>,
+    /// Name -> index into `source_files`. The table is append-only, so
+    /// this is a pure index over it; without it every declaration site
+    /// re-scans the whole table comparing full paths.
+    source_file_index: hashbrown::HashMap<String, usize>,
     /// Label of the primary translation-unit source as supplied
     /// through [`CompileOptions::source_label`]. Compared against
     /// [`lexer::Lexer::file`] at declaration sites so unused-symbol
@@ -1889,6 +1893,7 @@ impl Compiler {
                 crate::c5::symbol::InlineModel::C99
             },
             source_files: Vec::new(),
+            source_file_index: hashbrown::HashMap::new(),
             source_label: opts.source_label.clone(),
             variables: Vec::new(),
             pending_block_locals: Vec::new(),

@@ -378,6 +378,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("arithmetic.c", 60),
     ("inline_asm_x64_catalogue.c", 42),
     ("inline_asm_x64_paren_disp.c", 42),
+    ("inline_asm_x64_seg_prefix_wrpkru.c", 42),
     ("inline_asm_clobber_probe.c", 42),
     ("inline_asm_x64_sse.c", 42),
     ("inline_asm_x64_setcc.c", 42),

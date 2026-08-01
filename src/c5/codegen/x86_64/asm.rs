@@ -771,6 +771,16 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "lock" => Mnemonic::Prefix(0xF0),
         "rep" | "repe" | "repz" => Mnemonic::Prefix(0xF3),
         "repne" | "repnz" => Mnemonic::Prefix(0xF2),
+        // Segment overrides lead the instruction they apply to, the same
+        // shape as `lock` / `rep`. The name is a register only in an operand
+        // position, which this table is never consulted for. `es` and `ss`
+        // are omitted: 64-bit mode ignores them and GNU as rejects both.
+        "cs" => Mnemonic::Prefix(0x2E),
+        "ds" => Mnemonic::Prefix(0x3E),
+        "fs" => Mnemonic::Prefix(0x64),
+        "gs" => Mnemonic::Prefix(0x65),
+        // Protection-key register write (the read form is catalogued).
+        "wrpkru" => Mnemonic::Fixed(&[0x0F, 0x01, 0xEF]),
         "fninit" => Mnemonic::Fixed(&[0xDB, 0xE3]),
         // x87 wait-for-pending-exceptions (WAIT/FWAIT) and clear-exceptions.
         "fwait" | "wait" => Mnemonic::Fixed(&[0x9B]),

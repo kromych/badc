@@ -2362,6 +2362,40 @@ fn partially_guarded_headers_are_reprocessed() {
     }
 }
 
+/// The guard's own `#else` / `#elif` arm is what runs once the macro is
+/// defined, so such a file is not silent on re-inclusion.
+#[test]
+fn guard_with_an_else_arm_is_reprocessed() {
+    for (tag, body) in [
+        (
+            "else",
+            "#ifndef G\n#define G\nint g;\n#else\nint other;\n#endif\n",
+        ),
+        (
+            "elif",
+            "#ifndef G\n#define G\nint g;\n#elif 1\nint other;\n#endif\n",
+        ),
+    ] {
+        let (mut pp, base) = pp_with_headers(&format!("mi-{tag}"), &[("g.h", body)]);
+        let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert_eq!(out.matches("int g;").count(), 1, "{tag}: {out}");
+        assert_eq!(out.matches("int other;").count(), 1, "{tag}: {out}");
+    }
+    // A nested `#else` inside the guarded body is not the guard's own
+    // arm and leaves the file skippable.
+    let (mut pp, base) = pp_with_headers(
+        "mi-nested-else",
+        &[(
+            "g.h",
+            "#ifndef G\n#define G\n#if 0\nint a;\n#else\nint b;\n#endif\n#endif\n",
+        )],
+    );
+    let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert_eq!(out.matches("int b;").count(), 1, "{out}");
+}
+
 /// A `#define` after the guard's `#endif` is a side effect the second
 /// inclusion still performs.
 #[test]

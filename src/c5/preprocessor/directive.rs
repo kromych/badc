@@ -73,6 +73,15 @@ impl IncludeGuardScan {
                 }
                 _ => self.state = GuardState::Disqualified,
             },
+            // An `#else` / `#elif` arm of the guard itself is what runs
+            // when the macro is defined, so the file does not go quiet on
+            // re-inclusion. `depth == 1` selects the guard's own frame.
+            GuardState::Open
+                if depth == 1
+                    && matches!(directive, Some(Directive::Else | Directive::Elif(_))) =>
+            {
+                self.state = GuardState::Disqualified;
+            }
             GuardState::Closed => self.state = GuardState::Disqualified,
             GuardState::Open | GuardState::Disqualified => {}
         }

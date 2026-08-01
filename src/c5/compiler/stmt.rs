@@ -2783,6 +2783,7 @@ impl Compiler {
         // unrelated call in a later statement.
         self.pending.indirect_callee_params = None;
         self.pending.indirect_callee_is_variadic = false;
+        self.pending.indirect_callee_fn_ptr_depth = 0;
         // The function-pointer-decay depth (C99 6.3.2.1p4) is intra-
         // expression state: a function name used as a call argument seeds
         // it, and without this reset it leaks into the next statement's

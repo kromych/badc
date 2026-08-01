@@ -1354,6 +1354,14 @@ fn computed_goto_static_table() {
 }
 
 #[test]
+fn computed_goto_const_static_table() {
+    // The same table in each `const` spelling. Its value comes from
+    // stores the declaration emits, so the storage is written at run
+    // time and must not be placed read-only.
+    assert_eq!(run_fixture("computed_goto_const_static_table.c"), 0);
+}
+
+#[test]
 fn sieve_of_eratosthenes() {
     // Dense array write/read loop with a multiplicative inner stride;
     // the prime count below 100000 checks the result.

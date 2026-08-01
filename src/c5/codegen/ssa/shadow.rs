@@ -824,6 +824,9 @@ pub(crate) fn apply_data_liveness(
                 && sym.defined_here
                 && sym.storage_is_const
                 && !sym.is_thread_local
+                // Storage the declaration fills with stores is written
+                // during execution whatever its declared type says.
+                && !sym.runtime_initialized
                 && (0..data_len).contains(&sym.val)
             {
                 is_const_storage[interval_of(sym.val)] = true;

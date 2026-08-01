@@ -980,6 +980,12 @@ pub(super) fn write_relocatable(
         // afterwards. Under `-fPIC` the same object needs a load-time
         // fixup, so it goes to `.data.rel.ro`, which a consumer maps
         // writable until the fixups are applied.
+        //
+        // `runtime_initialized` storage is the exception on both counts:
+        // its value comes from stores the declaration emits, so the
+        // program writes it during execution whatever its declared type
+        // says, and its trailing once-guard byte sits past the symbol's
+        // extent and would not travel with it.
         let reloc_slots = relocated_data_offsets(program);
         let data_file_len = build.data.len() as u64;
         let mut named_objs: Vec<NamedDataObj> = Vec::new();
@@ -996,10 +1002,11 @@ pub(super) fn write_relocatable(
                 continue;
             };
             let val = sym.val as u64;
+            let read_only = sym.storage_is_const && !sym.runtime_initialized;
             let (sec, flags) = match sym.section_name.as_deref() {
                 Some(name) => (
                     name,
-                    if sym.storage_is_const {
+                    if read_only {
                         SHF_ALLOC
                     } else {
                         SHF_ALLOC | SHF_WRITE
@@ -1007,7 +1014,7 @@ pub(super) fn write_relocatable(
                 ),
                 None => {
                     // A zero-fill object has no file bytes to carve.
-                    if !sym.storage_is_const || val + size.extent > data_file_len {
+                    if !read_only || val + size.extent > data_file_len {
                         continue;
                     }
                     let holds_reloc = reloc_slots

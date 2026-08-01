@@ -4212,8 +4212,9 @@ fn switch_table_lands_in_rodata_section_of_object() {
 /// position-independent island) can take it.
 #[test]
 fn switch_table_pic_object_uses_pcrel_entries() {
-    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target,
-        emit_native_with_options};
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
 
     const SRC: &str = "int pick(int x) {\n\
          \tswitch (x) {\n\

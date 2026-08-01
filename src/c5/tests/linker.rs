@@ -2632,6 +2632,30 @@ fn file_scope_asm_symbol_riprel_displacement_relocates_pc32() {
 }
 
 #[test]
+fn single_tu_image_binds_asm_symbol_riprel_to_defined_data() {
+    // A single-TU image (no link step) with an inline-asm `sym(%rip)`
+    // reference to a data object the unit itself defines: the by-name
+    // reference binds to the definition through a data fixup, as the
+    // linker binds the object path's named relocation. Rejected as an
+    // undefined reference before the fix. The image finalizer runs only
+    // on the executable path, so the object-path tests do not cover it;
+    // the fixture-parity suites execute the image on matching hosts.
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    let src = super::load_fixture("inline_asm_x64_sym_riprel.c");
+    for optimize in [false, true] {
+        let program = Compiler::with_target(src.clone(), Target::LinuxX64)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            optimize,
+            ..Default::default()
+        };
+        emit_native_with_options(&program, Target::LinuxX64, opts)
+            .unwrap_or_else(|e| panic!("single-TU image emit (optimize={optimize}): {e}"));
+    }
+}
+
+#[test]
 fn asm_data_directive_quoted_symbol_matches_bare() {
     // `.quad "name"` -- a GNU as double-quoted symbol name in a data
     // directive: the same absolute relocation as the bare spelling, not

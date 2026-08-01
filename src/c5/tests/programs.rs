@@ -1786,6 +1786,14 @@ fn parenthesized_address_constant() {
 }
 
 #[test]
+fn const_init_literal_suffix() {
+    // C99 6.4.4.1: a constant's suffix and base give it its type. A static
+    // initializer is parsed speculatively, so a rewind has to restore the
+    // attributes that type the current token along with the token itself.
+    assert_eq!(run_fixture("const_init_literal_suffix.c"), 0);
+}
+
+#[test]
 fn attribute_section_placement() {
     // `section("name")` placements: the interpreter ignores them; the
     // native object writer places the bytes (locked by the object-level

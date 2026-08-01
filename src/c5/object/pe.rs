@@ -481,7 +481,15 @@ pub(super) fn write(
     let headers_size = headers_raw_size(&plan) as u32;
 
     let text_file_off: u32 = headers_size;
-    let text_size: u32 = text_prologue_len + build.text.len() as u32;
+    // The read-only blob (switch dispatch tables) rides at an
+    // 8-aligned tail of the code section; MEM_READ covers it and the
+    // loader needs no separate section.
+    let rodata_base_in_text: u32 = if build.rodata.bytes.is_empty() {
+        text_prologue_len + build.text.len() as u32
+    } else {
+        round_up(text_prologue_len + build.text.len() as u32, 8)
+    };
+    let text_size: u32 = rodata_base_in_text + build.rodata.bytes.len() as u32;
     let text_raw_size: u32 = round_up(text_size, FILE_ALIGNMENT);
 
     // 64-bit Windows requires a `.pdata` Exception Directory
@@ -895,6 +903,10 @@ pub(super) fn write(
     // (the stub exits through its own tail).
     text_bytes.resize(text_prologue_len as usize, 0xCC);
     text_bytes.extend_from_slice(&build.text);
+    if !build.rodata.bytes.is_empty() {
+        text_bytes.resize(rodata_base_in_text as usize, 0);
+        text_bytes.extend_from_slice(&build.rodata.bytes);
+    }
 
     // Stub-internal fixup: the direct call to main. Only
     // present in executable output; the DLL stub
@@ -962,6 +974,31 @@ pub(super) fn write(
         // combined .text past the entry stub.
         let target_rva = text_rva + text_prologue_len + f.target_native_offset as u32;
         patch_addr_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
+    }
+
+    // Read-only blob references (switch dispatch): the site
+    // materializes the table base at the code section's tail.
+    for f in &build.rodata.addr_fixups {
+        let instr_off = (f.code_offset as u32) + text_prologue_len;
+        let target_rva = text_rva + rodata_base_in_text + f.rodata_offset as u32;
+        patch_addr_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
+    }
+    // Table entries: `target - table_base`, both inside `.text`, so
+    // the value is a pure offset difference (ASLR-invariant, no
+    // `.reloc` entry).
+    for r in &build.rodata.rel32 {
+        let value = (text_prologue_len as i64 + r.text_offset as i64)
+            - (rodata_base_in_text as i64 + r.base_offset as i64);
+        let Ok(v) = i32::try_from(value) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "PE: rodata rel32 slot {:#x}: displacement {value:#x} exceeds 32 bits",
+                    r.slot_offset,
+                ),
+            )));
+        };
+        let off = (rodata_base_in_text + r.slot_offset as u32) as usize;
+        text_bytes[off..off + 4].copy_from_slice(&v.to_le_bytes());
     }
 
     // TLS-index fixups. Every `Inst::TlsAddr` lowering recorded
@@ -1199,6 +1236,38 @@ pub(super) fn write(
                 )));
             }
             data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+        }
+        // Object-linked pc-relative slots in the data stream: each
+        // holds `target - slot` as RVAs (the image base cancels) at
+        // the recorded width, so ASLR needs no `.reloc` entry.
+        for r in &build.data_pcrel_relocs {
+            let target = if r.target_in_data {
+                data_off_to_rva(r.target_offset as u32) as i64
+            } else {
+                (text_rva + text_prologue_len) as i64 + r.target_offset as i64
+            };
+            let slot_rva = data_rva as i64 + r.slot_data_offset as i64;
+            let off = r.slot_data_offset as usize;
+            let width = r.width as usize;
+            if off + width > data_with_relocs.len() {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "PE: data pcrel slot {off:#x} past end of .data ({})",
+                        data_with_relocs.len()
+                    ),
+                )));
+            }
+            let value = target - slot_rva;
+            if width == 8 {
+                data_with_relocs[off..off + 8].copy_from_slice(&value.to_le_bytes());
+                continue;
+            }
+            let Ok(v) = i32::try_from(value) else {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("PE: data pcrel slot {off:#x}: displacement {value:#x} exceeds 32 bits"),
+                )));
+            };
+            data_with_relocs[off..off + 4].copy_from_slice(&v.to_le_bytes());
         }
         out.extend_from_slice(&data_with_relocs);
         if !build.tls_data.is_empty() {

@@ -27,3 +27,8 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	sxtw	x0, w1
                	ret
+               	udf	#0x0
+
+<boot>:
+               	mov	x0, #0x7                // =7
+               	ret

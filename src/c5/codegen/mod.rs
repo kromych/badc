@@ -1309,6 +1309,13 @@ pub(crate) struct Build {
     /// left for a load-of-data-address sequence. The writer patches it
     /// with the page-relative address of `__data + data_offset`.
     pub data_fixups: Vec<DataFixup>,
+    /// Read-only data the emit produced (switch dispatch tables) with
+    /// its code-reference and slot fixups. See [`RodataBuild`].
+    pub rodata: RodataBuild,
+    /// Object-link rel32 slots in the data stream targeting `.text`.
+    /// Populated only by the multi-object synthesizer; see
+    /// [`DataPcRelReloc`].
+    pub data_pcrel_relocs: Vec<DataPcRelReloc>,
     /// Each entry records an `adrp + add` placeholder pair the codegen
     /// left for a function-pointer literal. The writer patches it with
     /// the page-relative address of `__text + target_native_offset`.
@@ -1744,6 +1751,67 @@ pub(crate) struct AsmTextAbsRef {
     pub field_offset: usize,
     /// Byte offset within `Build::text` of the referenced label.
     pub target_offset: usize,
+}
+
+/// Address-materialisation site in `Build::text` reaching a byte of
+/// `RodataBuild::bytes`: `lea reg, [rip+disp32]` on x86_64 (disp32 at
+/// `code_offset + 3`), `adrp + add` on aarch64. Same patch shape as
+/// [`DataFixup`], resolved against the read-only blob's base instead.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RodataAddrFixup {
+    /// Byte offset within `Build::text` of the instruction (pair).
+    pub code_offset: usize,
+    /// Offset into `RodataBuild::bytes`.
+    pub rodata_offset: u64,
+}
+
+/// 4-byte slot inside `RodataBuild::bytes` holding a text-relative
+/// displacement: once layout is final the slot receives
+/// `(text_base + text_offset) - (rodata_base + base_offset)` as a
+/// little-endian i32. Switch dispatch reads the slot and adds the
+/// table base back, so the stored difference keeps the image free of
+/// absolute-address relocations. The relocatable writer emits each
+/// slot as an `R_*_PC32`-class reloc against the `.text` section
+/// symbol with `addend = text_offset + (slot_offset - base_offset)`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RodataRel32 {
+    /// Slot position within `RodataBuild::bytes`.
+    pub slot_offset: u64,
+    /// Base the difference is taken against (the table start).
+    pub base_offset: u64,
+    /// Target byte offset within `Build::text`.
+    pub text_offset: u64,
+}
+
+/// Read-only data materialized during native emit: switch dispatch
+/// tables. Kept out of `Build::text` so the code section holds only
+/// instructions, and out of `Build::data` because data/bss offsets
+/// are fixed before lowering runs. Writers place `bytes` in a
+/// read-only region, resolve `addr_fixups` sites, and fill each
+/// `rel32` slot.
+#[derive(Debug, Default)]
+pub(crate) struct RodataBuild {
+    pub bytes: Vec<u8>,
+    pub addr_fixups: Vec<RodataAddrFixup>,
+    pub rel32: Vec<RodataRel32>,
+}
+
+/// Object-link analogue of [`RodataRel32`]: a 4- or 8-byte slot
+/// inside the merged data stream (reloc-bearing read-only sections
+/// fold into it) whose final value is `target_vaddr - slot_vaddr`.
+/// Produced by the linker from pc-relative relocations whose site
+/// lives in a data-family section.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct DataPcRelReloc {
+    pub slot_data_offset: u64,
+    /// Target byte offset: within `Build::text` when
+    /// `target_in_data` is false, else within the data-byte space
+    /// (writers map it like any data offset, zero-fill tail
+    /// included).
+    pub target_offset: u64,
+    pub target_in_data: bool,
+    /// Slot width in bytes: 4 or 8.
+    pub width: u8,
 }
 
 // TLS relocations don't need a writer-time fixup type for Linux:
@@ -2271,7 +2339,14 @@ pub(crate) fn lower_for_with_prebuilt(
     build.output_kind = options.output_kind;
     build.dllmain_pc = program.dllmain_pc;
     build.debug_info = options.debug_info;
-    append_build_info(&mut build);
+    // A relocatable object keeps `.text` instruction-pure -- external
+    // tooling decodes the section as one instruction stream -- so the
+    // fingerprint rides a `.comment` section there (the ET_REL
+    // writer emits it) and the multi-object synthesizer re-appends
+    // the in-text form to the final image.
+    if options.output_kind != OutputKind::Relocatable {
+        append_build_info(&mut build);
+    }
     Ok(build)
 }
 

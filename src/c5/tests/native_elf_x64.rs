@@ -1759,3 +1759,4 @@ fn symbol_get_weak_hidden_undef_reads_null() {
     );
     assert_eq!(code, 0, "weak hidden undefined address must read as null");
 }
+

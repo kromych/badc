@@ -13,3 +13,14 @@ Disassembly of section .text:
 <main>:
                	xorq	%rax, %rax
                	retq
+		...
+
+<em_div_ex>:
+               	divb	%cl
+               	retq
+               	nop
+               	nopw	%cs:(%rax,%rax)
+
+<div_cx>:
+               	divw	%cx
+               	retq

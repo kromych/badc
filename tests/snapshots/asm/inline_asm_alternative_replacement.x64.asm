@@ -40,3 +40,14 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+
+<cs_wrapper>:
+               	pushq	%rcx
+               	pushq	%rdx
+               	pushq	%rsi
+               	callq	<addr>
+               	popq	%rsi
+               	popq	%rdx
+               	popq	%rcx
+               	retq
+               	leaq	(%rax), %rdi

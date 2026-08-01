@@ -47,6 +47,9 @@ const R_AARCH64_JUMP26: u32 = 282;
 const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
 const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
 const R_X86_64_TPOFF32: u32 = 23;
+const R_X86_64_PC64: u32 = 24;
+const R_AARCH64_PREL32: u32 = 261;
+const R_AARCH64_PREL64: u32 = 260;
 const R_AARCH64_TLSLE_ADD_TPREL_HI12: u32 = 549;
 const R_AARCH64_TLSLE_ADD_TPREL_LO12_NC: u32 = 551;
 
@@ -108,6 +111,10 @@ pub struct MergedNative {
     /// `data_vaddr + target_data_offset` once the final-image
     /// writer commits a layout.
     pub data_abs_relocs: Vec<DataAbsReloc>,
+    /// PC-relative 4-byte slots in [`Self::data`] targeting `.text`
+    /// (switch dispatch tables from folded `.rodata`); see
+    /// [`DataPcRel`].
+    pub data_pcrel_relocs: Vec<DataPcRel>,
     /// Data-initializer slots that hold the address of an imported
     /// function: `(slot_data_offset, import_index)`. A function-pointer
     /// table entry naming a shared-library symbol (`static freefn t =
@@ -294,6 +301,24 @@ fn merged_target(
              text or data offset"
         ))),
     }
+}
+
+/// Pending pc-relative relocation whose site lives in the merged data
+/// stream: a switch dispatch table in folded `.rodata` (`R_*_PC32`
+/// class, 4-byte) or an assembler `label - .` record in a folded
+/// named section (`R_X86_64_PC64` class, 8-byte). The slot at
+/// `slot_offset` receives `(text_vaddr + target_offset) - (data_vaddr
+/// + slot_offset)` once the final-image writer commits a layout; no
+/// absolute address survives into the image, so a PIE needs no
+/// load-time relocation for it.
+#[derive(Debug, Clone, Copy)]
+pub struct DataPcRel {
+    /// Byte offset within `MergedNative::data` of the slot.
+    pub slot_offset: u64,
+    /// `S + A` of the relocation in the merged image.
+    pub target: MergedTarget,
+    /// Slot width in bytes: 4 or 8.
+    pub width: u8,
 }
 
 /// Where a defined symbol lives in the merged image.
@@ -502,6 +527,13 @@ pub fn link_native_objects_with_shared_libs(
         text_align = text_align.max(obj.text_align);
         text_bases.push(text.len());
         text.extend_from_slice(&obj.text);
+        // The per-unit producer fingerprint. Input objects keep their
+        // `.text` instruction-pure (stream decoders reject embedded
+        // data), so the tail marker the single-unit image writers
+        // append lands here instead, giving the merged image the same
+        // strings(1)-visible mark after each unit's code.
+        text.extend_from_slice(crate::OUTPUT_MARKER.as_bytes());
+        text.push(0);
         align_up(
             &mut data,
             crate::c5::layout::data_image_align(obj.rodata_align),
@@ -1221,6 +1253,7 @@ pub fn link_native_objects_with_shared_libs(
     // target to a merged-image data offset and queue it for
     // the writer to patch once `data_vaddr` is committed.
     let mut data_abs_relocs: Vec<DataAbsReloc> = Vec::new();
+    let mut data_pcrel_relocs: Vec<DataPcRel> = Vec::new();
     // Data slots that name an imported function; the PLT pass turns each
     // into a stub-targeting `DataAbsReloc` (see `data_import_refs`).
     let mut data_import_refs: Vec<(u64, usize)> = Vec::new();
@@ -1234,6 +1267,81 @@ pub fn link_native_objects_with_shared_libs(
             }
             let sym = &obj.symbols[reloc.sym_idx];
             let slot_offset = data_bases[i] as u64 + reloc.offset;
+            // A pc-relative slot in the data stream (a switch dispatch
+            // table in folded `.rodata`, an assembler `label - .`
+            // record in a folded named section): the value is
+            // `S + A - P`, deferred to the writer since the
+            // text-to-data vaddr gap is unknown here. Only defined
+            // `.text` targets occur.
+            let pcrel_width: Option<u8> = match (machine, reloc.rtype) {
+                (NativeMachine::X86_64, R_X86_64_PC32)
+                | (NativeMachine::Aarch64, R_AARCH64_PREL32) => Some(4),
+                (NativeMachine::X86_64, R_X86_64_PC64)
+                | (NativeMachine::Aarch64, R_AARCH64_PREL64) => Some(8),
+                _ => None,
+            };
+            if let Some(width) = pcrel_width {
+                let target = match sym.section {
+                    NativeSymSection::Undef | NativeSymSection::Common => {
+                        let d = defined.get(&sym.name).ok_or_else(|| {
+                            link_err(&format!(
+                                "undefined reference to `{}` (pc-relative data slot)",
+                                sym.name,
+                            ))
+                        })?;
+                        merged_target(d.section, d.value as i64, reloc.addend, data.len())?
+                    }
+                    NativeSymSection::Text => merged_target(
+                        sym.section,
+                        text_bases[i] as i64 + sym.value as i64,
+                        reloc.addend,
+                        data.len(),
+                    )?,
+                    NativeSymSection::RoData => merged_target(
+                        sym.section,
+                        rodata_bases[i] as i64 + sym.value as i64,
+                        reloc.addend,
+                        data.len(),
+                    )?,
+                    NativeSymSection::Data => merged_target(
+                        sym.section,
+                        data_bases[i] as i64 + sym.value as i64,
+                        reloc.addend,
+                        data.len(),
+                    )?,
+                    NativeSymSection::Bss => merged_target(
+                        sym.section,
+                        bss_bases[i] as i64 + sym.value as i64,
+                        reloc.addend,
+                        data.len(),
+                    )?,
+                    other => {
+                        return Err(err(&format!(
+                            "pc-relative data slot targets {other:?} symbol `{}`",
+                            sym.name,
+                        )));
+                    }
+                };
+                data_pcrel_relocs.push(DataPcRel {
+                    slot_offset,
+                    target,
+                    width,
+                });
+                continue;
+            }
+            // The remaining kinds are the 8-byte absolute pointer
+            // initializers.
+            let is_abs64 = matches!(
+                (machine, reloc.rtype),
+                (NativeMachine::X86_64, R_X86_64_64) | (NativeMachine::Aarch64, R_AARCH64_ABS64)
+            );
+            if !is_abs64 {
+                return Err(err(&format!(
+                    "link_native_objects: data-section reloc type {} not supported \
+                     in object {i}",
+                    reloc.rtype,
+                )));
+            }
             let resolved_section = match sym.section {
                 NativeSymSection::Undef | NativeSymSection::Common => {
                     // Common targets are coalesced into `.bss` by
@@ -1612,6 +1720,7 @@ pub fn link_native_objects_with_shared_libs(
         imports,
         pending_imports,
         data_abs_relocs,
+        data_pcrel_relocs,
         data_import_refs,
         machine,
         dylibs,

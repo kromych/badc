@@ -24,3 +24,8 @@ Disassembly of section .text:
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
                	retq
+               	addb	%al, (%rax)
+
+<boot>:
+               	movl	$0x7, %eax
+               	retq

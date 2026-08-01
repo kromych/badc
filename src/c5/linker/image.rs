@@ -207,6 +207,7 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
     // resolve against `text_vaddr` instead.
     let mut data = merged.data.clone();
     patch_data_abs_relocs(&mut data, text_vaddr, data_vaddr, &merged.data_abs_relocs)?;
+    patch_data_pcrel_relocs(&mut data, text_vaddr, data_vaddr, &merged.data_pcrel_relocs)?;
 
     let mut out: Vec<u8> = Vec::with_capacity(
         headers_size as usize + text.len() + merged.data.len() + PAGE_SIZE as usize,
@@ -313,6 +314,48 @@ fn patch_data_abs_relocs(
             super::link::MergedTarget::Text(off) => text_vaddr.wrapping_add(off as u64),
         };
         data[slot..slot + 8].copy_from_slice(&value.to_le_bytes());
+    }
+    Ok(())
+}
+
+/// Apply each pc-relative data-slot relocation (switch dispatch
+/// tables in folded `.rodata`, assembler `label - .` records): the
+/// slot receives `(text_vaddr + target_offset) - (data_vaddr +
+/// slot_offset)` at the recorded width.
+fn patch_data_pcrel_relocs(
+    data: &mut [u8],
+    text_vaddr: u64,
+    data_vaddr: u64,
+    relocs: &[super::link::DataPcRel],
+) -> Result<(), C5Error> {
+    for r in relocs {
+        let slot = r.slot_offset as usize;
+        let width = r.width as usize;
+        if slot + width > data.len() {
+            return Err(err(&format!(
+                "data pcrel reloc at slot 0x{:x} extends past .data (len 0x{:x})",
+                slot,
+                data.len()
+            )));
+        }
+        // `MergedTarget::Data` spans the file-backed data and the
+        // zero-fill tail past it in one offset space (as in
+        // `patch_data_abs_relocs`).
+        let target = match r.target {
+            super::link::MergedTarget::Data(off) => data_vaddr.wrapping_add(off as u64),
+            super::link::MergedTarget::Text(off) => text_vaddr.wrapping_add(off as u64),
+        };
+        let value = target as i64 - (data_vaddr + r.slot_offset) as i64;
+        if width == 8 {
+            data[slot..slot + 8].copy_from_slice(&value.to_le_bytes());
+            continue;
+        }
+        let Ok(v) = i32::try_from(value) else {
+            return Err(err(&format!(
+                "data pcrel reloc at slot 0x{slot:x}: displacement 0x{value:x} exceeds 32 bits",
+            )));
+        };
+        data[slot..slot + 4].copy_from_slice(&v.to_le_bytes());
     }
     Ok(())
 }
@@ -668,6 +711,7 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
     // in the static path.
     let mut data = merged.data.clone();
     patch_data_abs_relocs(&mut data, text_vaddr, data_vaddr, &merged.data_abs_relocs)?;
+    patch_data_pcrel_relocs(&mut data, text_vaddr, data_vaddr, &merged.data_pcrel_relocs)?;
 
     let mut out: Vec<u8> =
         Vec::with_capacity((dynamic_off + dynamic_size + PAGE_SIZE) as usize + merged.data.len());
@@ -1041,6 +1085,7 @@ mod tests {
             imports: alloc::vec![],
             pending_imports: alloc::vec![],
             data_abs_relocs: alloc::vec![],
+            data_pcrel_relocs: alloc::vec![],
             data_import_refs: alloc::vec![],
             machine: NativeMachine::X86_64,
             dylibs: alloc::vec![],

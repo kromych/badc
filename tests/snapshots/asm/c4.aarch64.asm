@@ -93,7 +93,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
                	cmp	x0, x1
-               	b.ge	<addr>
+               	b.hs	<addr>
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

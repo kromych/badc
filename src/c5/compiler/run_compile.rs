@@ -2410,10 +2410,15 @@ impl Compiler {
                         let reuse_eligible = was_tentative_glo
                             || (self.symbols[id_idx].defined_here && self.lex.tk != Token::Assign);
                         // Prior storage is reusable only when it sits on the
-                        // object's (merged) alignment; otherwise the object
-                        // moves to a fresh aligned slot below.
-                        let reuse_prior_storage =
-                            reuse_eligible && self.symbols[id_idx].val % obj_align == 0;
+                        // object's (merged) alignment and spans every byte the
+                        // object now needs -- a tentative definition reserves
+                        // `sizeof`, which a flexible array member's initializer
+                        // outgrows. Otherwise the object moves to a fresh slot
+                        // below, as the deferred-size array paths do, and the
+                        // references already emitted are rebased onto it.
+                        let reuse_prior_storage = reuse_eligible
+                            && self.symbols[id_idx].val % obj_align == 0
+                            && bytes <= self.symbols[id_idx].reserved_data_bytes;
                         // `extern _Thread_local T x;` (no initializer) is a
                         // pure reference, not a definition: it must not
                         // reserve TLS storage. The defining unit owns the

@@ -3809,6 +3809,15 @@ fn flexible_array_member_after_tentative_decl() {
 }
 
 #[test]
+fn flexible_array_member_after_tentative_def() {
+    // C99 6.9.2 + 6.7.2.1p16: a tentative definition of a FAM-bearing struct
+    // reserves only `sizeof`, so the later defining declaration -- which is
+    // larger by its initialized elements -- must take fresh storage. Reusing
+    // the tentative slot writes the elements over the next object.
+    assert_eq!(run_fixture("flexible_array_member_after_tentative_def.c"), 0);
+}
+
+#[test]
 fn pointer_to_array_typedef_param_subscript() {
     // A `Node *nodes` parameter, where `Node` is an array typedef, is a
     // pointer to the array (not an array parameter -- 6.7.5.3p7 does not

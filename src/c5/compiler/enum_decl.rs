@@ -29,20 +29,35 @@ type EnumBody = (i64, i64, alloc::vec::Vec<(String, i64)>);
 
 /// The integer type compatible with an enum whose values span
 /// `[min, max]`. C99 6.7.2.2p4 leaves the choice to the
-/// implementation; GCC picks the first of `int`, `unsigned int`,
-/// then a 64-bit type able to represent every value, unsigned when
-/// no enumerator is negative. Enumerator constants outside `int`'s
-/// range are a GCC extension typed the same way, so this also
-/// types the constants of such an enum.
+/// implementation; GCC picks `unsigned int` whenever no enumerator is
+/// negative (widening to a 64-bit type when a value exceeds it) and
+/// `int` otherwise, so an all-non-negative enum compares, divides,
+/// and converts as an unsigned type.
 fn enum_compatible_ty(min: i64, max: i64) -> i64 {
-    if min >= i32::MIN as i64 && max <= i32::MAX as i64 {
-        Ty::Int as i64
-    } else if min >= 0 && max <= u32::MAX as i64 {
+    if min < 0 {
+        if min >= i32::MIN as i64 && max <= i32::MAX as i64 {
+            Ty::Int as i64
+        } else {
+            Ty::LongLong as i64
+        }
+    } else if max <= u32::MAX as i64 {
         Ty::Int as i64 | UNSIGNED_BIT
-    } else if min >= 0 {
-        Ty::LongLong as i64 | UNSIGNED_BIT
     } else {
-        Ty::LongLong as i64
+        Ty::LongLong as i64 | UNSIGNED_BIT
+    }
+}
+
+/// The type of one enumerator constant. Within a 32-bit enum GCC
+/// types each constant by its own value -- `int` when it fits (C99
+/// 6.7.2.2p3), `unsigned int` for the wider extension values -- while
+/// every constant of an enum needing a 64-bit type takes that type.
+fn enumerator_constant_ty(v: i64, enum_ty: i64) -> i64 {
+    if (enum_ty & !UNSIGNED_BIT) == Ty::LongLong as i64 {
+        enum_ty
+    } else if v >= i32::MIN as i64 && v <= i32::MAX as i64 {
+        Ty::Int as i64
+    } else {
+        Ty::Int as i64 | UNSIGNED_BIT
     }
 }
 
@@ -158,7 +173,7 @@ impl Compiler {
             // During the body the constant carries its value's own type
             // so a reference from a later enumerator converts correctly;
             // the whole list is restamped below once the range is known.
-            self.symbols[idx].type_ = enum_compatible_ty(i, i);
+            self.symbols[idx].type_ = enumerator_constant_ty(i, enum_compatible_ty(i, i));
             self.symbols[idx].val = i;
             captured.push((name, i));
             sym_indexes.push(idx);
@@ -170,12 +185,13 @@ impl Compiler {
         // caller records the resulting EnumDef once packedness is known.
         let min = captured.iter().map(|&(_, v)| v).min().unwrap_or(0);
         let max = captured.iter().map(|&(_, v)| v).max().unwrap_or(0);
-        // On completion every constant takes the type compatible with the
-        // whole value range (GCC; C23 6.7.2.2 codified it). `packed`
-        // narrows only the enum type, never the constants.
+        // On completion each constant is restamped against the whole
+        // range: per-value within a 32-bit enum, the enum's own 64-bit
+        // type otherwise (GCC). `packed` narrows only the enum type,
+        // never the constants.
         let compatible = enum_compatible_ty(min, max);
-        for &idx in &sym_indexes {
-            self.symbols[idx].type_ = compatible;
+        for (&idx, &(_, v)) in sym_indexes.iter().zip(&captured) {
+            self.symbols[idx].type_ = enumerator_constant_ty(v, compatible);
         }
         Ok((min, max, captured))
     }

@@ -850,6 +850,58 @@ pub(in crate::c5::compiler) struct Pending {
     pub auto_type_single_declarator: bool,
 }
 
+/// The declaration-specifier carriers of an enclosing, still-open
+/// declaration, detached while a nested statement block parses (a GNU
+/// statement expression in a `typeof` operand or an initializer). The
+/// block's own declarations reset or consume these fields on entry, so
+/// without the detach the enclosing declaration would read the inner
+/// declaration's state -- e.g. `register typeof(({...})) v asm("reg")`
+/// losing its storage class.
+pub(super) struct DeclSpecifiers {
+    saw_register_storage: bool,
+    base_is_const: bool,
+    attr_used: bool,
+    attr_weak: bool,
+    attr_hidden: bool,
+    attr_section: Option<alloc::string::String>,
+    attr_cleanup: Option<usize>,
+    attr_align: i64,
+    type_align: i64,
+    attr_vector_size: i64,
+}
+
+impl Pending {
+    /// Detach the specifier carriers; the nested block starts clean, as
+    /// any declaration does.
+    pub(super) fn take_decl_specifiers(&mut self) -> DeclSpecifiers {
+        DeclSpecifiers {
+            saw_register_storage: core::mem::take(&mut self.saw_register_storage),
+            base_is_const: core::mem::take(&mut self.base_is_const),
+            attr_used: core::mem::take(&mut self.attr_used),
+            attr_weak: core::mem::take(&mut self.attr_weak),
+            attr_hidden: core::mem::take(&mut self.attr_hidden),
+            attr_section: self.attr_section.take(),
+            attr_cleanup: self.attr_cleanup.take(),
+            attr_align: core::mem::take(&mut self.attr_align),
+            type_align: core::mem::take(&mut self.type_align),
+            attr_vector_size: core::mem::take(&mut self.attr_vector_size),
+        }
+    }
+
+    pub(super) fn restore_decl_specifiers(&mut self, s: DeclSpecifiers) {
+        self.saw_register_storage = s.saw_register_storage;
+        self.base_is_const = s.base_is_const;
+        self.attr_used = s.attr_used;
+        self.attr_weak = s.attr_weak;
+        self.attr_hidden = s.attr_hidden;
+        self.attr_section = s.attr_section;
+        self.attr_cleanup = s.attr_cleanup;
+        self.attr_align = s.attr_align;
+        self.type_align = s.type_align;
+        self.attr_vector_size = s.attr_vector_size;
+    }
+}
+
 impl Default for Pending {
     fn default() -> Self {
         Self {

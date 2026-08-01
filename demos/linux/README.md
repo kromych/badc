@@ -205,7 +205,7 @@ result, as a pass/fail check rather than a measurement:
 ```sh
 python3 demos/linux/initramfs.py -o initramfs.cpio.gz
 python3 demos/linux/verify.py --kernel-dir <writable tree> \
-    --initramfs initramfs.cpio.gz --expect-units 1912 --report verify-x86_64.json
+    --initramfs initramfs.cpio.gz --expect-units 2800 --report verify-x86_64.json
 ```
 
 `initramfs.py` builds the boot image: a single static `/init`, compiled with
@@ -227,9 +227,11 @@ Run it on the box whose corpus matches, and against a copy: the build writes
 into the tree.
 
 Two parameters depend on the corpus rather than the architecture and have to
-be passed. `--expect-units` is the unit count of the configuration under test
-(1912 for the pinned x86_64 config, 1346 for the aarch64 one). `--rdinit` is
-whatever the initramfs installs, `/init` by default.
+be passed. `--expect-units` is a floor on the unit count of the configuration
+under test: at defconfig the trees measure 2847 (x86_64) and 4177 (aarch64),
+and the minimal configs 1912 and 1346, so set it just under whichever one is
+being built. `--rdinit` is whatever the initramfs installs, `/init` by
+default.
 
 `--qemu` selects the emulator; `--qemu-args` adds arguments to the boot. An
 emulator built out of tree has no data directory, so it needs `-nic none`:

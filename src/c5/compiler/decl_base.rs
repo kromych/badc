@@ -474,6 +474,51 @@ impl Compiler {
         (*class == Token::Fun as i64 || *class == Token::Sys as i64).then_some(*sym as usize)
     }
 
+    /// The prototype of the accumulated operand when it is a plain
+    /// function-pointer object reference: `(parameter types, variadic,
+    /// pointer depth)`. An identifier reads its symbol; a non-bitfield
+    /// member access or a subscripted element reads the callee channel,
+    /// which its own parse is what last wrote (the channel is cleared at
+    /// the operand's start and parked across subscript indices), so the
+    /// channel describes the operand's value and not an inner
+    /// subexpression's. Empty parameter types spell a zero-parameter
+    /// prototype: the symbol tables do not record the prototyped-ness
+    /// distinction (see `FnTypeName::params`).
+    fn fn_ptr_object_proto(&mut self) -> Option<(alloc::vec::Vec<i64>, bool, i64)> {
+        use super::super::ast::Expr;
+        let acc = self.ast_acc?;
+        match self.ast.expr(acc) {
+            Expr::Ident {
+                sym,
+                class,
+                array_size,
+                ..
+            } if (*class == Token::Loc as i64 || *class == Token::Glo as i64)
+                && *array_size == 0 =>
+            {
+                let s = &self.symbols[*sym as usize];
+                (s.fn_ptr_indirection >= 1)
+                    .then(|| (s.params.clone(), s.is_variadic, s.fn_ptr_indirection))
+            }
+            Expr::Member {
+                bitfield: None,
+                array_size: 0,
+                ..
+            }
+            | Expr::Index { .. } => {
+                let depth = self.pending.indirect_callee_fn_ptr_depth;
+                if depth < 1 {
+                    return None;
+                }
+                self.pending
+                    .indirect_callee_params
+                    .take()
+                    .map(|p| (p, self.pending.indirect_callee_is_variadic, depth))
+            }
+            _ => None,
+        }
+    }
+
     fn parse_unevaluated_expr_ty(&mut self, comma_operands: bool) -> Result<i64, C5Error> {
         let saved_text_len = self.next_ent_pc;
         let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
@@ -492,6 +537,12 @@ impl Compiler {
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
         self.pending.last_fn_ptr_cast = None;
+        // The callee channel must reflect this operand's own producers:
+        // clear it for the parse and restore the surrounding context's
+        // values on exit.
+        let saved_callee_params = self.pending.indirect_callee_params.take();
+        let saved_callee_variadic = core::mem::take(&mut self.pending.indirect_callee_is_variadic);
+        let saved_callee_depth = core::mem::take(&mut self.pending.indirect_callee_fn_ptr_depth);
         // Parse at assignment precedence so binary, conditional, and
         // assignment operators are consumed.
         self.expr(Token::Assign as i64)?;
@@ -501,6 +552,9 @@ impl Compiler {
                 self.pending.last_array_decay_size = 0;
                 self.pending.last_array_decay_bytes = 0;
                 self.pending.last_array_decay_dims.clear();
+                self.pending.indirect_callee_params = None;
+                self.pending.indirect_callee_is_variadic = false;
+                self.pending.indirect_callee_fn_ptr_depth = 0;
                 self.expr(Token::Assign as i64)?;
             }
         }
@@ -536,6 +590,21 @@ impl Compiler {
                     self.pending.base_is_function_type = false;
                     self.pending.typedef_fn_proto = Some((params.len(), variadic));
                     self.pending.fn_ptr_param_types = Some(params);
+                } else if self.pending.last_array_decay_size == 0
+                    && self.pending.last_array_decay_bytes == 0
+                    && self.pending.last_array_decay_dims.is_empty()
+                    && let Some((params, variadic, depth)) = self.fn_ptr_object_proto()
+                {
+                    // A function-pointer object as the whole operand -- an
+                    // identifier, a member access, or a subscripted
+                    // element: route its prototype through the same
+                    // carriers so a type-name reader compares the
+                    // signature, which the flat tag (return type only)
+                    // cannot spell.
+                    self.pending.fn_ptr_indirection = Some(depth);
+                    self.pending.base_is_function_type = false;
+                    self.pending.typedef_fn_proto = Some((params.len(), variadic));
+                    self.pending.fn_ptr_param_types = Some(params);
                 }
                 self.ty
             }
@@ -563,6 +632,9 @@ impl Compiler {
             core::mem::replace(&mut self.pending.last_array_decay_dims, saved_decay_dims);
         self.pending.last_array_decay_size = saved_decay;
         self.pending.last_array_decay_bytes = saved_decay_bytes;
+        self.pending.indirect_callee_params = saved_callee_params;
+        self.pending.indirect_callee_is_variadic = saved_callee_variadic;
+        self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);

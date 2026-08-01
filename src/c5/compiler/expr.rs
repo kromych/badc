@@ -1769,6 +1769,8 @@ impl Compiler {
                 if !is_array_var && !is_struct_value && !self.symbols[id_idx].params.is_empty() {
                     self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
                     self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
+                    self.pending.indirect_callee_fn_ptr_depth =
+                        self.symbols[id_idx].fn_ptr_indirection;
                 }
                 // Array variables decay to a pointer to the first
                 // element: the symbol's address IS its value, no
@@ -1865,10 +1867,11 @@ impl Compiler {
                     if fpi > 0 {
                         self.pending.fn_ptr_chain_depth = fpi - 1;
                     }
-                    if !self.symbols[id_idx].params.is_empty() {
+                    if fpi > 0 || !self.symbols[id_idx].params.is_empty() {
                         self.pending.indirect_callee_params =
                             Some(self.symbols[id_idx].params.clone());
                         self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
+                        self.pending.indirect_callee_fn_ptr_depth = fpi;
                     }
                 } else if is_struct_value {
                     if identifier_is_local {
@@ -2206,6 +2209,7 @@ impl Compiler {
                             cast_fpi.unwrap_or(1).max(1),
                         ));
                         self.pending.indirect_callee_is_variadic = pp.is_variadic;
+                        self.pending.indirect_callee_fn_ptr_depth = cast_fpi.unwrap_or(1).max(1);
                         self.pending.indirect_callee_params = if pp.types.is_empty() {
                             None
                         } else {
@@ -4102,12 +4106,15 @@ impl Compiler {
                 let saved_callee_params = self.pending.indirect_callee_params.take();
                 let saved_callee_variadic =
                     core::mem::take(&mut self.pending.indirect_callee_is_variadic);
+                let saved_callee_depth =
+                    core::mem::take(&mut self.pending.indirect_callee_fn_ptr_depth);
                 let saved_fn_ptr_chain = self.pending.fn_ptr_chain_depth;
                 self.ast_psh();
                 self.expr(Token::Assign as i64)?;
                 let idx_ast = self.ast_acc;
                 self.pending.indirect_callee_params = saved_callee_params;
                 self.pending.indirect_callee_is_variadic = saved_callee_variadic;
+                self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;
                 self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
                 // Restore the queue and shift one level down so
                 // the next `[i]` sees the stride for that level
@@ -4264,13 +4271,18 @@ impl Compiler {
                 // non-function-pointer field has empty params and clears the
                 // channel so a stale producer's parameters cannot reach an
                 // unrelated call.
-                self.pending.indirect_callee_params = if field.params.is_empty() {
-                    None
-                } else {
+                let field_is_fn_ptr = field.fn_ptr_indirection > 0 || !field.params.is_empty();
+                self.pending.indirect_callee_params = if field_is_fn_ptr {
                     Some(field.params.clone())
+                } else {
+                    None
                 };
-                self.pending.indirect_callee_is_variadic =
-                    !field.params.is_empty() && field.is_variadic;
+                self.pending.indirect_callee_is_variadic = field_is_fn_ptr && field.is_variadic;
+                self.pending.indirect_callee_fn_ptr_depth = if field_is_fn_ptr {
+                    field.fn_ptr_indirection
+                } else {
+                    0
+                };
 
                 if field.offset > 0 {
                     self.emit_binop_with_imm(crate::c5::ir::BinOp::Add, field.offset as i64);

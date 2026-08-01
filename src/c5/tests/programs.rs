@@ -1869,6 +1869,14 @@ fn types_compatible_fn_ptr_cast() {
 }
 
 #[test]
+fn types_compatible_fn_ptr_object() {
+    // typeof of a function-pointer object -- a variable, a member, an
+    // element -- carries the object's prototype into
+    // __builtin_types_compatible_p.
+    assert_eq!(run_fixture("types_compatible_fn_ptr_object.c"), 0);
+}
+
+#[test]
 fn zero_length_array_decay() {
     // A zero-length array reads as its address, not as a load of the
     // storage it does not have.

@@ -629,6 +629,11 @@ pub(in crate::c5::compiler) struct Pending {
     /// variant passes the tail on the stack). Set and cleared at the same
     /// sites as `indirect_callee_params`.
     pub indirect_callee_is_variadic: bool,
+    /// Pointer depth of the value whose prototype is held in
+    /// `indirect_callee_params`, in `Symbol::fn_ptr_indirection`'s
+    /// convention (1: the value is the function pointer). Threaded at the
+    /// same sites; `typeof` reads it to spell the operand's indirection.
+    pub indirect_callee_fn_ptr_depth: i64,
     /// Signature of the last completed function-pointer cast: (cast
     /// result tag, parameter types, variadic, pointer depth). The flat
     /// tag carries only the return type, so `typeof(<cast>)` recovers
@@ -954,6 +959,7 @@ impl Default for Pending {
             fn_ptr_param_types: None,
             indirect_callee_params: None,
             indirect_callee_is_variadic: false,
+            indirect_callee_fn_ptr_depth: 0,
             last_fn_ptr_cast: None,
             parsing_fn_ptr_proto: false,
             param_decl_context: false,

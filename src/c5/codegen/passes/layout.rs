@@ -103,6 +103,11 @@ struct JumpChains {
     state: Vec<u8>,
     /// Blocks of the chain being resolved, unwound to assign their ends.
     path: Vec<BlockId>,
+    /// Chain steps taken since the last `build`, counting the resolution
+    /// walk and every walk a cyclic chain still forces. Resolving the
+    /// ends once bounds this by the block count; walking per edge costs
+    /// the chain's length at each of them. The scaling test reads it.
+    hops: usize,
 }
 
 impl JumpChains {
@@ -113,7 +118,9 @@ impl JumpChains {
             penultimate,
             state,
             path,
+            hops,
         } = self;
+        *hops = 0;
         end.clear();
         end.resize(n, NO_BLOCK);
         penultimate.clear();
@@ -135,6 +142,7 @@ impl JumpChains {
             // Walk until the chain reaches a resolved block, a block
             // that ends no chain, or the path itself (a jump cycle).
             let tail = loop {
+                *hops += 1;
                 if state[cur as usize] == 2 {
                     break Some(cur);
                 }
@@ -180,10 +188,13 @@ impl JumpChains {
     /// the graph as it stands: retargeting rewrites the edges the walk
     /// reads, and only a cyclic chain's answer depends on how far that
     /// rewriting has got.
-    fn target(&self, func: &FunctionSsa, start: BlockId) -> BlockId {
+    fn target(&mut self, func: &FunctionSsa, start: BlockId) -> BlockId {
+        self.hops += 1;
         let e = self.end[start as usize];
         if e == NO_BLOCK {
-            return walk_chain(func, start);
+            let (t, hops) = walk_chain(func, start);
+            self.hops += hops;
+            return t;
         }
         if block_has_phis(func, e) {
             self.penultimate[start as usize]
@@ -196,7 +207,8 @@ impl JumpChains {
 /// Follow the chain of empty unconditionally-branching blocks from
 /// `start`, stopping one hop short of a phi-carrying end. A chain
 /// longer than the block count is a jump cycle and is left alone.
-fn walk_chain(func: &FunctionSsa, start: BlockId) -> BlockId {
+/// Returns the target and the steps the walk took.
+fn walk_chain(func: &FunctionSsa, start: BlockId) -> (BlockId, usize) {
     let mut prev = start;
     let mut cur = start;
     let mut steps = 0usize;
@@ -215,9 +227,9 @@ fn walk_chain(func: &FunctionSsa, start: BlockId) -> BlockId {
         steps += 1;
     }
     if steps > func.blocks.len() {
-        return start;
+        return (start, steps);
     }
-    if block_has_phis(func, cur) { prev } else { cur }
+    (if block_has_phis(func, cur) { prev } else { cur }, steps)
 }
 
 /// Retarget every terminator edge through [`JumpChains::target`].
@@ -1236,7 +1248,7 @@ mod tests {
             for b in 0..f.blocks.len() as BlockId {
                 assert_eq!(
                     chains.target(f, b),
-                    walk_chain(f, b),
+                    walk_chain(f, b).0,
                     "block {b} of a {}-block shape",
                     f.blocks.len(),
                 );
@@ -1245,28 +1257,39 @@ mod tests {
     }
 
     /// Threading walked the chain from every edge, so a chain of N empty
-    /// jump blocks cost N^2. Quadrupling the chain must not quadruple
-    /// the cost -- 16x is what the per-edge walk would spend.
+    /// jump blocks cost N^2. Measured in chain steps -- the operation
+    /// the per-edge walk repeats -- so the bound holds whatever the
+    /// machine is doing. Quadrupling the chain must not quadruple the
+    /// steps; 16x is what the per-edge walk would spend, and the
+    /// reference walk is held to the same bound to confirm it does.
     #[test]
     fn jump_threading_is_not_quadratic_in_the_chain() {
-        let run = |n: usize| {
+        let hops = |n: usize| -> (usize, usize) {
             let mut f = jump_chain(n, false);
-            let start = std::time::Instant::now();
-            thread_jumps(&mut f, &mut JumpChains::default());
-            start.elapsed().as_secs_f64()
+            // The reference is taken first: threading collapses the
+            // chain the per-edge walk would have to follow.
+            let per_edge: usize = (0..f.blocks.len() as BlockId)
+                .map(|b| walk_chain(&f, b).1 + 1)
+                .sum();
+            let mut chains = JumpChains::default();
+            thread_jumps(&mut f, &mut chains);
+            (chains.hops, per_edge)
         };
-        // Interleaved so a load excursion on a shared machine skews
-        // both sizes rather than only the later batch; the suite runs
-        // its tests in parallel, so the two are never measured alone.
-        let (mut small, mut large) = (f64::MAX, f64::MAX);
-        for _ in 0..3 {
-            small = small.min(run(8000));
-            large = large.min(run(32000));
-        }
+        let (small, small_walk) = hops(500);
+        let (large, large_walk) = hops(2000);
+        assert!(small > 0, "no chain steps to compare");
         assert!(
-            large < small * 8.0,
-            "4x the chain cost {:.1}x, past the 8x headroom over linear",
-            large / small,
+            large < small * 6,
+            "4x the chain cost {large} steps against {small}, \
+             past the 6x headroom over linear",
+        );
+        // The per-edge walk this replaced fails the same bound at the
+        // same sizes, so the bound separates the two.
+        assert!(
+            large_walk >= small_walk * 6,
+            "the per-edge walk no longer costs the chain's length at each \
+             edge ({small_walk} -> {large_walk} steps); the bound above no \
+             longer proves anything",
         );
     }
 }

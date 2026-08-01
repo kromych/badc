@@ -33,8 +33,8 @@ LSUI_RMW(lsui_swap32, "swpt", u32, "w")
 LSUI_RMW(lsui_swap64_al, "swptal", u64, "x")
 
 // The compare-and-swap forms take the expected value in place, so the first
-// operand is read-write; a leading local label is what the kernel's fault
-// table anchors on.
+// operand is read-write; the leading local label is the anchor a fault-fixup
+// table refers to.
 #define LSUI_CAS(name, insn)                                                   \
     u64 name(u64 *p, u64 expect, u64 newval) {                                 \
         __asm__ volatile(".arch_extension lsui\n"                              \

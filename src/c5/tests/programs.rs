@@ -3822,7 +3822,10 @@ fn flexible_array_member_after_tentative_def() {
     // reserves only `sizeof`, so the later defining declaration -- which is
     // larger by its initialized elements -- must take fresh storage. Reusing
     // the tentative slot writes the elements over the next object.
-    assert_eq!(run_fixture("flexible_array_member_after_tentative_def.c"), 0);
+    assert_eq!(
+        run_fixture("flexible_array_member_after_tentative_def.c"),
+        0
+    );
 }
 
 #[test]

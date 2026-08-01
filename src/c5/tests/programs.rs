@@ -295,6 +295,15 @@ fn offsetof_runtime_subscript() {
 }
 
 #[test]
+fn offsetof_multi_runtime_subscript() {
+    // GCC extension: any number of runtime subscripts in an offsetof
+    // designator; each adds `(size_t)index * stride`. Mixed constant and
+    // runtime subscripts and member-subscript-member chains; all-constant
+    // designators still fold to integer constant expressions.
+    assert_eq!(run_fixture("offsetof_multi_runtime_subscript.c"), 0);
+}
+
+#[test]
 fn decl_specifier_order() {
     // C99 6.7.1: declaration specifiers may appear in any order. A
     // storage-class specifier after the type (`INTN STATIC f()`, the edk2

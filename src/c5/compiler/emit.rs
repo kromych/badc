@@ -213,16 +213,16 @@ impl Compiler {
     /// CU's primary file).
     pub(super) fn intern_source_file(&mut self) -> u16 {
         let name = &self.lex.file;
-        if let Some(pos) = self.source_files.iter().position(|f| f == name) {
-            // Cap at u16::MAX to keep `source_file_indices` a tight
-            // column. A translation unit with > 65k distinct
-            // headers is well past anything we've seen; clamp
-            // rather than overflow so the codegen still produces
-            // *some* attribution.
+        // Cap at u16::MAX to keep `source_file_indices` a tight column.
+        // A translation unit with > 65k distinct headers is well past
+        // anything we've seen; clamp rather than overflow so the codegen
+        // still produces *some* attribution.
+        if let Some(&pos) = self.source_file_index.get(name.as_str()) {
             return pos.min(u16::MAX as usize) as u16;
         }
         let idx = self.source_files.len();
         self.source_files.push(name.clone());
+        self.source_file_index.insert(name.clone(), idx);
         idx.min(u16::MAX as usize) as u16
     }
 

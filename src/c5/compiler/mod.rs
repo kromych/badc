@@ -1497,6 +1497,10 @@ pub struct Compiler {
     /// `DW_LNE_define_file` per entry and switches with the
     /// walker's per-Inst `inst_src` file index.
     source_files: Vec<String>,
+    /// Name -> index into `source_files`. The table is append-only, so
+    /// this is a pure index over it; without it every declaration site
+    /// re-scans the whole table comparing full paths.
+    source_file_index: hashbrown::HashMap<String, usize>,
     /// Label of the primary translation-unit source as supplied
     /// through [`CompileOptions::source_label`]. Compared against
     /// [`lexer::Lexer::file`] at declaration sites so unused-symbol
@@ -1616,6 +1620,10 @@ pub struct Compiler {
     retry_state: Option<(String, CompileOptions)>,
 }
 
+/// Header of `__builtin_*` thunks every translation unit is given; see
+/// [`Compiler::configure_preprocessor`].
+const BUILTIN_THUNK_HEADER: &str = "_builtins.h";
+
 impl Compiler {
     /// Construct a compiler for the default target (the host).
     /// Equivalent to `Compiler::with_target(source,
@@ -1690,6 +1698,18 @@ impl Compiler {
         }
         for name in &opts.force_includes {
             pp.add_force_include(name);
+        }
+        // The GCC `__builtin_*` library thunks, which gcc and clang give
+        // every unit with no `#include`. The header is only `#define`s of
+        // names C99 7.1.3 reserves to the implementation, so it declares
+        // nothing and orders nothing; supplying it up front rather than
+        // on a parse failure keeps the compile to one front-end pass.
+        if !opts
+            .force_includes
+            .iter()
+            .any(|h| h == BUILTIN_THUNK_HEADER)
+        {
+            pp.add_force_include(BUILTIN_THUNK_HEADER);
         }
         // `-O` predefines, installed before the CLI lists so an explicit
         // `-D NDEBUG=<v>` overrides the value and `-U NDEBUG` removes it.
@@ -1895,6 +1915,7 @@ impl Compiler {
                 crate::c5::symbol::InlineModel::C99
             },
             source_files: Vec::new(),
+            source_file_index: hashbrown::HashMap::new(),
             source_label: opts.source_label.clone(),
             variables: Vec::new(),
             pending_block_locals: Vec::new(),
@@ -2112,7 +2133,9 @@ impl Compiler {
                 Some(h) => h,
                 None => return Err(e),
             };
-            if opts.force_includes.iter().any(|h| h == header) {
+            // The thunk header is always in scope, so a failure naming
+            // one of its macros is not something a retry can fix.
+            if header == BUILTIN_THUNK_HEADER || opts.force_includes.iter().any(|h| h == header) {
                 return Err(e);
             }
             opts.force_includes.push(header.to_string());

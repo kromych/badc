@@ -2278,3 +2278,204 @@ fn compiler_owned_header_resolves_embedded_before_search_paths() {
         "a -I shadow of stdarg.h must win, as in gcc/clang"
     );
 }
+
+/// Scratch directory holding the given (name, body) headers, on the
+/// search path of a fresh preprocessor. The caller removes it.
+fn pp_with_headers(tag: &str, files: &[(&str, &str)]) -> (Preprocessor, std::path::PathBuf) {
+    let base = std::env::temp_dir().join(format!(
+        "badc-{tag}-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    std::fs::create_dir_all(&base).unwrap();
+    for (name, body) in files {
+        std::fs::write(base.join(name), body).unwrap();
+    }
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.add_search_path(base.to_str().unwrap());
+    (pp, base)
+}
+
+/// A header wholly wrapped in `#ifndef G` / `#endif` contributes nothing
+/// on re-inclusion while `G` is defined, so the repeat `#include` is
+/// dropped without reading the file.
+#[test]
+fn guarded_header_is_included_once() {
+    let (mut pp, base) = pp_with_headers(
+        "mi-once",
+        &[("g.h", "#ifndef G_H\n#define G_H\nint g;\n#endif\n")],
+    );
+    let out = pp
+        .process("#include <g.h>\n#include <g.h>\nint main() {}\n")
+        .unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert_eq!(out.matches("int g;").count(), 1, "{out}");
+    assert!(out.contains("int main()"), "{out}");
+}
+
+/// `#undef` of the controlling macro puts the body back in play: the
+/// drop tracks whether the macro is defined, not whether the file has
+/// been seen.
+#[test]
+fn undefining_the_guard_reinstates_the_header() {
+    let (mut pp, base) = pp_with_headers(
+        "mi-undef",
+        &[("g.h", "#ifndef G_H\n#define G_H\nint g;\n#endif\n")],
+    );
+    let out = pp
+        .process("#include <g.h>\n#undef G_H\n#include <g.h>\nint main() {}\n")
+        .unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert_eq!(out.matches("int g;").count(), 2, "{out}");
+}
+
+/// Anything outside the guard would be lost by dropping the file, so
+/// only a wholly wrapped header qualifies.
+#[test]
+fn partially_guarded_headers_are_reprocessed() {
+    for (tag, body, marker, want) in [
+        (
+            "pre",
+            "int lead;\n#ifndef G\n#define G\nint g;\n#endif\n",
+            "int lead;",
+            2,
+        ),
+        (
+            "post",
+            "#ifndef G\n#define G\nint g;\n#endif\nint tail;\n",
+            "int tail;",
+            2,
+        ),
+        // Two sibling conditionals: neither wraps the file, and the
+        // second never defines `H`, so its body emits on every pass.
+        (
+            "two",
+            "#ifndef G\n#define G\n#endif\n#ifndef H\nint h;\n#endif\n",
+            "int h;",
+            2,
+        ),
+    ] {
+        let (mut pp, base) = pp_with_headers(&format!("mi-{tag}"), &[("g.h", body)]);
+        let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert_eq!(out.matches(marker).count(), want, "{tag}: {out}");
+    }
+}
+
+/// The guard's own `#else` / `#elif` arm is what runs once the macro is
+/// defined, so such a file is not silent on re-inclusion.
+#[test]
+fn guard_with_an_else_arm_is_reprocessed() {
+    for (tag, body) in [
+        (
+            "else",
+            "#ifndef G\n#define G\nint g;\n#else\nint other;\n#endif\n",
+        ),
+        (
+            "elif",
+            "#ifndef G\n#define G\nint g;\n#elif 1\nint other;\n#endif\n",
+        ),
+    ] {
+        let (mut pp, base) = pp_with_headers(&format!("mi-{tag}"), &[("g.h", body)]);
+        let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert_eq!(out.matches("int g;").count(), 1, "{tag}: {out}");
+        assert_eq!(out.matches("int other;").count(), 1, "{tag}: {out}");
+    }
+    // A nested `#else` inside the guarded body is not the guard's own
+    // arm and leaves the file skippable.
+    let (mut pp, base) = pp_with_headers(
+        "mi-nested-else",
+        &[(
+            "g.h",
+            "#ifndef G\n#define G\n#if 0\nint a;\n#else\nint b;\n#endif\n#endif\n",
+        )],
+    );
+    let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert_eq!(out.matches("int b;").count(), 1, "{out}");
+}
+
+/// A `#define` after the guard's `#endif` is a side effect the second
+/// inclusion still performs.
+#[test]
+fn trailing_directive_disqualifies_the_guard() {
+    let (mut pp, base) = pp_with_headers(
+        "mi-trail",
+        &[(
+            "g.h",
+            "#ifndef G\n#define G\n#endif\n#define N N_BODY\n#undef N\n",
+        )],
+    );
+    let out = pp.process("#include <g.h>\n#include <g.h>\nN\n").unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert!(out.contains("N"), "{out}");
+}
+
+/// `#if !defined(G)` is the other spelling of the same test.
+#[test]
+fn if_not_defined_guard_form_is_recognised() {
+    for open in [
+        "#if !defined(G_H)",
+        "#if !defined G_H",
+        "#if ! defined ( G_H )",
+        // A trailing comment becomes trailing white space in phase 3.
+        "#if !defined(G_H) /* guard */",
+    ] {
+        let (mut pp, base) = pp_with_headers(
+            "mi-ifnd",
+            &[("g.h", &format!("{open}\n#define G_H\nint g;\n#endif\n"))],
+        );
+        let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert_eq!(out.matches("int g;").count(), 1, "{open}: {out}");
+    }
+    // Operands that are not the plain absence test must not be taken for
+    // a guard: the file is processed on every inclusion.
+    for open in ["#if !defined(A) && !defined(G_H)", "#if !G_H", "#ifdef G_H"] {
+        let (mut pp, base) = pp_with_headers(
+            "mi-ifnd-no",
+            &[(
+                "g.h",
+                &format!("{open}\n#define G_H 1\n#else\nint other;\n#endif\n"),
+            )],
+        );
+        let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert!(out.contains("int other;"), "{open}: {out}");
+    }
+}
+
+/// The cost of a unit that includes one guarded header n times must not
+/// scale with the header's size: the repeats are dropped rather than
+/// read and scanned. 4x the inclusions staying under 4x the time rules
+/// out the per-inclusion rescan, which is 4x on its own.
+#[test]
+#[cfg(not(debug_assertions))]
+fn repeat_inclusion_cost_is_independent_of_header_size() {
+    let mut body = String::from("#ifndef BIG_H\n#define BIG_H\n");
+    for i in 0..4000 {
+        body.push_str(&format!("int f{i}(void); /* decl {i} */\n"));
+    }
+    body.push_str("#endif\n");
+    let (_, base) = pp_with_headers("mi-cost", &[("big.h", &body)]);
+    let dir = base.to_str().unwrap().to_string();
+    let once = |n: usize| -> f64 {
+        let src = "#include <big.h>\n".repeat(n);
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_search_path(&dir);
+        let t = std::time::Instant::now();
+        pp.process(&src).unwrap();
+        t.elapsed().as_secs_f64()
+    };
+    once(4);
+    let small = once(4).max(1e-6);
+    let large = once(16);
+    std::fs::remove_dir_all(&base).ok();
+    assert!(
+        large < small * 4.0,
+        "4x the inclusions cost {:.1}x ({small:.4}s -> {large:.4}s); \
+         the repeats are being re-read and re-scanned",
+        large / small
+    );
+}

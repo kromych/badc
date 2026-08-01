@@ -27,6 +27,87 @@ impl CondFrame {
     }
 }
 
+/// Progress of the multiple-inclusion shape check over one file: does
+/// its whole content sit inside a single `#ifndef X` / `#endif` pair,
+/// with nothing but white space outside? If so, re-including the file
+/// while `X` is defined takes the false arm over the entire body and
+/// contributes nothing, so the file need not be read at all.
+///
+/// The scan runs alongside the normal line loop and only observes; it
+/// is driven by [`IncludeGuardScan::line`], called once per line with
+/// the conditional-nesting depth at that point.
+#[derive(Default)]
+pub(super) struct IncludeGuardScan {
+    state: GuardState,
+    name: Option<String>,
+}
+
+#[derive(Default, PartialEq)]
+enum GuardState {
+    /// Before the opening conditional; only white space is allowed.
+    #[default]
+    Leading,
+    /// Inside the guard's body.
+    Open,
+    /// Past the matching `#endif`; only white space is allowed.
+    Closed,
+    /// Something outside the guard would be lost by skipping the file.
+    Disqualified,
+}
+
+impl IncludeGuardScan {
+    /// Observe one line. `directive` is its parse when the line is one,
+    /// `depth` the conditional-nesting depth before the line is applied.
+    pub(super) fn line(&mut self, line: &str, directive: Option<&Directive<'_>>, depth: usize) {
+        if self.state == GuardState::Open && depth == 0 {
+            self.state = GuardState::Closed;
+        }
+        if line.trim().is_empty() {
+            return;
+        }
+        match self.state {
+            GuardState::Leading => match guard_opened_by(directive) {
+                Some(name) if depth == 0 => {
+                    self.name = Some(name.into());
+                    self.state = GuardState::Open;
+                }
+                _ => self.state = GuardState::Disqualified,
+            },
+            // An `#else` / `#elif` arm of the guard itself is what runs
+            // when the macro is defined, so the file does not go quiet on
+            // re-inclusion. `depth == 1` selects the guard's own frame.
+            GuardState::Open
+                if depth == 1
+                    && matches!(directive, Some(Directive::Else | Directive::Elif(_))) =>
+            {
+                self.state = GuardState::Disqualified;
+            }
+            GuardState::Closed => self.state = GuardState::Disqualified,
+            GuardState::Open | GuardState::Disqualified => {}
+        }
+    }
+
+    /// The controlling macro, once the whole file has been observed and
+    /// `depth` has returned to zero. `None` when the file is not wholly
+    /// guarded.
+    pub(super) fn finish(mut self, depth: usize) -> Option<String> {
+        if self.state == GuardState::Open && depth == 0 {
+            self.state = GuardState::Closed;
+        }
+        (self.state == GuardState::Closed).then_some(self.name)?
+    }
+}
+
+/// The macro a conditional tests for absence, for the two spellings a
+/// header guard takes: `#ifndef X` and `#if !defined X` / `!defined(X)`.
+fn guard_opened_by<'a>(directive: Option<&'a Directive<'a>>) -> Option<&'a str> {
+    match directive? {
+        Directive::Ifndef(name) => Some(name),
+        Directive::If(expr) => super::text::if_operand_undefined_name(expr),
+        _ => None,
+    }
+}
+
 /// `#else` state transition on the innermost frame; returns the new
 /// active state. Shared by the main directive loop and the
 /// macro-argument line joiner so both agree on the semantics.

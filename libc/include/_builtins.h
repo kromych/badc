@@ -14,8 +14,10 @@
 // The genuine code-generation builtins (`__builtin_clz`, the byte-swap
 // and overflow family, `__builtin_alloca`, `__builtin_va_*`, the
 // floating-point and trap builtins) are handled by the compiler, not
-// here. This header is auto-included when a `__builtin_*` name that is
-// not such an intrinsic is first used.
+// here. Every translation unit gets this header, so nothing in it may
+// shadow a name the compiler evaluates itself: the absolute-value
+// thunks would, and live in <_builtins_abs.h>, auto-included when one
+// of them is used outside a constant expression.
 
 #pragma once
 
@@ -64,9 +66,6 @@
 #define __builtin_strspn strspn
 #define __builtin_strcspn strcspn
 #define __builtin_abort abort
-#define __builtin_abs abs
-#define __builtin_labs labs
-#define __builtin_llabs llabs
 #define __builtin_malloc malloc
 #define __builtin_calloc calloc
 #define __builtin_realloc realloc

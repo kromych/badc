@@ -222,6 +222,8 @@ impl Compiler {
         } else {
             0
         };
+        // A declarator request replaces both the typedef carrier and an
+        // aggregate's attribute-derived alignment (GNU set semantics).
         let explicit = if req_align > 0 {
             req_align
         } else {

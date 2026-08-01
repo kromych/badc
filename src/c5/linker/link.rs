@@ -19,6 +19,7 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use hashbrown::HashMap;
 
 use crate::c5::error::C5Error;
 
@@ -217,8 +218,9 @@ pub struct MergedNative {
     /// populate `Build::func_prologue_native` so
     /// `dwarf::build_debug_frame` emits
     /// `DW_CFA_advance_loc <prologue_size>` ahead of the
-    /// post-prologue CFA rule.
-    pub prologue_ends: BTreeMap<u64, u64>,
+    /// post-prologue CFA rule. Consulted by lookup only, so it is
+    /// keyed by hash rather than ordered.
+    pub prologue_ends: HashMap<u64, u64>,
     /// Defined `STT_FUNC STB_LOCAL` (static) functions as
     /// `(name, merged_text_offset)`, rebased by the per-unit text base.
     /// Kept as a flat list separate from `defined` -- which is
@@ -634,14 +636,21 @@ pub fn link_native_objects_with_shared_libs(
     // matching base + the unit-local offset. Multiple
     // definitions (same name in two units) error out -- the
     // ELF rule for `STB_GLOBAL` is "exactly one definition".
-    let mut defined: BTreeMap<String, MergedSymbol> = BTreeMap::new();
+    //
+    // Resolution runs over borrowed names in a hash table: a large link
+    // resolves hundreds of thousands of references against tens of
+    // thousands of definitions, and an ordered string-keyed map pays a
+    // chain of comparisons per lookup. `MergedNative::defined` is
+    // rebuilt as an ordered map at the end -- the image writers iterate
+    // it, and their output order is part of the produced image.
+    let mut defined: HashMap<&str, MergedSymbol> = HashMap::new();
     // STB_WEAK (binding 2) defined symbols. ELF/SysV treats a weak
     // definition as a real but overridable definition: a strong
     // (STB_GLOBAL) definition of the same name wins with no
     // multiple-definition error, and a weak definition on its own
     // satisfies a reference. Collected separately, then folded into
     // `defined` for every name no strong definition claims.
-    let mut weak_defined: BTreeMap<String, MergedSymbol> = BTreeMap::new();
+    let mut weak_defined: HashMap<&str, MergedSymbol> = HashMap::new();
     for (i, obj) in objs.iter().enumerate() {
         for sym in &obj.symbols {
             // STB_LOCAL (0) routes through the static-func pass; only
@@ -683,16 +692,16 @@ pub fn link_native_objects_with_shared_libs(
             };
             if sym.binding == 2 {
                 // Multiple weak definitions -- keep the first, no error.
-                weak_defined.entry(sym.name.clone()).or_insert(merged);
+                weak_defined.entry(sym.name.as_str()).or_insert(merged);
                 continue;
             }
-            if let Some(prev) = defined.get(&sym.name) {
+            if let Some(prev) = defined.get(sym.name.as_str()) {
                 return Err(link_err(&format!(
                     "multiple definition of `{}` (first at offset 0x{:x}, also at 0x{:x})",
                     sym.name, prev.value, merged.value,
                 )));
             }
-            defined.insert(sym.name.clone(), merged);
+            defined.insert(sym.name.as_str(), merged);
         }
     }
     // Fold weak definitions in behind strong ones: a name a strong def
@@ -712,11 +721,11 @@ pub fn link_native_objects_with_shared_libs(
     // same-named static the first unit's anchor, describing a
     // framed function as frameless in the Win-x64 .pdata / DWARF
     // CFA output.
-    let mut prologue_ends: BTreeMap<u64, u64> = BTreeMap::new();
+    let mut prologue_ends: HashMap<u64, u64> = HashMap::new();
     for (i, obj) in objs.iter().enumerate() {
         // STT_FUNC = 2. One pass builds the unit's function index so the
         // anchor pass is a lookup rather than a scan per anchor.
-        let mut text_funcs: BTreeMap<&str, u64> = BTreeMap::new();
+        let mut text_funcs: HashMap<&str, u64> = HashMap::new();
         for sym in &obj.symbols {
             if sym.kind == 2
                 && !sym.name.is_empty()
@@ -772,16 +781,18 @@ pub fn link_native_objects_with_shared_libs(
     //
     // Common-vs-Strong: strong wins, Common drop. Common-vs-
     // Common: coalesce.
-    let mut common_max: BTreeMap<String, (u64, u64)> = BTreeMap::new();
+    // Name-ordered: slot assignment walks it, so the `.bss` layout must
+    // not depend on the order the units happen to declare the names in.
+    let mut common_max: BTreeMap<&str, (u64, u64)> = BTreeMap::new();
     for obj in objs.iter() {
         for sym in &obj.symbols {
             if !matches!(sym.section, NativeSymSection::Common) {
                 continue;
             }
-            if sym.name.is_empty() || defined.contains_key(&sym.name) {
+            if sym.name.is_empty() || defined.contains_key(sym.name.as_str()) {
                 continue;
             }
-            let entry = common_max.entry(sym.name.clone()).or_insert((0, 1));
+            let entry = common_max.entry(sym.name.as_str()).or_insert((0, 1));
             entry.0 = entry.0.max(sym.size);
             entry.1 = entry.1.max(sym.value.max(1));
         }
@@ -792,7 +803,7 @@ pub fn link_native_objects_with_shared_libs(
         let slot_offset = bss_size as u64;
         bss_size += *size as usize;
         defined.insert(
-            name.clone(),
+            name,
             MergedSymbol {
                 section: NativeSymSection::Bss,
                 value: slot_offset,
@@ -813,7 +824,7 @@ pub fn link_native_objects_with_shared_libs(
         ("__fini_array_end", fini_array_end),
     ] {
         defined.insert(
-            name.to_string(),
+            name,
             MergedSymbol {
                 section: NativeSymSection::Data,
                 value: off,
@@ -976,7 +987,7 @@ pub fn link_native_objects_with_shared_libs(
                     )?;
                 }
                 NativeSymSection::Undef => {
-                    if let Some(def) = defined.get(&sym.name) {
+                    if let Some(def) = defined.get(sym.name.as_str()) {
                         // Cross-unit reference to a globally
                         // defined symbol. Text-section targets
                         // can be patched in place because the
@@ -1099,7 +1110,7 @@ pub fn link_native_objects_with_shared_libs(
                     // C99 6.9.2 tentative definition: Pass 2.5
                     // coalesced this name into a `.bss` slot, so the
                     // merged table already answers where it lands.
-                    let def = defined.get(&sym.name).ok_or_else(|| {
+                    let def = defined.get(sym.name.as_str()).ok_or_else(|| {
                         err(&format!(
                             "link_native_objects: SHN_COMMON `{}` not coalesced (internal: Pass 2.5 missed it)",
                             sym.name,
@@ -1283,7 +1294,7 @@ pub fn link_native_objects_with_shared_libs(
             if let Some(width) = pcrel_width {
                 let target = match sym.section {
                     NativeSymSection::Undef | NativeSymSection::Common => {
-                        let d = defined.get(&sym.name).ok_or_else(|| {
+                        let d = defined.get(sym.name.as_str()).ok_or_else(|| {
                             link_err(&format!(
                                 "undefined reference to `{}` (pc-relative data slot)",
                                 sym.name,
@@ -1348,7 +1359,7 @@ pub fn link_native_objects_with_shared_libs(
                     // Pass 2.5 and join `defined` with section
                     // == Bss; the lookup is the same as for an
                     // Undef cross-unit reference.
-                    match defined.get(&sym.name) {
+                    match defined.get(sym.name.as_str()) {
                         Some(d) => d.section,
                         // An unresolved weak reference in a data
                         // initializer takes the absolute value
@@ -1403,7 +1414,7 @@ pub fn link_native_objects_with_shared_libs(
             // unit's base; a resolved cross-unit one is already merged.
             let resolved_value = match sym.section {
                 NativeSymSection::Undef | NativeSymSection::Common => {
-                    defined.get(&sym.name).map(|d| d.value as i64).unwrap()
+                    defined.get(sym.name.as_str()).map(|d| d.value as i64).unwrap()
                 }
                 NativeSymSection::RoData => rodata_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Data => data_bases[i] as i64 + sym.value as i64,
@@ -1709,6 +1720,14 @@ pub fn link_native_objects_with_shared_libs(
         )?;
     }
 
+    // The writers iterate the merged table, so it leaves the link as an
+    // ordered map: the static symbol table and the dynamic export list
+    // follow this order byte for byte.
+    let defined: BTreeMap<String, MergedSymbol> = defined
+        .into_iter()
+        .map(|(name, sym)| (name.to_string(), sym))
+        .collect();
+
     Ok(MergedNative {
         text,
         text_align,
@@ -1792,7 +1811,7 @@ fn resolve_debug_reloc(
     debug_abbrev_bases: &[usize],
     debug_line_bases: &[usize],
     debug_str_bases: &[usize],
-    defined: &BTreeMap<String, MergedSymbol>,
+    defined: &HashMap<&str, MergedSymbol>,
 ) -> Result<(), C5Error> {
     let patch_off = reloc.offset as usize;
     // Resolve the reloc's symbol to a merged offset, noting whether it lands
@@ -1810,7 +1829,7 @@ fn resolve_debug_reloc(
         }
         NativeSymSection::DebugLine => (debug_line_bases[unit_idx] as u64 + sym.value, false, true),
         NativeSymSection::DebugStr => (debug_str_bases[unit_idx] as u64 + sym.value, false, true),
-        NativeSymSection::Undef => match defined.get(&sym.name) {
+        NativeSymSection::Undef => match defined.get(sym.name.as_str()) {
             Some(m) if m.section == NativeSymSection::Text => (m.value, true, true),
             _ => (0, false, false),
         },

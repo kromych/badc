@@ -1111,7 +1111,7 @@ mod tests {
             unit_for_debug_line_reloc: alloc::vec![],
             debug_info_text_relocs: alloc::vec![],
             debug_line_text_relocs: alloc::vec![],
-            prologue_ends: alloc::collections::BTreeMap::new(),
+            prologue_ends: hashbrown::HashMap::new(),
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,

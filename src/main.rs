@@ -1285,6 +1285,7 @@ fn run() {
                 }
             }
         }
+        stats.mark("runtime");
         for obj_path in &objects {
             let bytes = match std::fs::read(obj_path) {
                 Ok(b) => b,
@@ -1367,6 +1368,7 @@ fn run() {
                 }
             }
         }
+        stats.mark("rtlib");
         // C89 6.3.2.2 link semantics: a definition anywhere in the
         // link set satisfies an implicitly declared call, so a name
         // the auto-include retry bound to a header's library binding

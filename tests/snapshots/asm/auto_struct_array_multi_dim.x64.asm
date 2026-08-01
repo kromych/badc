@@ -190,33 +190,8 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	leaq	-0x10(%rbp), %rax
-               	movl	0x4(%rax), %eax
-               	xorq	$0x2, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movl	0x8(%rax), %eax
-               	xorq	$0x3, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	movslq	%eax, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
                	movl	$0x2, %edi
                	movl	$0x1000, %esi           # imm = 0x1000
                	movl	$0x9000, %edx           # imm = 0x9000
@@ -225,6 +200,3 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	jmp	<addr>
-               	jmp	<addr>

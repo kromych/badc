@@ -22,22 +22,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	-<rip>, %rax       # <addr>
-               	leaq	-<rip>, %rcx       # <addr>
-               	cmpq	%rax, %rcx
-               	je	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	cmpq	%rax, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	popq	%rbp
-               	retq
-               	cmpq	%rax, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	popq	%rbp
-               	retq
                	movl	$0x14, %edi
                	callq	*%rax
                	movslq	%eax, %rcx

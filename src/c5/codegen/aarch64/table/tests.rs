@@ -1601,6 +1601,54 @@ fn memory_and_positional_registers() {
     assert_eq!(enc("cmpp", &[x(3), x(4)]), 0xBAC4007F);
 }
 
+/// FEAT_LSUI unprivileged atomics: the read-modify-write family in both widths
+/// and all four orderings, and the 64-bit-only compare-and-swap forms. Every
+/// word byte-compared against GNU as under `.arch armv9.6-a+lsui`. The
+/// architecture has no exclusive-or member, so the family stops at
+/// add/clear/set/swap.
+#[test]
+fn lsui_unprivileged_atomics() {
+    assert_eq!(enc("ldtadd", &[w(0), w(1), m(2)]), 0x19200441);
+    assert_eq!(enc("ldtadd", &[x(3), x(4), m(5)]), 0x592304A4);
+    assert_eq!(enc("ldtadda", &[w(6), w(7), m(8)]), 0x19A60507);
+    assert_eq!(enc("ldtadda", &[x(9), x(10), m(11)]), 0x59A9056A);
+    assert_eq!(enc("ldtaddl", &[w(12), w(13), m(14)]), 0x196C05CD);
+    assert_eq!(enc("ldtaddl", &[x(15), x(16), m(17)]), 0x596F0630);
+    assert_eq!(enc("ldtaddal", &[w(18), w(19), m(20)]), 0x19F20693);
+    assert_eq!(enc("ldtaddal", &[x(21), x(22), m(23)]), 0x59F506F6);
+    assert_eq!(enc("ldtclr", &[w(24), w(25), m(26)]), 0x19381759);
+    assert_eq!(enc("ldtclr", &[x(27), x(28), m(29)]), 0x593B17BC);
+    assert_eq!(enc("ldtclra", &[w(30), w(0), m(1)]), 0x19BE1420);
+    assert_eq!(enc("ldtclra", &[x(2), x(3), m(4)]), 0x59A21483);
+    assert_eq!(enc("ldtclrl", &[w(5), w(6), m(7)]), 0x196514E6);
+    assert_eq!(enc("ldtclrl", &[x(8), x(9), m(10)]), 0x59681549);
+    assert_eq!(enc("ldtclral", &[w(11), w(12), m(13)]), 0x19EB15AC);
+    assert_eq!(enc("ldtclral", &[x(14), x(15), m(16)]), 0x59EE160F);
+    assert_eq!(enc("ldtset", &[w(17), w(18), m(19)]), 0x19313672);
+    assert_eq!(enc("ldtset", &[x(20), x(21), m(22)]), 0x593436D5);
+    assert_eq!(enc("ldtseta", &[w(23), w(24), m(25)]), 0x19B73738);
+    assert_eq!(enc("ldtseta", &[x(26), x(27), m(28)]), 0x59BA379B);
+    assert_eq!(enc("ldtsetl", &[w(29), w(30), m(0)]), 0x197D341E);
+    assert_eq!(enc("ldtsetl", &[x(1), x(2), m(3)]), 0x59613462);
+    assert_eq!(enc("ldtsetal", &[w(4), w(5), m(6)]), 0x19E434C5);
+    assert_eq!(enc("ldtsetal", &[x(7), x(8), m(9)]), 0x59E73528);
+    assert_eq!(enc("swpt", &[w(10), w(11), m(12)]), 0x192A858B);
+    assert_eq!(enc("swpt", &[x(13), x(14), m(15)]), 0x592D85EE);
+    assert_eq!(enc("swpta", &[w(16), w(17), m(18)]), 0x19B08651);
+    assert_eq!(enc("swpta", &[x(19), x(20), m(21)]), 0x59B386B4);
+    assert_eq!(enc("swptl", &[w(22), w(23), m(24)]), 0x19768717);
+    assert_eq!(enc("swptl", &[x(25), x(26), m(27)]), 0x5979877A);
+    assert_eq!(enc("swptal", &[w(28), w(29), m(30)]), 0x19FC87DD);
+    assert_eq!(enc("swptal", &[x(0), x(1), m(2)]), 0x59E08441);
+    assert_eq!(enc("cast", &[x(3), x(4), m(5)]), 0xC9837CA4);
+    assert_eq!(enc("casat", &[x(6), x(7), m(8)]), 0xC9C67D07);
+    assert_eq!(enc("caslt", &[x(9), x(10), m(11)]), 0xC989FD6A);
+    assert_eq!(enc("casalt", &[x(12), x(13), m(14)]), 0xC9CCFDCD);
+    // The compare-and-swap forms have no 32-bit variant, as in GNU as.
+    assert!(encode("casalt", &[w(0), w(1), m(2)]).is_err());
+    assert!(encode("ldteor", &[x(0), x(1), m(2)]).is_err());
+}
+
 /// Memory operands carrying an immediate offset (the unscaled/unprivileged
 /// signed imm9 and the byte unsigned imm12) and the standalone signed
 /// immediate (`smax`/`smin` imm8). One word per class, all verified against

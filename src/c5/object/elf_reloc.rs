@@ -18,7 +18,8 @@
 //! resolves them at load time), cross-TU function and data
 //! UNDEFs as `STB_GLOBAL` (the linker rejects unresolved
 //! `STB_GLOBAL` UNDEF as `undefined reference to <name>`),
-//! and defined data globals as `STT_OBJECT STB_GLOBAL`.
+//! and defined data objects as `STT_OBJECT`, `STB_GLOBAL` for
+//! external linkage and `STB_LOCAL` for internal.
 //!
 //! Distinct from `codegen/elf.rs`, which writes ET_EXEC /
 //! ET_DYN load-time images.
@@ -1478,6 +1479,12 @@ pub(super) fn write_relocatable(
     // offset within `.data`; the size comes from the symbol's type
     // (struct / union globals stay unsized).
     let mut defined_data_globals: Vec<(&str, i64, u64)> = Vec::new();
+    // Internal-linkage data objects: file-scope `static`, block-scope
+    // statics (`name.N`) and compound literals (`__compound.N`). They
+    // resolve nothing across units, so they bind STB_LOCAL; a symbol
+    // still has to name them or an address in their storage attributes
+    // to whatever global happens to precede it. Same shape gcc emits.
+    let mut defined_data_locals: Vec<(&str, i64, u64)> = Vec::new();
     // Defined `_Thread_local` symbols: name, offset within this unit's
     // TLS block, byte size. Exported through NT_BADC_TLS_SYM (not the
     // `.data` symbol table -- their value is a TLS-block offset, not a
@@ -1487,26 +1494,38 @@ pub(super) fn write_relocatable(
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
         for sym in &program.symbols {
-            if sym.class == Token::Glo as i64
-                && sym.defined_here
-                && sym.linkage == Linkage::External
-                && !sym.name.is_empty()
-            {
-                if sym.is_thread_local {
-                    defined_tls_globals.push((
-                        sym.name.as_str(),
-                        sym.val,
-                        crate::c5::layout::data_object_byte_size(sym),
-                    ));
-                } else {
-                    defined_data_globals.push((
-                        sym.name.as_str(),
-                        sym.val,
-                        crate::c5::layout::data_object_byte_size(sym),
-                    ));
+            if sym.class != Token::Glo as i64 || !sym.defined_here || sym.name.is_empty() {
+                continue;
+            }
+            let size = crate::c5::layout::data_object_byte_size(sym);
+            match sym.linkage {
+                Linkage::External if sym.is_thread_local => {
+                    defined_tls_globals.push((sym.name.as_str(), sym.val, size));
                 }
+                Linkage::External => {
+                    defined_data_globals.push((sym.name.as_str(), sym.val, size));
+                }
+                // An alias names another object's storage and a
+                // thread-local static's value is a TLS-block offset, which
+                // `DataPlan::map` would read as a `.data` offset.
+                Linkage::Internal if !sym.is_thread_local && !sym.is_alias => {
+                    defined_data_locals.push((sym.name.as_str(), sym.val, size));
+                }
+                _ => {}
             }
         }
+    }
+    // One name can reach the object twice: a block-scope static shares
+    // its source name with a file-scope object, and an inline-asm label
+    // may already carry it. Keep the first record for each so the
+    // symbol table stays a function of name -> storage.
+    {
+        let mut seen: alloc::collections::BTreeSet<&str> = defined_data_globals
+            .iter()
+            .map(|(n, _, _)| *n)
+            .chain(asm_defined_labels.iter().copied())
+            .collect();
+        defined_data_locals.retain(|(n, _, _)| seen.insert(n));
     }
 
     // Unique cross-TU user-data names referenced by
@@ -1619,6 +1638,10 @@ pub(super) fn write_relocatable(
     }
     let user_extern_names_start = all_names.len();
     for name in &user_extern_names {
+        all_names.push(*name);
+    }
+    let defined_data_locals_start = all_names.len();
+    for (name, _, _) in &defined_data_locals {
         all_names.push(*name);
     }
     let defined_data_globals_start = all_names.len();
@@ -1839,6 +1862,24 @@ pub(super) fn write_relocatable(
             st_value: value,
             st_size: 0,
             ..Default::default()
+        });
+    }
+    // Internal-linkage data objects: STB_LOCAL + STT_OBJECT, placed
+    // through the same layout plan the external ones use, so
+    // compaction and named-section moves are reflected.
+    for (i, (_, val, size)) in defined_data_locals.iter().enumerate() {
+        let (shndx, value) = match plan.map((*val).max(0) as u64) {
+            DataHome::Data(o) => (SHIDX_DATA, o),
+            DataHome::Bss(o) => (SHIDX_BSS, o),
+            DataHome::Named(e, o) => (carve.shndx[e], o),
+        };
+        symbols.push(Elf64Sym {
+            st_name: name_offs[defined_data_locals_start + i],
+            st_info: pack_sym_info(STB_LOCAL, STT_OBJECT),
+            st_other: STV_DEFAULT,
+            st_shndx: shndx,
+            st_value: value,
+            st_size: *size,
         });
     }
     let first_global = symbols.len() as u32;

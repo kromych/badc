@@ -1647,9 +1647,11 @@ jobs:
       - name: switch the tree to defconfig
         # setup.py installs the sweep's minimal config; the gate builds the
         # architecture's own defconfig instead. The tree path carries the
-        # pinned version, so it is globbed rather than spelled out.
+        # pinned version, so it is globbed rather than spelled out -- matching
+        # directories only, since the downloaded tarball shares the prefix.
         run: |
-          tree=$(echo "$RUNNER_TEMP"/lk/linux-*)
+          tree=$(find "$RUNNER_TEMP/lk" -maxdepth 1 -type d -name 'linux-*' | head -1)
+          test -n "$tree" || { echo "no kernel tree under $RUNNER_TEMP/lk"; exit 1; }
           echo "KERNEL_TREE=$tree" >> "$GITHUB_ENV"
           make -C "$tree" defconfig
       - name: build the boot initramfs

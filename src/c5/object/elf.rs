@@ -1759,7 +1759,11 @@ pub(super) fn write(
     // the same load at an 8-aligned tail past the prefix.
     let ro_len = build.data_ro_len.min(build.data.len()) as u64;
     let jt_len = build.rodata.bytes.len() as u64;
-    let jt_off = if jt_len > 0 { round_up(ro_len, 8) } else { ro_len };
+    let jt_off = if jt_len > 0 {
+        round_up(ro_len, 8)
+    } else {
+        ro_len
+    };
     let ro_total = jt_off + jt_len;
     let has_rodata = ro_total > 0;
     let n_program_headers =

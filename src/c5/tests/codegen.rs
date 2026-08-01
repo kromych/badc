@@ -4077,8 +4077,9 @@ fn auto_include_retry_emits_what_the_force_include_would() {
 /// materialization against that section's STT_SECTION symbol.
 #[test]
 fn switch_table_lands_in_rodata_section_of_object() {
-    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target,
-        emit_native_with_options};
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
 
     const SRC: &str = "int pick(int x) {\n\
          \tswitch (x) {\n\
@@ -4164,7 +4165,11 @@ fn switch_table_lands_in_rodata_section_of_object() {
         let info = rd_u64(p + 8);
         assert_eq!((info & 0xffff_ffff) as u32, R_X86_64_64);
         let s = (info >> 32) as usize;
-        assert_eq!(sym_info(s) & 0xf, 3, "entry {k} must target a section symbol");
+        assert_eq!(
+            sym_info(s) & 0xf,
+            3,
+            "entry {k} must target a section symbol"
+        );
         assert_eq!(sym_shndx(s), text, "entry {k} must target `.text`");
         let addend = rd_u64(p + 16);
         assert!(

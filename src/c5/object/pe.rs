@@ -1271,7 +1271,9 @@ pub(super) fn write(
             }
             let Ok(v) = i32::try_from(value) else {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!("PE: data pcrel slot {off:#x}: displacement {value:#x} exceeds 32 bits"),
+                    &format!(
+                        "PE: data pcrel slot {off:#x}: displacement {value:#x} exceeds 32 bits"
+                    ),
                 )));
             };
             data_with_relocs[off..off + 4].copy_from_slice(&v.to_le_bytes());

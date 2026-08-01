@@ -400,8 +400,7 @@ mod jit_impl {
                 )));
             }
             let full_len = rodata_blob_off + build.rodata.bytes.len();
-            let bytes =
-                unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), full_len) };
+            let bytes = unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), full_len) };
             for fx in &build.rodata.addr_fixups {
                 patch_addr_load(
                     target,

@@ -1557,8 +1557,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: qemu-bin-${{ matrix.label }}
-          # The cache path carries the pinned QEMU version; glob it.
+          # The cache path carries the pinned QEMU version; glob it. The
+          # directory is dot-prefixed, which the upload action treats as
+          # hidden and skips unless told otherwise.
           path: demos/qemu/.cache/qemu-*/objs/qemu-system-*
+          include-hidden-files: true
           if-no-files-found: error
 
   kernel:

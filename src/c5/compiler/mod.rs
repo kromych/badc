@@ -1614,6 +1614,10 @@ pub struct Compiler {
     retry_state: Option<(String, CompileOptions)>,
 }
 
+/// Header of `__builtin_*` thunks every translation unit is given; see
+/// [`Compiler::configure_preprocessor`].
+const BUILTIN_THUNK_HEADER: &str = "_builtins.h";
+
 impl Compiler {
     /// Construct a compiler for the default target (the host).
     /// Equivalent to `Compiler::with_target(source,
@@ -1688,6 +1692,22 @@ impl Compiler {
         }
         for name in &opts.force_includes {
             pp.add_force_include(name);
+        }
+        // The GCC `__builtin_*` library thunks. gcc and clang give every
+        // translation unit these names with no `#include`, and the header
+        // holding them is nothing but `#define`s of identifiers C99 7.1.3
+        // reserves to the implementation: it declares nothing, emits
+        // nothing, and orders nothing. Supplying it up front rather than
+        // on a parse failure keeps the compile to one front-end pass;
+        // recovering afterwards meant preprocessing and parsing the whole
+        // unit twice, which nearly every unit of a large GNU-dialect code
+        // base did.
+        if !opts
+            .force_includes
+            .iter()
+            .any(|h| h == BUILTIN_THUNK_HEADER)
+        {
+            pp.add_force_include(BUILTIN_THUNK_HEADER);
         }
         // `-O` predefines, installed before the CLI lists so an explicit
         // `-D NDEBUG=<v>` overrides the value and `-U NDEBUG` removes it.
@@ -2111,7 +2131,9 @@ impl Compiler {
                 Some(h) => h,
                 None => return Err(e),
             };
-            if opts.force_includes.iter().any(|h| h == header) {
+            // The thunk header is always in scope, so a failure naming
+            // one of its macros is not something a retry can fix.
+            if header == BUILTIN_THUNK_HEADER || opts.force_includes.iter().any(|h| h == header) {
                 return Err(e);
             }
             opts.force_includes.push(header.to_string());

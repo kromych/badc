@@ -3468,6 +3468,7 @@ mod tests {
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
             data_ro_len: 0,
+            pic: false,
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
             data_align: 8,

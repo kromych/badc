@@ -124,6 +124,10 @@ const NT_BADC_ELF_TPOFF: u32 = 10;
 /// Output section for `const`-qualified file-scope storage the
 /// declaration did not place by name.
 const RODATA_SECTION: &str = ".rodata";
+/// Output section for the same storage when the initializer carries a
+/// relocation and the output is position-independent: writable until
+/// the load-time fixups are applied, read-only afterwards.
+const DATA_REL_RO_SECTION: &str = ".data.rel.ro";
 
 /// `.bss` and `.bss.*` name zero-fill storage by convention (the
 /// assembler's default section attributes, mirrored by the linker's
@@ -968,9 +972,14 @@ pub(super) fn write_relocatable(
         // is writable (C99 6.7.3: a `const`-qualified object cannot be
         // written through its declared type, and one writable member
         // makes the whole section writable -- `get_or_insert` unions).
-        // Everything else that is `const`, file-backed and holds no
-        // relocated slot goes to `.rodata`, so the loader can map it
-        // without write permission.
+        // Everything else that is `const` and file-backed goes to
+        // `.rodata`, so the loader can map it without write permission.
+        // A `const` object whose initializer carries a relocation goes
+        // there too when the output is not position-independent -- the
+        // relocations resolve at link time and nothing writes the page
+        // afterwards. Under `-fPIC` the same object needs a load-time
+        // fixup, so it goes to `.data.rel.ro`, which a consumer maps
+        // writable until the fixups are applied.
         let reloc_slots = relocated_data_offsets(program);
         let data_file_len = build.data.len() as u64;
         let mut named_objs: Vec<NamedDataObj> = Vec::new();
@@ -997,17 +1006,19 @@ pub(super) fn write_relocatable(
                     },
                 ),
                 None => {
-                    // A zero-fill object stays in `.bss`; a relocated
-                    // slot needs a writable page because the image
-                    // carries no `PT_GNU_RELRO`.
+                    // A zero-fill object has no file bytes to carve.
+                    if !sym.storage_is_const || val + size.extent > data_file_len {
+                        continue;
+                    }
                     let holds_reloc = reloc_slots
                         .range(val..val.saturating_add(size.extent))
                         .next()
                         .is_some();
-                    if !sym.storage_is_const || holds_reloc || val + size.extent > data_file_len {
-                        continue;
+                    if holds_reloc && build.pic {
+                        (DATA_REL_RO_SECTION, SHF_ALLOC | SHF_WRITE)
+                    } else {
+                        (RODATA_SECTION, SHF_ALLOC)
                     }
-                    (RODATA_SECTION, SHF_ALLOC)
                 }
             };
             let align = sym.data_align.max(1) as u64;
@@ -3850,6 +3861,7 @@ mod tests {
             text: Vec::new(),
             data: Vec::new(),
             data_ro_len: 0,
+            pic: false,
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
             data_align: 8,

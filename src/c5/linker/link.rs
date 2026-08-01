@@ -3327,11 +3327,16 @@ mod tests {
             ..NativeOptions::new()
         };
         // `big` (partially non-zero) inflates `.data` so a bss-relative
-        // offset is strictly smaller than the data length; `g` (wholly
-        // zero) lands in `.bss`. `readg` makes a code reference to `g`.
-        let src = "long big[16] = {1}; long g[8]; long *const gp = &g[0]; \
+        // offset is strictly smaller than the data length; `lead` and `g`
+        // (wholly zero) land in `.bss`. `lead` keeps `g` off the region's
+        // first byte, so the parked value stays inside the region under
+        // the x86-64 pc-relative addend bias. `readg` makes a code
+        // reference to `g`.
+        let src = "long big[16] = {1}; long lead[8]; long g[8]; \
+                   long *const gp = &g[0]; long *const lp = &lead[0]; \
                    long readg(void){ return g[0]; } \
-                   int main(void){ return (int)readg() + (gp != 0) + (int)big[0]; }";
+                   int main(void){ return (int)readg() + (gp != 0) \
+                   + (lp != 0) + (int)big[0]; }";
         let obj = compile_native(src, Target::LinuxX64, opts);
         let merged = link_native_objects(&[obj]).expect("link");
         assert!(merged.bss_size > 0, "the zero global must occupy bss");

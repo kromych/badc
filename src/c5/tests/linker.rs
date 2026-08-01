@@ -10068,3 +10068,201 @@ fn asm_section_local_label_reloc_reduces_to_section_symbol() {
         assert_eq!(vis_addend, 0, "{target:?}: global label addend");
     }
 }
+
+/// Section name, symbol binding, value and size for every named data
+/// object in a `-c` object, keyed by symbol name.
+#[cfg(feature = "native-emit")]
+fn elf_data_objects(bytes: &[u8]) -> alloc::collections::BTreeMap<String, (String, u8, u64, u64)> {
+    const STT_OBJECT: u8 = 1;
+    let sections = elf_sections(bytes);
+    elf_symbols(bytes)
+        .into_iter()
+        .filter(|(name, info, shndx, _, _)| {
+            !name.is_empty() && info & 0xf == STT_OBJECT && *shndx != 0
+        })
+        .map(|(name, info, shndx, value, size)| {
+            (
+                name,
+                (sections[shndx as usize].0.clone(), info >> 4, value, size),
+            )
+        })
+        .collect()
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn internal_linkage_data_objects_get_local_symbols() {
+    // C99 6.2.2p3: a `static` file-scope object has internal linkage, so
+    // it binds STB_LOCAL -- but it still needs a symbol, or an address
+    // inside its storage attributes to the preceding global. Block-scope
+    // statics carry the disambiguating `.N` suffix already.
+    let src = "\
+        static const int tab[4] = {1,2,3,4};\n\
+        static int counter = 7;\n\
+        int g_open = 9;\n\
+        int bump(void) { static int seen = 1; return seen++ + counter + tab[0] + g_open; }\n\
+        int again(void) { static int seen = 2; return seen++; }\n";
+    const STB_LOCAL: u8 = 0;
+    const STB_GLOBAL: u8 = 1;
+    for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
+        let objs = elf_data_objects(&reloc_tu(src, target, false));
+        let get = |n: &str| -> &(String, u8, u64, u64) {
+            objs.get(n)
+                .unwrap_or_else(|| panic!("{target:?}: no symbol `{n}` among {:?}", objs.keys()))
+        };
+        assert_eq!(get("tab").1, STB_LOCAL, "{target:?}: static binding");
+        assert_eq!(get("tab").3, 16, "{target:?}: static array size");
+        assert_eq!(get("counter").1, STB_LOCAL, "{target:?}: static binding");
+        assert_eq!(get("counter").3, 4, "{target:?}: static scalar size");
+        assert_eq!(get("g_open").1, STB_GLOBAL, "{target:?}: extern binding");
+        // Two functions declare `seen`; each gets its own storage and so
+        // its own symbol.
+        let seen: alloc::vec::Vec<&String> =
+            objs.keys().filter(|k| k.starts_with("seen.")).collect();
+        assert_eq!(seen.len(), 2, "{target:?}: block statics {seen:?}");
+        for k in seen {
+            assert_eq!(objs[k].1, STB_LOCAL, "{target:?}: `{k}` binding");
+            assert_eq!(objs[k].3, 4, "{target:?}: `{k}` size");
+        }
+    }
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn local_symbols_precede_globals_in_symtab() {
+    // ELF requires every STB_LOCAL entry to precede every STB_GLOBAL one,
+    // with `.symtab`'s sh_info naming the first global.
+    let src = "\
+        static const int tab[2] = {1,2};\n\
+        int g = 3;\n\
+        int use(void) { return tab[0] + g; }\n";
+    const STB_LOCAL: u8 = 0;
+    for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
+        let bytes = reloc_tu(src, target, false);
+        let symbols = elf_symbols(&bytes);
+        let first_global = symbols
+            .iter()
+            .position(|(_, info, _, _, _)| info >> 4 != STB_LOCAL)
+            .expect("a global symbol");
+        assert!(
+            symbols[..first_global]
+                .iter()
+                .all(|(_, info, _, _, _)| info >> 4 == STB_LOCAL),
+            "{target:?}: locals must be contiguous"
+        );
+        // sh_info of `.symtab` is the index of the first non-local.
+        let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+        let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+        let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+        let (shoff, shentsize, shnum) = (u64le(0x28) as usize, u16le(0x3A), u16le(0x3C));
+        let symtab = (0..shnum)
+            .map(|i| shoff + i * shentsize)
+            .find(|&sh| u32le(sh + 4) == 2)
+            .expect(".symtab header");
+        assert_eq!(
+            u32le(symtab + 0x2C) as usize,
+            first_global,
+            "{target:?}: sh_info names the first global"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn const_storage_lands_in_rodata() {
+    // C99 6.7.3p5 makes writing a `const`-qualified object undefined, so
+    // its storage goes on a page the loader maps read-only. A wholly-zero
+    // initializer does not move it to the zero-fill region: only
+    // file-backed storage can be carved read-only, and the object is no
+    // more writable for having been zeroed.
+    let src = "\
+        static const int nz[4] = {1,2,3,4};\n\
+        static const int z[4] = {0,0,0,0};\n\
+        static const int tentative[4];\n\
+        static int mut_nz[4] = {1,2,3,4};\n\
+        static int mut_z[4] = {0,0,0,0};\n\
+        const int g_ro = 5;\n\
+        int use(void) { return nz[0]+z[1]+tentative[2]+mut_nz[0]+mut_z[1]+g_ro; }\n";
+    for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
+        let objs = elf_data_objects(&reloc_tu(src, target, false));
+        let sec = |n: &str| -> &str {
+            objs.get(n)
+                .unwrap_or_else(|| panic!("{target:?}: no symbol `{n}`"))
+                .0
+                .as_str()
+        };
+        for n in ["nz", "z", "tentative", "g_ro"] {
+            assert_eq!(sec(n), ".rodata", "{target:?}: `{n}` placement");
+        }
+        assert_eq!(sec("mut_nz"), ".data", "{target:?}: writable initialized");
+        assert_eq!(sec("mut_z"), ".bss", "{target:?}: writable zero-fill");
+    }
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn relocated_const_storage_follows_the_pic_model() {
+    // A `const` object whose initializer names another object or a
+    // function carries a relocation. Without position independence the
+    // relocation resolves at link time and nothing writes the storage
+    // afterwards, so it goes to `.rodata`. Under `-fPIC` the same slot
+    // takes a load-time fixup and needs a writable page until it is
+    // applied, which is what `.data.rel.ro` denotes.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
+    let src = "\
+        static int probe(void) { return 1; }\n\
+        struct ops { int (*p)(void); const char *n; };\n\
+        static const struct ops tbl = { probe, \"n\" };\n\
+        static const int plain[2] = {1,2};\n\
+        const struct ops *get(void) { return &tbl; }\n\
+        int use(void) { return plain[0]; }\n";
+    const SHF_WRITE: u64 = 0x1;
+    for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
+        for pic in [false, true] {
+            let copts = CompileOptions {
+                no_entry_point: true,
+                gnu: true,
+                ..Default::default()
+            };
+            let program = Compiler::with_options(String::from(src), target, copts)
+                .compile()
+                .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                pic,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+            let objs = elf_data_objects(&bytes);
+            let want = if pic { ".data.rel.ro" } else { ".rodata" };
+            assert_eq!(objs["tbl"].0, want, "{target:?} pic={pic}: relocated const");
+            assert_eq!(objs["tbl"].3, 16, "{target:?} pic={pic}: size");
+            assert_eq!(
+                objs["plain"].0, ".rodata",
+                "{target:?} pic={pic}: relocation-free const stays in .rodata"
+            );
+            let sections = elf_sections(&bytes);
+            let rodata = sections
+                .iter()
+                .find(|(n, _, _, _)| n == ".rodata")
+                .expect(".rodata");
+            assert_eq!(
+                rodata.2 & SHF_WRITE,
+                0,
+                "{target:?} pic={pic}: .rodata must not be writable"
+            );
+            if pic {
+                let relro = sections
+                    .iter()
+                    .find(|(n, _, _, _)| n == ".data.rel.ro")
+                    .expect(".data.rel.ro");
+                assert_ne!(
+                    relro.2 & SHF_WRITE,
+                    0,
+                    "{target:?}: .data.rel.ro takes load-time fixups"
+                );
+            }
+        }
+    }
+}

@@ -2463,6 +2463,7 @@ pub(crate) fn lower(
         exports: Vec::new(),
         dynamic_exports: Vec::new(),
         output_kind: super::OutputKind::Executable,
+        pic: native.pic,
         shared_lib_name: None,
         dllmain_pc: None,
         // Mach-O TLV is arm64-only on Apple Silicon; x86_64 macOS

@@ -1693,15 +1693,11 @@ impl Compiler {
         for name in &opts.force_includes {
             pp.add_force_include(name);
         }
-        // The GCC `__builtin_*` library thunks. gcc and clang give every
-        // translation unit these names with no `#include`, and the header
-        // holding them is nothing but `#define`s of identifiers C99 7.1.3
-        // reserves to the implementation: it declares nothing, emits
-        // nothing, and orders nothing. Supplying it up front rather than
-        // on a parse failure keeps the compile to one front-end pass;
-        // recovering afterwards meant preprocessing and parsing the whole
-        // unit twice, which nearly every unit of a large GNU-dialect code
-        // base did.
+        // The GCC `__builtin_*` library thunks, which gcc and clang give
+        // every unit with no `#include`. The header is only `#define`s of
+        // names C99 7.1.3 reserves to the implementation, so it declares
+        // nothing and orders nothing; supplying it up front rather than
+        // on a parse failure keeps the compile to one front-end pass.
         if !opts
             .force_includes
             .iter()

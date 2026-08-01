@@ -773,7 +773,9 @@ impl<'a> Exp<'a> {
         } else {
             Vec::new()
         };
-        if def.is_variadic {
+        // Substring test first: it settles the question for every variadic
+        // macro that does not use the construct without tokenized comparisons.
+        if def.is_variadic && def.body.contains("__VA_OPT__") {
             body = self.expand_va_opt(body, def, raw_args, &raw_va);
         }
         let mut exp_args: Vec<Option<Vec<Tok>>> = raw_args.iter().map(|_| None).collect();

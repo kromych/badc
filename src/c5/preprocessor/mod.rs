@@ -999,8 +999,10 @@ impl Preprocessor {
                             // else is malformed; surface a
                             // warning and skip, matching how
                             // other unrecognised directives are
-                            // handled.
-                            let expanded = self.substitute(args, filename, line_no);
+                            // handled. The spelling-faithful form
+                            // keeps re-lex separators out of the
+                            // header name.
+                            let expanded = self.substitute_spelling(args, filename, line_no);
                             let trimmed = expanded.trim();
                             let name = trimmed
                                 .strip_prefix('<')

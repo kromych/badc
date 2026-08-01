@@ -1,7 +1,9 @@
 use super::Preprocessor;
 use super::builtins;
 use super::include::IncludeForm;
-use super::text::{is_ident_byte, literal_prefix_len, pp_number_len, strip_c_comments};
+use super::text::{
+    is_ident_byte, literal_prefix_len, pp_number_len, skip_literal, strip_c_comments,
+};
 use crate::c5::error::C5Error;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -13,7 +15,7 @@ impl Preprocessor {
     /// argument and lose the original name. Returns a fully
     /// macro-substituted string suitable for the `#if` expression
     /// parser.
-    pub(super) fn expand_for_if(&self, expr: &str, line_no: usize) -> String {
+    pub(super) fn expand_for_if(&self, expr: &str, line_no: usize, filename: &str) -> String {
         let mut out = String::with_capacity(expr.len());
         let bytes = expr.as_bytes();
         let mut i = 0;
@@ -40,6 +42,16 @@ impl Preprocessor {
                 i = next;
                 continue;
             }
+            // `__has_include` / `__has_include_next` (C23 6.10.1) also
+            // resolve before substitution: a literal `<...>` / `"..."`
+            // operand is a header name as written, and a pp-token
+            // operand expands spelling-faithfully. Substituting the
+            // whole expression instead would insert re-lex separators
+            // into the header name.
+            if let Some(next) = self.resolve_has_include(expr, i, filename, line_no, &mut out) {
+                i = next;
+                continue;
+            }
             // Bytes with no operator meaning pass through as a UTF-8
             // slice; a per-byte `as char` would widen non-ASCII.
             let start = i;
@@ -62,6 +74,66 @@ impl Preprocessor {
         replace_has_operators(&strip_c_comments(&substituted))
     }
 
+    /// Resolve a `__has_include` / `__has_include_next` at `i`,
+    /// appending `1` or `0` to `out`; returns the index just past the
+    /// call. `None` when neither operator starts there, and also when
+    /// the operand expands to neither literal form -- the text then
+    /// flows on to the expression parser, whose diagnostics cover the
+    /// malformed operand.
+    fn resolve_has_include(
+        &self,
+        s: &str,
+        i: usize,
+        filename: &str,
+        line_no: usize,
+        out: &mut String,
+    ) -> Option<usize> {
+        for (kw, next) in [("__has_include_next", true), ("__has_include", false)] {
+            let Some((operand, after)) = balanced_operand(s, i, kw) else {
+                continue;
+            };
+            let found = self.has_include_answer(operand, next, filename, line_no)?;
+            out.push_str(if found { "1" } else { "0" });
+            return Some(after);
+        }
+        None
+    }
+
+    /// Answer for a `__has_include` operand (`next` selects the
+    /// `_next` search): a literal `<...>` / `"..."` names the header
+    /// as written (C23 6.10.1 matches the header-name forms before
+    /// macro replacement); any other operand is macro-expanded with
+    /// its spelling kept and reparsed. `None` when the expansion
+    /// yields neither form.
+    fn has_include_answer(
+        &self,
+        operand: &str,
+        next: bool,
+        filename: &str,
+        line_no: usize,
+    ) -> Option<bool> {
+        let literal = |t: &str| {
+            let t = t.trim();
+            t.strip_prefix('<')
+                .and_then(|s| s.strip_suffix('>'))
+                .map(|n| (n, false))
+                .or_else(|| {
+                    t.strip_prefix('"')
+                        .and_then(|s| s.strip_suffix('"'))
+                        .map(|n| (n, true))
+                })
+                .map(|(n, quoted)| (n.trim().to_string(), quoted))
+        };
+        let (name, quoted) = literal(operand)
+            .or_else(|| literal(&self.substitute_spelling(operand, filename, line_no)))?;
+        let form = if next {
+            IncludeForm::next(quoted)
+        } else {
+            IncludeForm::plain(quoted)
+        };
+        Some(self.resolve_include(&name, form, filename).is_some())
+    }
+
     pub(super) fn eval_condition(
         &self,
         expr: &str,
@@ -82,7 +154,7 @@ impl Preprocessor {
         // parser sees them. `defined(X)` is protected by a
         // pre-pass that converts it to a literal 0/1 since
         // substitute would otherwise expand X away.
-        let prepared = self.expand_for_if(expr, line_no);
+        let prepared = self.expand_for_if(expr, line_no, filename);
         self.take_pending_error()?;
         let mut p = IfExprParser::new(&prepared, self, filename);
         let v = p.parse_ternary()?;
@@ -1001,6 +1073,51 @@ fn operator_operand<'a>(
         }
     }
     Some((name, j))
+}
+
+/// Match `kw ( operand )` at `at` with a word boundary around `kw`,
+/// the operand running to the balancing `)`. Returns the operand text
+/// and the index just past the call. String and char literals inside
+/// the operand are skipped opaquely.
+fn balanced_operand<'a>(s: &'a str, at: usize, kw: &str) -> Option<(&'a str, usize)> {
+    let bytes = s.as_bytes();
+    if !bytes[at..].starts_with(kw.as_bytes()) {
+        return None;
+    }
+    let after = at + kw.len();
+    let prev_word = at > 0 && is_ident_byte(bytes[at - 1]);
+    let next_word = bytes.get(after).copied().is_some_and(is_ident_byte);
+    if prev_word || next_word {
+        return None;
+    }
+    let mut j = after;
+    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+        j += 1;
+    }
+    if bytes.get(j) != Some(&b'(') {
+        return None;
+    }
+    let start = j + 1;
+    let mut depth = 1usize;
+    j = start;
+    while j < bytes.len() {
+        match bytes[j] {
+            b'"' | b'\'' => {
+                j = skip_literal(bytes, j);
+                continue;
+            }
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some((&s[start..j], j + 1));
+                }
+            }
+            _ => {}
+        }
+        j += 1;
+    }
+    None
 }
 
 /// The `#if` operators whose identifier operand is resolved textually,

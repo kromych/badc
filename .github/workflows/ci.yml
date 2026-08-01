@@ -1460,9 +1460,10 @@ jobs:
           - { os: ubuntu-24.04,     label: ubuntu-x64,   optenv: "", optname: O0 }
           - { os: ubuntu-24.04,     label: ubuntu-x64,   optenv: "1", optname: O }
     runs-on: ${{ matrix.os }}
-    # badc build (warm cache) + full-unit compile + link. The compile is the
-    # long pole; 30 min is a backstop it must never approach.
-    timeout-minutes: 30
+    # badc build (warm cache) + full-unit compile + link. A green lane runs
+    # about 7 minutes end to end; the caps exist to kill hangs, not to fit
+    # slow work, so they stay close to the observed time.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -1508,6 +1509,9 @@ jobs:
       - name: qemu setup (fetch source + build config)
         run: python demos/qemu/setup.py
       - name: qemu smoke (badc build + self-link + boot)
+        # The step cap bounds a hang in the compile/link/boot chain well below
+        # the job cap; each boot is separately bounded by BADC_QEMU_BOOT_TIMEOUT.
+        timeout-minutes: 15
         # Two-stage gate. BADC_QEMU_REQUIRE_RUN=1 requires the linked emulator
         # to start (--version): the runner builds at a long path whose length
         # lands the init_array on the .data boundary, catching a boundary
@@ -1520,6 +1524,9 @@ jobs:
         env:
           BADC_QEMU_REQUIRE_RUN: "1"
           BADC_QEMU_BOOT: "gate"
+          # Explicit per-boot cap: a boot either reaches userspace in this
+          # window or the lane fails; it must never sit on the job budget.
+          BADC_QEMU_BOOT_TIMEOUT: "90"
           BADC_QEMU_OPT: ${{ matrix.optenv }}
           BADC_QEMU_BOOT_LOG: ${{ github.workspace }}/qemu-boot-${{ matrix.label }}-${{ matrix.optname }}.log
           # Both arches boot the EFI-stub kernel THROUGH the firmware the ovmf

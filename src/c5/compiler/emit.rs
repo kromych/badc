@@ -23,6 +23,26 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{is_bool_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, load_op_for};
 
+#[cfg(test)]
+thread_local! {
+    /// Symbols the scope unwinds examined, and the symbol-table entries
+    /// a full-table scan per scope exit would have examined. Read by the
+    /// scaling test, which bounds the first against the second.
+    pub(crate) static SCOPE_UNWIND: core::cell::Cell<(usize, usize)> =
+        const { core::cell::Cell::new((0, 0)) };
+}
+
+#[cfg(test)]
+fn note_scope_unwind(examined: usize, table: usize) {
+    SCOPE_UNWIND.with(|c| {
+        let (a, b) = c.get();
+        c.set((a + examined, b + table));
+    });
+}
+
+#[cfg(not(test))]
+fn note_scope_unwind(_examined: usize, _table: usize) {}
+
 impl Compiler {
     // ---- Lexer plumbing ----
 
@@ -793,6 +813,7 @@ impl Compiler {
     /// restore -- a file-scope register variable shadows itself, so it
     /// stays bound and every later scope exit must revisit it.
     pub(super) fn unwind_scope_bound(&mut self, mut bound: alloc::vec::Vec<u32>) {
+        note_scope_unwind(bound.len(), self.symbols.len());
         for &i in &bound {
             let sym = &mut self.symbols[i as usize];
             if Self::scope_binding_active(sym) {

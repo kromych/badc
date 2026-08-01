@@ -984,10 +984,20 @@ struct CalleeFacts {
 /// Facts keyed by callee entry pc.
 type FactsMap = BTreeMap<usize, CalleeFacts>;
 
+#[cfg(test)]
+thread_local! {
+    /// Candidate entries the pass has materialized on this thread. Every
+    /// candidate container goes through [`CandidatePool::build`], so this
+    /// is the pass's whole candidate bookkeeping; a per-caller set would
+    /// make it grow with callers x candidates. Read by the scaling test.
+    static CANDIDATE_ENTRIES: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
 /// One fixpoint iteration's candidate bodies under a single gate
 /// combination, shared by every caller the gates admit. Building the
 /// gated sets once per iteration keeps the pass off callers x
-/// candidates.
+/// candidates. `build` is the only constructor, so the entry count it
+/// records covers every candidate set the pass holds.
 struct CandidatePool<'a> {
     map: BTreeMap<usize, &'a FunctionSsa>,
     /// Entry pcs of candidates whose loops were unrolled, at most two:
@@ -996,12 +1006,14 @@ struct CandidatePool<'a> {
 }
 
 impl<'a> CandidatePool<'a> {
-    fn build(src: &BTreeMap<usize, &'a FunctionSsa>, keep: impl Fn(&FunctionSsa) -> bool) -> Self {
+    fn build(src: &'a [FunctionSsa], keep: impl Fn(&FunctionSsa) -> bool) -> Self {
         let map: BTreeMap<usize, &'a FunctionSsa> = src
             .iter()
-            .filter(|(_, c)| keep(c))
-            .map(|(&pc, &c)| (pc, c))
+            .filter(|c| keep(c))
+            .map(|c| (c.ent_pc, c))
             .collect();
+        #[cfg(test)]
+        CANDIDATE_ENTRIES.with(|n| n.set(n.get() + map.len()));
         let unrolled = map
             .iter()
             .filter(|(_, c)| c.did_unroll)
@@ -2750,36 +2762,15 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             .filter(|f| is_inline_candidate(f, cap, abi, None))
             .cloned()
             .collect();
-        let mut candidates: BTreeMap<usize, &FunctionSsa> = BTreeMap::new();
-        for f in &bodies {
-            candidates.insert(f.ent_pc, f);
-        }
-        #[cfg(feature = "codegen_test")]
-        if trace {
-            eprintln!(
-                "[inline] iter={i} cap={cap} funcs={n} candidates={c}",
-                i = iter,
-                cap = cap,
-                n = funcs.len(),
-                c = candidates.len()
-            );
-            for (pc, f) in &candidates {
-                eprintln!(
-                    "[inline] candidate ent_pc={pc} name={n} insts={i}",
-                    n = f.name,
-                    i = f.insts.len()
-                );
-            }
-        }
-        if candidates.is_empty() {
+        if bodies.is_empty() {
             break;
         }
         // The candidate bodies are fixed for this iteration, so their
         // splice facts are derived once here rather than per caller and
         // per call site.
-        let facts: FactsMap = candidates
+        let facts: FactsMap = bodies
             .iter()
-            .map(|(&pc, c)| (pc, callee_facts(c)))
+            .map(|c| (c.ent_pc, callee_facts(c)))
             .collect();
         // The two caller gates below are predicates over the candidate
         // body alone, so each combination they select is one shared pool
@@ -2787,11 +2778,26 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
         let marked = |c: &FunctionSsa| c.is_inline;
         let frame_free = |c: &FunctionSsa| c.is_always_inline || facts[&c.ent_pc].frame_cost == 0;
         let pools = [
-            CandidatePool::build(&candidates, |_| true),
-            CandidatePool::build(&candidates, marked),
-            CandidatePool::build(&candidates, frame_free),
-            CandidatePool::build(&candidates, |c| marked(c) && frame_free(c)),
+            CandidatePool::build(&bodies, |_| true),
+            CandidatePool::build(&bodies, marked),
+            CandidatePool::build(&bodies, frame_free),
+            CandidatePool::build(&bodies, |c| marked(c) && frame_free(c)),
         ];
+        #[cfg(feature = "codegen_test")]
+        if trace {
+            eprintln!(
+                "[inline] iter={iter} cap={cap} funcs={n} candidates={c}",
+                n = funcs.len(),
+                c = pools[0].map.len(),
+            );
+            for (pc, f) in &pools[0].map {
+                eprintln!(
+                    "[inline] candidate ent_pc={pc} name={n} insts={i}",
+                    n = f.name,
+                    i = f.insts.len()
+                );
+            }
+        }
         let mut changed = false;
         for (fi, caller) in funcs.iter_mut().enumerate() {
             // A self-recursive caller's frame is paid once per recursion
@@ -3930,22 +3936,19 @@ mod tests {
         }
     }
 
-    /// The pass copied every function into a per-iteration snapshot and
-    /// the candidate map into a per-caller copy, so a module of N
-    /// helpers cost N^2. Quadrupling the helper count must not
-    /// quadruple the cost -- 16x is what the copies would spend.
+    /// The pass copied the candidate map once per caller, so a module of
+    /// N helpers materialized N^2 candidate entries. The count is taken
+    /// from `CANDIDATE_ENTRIES`, which every candidate set the pass
+    /// builds feeds, so the bound holds whatever the machine is doing.
+    /// Quadrupling the helper count must not quadruple the entries --
+    /// 16x is what a per-caller copy would spend.
     #[test]
     fn candidate_bookkeeping_is_not_quadratic_in_the_module() {
-        let build = |n: usize| {
+        let entries = |n: usize| -> usize {
             let mut funcs: Vec<FunctionSsa> = (0..n).map(|i| leaf_callee(i + 1)).collect();
             funcs.push(driver(0, &(1..=n).collect::<Vec<_>>()));
-            funcs
-        };
-        let run_once = |n: usize| {
-            let mut funcs = build(n);
-            let start = std::time::Instant::now();
+            CANDIDATE_ENTRIES.with(|c| c.set(0));
             run(&mut funcs, 64, Target::LinuxX64.abi());
-            let t = start.elapsed().as_secs_f64();
             assert!(
                 !funcs
                     .last()
@@ -3955,20 +3958,14 @@ mod tests {
                     .any(|i| matches!(i, Inst::Call { .. })),
                 "the driver's calls must all have been spliced",
             );
-            t
+            CANDIDATE_ENTRIES.with(|c| c.get())
         };
-        // Interleaved so a load excursion on a shared machine skews
-        // both sizes rather than only the later batch; the suite runs
-        // its tests in parallel, so the two are never measured alone.
-        let (mut small, mut large) = (f64::MAX, f64::MAX);
-        for _ in 0..3 {
-            small = small.min(run_once(500));
-            large = large.min(run_once(2000));
-        }
+        let (small, large) = (entries(500), entries(2000));
+        assert!(small > 0, "no candidate bookkeeping to compare");
         assert!(
-            large < small * 8.0,
-            "4x the module cost {:.1}x, past the 8x headroom over linear",
-            large / small,
+            large < small * 6,
+            "4x the module materialized {large} candidate entries against \
+             {small}, past the 6x headroom over linear",
         );
     }
 }

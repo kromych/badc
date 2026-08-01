@@ -5099,6 +5099,39 @@ mod asm_section_tests {
     }
 
     #[test]
+    fn section_value_quoted_symbol_name() {
+        // A double-quoted symbol name is the symbol, quotes stripped, and
+        // composes with an addend and the `- .` PC-relative marker.
+        assert_eq!(
+            parse_section_value("\"__SCK__call\"").unwrap(),
+            AsmSectionValue::Ref {
+                name: alloc::string::String::from("__SCK__call"),
+                pcrel: false,
+                addend: alloc::string::String::new(),
+            }
+        );
+        assert_eq!(
+            parse_section_value("\"sym\" + 8").unwrap(),
+            AsmSectionValue::Ref {
+                name: alloc::string::String::from("sym"),
+                pcrel: false,
+                addend: alloc::string::String::from("0 + 8"),
+            }
+        );
+        // The quoted run is opaque: the name may carry expression characters.
+        assert_eq!(
+            parse_section_value("\"a-b\" - .").unwrap(),
+            AsmSectionValue::Ref {
+                name: alloc::string::String::from("a-b"),
+                pcrel: true,
+                addend: alloc::string::String::new(),
+            }
+        );
+        // An unterminated quote is not a value.
+        assert!(parse_section_value("\"sym").is_err());
+    }
+
+    #[test]
     fn section_value_strips_enclosing_parens() {
         // A fully-enclosing paren group is grouping only. The aarch64
         // exception table wraps the whole PC-relative expression

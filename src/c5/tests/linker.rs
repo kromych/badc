@@ -2578,6 +2578,106 @@ fn file_scope_asm_symbol_displacement_memory_relocates_32s() {
 }
 
 #[test]
+fn file_scope_asm_symbol_riprel_displacement_relocates_pc32() {
+    // RIP-relative references in a pushed data section whose displacement
+    // is a link-time symbol plus a constant, optionally parenthesized and
+    // segment-prefixed (`sarq $5, %gs:(sym + 8)(%rip)`): each disp32 field
+    // takes an `R_X86_64_PC32` whose addend folds the constant less the
+    // 4-byte PC skew and any trailing immediate, byte-identical to gas:
+    //   65 48 c1 3d <disp32> 05    sarq $5, %gs:(sym + 8)(%rip)   sym + 3
+    //   48 8b 05 <disp32>          movq sym(%rip), %rax           sym - 4
+    //   65 ff 05 <disp32>          incl %gs:sym(%rip)             sym - 4
+    //   48 8b 0d <disp32>          movq sym+8(%rip), %rcx         sym + 4
+    //   48 8d 15 <disp32>          leaq (sym - 8)(%rip), %rdx     sym - 12
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_PC32: u32 = 2;
+    let src = super::load_fixture("file_scope_asm_sym_riprel.c");
+    let program = Compiler::with_target(src, Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    #[rustfmt::skip]
+    let template: &[u8] = &[
+        0x65, 0x48, 0xc1, 0x3d, 0, 0, 0, 0, 0x05,
+        0x48, 0x8b, 0x05, 0, 0, 0, 0,
+        0x65, 0xff, 0x05, 0, 0, 0, 0,
+        0x48, 0x8b, 0x0d, 0, 0, 0, 0,
+        0x48, 0x8d, 0x15, 0, 0, 0, 0,
+    ];
+    let base = obj
+        .data
+        .windows(template.len())
+        .position(|w| w == template)
+        .expect("the template instructions must encode byte-identically to gas");
+    // (field offset within the template, addend).
+    for (field, addend) in [(4, 3), (12, -4), (19, -4), (26, 4), (33, -12)] {
+        let r = obj
+            .data_relocs
+            .iter()
+            .find(|r| r.offset == (base + field) as u64)
+            .unwrap_or_else(|| panic!("disp32 at template offset {field} must carry a reloc"));
+        assert_eq!(r.rtype, R_X86_64_PC32, "field {field} relocates as PC32");
+        assert_eq!(
+            obj.symbols[r.sym_idx].name, "counter",
+            "field {field} targets the symbol"
+        );
+        assert_eq!(r.addend, addend, "field {field} addend");
+    }
+}
+
+#[test]
+fn asm_data_directive_quoted_symbol_matches_bare() {
+    // `.quad "name"` -- a GNU as double-quoted symbol name in a data
+    // directive: the same absolute relocation as the bare spelling, not
+    // string data.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = super::load_fixture("inline_asm_quoted_symbol_data.c");
+    for (target, abs64) in [(Target::LinuxX64, 1u32), (Target::LinuxAarch64, 257u32)] {
+        let program = Compiler::with_target(src.clone(), target)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = &sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".discard.addressable")
+            .unwrap_or_else(|| panic!("{target:?}: .discard.addressable missing"))
+            .3;
+        assert_eq!(sec, &[0u8; 16], "{target:?}: two zeroed 8-byte fields");
+        let rela = &sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.discard.addressable")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.discard.addressable missing"))
+            .3;
+        assert_eq!(rela.len(), 2 * 24, "{target:?}: two relocations");
+        let symbols = elf_symbols(&bytes);
+        for (k, r) in rela.chunks_exact(24).enumerate() {
+            let r_offset = u64::from_le_bytes(r[0..8].try_into().unwrap());
+            let r_info = u64::from_le_bytes(r[8..16].try_into().unwrap());
+            let r_addend = i64::from_le_bytes(r[16..24].try_into().unwrap());
+            assert_eq!(r_offset, k as u64 * 8, "{target:?}: entry {k} offset");
+            assert_eq!(r_info as u32, abs64, "{target:?}: entry {k} is ABS64");
+            assert_eq!(r_addend, 0, "{target:?}: entry {k} addend");
+            assert_eq!(
+                symbols[(r_info >> 32) as usize].0,
+                "external_key",
+                "{target:?}: entry {k} targets the same symbol as the bare form"
+            );
+        }
+    }
+}
+
+#[test]
 fn file_scope_asm_jcc_to_section_label_and_lock_prefix() {
     // `jne .slowpath` inside a pushed section branches to a label defined
     // later in the same section: the rel32 `0f 85` form with a branch

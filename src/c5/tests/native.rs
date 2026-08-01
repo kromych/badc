@@ -836,6 +836,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_barriers.c", 42),
     ("inline_asm_a64_comments.c", 42),
     ("inline_asm_pushsection.c", 42),
+    ("inline_asm_quoted_symbol_data.c", 42),
     ("inline_asm_alternative_replacement.c", 42),
     ("file_scope_asm_decls.c", 0),
     ("file_scope_asm_label_binding.c", 42),

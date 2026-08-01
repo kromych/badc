@@ -3756,6 +3756,30 @@ mod tests {
     }
 
     #[test]
+    fn symbol_riprel_displacement() {
+        // `sym(%rip)` / `(sym + disp)(%rip)`: a RIP-relative reference to a
+        // link-time symbol, the name on the instruction, the folded constant
+        // in the operand; a segment override rides the instruction.
+        let insns = parse_template(b"sarq $5, %%gs:(percpu_obj + 16)(%%rip)").unwrap();
+        assert_eq!(insns[0].seg, Some(0x65));
+        assert_eq!(insns[0].sym_target.as_deref(), Some("percpu_obj"));
+        assert_eq!(insns[0].operands[0], AsmOpnd::Imm(5));
+        assert_eq!(insns[0].operands[1], AsmOpnd::SymRipRel { disp: 16 });
+        // The single-`%` basic-asm spelling and the unparenthesized form.
+        let insns = parse_template(b"movq obj+8(%rip), %rax").unwrap();
+        assert_eq!(insns[0].sym_target.as_deref(), Some("obj"));
+        assert_eq!(insns[0].operands[0], AsmOpnd::SymRipRel { disp: 8 });
+        let insns = parse_template(b"leaq (obj - 8)(%%rip), %%rdx").unwrap();
+        assert_eq!(insns[0].operands[0], AsmOpnd::SymRipRel { disp: -8 });
+        // A template-local label keeps the label-address form; a literal
+        // displacement keeps the relocation-free form.
+        let insns = parse_template(b"lbl:\n\tleaq lbl(%%rip), %%rax").unwrap();
+        assert!(matches!(insns[1].operands[0], AsmOpnd::LabelAddr { .. }));
+        let insns = parse_template(b"movq 8(%%rip), %%rax").unwrap();
+        assert_eq!(insns[0].operands[0], AsmOpnd::RipRel { disp: 8 });
+    }
+
+    #[test]
     fn align_directives() {
         // `.align` / `.balign` take a byte count on x86; `.p2align` an
         // exponent. Fill and max-skip operands carry through.

@@ -222,7 +222,7 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
 fn asm_save_masks_and_stage(
     asm: &super::super::ir::AsmBlock,
     op_reg: &[Option<u8>],
-) -> Result<(u32, u32, Reg), String> {
+) -> Result<(u32, u32, Reg), alloc::string::String> {
     use super::super::ir::AsmConstraint;
     let mut used = asm.clobber_regs;
     let mut fp_used = asm.clobber_fp_regs;
@@ -257,7 +257,9 @@ fn asm_save_masks_and_stage(
                 .find(|&r| free(r) && asm.clobber_regs & (1 << r) != 0)
         })
         .or_else(|| STAGE_CANDIDATES.iter().copied().find(|&r| free(r)))
-        .ok_or_else(|| String::from("inline asm: no register left for operand staging"))?;
+        .ok_or_else(|| {
+            alloc::string::String::from("inline asm: no register left for operand staging")
+        })?;
     if stage != 10 && stage != 11 && asm.clobber_regs & (1 << stage) == 0 {
         used |= 1 << stage;
     }

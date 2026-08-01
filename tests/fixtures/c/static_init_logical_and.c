@@ -22,7 +22,8 @@ static int classify(int n) {
     return (int)table[n].value;
 }
 
-typedef unsigned long word;
+// Wide enough to hold a code address on every supported data model.
+typedef unsigned long long word;
 
 static int dispatch(int n) {
     // The block-address form in the same shape: prefix `&&`, runtime stores.

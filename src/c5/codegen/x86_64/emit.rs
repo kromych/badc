@@ -6924,6 +6924,27 @@ fn encode_one_x86_section_insn(
                     size,
                 });
             }
+            // `sym(%%rip)` / `(sym + disp)(%%rip)`: a RIP-relative reference
+            // to a link-time symbol (name in `sym_target`); the disp32 takes a
+            // PC-relative relocation with the constant folded into the addend.
+            AsmOpnd::SymRipRel { disp } => {
+                let size = mem_size(insn);
+                let name = insn.sym_target.clone().ok_or_else(|| {
+                    alloc::format!("inline asm: replacement `{text}` memory symbol is missing")
+                })?;
+                if sym_disp.is_some() {
+                    return Err(alloc::format!(
+                        "inline asm: replacement `{text}` has more than one memory operand"
+                    ));
+                }
+                sym_disp = Some((
+                    AsmSectionTarget::Symbol(name),
+                    disp as i64,
+                    concrete.len(),
+                    true,
+                ));
+                concrete.push(Concrete::RipRel { disp: 0, size });
+            }
             _ => {
                 return Err(alloc::format!(
                     "inline asm: replacement instruction `{text}` operand is not a \
@@ -7926,6 +7947,18 @@ fn emit_inline_asm(
                         "inline asm: a symbol-displacement memory operand is only supported in file-scope asm",
                     );
                 }
+                // `sym(%%rip)`: a PC-relative reference to a named symbol,
+                // resolved by name through the same relocation channel as a
+                // `%a` operand.
+                AsmOpnd::SymRipRel { disp } => {
+                    let size = asm_mem_size(None, insn, &asm.operands, &op_reg)
+                        .unwrap_or(AsmRegSize::Quad);
+                    let Some(name) = insn.sym_target.clone() else {
+                        return fail("inline asm: memory symbol is missing");
+                    };
+                    riprel_reloc = Some((AsmRipSym::Extern { name, offset: 0 }, disp as i64));
+                    Concrete::RipRel { disp: 0, size }
+                }
                 // A `$symbol` absolute-address immediate needs a symbol
                 // relocation the function-body stream does not carry; it is
                 // assembled only in file-scope section code.
@@ -7950,7 +7983,7 @@ fn emit_inline_asm(
         // offset below would be wrong. Reject that combination rather than
         // relocate the wrong bytes.
         if riprel_reloc.is_some() && concrete.iter().any(|c| matches!(c, Concrete::Imm(_))) {
-            return fail("inline asm: `%a` symbolic operand with an immediate");
+            return fail("inline asm: a symbolic RIP-relative operand with an immediate");
         }
         if abs_label.is_some()
             && concrete

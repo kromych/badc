@@ -2105,6 +2105,8 @@ fn run_inline_asm(
                     | AsmOpnd::AbsMem { .. }
                     | AsmOpnd::AbsMemRef { .. }
                     | AsmOpnd::IndexMem { .. }
+                    | AsmOpnd::SymMem { .. }
+                    | AsmOpnd::SymRipRel { .. }
                     | AsmOpnd::RipRel { .. }
                     | AsmOpnd::RipRelRef { .. }
                     | AsmOpnd::LabelAddr { .. }
@@ -2201,6 +2203,7 @@ fn run_inline_asm(
             | AsmOpnd::AbsMemRef { .. }
             | AsmOpnd::IndexMem { .. }
             | AsmOpnd::SymMem { .. }
+            | AsmOpnd::SymRipRel { .. }
             | AsmOpnd::RipRel { .. }
             | AsmOpnd::RipRelRef { .. } => (0, AsmRegSize::Long),
         }
@@ -2224,6 +2227,7 @@ fn run_inline_asm(
             | AsmOpnd::AbsMemRef { .. }
             | AsmOpnd::IndexMem { .. }
             | AsmOpnd::SymMem { .. }
+            | AsmOpnd::SymRipRel { .. }
             | AsmOpnd::RipRel { .. }
             | AsmOpnd::RipRelRef { .. } => None,
         }

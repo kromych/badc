@@ -62,6 +62,11 @@ const COMPILE_SKIPLIST: &[&str] = &[
     // on the `-c` object path (a single-file image folds only
     // PC-relative section relocs); locked by a linker test.
     "file_scope_asm_sym_mem.c",
+    // PC-relative symbol relocations from a non-executable pushed
+    // section assemble only on the `-c` object path (the single-file
+    // image folds data-side relocs as absolute); locked by a linker
+    // test.
+    "file_scope_asm_sym_riprel.c",
     // Each calls a declared-but-undefined function from a statically
     // dead branch, so the link succeeds only once the fold deletes the
     // call -- an -O capability. gcc likewise fails to link these at -O0
@@ -129,6 +134,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_port_dx.c", "linux-aarch64"),    // x86-64 `(%dx)` port in/out
     ("inline_asm_x64_c_mem.c", "linux-aarch64"),      // x86-64 `%c` RIP-relative memory forms
     ("inline_asm_x64_seg_c_percpu.c", "linux-aarch64"), // x86-64 `%%gs:` percpu accessor shapes
+    ("inline_asm_x64_sym_riprel.c", "linux-aarch64"), // x86-64 sym(%rip) displacement forms
     ("inline_asm_x64_align.c", "linux-aarch64"),      // x86-64 `.align` in the code stream
     ("cpuid_partial_outputs.c", "linux-aarch64"),     // x86-64 cpuid
     ("inline_asm_x64_flag_outputs.c", "linux-aarch64"), // x86-64 `=@cc` flag outputs

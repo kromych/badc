@@ -901,6 +901,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("int_times_double_into_local.c", 0),
     ("ptr_diff_plus_ptr.c", 0),
     ("anonymous_aggregates.c", 0),
+    ("unnamed_field_tagged_type.c", 0),
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),
     ("octal_literal.c", 42),

@@ -575,6 +575,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("optimizer_fp_arg_mask_remap.c", 19),
     ("struct_2d_array_field.c", 27),
     ("anonymous_aggregates.c", 0),
+    ("unnamed_field_tagged_type.c", 0),
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),
     ("octal_literal.c", 42),

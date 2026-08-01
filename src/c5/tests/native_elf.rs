@@ -583,6 +583,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("variadic_optimizer_survives.c", 0),
     ("struct_2d_array_field.c", 27),
     ("anonymous_aggregates.c", 0),
+    ("unnamed_field_tagged_type.c", 0),
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),
     ("octal_literal.c", 42),

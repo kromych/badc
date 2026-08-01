@@ -185,14 +185,14 @@ impl Compiler {
             // modifier appeared so a bare `unsigned x;` field still
             // produces an `int` field.
             let mut mods = decl_base::IntModifiers::default();
-            // Set when the field-type prefix is an anonymous
-            // (no-tag) `struct { ... }` / `union { ... }` whose
-            // members should promote into the enclosing struct
-            // (C11 6.7.2.1p13). Stays `None` for named tags --
-            // those need an explicit declarator. Checked AFTER
-            // the type-prefix parse: if there's no declarator
-            // (`;` next), the promotion path runs; otherwise the
-            // synthesised tag stays a regular nested-struct type.
+            // Set when the field-type prefix is a `struct` / `union`
+            // whose members should promote into the enclosing struct
+            // when no declarator follows: C11 6.7.2.1p13 for a no-tag
+            // `struct { ... }`, and the unnamed-field extension gcc
+            // spells `-fms-extensions` for a tagged one. Checked AFTER
+            // the type-prefix parse: if there's no declarator (`;`
+            // next), the promotion path runs; otherwise the tag stays a
+            // regular nested-aggregate field type.
             let mut anon_aggregate_inner_id: Option<usize> = None;
             let mut atomic_field_base: Option<i64> = None;
             // `__attribute__((aligned(N)))` before the declarator raises the
@@ -255,34 +255,23 @@ impl Compiler {
                 let nested_is_union = self.lex.tk == Token::Union;
                 self.next()?;
                 let nested_packed = self.skip_attribute_specifiers()?;
-                // Three shapes:
-                //   * `struct Foo { ... }` -- named definition.
-                //   * `struct Foo`         -- type use.
-                //   * `struct { ... }`     -- anonymous (no tag),
-                //                            inlined here. We
-                //                            synthesise a unique
-                //                            tag to register it
-                //                            in the struct table.
-                //                            If no declarator
-                //                            follows (next token
-                //                            is `;`), the inner
-                //                            fields PROMOTE into
-                //                            the enclosing scope
-                //                            -- C11 6.7.2.1p13.
-                let (inner_name, had_explicit_tag) = if self.lex.tk == Token::Id {
+                // Three shapes: `struct Foo { ... }` (named definition),
+                // `struct Foo` (type use), and `struct { ... }` (no tag,
+                // registered under a synthesised unique tag). Any of them
+                // with no declarator -- next token `;` -- is an unnamed
+                // member whose fields promote into the enclosing
+                // aggregate.
+                let inner_name = if self.lex.tk == Token::Id {
                     let name = self.symbols[self.lex.curr_id_idx].name.clone();
                     self.next()?;
-                    (name, true)
+                    name
                 } else if self.lex.tk == '{' {
                     let kind = if nested_is_union {
                         "anon_union"
                     } else {
                         "anon_struct"
                     };
-                    (
-                        format!("__{kind}_{}_in_{}", self.structs.len(), name),
-                        false,
-                    )
+                    format!("__{kind}_{}_in_{}", self.structs.len(), name)
                 } else {
                     return Err(self.compile_err("aggregate name or `{{` expected in field type"));
                 };
@@ -294,11 +283,7 @@ impl Compiler {
                 } else {
                     self.find_or_forward_declare_struct(&inner_name)
                 };
-                anon_aggregate_inner_id = if had_explicit_tag {
-                    None
-                } else {
-                    Some(inner_id)
-                };
+                anon_aggregate_inner_id = Some(inner_id);
                 struct_ty_for(inner_id)
             } else if self.lex.tk == Token::Enum {
                 // C99 6.7.2.2: an `enum X` field is `int`, or the packed
@@ -400,21 +385,21 @@ impl Compiler {
             // through the typedef keeps pointer alignment instead.
             let type_align_override = core::mem::take(&mut self.pending.type_align) as usize;
 
-            // Anonymous struct/union member (C11 6.7.2.1p13). The
-            // type-prefix parse just registered an anon-tagged
-            // aggregate; if there's no declarator (`;` follows
-            // immediately), promote each inner field into the
-            // enclosing struct's namespace at the current cursor,
-            // adjusting offsets, and skip the regular declarator
-            // loop entirely. Real-Windows `LARGE_INTEGER` /
-            // `ULARGE_INTEGER` are the canonical use site --
-            // their `LowPart` / `HighPart` members live inside
-            // an unnamed `struct { ... }` and must be reachable
-            // as `li.LowPart` (not `li.<some-tag>.LowPart`).
+            // Unnamed member: a struct/union type prefix with no
+            // declarator (`;` follows immediately). Its fields promote
+            // into the enclosing aggregate's namespace at the current
+            // cursor, rebased onto the member's offset, so `li.LowPart`
+            // rather than `li.<tag>.LowPart` names them. Untagged is
+            // C11 6.7.2.1p13; tagged is the unnamed-field extension
+            // gcc spells `-fms-extensions`, which the type has to be
+            // complete for.
             if let Some(inner_id) = anon_aggregate_inner_id
                 && self.lex.tk == ';'
             {
                 {
+                    if !self.structs[inner_id].is_complete {
+                        return Err(self.compile_err("unnamed field has incomplete type"));
+                    }
                     // Seal any pending bitfield run -- the
                     // anonymous aggregate is a regular field
                     // from the cursor's perspective.

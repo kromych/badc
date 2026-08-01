@@ -63,3 +63,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp], #0x30
                	ret
+               	udf	#0x0
+               	mov	w1, #0x1234             // =4660
+               	str	w1, [x0]
+               	ret
+               	nop
+               	udf	#0x5678
+               	nop
+               	udf	#0x10

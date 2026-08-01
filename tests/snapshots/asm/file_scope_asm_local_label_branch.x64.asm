@@ -78,3 +78,20 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)
+
+<pv_unlock>:
+               	pushq	%rdx
+               	movl	$0x1, %eax
+               	xorl	%edx, %edx
+               	lock
+               	cmpxchgb	%dl, (%rdi)
+               	jne	<addr>
+               	popq	%rdx
+               	retq
+               	pushq	%rsi
+               	movzbl	%al, %esi
+               	callq	<addr>
+               	popq	%rsi
+               	popq	%rdx
+               	retq

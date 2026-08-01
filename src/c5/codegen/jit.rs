@@ -375,8 +375,57 @@ mod jit_impl {
         // addresses *before* flipping to RX -- the writes need to
         // hit RW pages. Once exec is enabled the page is read-only
         // for the lifetime of the run.
-        let region = JitRegion::new(&build.text)?;
+        // The read-only blob (switch dispatch tables) rides at an
+        // 8-aligned tail of the same mapping; reads from RX pages
+        // are fine and the region sizing covers the whole blob.
+        let rodata_blob_off = (build.text.len() + 7) & !7;
+        let region = if build.rodata.bytes.is_empty() {
+            JitRegion::new(&build.text)?
+        } else {
+            let mut blob = Vec::with_capacity(rodata_blob_off + build.rodata.bytes.len());
+            blob.extend_from_slice(&build.text);
+            blob.resize(rodata_blob_off, 0);
+            blob.extend_from_slice(&build.rodata.bytes);
+            JitRegion::new(&blob)?
+        };
         let code_vmaddr = region.as_ptr() as u64;
+        // Resolve the blob's address fixups and entry slots against
+        // the mapped base: each table entry holds `target -
+        // table_base`, both inside this mapping.
+        if !build.rodata.bytes.is_empty() {
+            // The absolute-slot form is relocatable-only.
+            if !build.rodata.abs64.is_empty() {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    "JIT: absolute table slots reached an in-memory build",
+                )));
+            }
+            let full_len = rodata_blob_off + build.rodata.bytes.len();
+            let bytes =
+                unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), full_len) };
+            for fx in &build.rodata.addr_fixups {
+                patch_addr_load(
+                    target,
+                    bytes,
+                    code_vmaddr,
+                    fx.code_offset as u64,
+                    code_vmaddr + rodata_blob_off as u64 + fx.rodata_offset,
+                    "rodata fixup",
+                )?;
+            }
+            for r in &build.rodata.rel32 {
+                let value = r.text_offset as i64 - (rodata_blob_off as u64 + r.base_offset) as i64;
+                let Ok(v) = i32::try_from(value) else {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "JIT: rodata rel32 slot {:#x}: displacement {value:#x} exceeds 32 bits",
+                            r.slot_offset,
+                        ),
+                    )));
+                };
+                let off = rodata_blob_off + r.slot_offset as usize;
+                bytes[off..off + 4].copy_from_slice(&v.to_le_bytes());
+            }
+        }
         // Now that the code region's runtime address is known,
         // patch every CodeReloc slot in the data region to point
         // at the function's actual code byte offset. Mirrors the

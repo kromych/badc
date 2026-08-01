@@ -1754,9 +1754,14 @@ pub(super) fn write(
     // `p_memsz - p_filesz` only.
     let has_tls = !build.tls_data.is_empty();
     // `build.data[..data_ro_len]` gets a PF_R load of its own (see the
-    // read-only layout pass); an empty prefix emits no header.
+    // read-only layout pass); an empty prefix emits no header. The
+    // emit-produced read-only blob (switch dispatch tables) rides in
+    // the same load at an 8-aligned tail past the prefix.
     let ro_len = build.data_ro_len.min(build.data.len()) as u64;
-    let has_rodata = ro_len > 0;
+    let jt_len = build.rodata.bytes.len() as u64;
+    let jt_off = if jt_len > 0 { round_up(ro_len, 8) } else { ro_len };
+    let ro_total = jt_off + jt_len;
+    let has_rodata = ro_total > 0;
     let n_program_headers =
         N_BASE_PROGRAM_HEADERS + if has_tls { 1 } else { 0 } + if has_rodata { 1 } else { 0 };
     let phoff = ELF_HEADER_SIZE;
@@ -1843,12 +1848,14 @@ pub(super) fn write(
     // the writable one. Its own segment (not the R+X one) keeps it
     // non-executable as well as non-writable.
     let rodata_off = segment1_end;
-    let rodata_end = if ro_len > 0 {
-        round_up(rodata_off + ro_len, seg)
+    let rodata_end = if ro_total > 0 {
+        round_up(rodata_off + ro_total, seg)
     } else {
         rodata_off
     };
     let rodata_vmaddr = TEXT_VMADDR_BASE + rodata_off;
+    // Runtime VA of the switch-table blob's first byte.
+    let jt_vmaddr = rodata_vmaddr + jt_off;
 
     // ---- Layout pass 2: rw segment (.dynamic, .got, build.data,
     //      .tdata, .tbss). ----
@@ -2259,8 +2266,8 @@ pub(super) fn write(
             PF_R,
             rodata_off,
             rodata_vmaddr,
-            ro_len,
-            ro_len,
+            ro_total,
+            ro_total,
             seg,
         );
     }
@@ -2459,10 +2466,41 @@ pub(super) fn write(
     }
 
     // .rodata -- the read-only prefix of the data image, in its own
-    // PF_R load. It carries no relocated slot by construction, so the
-    // bytes are final and no `.rela.dyn` entry targets them.
+    // PF_R load, then the switch-table blob. The prefix carries no
+    // relocated slot by construction; each table slot is baked below
+    // as a text-minus-base difference, which slides with the image,
+    // so no `.rela.dyn` entry targets the load.
     debug_assert_eq!(out.len() as u64, rodata_off);
     out.extend_from_slice(&build.data[..ro_len as usize]);
+    if jt_len > 0 {
+        // The absolute-slot form is relocatable-only; an image build
+        // carries difference slots exclusively.
+        if !build.rodata.abs64.is_empty() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "ELF image: absolute table slots reached a final-image build",
+            )));
+        }
+        while (out.len() as u64) < rodata_off + jt_off {
+            out.push(0);
+        }
+        out.extend_from_slice(&build.rodata.bytes);
+        // Table entries: each 4-byte slot holds `target - table_base`.
+        for r in &build.rodata.rel32 {
+            let target = code_vmaddr + stub_len + r.text_offset;
+            let base = jt_vmaddr + r.base_offset;
+            let value = target as i64 - base as i64;
+            let Ok(v) = i32::try_from(value) else {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "ELF: table slot {:#x}: displacement {value:#x} exceeds 32 bits",
+                        r.slot_offset,
+                    ),
+                )));
+            };
+            let file_off = (rodata_off + jt_off + r.slot_offset) as usize;
+            out[file_off..file_off + 4].copy_from_slice(&v.to_le_bytes());
+        }
+    }
     while (out.len() as u64) < rodata_end {
         out.push(0);
     }
@@ -2557,6 +2595,41 @@ pub(super) fn write(
             )));
         }
         data_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+    }
+    // Object-linked pc-relative slots (switch tables, assembler
+    // `label - .` records): each holds `target - slot` as link-time
+    // vaddrs at the recorded width. A pure difference slides with the
+    // image, so no `.rela.dyn` entry is needed. The reader demotes a
+    // reloc-bearing read-only section into the writable stream, so
+    // the slots sit past `ro_len`.
+    for r in &build.data_pcrel_relocs {
+        let target = if r.target_in_data {
+            data_off_to_vaddr(r.target_offset)
+        } else {
+            code_vmaddr + stub_len + r.target_offset
+        };
+        let slot_vaddr = data_off_to_vaddr(r.slot_data_offset);
+        let off = reloc_slot_in_data(r.slot_data_offset, ro_len, "pcrel")?;
+        let width = r.width as usize;
+        if off + width > data_with_relocs.len() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: data pcrel slot {off:#x} past end of .data ({})",
+                    data_with_relocs.len()
+                ),
+            )));
+        }
+        let value = target as i64 - slot_vaddr as i64;
+        if width == 8 {
+            data_with_relocs[off..off + 8].copy_from_slice(&value.to_le_bytes());
+            continue;
+        }
+        let Ok(v) = i32::try_from(value) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("ELF: data pcrel slot {off:#x}: displacement {value:#x} exceeds 32 bits"),
+            )));
+        };
+        data_with_relocs[off..off + 4].copy_from_slice(&v.to_le_bytes());
     }
     out.extend_from_slice(&data_with_relocs);
 
@@ -2836,7 +2909,7 @@ pub(super) fn write(
                 sh_flags: SHF_ALLOC,
                 sh_addr: rodata_vmaddr,
                 sh_offset: rodata_off,
-                sh_size: ro_len,
+                sh_size: ro_total,
                 sh_link: 0,
                 sh_info: 0,
                 sh_addralign: build.data_align.max(8) as u64,
@@ -3210,6 +3283,20 @@ pub(super) fn write(
         )?;
     }
 
+    // Switch-table base materializations (the lea feeding the
+    // dispatch); the blob sits in the PF_R load at `jt_vmaddr`.
+    for fx in &build.rodata.addr_fixups {
+        patch_addr_load(
+            machine,
+            &mut out,
+            code_file_offset,
+            code_vmaddr,
+            stub_len + fx.code_offset as u64,
+            jt_vmaddr + fx.rodata_offset,
+            "table fixup",
+        )?;
+    }
+
     Ok(out)
 }
 
@@ -3377,6 +3464,8 @@ mod tests {
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
             data_ro_len: 0,
+            rodata: Default::default(),
+            data_pcrel_relocs: Vec::new(),
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),

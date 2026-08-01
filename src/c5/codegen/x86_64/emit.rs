@@ -1605,6 +1605,8 @@ pub(crate) fn emit_function(
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     no_fp_regs: bool,
     strict_align: bool,
+    rodata: &mut super::RodataBuild,
+    abs_jump_tables: bool,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -1814,9 +1816,10 @@ pub(crate) fn emit_function(
     // final `block_offsets` after the relaxation passes settle (only the
     // disp32 is patched, so the destination register need not be saved).
     let mut block_addr_fixups: Vec<(usize, u32)> = Vec::new();
-    // Text-embedded jump tables: `(table_start, table_idx)` per
-    // `Terminator::JumpTable`. Each 32-bit entry is patched to
-    // `block_offset - table_start` after the relaxation passes settle.
+    // Jump tables: `(lea_start, table_idx)` per
+    // `Terminator::JumpTable`. Each table is materialized into the
+    // read-only blob after the relaxation passes settle; the lea at
+    // `lea_start` becomes a writer-resolved address fixup.
     let mut jump_table_fixups: Vec<(usize, u32)> = Vec::new();
     // Branch relaxation. The block loop runs once with every local
     // branch in the rel32 long form (`branch_short` empty), then, when
@@ -2184,11 +2187,15 @@ pub(crate) fn emit_function(
                     super::encode::emit_jmp_r(code, rt);
                 }
                 Terminator::JumpTable { idx, table } => {
-                    // Table dispatch: `lea` the table base (embedded
-                    // right after the `jmp`), sign-extend the 32-bit
-                    // table-relative entry, add, and branch. The bounds
-                    // check preceding this terminator proves the index
-                    // in range.
+                    // Table dispatch through the read-only blob (kept
+                    // out of the code section so it never decodes as
+                    // instructions). The bounds check preceding this
+                    // terminator proves the index in range. Image
+                    // output reads a 32-bit table-relative entry and
+                    // adds the base back (no load-time relocation);
+                    // relocatable output loads an 8-byte absolute
+                    // entry, the form whose relocations name the
+                    // targets directly.
                     let iplace = place_of(alloc, idx);
                     let Some(rt) = materialize_int(code, iplace, SCRATCH_R10, frame) else {
                         bail_msg("JumpTable: idx Place not int reg / spill");
@@ -2196,19 +2203,18 @@ pub(crate) fn emit_function(
                     };
                     // rt is an allocated register or SCRATCH_R10, never
                     // r11, so the table base cannot alias it. The lea's
-                    // disp32 spans a fixed distance to the table, so it
-                    // is patched here rather than post-layout.
+                    // disp32 crosses into the read-only blob, so the
+                    // writer patches it (RodataAddrFixup).
                     let lea_start = code.len();
                     super::encode::emit_lea_r_rip32(code, SCRATCH_R11, 0);
-                    super::encode::emit_movsxd_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 4);
-                    super::encode::emit_rr(code, Mnem::Add, 8, SCRATCH_R10, SCRATCH_R11);
+                    if abs_jump_tables {
+                        super::encode::emit_mov_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 8);
+                    } else {
+                        super::encode::emit_movsxd_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 4);
+                        super::encode::emit_rr(code, Mnem::Add, 8, SCRATCH_R10, SCRATCH_R11);
+                    }
                     super::encode::emit_jmp_r(code, SCRATCH_R10);
-                    let table_start = code.len();
-                    let disp = (table_start - (lea_start + super::encode::LEA_RIP32_LEN)) as i32;
-                    code[lea_start + 3..lea_start + 7].copy_from_slice(&disp.to_le_bytes());
-                    jump_table_fixups.push((table_start, table));
-                    let entries = func.jump_tables[table as usize].len();
-                    code.resize(code.len() + entries * 4, 0);
+                    jump_table_fixups.push((lea_start, table));
                 }
                 Terminator::AsmGoto { table } => {
                     // The label branches were lowered inside the
@@ -2323,20 +2329,6 @@ pub(crate) fn emit_function(
         block_offsets[bid as usize]
     });
 
-    // Patch each jump table's entries with the target block's offset
-    // relative to the table base.
-    for (table_start, table) in &jump_table_fixups {
-        for (i, &t) in func.jump_tables[*table as usize].iter().enumerate() {
-            let rel = block_offsets[t as usize] as i64 - *table_start as i64;
-            debug_assert!(
-                i32::try_from(rel).is_ok(),
-                "JumpTable: entry offset out of i32 range"
-            );
-            let site = table_start + i * 4;
-            code[site..site + 4].copy_from_slice(&(rel as i32).to_le_bytes());
-        }
-    }
-
     // Patch recorded branches. The displacement is measured from the
     // byte after the displacement field: `site + 1` for the rel8 short
     // form, `site + 4` for rel32. `relax_branches` guarantees a short
@@ -2363,6 +2355,41 @@ pub(crate) fn emit_function(
                 }
             };
             code[fx.site..fx.site + 4].copy_from_slice(&imm.to_le_bytes());
+        }
+    }
+
+    // Materialize each jump table into the read-only blob: one
+    // address fixup for the lea site, one slot per entry (a 4-byte
+    // `target - table_base` difference, or the relocatable form's
+    // 8-byte absolute address left for the object's relocations).
+    // Runs past the last bail site so a bailed function leaves the
+    // blob untouched.
+    for (lea_start, table) in &jump_table_fixups {
+        let width: usize = if abs_jump_tables { 8 } else { 4 };
+        while !rodata.bytes.len().is_multiple_of(width) {
+            rodata.bytes.push(0);
+        }
+        let base = rodata.bytes.len() as u64;
+        rodata.addr_fixups.push(super::RodataAddrFixup {
+            code_offset: *lea_start,
+            rodata_offset: base,
+        });
+        for (i, &t) in func.jump_tables[*table as usize].iter().enumerate() {
+            let slot_offset = base + (i * width) as u64;
+            let text_offset = block_offsets[t as usize] as u64;
+            if abs_jump_tables {
+                rodata.abs64.push(super::RodataAbs64 {
+                    slot_offset,
+                    text_offset,
+                });
+            } else {
+                rodata.rel32.push(super::RodataRel32 {
+                    slot_offset,
+                    base_offset: base,
+                    text_offset,
+                });
+            }
+            rodata.bytes.resize(rodata.bytes.len() + width, 0);
         }
     }
 

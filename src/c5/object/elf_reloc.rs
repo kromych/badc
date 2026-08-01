@@ -1163,6 +1163,28 @@ pub(super) fn write_relocatable(
         sizes[e] = base + s.bytes.len() as u64;
         asm_placements.push((e, base));
     }
+    // Switch dispatch tables: a read-only entry of their own. The
+    // name keeps the `.rodata` prefix consumers that discover
+    // compiler jump tables key on, and stays apart from the carved
+    // `.rodata` so its pc-relative entry relocations don't demote
+    // that section's const objects to the writable stream on
+    // re-ingestion. No named symbol covers the tables: the same
+    // consumers require the region anonymous, addressed only through
+    // the section symbol.
+    let jt_placement: Option<(usize, u64)> = if build.rodata.bytes.is_empty() {
+        None
+    } else {
+        let e = carve
+            .table
+            .get_or_insert(".rodata.jump_tables", SHT_PROGBITS, SHF_ALLOC, 8)
+            .map_err(|msg| C5Error::Compile(crate::c5::error::fmt_internal_err(&msg)))?;
+        if sizes.len() <= e {
+            sizes.resize(e + 1, 0);
+        }
+        let base = round_up(sizes[e], 8);
+        sizes[e] = base + build.rodata.bytes.len() as u64;
+        Some((e, base))
+    };
     for k in 0..carve.table.entries.len() {
         carve.shndx.push((base_sections + k) as u16);
         carve.sym_idx.push(0);
@@ -2203,6 +2225,74 @@ pub(super) fn write_relocatable(
         );
     }
 
+    // Switch-table base materializations: same shape as a data
+    // fixup, resolved against the table entry's section symbol.
+    for fx in &build.rodata.addr_fixups {
+        let (e, base) = jt_placement.ok_or_else(|| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "elf_reloc: table fixup recorded without table bytes",
+            ))
+        })?;
+        emit_addr_fixup_relocs(
+            machine_for_rela,
+            &mut rela_bytes,
+            fx.code_offset as u64,
+            carve.sym_idx[e],
+            base as i64 + fx.rodata_offset as i64,
+        );
+    }
+
+    // Switch-table entry slots, one relocation per slot against the
+    // `.text` section symbol (or a carved function's own section).
+    // The 8-byte absolute rows carry `addend = text_offset`, the
+    // addend-names-the-target shape jump-table discovery keys on; a
+    // pc-relative row's `A = text_offset + (slot - table base)`
+    // reproduces `target - table_base` at the slot wherever the
+    // linker places either section. Recorded now so the `.rela`
+    // companion bookkeeping below sees the entry as reloc-bearing;
+    // the blob's bytes join the entry with the other named-section
+    // payloads.
+    if let Some((e, base)) = jt_placement {
+        let (rtype_pcrel32, rtype_jt_abs64) = match machine_for_rela {
+            Machine::X86_64 => (R_X86_64_PC32, R_X86_64_64),
+            Machine::Aarch64 => (R_AARCH64_PREL32, R_AARCH64_ABS64),
+        };
+        let map = |off: u64| match carve.map_text(off) {
+            Some((te, new_off)) => (carve.sym_idx[te], new_off as i64),
+            None => (text_sym_idx, off as i64),
+        };
+        let rel32: Vec<(u64, i64, i64)> = build
+            .rodata
+            .rel32
+            .iter()
+            .map(|r| {
+                let (sym, target) = map(r.text_offset);
+                let skew = r.slot_offset as i64 - r.base_offset as i64;
+                (sym, r.slot_offset as i64, target + skew)
+            })
+            .collect();
+        let abs64: Vec<(u64, i64, i64)> = build
+            .rodata
+            .abs64
+            .iter()
+            .map(|r| {
+                let (sym, target) = map(r.text_offset);
+                (sym, r.slot_offset as i64, target)
+            })
+            .collect();
+        let ent = &mut carve.table.entries[e];
+        for (rtype, rows) in [(rtype_pcrel32, rel32), (rtype_jt_abs64, abs64)] {
+            for (sym, slot, addend) in rows {
+                ent.relas.push(super::section_table::SectionRela {
+                    offset: base + slot as u64,
+                    sym,
+                    rtype,
+                    addend,
+                });
+            }
+        }
+    }
+
     // Cross-TU data references. The reloc targets the named
     // undefined-data symbol with addend zero so the linker resolves
     // it against the defining TU's storage. Per-arch addressing:
@@ -2566,8 +2656,11 @@ pub(super) fn write_relocatable(
         .iter()
         .filter(|e| !e.relas.is_empty())
         .count();
+    // `+ 1` is `.comment`: the producer fingerprint rides a non-alloc
+    // section here rather than the `.text` tail final images use, so
+    // the code section stays a pure instruction stream for decoders.
     let num_sections: usize =
-        base_sections + named_section_count + named_rela_count + 2 * init_sections.len();
+        base_sections + named_section_count + named_rela_count + 2 * init_sections.len() + 1;
 
     // Section name table. Index map below mirrors the SHIDX_*
     // constants above (one entry per non-null section).
@@ -2618,6 +2711,8 @@ pub(super) fn write_relocatable(
         shstrtab_names.push(s.name.as_str());
         shstrtab_names.push(s.rela_name.as_str());
     }
+    let comment_name_idx = shstrtab_names.len();
+    shstrtab_names.push(".comment");
     let (shstrtab_bytes, shstrtab_offs) = build_strtab(&shstrtab_names);
 
     // Generate the DWARF triple for this TU. Address slots end
@@ -2791,6 +2886,15 @@ pub(super) fn write_relocatable(
             ent.bytes.resize(base as usize, 0);
         }
         ent.bytes.extend_from_slice(&s.bytes);
+    }
+    // Switch-table blob bytes; slots stay zero, the entry's `.rela`
+    // rows recorded above carry the values.
+    if let Some((e, base)) = jt_placement {
+        let ent = &mut carve.table.entries[e];
+        if (ent.bytes.len() as u64) < base {
+            ent.bytes.resize(base as usize, 0);
+        }
+        ent.bytes.extend_from_slice(&build.rodata.bytes);
     }
     let data_align = plan.data_align;
     let data_off = round_up(out.len() as u64, data_align);
@@ -3123,6 +3227,20 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
+
+    // .comment -- the producer fingerprint (non-alloc, so it never
+    // reaches the loaded image through this object).
+    let comment_off = out.len() as u64;
+    out.extend_from_slice(crate::OUTPUT_MARKER.as_bytes());
+    out.push(0);
+    sh.push(Elf64Shdr {
+        sh_name: shstrtab_offs[comment_name_idx],
+        sh_type: SHT_PROGBITS,
+        sh_offset: comment_off,
+        sh_size: crate::OUTPUT_MARKER.len() as u64 + 1,
+        sh_addralign: 1,
+        ..Default::default()
+    });
 
     debug_assert_eq!(sh.len(), num_sections);
 
@@ -3640,6 +3758,8 @@ mod tests {
             text: Vec::new(),
             data: Vec::new(),
             data_ro_len: 0,
+            rodata: Default::default(),
+            data_pcrel_relocs: Vec::new(),
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),

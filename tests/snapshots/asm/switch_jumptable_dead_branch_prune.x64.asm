@@ -14,30 +14,10 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	cmpq	$0xa, %rdi
                	jae	<addr>
-               	leaq	<rip>, %r11         # <addr>
-               	movslq	(%r11,%rdi,4), %r10
-               	addq	%r11, %r10
+               	leaq	<rip>, %r11
+               	movq	(%r11,%rdi,8), %r10
                	jmpq	*%r10
-               	subb	%al, (%rax)
-               	addb	%al, (%rax)
-               	xorb	$0x0, %al
-               	addb	%al, (%rax)
-               	cmpl	(%rax), %eax
-               	addb	%al, (%rax)
-               	addb	%al, (%rax)
-               	addb	%cl, (%rcx)
-               	addb	%al, (%rax)
-               	pushq	%rax
-               	addb	%al, (%rax)
-               	addb	%dl, (%rdi)
-               	addb	%al, (%rax)
-               	popq	%rsi
-               	addb	%al, (%rax)
-               	addb	%ah, (%rbp)
-               	addb	%al, (%rax)
-               	insb	%dx, %es:(%rdi)
-               	addb	%al, (%rax)
-               	addb	%bh, 0xa(%rax)
+               	movl	$0xa, %eax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
                	retq

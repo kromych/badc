@@ -56,3 +56,17 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
+               	addb	%al, %bh
+
+<asm_store_magic>:
+               	movl	$0x1234, (%rdi)         # imm = 0x1234
+               	retq
+               	nop
+               	js	<addr>
+               	addb	%al, (%rax)
+               	nopl	(%rax)
+               	orb	%al, (%rax)
+               	addb	%al, (%rax)

@@ -19,23 +19,9 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	cmpq	$0x8, %rdi
                	jae	<addr>
-               	leaq	<rip>, %r11         # <addr>
-               	movslq	(%r11,%rdi,4), %r10
-               	addq	%r11, %r10
+               	leaq	<rip>, %r11
+               	movq	(%r11,%rdi,8), %r10
                	jmpq	*%r10
-               	andb	%al, (%rax)
-               	addb	%al, (%rax)
-               	addb	%al, %es:(%rax)
-               	addb	%ch, (%rax,%rax)
-               	addb	%al, (%rax)
-               	xorb	(%rax), %al
-               	addb	%al, (%rax)
-               	cmpb	%al, (%rax)
-               	addb	%al, (%rax)
-               	addb	%al, %ds:(%rax)
-               	addb	%al, (%rax,%rax)
-               	addb	%cl, (%rdx)
-               	addb	%al, (%rax)
                	movl	$0x14, %eax
                	retq
                	movl	$0x15, %eax

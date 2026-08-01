@@ -366,6 +366,26 @@ fn synth_program_and_build(
         entry_offset,
         got_fixups,
         data_fixups,
+        // Object-linked jump tables ride in the merged data stream
+        // (input `.rodata` folds into it); the direct-lowering rodata
+        // blob stays empty on this path.
+        rodata: Default::default(),
+        data_pcrel_relocs: merged
+            .data_pcrel_relocs
+            .iter()
+            .map(|r| {
+                let (target_offset, target_in_data) = match r.target {
+                    MergedTarget::Text(off) => (off as u64, false),
+                    MergedTarget::Data(off) => (off as u64, true),
+                };
+                crate::c5::codegen::DataPcRelReloc {
+                    slot_data_offset: r.slot_offset,
+                    target_offset,
+                    target_in_data,
+                    width: r.width,
+                }
+            })
+            .collect(),
         func_fixups,
         pc_to_native,
         func_ent_pcs,
@@ -1007,6 +1027,7 @@ mod tests {
             imports: alloc::vec![],
             pending_imports: alloc::vec![],
             data_abs_relocs: alloc::vec![],
+            data_pcrel_relocs: alloc::vec![],
             data_import_refs: alloc::vec![],
             machine: NativeMachine::Aarch64,
             import_dylib_map: alloc::collections::BTreeMap::new(),

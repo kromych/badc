@@ -1762,6 +1762,14 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let code = &build.text;
     let tls_present = !build.macho_tlv_descriptors.is_empty();
     let n_tlv = build.macho_tlv_descriptors.len();
+    // The aarch64 lowering keeps switch tables in `.text`, so these
+    // carriers are empty on every build that reaches this writer.
+    // Fail loud rather than drop them if that changes. TODO
+    if !build.rodata.bytes.is_empty() || !build.data_pcrel_relocs.is_empty() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            "Mach-O writer: read-only blob / data rel32 slots not implemented",
+        )));
+    }
 
     // ---- step 1: build __LINKEDIT contents ----
     //
@@ -2761,6 +2769,8 @@ mod tests {
             entry_offset: 0,
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),
+            rodata: Default::default(),
+            data_pcrel_relocs: Vec::new(),
             func_fixups: Vec::new(),
             pc_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),

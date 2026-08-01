@@ -149,3 +149,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%ah, 0x48(%rbp)
+               	movl	0x40, %eax
+               	movq	%gs:<rip>, %rdx

@@ -4065,3 +4065,137 @@ fn auto_include_retry_emits_what_the_force_include_would() {
         "the retry's object differs from the force-included one"
     );
 }
+
+/// A dense case set lowers to a table dispatch whose table must stay
+/// out of the code section: unwind-metadata generators decode `.text`
+/// as a pure instruction stream and reject embedded data. The
+/// relocatable object places the tables in an anonymous read-only
+/// section under the `.rodata` name prefix, one `R_*_64` relocation
+/// per 8-byte entry against the `.text` section symbol with the
+/// target's offset as the addend -- the shape jump-table discovery in
+/// unwind tooling keys on -- and relocates the dispatch's base
+/// materialization against that section's STT_SECTION symbol.
+#[test]
+fn switch_table_lands_in_rodata_section_of_object() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target,
+        emit_native_with_options};
+
+    const SRC: &str = "int pick(int x) {\n\
+         \tswitch (x) {\n\
+         \tcase 0: return 10;\n\
+         \tcase 1: return 11;\n\
+         \tcase 2: return 12;\n\
+         \tcase 3: return 13;\n\
+         \tcase 4: return 14;\n\
+         \tcase 5: return 15;\n\
+         \tcase 6: return 16;\n\
+         \tcase 7: return 17;\n\
+         \tcase 8: return 18;\n\
+         \tcase 9: return 19;\n\
+         \tdefault: return -1;\n\
+         \t}\n\
+         }\n";
+    let prog = Compiler::with_options(
+        SRC.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile dense switch: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::default()
+    };
+    let bytes = emit_native_with_options(&prog, Target::LinuxX64, opts)
+        .unwrap_or_else(|e| panic!("emit object: {e}"));
+
+    let rd_u16 = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+    let rd_u32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd_u64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd_u64(0x28) as usize;
+    let e_shnum = rd_u16(0x3C) as usize;
+    let e_shstrndx = rd_u16(0x3E) as usize;
+    let shdr = |i: usize| e_shoff + i * 64;
+    let sh_name = |i: usize| rd_u32(shdr(i));
+    let sh_type = |i: usize| rd_u32(shdr(i) + 4);
+    let sh_flags = |i: usize| rd_u64(shdr(i) + 8);
+    let sh_offset = |i: usize| rd_u64(shdr(i) + 24) as usize;
+    let sh_size = |i: usize| rd_u64(shdr(i) + 32) as usize;
+    let sh_info = |i: usize| rd_u32(shdr(i) + 44) as usize;
+    let shstr_off = sh_offset(e_shstrndx);
+    let name_at = |noff: u32| -> String {
+        let start = shstr_off + noff as usize;
+        let len = bytes[start..].iter().position(|&b| b == 0).unwrap();
+        String::from_utf8_lossy(&bytes[start..start + len]).into_owned()
+    };
+    let find = |name: &str| (0..e_shnum).find(|&i| name_at(sh_name(i)) == name);
+
+    // The table section: allocated, read-only, non-executable, and a
+    // whole number of 8-byte entries covering the 10-case span.
+    let tbl = find(".rodata.jump_tables").expect("object lacks the table section");
+    const SHF_ALLOC: u64 = 0x2;
+    assert_eq!(sh_type(tbl), 1, "table section must be SHT_PROGBITS");
+    assert_eq!(sh_flags(tbl), SHF_ALLOC, "table must be alloc, read-only");
+    let tbl_size = sh_size(tbl);
+    assert!(
+        tbl_size >= 10 * 8 && tbl_size % 8 == 0,
+        "table size {tbl_size} does not cover 10 dense cases in 8-byte entries"
+    );
+
+    // Its relocation companion: one R_X86_64_64 per entry, 8-byte
+    // stride, every one against the `.text` section symbol with an
+    // in-bounds target offset as the addend.
+    let rela = find(".rela.rodata.jump_tables").expect("object lacks the table relocations");
+    assert_eq!(sh_type(rela), 4, "table relocations must be SHT_RELA");
+    assert_eq!(sh_info(rela), tbl, "sh_info must name the table section");
+    let (roff, rsize) = (sh_offset(rela), sh_size(rela));
+    assert_eq!(rsize % 24, 0);
+    assert_eq!(rsize / 24, tbl_size / 8, "one relocation per table entry");
+    let symtab = find(".symtab").expect("object lacks .symtab");
+    let (sym_off, sym_size) = (sh_offset(symtab), sh_size(symtab));
+    let text = find(".text").expect("object lacks .text");
+    let text_size = sh_size(text) as u64;
+    let sym_shndx = |s: usize| rd_u16(sym_off + s * 24 + 6) as usize;
+    let sym_info = |s: usize| bytes[sym_off + s * 24 + 4];
+    const R_X86_64_64: u32 = 1;
+    for k in 0..rsize / 24 {
+        let p = roff + k * 24;
+        assert_eq!(rd_u64(p), (k * 8) as u64, "entry {k} offset stride");
+        let info = rd_u64(p + 8);
+        assert_eq!((info & 0xffff_ffff) as u32, R_X86_64_64);
+        let s = (info >> 32) as usize;
+        assert_eq!(sym_info(s) & 0xf, 3, "entry {k} must target a section symbol");
+        assert_eq!(sym_shndx(s), text, "entry {k} must target `.text`");
+        let addend = rd_u64(p + 16);
+        assert!(
+            addend < text_size,
+            "entry {k} addend {addend:#x} must name a `.text` byte"
+        );
+    }
+
+    // The dispatch's base materialization: a pc-relative text
+    // relocation against the table section's own STT_SECTION symbol.
+    const R_X86_64_PC32: u32 = 2;
+    let rela_text = find(".rela.text").expect("object lacks .rela.text");
+    let (toff, tsize) = (sh_offset(rela_text), sh_size(rela_text));
+    let lea_rows = (0..tsize / 24)
+        .filter(|k| {
+            let info = rd_u64(toff + k * 24 + 8);
+            let s = (info >> 32) as usize;
+            (info & 0xffff_ffff) as u32 == R_X86_64_PC32
+                && sym_info(s) & 0xf == 3
+                && sym_shndx(s) == tbl
+        })
+        .count();
+    assert_eq!(lea_rows, 1, "one base materialization for one table");
+
+    // Anonymity: no named symbol covers the tables, only the section
+    // symbol addresses them (consumers that discover compiler jump
+    // tables require the region symbol-free).
+    for s in 0..sym_size / 24 {
+        assert!(
+            sym_shndx(s) != tbl || sym_info(s) & 0xf == 3,
+            "symbol {s} covers the table section"
+        );
+    }
+}

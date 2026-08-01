@@ -153,6 +153,7 @@ pub(crate) fn compile_function_to_bytes(
             // The JIT single-function path builds no PE; the unwind
             // descriptor is discarded.
             let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
+            let mut rodata = super::RodataBuild::default();
             let ok = {
                 let mut cx = super::emit_common::EmitCtx {
                     code: &mut code,
@@ -192,6 +193,8 @@ pub(crate) fn compile_function_to_bytes(
                     &mut asm_text_labels,
                     false,
                     false,
+                    &mut rodata,
+                    false,
                 )
             };
             if !ok {
@@ -206,7 +209,8 @@ pub(crate) fn compile_function_to_bytes(
                 + asm_text_abs_refs.len()
                 + asm_text_labels.len()
                 + pending_func_fixups.len()
-                + tls_index_fixups.len();
+                + tls_index_fixups.len()
+                + rodata.addr_fixups.len();
             if outer != 0 {
                 return Err(format!(
                     "ssa_native: function produces {outer} cross-function fixup(s); only self-contained functions are supported",

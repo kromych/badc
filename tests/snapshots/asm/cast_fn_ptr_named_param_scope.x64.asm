@@ -30,6 +30,7 @@ Disassembly of section .text:
                	leaq	-<rip>, %rax       # <addr>
                	callq	*%rax
                	movslq	%eax, %rcx
+               	movslq	%ecx, %rcx
                	movslq	%ebx, %rax
                	cmpq	$0xb, %rax
                	sete	%dl

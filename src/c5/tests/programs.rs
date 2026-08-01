@@ -751,6 +751,15 @@ fn cast_fn_ptr_named_param_scope() {
 }
 
 #[test]
+fn block_scope_fn_typedef_extern_decay() {
+    // C99 6.3.2.1p4 + 6.2.2p4: a block-scope `extern` through a
+    // function-type typedef (or an alias of one) declares a function; a
+    // value use decays to its address. The object classification loaded
+    // the code bytes at the function's address instead.
+    assert_eq!(run_fixture("block_scope_fn_typedef_extern_decay.c"), 0);
+}
+
+#[test]
 fn bitfield_runtime_init() {
     // A bitfield struct member initialized at block scope by a non-constant
     // value: the walker read-modify-writes the storage unit. Signedness,

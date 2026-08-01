@@ -370,11 +370,14 @@ impl Compiler {
                 ty = self.make_vector_type(ty, n);
             }
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+            let bare_fn_type = core::mem::take(&mut self.pending.bare_function_type_declarator);
             // C99 function-type typedef: `typedef RET NAME(args);`
             // declared at block scope. Same handling as run_compile's
             // file-scope branch -- parse the `(args)` and bind the
             // typedef as a function-pointer alias.
-            let (typedef_ty, typedef_fpi, typedef_params) = if self.lex.tk == '(' {
+            let (typedef_ty, typedef_fpi, typedef_params, typedef_is_fn_type) = if self.lex.tk
+                == '('
+            {
                 self.next()?; // consume `(`
                 // C99 6.2.1p4: the parameter names of this function-type
                 // typedef have no scope. Record their types without binding
@@ -386,9 +389,10 @@ impl Compiler {
                 let pp = self.parse_function_params()?;
                 self.pending.parsing_fn_ptr_proto = saved;
                 let fty = ty + Ty::Ptr as i64;
-                (fty, 1i64, Some(pp))
+                (fty, 1i64, Some(pp), true)
             } else {
-                (ty, fn_ptr_indirection, None)
+                // An alias of a function-type typedef stays a function type.
+                (ty, fn_ptr_indirection, None, bare_fn_type)
             };
             if block_symbols.is_some() {
                 let snap = self.capture_block_shadow(id_idx);
@@ -417,6 +421,7 @@ impl Compiler {
                 td_array = typedef_dim;
             }
             self.symbols[id_idx].array_size = td_array;
+            self.symbols[id_idx].is_function_type = typedef_is_fn_type;
             if typedef_fpi > 0 {
                 self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
             }

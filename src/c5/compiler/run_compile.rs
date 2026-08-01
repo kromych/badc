@@ -814,7 +814,9 @@ impl Compiler {
                             }
                             (ty, fn_ptr_indirection, Some(pp), false)
                         } else {
-                            (ty, fn_ptr_indirection, None, false)
+                            // An alias of a function-type typedef stays a
+                            // function type.
+                            (ty, fn_ptr_indirection, None, bare_function_type)
                         };
                     let prior_class = self.symbols[id_idx].class;
                     let prior_type = self.symbols[id_idx].type_;

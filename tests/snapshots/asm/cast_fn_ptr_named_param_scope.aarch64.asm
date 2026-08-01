@@ -37,6 +37,7 @@ Disassembly of section .text:
                	mov	x0, x1
                	blr	x9
                	sxtw	x1, w0
+               	sxtw	x1, w1
                	sxtw	x0, w20
                	cmp	x0, #0xb
                	cset	x2, eq

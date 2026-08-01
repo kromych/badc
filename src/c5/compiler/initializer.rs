@@ -2115,11 +2115,13 @@ impl Compiler {
             return Ok(0);
         }
         let cp = self.init_checkpoint();
-        // The FAM is the last member, so its offset is the fixed part's
-        // size; reserve that scratch region so the preceding fields'
-        // writes land in bounds, then let the FAM fill grow the tail.
+        // Reserve the fixed part so the non-FAM members' writes land in
+        // bounds, then let the FAM fill grow the tail. The FAM's offset
+        // is not that size on its own: sharing a union with a wider arm
+        // puts members past it, so take the aggregate's size too.
         let scratch = self.data.len();
-        self.data.resize(scratch + fam_offset, 0);
+        let fixed = fam_offset.max(self.structs[sid].size);
+        self.data.resize(scratch + fixed, 0);
         self.flex_array_measured_count = None;
         let filled = self.collect_struct_initializer(sid, scratch as i64);
         // A genuine initializer error is left for the real fill to report

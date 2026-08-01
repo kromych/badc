@@ -22,21 +22,6 @@ Disassembly of section .text:
                	ldr	x10, [x1]
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0x8
-               	ldr	x0, [x0]
-               	sxtw	x0, w0
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	mul	x0, x0, x17
-               	mov	x17, #0x1000            // =4096
-               	cmp	x0, x17
-               	b.hs	<addr>
-               	mov	x0, #0xc                // =12
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x2                // =2
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10

@@ -85,48 +85,10 @@ Disassembly of section .text:
                	ldrb	w10, [x1, #0x13]
                	strb	w10, [x0, #0x13]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0x30
-               	ldrsw	x0, [x0]
-               	cmp	x0, #0x1
-               	cset	x1, eq
-               	mov	x0, #0x0                // =0
-               	cbz	x1, <addr>
-               	sub	x0, x29, #0x30
-               	ldrsw	x0, [x0, #0x4]
-               	cmp	x0, #0xa
-               	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	mov	x1, #0x0                // =0
-               	cbz	x0, <addr>
-               	sub	x0, x29, #0x30
-               	ldrsw	x0, [x0, #0x8]
-               	cmp	x0, #0x14
-               	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x1, ne
-               	mov	x0, #0x0                // =0
-               	cbz	x1, <addr>
-               	sub	x0, x29, #0x30
-               	ldrsw	x0, [x0, #0xc]
-               	cmp	x0, #0x0
-               	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	mov	x1, #0x0                // =0
-               	cbz	x0, <addr>
-               	sub	x0, x29, #0x30
-               	ldrsw	x0, [x0, #0x10]
-               	cmp	x0, #0x4
-               	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x1, ne
-               	cmp	x1, #0x0
-               	b.ne	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	mov	x0, #0x1                // =1
+               	mov	x0, #0x1                // =1
+               	mov	x0, #0x1                // =1
+               	mov	x0, #0x1                // =1
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x38]
                	mov	x0, #0x1                // =1
@@ -138,7 +100,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

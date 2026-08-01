@@ -38,31 +38,25 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v2   ImmData(8)                                       -> x1
     v3   Mcpy { dst=v1, src=v2, size=4, align=8 }         -> x0
     v4   LocalAddr(-1)                                    -> x0
-    v5   Imm(0)                                           -> x1
-    v6   Load { addr=v4, disp=0, kind=I32 }               -> x0
-    v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x1
-    v8   Extend { value=v6, kind=I32 }                    -> x1
-    v9   BinopI { op=ne, lhs=v6, rhs_imm=21 }             -> x0
-    terminator Bz { cond=v9, target=b2, fall=b1 }   (exit_acc=v9)
+    v5   Imm(0)                                           -> x0
+    v6   Imm(21)                                          -> x0
+    v7   Imm(90194313216)                                 -> x0
+    v8   Imm(21)                                          -> x0
+    v9   Imm(0)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v9)
   block 1  start_pc=0
-    v10  Imm(1)                                           -> x0
-    terminator Return(v10)   (exit_acc=v10)
-  block 2  start_pc=0
     v11  LocalAddr(-1)                                    -> x0
-    v12  Imm(0)                                           -> x1
-    v13  Imm(2)                                           -> x1
-    v14  Load { addr=v11, disp=0, kind=I32 }              -> x0
-    v15  BinopI { op=shl, lhs=v14, rhs_imm=1 }            -> x0
-    v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x1
-    v17  Extend { value=v15, kind=I32 }                   -> x1
-    v18  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x0
-    v19  Extend { value=v17, kind=I32 }                   -> x0
-    v20  BinopI { op=ne, lhs=v19, rhs_imm=42 }            -> x0
-    terminator Bz { cond=v20, target=b4, fall=b3 }   (exit_acc=v20)
-  block 3  start_pc=0
-    v21  Imm(2)                                           -> x0
-    terminator Return(v21)   (exit_acc=v21)
-  block 4  start_pc=0
+    v12  Imm(0)                                           -> x0
+    v13  Imm(2)                                           -> x0
+    v14  Imm(21)                                          -> x0
+    v15  Imm(42)                                          -> x0
+    v16  Imm(180388626432)                                -> x0
+    v17  Imm(42)                                          -> x0
+    v18  Imm(180388626432)                                -> x0
+    v19  Imm(42)                                          -> x0
+    v20  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v20)
+  block 2  start_pc=0
     v22  Imm(0)                                           -> x0
     terminator Return(v22)   (exit_acc=v22)
 ; --- SSA dump (ok=true) ent_pc=0 ---

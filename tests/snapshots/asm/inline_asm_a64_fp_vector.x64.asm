@@ -61,8 +61,7 @@ Disassembly of section .text:
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
                	leaq	-0x8(%rbp), %rbx
-               	leaq	-0x10(%rbp), %rax
-               	movslq	(%rax), %rdi
+               	movl	$0x41a80000, %edi       # imm = 0x41A80000
                	callq	<addr>
                	movl	%eax, (%rbx)
                	leaq	-0x8(%rbp), %rax

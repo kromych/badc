@@ -39,25 +39,6 @@ Disassembly of section .text:
                	ldrb	w10, [x1, #0x3]
                	strb	w10, [x0, #0x3]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0x8
-               	ldrsw	x0, [x0]
-               	cmp	x0, #0x15
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x0, x29, #0x8
-               	ldrsw	x0, [x0]
-               	lsl	x0, x0, #1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
-               	cmp	x0, #0x2a
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

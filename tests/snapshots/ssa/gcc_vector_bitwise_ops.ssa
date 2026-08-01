@@ -578,11 +578,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=47
     v235 Mcpy { dst=v233, src=v234, size=8, align=8 }     -> x0
     v236 LocalAddr(-35)                                   -> x0
     v237 LocalAddr(-35)                                   -> x1
-    v238 LocalAddr(-46)                                   -> x2
-    v239 LocalAddr(-19)                                   -> x6
-    v240 Load { addr=v237, disp=0, kind=I64 }             -> x1
-    v241 Load { addr=v238, disp=0, kind=I64 }             -> x2
-    v242 Binop { op=xor, lhs=v240, rhs=v241 }             -> x1
+    v238 LocalAddr(-46)                                   -> x1
+    v239 LocalAddr(-19)                                   -> x1
+    v240 Imm(578437695752307201)                          -> x1
+    v241 Imm(71777214294589695)                           -> x1
+    v242 Imm(646274217422881534)                          -> x1
     v243 Imm(0)                                           -> x2
     v244 Store { addr=v236, disp=0, value=v242, kind=I64 } -> -
     v245 LocalAddr(-35)                                   -> x1

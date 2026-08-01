@@ -145,23 +145,8 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	leaq	-0x20(%rbp), %rax
-               	movq	(%rax), %rcx
-               	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
-               	movq	0x8(%rax), %rax
-               	imulq	$0xa, %rax, %rax
-               	addq	%rcx, %rax
-               	addq	$0x5, %rax
-               	xorq	%rcx, %rcx
-               	addq	$0x0, %rax
-               	xorq	%rcx, %rcx
-               	addq	$0x0, %rax
-               	cmpq	$0x1b7b, %rax           # imm = 0x1B7B
-               	je	<addr>
-               	movl	$0x1, %eax
-               	addq	$0xb0, %rsp
-               	popq	%rbp
-               	retq
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
                	leaq	-<rip>, %rdi      # <addr>
                	xorq	%rsi, %rsi
                	leaq	-0x20(%rbp), %rdx

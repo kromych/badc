@@ -74,14 +74,6 @@ Disassembly of section .text:
                	movq	0x18(%rcx), %rdx
                	movq	%rdx, 0x18(%rax)
                	popq	%rdx
-               	leaq	-0x60(%rbp), %rax
-               	movslq	0x18(%rax), %rax
-               	cmpq	$0x3, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
                	xorq	%rax, %rax
                	addq	$0x60, %rsp
                	popq	%rbp

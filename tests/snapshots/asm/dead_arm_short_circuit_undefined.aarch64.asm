@@ -43,16 +43,8 @@ Disassembly of section .text:
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x20
-               	ldr	x1, [x0]
-               	mov	x17, #0x1               // =1
-               	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
-               	mov	x1, #0x0                // =0
-               	cmp	x1, #0x1
-               	cset	x1, ls
-               	cbnz	x1, <addr>
-               	mov	x1, #0x1                // =1
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x1                // =1
                	mov	x0, #0x0                // =0
                	sub	x0, x29, #0x30
                	ldr	x1, [x0]
@@ -358,11 +350,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	ldr	x1, [x0, #0x8]
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
-               	b	<addr>
                	b	<addr>
                	ldr	x1, [x0, #0x8]
                	mov	x17, #0xff              // =255

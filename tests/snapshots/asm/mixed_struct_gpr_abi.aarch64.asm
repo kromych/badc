@@ -25,7 +25,7 @@ Disassembly of section .text:
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x10
-               	ldr	x1, [x0]
+               	mov	x1, #0x3                // =3
                	scvtf	d1, x1
                	ldr	d0, [x0, #0x8]
                	mov	x0, #0x4000000000000000 // =4611686018427387904

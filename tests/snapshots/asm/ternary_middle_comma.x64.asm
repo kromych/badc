@@ -40,24 +40,7 @@ Disassembly of section .text:
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
                	movl	$0x63, %eax
-               	leaq	-0x8(%rbp), %rax
-               	movzbq	(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movl	$0x63, %esi
-               	leaq	-0x8(%rbp), %rax
-               	movzbq	(%rax), %rdx
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x5, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
+               	xorq	%rax, %rax
                	xorq	%rax, %rax
                	addq	$0x30, %rsp
                	popq	%rbp

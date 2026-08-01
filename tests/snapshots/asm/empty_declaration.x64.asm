@@ -21,24 +21,7 @@ Disassembly of section .text:
                	movq	%rdx, (%rax)
                	popq	%rdx
                	xorq	%rax, %rax
-               	leaq	-0x20(%rbp), %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x1, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	leaq	-0x20(%rbp), %rax
-               	movslq	0x4(%rax), %rax
-               	cmpq	$0x2, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x9, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
+               	xorq	%rax, %rax
                	leaq	<rip>, %rax
                	movl	$0xb, %ecx
                	movl	%ecx, (%rax)
@@ -59,4 +42,3 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>

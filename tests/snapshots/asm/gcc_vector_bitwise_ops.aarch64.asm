@@ -445,11 +445,10 @@ Disassembly of section .text:
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x118
-               	sub	x1, x29, #0x118
-               	sub	x2, x29, #0x170
-               	ldr	x1, [x1]
-               	ldr	x2, [x2]
-               	eor	x1, x1, x2
+               	mov	x1, #0x2fe              // =766
+               	movk	x1, #0x4fc, lsl #16
+               	movk	x1, #0x6fa, lsl #32
+               	movk	x1, #0x8f8, lsl #48
                	str	x1, [x0]
                	sub	x1, x29, #0x118
                	ldrb	w0, [x1]

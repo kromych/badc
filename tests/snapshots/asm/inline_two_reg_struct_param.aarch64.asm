@@ -24,35 +24,6 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0x10
-               	ldr	x0, [x0]
-               	cmp	x0, #0xc
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x0, x29, #0x10
-               	ldr	x0, [x0, #0x8]
-               	cmp	x0, #0x22
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x0, x29, #0x10
-               	ldr	x1, [x0]
-               	mov	x17, #0x3e8             // =1000
-               	mul	x1, x1, x17
-               	ldr	x0, [x0, #0x8]
-               	add	x0, x1, x0
-               	mov	x17, #0x2f02            // =12034
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

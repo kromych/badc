@@ -1656,24 +1656,17 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
+               	leaq	-0x990(%rbp), %rcx
+               	movl	$0x99, %eax
+               	movl	$0x10000, %esi          # imm = 0x10000
+               	movq	%rax, (%rcx)
+               	movq	%rsi, 0x8(%rcx)
                	leaq	-0x990(%rbp), %rax
-               	movq	0x8(%rax), %rcx
-               	movabsq	$-0x1000000000, %r11    # imm = 0xFFFFFFF000000000
-               	andq	%r11, %rcx
-               	movl	$0x99, %esi
-               	orq	$0x10000, %rcx          # imm = 0x10000
-               	movq	%rsi, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	leaq	-0x990(%rbp), %rax
-               	movabsq	$0xfffffffff, %rsi      # imm = 0xFFFFFFFFF
-               	andq	%rcx, %rsi
                	movl	$0x99, %ecx
-               	movabsq	$0x123000000000, %rbx   # imm = 0x123000000000
-               	orq	%rsi, %rbx
+               	movabsq	$0x123000010000, %rsi   # imm = 0x123000010000
                	movq	%rcx, (%rax)
-               	movq	%rbx, 0x8(%rax)
-               	movabsq	$0xfffffffff, %rax      # imm = 0xFFFFFFFFF
-               	andq	%rbx, %rax
+               	movq	%rsi, 0x8(%rax)
+               	movl	$0x10000, %eax          # imm = 0x10000
                	leaq	-0x80(%rbp), %rdi
                	movq	%rcx, (%rdi)
                	movq	%rax, 0x8(%rdi)
@@ -1697,13 +1690,11 @@ Disassembly of section .text:
                	addq	$0xa60, %rsp            # imm = 0xA60
                	popq	%rbp
                	retq
-               	movq	%rbx, %rax
-               	shrq	$0x24, %rax
                	xorq	%rsi, %rsi
-               	andq	$0xfffffff, %rax        # imm = 0xFFFFFFF
+               	movl	$0x123, %eax            # imm = 0x123
                	leaq	-0x90(%rbp), %rdi
                	movq	%rax, (%rdi)
-               	sarq	$0x3f, %rax
+               	xorq	%rax, %rax
                	movq	%rax, 0x8(%rdi)
                	movl	$0x123, %edx            # imm = 0x123
                	movl	$0x75, %ecx

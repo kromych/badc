@@ -64,8 +64,7 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x10
                	mov	x1, #0x3ff8000000000000 // =4609434218613702656
-               	ldr	x2, [x0, #0x8]
-               	add	x2, x2, #0x1
+               	mov	x2, #0x1                // =1
                	str	x2, [x0, #0x8]
                	fmov	d0, x1
                	bl	<addr>

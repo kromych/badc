@@ -36,23 +36,9 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x10]
                	str	x10, [x0, #0x10]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0x68
-               	ldrsw	x0, [x0]
-               	cmp	x0, #0x1
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	sub	x0, x29, #0x68
-               	ldr	x0, [x0, #0x8]
-               	cmp	x0, #0x2a
-               	cset	x0, ne
-               	cbz	x0, <addr>
-               	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
                	b	<addr>

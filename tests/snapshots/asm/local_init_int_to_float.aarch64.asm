@@ -28,8 +28,7 @@ Disassembly of section .text:
                	ldrb	w10, [x1, #0x3]
                	strb	w10, [x0, #0x3]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0x8
-               	ldrb	w0, [x0]
+               	mov	x0, #0x2a               // =42
                	scvtf	s0, x0
                	mov	x0, #0x999a             // =39322
                	movk	x0, #0x4227, lsl #16

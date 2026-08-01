@@ -1823,6 +1823,13 @@ fn enum_unsigned_compatible() {
 }
 
 #[test]
+fn types_compatible_fn_ptr_cast() {
+    // typeof of a function-pointer cast carries the cast's prototype
+    // into __builtin_types_compatible_p.
+    assert_eq!(run_fixture("types_compatible_fn_ptr_cast.c"), 0);
+}
+
+#[test]
 fn zero_length_array_decay() {
     // A zero-length array reads as its address, not as a load of the
     // storage it does not have.

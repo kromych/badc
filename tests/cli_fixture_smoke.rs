@@ -78,6 +78,7 @@ const COMPILE_SKIPLIST: &[&str] = &[
     "addr_null_compare_inline_param.c",
     "addr_compare_same_function_inline.c",
     "const_struct_array_inline_accessor.c",
+    "local_template_byte_probe.c",
 ];
 
 /// Fixtures whose body carries inline asm specific to one ISA. The
@@ -287,6 +288,7 @@ fn dead_branch_calls_are_eliminated_under_optimize() {
         "addr_null_compare_inline_param.c",
         "addr_compare_same_function_inline.c",
         "const_struct_array_inline_accessor.c",
+        "local_template_byte_probe.c",
     ] {
         let src = root.join(name);
         let stem = name.trim_end_matches(".c");

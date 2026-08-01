@@ -765,7 +765,7 @@ impl<'a> Exp<'a> {
         inv_hs: u32,
         depth: usize,
     ) -> Vec<Tok> {
-        let (body, _) = self.body_toks(name, &def.body);
+        let (mut body, _) = self.body_toks(name, &def.body);
         let nfixed = def.params.len();
 
         let raw_va: Vec<Tok> = if def.is_variadic {
@@ -773,6 +773,9 @@ impl<'a> Exp<'a> {
         } else {
             Vec::new()
         };
+        if def.is_variadic {
+            body = self.expand_va_opt(body, def, raw_args, &raw_va);
+        }
         let mut exp_args: Vec<Option<Vec<Tok>>> = raw_args.iter().map(|_| None).collect();
         let mut exp_va: Option<Vec<Tok>> = None;
 
@@ -904,6 +907,92 @@ impl<'a> Exp<'a> {
             i += 1;
         }
         self.hs_add_all(&mut out, inv_hs);
+        self.put_vec(body);
+        out
+    }
+
+    /// C23 6.10.5.2 `__VA_OPT__ ( content )` in a variadic replacement list:
+    /// the content when the variable arguments hold at least one token, a
+    /// placemarker otherwise. The construct is resolved over the replacement
+    /// list before substitution, so a surviving content goes through parameter
+    /// substitution, `#` and `##` exactly as if written in its place. A
+    /// placemarker is spelled by dropping an adjacent `##`, whose result is
+    /// then its other operand; a preceding `#` stringizes the content after
+    /// argument substitution, empty included.
+    fn expand_va_opt(
+        &mut self,
+        body: Vec<Tok>,
+        def: &FnMacro,
+        raw_args: &[Vec<Tok>],
+        raw_va: &[Tok],
+    ) -> Vec<Tok> {
+        if !body
+            .iter()
+            .any(|&t| t.kind == TokKind::Ident && self.text(t) == "__VA_OPT__")
+        {
+            return body;
+        }
+        let present = !raw_va.is_empty();
+        let mut out: Vec<Tok> = self.take_vec();
+        out.reserve(body.len());
+        let mut i = 0;
+        while i < body.len() {
+            let t = body[i];
+            if !(t.kind == TokKind::Ident
+                && self.text(t) == "__VA_OPT__"
+                && body.get(i + 1).is_some_and(|&n| self.is_punct(n, "(")))
+            {
+                out.push(t);
+                i += 1;
+                continue;
+            }
+            let mut depth = 0usize;
+            let mut close = i + 1;
+            while close < body.len() {
+                if self.is_punct(body[close], "(") {
+                    depth += 1;
+                } else if self.is_punct(body[close], ")") {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                close += 1;
+            }
+            if close >= body.len() {
+                // Unbalanced: leave the tokens for the parser to reject.
+                out.push(t);
+                i += 1;
+                continue;
+            }
+            let content = &body[i + 2..close];
+            let mut next = close + 1;
+            if out.last().is_some_and(|&p| self.is_punct(p, "#")) {
+                let mut raw: Vec<Tok> = Vec::new();
+                if present {
+                    for &c in content {
+                        match self.raw_of(def, raw_args, raw_va, c) {
+                            Some(r) => raw.extend(r),
+                            None => raw.push(c),
+                        }
+                    }
+                }
+                let s = self.stringize(&raw, t.space);
+                out.pop();
+                out.push(s);
+            } else if present {
+                let start = out.len();
+                out.extend_from_slice(content);
+                if let Some(first) = out.get_mut(start) {
+                    first.space = t.space;
+                }
+            } else if out.last().is_some_and(|&p| self.is_punct(p, "##")) {
+                out.pop();
+            } else if body.get(next).is_some_and(|&n| self.is_punct(n, "##")) {
+                next += 1;
+            }
+            i = next;
+        }
         self.put_vec(body);
         out
     }

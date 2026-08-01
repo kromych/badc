@@ -1546,6 +1546,13 @@ fn posix_utime_errno_headers() {
 }
 
 #[test]
+fn va_opt_initializer() {
+    // C23 6.10.5.2: __VA_OPT__ emits its content only for a non-empty
+    // variadic tail, here the comma separating a terminated pointer list.
+    assert_eq!(run_fixture("va_opt_initializer.c"), 42);
+}
+
+#[test]
 fn cast_fn_typedef_ptr_in_initializer() {
     // A cast to a function-type-typedef pointer in an initializer must not
     // leak the function-type marker to the next declaration (C99 6.5.4).

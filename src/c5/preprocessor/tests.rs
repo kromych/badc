@@ -2483,3 +2483,77 @@ fn repeat_inclusion_cost_is_independent_of_header_size() {
          re-read and re-scanned",
     );
 }
+
+/// C23 6.10.5.2 `__VA_OPT__`: the content survives when the variable arguments
+/// hold at least one token and is a placemarker otherwise, including as a `##`
+/// operand and under `#`. Every expansion here matches gcc's, which accepts the
+/// construct in every language mode.
+#[test]
+fn va_opt_expands_on_a_non_empty_variadic_tail() {
+    let cases: &[(&str, &str, &str)] = &[
+        // (definition, invocation, expected tokens)
+        (
+            "#define TAIL(a, ...) f(a __VA_OPT__(,) __VA_ARGS__)",
+            "TAIL(1)",
+            "f(1)",
+        ),
+        (
+            "#define TAIL(a, ...) f(a __VA_OPT__(,) __VA_ARGS__)",
+            "TAIL(1, 2)",
+            "f(1 , 2)",
+        ),
+        // Present but holding no token: a placemarker, as when omitted.
+        (
+            "#define TAIL(a, ...) f(a __VA_OPT__(,) __VA_ARGS__)",
+            "TAIL(1, )",
+            "f(1)",
+        ),
+        ("#define LEAD(...) __VA_OPT__(x) y", "LEAD()", "y"),
+        ("#define LEAD(...) __VA_OPT__(x) y", "LEAD(1)", "x y"),
+        // A placemarker on either side of `##` leaves the other operand.
+        ("#define PL(a, ...) a##__VA_OPT__(b)", "PL(1)", "1"),
+        ("#define PL(a, ...) a##__VA_OPT__(b)", "PL(1, 2)", "1b"),
+        ("#define PR(a, ...) __VA_OPT__(b)##a", "PR(1)", "1"),
+        ("#define PR(a, ...) __VA_OPT__(b)##a", "PR(1, 2)", "b1"),
+        // `#` stringizes the content after argument substitution.
+        ("#define STR(...) #__VA_OPT__(a b)", "STR()", "\"\""),
+        ("#define STR(...) #__VA_OPT__(a b)", "STR(1)", "\"a b\""),
+        ("#define SA(...) #__VA_OPT__(__VA_ARGS__)", "SA()", "\"\""),
+        (
+            "#define SA(...) #__VA_OPT__(__VA_ARGS__)",
+            "SA(1 + 2)",
+            "\"1 + 2\"",
+        ),
+        // Parentheses inside the content are content, not the terminator.
+        ("#define PN(...) __VA_OPT__((a, b)) z", "PN()", "z"),
+        ("#define PN(...) __VA_OPT__((a, b)) z", "PN(9)", "(a, b) z"),
+        // The GNU named-rest spelling reaches the same tail.
+        ("#define NR(a, rest...) a __VA_OPT__(,) rest", "NR(1)", "1"),
+        (
+            "#define NR(a, rest...) a __VA_OPT__(,) rest",
+            "NR(1, 2, 3)",
+            "1 , 2, 3",
+        ),
+        (
+            "#define IN(...) __VA_OPT__(__VA_ARGS__ ,) end",
+            "IN()",
+            "end",
+        ),
+        (
+            "#define IN(...) __VA_OPT__(__VA_ARGS__ ,) end",
+            "IN(7, 8)",
+            "7, 8 , end",
+        ),
+        // Only special in a variadic replacement list.
+        ("#define PLAIN(a) a __VA_OPT__", "PLAIN(1)", "1 __VA_OPT__"),
+    ];
+    for (def, call, want) in cases {
+        let out = process(&format!("{def}\nMARK {call}\n"));
+        let got = out
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("MARK"))
+            .unwrap_or_else(|| panic!("no expansion line for {call}: {out}"))
+            .trim();
+        assert_eq!(got, *want, "{def} / {call}");
+    }
+}

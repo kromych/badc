@@ -35,6 +35,22 @@ struct tagged {
 };
 _Static_assert(sizeof(struct tagged) == 12, "member bound folds");
 
+// A static initializer element is a constant expression too, so the same
+// fold applies there. Without it the identifier alone would be taken for
+// the function's address and its argument list read as further elements.
+struct info {
+    unsigned int id;
+    char name[24];
+    char name_len;
+};
+
+static struct info list[] = {
+    { 1, "ALPHA", strlen("ALPHA") },
+    { 2, "BETA", __builtin_strlen("BETA") },
+};
+
+static unsigned long lens[] = { strlen("x"), strlen("yy") };
+
 static int streq(const char *a, const char *b) {
     while (*a && *a == *b) { a++; b++; }
     return *a == *b;
@@ -67,6 +83,13 @@ int main(void) {
 
     // A folded operand in a runtime expression keeps its value.
     if (strlen("abcd") + strlen(s) != 11) return 30;
+
+    // Static initializers.
+    if (list[0].id != 1 || list[0].name_len != 5) return 31;
+    if (!streq(list[0].name, "ALPHA")) return 32;
+    if (list[1].id != 2 || list[1].name_len != 4) return 33;
+    if (!streq(list[1].name, "BETA")) return 34;
+    if (lens[0] != 1 || lens[1] != 2) return 35;
 
     printf("ok\n");
     return 0;

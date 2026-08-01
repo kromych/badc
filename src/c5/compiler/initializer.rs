@@ -1557,6 +1557,24 @@ impl Compiler {
                 self.next()?;
                 return Ok((off as i128, InitElemReloc::Data(None)));
             }
+            // An identifier followed by `(` is a call, not the symbol's
+            // address: taking the branches below would consume the name
+            // alone and leave the argument list to be misread as further
+            // elements. A static initializer admits a call only when it
+            // folds (C99 6.6p10) -- the constant evaluator owns which
+            // builtins do -- so defer to it, and fall through when it
+            // cannot, leaving the diagnostics below to report the shape.
+            if self.lex.peek_after_whitespace(b'(') {
+                let snap = self.lex.snapshot();
+                let data_snap = self.data.len();
+                let nonconst = self.pending.const_expr_nonconst;
+                if let Ok(v) = self.parse_constant_i128() {
+                    return Ok((v, InitElemReloc::None));
+                }
+                self.restore_lex(snap);
+                self.truncate_data(data_snap);
+                self.pending.const_expr_nonconst = nonconst;
+            }
             // C99 6.5.1: an identifier must be declared before use. An
             // undeclared identifier as an initializer element has no
             // resolvable value, so reject it rather than bind a placeholder

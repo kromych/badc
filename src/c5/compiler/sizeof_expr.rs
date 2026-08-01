@@ -369,6 +369,24 @@ impl Compiler {
     /// can still become one after inlining and constant propagation, so
     /// where deferring is sound it becomes an `Intrinsic::ConstantP` for
     /// the SSA folds; otherwise the conservative 0 stands.
+    /// GCC `__builtin_has_attribute(operand, attribute)`: an `int`
+    /// constant. badc does not model the queried attributes on objects or
+    /// types, so under its own semantics no operand carries one -- the
+    /// answer is 0. Both operands are consumed unevaluated.
+    pub(super) fn parse_has_attribute_builtin(&mut self) -> Result<(), C5Error> {
+        // The call dispatch consumed `__builtin_has_attribute (`.
+        self.skip_balanced_to_comma()?;
+        if self.lex.tk != ',' {
+            return Err(self.compile_err("`,` expected in `__builtin_has_attribute`"));
+        }
+        self.next()?;
+        self.skip_balanced_to_close_paren()?;
+        self.ty = Ty::Int as i64;
+        self.emit_imm(0);
+        self.ast_emit_int_lit(0, self.ty);
+        Ok(())
+    }
+
     pub(super) fn parse_constant_p_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_constant_p (`.
         let snap = self.lex.snapshot();

@@ -210,6 +210,26 @@ impl Compiler {
             let pre_paren = self.lex.snapshot();
             self.next()?;
             if self.lex_is_type_start() {
+                // Fold the whole expression with the cast applied first: a
+                // cast participating in arithmetic (`(char *)&s.b -
+                // (char *)&s.a` strides by the cast's pointee, C99 6.5.6)
+                // must not be discarded by the reloc-leaf shortcut below.
+                // An arithmetic result that consumes the whole initializer
+                // routes to the shared evaluator tail, which refolds it.
+                let cp = self.init_checkpoint();
+                let data_before = self.data.len();
+                self.restore_lex(pre_paren);
+                let whole = self.parse_const_expr_cond_val();
+                // A parse that staged data (a string or compound literal)
+                // folded an address needing its relocation; only a
+                // stage-free arithmetic result takes the evaluator tail.
+                let arithmetic = matches!(whole, Ok(ConstVal::Int { .. }) | Ok(ConstVal::Float(_)))
+                    && self.at_initializer_end()
+                    && self.data.len() == data_before;
+                self.restore_init_checkpoint(cp);
+                if arithmetic {
+                    self.restore_lex(pre_paren);
+                } else
                 // A leading `(TYPE)` cast. When it applies to a
                 // relocation leaf (`&x`, a string, a function or
                 // global-array name) the value is the leaf's address and
@@ -422,9 +442,17 @@ impl Compiler {
                      initializers are fine)",
                 ));
             }
-            let (value, reloc) = self.parse_constant_init_value()?;
-            self.write_init_value(var_offset as usize, 8, value, reloc, var_ty);
-            return Ok(());
+            // The address may instead be the operand of a larger constant
+            // expression (`&s.b - &s.a` folds to an integer, C99 6.5.6p9);
+            // an incomplete parse rewinds to the arithmetic evaluator below.
+            let cp = self.init_checkpoint();
+            match self.parse_constant_init_value() {
+                Ok((value, reloc)) if self.at_initializer_end() => {
+                    self.write_init_value(var_offset as usize, 8, value, reloc, var_ty);
+                    return Ok(());
+                }
+                _ => self.restore_init_checkpoint(cp),
+            }
         }
 
         // Float / double scalar global with a constant-foldable

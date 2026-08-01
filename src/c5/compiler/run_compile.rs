@@ -2173,66 +2173,15 @@ impl Compiler {
                             // bytes, whose parser-added NUL must land right
                             // after them.
                             self.next()?;
-                            // 2D struct array `T xs[][M] = { { {...}, ... }, ...
-                            // }`: each top-level brace is a row of `inner_dim`
-                            // structs. The 1D loop below fills one struct per
-                            // top-level brace, so a row would be misread; walk
-                            // the rows here instead. (Fully-braced rows, which
-                            // is how nested aggregates are written.)
+                            // Multi-dimensional struct array `T xs[][M]... = {
+                            // ... }`: fill the rows below the deferred outer
+                            // dimension through the shared struct-array walker
+                            // (designators at every level).
                             if inner_dim > 1 {
-                                let mut row: i64 = 0;
-                                while self.lex.tk != '}' {
-                                    // C99 6.7.8p7 array designator naming a row:
-                                    // `[N] = { ... }` moves the cursor to row N;
-                                    // subsequent positional rows continue at N+1.
-                                    // TODO: `[lo ... hi]` row replication and
-                                    // `[N][M]`/`[N].field` chains, as the
-                                    // known-size path supports.
-                                    if self.lex.tk == Token::Brak {
-                                        self.next()?;
-                                        let idx = self.parse_constant_int()?;
-                                        if idx < 0 || idx >= count {
-                                            return Err(self.compile_err(format!(
-                                                "row designator index {idx} out of bounds [0, {count})"
-                                            )));
-                                        }
-                                        if self.lex.tk != ']' {
-                                            return Err(self.compile_err(
-                                                "`]` expected after row designator index",
-                                            ));
-                                        }
-                                        self.next()?;
-                                        if self.lex.tk != Token::Assign {
-                                            return Err(self.compile_err(
-                                                "`=` expected after `[N]` row designator",
-                                            ));
-                                        }
-                                        self.next()?;
-                                        row = idx;
-                                    }
-                                    if self.lex.tk != '{' {
-                                        return Err(self.compile_err(
-                                            "row of a 2D struct array must be brace-enclosed",
-                                        ));
-                                    }
-                                    self.next()?; // row `{`
-                                    let mut j: i64 = 0;
-                                    while self.lex.tk != '}' {
-                                        if j >= inner_dim {
-                                            return Err(self.compile_err(
-                                                "too many initializers in struct-array row",
-                                            ));
-                                        }
-                                        let here = off + (row * inner_dim + j) * elem_size as i64;
-                                        self.init_struct_array_element(sid, here)?;
-                                        j += 1;
-                                        self.accept(',')?;
-                                    }
-                                    self.next()?; // row `}`
-                                    row += 1;
-                                    self.accept(',')?;
-                                }
-                                self.next()?; // outer `}`
+                                let mut dims = alloc::vec::Vec::new();
+                                dims.push(count);
+                                dims.extend_from_slice(&self.symbols[id_idx].array_dims[1..]);
+                                self.collect_struct_array_entries(ty, off, &dims)?;
                                 let total = count * inner_dim;
                                 self.symbols[id_idx].array_size = total;
                                 self.symbols[id_idx].is_zero_len_array = total == 0;
@@ -2653,12 +2602,7 @@ impl Compiler {
                                         if inner_dims.is_empty() {
                                             self.init_struct_array_element(sid, here)?;
                                         } else {
-                                            self.collect_struct_array_data(
-                                                sid,
-                                                here,
-                                                &inner_dims,
-                                                elem_size as i64,
-                                            )?;
+                                            self.collect_struct_array_data(ty, here, &inner_dims)?;
                                         }
                                         if k >= last {
                                             break;

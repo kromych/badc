@@ -862,10 +862,16 @@ impl Compiler {
                 // the unevaluated operand folds to a constant expression.
                 let is_constant_p =
                     not_real_fn && self.symbols[id_idx].name == "__builtin_constant_p";
+                // GCC `__builtin_has_attribute`: folded to 0, unevaluated
+                // operands (badc does not model the queried attributes).
+                let is_has_attribute =
+                    not_real_fn && self.symbols[id_idx].name == "__builtin_has_attribute";
                 if is_choose_expr {
                     self.parse_choose_expr_builtin()?;
                 } else if is_constant_p {
                     self.parse_constant_p_builtin()?;
+                } else if is_has_attribute {
+                    self.parse_has_attribute_builtin()?;
                 } else if is_object_size {
                     self.parse_object_size_builtin()?;
                 } else if is_overflow {

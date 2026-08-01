@@ -1,0 +1,2338 @@
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=classify
+fn ent_pc=0 n_params=1 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I32 }                    -> x0
+    v4   BinopI { op=ult, lhs=v1, rhs_imm=2001 }          -> x0
+    terminator Bz { cond=v4, target=b1026, fall=b1 }   (exit_acc=v4)
+  block 1  start_pc=0
+    terminator JumpTable { idx=v1, table=0 }   [b2, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24, b25, b26, b27, b28, b29, b30, b31, b32, b33, b34, b35, b36, b37, b38, b39, b40, b41, b42, b43, b44, b45, b46, b47, b48, b49, b50, b51, b52, b53, b54, b55, b56, b57, b58, b59, b60, b61, b62, b63, b64, b65, b66, b67, b68, b69, b70, b71, b72, b73, b74, b75, b76, b77, b78, b79, b80, b81, b82, b83, b84, b85, b86, b87, b88, b89, b90, b91, b92, b93, b94, b95, b96, b97, b98, b99, b100, b101, b102, b103, b104, b105, b106, b107, b108, b109, b110, b111, b112, b113, b114, b115, b116, b117, b118, b119, b120, b121, b122, b123, b124, b125, b126, b127, b128, b129, b130, b131, b132, b133, b134, b135, b136, b137, b138, b139, b140, b141, b142, b143, b144, b145, b146, b147, b148, b149, b150, b151, b152, b153, b154, b155, b156, b157, b158, b159, b160, b161, b162, b163, b164, b165, b166, b167, b168, b169, b170, b171, b172, b173, b174, b175, b176, b177, b178, b179, b180, b181, b182, b183, b184, b185, b186, b187, b188, b189, b190, b191, b192, b193, b194, b195, b196, b197, b198, b199, b200, b201, b202, b203, b204, b205, b206, b207, b208, b209, b210, b211, b212, b213, b214, b215, b216, b217, b218, b219, b220, b221, b222, b223, b224, b225, b226, b227, b228, b229, b230, b231, b232, b233, b234, b235, b236, b237, b238, b239, b240, b241, b242, b243, b244, b245, b246, b247, b248, b249, b250, b251, b252, b253, b254, b255, b256, b257, b258, b259, b260, b261, b262, b263, b264, b265, b266, b267, b268, b269, b270, b271, b272, b273, b274, b275, b276, b277, b278, b279, b280, b281, b282, b283, b284, b285, b286, b287, b288, b289, b290, b291, b292, b293, b294, b295, b296, b297, b298, b299, b300, b301, b302, b303, b304, b305, b306, b307, b308, b309, b310, b311, b312, b313, b314, b315, b316, b317, b318, b319, b320, b321, b322, b323, b324, b325, b326, b327, b328, b329, b330, b331, b332, b333, b334, b335, b336, b337, b338, b339, b340, b341, b342, b343, b344, b345, b346, b347, b348, b349, b350, b351, b352, b353, b354, b355, b356, b357, b358, b359, b360, b361, b362, b363, b364, b365, b366, b367, b368, b369, b370, b371, b372, b373, b374, b375, b376, b377, b378, b379, b380, b381, b382, b383, b384, b385, b386, b387, b388, b389, b390, b391, b392, b393, b394, b395, b396, b397, b398, b399, b400, b401, b402, b403, b404, b405, b406, b407, b408, b409, b410, b411, b412, b413, b414, b415, b416, b417, b418, b419, b420, b421, b422, b423, b424, b425, b426, b427, b428, b429, b430, b431, b432, b433, b434, b435, b436, b437, b438, b439, b440, b441, b442, b443, b444, b445, b446, b447, b448, b449, b450, b451, b452, b453, b454, b455, b456, b457, b458, b459, b460, b461, b462, b463, b464, b465, b466, b467, b468, b469, b470, b471, b472, b473, b474, b475, b476, b477, b478, b479, b480, b481, b482, b483, b484, b485, b486, b487, b488, b489, b490, b491, b492, b493, b494, b495, b496, b497, b498, b499, b500, b501, b502, b503, b504, b505, b506, b507, b508, b509, b510, b511, b512, b513, b514, b515, b516, b517, b518, b519, b520, b521, b522, b523, b524, b525, b526, b527, b528, b529, b530, b531, b532, b533, b534, b535, b536, b537, b538, b539, b540, b541, b542, b543, b544, b545, b546, b547, b548, b549, b550, b551, b552, b553, b554, b555, b556, b557, b558, b559, b560, b561, b562, b563, b564, b565, b566, b567, b568, b569, b570, b571, b572, b573, b574, b575, b576, b577, b578, b579, b580, b581, b582, b583, b584, b585, b586, b587, b588, b589, b590, b591, b592, b593, b594, b595, b596, b597, b598, b599, b600, b601, b602, b603, b604, b605, b606, b607, b608, b609, b610, b611, b612, b613, b614, b615, b616, b617, b618, b619, b620, b621, b622, b623, b624, b625, b626, b627, b628, b629, b630, b631, b632, b633, b634, b635, b636, b637, b638, b639, b640, b641, b642, b643, b644, b645, b646, b647, b648, b649, b650, b651, b652, b653, b654, b655, b656, b657, b658, b659, b660, b661, b662, b663, b664, b665, b666, b667, b668, b669, b670, b671, b672, b673, b674, b675, b676, b677, b678, b679, b680, b681, b682, b683, b684, b685, b686, b687, b688, b689, b690, b691, b692, b693, b694, b695, b696, b697, b698, b699, b700, b701, b702, b703, b704, b705, b706, b707, b708, b709, b710, b711, b712, b713, b714, b715, b716, b717, b718, b719, b720, b721, b722, b723, b724, b725, b726, b727, b728, b729, b730, b731, b732, b733, b734, b735, b736, b737, b738, b739, b740, b741, b742, b743, b744, b745, b746, b747, b748, b749, b750, b751, b752, b753, b754, b755, b756, b757, b758, b759, b760, b761, b762, b763, b764, b765, b766, b767, b768, b769, b770, b771, b772, b773, b774, b775, b776, b777, b778, b779, b780, b781, b782, b783, b784, b785, b786, b787, b788, b789, b790, b791, b792, b793, b794, b795, b796, b797, b798, b799, b800, b801, b802, b803, b804, b805, b806, b807, b808, b809, b810, b811, b812, b813, b814, b815, b816, b817, b818, b819, b820, b821, b822, b823, b824, b825, b826, b827, b828, b829, b830, b831, b832, b833, b834, b835, b836, b837, b838, b839, b840, b841, b842, b843, b844, b845, b846, b847, b848, b849, b850, b851, b852, b853, b854, b855, b856, b857, b858, b859, b860, b861, b862, b863, b864, b865, b866, b867, b868, b869, b870, b871, b872, b873, b874, b875, b876, b877, b878, b879, b880, b881, b882, b883, b884, b885, b886, b887, b888, b889, b890, b891, b892, b893, b894, b895, b896, b897, b898, b899, b900, b901, b902, b903, b904, b905, b906, b907, b908, b909, b910, b911, b912, b913, b914, b915, b916, b917, b918, b919, b920, b921, b922, b923, b924, b925, b926, b927, b928, b929, b930, b931, b932, b933, b934, b935, b936, b937, b938, b939, b940, b941, b942, b943, b944, b945, b946, b947, b948, b949, b950, b951, b952, b953, b954, b955, b956, b957, b958, b959, b960, b961, b962, b963, b964, b965, b966, b967, b968, b969, b970, b971, b972, b973, b974, b975, b976, b977, b978, b979, b980, b981, b982, b983, b984, b985, b986, b987, b988, b989, b990, b991, b992, b993, b994, b995, b996, b997, b998, b999, b1000, b1001, b1002, b1003, b1004, b1005, b1006, b1007, b1008, b1009, b1010, b1011, b1012, b1013, b1014, b1015, b1016, b1017, b1018, b1019, b1020, b1021, b1022, b1023, b1024, b1025, b3, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1026, b1027]   (exit_acc=v1)
+  block 2  start_pc=0
+    terminator Jmp(b3)
+  block 3  start_pc=0
+    v5   Imm(1)                                           -> x0
+    terminator Return(v5)   (exit_acc=v5)
+  block 4  start_pc=0
+    terminator Jmp(b3)
+  block 5  start_pc=0
+    terminator Jmp(b3)
+  block 6  start_pc=0
+    terminator Jmp(b3)
+  block 7  start_pc=0
+    terminator Jmp(b3)
+  block 8  start_pc=0
+    terminator Jmp(b3)
+  block 9  start_pc=0
+    terminator Jmp(b3)
+  block 10  start_pc=0
+    terminator Jmp(b3)
+  block 11  start_pc=0
+    terminator Jmp(b3)
+  block 12  start_pc=0
+    terminator Jmp(b3)
+  block 13  start_pc=0
+    terminator Jmp(b3)
+  block 14  start_pc=0
+    terminator Jmp(b3)
+  block 15  start_pc=0
+    terminator Jmp(b3)
+  block 16  start_pc=0
+    terminator Jmp(b3)
+  block 17  start_pc=0
+    terminator Jmp(b3)
+  block 18  start_pc=0
+    terminator Jmp(b3)
+  block 19  start_pc=0
+    terminator Jmp(b3)
+  block 20  start_pc=0
+    terminator Jmp(b3)
+  block 21  start_pc=0
+    terminator Jmp(b3)
+  block 22  start_pc=0
+    terminator Jmp(b3)
+  block 23  start_pc=0
+    terminator Jmp(b3)
+  block 24  start_pc=0
+    terminator Jmp(b3)
+  block 25  start_pc=0
+    terminator Jmp(b3)
+  block 26  start_pc=0
+    terminator Jmp(b3)
+  block 27  start_pc=0
+    terminator Jmp(b3)
+  block 28  start_pc=0
+    terminator Jmp(b3)
+  block 29  start_pc=0
+    terminator Jmp(b3)
+  block 30  start_pc=0
+    terminator Jmp(b3)
+  block 31  start_pc=0
+    terminator Jmp(b3)
+  block 32  start_pc=0
+    terminator Jmp(b3)
+  block 33  start_pc=0
+    terminator Jmp(b3)
+  block 34  start_pc=0
+    terminator Jmp(b3)
+  block 35  start_pc=0
+    terminator Jmp(b3)
+  block 36  start_pc=0
+    terminator Jmp(b3)
+  block 37  start_pc=0
+    terminator Jmp(b3)
+  block 38  start_pc=0
+    terminator Jmp(b3)
+  block 39  start_pc=0
+    terminator Jmp(b3)
+  block 40  start_pc=0
+    terminator Jmp(b3)
+  block 41  start_pc=0
+    terminator Jmp(b3)
+  block 42  start_pc=0
+    terminator Jmp(b3)
+  block 43  start_pc=0
+    terminator Jmp(b3)
+  block 44  start_pc=0
+    terminator Jmp(b3)
+  block 45  start_pc=0
+    terminator Jmp(b3)
+  block 46  start_pc=0
+    terminator Jmp(b3)
+  block 47  start_pc=0
+    terminator Jmp(b3)
+  block 48  start_pc=0
+    terminator Jmp(b3)
+  block 49  start_pc=0
+    terminator Jmp(b3)
+  block 50  start_pc=0
+    terminator Jmp(b3)
+  block 51  start_pc=0
+    terminator Jmp(b3)
+  block 52  start_pc=0
+    terminator Jmp(b3)
+  block 53  start_pc=0
+    terminator Jmp(b3)
+  block 54  start_pc=0
+    terminator Jmp(b3)
+  block 55  start_pc=0
+    terminator Jmp(b3)
+  block 56  start_pc=0
+    terminator Jmp(b3)
+  block 57  start_pc=0
+    terminator Jmp(b3)
+  block 58  start_pc=0
+    terminator Jmp(b3)
+  block 59  start_pc=0
+    terminator Jmp(b3)
+  block 60  start_pc=0
+    terminator Jmp(b3)
+  block 61  start_pc=0
+    terminator Jmp(b3)
+  block 62  start_pc=0
+    terminator Jmp(b3)
+  block 63  start_pc=0
+    terminator Jmp(b3)
+  block 64  start_pc=0
+    terminator Jmp(b3)
+  block 65  start_pc=0
+    terminator Jmp(b3)
+  block 66  start_pc=0
+    terminator Jmp(b3)
+  block 67  start_pc=0
+    terminator Jmp(b3)
+  block 68  start_pc=0
+    terminator Jmp(b3)
+  block 69  start_pc=0
+    terminator Jmp(b3)
+  block 70  start_pc=0
+    terminator Jmp(b3)
+  block 71  start_pc=0
+    terminator Jmp(b3)
+  block 72  start_pc=0
+    terminator Jmp(b3)
+  block 73  start_pc=0
+    terminator Jmp(b3)
+  block 74  start_pc=0
+    terminator Jmp(b3)
+  block 75  start_pc=0
+    terminator Jmp(b3)
+  block 76  start_pc=0
+    terminator Jmp(b3)
+  block 77  start_pc=0
+    terminator Jmp(b3)
+  block 78  start_pc=0
+    terminator Jmp(b3)
+  block 79  start_pc=0
+    terminator Jmp(b3)
+  block 80  start_pc=0
+    terminator Jmp(b3)
+  block 81  start_pc=0
+    terminator Jmp(b3)
+  block 82  start_pc=0
+    terminator Jmp(b3)
+  block 83  start_pc=0
+    terminator Jmp(b3)
+  block 84  start_pc=0
+    terminator Jmp(b3)
+  block 85  start_pc=0
+    terminator Jmp(b3)
+  block 86  start_pc=0
+    terminator Jmp(b3)
+  block 87  start_pc=0
+    terminator Jmp(b3)
+  block 88  start_pc=0
+    terminator Jmp(b3)
+  block 89  start_pc=0
+    terminator Jmp(b3)
+  block 90  start_pc=0
+    terminator Jmp(b3)
+  block 91  start_pc=0
+    terminator Jmp(b3)
+  block 92  start_pc=0
+    terminator Jmp(b3)
+  block 93  start_pc=0
+    terminator Jmp(b3)
+  block 94  start_pc=0
+    terminator Jmp(b3)
+  block 95  start_pc=0
+    terminator Jmp(b3)
+  block 96  start_pc=0
+    terminator Jmp(b3)
+  block 97  start_pc=0
+    terminator Jmp(b3)
+  block 98  start_pc=0
+    terminator Jmp(b3)
+  block 99  start_pc=0
+    terminator Jmp(b3)
+  block 100  start_pc=0
+    terminator Jmp(b3)
+  block 101  start_pc=0
+    terminator Jmp(b3)
+  block 102  start_pc=0
+    terminator Jmp(b3)
+  block 103  start_pc=0
+    terminator Jmp(b3)
+  block 104  start_pc=0
+    terminator Jmp(b3)
+  block 105  start_pc=0
+    terminator Jmp(b3)
+  block 106  start_pc=0
+    terminator Jmp(b3)
+  block 107  start_pc=0
+    terminator Jmp(b3)
+  block 108  start_pc=0
+    terminator Jmp(b3)
+  block 109  start_pc=0
+    terminator Jmp(b3)
+  block 110  start_pc=0
+    terminator Jmp(b3)
+  block 111  start_pc=0
+    terminator Jmp(b3)
+  block 112  start_pc=0
+    terminator Jmp(b3)
+  block 113  start_pc=0
+    terminator Jmp(b3)
+  block 114  start_pc=0
+    terminator Jmp(b3)
+  block 115  start_pc=0
+    terminator Jmp(b3)
+  block 116  start_pc=0
+    terminator Jmp(b3)
+  block 117  start_pc=0
+    terminator Jmp(b3)
+  block 118  start_pc=0
+    terminator Jmp(b3)
+  block 119  start_pc=0
+    terminator Jmp(b3)
+  block 120  start_pc=0
+    terminator Jmp(b3)
+  block 121  start_pc=0
+    terminator Jmp(b3)
+  block 122  start_pc=0
+    terminator Jmp(b3)
+  block 123  start_pc=0
+    terminator Jmp(b3)
+  block 124  start_pc=0
+    terminator Jmp(b3)
+  block 125  start_pc=0
+    terminator Jmp(b3)
+  block 126  start_pc=0
+    terminator Jmp(b3)
+  block 127  start_pc=0
+    terminator Jmp(b3)
+  block 128  start_pc=0
+    terminator Jmp(b3)
+  block 129  start_pc=0
+    terminator Jmp(b3)
+  block 130  start_pc=0
+    terminator Jmp(b3)
+  block 131  start_pc=0
+    terminator Jmp(b3)
+  block 132  start_pc=0
+    terminator Jmp(b3)
+  block 133  start_pc=0
+    terminator Jmp(b3)
+  block 134  start_pc=0
+    terminator Jmp(b3)
+  block 135  start_pc=0
+    terminator Jmp(b3)
+  block 136  start_pc=0
+    terminator Jmp(b3)
+  block 137  start_pc=0
+    terminator Jmp(b3)
+  block 138  start_pc=0
+    terminator Jmp(b3)
+  block 139  start_pc=0
+    terminator Jmp(b3)
+  block 140  start_pc=0
+    terminator Jmp(b3)
+  block 141  start_pc=0
+    terminator Jmp(b3)
+  block 142  start_pc=0
+    terminator Jmp(b3)
+  block 143  start_pc=0
+    terminator Jmp(b3)
+  block 144  start_pc=0
+    terminator Jmp(b3)
+  block 145  start_pc=0
+    terminator Jmp(b3)
+  block 146  start_pc=0
+    terminator Jmp(b3)
+  block 147  start_pc=0
+    terminator Jmp(b3)
+  block 148  start_pc=0
+    terminator Jmp(b3)
+  block 149  start_pc=0
+    terminator Jmp(b3)
+  block 150  start_pc=0
+    terminator Jmp(b3)
+  block 151  start_pc=0
+    terminator Jmp(b3)
+  block 152  start_pc=0
+    terminator Jmp(b3)
+  block 153  start_pc=0
+    terminator Jmp(b3)
+  block 154  start_pc=0
+    terminator Jmp(b3)
+  block 155  start_pc=0
+    terminator Jmp(b3)
+  block 156  start_pc=0
+    terminator Jmp(b3)
+  block 157  start_pc=0
+    terminator Jmp(b3)
+  block 158  start_pc=0
+    terminator Jmp(b3)
+  block 159  start_pc=0
+    terminator Jmp(b3)
+  block 160  start_pc=0
+    terminator Jmp(b3)
+  block 161  start_pc=0
+    terminator Jmp(b3)
+  block 162  start_pc=0
+    terminator Jmp(b3)
+  block 163  start_pc=0
+    terminator Jmp(b3)
+  block 164  start_pc=0
+    terminator Jmp(b3)
+  block 165  start_pc=0
+    terminator Jmp(b3)
+  block 166  start_pc=0
+    terminator Jmp(b3)
+  block 167  start_pc=0
+    terminator Jmp(b3)
+  block 168  start_pc=0
+    terminator Jmp(b3)
+  block 169  start_pc=0
+    terminator Jmp(b3)
+  block 170  start_pc=0
+    terminator Jmp(b3)
+  block 171  start_pc=0
+    terminator Jmp(b3)
+  block 172  start_pc=0
+    terminator Jmp(b3)
+  block 173  start_pc=0
+    terminator Jmp(b3)
+  block 174  start_pc=0
+    terminator Jmp(b3)
+  block 175  start_pc=0
+    terminator Jmp(b3)
+  block 176  start_pc=0
+    terminator Jmp(b3)
+  block 177  start_pc=0
+    terminator Jmp(b3)
+  block 178  start_pc=0
+    terminator Jmp(b3)
+  block 179  start_pc=0
+    terminator Jmp(b3)
+  block 180  start_pc=0
+    terminator Jmp(b3)
+  block 181  start_pc=0
+    terminator Jmp(b3)
+  block 182  start_pc=0
+    terminator Jmp(b3)
+  block 183  start_pc=0
+    terminator Jmp(b3)
+  block 184  start_pc=0
+    terminator Jmp(b3)
+  block 185  start_pc=0
+    terminator Jmp(b3)
+  block 186  start_pc=0
+    terminator Jmp(b3)
+  block 187  start_pc=0
+    terminator Jmp(b3)
+  block 188  start_pc=0
+    terminator Jmp(b3)
+  block 189  start_pc=0
+    terminator Jmp(b3)
+  block 190  start_pc=0
+    terminator Jmp(b3)
+  block 191  start_pc=0
+    terminator Jmp(b3)
+  block 192  start_pc=0
+    terminator Jmp(b3)
+  block 193  start_pc=0
+    terminator Jmp(b3)
+  block 194  start_pc=0
+    terminator Jmp(b3)
+  block 195  start_pc=0
+    terminator Jmp(b3)
+  block 196  start_pc=0
+    terminator Jmp(b3)
+  block 197  start_pc=0
+    terminator Jmp(b3)
+  block 198  start_pc=0
+    terminator Jmp(b3)
+  block 199  start_pc=0
+    terminator Jmp(b3)
+  block 200  start_pc=0
+    terminator Jmp(b3)
+  block 201  start_pc=0
+    terminator Jmp(b3)
+  block 202  start_pc=0
+    terminator Jmp(b3)
+  block 203  start_pc=0
+    terminator Jmp(b3)
+  block 204  start_pc=0
+    terminator Jmp(b3)
+  block 205  start_pc=0
+    terminator Jmp(b3)
+  block 206  start_pc=0
+    terminator Jmp(b3)
+  block 207  start_pc=0
+    terminator Jmp(b3)
+  block 208  start_pc=0
+    terminator Jmp(b3)
+  block 209  start_pc=0
+    terminator Jmp(b3)
+  block 210  start_pc=0
+    terminator Jmp(b3)
+  block 211  start_pc=0
+    terminator Jmp(b3)
+  block 212  start_pc=0
+    terminator Jmp(b3)
+  block 213  start_pc=0
+    terminator Jmp(b3)
+  block 214  start_pc=0
+    terminator Jmp(b3)
+  block 215  start_pc=0
+    terminator Jmp(b3)
+  block 216  start_pc=0
+    terminator Jmp(b3)
+  block 217  start_pc=0
+    terminator Jmp(b3)
+  block 218  start_pc=0
+    terminator Jmp(b3)
+  block 219  start_pc=0
+    terminator Jmp(b3)
+  block 220  start_pc=0
+    terminator Jmp(b3)
+  block 221  start_pc=0
+    terminator Jmp(b3)
+  block 222  start_pc=0
+    terminator Jmp(b3)
+  block 223  start_pc=0
+    terminator Jmp(b3)
+  block 224  start_pc=0
+    terminator Jmp(b3)
+  block 225  start_pc=0
+    terminator Jmp(b3)
+  block 226  start_pc=0
+    terminator Jmp(b3)
+  block 227  start_pc=0
+    terminator Jmp(b3)
+  block 228  start_pc=0
+    terminator Jmp(b3)
+  block 229  start_pc=0
+    terminator Jmp(b3)
+  block 230  start_pc=0
+    terminator Jmp(b3)
+  block 231  start_pc=0
+    terminator Jmp(b3)
+  block 232  start_pc=0
+    terminator Jmp(b3)
+  block 233  start_pc=0
+    terminator Jmp(b3)
+  block 234  start_pc=0
+    terminator Jmp(b3)
+  block 235  start_pc=0
+    terminator Jmp(b3)
+  block 236  start_pc=0
+    terminator Jmp(b3)
+  block 237  start_pc=0
+    terminator Jmp(b3)
+  block 238  start_pc=0
+    terminator Jmp(b3)
+  block 239  start_pc=0
+    terminator Jmp(b3)
+  block 240  start_pc=0
+    terminator Jmp(b3)
+  block 241  start_pc=0
+    terminator Jmp(b3)
+  block 242  start_pc=0
+    terminator Jmp(b3)
+  block 243  start_pc=0
+    terminator Jmp(b3)
+  block 244  start_pc=0
+    terminator Jmp(b3)
+  block 245  start_pc=0
+    terminator Jmp(b3)
+  block 246  start_pc=0
+    terminator Jmp(b3)
+  block 247  start_pc=0
+    terminator Jmp(b3)
+  block 248  start_pc=0
+    terminator Jmp(b3)
+  block 249  start_pc=0
+    terminator Jmp(b3)
+  block 250  start_pc=0
+    terminator Jmp(b3)
+  block 251  start_pc=0
+    terminator Jmp(b3)
+  block 252  start_pc=0
+    terminator Jmp(b3)
+  block 253  start_pc=0
+    terminator Jmp(b3)
+  block 254  start_pc=0
+    terminator Jmp(b3)
+  block 255  start_pc=0
+    terminator Jmp(b3)
+  block 256  start_pc=0
+    terminator Jmp(b3)
+  block 257  start_pc=0
+    terminator Jmp(b3)
+  block 258  start_pc=0
+    terminator Jmp(b3)
+  block 259  start_pc=0
+    terminator Jmp(b3)
+  block 260  start_pc=0
+    terminator Jmp(b3)
+  block 261  start_pc=0
+    terminator Jmp(b3)
+  block 262  start_pc=0
+    terminator Jmp(b3)
+  block 263  start_pc=0
+    terminator Jmp(b3)
+  block 264  start_pc=0
+    terminator Jmp(b3)
+  block 265  start_pc=0
+    terminator Jmp(b3)
+  block 266  start_pc=0
+    terminator Jmp(b3)
+  block 267  start_pc=0
+    terminator Jmp(b3)
+  block 268  start_pc=0
+    terminator Jmp(b3)
+  block 269  start_pc=0
+    terminator Jmp(b3)
+  block 270  start_pc=0
+    terminator Jmp(b3)
+  block 271  start_pc=0
+    terminator Jmp(b3)
+  block 272  start_pc=0
+    terminator Jmp(b3)
+  block 273  start_pc=0
+    terminator Jmp(b3)
+  block 274  start_pc=0
+    terminator Jmp(b3)
+  block 275  start_pc=0
+    terminator Jmp(b3)
+  block 276  start_pc=0
+    terminator Jmp(b3)
+  block 277  start_pc=0
+    terminator Jmp(b3)
+  block 278  start_pc=0
+    terminator Jmp(b3)
+  block 279  start_pc=0
+    terminator Jmp(b3)
+  block 280  start_pc=0
+    terminator Jmp(b3)
+  block 281  start_pc=0
+    terminator Jmp(b3)
+  block 282  start_pc=0
+    terminator Jmp(b3)
+  block 283  start_pc=0
+    terminator Jmp(b3)
+  block 284  start_pc=0
+    terminator Jmp(b3)
+  block 285  start_pc=0
+    terminator Jmp(b3)
+  block 286  start_pc=0
+    terminator Jmp(b3)
+  block 287  start_pc=0
+    terminator Jmp(b3)
+  block 288  start_pc=0
+    terminator Jmp(b3)
+  block 289  start_pc=0
+    terminator Jmp(b3)
+  block 290  start_pc=0
+    terminator Jmp(b3)
+  block 291  start_pc=0
+    terminator Jmp(b3)
+  block 292  start_pc=0
+    terminator Jmp(b3)
+  block 293  start_pc=0
+    terminator Jmp(b3)
+  block 294  start_pc=0
+    terminator Jmp(b3)
+  block 295  start_pc=0
+    terminator Jmp(b3)
+  block 296  start_pc=0
+    terminator Jmp(b3)
+  block 297  start_pc=0
+    terminator Jmp(b3)
+  block 298  start_pc=0
+    terminator Jmp(b3)
+  block 299  start_pc=0
+    terminator Jmp(b3)
+  block 300  start_pc=0
+    terminator Jmp(b3)
+  block 301  start_pc=0
+    terminator Jmp(b3)
+  block 302  start_pc=0
+    terminator Jmp(b3)
+  block 303  start_pc=0
+    terminator Jmp(b3)
+  block 304  start_pc=0
+    terminator Jmp(b3)
+  block 305  start_pc=0
+    terminator Jmp(b3)
+  block 306  start_pc=0
+    terminator Jmp(b3)
+  block 307  start_pc=0
+    terminator Jmp(b3)
+  block 308  start_pc=0
+    terminator Jmp(b3)
+  block 309  start_pc=0
+    terminator Jmp(b3)
+  block 310  start_pc=0
+    terminator Jmp(b3)
+  block 311  start_pc=0
+    terminator Jmp(b3)
+  block 312  start_pc=0
+    terminator Jmp(b3)
+  block 313  start_pc=0
+    terminator Jmp(b3)
+  block 314  start_pc=0
+    terminator Jmp(b3)
+  block 315  start_pc=0
+    terminator Jmp(b3)
+  block 316  start_pc=0
+    terminator Jmp(b3)
+  block 317  start_pc=0
+    terminator Jmp(b3)
+  block 318  start_pc=0
+    terminator Jmp(b3)
+  block 319  start_pc=0
+    terminator Jmp(b3)
+  block 320  start_pc=0
+    terminator Jmp(b3)
+  block 321  start_pc=0
+    terminator Jmp(b3)
+  block 322  start_pc=0
+    terminator Jmp(b3)
+  block 323  start_pc=0
+    terminator Jmp(b3)
+  block 324  start_pc=0
+    terminator Jmp(b3)
+  block 325  start_pc=0
+    terminator Jmp(b3)
+  block 326  start_pc=0
+    terminator Jmp(b3)
+  block 327  start_pc=0
+    terminator Jmp(b3)
+  block 328  start_pc=0
+    terminator Jmp(b3)
+  block 329  start_pc=0
+    terminator Jmp(b3)
+  block 330  start_pc=0
+    terminator Jmp(b3)
+  block 331  start_pc=0
+    terminator Jmp(b3)
+  block 332  start_pc=0
+    terminator Jmp(b3)
+  block 333  start_pc=0
+    terminator Jmp(b3)
+  block 334  start_pc=0
+    terminator Jmp(b3)
+  block 335  start_pc=0
+    terminator Jmp(b3)
+  block 336  start_pc=0
+    terminator Jmp(b3)
+  block 337  start_pc=0
+    terminator Jmp(b3)
+  block 338  start_pc=0
+    terminator Jmp(b3)
+  block 339  start_pc=0
+    terminator Jmp(b3)
+  block 340  start_pc=0
+    terminator Jmp(b3)
+  block 341  start_pc=0
+    terminator Jmp(b3)
+  block 342  start_pc=0
+    terminator Jmp(b3)
+  block 343  start_pc=0
+    terminator Jmp(b3)
+  block 344  start_pc=0
+    terminator Jmp(b3)
+  block 345  start_pc=0
+    terminator Jmp(b3)
+  block 346  start_pc=0
+    terminator Jmp(b3)
+  block 347  start_pc=0
+    terminator Jmp(b3)
+  block 348  start_pc=0
+    terminator Jmp(b3)
+  block 349  start_pc=0
+    terminator Jmp(b3)
+  block 350  start_pc=0
+    terminator Jmp(b3)
+  block 351  start_pc=0
+    terminator Jmp(b3)
+  block 352  start_pc=0
+    terminator Jmp(b3)
+  block 353  start_pc=0
+    terminator Jmp(b3)
+  block 354  start_pc=0
+    terminator Jmp(b3)
+  block 355  start_pc=0
+    terminator Jmp(b3)
+  block 356  start_pc=0
+    terminator Jmp(b3)
+  block 357  start_pc=0
+    terminator Jmp(b3)
+  block 358  start_pc=0
+    terminator Jmp(b3)
+  block 359  start_pc=0
+    terminator Jmp(b3)
+  block 360  start_pc=0
+    terminator Jmp(b3)
+  block 361  start_pc=0
+    terminator Jmp(b3)
+  block 362  start_pc=0
+    terminator Jmp(b3)
+  block 363  start_pc=0
+    terminator Jmp(b3)
+  block 364  start_pc=0
+    terminator Jmp(b3)
+  block 365  start_pc=0
+    terminator Jmp(b3)
+  block 366  start_pc=0
+    terminator Jmp(b3)
+  block 367  start_pc=0
+    terminator Jmp(b3)
+  block 368  start_pc=0
+    terminator Jmp(b3)
+  block 369  start_pc=0
+    terminator Jmp(b3)
+  block 370  start_pc=0
+    terminator Jmp(b3)
+  block 371  start_pc=0
+    terminator Jmp(b3)
+  block 372  start_pc=0
+    terminator Jmp(b3)
+  block 373  start_pc=0
+    terminator Jmp(b3)
+  block 374  start_pc=0
+    terminator Jmp(b3)
+  block 375  start_pc=0
+    terminator Jmp(b3)
+  block 376  start_pc=0
+    terminator Jmp(b3)
+  block 377  start_pc=0
+    terminator Jmp(b3)
+  block 378  start_pc=0
+    terminator Jmp(b3)
+  block 379  start_pc=0
+    terminator Jmp(b3)
+  block 380  start_pc=0
+    terminator Jmp(b3)
+  block 381  start_pc=0
+    terminator Jmp(b3)
+  block 382  start_pc=0
+    terminator Jmp(b3)
+  block 383  start_pc=0
+    terminator Jmp(b3)
+  block 384  start_pc=0
+    terminator Jmp(b3)
+  block 385  start_pc=0
+    terminator Jmp(b3)
+  block 386  start_pc=0
+    terminator Jmp(b3)
+  block 387  start_pc=0
+    terminator Jmp(b3)
+  block 388  start_pc=0
+    terminator Jmp(b3)
+  block 389  start_pc=0
+    terminator Jmp(b3)
+  block 390  start_pc=0
+    terminator Jmp(b3)
+  block 391  start_pc=0
+    terminator Jmp(b3)
+  block 392  start_pc=0
+    terminator Jmp(b3)
+  block 393  start_pc=0
+    terminator Jmp(b3)
+  block 394  start_pc=0
+    terminator Jmp(b3)
+  block 395  start_pc=0
+    terminator Jmp(b3)
+  block 396  start_pc=0
+    terminator Jmp(b3)
+  block 397  start_pc=0
+    terminator Jmp(b3)
+  block 398  start_pc=0
+    terminator Jmp(b3)
+  block 399  start_pc=0
+    terminator Jmp(b3)
+  block 400  start_pc=0
+    terminator Jmp(b3)
+  block 401  start_pc=0
+    terminator Jmp(b3)
+  block 402  start_pc=0
+    terminator Jmp(b3)
+  block 403  start_pc=0
+    terminator Jmp(b3)
+  block 404  start_pc=0
+    terminator Jmp(b3)
+  block 405  start_pc=0
+    terminator Jmp(b3)
+  block 406  start_pc=0
+    terminator Jmp(b3)
+  block 407  start_pc=0
+    terminator Jmp(b3)
+  block 408  start_pc=0
+    terminator Jmp(b3)
+  block 409  start_pc=0
+    terminator Jmp(b3)
+  block 410  start_pc=0
+    terminator Jmp(b3)
+  block 411  start_pc=0
+    terminator Jmp(b3)
+  block 412  start_pc=0
+    terminator Jmp(b3)
+  block 413  start_pc=0
+    terminator Jmp(b3)
+  block 414  start_pc=0
+    terminator Jmp(b3)
+  block 415  start_pc=0
+    terminator Jmp(b3)
+  block 416  start_pc=0
+    terminator Jmp(b3)
+  block 417  start_pc=0
+    terminator Jmp(b3)
+  block 418  start_pc=0
+    terminator Jmp(b3)
+  block 419  start_pc=0
+    terminator Jmp(b3)
+  block 420  start_pc=0
+    terminator Jmp(b3)
+  block 421  start_pc=0
+    terminator Jmp(b3)
+  block 422  start_pc=0
+    terminator Jmp(b3)
+  block 423  start_pc=0
+    terminator Jmp(b3)
+  block 424  start_pc=0
+    terminator Jmp(b3)
+  block 425  start_pc=0
+    terminator Jmp(b3)
+  block 426  start_pc=0
+    terminator Jmp(b3)
+  block 427  start_pc=0
+    terminator Jmp(b3)
+  block 428  start_pc=0
+    terminator Jmp(b3)
+  block 429  start_pc=0
+    terminator Jmp(b3)
+  block 430  start_pc=0
+    terminator Jmp(b3)
+  block 431  start_pc=0
+    terminator Jmp(b3)
+  block 432  start_pc=0
+    terminator Jmp(b3)
+  block 433  start_pc=0
+    terminator Jmp(b3)
+  block 434  start_pc=0
+    terminator Jmp(b3)
+  block 435  start_pc=0
+    terminator Jmp(b3)
+  block 436  start_pc=0
+    terminator Jmp(b3)
+  block 437  start_pc=0
+    terminator Jmp(b3)
+  block 438  start_pc=0
+    terminator Jmp(b3)
+  block 439  start_pc=0
+    terminator Jmp(b3)
+  block 440  start_pc=0
+    terminator Jmp(b3)
+  block 441  start_pc=0
+    terminator Jmp(b3)
+  block 442  start_pc=0
+    terminator Jmp(b3)
+  block 443  start_pc=0
+    terminator Jmp(b3)
+  block 444  start_pc=0
+    terminator Jmp(b3)
+  block 445  start_pc=0
+    terminator Jmp(b3)
+  block 446  start_pc=0
+    terminator Jmp(b3)
+  block 447  start_pc=0
+    terminator Jmp(b3)
+  block 448  start_pc=0
+    terminator Jmp(b3)
+  block 449  start_pc=0
+    terminator Jmp(b3)
+  block 450  start_pc=0
+    terminator Jmp(b3)
+  block 451  start_pc=0
+    terminator Jmp(b3)
+  block 452  start_pc=0
+    terminator Jmp(b3)
+  block 453  start_pc=0
+    terminator Jmp(b3)
+  block 454  start_pc=0
+    terminator Jmp(b3)
+  block 455  start_pc=0
+    terminator Jmp(b3)
+  block 456  start_pc=0
+    terminator Jmp(b3)
+  block 457  start_pc=0
+    terminator Jmp(b3)
+  block 458  start_pc=0
+    terminator Jmp(b3)
+  block 459  start_pc=0
+    terminator Jmp(b3)
+  block 460  start_pc=0
+    terminator Jmp(b3)
+  block 461  start_pc=0
+    terminator Jmp(b3)
+  block 462  start_pc=0
+    terminator Jmp(b3)
+  block 463  start_pc=0
+    terminator Jmp(b3)
+  block 464  start_pc=0
+    terminator Jmp(b3)
+  block 465  start_pc=0
+    terminator Jmp(b3)
+  block 466  start_pc=0
+    terminator Jmp(b3)
+  block 467  start_pc=0
+    terminator Jmp(b3)
+  block 468  start_pc=0
+    terminator Jmp(b3)
+  block 469  start_pc=0
+    terminator Jmp(b3)
+  block 470  start_pc=0
+    terminator Jmp(b3)
+  block 471  start_pc=0
+    terminator Jmp(b3)
+  block 472  start_pc=0
+    terminator Jmp(b3)
+  block 473  start_pc=0
+    terminator Jmp(b3)
+  block 474  start_pc=0
+    terminator Jmp(b3)
+  block 475  start_pc=0
+    terminator Jmp(b3)
+  block 476  start_pc=0
+    terminator Jmp(b3)
+  block 477  start_pc=0
+    terminator Jmp(b3)
+  block 478  start_pc=0
+    terminator Jmp(b3)
+  block 479  start_pc=0
+    terminator Jmp(b3)
+  block 480  start_pc=0
+    terminator Jmp(b3)
+  block 481  start_pc=0
+    terminator Jmp(b3)
+  block 482  start_pc=0
+    terminator Jmp(b3)
+  block 483  start_pc=0
+    terminator Jmp(b3)
+  block 484  start_pc=0
+    terminator Jmp(b3)
+  block 485  start_pc=0
+    terminator Jmp(b3)
+  block 486  start_pc=0
+    terminator Jmp(b3)
+  block 487  start_pc=0
+    terminator Jmp(b3)
+  block 488  start_pc=0
+    terminator Jmp(b3)
+  block 489  start_pc=0
+    terminator Jmp(b3)
+  block 490  start_pc=0
+    terminator Jmp(b3)
+  block 491  start_pc=0
+    terminator Jmp(b3)
+  block 492  start_pc=0
+    terminator Jmp(b3)
+  block 493  start_pc=0
+    terminator Jmp(b3)
+  block 494  start_pc=0
+    terminator Jmp(b3)
+  block 495  start_pc=0
+    terminator Jmp(b3)
+  block 496  start_pc=0
+    terminator Jmp(b3)
+  block 497  start_pc=0
+    terminator Jmp(b3)
+  block 498  start_pc=0
+    terminator Jmp(b3)
+  block 499  start_pc=0
+    terminator Jmp(b3)
+  block 500  start_pc=0
+    terminator Jmp(b3)
+  block 501  start_pc=0
+    terminator Jmp(b3)
+  block 502  start_pc=0
+    terminator Jmp(b3)
+  block 503  start_pc=0
+    terminator Jmp(b3)
+  block 504  start_pc=0
+    terminator Jmp(b3)
+  block 505  start_pc=0
+    terminator Jmp(b3)
+  block 506  start_pc=0
+    terminator Jmp(b3)
+  block 507  start_pc=0
+    terminator Jmp(b3)
+  block 508  start_pc=0
+    terminator Jmp(b3)
+  block 509  start_pc=0
+    terminator Jmp(b3)
+  block 510  start_pc=0
+    terminator Jmp(b3)
+  block 511  start_pc=0
+    terminator Jmp(b3)
+  block 512  start_pc=0
+    terminator Jmp(b3)
+  block 513  start_pc=0
+    terminator Jmp(b3)
+  block 514  start_pc=0
+    terminator Jmp(b3)
+  block 515  start_pc=0
+    terminator Jmp(b3)
+  block 516  start_pc=0
+    terminator Jmp(b3)
+  block 517  start_pc=0
+    terminator Jmp(b3)
+  block 518  start_pc=0
+    terminator Jmp(b3)
+  block 519  start_pc=0
+    terminator Jmp(b3)
+  block 520  start_pc=0
+    terminator Jmp(b3)
+  block 521  start_pc=0
+    terminator Jmp(b3)
+  block 522  start_pc=0
+    terminator Jmp(b3)
+  block 523  start_pc=0
+    terminator Jmp(b3)
+  block 524  start_pc=0
+    terminator Jmp(b3)
+  block 525  start_pc=0
+    terminator Jmp(b3)
+  block 526  start_pc=0
+    terminator Jmp(b3)
+  block 527  start_pc=0
+    terminator Jmp(b3)
+  block 528  start_pc=0
+    terminator Jmp(b3)
+  block 529  start_pc=0
+    terminator Jmp(b3)
+  block 530  start_pc=0
+    terminator Jmp(b3)
+  block 531  start_pc=0
+    terminator Jmp(b3)
+  block 532  start_pc=0
+    terminator Jmp(b3)
+  block 533  start_pc=0
+    terminator Jmp(b3)
+  block 534  start_pc=0
+    terminator Jmp(b3)
+  block 535  start_pc=0
+    terminator Jmp(b3)
+  block 536  start_pc=0
+    terminator Jmp(b3)
+  block 537  start_pc=0
+    terminator Jmp(b3)
+  block 538  start_pc=0
+    terminator Jmp(b3)
+  block 539  start_pc=0
+    terminator Jmp(b3)
+  block 540  start_pc=0
+    terminator Jmp(b3)
+  block 541  start_pc=0
+    terminator Jmp(b3)
+  block 542  start_pc=0
+    terminator Jmp(b3)
+  block 543  start_pc=0
+    terminator Jmp(b3)
+  block 544  start_pc=0
+    terminator Jmp(b3)
+  block 545  start_pc=0
+    terminator Jmp(b3)
+  block 546  start_pc=0
+    terminator Jmp(b3)
+  block 547  start_pc=0
+    terminator Jmp(b3)
+  block 548  start_pc=0
+    terminator Jmp(b3)
+  block 549  start_pc=0
+    terminator Jmp(b3)
+  block 550  start_pc=0
+    terminator Jmp(b3)
+  block 551  start_pc=0
+    terminator Jmp(b3)
+  block 552  start_pc=0
+    terminator Jmp(b3)
+  block 553  start_pc=0
+    terminator Jmp(b3)
+  block 554  start_pc=0
+    terminator Jmp(b3)
+  block 555  start_pc=0
+    terminator Jmp(b3)
+  block 556  start_pc=0
+    terminator Jmp(b3)
+  block 557  start_pc=0
+    terminator Jmp(b3)
+  block 558  start_pc=0
+    terminator Jmp(b3)
+  block 559  start_pc=0
+    terminator Jmp(b3)
+  block 560  start_pc=0
+    terminator Jmp(b3)
+  block 561  start_pc=0
+    terminator Jmp(b3)
+  block 562  start_pc=0
+    terminator Jmp(b3)
+  block 563  start_pc=0
+    terminator Jmp(b3)
+  block 564  start_pc=0
+    terminator Jmp(b3)
+  block 565  start_pc=0
+    terminator Jmp(b3)
+  block 566  start_pc=0
+    terminator Jmp(b3)
+  block 567  start_pc=0
+    terminator Jmp(b3)
+  block 568  start_pc=0
+    terminator Jmp(b3)
+  block 569  start_pc=0
+    terminator Jmp(b3)
+  block 570  start_pc=0
+    terminator Jmp(b3)
+  block 571  start_pc=0
+    terminator Jmp(b3)
+  block 572  start_pc=0
+    terminator Jmp(b3)
+  block 573  start_pc=0
+    terminator Jmp(b3)
+  block 574  start_pc=0
+    terminator Jmp(b3)
+  block 575  start_pc=0
+    terminator Jmp(b3)
+  block 576  start_pc=0
+    terminator Jmp(b3)
+  block 577  start_pc=0
+    terminator Jmp(b3)
+  block 578  start_pc=0
+    terminator Jmp(b3)
+  block 579  start_pc=0
+    terminator Jmp(b3)
+  block 580  start_pc=0
+    terminator Jmp(b3)
+  block 581  start_pc=0
+    terminator Jmp(b3)
+  block 582  start_pc=0
+    terminator Jmp(b3)
+  block 583  start_pc=0
+    terminator Jmp(b3)
+  block 584  start_pc=0
+    terminator Jmp(b3)
+  block 585  start_pc=0
+    terminator Jmp(b3)
+  block 586  start_pc=0
+    terminator Jmp(b3)
+  block 587  start_pc=0
+    terminator Jmp(b3)
+  block 588  start_pc=0
+    terminator Jmp(b3)
+  block 589  start_pc=0
+    terminator Jmp(b3)
+  block 590  start_pc=0
+    terminator Jmp(b3)
+  block 591  start_pc=0
+    terminator Jmp(b3)
+  block 592  start_pc=0
+    terminator Jmp(b3)
+  block 593  start_pc=0
+    terminator Jmp(b3)
+  block 594  start_pc=0
+    terminator Jmp(b3)
+  block 595  start_pc=0
+    terminator Jmp(b3)
+  block 596  start_pc=0
+    terminator Jmp(b3)
+  block 597  start_pc=0
+    terminator Jmp(b3)
+  block 598  start_pc=0
+    terminator Jmp(b3)
+  block 599  start_pc=0
+    terminator Jmp(b3)
+  block 600  start_pc=0
+    terminator Jmp(b3)
+  block 601  start_pc=0
+    terminator Jmp(b3)
+  block 602  start_pc=0
+    terminator Jmp(b3)
+  block 603  start_pc=0
+    terminator Jmp(b3)
+  block 604  start_pc=0
+    terminator Jmp(b3)
+  block 605  start_pc=0
+    terminator Jmp(b3)
+  block 606  start_pc=0
+    terminator Jmp(b3)
+  block 607  start_pc=0
+    terminator Jmp(b3)
+  block 608  start_pc=0
+    terminator Jmp(b3)
+  block 609  start_pc=0
+    terminator Jmp(b3)
+  block 610  start_pc=0
+    terminator Jmp(b3)
+  block 611  start_pc=0
+    terminator Jmp(b3)
+  block 612  start_pc=0
+    terminator Jmp(b3)
+  block 613  start_pc=0
+    terminator Jmp(b3)
+  block 614  start_pc=0
+    terminator Jmp(b3)
+  block 615  start_pc=0
+    terminator Jmp(b3)
+  block 616  start_pc=0
+    terminator Jmp(b3)
+  block 617  start_pc=0
+    terminator Jmp(b3)
+  block 618  start_pc=0
+    terminator Jmp(b3)
+  block 619  start_pc=0
+    terminator Jmp(b3)
+  block 620  start_pc=0
+    terminator Jmp(b3)
+  block 621  start_pc=0
+    terminator Jmp(b3)
+  block 622  start_pc=0
+    terminator Jmp(b3)
+  block 623  start_pc=0
+    terminator Jmp(b3)
+  block 624  start_pc=0
+    terminator Jmp(b3)
+  block 625  start_pc=0
+    terminator Jmp(b3)
+  block 626  start_pc=0
+    terminator Jmp(b3)
+  block 627  start_pc=0
+    terminator Jmp(b3)
+  block 628  start_pc=0
+    terminator Jmp(b3)
+  block 629  start_pc=0
+    terminator Jmp(b3)
+  block 630  start_pc=0
+    terminator Jmp(b3)
+  block 631  start_pc=0
+    terminator Jmp(b3)
+  block 632  start_pc=0
+    terminator Jmp(b3)
+  block 633  start_pc=0
+    terminator Jmp(b3)
+  block 634  start_pc=0
+    terminator Jmp(b3)
+  block 635  start_pc=0
+    terminator Jmp(b3)
+  block 636  start_pc=0
+    terminator Jmp(b3)
+  block 637  start_pc=0
+    terminator Jmp(b3)
+  block 638  start_pc=0
+    terminator Jmp(b3)
+  block 639  start_pc=0
+    terminator Jmp(b3)
+  block 640  start_pc=0
+    terminator Jmp(b3)
+  block 641  start_pc=0
+    terminator Jmp(b3)
+  block 642  start_pc=0
+    terminator Jmp(b3)
+  block 643  start_pc=0
+    terminator Jmp(b3)
+  block 644  start_pc=0
+    terminator Jmp(b3)
+  block 645  start_pc=0
+    terminator Jmp(b3)
+  block 646  start_pc=0
+    terminator Jmp(b3)
+  block 647  start_pc=0
+    terminator Jmp(b3)
+  block 648  start_pc=0
+    terminator Jmp(b3)
+  block 649  start_pc=0
+    terminator Jmp(b3)
+  block 650  start_pc=0
+    terminator Jmp(b3)
+  block 651  start_pc=0
+    terminator Jmp(b3)
+  block 652  start_pc=0
+    terminator Jmp(b3)
+  block 653  start_pc=0
+    terminator Jmp(b3)
+  block 654  start_pc=0
+    terminator Jmp(b3)
+  block 655  start_pc=0
+    terminator Jmp(b3)
+  block 656  start_pc=0
+    terminator Jmp(b3)
+  block 657  start_pc=0
+    terminator Jmp(b3)
+  block 658  start_pc=0
+    terminator Jmp(b3)
+  block 659  start_pc=0
+    terminator Jmp(b3)
+  block 660  start_pc=0
+    terminator Jmp(b3)
+  block 661  start_pc=0
+    terminator Jmp(b3)
+  block 662  start_pc=0
+    terminator Jmp(b3)
+  block 663  start_pc=0
+    terminator Jmp(b3)
+  block 664  start_pc=0
+    terminator Jmp(b3)
+  block 665  start_pc=0
+    terminator Jmp(b3)
+  block 666  start_pc=0
+    terminator Jmp(b3)
+  block 667  start_pc=0
+    terminator Jmp(b3)
+  block 668  start_pc=0
+    terminator Jmp(b3)
+  block 669  start_pc=0
+    terminator Jmp(b3)
+  block 670  start_pc=0
+    terminator Jmp(b3)
+  block 671  start_pc=0
+    terminator Jmp(b3)
+  block 672  start_pc=0
+    terminator Jmp(b3)
+  block 673  start_pc=0
+    terminator Jmp(b3)
+  block 674  start_pc=0
+    terminator Jmp(b3)
+  block 675  start_pc=0
+    terminator Jmp(b3)
+  block 676  start_pc=0
+    terminator Jmp(b3)
+  block 677  start_pc=0
+    terminator Jmp(b3)
+  block 678  start_pc=0
+    terminator Jmp(b3)
+  block 679  start_pc=0
+    terminator Jmp(b3)
+  block 680  start_pc=0
+    terminator Jmp(b3)
+  block 681  start_pc=0
+    terminator Jmp(b3)
+  block 682  start_pc=0
+    terminator Jmp(b3)
+  block 683  start_pc=0
+    terminator Jmp(b3)
+  block 684  start_pc=0
+    terminator Jmp(b3)
+  block 685  start_pc=0
+    terminator Jmp(b3)
+  block 686  start_pc=0
+    terminator Jmp(b3)
+  block 687  start_pc=0
+    terminator Jmp(b3)
+  block 688  start_pc=0
+    terminator Jmp(b3)
+  block 689  start_pc=0
+    terminator Jmp(b3)
+  block 690  start_pc=0
+    terminator Jmp(b3)
+  block 691  start_pc=0
+    terminator Jmp(b3)
+  block 692  start_pc=0
+    terminator Jmp(b3)
+  block 693  start_pc=0
+    terminator Jmp(b3)
+  block 694  start_pc=0
+    terminator Jmp(b3)
+  block 695  start_pc=0
+    terminator Jmp(b3)
+  block 696  start_pc=0
+    terminator Jmp(b3)
+  block 697  start_pc=0
+    terminator Jmp(b3)
+  block 698  start_pc=0
+    terminator Jmp(b3)
+  block 699  start_pc=0
+    terminator Jmp(b3)
+  block 700  start_pc=0
+    terminator Jmp(b3)
+  block 701  start_pc=0
+    terminator Jmp(b3)
+  block 702  start_pc=0
+    terminator Jmp(b3)
+  block 703  start_pc=0
+    terminator Jmp(b3)
+  block 704  start_pc=0
+    terminator Jmp(b3)
+  block 705  start_pc=0
+    terminator Jmp(b3)
+  block 706  start_pc=0
+    terminator Jmp(b3)
+  block 707  start_pc=0
+    terminator Jmp(b3)
+  block 708  start_pc=0
+    terminator Jmp(b3)
+  block 709  start_pc=0
+    terminator Jmp(b3)
+  block 710  start_pc=0
+    terminator Jmp(b3)
+  block 711  start_pc=0
+    terminator Jmp(b3)
+  block 712  start_pc=0
+    terminator Jmp(b3)
+  block 713  start_pc=0
+    terminator Jmp(b3)
+  block 714  start_pc=0
+    terminator Jmp(b3)
+  block 715  start_pc=0
+    terminator Jmp(b3)
+  block 716  start_pc=0
+    terminator Jmp(b3)
+  block 717  start_pc=0
+    terminator Jmp(b3)
+  block 718  start_pc=0
+    terminator Jmp(b3)
+  block 719  start_pc=0
+    terminator Jmp(b3)
+  block 720  start_pc=0
+    terminator Jmp(b3)
+  block 721  start_pc=0
+    terminator Jmp(b3)
+  block 722  start_pc=0
+    terminator Jmp(b3)
+  block 723  start_pc=0
+    terminator Jmp(b3)
+  block 724  start_pc=0
+    terminator Jmp(b3)
+  block 725  start_pc=0
+    terminator Jmp(b3)
+  block 726  start_pc=0
+    terminator Jmp(b3)
+  block 727  start_pc=0
+    terminator Jmp(b3)
+  block 728  start_pc=0
+    terminator Jmp(b3)
+  block 729  start_pc=0
+    terminator Jmp(b3)
+  block 730  start_pc=0
+    terminator Jmp(b3)
+  block 731  start_pc=0
+    terminator Jmp(b3)
+  block 732  start_pc=0
+    terminator Jmp(b3)
+  block 733  start_pc=0
+    terminator Jmp(b3)
+  block 734  start_pc=0
+    terminator Jmp(b3)
+  block 735  start_pc=0
+    terminator Jmp(b3)
+  block 736  start_pc=0
+    terminator Jmp(b3)
+  block 737  start_pc=0
+    terminator Jmp(b3)
+  block 738  start_pc=0
+    terminator Jmp(b3)
+  block 739  start_pc=0
+    terminator Jmp(b3)
+  block 740  start_pc=0
+    terminator Jmp(b3)
+  block 741  start_pc=0
+    terminator Jmp(b3)
+  block 742  start_pc=0
+    terminator Jmp(b3)
+  block 743  start_pc=0
+    terminator Jmp(b3)
+  block 744  start_pc=0
+    terminator Jmp(b3)
+  block 745  start_pc=0
+    terminator Jmp(b3)
+  block 746  start_pc=0
+    terminator Jmp(b3)
+  block 747  start_pc=0
+    terminator Jmp(b3)
+  block 748  start_pc=0
+    terminator Jmp(b3)
+  block 749  start_pc=0
+    terminator Jmp(b3)
+  block 750  start_pc=0
+    terminator Jmp(b3)
+  block 751  start_pc=0
+    terminator Jmp(b3)
+  block 752  start_pc=0
+    terminator Jmp(b3)
+  block 753  start_pc=0
+    terminator Jmp(b3)
+  block 754  start_pc=0
+    terminator Jmp(b3)
+  block 755  start_pc=0
+    terminator Jmp(b3)
+  block 756  start_pc=0
+    terminator Jmp(b3)
+  block 757  start_pc=0
+    terminator Jmp(b3)
+  block 758  start_pc=0
+    terminator Jmp(b3)
+  block 759  start_pc=0
+    terminator Jmp(b3)
+  block 760  start_pc=0
+    terminator Jmp(b3)
+  block 761  start_pc=0
+    terminator Jmp(b3)
+  block 762  start_pc=0
+    terminator Jmp(b3)
+  block 763  start_pc=0
+    terminator Jmp(b3)
+  block 764  start_pc=0
+    terminator Jmp(b3)
+  block 765  start_pc=0
+    terminator Jmp(b3)
+  block 766  start_pc=0
+    terminator Jmp(b3)
+  block 767  start_pc=0
+    terminator Jmp(b3)
+  block 768  start_pc=0
+    terminator Jmp(b3)
+  block 769  start_pc=0
+    terminator Jmp(b3)
+  block 770  start_pc=0
+    terminator Jmp(b3)
+  block 771  start_pc=0
+    terminator Jmp(b3)
+  block 772  start_pc=0
+    terminator Jmp(b3)
+  block 773  start_pc=0
+    terminator Jmp(b3)
+  block 774  start_pc=0
+    terminator Jmp(b3)
+  block 775  start_pc=0
+    terminator Jmp(b3)
+  block 776  start_pc=0
+    terminator Jmp(b3)
+  block 777  start_pc=0
+    terminator Jmp(b3)
+  block 778  start_pc=0
+    terminator Jmp(b3)
+  block 779  start_pc=0
+    terminator Jmp(b3)
+  block 780  start_pc=0
+    terminator Jmp(b3)
+  block 781  start_pc=0
+    terminator Jmp(b3)
+  block 782  start_pc=0
+    terminator Jmp(b3)
+  block 783  start_pc=0
+    terminator Jmp(b3)
+  block 784  start_pc=0
+    terminator Jmp(b3)
+  block 785  start_pc=0
+    terminator Jmp(b3)
+  block 786  start_pc=0
+    terminator Jmp(b3)
+  block 787  start_pc=0
+    terminator Jmp(b3)
+  block 788  start_pc=0
+    terminator Jmp(b3)
+  block 789  start_pc=0
+    terminator Jmp(b3)
+  block 790  start_pc=0
+    terminator Jmp(b3)
+  block 791  start_pc=0
+    terminator Jmp(b3)
+  block 792  start_pc=0
+    terminator Jmp(b3)
+  block 793  start_pc=0
+    terminator Jmp(b3)
+  block 794  start_pc=0
+    terminator Jmp(b3)
+  block 795  start_pc=0
+    terminator Jmp(b3)
+  block 796  start_pc=0
+    terminator Jmp(b3)
+  block 797  start_pc=0
+    terminator Jmp(b3)
+  block 798  start_pc=0
+    terminator Jmp(b3)
+  block 799  start_pc=0
+    terminator Jmp(b3)
+  block 800  start_pc=0
+    terminator Jmp(b3)
+  block 801  start_pc=0
+    terminator Jmp(b3)
+  block 802  start_pc=0
+    terminator Jmp(b3)
+  block 803  start_pc=0
+    terminator Jmp(b3)
+  block 804  start_pc=0
+    terminator Jmp(b3)
+  block 805  start_pc=0
+    terminator Jmp(b3)
+  block 806  start_pc=0
+    terminator Jmp(b3)
+  block 807  start_pc=0
+    terminator Jmp(b3)
+  block 808  start_pc=0
+    terminator Jmp(b3)
+  block 809  start_pc=0
+    terminator Jmp(b3)
+  block 810  start_pc=0
+    terminator Jmp(b3)
+  block 811  start_pc=0
+    terminator Jmp(b3)
+  block 812  start_pc=0
+    terminator Jmp(b3)
+  block 813  start_pc=0
+    terminator Jmp(b3)
+  block 814  start_pc=0
+    terminator Jmp(b3)
+  block 815  start_pc=0
+    terminator Jmp(b3)
+  block 816  start_pc=0
+    terminator Jmp(b3)
+  block 817  start_pc=0
+    terminator Jmp(b3)
+  block 818  start_pc=0
+    terminator Jmp(b3)
+  block 819  start_pc=0
+    terminator Jmp(b3)
+  block 820  start_pc=0
+    terminator Jmp(b3)
+  block 821  start_pc=0
+    terminator Jmp(b3)
+  block 822  start_pc=0
+    terminator Jmp(b3)
+  block 823  start_pc=0
+    terminator Jmp(b3)
+  block 824  start_pc=0
+    terminator Jmp(b3)
+  block 825  start_pc=0
+    terminator Jmp(b3)
+  block 826  start_pc=0
+    terminator Jmp(b3)
+  block 827  start_pc=0
+    terminator Jmp(b3)
+  block 828  start_pc=0
+    terminator Jmp(b3)
+  block 829  start_pc=0
+    terminator Jmp(b3)
+  block 830  start_pc=0
+    terminator Jmp(b3)
+  block 831  start_pc=0
+    terminator Jmp(b3)
+  block 832  start_pc=0
+    terminator Jmp(b3)
+  block 833  start_pc=0
+    terminator Jmp(b3)
+  block 834  start_pc=0
+    terminator Jmp(b3)
+  block 835  start_pc=0
+    terminator Jmp(b3)
+  block 836  start_pc=0
+    terminator Jmp(b3)
+  block 837  start_pc=0
+    terminator Jmp(b3)
+  block 838  start_pc=0
+    terminator Jmp(b3)
+  block 839  start_pc=0
+    terminator Jmp(b3)
+  block 840  start_pc=0
+    terminator Jmp(b3)
+  block 841  start_pc=0
+    terminator Jmp(b3)
+  block 842  start_pc=0
+    terminator Jmp(b3)
+  block 843  start_pc=0
+    terminator Jmp(b3)
+  block 844  start_pc=0
+    terminator Jmp(b3)
+  block 845  start_pc=0
+    terminator Jmp(b3)
+  block 846  start_pc=0
+    terminator Jmp(b3)
+  block 847  start_pc=0
+    terminator Jmp(b3)
+  block 848  start_pc=0
+    terminator Jmp(b3)
+  block 849  start_pc=0
+    terminator Jmp(b3)
+  block 850  start_pc=0
+    terminator Jmp(b3)
+  block 851  start_pc=0
+    terminator Jmp(b3)
+  block 852  start_pc=0
+    terminator Jmp(b3)
+  block 853  start_pc=0
+    terminator Jmp(b3)
+  block 854  start_pc=0
+    terminator Jmp(b3)
+  block 855  start_pc=0
+    terminator Jmp(b3)
+  block 856  start_pc=0
+    terminator Jmp(b3)
+  block 857  start_pc=0
+    terminator Jmp(b3)
+  block 858  start_pc=0
+    terminator Jmp(b3)
+  block 859  start_pc=0
+    terminator Jmp(b3)
+  block 860  start_pc=0
+    terminator Jmp(b3)
+  block 861  start_pc=0
+    terminator Jmp(b3)
+  block 862  start_pc=0
+    terminator Jmp(b3)
+  block 863  start_pc=0
+    terminator Jmp(b3)
+  block 864  start_pc=0
+    terminator Jmp(b3)
+  block 865  start_pc=0
+    terminator Jmp(b3)
+  block 866  start_pc=0
+    terminator Jmp(b3)
+  block 867  start_pc=0
+    terminator Jmp(b3)
+  block 868  start_pc=0
+    terminator Jmp(b3)
+  block 869  start_pc=0
+    terminator Jmp(b3)
+  block 870  start_pc=0
+    terminator Jmp(b3)
+  block 871  start_pc=0
+    terminator Jmp(b3)
+  block 872  start_pc=0
+    terminator Jmp(b3)
+  block 873  start_pc=0
+    terminator Jmp(b3)
+  block 874  start_pc=0
+    terminator Jmp(b3)
+  block 875  start_pc=0
+    terminator Jmp(b3)
+  block 876  start_pc=0
+    terminator Jmp(b3)
+  block 877  start_pc=0
+    terminator Jmp(b3)
+  block 878  start_pc=0
+    terminator Jmp(b3)
+  block 879  start_pc=0
+    terminator Jmp(b3)
+  block 880  start_pc=0
+    terminator Jmp(b3)
+  block 881  start_pc=0
+    terminator Jmp(b3)
+  block 882  start_pc=0
+    terminator Jmp(b3)
+  block 883  start_pc=0
+    terminator Jmp(b3)
+  block 884  start_pc=0
+    terminator Jmp(b3)
+  block 885  start_pc=0
+    terminator Jmp(b3)
+  block 886  start_pc=0
+    terminator Jmp(b3)
+  block 887  start_pc=0
+    terminator Jmp(b3)
+  block 888  start_pc=0
+    terminator Jmp(b3)
+  block 889  start_pc=0
+    terminator Jmp(b3)
+  block 890  start_pc=0
+    terminator Jmp(b3)
+  block 891  start_pc=0
+    terminator Jmp(b3)
+  block 892  start_pc=0
+    terminator Jmp(b3)
+  block 893  start_pc=0
+    terminator Jmp(b3)
+  block 894  start_pc=0
+    terminator Jmp(b3)
+  block 895  start_pc=0
+    terminator Jmp(b3)
+  block 896  start_pc=0
+    terminator Jmp(b3)
+  block 897  start_pc=0
+    terminator Jmp(b3)
+  block 898  start_pc=0
+    terminator Jmp(b3)
+  block 899  start_pc=0
+    terminator Jmp(b3)
+  block 900  start_pc=0
+    terminator Jmp(b3)
+  block 901  start_pc=0
+    terminator Jmp(b3)
+  block 902  start_pc=0
+    terminator Jmp(b3)
+  block 903  start_pc=0
+    terminator Jmp(b3)
+  block 904  start_pc=0
+    terminator Jmp(b3)
+  block 905  start_pc=0
+    terminator Jmp(b3)
+  block 906  start_pc=0
+    terminator Jmp(b3)
+  block 907  start_pc=0
+    terminator Jmp(b3)
+  block 908  start_pc=0
+    terminator Jmp(b3)
+  block 909  start_pc=0
+    terminator Jmp(b3)
+  block 910  start_pc=0
+    terminator Jmp(b3)
+  block 911  start_pc=0
+    terminator Jmp(b3)
+  block 912  start_pc=0
+    terminator Jmp(b3)
+  block 913  start_pc=0
+    terminator Jmp(b3)
+  block 914  start_pc=0
+    terminator Jmp(b3)
+  block 915  start_pc=0
+    terminator Jmp(b3)
+  block 916  start_pc=0
+    terminator Jmp(b3)
+  block 917  start_pc=0
+    terminator Jmp(b3)
+  block 918  start_pc=0
+    terminator Jmp(b3)
+  block 919  start_pc=0
+    terminator Jmp(b3)
+  block 920  start_pc=0
+    terminator Jmp(b3)
+  block 921  start_pc=0
+    terminator Jmp(b3)
+  block 922  start_pc=0
+    terminator Jmp(b3)
+  block 923  start_pc=0
+    terminator Jmp(b3)
+  block 924  start_pc=0
+    terminator Jmp(b3)
+  block 925  start_pc=0
+    terminator Jmp(b3)
+  block 926  start_pc=0
+    terminator Jmp(b3)
+  block 927  start_pc=0
+    terminator Jmp(b3)
+  block 928  start_pc=0
+    terminator Jmp(b3)
+  block 929  start_pc=0
+    terminator Jmp(b3)
+  block 930  start_pc=0
+    terminator Jmp(b3)
+  block 931  start_pc=0
+    terminator Jmp(b3)
+  block 932  start_pc=0
+    terminator Jmp(b3)
+  block 933  start_pc=0
+    terminator Jmp(b3)
+  block 934  start_pc=0
+    terminator Jmp(b3)
+  block 935  start_pc=0
+    terminator Jmp(b3)
+  block 936  start_pc=0
+    terminator Jmp(b3)
+  block 937  start_pc=0
+    terminator Jmp(b3)
+  block 938  start_pc=0
+    terminator Jmp(b3)
+  block 939  start_pc=0
+    terminator Jmp(b3)
+  block 940  start_pc=0
+    terminator Jmp(b3)
+  block 941  start_pc=0
+    terminator Jmp(b3)
+  block 942  start_pc=0
+    terminator Jmp(b3)
+  block 943  start_pc=0
+    terminator Jmp(b3)
+  block 944  start_pc=0
+    terminator Jmp(b3)
+  block 945  start_pc=0
+    terminator Jmp(b3)
+  block 946  start_pc=0
+    terminator Jmp(b3)
+  block 947  start_pc=0
+    terminator Jmp(b3)
+  block 948  start_pc=0
+    terminator Jmp(b3)
+  block 949  start_pc=0
+    terminator Jmp(b3)
+  block 950  start_pc=0
+    terminator Jmp(b3)
+  block 951  start_pc=0
+    terminator Jmp(b3)
+  block 952  start_pc=0
+    terminator Jmp(b3)
+  block 953  start_pc=0
+    terminator Jmp(b3)
+  block 954  start_pc=0
+    terminator Jmp(b3)
+  block 955  start_pc=0
+    terminator Jmp(b3)
+  block 956  start_pc=0
+    terminator Jmp(b3)
+  block 957  start_pc=0
+    terminator Jmp(b3)
+  block 958  start_pc=0
+    terminator Jmp(b3)
+  block 959  start_pc=0
+    terminator Jmp(b3)
+  block 960  start_pc=0
+    terminator Jmp(b3)
+  block 961  start_pc=0
+    terminator Jmp(b3)
+  block 962  start_pc=0
+    terminator Jmp(b3)
+  block 963  start_pc=0
+    terminator Jmp(b3)
+  block 964  start_pc=0
+    terminator Jmp(b3)
+  block 965  start_pc=0
+    terminator Jmp(b3)
+  block 966  start_pc=0
+    terminator Jmp(b3)
+  block 967  start_pc=0
+    terminator Jmp(b3)
+  block 968  start_pc=0
+    terminator Jmp(b3)
+  block 969  start_pc=0
+    terminator Jmp(b3)
+  block 970  start_pc=0
+    terminator Jmp(b3)
+  block 971  start_pc=0
+    terminator Jmp(b3)
+  block 972  start_pc=0
+    terminator Jmp(b3)
+  block 973  start_pc=0
+    terminator Jmp(b3)
+  block 974  start_pc=0
+    terminator Jmp(b3)
+  block 975  start_pc=0
+    terminator Jmp(b3)
+  block 976  start_pc=0
+    terminator Jmp(b3)
+  block 977  start_pc=0
+    terminator Jmp(b3)
+  block 978  start_pc=0
+    terminator Jmp(b3)
+  block 979  start_pc=0
+    terminator Jmp(b3)
+  block 980  start_pc=0
+    terminator Jmp(b3)
+  block 981  start_pc=0
+    terminator Jmp(b3)
+  block 982  start_pc=0
+    terminator Jmp(b3)
+  block 983  start_pc=0
+    terminator Jmp(b3)
+  block 984  start_pc=0
+    terminator Jmp(b3)
+  block 985  start_pc=0
+    terminator Jmp(b3)
+  block 986  start_pc=0
+    terminator Jmp(b3)
+  block 987  start_pc=0
+    terminator Jmp(b3)
+  block 988  start_pc=0
+    terminator Jmp(b3)
+  block 989  start_pc=0
+    terminator Jmp(b3)
+  block 990  start_pc=0
+    terminator Jmp(b3)
+  block 991  start_pc=0
+    terminator Jmp(b3)
+  block 992  start_pc=0
+    terminator Jmp(b3)
+  block 993  start_pc=0
+    terminator Jmp(b3)
+  block 994  start_pc=0
+    terminator Jmp(b3)
+  block 995  start_pc=0
+    terminator Jmp(b3)
+  block 996  start_pc=0
+    terminator Jmp(b3)
+  block 997  start_pc=0
+    terminator Jmp(b3)
+  block 998  start_pc=0
+    terminator Jmp(b3)
+  block 999  start_pc=0
+    terminator Jmp(b3)
+  block 1000  start_pc=0
+    terminator Jmp(b3)
+  block 1001  start_pc=0
+    terminator Jmp(b3)
+  block 1002  start_pc=0
+    terminator Jmp(b3)
+  block 1003  start_pc=0
+    terminator Jmp(b3)
+  block 1004  start_pc=0
+    terminator Jmp(b3)
+  block 1005  start_pc=0
+    terminator Jmp(b3)
+  block 1006  start_pc=0
+    terminator Jmp(b3)
+  block 1007  start_pc=0
+    terminator Jmp(b3)
+  block 1008  start_pc=0
+    terminator Jmp(b3)
+  block 1009  start_pc=0
+    terminator Jmp(b3)
+  block 1010  start_pc=0
+    terminator Jmp(b3)
+  block 1011  start_pc=0
+    terminator Jmp(b3)
+  block 1012  start_pc=0
+    terminator Jmp(b3)
+  block 1013  start_pc=0
+    terminator Jmp(b3)
+  block 1014  start_pc=0
+    terminator Jmp(b3)
+  block 1015  start_pc=0
+    terminator Jmp(b3)
+  block 1016  start_pc=0
+    terminator Jmp(b3)
+  block 1017  start_pc=0
+    terminator Jmp(b3)
+  block 1018  start_pc=0
+    terminator Jmp(b3)
+  block 1019  start_pc=0
+    terminator Jmp(b3)
+  block 1020  start_pc=0
+    terminator Jmp(b3)
+  block 1021  start_pc=0
+    terminator Jmp(b3)
+  block 1022  start_pc=0
+    terminator Jmp(b3)
+  block 1023  start_pc=0
+    terminator Jmp(b3)
+  block 1024  start_pc=0
+    terminator Jmp(b3)
+  block 1025  start_pc=0
+    terminator Jmp(b3)
+  block 1026  start_pc=0
+    v6   Imm(2)                                           -> x0
+    terminator Return(v6)   (exit_acc=v6)
+  block 1027  start_pc=0
+    terminator Jmp(b1026)
+; --- SSA dump (ok=true) ent_pc=1 ---
+; name=main
+fn ent_pc=1 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(0)                                           -> x7
+    v2   Call { target_pc=0, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v3   BinopI { op=ne, lhs=v2, rhs_imm=1 }              -> x0
+    terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
+  block 1  start_pc=0
+    v4   Imm(1)                                           -> x0
+    terminator Return(v4)   (exit_acc=v4)
+  block 2  start_pc=0
+    v5   Imm(511)                                         -> x7
+    v6   Call { target_pc=0, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v7   BinopI { op=ne, lhs=v6, rhs_imm=1 }              -> x0
+    terminator Bz { cond=v7, target=b4, fall=b3 }   (exit_acc=v7)
+  block 3  start_pc=0
+    v8   Imm(2)                                           -> x0
+    terminator Return(v8)   (exit_acc=v8)
+  block 4  start_pc=0
+    v9   Imm(1023)                                        -> x7
+    v10  Call { target_pc=0, args=[v9], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v11  BinopI { op=ne, lhs=v10, rhs_imm=1 }             -> x0
+    terminator Bz { cond=v11, target=b6, fall=b5 }   (exit_acc=v11)
+  block 5  start_pc=0
+    v12  Imm(3)                                           -> x0
+    terminator Return(v12)   (exit_acc=v12)
+  block 6  start_pc=0
+    v13  Imm(1024)                                        -> x7
+    v14  Call { target_pc=0, args=[v13], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v15  BinopI { op=ne, lhs=v14, rhs_imm=2 }             -> x0
+    terminator Bz { cond=v15, target=b8, fall=b7 }   (exit_acc=v15)
+  block 7  start_pc=0
+    v16  Imm(4)                                           -> x0
+    terminator Return(v16)   (exit_acc=v16)
+  block 8  start_pc=0
+    v17  Imm(2000)                                        -> x7
+    v18  Call { target_pc=0, args=[v17], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  BinopI { op=ne, lhs=v18, rhs_imm=2 }             -> x0
+    terminator Bz { cond=v19, target=b10, fall=b9 }   (exit_acc=v19)
+  block 9  start_pc=0
+    v20  Imm(5)                                           -> x0
+    terminator Return(v20)   (exit_acc=v20)
+  block 10  start_pc=0
+    v21  Imm(0)                                           -> x0
+    terminator Return(v21)   (exit_acc=v21)
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=__c5_exit
+fn ent_pc=0 n_params=1 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I32 }                    -> x0
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
+    v5   Imm(0)                                           -> x0
+    terminator Return(v5)   (exit_acc=v5)
+; --- SSA dump (ok=true) ent_pc=2 ---
+; name=__c5_fini_trampoline
+fn ent_pc=2 n_params=1 variadic=false locals=2
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I64 }                    -> x0
+    v4   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x0
+    terminator Jmp(b1)
+  block 1  start_pc=0
+    v6   ImmData(0)                                       -> x3
+    v7   Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v6)
+  block 2  start_pc=0
+    v12  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v13  BinopI { op=add, lhs=v8, rhs_imm=-8 }            -> x3
+    v14  Imm(0)                                           -> x0
+    v15  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v16  Load { addr=v13, disp=0, kind=I64 }              -> x0
+    v17  CallIndirect { target=v16, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v18  BinopI { op=and, lhs=v17, rhs_imm=255 }          -> x0
+    terminator Jmp(b3)   (exit_acc=v18)
+  block 3  start_pc=0
+    v8   Phi { incoming=[b1:v6, b2:v13], kind=I64 }       -> x3
+    v9   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v10  ImmData(0)                                       -> x0
+    v11  Binop { op=ne, lhs=v8, rhs=v10 }                 -> x0
+    terminator Bnz { cond=v11, target=b2, fall=b4 }   (exit_acc=v11)
+  block 4  start_pc=0
+    v19  Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v19)
+  block 5  start_pc=0
+    v5   Imm(0)                                           -> x0
+    terminator Return(v5)   (exit_acc=v5)
+; --- SSA dump (ok=true) ent_pc=3 ---
+; name=__c5_register_fini
+fn ent_pc=3 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmCode(ent_pc=2)                                -> x7
+    v2   Imm(0)                                           -> x3
+    v3   CallExt { binding_idx=1, args=[v1, v2, v2], fp_arg_mask=0x0 } -> x0
+    terminator Return(v2)   (exit_acc=v2)
+; --- SSA dump (ok=true) ent_pc=4 ---
+; name=__c5_run_init_array
+fn ent_pc=4 n_params=0 variadic=false locals=1
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmData(0)                                       -> x0
+    v2   ImmData(0)                                       -> x1
+    v3   Binop { op=ne, lhs=v1, rhs=v2 }                  -> x0
+    terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
+  block 1  start_pc=0
+    v4   Call { target_pc=3, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    terminator Jmp(b2)   (exit_acc=v4)
+  block 2  start_pc=0
+    v5   ImmData(0)                                       -> x3
+    v6   Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v5)
+  block 3  start_pc=0
+    v14  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v15  Load { addr=v7, disp=0, kind=I64 }               -> x0
+    v16  CallIndirect { target=v15, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v17  BinopI { op=and, lhs=v16, rhs_imm=255 }          -> x0
+    terminator Jmp(b4)   (exit_acc=v17)
+  block 4  start_pc=0
+    v11  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v12  BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x3
+    v13  Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v12)
+  block 5  start_pc=0
+    v7   Phi { incoming=[b2:v5, b4:v12], kind=I64 }       -> x3
+    v8   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v9   ImmData(0)                                       -> x0
+    v10  Binop { op=ne, lhs=v7, rhs=v9 }                  -> x0
+    terminator Bnz { cond=v10, target=b3, fall=b6 }   (exit_acc=v10)
+  block 6  start_pc=0
+    v18  Imm(0)                                           -> x0
+    terminator Return(v18)   (exit_acc=v18)
+; --- SSA dump (ok=true) ent_pc=5 ---
+; name=__c5_entry
+fn ent_pc=5 n_params=2 variadic=false locals=1
+  spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ParamRef(1, kind=I64)                            -> x6
+    v4   Imm(0)                                           -> x0
+    v5   LoadLocal { off=3, kind=I64 }                    -> x0
+    v6   BinopI { op=and, lhs=v3, rhs_imm=255 }           -> x0
+    v7   LoadLocal { off=2, kind=I64 }                    -> x0
+    v8   Imm(0)                                           -> x0
+    v9   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v10  Imm(0)                                           -> x14
+    v11  Load { addr=v1, disp=0, kind=I64 }               -> x0
+    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
+    v13  Extend { value=v11, kind=I32 }                   -> x12
+    v14  Imm(0)                                           -> x0
+    v15  Imm(8)                                           -> x0
+    v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
+    v17  Imm(0)                                           -> x0
+    v18  ImmData(24)                                      -> x0
+    v19  LoadLocal { off=-1, kind=I64 }                   -> x1
+    v20  LoadLocal { off=-1, kind=I32 }                   -> x1
+    v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x1
+    v22  Binop { op=add, lhs=v16, rhs=v21 }               -> x1
+    v23  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x1
+    v24  Store { addr=v18, disp=0, value=v23, kind=I64 }  -> -
+    terminator Jmp(b1)
+  block 1  start_pc=0
+    v31  ImmData(0)                                       -> x0
+    v32  ImmData(0)                                       -> x1
+    v33  Binop { op=ne, lhs=v31, rhs=v32 }                -> x0
+    terminator Bz { cond=v33, target=b3, fall=b2 }   (exit_acc=v33)
+  block 2  start_pc=0
+    v34  Call { target_pc=3, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    terminator Jmp(b3)   (exit_acc=v34)
+  block 3  start_pc=0
+    v35  ImmData(0)                                       -> x3
+    v36  Imm(0)                                           -> x0
+    terminator Jmp(b6)   (exit_acc=v35)
+  block 4  start_pc=0
+    v44  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v45  Load { addr=v37, disp=0, kind=I64 }              -> x0
+    v46  CallIndirect { target=v45, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v47  BinopI { op=and, lhs=v46, rhs_imm=255 }          -> x0
+    terminator Jmp(b5)   (exit_acc=v47)
+  block 5  start_pc=0
+    v41  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v42  BinopI { op=add, lhs=v37, rhs_imm=8 }            -> x3
+    v43  Imm(0)                                           -> x0
+    terminator Jmp(b6)   (exit_acc=v42)
+  block 6  start_pc=0
+    v37  Phi { incoming=[b3:v35, b5:v42], kind=I64 }      -> x3
+    v38  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v39  ImmData(0)                                       -> x0
+    v40  Binop { op=ne, lhs=v37, rhs=v39 }                -> x0
+    terminator Bnz { cond=v40, target=b4, fall=b7 }   (exit_acc=v40)
+  block 7  start_pc=0
+    v48  Imm(0)                                           -> x0
+    terminator Jmp(b8)   (exit_acc=v48)
+  block 8  start_pc=0
+    v25  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v26  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v27  Call { target_pc=7, args=[v13, v16], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
+    v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x0
+    v29  Extend { value=v27, kind=I32 }                   -> x0
+    v30  Call { target_pc=0, args=[v27], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    terminator Return(v10)   (exit_acc=v10)
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=atexit
+fn ent_pc=0 n_params=1 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I64 }                    -> x0
+    v4   Imm(0)                                           -> x6
+    v5   CallExt { binding_idx=0, args=[v1, v4, v4], fp_arg_mask=0x0 } -> x0
+    v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x1
+    v7   Extend { value=v5, kind=I32 }                    -> x0
+    terminator Return(v7)   (exit_acc=v7)
+; --- SSA dump (ok=true) ent_pc=1 ---
+; name=at_quick_exit
+fn ent_pc=1 n_params=1 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I64 }                    -> x0
+    v4   Imm(0)                                           -> x6
+    v5   CallExt { binding_idx=1, args=[v1, v4], fp_arg_mask=0x0 } -> x0
+    v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x1
+    v7   Extend { value=v5, kind=I32 }                    -> x0
+    terminator Return(v7)   (exit_acc=v7)
+; --- SSA dump (ok=true) ent_pc=2 ---
+; name=pthread_atfork
+fn ent_pc=2 n_params=3 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ParamRef(1, kind=I64)                            -> x6
+    v4   Imm(0)                                           -> x0
+    v5   ParamRef(2, kind=I64)                            -> x2
+    v6   Imm(0)                                           -> x0
+    v7   LoadLocal { off=2, kind=I64 }                    -> x0
+    v8   LoadLocal { off=3, kind=I64 }                    -> x0
+    v9   LoadLocal { off=4, kind=I64 }                    -> x0
+    v10  Imm(0)                                           -> x1
+    v11  CallExt { binding_idx=2, args=[v1, v3, v5, v10], fp_arg_mask=0x0 } -> x0
+    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
+    v13  Extend { value=v11, kind=I32 }                   -> x0
+    terminator Return(v13)   (exit_acc=v13)
+; --- SSA dump (ok=true) ent_pc=3 ---
+; name=__stack_chk_fail_local
+fn ent_pc=3 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   CallExt { binding_idx=3, args=[], fp_arg_mask=0x0 } -> x0
+    v2   Imm(0)                                           -> x0
+    terminator Return(v2)   (exit_acc=v2)

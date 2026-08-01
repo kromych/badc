@@ -2444,9 +2444,15 @@ impl Compiler {
                             // compound literal naming its own type (C99
                             // 6.5.2.5): `static T g = (T){ ... };`. Drop the
                             // redundant `(T)` so the brace dispatch below sees
-                            // `{ ... }`. A scalar `(int){5}` falls through to
-                            // parse_global_initializer's single-value path.
-                            self.skip_opt_compound_literal_cast()?;
+                            // `{ ... }`. Only for an aggregate object: the
+                            // cast is not redundant when the object is a
+                            // scalar, where `T *p = (T[]){ ... }` decays to
+                            // the address of an anonymous array and
+                            // `int x = (int){ v }` converts a value. Both are
+                            // the constant evaluator's, which needs the type.
+                            if array_size > 0 || self.is_traversable_aggregate_ty(ty) {
+                                self.skip_opt_compound_literal_cast()?;
+                            }
                             if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
                                 if thread_local {
                                     return Err(self.compile_err(

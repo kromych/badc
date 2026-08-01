@@ -117,10 +117,10 @@ Disassembly of section .text:
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x2                // =2
-               	sub	x1, x29, #0x10
-               	sub	x2, x29, #0x8
-               	ldr	x1, [x1]
-               	ldr	x2, [x2]
+               	mov	x1, #0x3                // =3
+               	movk	x1, #0x4, lsl #32
+               	mov	x2, #0x5                // =5
+               	movk	x2, #0x6, lsl #32
                	bl	<addr>
                	sxtw	x0, w0
                	add	sp, sp, #0x10

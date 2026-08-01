@@ -16,18 +16,18 @@ fn ent_pc=0 n_params=4 variadic=false locals=2
     v10  ImmData(24)                                      -> x1
     v11  Mcpy { dst=v9, src=v10, size=8, align=8 }        -> x0
     v12  LoadLocal { off=2, kind=I32 }                    -> x0
-    v13  LocalAddr(-1)                                    -> x0
-    v14  BinopI { op=and, lhs=v1, rhs_imm=15 }            -> x1
-    v15  Load { addr=v13, disp=0, kind=U32 }              -> x2
-    v16  BinopI { op=and, lhs=v15, rhs_imm=-16 }          -> x2
-    v17  Binop { op=or, lhs=v16, rhs=v14 }                -> x1
+    v13  LocalAddr(-1)                                    -> x1
+    v14  BinopI { op=and, lhs=v1, rhs_imm=15 }            -> x0
+    v15  Imm(0)                                           -> x2
+    v16  Imm(0)                                           -> x2
+    v17  BinopI { op=or, lhs=v14, rhs_imm=0 }             -> x0
     v18  Store { addr=v13, disp=0, value=v17, kind=I32 }  -> -
-    v19  LoadLocal { off=3, kind=I32 }                    -> x0
-    v20  LocalAddr(-1)                                    -> x2
-    v21  BinopI { op=and, lhs=v3, rhs_imm=15 }            -> x0
-    v22  BinopI { op=and, lhs=v17, rhs_imm=4294967295 }   -> x1
-    v23  BinopI { op=and, lhs=v22, rhs_imm=-241 }         -> x1
-    v24  BinopI { op=shl, lhs=v21, rhs_imm=4 }            -> x0
+    v19  LoadLocal { off=3, kind=I32 }                    -> x1
+    v20  LocalAddr(-1)                                    -> x1
+    v21  BinopI { op=and, lhs=v3, rhs_imm=15 }            -> x2
+    v22  BinopI { op=and, lhs=v17, rhs_imm=4294967295 }   -> x0
+    v23  BinopI { op=and, lhs=v22, rhs_imm=-241 }         -> x0
+    v24  BinopI { op=shl, lhs=v21, rhs_imm=4 }            -> x2
     v25  Binop { op=or, lhs=v23, rhs=v24 }                -> x0
     v26  Store { addr=v20, disp=0, value=v25, kind=I32 }  -> -
     v27  LoadLocal { off=4, kind=I32 }                    -> x1

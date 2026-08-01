@@ -152,8 +152,10 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x2, %rax
+               	movl	(%rax), %eax
+               	xorq	$0x2, %rax
+               	movl	%eax, %eax
+               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

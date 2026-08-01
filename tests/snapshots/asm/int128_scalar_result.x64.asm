@@ -347,14 +347,11 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	cmpq	%r13, %r13
-               	setb	%al
-               	movzbq	%al, %rax
                	movq	%r13, %rcx
                	subq	%r13, %rcx
-               	movq	%rbx, %rdx
-               	subq	%rbx, %rdx
-               	subq	%rax, %rdx
+               	movq	%rbx, %rax
+               	subq	%rbx, %rax
+               	leaq	(%rax), %rdx
                	xorq	%rax, %rax
                	xorq	%rax, %rcx
                	xorq	%rdx, %rax

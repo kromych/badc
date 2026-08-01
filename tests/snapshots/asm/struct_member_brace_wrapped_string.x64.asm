@@ -191,13 +191,6 @@ Disassembly of section .text:
                	movb	%dl, 0x13(%rax)
                	popq	%rdx
                	leaq	-0x120(%rbp), %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x9, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	leaq	-0x120(%rbp), %rax
                	addq	$0x4, %rax
                	leaq	<rip>, %rcx
                	movsbq	(%rax), %rdx
@@ -233,4 +226,3 @@ Disassembly of section .text:
                	addq	$0x130, %rsp            # imm = 0x130
                	popq	%rbp
                	retq
-               	jmp	<addr>

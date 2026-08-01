@@ -21,10 +21,6 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	xorq	%rcx, %rcx
                	xorq	%rcx, %rcx
-               	cmpq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	retq
                	movslq	(%rax), %rax
                	leaq	<rip>, %rcx
                	movslq	(%rcx), %rcx

@@ -26,13 +26,7 @@ Disassembly of section .text:
                	movq	0x18(%rcx), %rdx
                	movq	%rdx, 0x18(%rax)
                	popq	%rdx
-               	leaq	-0x20(%rbp), %rax
-               	movslq	(%rax), %rax
-               	leaq	-0x20(%rbp), %rcx
-               	movslq	0x10(%rcx), %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movl	$0x2a, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq

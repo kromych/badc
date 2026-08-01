@@ -83,18 +83,18 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     v66  LocalAddr(-4)                                    -> x0
     v67  Imm(0)                                           -> x1
     v68  Imm(0)                                           -> x1
-    v69  BinopI { op=add, lhs=v66, rhs_imm=0 }            -> x0
-    v70  Imm(0)                                           -> x1
-    v71  Imm(0)                                           -> x1
-    v72  Imm(0)                                           -> x1
-    v73  Imm(1)                                           -> x1
-    v74  Imm(4294967296)                                  -> x1
-    v75  Imm(1)                                           -> x1
-    v76  Imm(0)                                           -> x1
-    v77  Imm(1)                                           -> x1
-    v78  Imm(0)                                           -> x1
-    v79  Load { addr=v69, disp=0, kind=I32 }              -> x1
-    v80  BinopI { op=add, lhs=v79, rhs_imm=1 }            -> x1
+    v69  BinopI { op=add, lhs=v66, rhs_imm=0 }            -> x1
+    v70  Imm(0)                                           -> x0
+    v71  Imm(0)                                           -> x0
+    v72  Imm(0)                                           -> x0
+    v73  Imm(1)                                           -> x0
+    v74  Imm(4294967296)                                  -> x0
+    v75  Imm(1)                                           -> x0
+    v76  Imm(0)                                           -> x0
+    v77  Imm(1)                                           -> x0
+    v78  Imm(0)                                           -> x0
+    v79  Imm(0)                                           -> x0
+    v80  Imm(1)                                           -> x0
     v81  Store { addr=v69, disp=0, value=v80, kind=I32 }  -> -
     v82  Extend { value=v80, kind=I32 }                   -> x0
     v83  Imm(0)                                           -> x0

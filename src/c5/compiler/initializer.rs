@@ -3750,8 +3750,12 @@ impl Compiler {
         }
         // The staged template is an anonymous data object (the Mcpy
         // source); record its boundary like a literal's so static DCE
-        // neither glues it to a neighbor nor drops part of it.
+        // neither glues it to a neighbor nor drops part of it, and its
+        // range so the const-data load fold may read its bytes (nothing
+        // names a template, so its image never changes).
         self.data_object_starts.push(src_data_addr as i64);
+        self.local_init_templates
+            .push((src_data_addr as i64, (src_data_addr + total_bytes) as i64));
         self.emit_lea(local_val);
         self.ast_psh();
         self.emit_data_imm(src_data_addr as i64);

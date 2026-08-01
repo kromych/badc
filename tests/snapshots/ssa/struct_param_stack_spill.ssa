@@ -35,18 +35,15 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     v29  Imm(21)                                          -> x1
     v30  Imm(28)                                          -> x1
     v31  Imm(36)                                          -> x1
-    v32  Load { addr=v12, disp=0, kind=I64 }              -> x1
-    v33  BinopI { op=mul, lhs=v32, rhs_imm=1000 }         -> x1
-    v34  BinopI { op=add, lhs=v33, rhs_imm=36 }           -> x1
-    v35  BinopI { op=add, lhs=v12, rhs_imm=8 }            -> x2
-    v36  Load { addr=v12, disp=8, kind=I64 }              -> x0
-    v37  Binop { op=add, lhs=v34, rhs=v36 }               -> x0
-    v38  BinopI { op=ne, lhs=v37, rhs_imm=3040 }          -> x0
-    terminator Bz { cond=v38, target=b2, fall=b1 }   (exit_acc=v38)
+    v32  Imm(3)                                           -> x1
+    v33  Imm(3000)                                        -> x1
+    v34  Imm(3036)                                        -> x1
+    v35  BinopI { op=add, lhs=v12, rhs_imm=8 }            -> x0
+    v36  Imm(4)                                           -> x0
+    v37  Imm(3040)                                        -> x0
+    v38  Imm(0)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v38)
   block 1  start_pc=0
-    v39  Imm(1)                                           -> x0
-    terminator Return(v39)   (exit_acc=v39)
-  block 2  start_pc=0
     v40  LocalAddr(-4)                                    -> x0
     v41  ImmData(24)                                      -> x1
     v42  Mcpy { dst=v40, src=v41, size=12, align=8 }      -> x0
@@ -78,26 +75,23 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     v68  Imm(21)                                          -> x1
     v69  Imm(28)                                          -> x1
     v70  Imm(36)                                          -> x1
-    v71  Load { addr=v51, disp=0, kind=I32 }              -> x1
-    v72  BinopI { op=mul, lhs=v71, rhs_imm=100 }          -> x1
-    v73  BinopI { op=shl, lhs=v72, rhs_imm=32 }           -> x2
-    v74  Extend { value=v72, kind=I32 }                   -> x1
-    v75  BinopI { op=add, lhs=v74, rhs_imm=36 }           -> x2
+    v71  Imm(2)                                           -> x1
+    v72  Imm(200)                                         -> x1
+    v73  Imm(858993459200)                                -> x1
+    v74  Imm(200)                                         -> x1
+    v75  Imm(236)                                         -> x1
     v76  BinopI { op=add, lhs=v51, rhs_imm=4 }            -> x1
-    v77  Load { addr=v51, disp=4, kind=I32 }              -> x1
-    v78  BinopI { op=mul, lhs=v77, rhs_imm=10 }           -> x1
-    v79  BinopI { op=shl, lhs=v78, rhs_imm=32 }           -> x6
-    v80  Extend { value=v78, kind=I32 }                   -> x1
-    v81  Binop { op=add, lhs=v75, rhs=v80 }               -> x1
-    v82  BinopI { op=add, lhs=v51, rhs_imm=8 }            -> x2
-    v83  Load { addr=v51, disp=8, kind=I32 }              -> x0
-    v84  Binop { op=add, lhs=v81, rhs=v83 }               -> x0
-    v85  BinopI { op=ne, lhs=v84, rhs_imm=270 }           -> x0
-    terminator Bz { cond=v85, target=b4, fall=b3 }   (exit_acc=v85)
-  block 3  start_pc=0
-    v86  Imm(2)                                           -> x0
-    terminator Return(v86)   (exit_acc=v86)
-  block 4  start_pc=0
+    v77  Imm(3)                                           -> x1
+    v78  Imm(30)                                          -> x1
+    v79  Imm(128849018880)                                -> x1
+    v80  Imm(30)                                          -> x1
+    v81  Imm(266)                                         -> x1
+    v82  BinopI { op=add, lhs=v51, rhs_imm=8 }            -> x0
+    v83  Imm(4)                                           -> x0
+    v84  Imm(270)                                         -> x0
+    v85  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v85)
+  block 2  start_pc=0
     v87  Imm(0)                                           -> x0
     terminator Return(v87)   (exit_acc=v87)
 ; --- SSA dump (ok=true) ent_pc=0 ---

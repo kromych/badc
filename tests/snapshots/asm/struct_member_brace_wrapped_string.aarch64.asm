@@ -185,11 +185,6 @@ Disassembly of section .text:
                	strb	w10, [x0, #0x13]
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x120
-               	ldrsw	x0, [x0]
-               	cmp	x0, #0x9
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	sub	x0, x29, #0x120
                	add	x0, x0, #0x4
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -220,4 +215,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x130
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>

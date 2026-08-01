@@ -61,8 +61,7 @@ Disassembly of section .text:
                	popq	%rdx
                	leaq	-0x10(%rbp), %rdi
                	movabsq	$0x3ff8000000000000, %rsi # imm = 0x3FF8000000000000
-               	movq	0x8(%rdi), %rax
-               	incq	%rax
+               	movl	$0x1, %eax
                	movq	%rax, 0x8(%rdi)
                	movq	%rsi, %xmm0
                	callq	<addr>

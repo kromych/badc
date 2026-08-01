@@ -20,16 +20,6 @@ Disassembly of section .text:
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
                	popq	%rdx
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
-               	movslq	%eax, %rax
-               	imulq	$-0x1, %rax, %rax
-               	cmpq	$0x1000, %rax           # imm = 0x1000
-               	jae	<addr>
-               	movl	$0xc, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
                	movl	$0x2, %eax
                	xorq	%rax, %rax
                	addq	$0x10, %rsp

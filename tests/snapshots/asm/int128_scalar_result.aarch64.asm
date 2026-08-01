@@ -320,11 +320,9 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x0, eq
                	cbnz	x0, <addr>
-               	cmp	x22, x22
-               	cset	x0, lo
                	sub	x1, x22, x22
-               	sub	x2, x20, x20
-               	sub	x2, x2, x0
+               	sub	x0, x20, x20
+               	sub	x2, x0, #0x0
                	mov	x0, #0x0                // =0
                	eor	x1, x1, x0
                	eor	x0, x2, x0

@@ -29,8 +29,7 @@ Disassembly of section .text:
                	strb	w10, [x0, #0x3]
                	ldr	x10, [sp], #0x10
                	sub	x1, x29, #0x10
-               	sub	x0, x29, #0x18
-               	ldrsw	x0, [x0]
+               	mov	x0, #0x41a80000         // =1101529088
                	sub	x2, x29, #0x8
                	sub	sp, sp, #0x30
                	str	x0, [sp, #0x10]

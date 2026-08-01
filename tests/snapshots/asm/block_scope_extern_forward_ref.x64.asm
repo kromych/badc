@@ -24,14 +24,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movslq	(%rax), %rcx
-               	cmpq	$0x5, %rcx
+               	movslq	(%rax), %rax
+               	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	retq
-               	cmpq	%rax, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
                	retq
                	xorq	%rax, %rax
                	retq

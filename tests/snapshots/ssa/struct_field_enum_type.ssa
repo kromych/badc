@@ -20,28 +20,32 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v13  BinopI { op=add, lhs=v12, rhs_imm=4 }            -> x0
     v14  Imm(1)                                           -> x0
     v15  Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v15)
+    v16  Imm(0)                                           -> x0
+    v17  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v17)
   block 2  start_pc=0
-    v17  LocalAddr(-2)                                    -> x0
-    v18  Imm(1)                                           -> x0
-    v19  Imm(0)                                           -> x0
-    v20  LocalAddr(-2)                                    -> x0
-    v21  BinopI { op=add, lhs=v20, rhs_imm=4 }            -> x0
-    v22  Imm(7)                                           -> x0
-    v23  Imm(0)                                           -> x0
-    v24  LocalAddr(-2)                                    -> x0
-    v25  Imm(1)                                           -> x0
-    v26  Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v26)
+    v19  LocalAddr(-2)                                    -> x0
+    v20  Imm(1)                                           -> x0
+    v21  Imm(0)                                           -> x0
+    v22  LocalAddr(-2)                                    -> x0
+    v23  BinopI { op=add, lhs=v22, rhs_imm=4 }            -> x0
+    v24  Imm(7)                                           -> x0
+    v25  Imm(0)                                           -> x0
+    v26  LocalAddr(-2)                                    -> x0
+    v27  Imm(1)                                           -> x0
+    v28  Imm(0)                                           -> x0
+    v29  Imm(0)                                           -> x0
+    v30  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v30)
   block 3  start_pc=0
-    v28  LocalAddr(-2)                                    -> x0
-    v29  BinopI { op=add, lhs=v28, rhs_imm=4 }            -> x0
-    v30  Imm(7)                                           -> x0
-    v31  Imm(0)                                           -> x0
-    terminator Jmp(b4)   (exit_acc=v31)
+    v32  LocalAddr(-2)                                    -> x0
+    v33  BinopI { op=add, lhs=v32, rhs_imm=4 }            -> x0
+    v34  Imm(7)                                           -> x0
+    v35  Imm(0)                                           -> x0
+    terminator Jmp(b4)   (exit_acc=v35)
   block 4  start_pc=0
-    v33  Imm(13)                                          -> x0
-    terminator Return(v33)   (exit_acc=v33)
+    v37  Imm(13)                                          -> x0
+    terminator Return(v37)   (exit_acc=v37)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

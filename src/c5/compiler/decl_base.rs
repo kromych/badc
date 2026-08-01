@@ -491,6 +491,7 @@ impl Compiler {
         let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
+        self.pending.last_fn_ptr_cast = None;
         // Parse at assignment precedence so binary, conditional, and
         // assignment operators are consumed.
         self.expr(Token::Assign as i64)?;
@@ -519,7 +520,25 @@ impl Compiler {
                 self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
                 self.symbols[idx].type_ + Ty::Ptr as i64
             }
-            None => self.ty,
+            None => {
+                // `(T (*)(params))e` as the whole operand: recover the
+                // cast's prototype the same way, keyed to the cast node
+                // so a larger expression does not inherit it.
+                if let Some((cast_ty, params, variadic, depth)) =
+                    self.pending.last_fn_ptr_cast.take()
+                    && let Some(acc) = self.ast_acc
+                    && matches!(
+                        self.ast.expr(acc),
+                        super::super::ast::Expr::Cast { to_ty, .. } if *to_ty == cast_ty
+                    )
+                {
+                    self.pending.fn_ptr_indirection = Some(depth);
+                    self.pending.base_is_function_type = false;
+                    self.pending.typedef_fn_proto = Some((params.len(), variadic));
+                    self.pending.fn_ptr_param_types = Some(params);
+                }
+                self.ty
+            }
         };
         // Either marker firing means the operand decayed from an
         // array, so `typeof(x)` is an array type and

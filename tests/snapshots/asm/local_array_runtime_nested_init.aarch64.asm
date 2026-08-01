@@ -122,31 +122,12 @@ Disassembly of section .text:
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0xb0
-               	sub	x1, x29, #0x98
-               	sub	x2, x29, #0xb0
-               	cmp	x0, x2
-               	cset	x2, ne
-               	mov	x0, #0x1                // =1
-               	cbnz	x2, <addr>
-               	sub	x0, x29, #0x98
-               	cmp	x1, x0
-               	cset	x0, ne
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
-               	cbz	x0, <addr>
-               	mov	x0, #0x4                // =4
-               	add	sp, sp, #0xc0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>

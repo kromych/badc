@@ -412,10 +412,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=53
     v323 Load { addr=v322, disp=0, kind=I64 }             -> x1
     v324 BinopI { op=add, lhs=v322, rhs_imm=8 }           -> x1
     v325 Load { addr=v322, disp=8, kind=I64 }             -> x0
-    v326 Binop { op=ult, lhs=v19, rhs=v19 }               -> x0
+    v326 Imm(0)                                           -> x0
     v327 Binop { op=sub, lhs=v19, rhs=v19 }               -> x1
-    v328 Binop { op=sub, lhs=v20, rhs=v20 }               -> x2
-    v329 Binop { op=sub, lhs=v328, rhs=v326 }             -> x2
+    v328 Binop { op=sub, lhs=v20, rhs=v20 }               -> x0
+    v329 BinopI { op=sub, lhs=v328, rhs_imm=0 }           -> x2
     v330 LocalAddr(-6)                                    -> x0
     v331 Imm(0)                                           -> x6
     v332 BinopI { op=add, lhs=v330, rhs_imm=8 }           -> x6

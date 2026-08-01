@@ -37,7 +37,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v3   Mcpy { dst=v1, src=v2, size=4, align=8 }         -> x0
     v4   LocalAddr(-1)                                    -> x3
     v5   LocalAddr(-2)                                    -> x0
-    v6   Load { addr=v5, disp=0, kind=I32 }               -> x7
+    v6   Imm(1101529088)                                  -> x7
     v7   Call { target_pc=0, args=[v6], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v8   Store { addr=v4, disp=0, value=v7, kind=I32 }    -> -
     v9   LocalAddr(-1)                                    -> x0

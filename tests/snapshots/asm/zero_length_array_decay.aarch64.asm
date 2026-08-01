@@ -14,16 +14,6 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	cmp	x0, x0
-               	b.eq	<addr>
-               	mov	x0, #0x6                // =6
-               	ret
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	cmp	x1, x1
-               	b.eq	<addr>
-               	mov	x0, #0x7                // =7
-               	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	cmp	x0, x1

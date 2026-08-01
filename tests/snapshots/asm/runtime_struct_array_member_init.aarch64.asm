@@ -96,12 +96,6 @@ Disassembly of section .text:
                	mov	x4, #0x2000             // =8192
                	sub	x1, x29, #0xa8
                	str	x4, [x1, #0x40]
-               	cmp	x0, x0
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0xb0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	ldrsw	x1, [x0]
                	cmp	x1, #0xa
                	b.eq	<addr>

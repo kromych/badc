@@ -26,8 +26,7 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rdx
                	movb	%dl, 0x3(%rax)
                	popq	%rdx
-               	leaq	-0x8(%rbp), %rax
-               	movzbq	(%rax), %rax
+               	movl	$0x2a, %eax
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
                	movl	$0x4227999a, %eax       # imm = 0x4227999A

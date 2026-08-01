@@ -11,18 +11,6 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#0x1
 
-<handler>:
-               	mov	x0, #0x0                // =0
-               	ret
-
 <main>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	cmp	x0, x1
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
                	mov	x0, #0x0                // =0
                	ret

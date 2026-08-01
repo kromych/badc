@@ -1639,30 +1639,18 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
+               	sub	x1, x29, #0x990
+               	mov	x0, #0x99               // =153
+               	mov	x3, #0x10000            // =65536
+               	str	x0, [x1]
+               	str	x3, [x1, #0x8]
                	sub	x0, x29, #0x990
-               	ldr	x1, [x0, #0x8]
-               	mov	x17, #0xfff000000000    // =281406257233920
-               	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
-               	mov	x3, #0x99               // =153
-               	mov	x17, #0x10000           // =65536
-               	orr	x1, x1, x17
-               	str	x3, [x0]
-               	str	x1, [x0, #0x8]
-               	sub	x0, x29, #0x990
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xf, lsl #32
-               	and	x3, x1, x17
                	mov	x1, #0x99               // =153
-               	mov	x17, #0x123000000000    // =19997367730176
-               	orr	x20, x3, x17
+               	mov	x3, #0x10000            // =65536
+               	movk	x3, #0x1230, lsl #32
                	str	x1, [x0]
-               	str	x20, [x0, #0x8]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xf, lsl #32
-               	and	x3, x20, x17
+               	str	x3, [x0, #0x8]
+               	mov	x3, #0x10000            // =65536
                	sub	x0, x29, #0x80
                	str	x1, [x0]
                	str	x3, [x0, #0x8]
@@ -1681,19 +1669,17 @@ Disassembly of section .text:
                	add	sp, sp, #0xa30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	lsr	x0, x20, #36
-               	mov	x2, #0x0                // =0
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xfff, lsl #16
-               	and	x1, x0, x17
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x123              // =291
                	sub	x0, x29, #0x90
-               	str	x1, [x0]
-               	asr	x1, x1, #63
-               	str	x1, [x0, #0x8]
-               	mov	x1, #0x123              // =291
+               	str	x2, [x0]
+               	mov	x2, #0x0                // =0
+               	str	x2, [x0, #0x8]
+               	mov	x2, #0x123              // =291
                	mov	x3, #0x75               // =117
                	mov	x4, x3
-               	mov	x3, x1
+               	mov	x3, x2
+               	mov	x2, x1
                	ldr	x1, [x0, #0x8]
                	ldr	x0, [x0]
                	bl	<addr>

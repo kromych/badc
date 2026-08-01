@@ -19,7 +19,7 @@
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, ValueId};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, Terminator, ValueId};
 use crate::c5::program::Program;
 use crate::c5::token::Token;
 
@@ -36,7 +36,7 @@ pub(crate) struct ConstData<'a> {
 
 impl<'a> ConstData<'a> {
     pub(crate) fn build(program: &'a Program) -> Self {
-        let intervals: Vec<(i64, i64)> = program
+        let mut intervals: Vec<(i64, i64)> = program
             .symbols
             .iter()
             .filter(|s| {
@@ -58,6 +58,9 @@ impl<'a> ConstData<'a> {
             })
             .map(|s| (s.val, s.val + s.reserved_data_bytes))
             .collect();
+        // Staged local-initializer templates: anonymous, so nothing can
+        // write them; their image is their value for the whole run.
+        intervals.extend(program.local_init_templates.iter().copied());
         // Every form of data relocation: a link-time address in this
         // unit's data, an extern symbol's address, and a function
         // address. The image bytes under any of them are a placeholder.
@@ -120,11 +123,13 @@ fn extern_imm_data(func: &FunctionSsa) -> BTreeSet<u32> {
 }
 
 /// Resolve `v` to a data-segment offset when it is an `ImmData` plus a
-/// folded constant displacement chain. An `ImmData` naming an extern
-/// symbol resolves to nothing: its payload is a placeholder, so the
-/// bytes at that offset belong to an unrelated object of this unit.
+/// folded constant displacement chain, chasing degenerate phis -- the
+/// residue a pruned branch leaves between an inlined accessor's return
+/// and its consumer. An `ImmData` naming an extern symbol resolves to
+/// nothing: its payload is a placeholder, so the bytes at that offset
+/// belong to an unrelated object of this unit.
 fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i64) -> Option<i64> {
-    for _ in 0..8 {
+    for _ in 0..16 {
         match func.insts.get(v as usize)? {
             Inst::ImmData(_) if ext.contains(&v) => return None,
             Inst::ImmData(base) => return Some(base.wrapping_add(off)),
@@ -144,6 +149,7 @@ fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i
                 off = off.wrapping_sub(*rhs_imm);
                 v = *lhs;
             }
+            Inst::Phi { incoming, .. } if incoming.len() == 1 => v = incoming[0].1,
             _ => return None,
         }
     }
@@ -194,6 +200,241 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
         };
         func.insts[i] = Inst::Imm(value);
         changed = true;
+    }
+    changed
+}
+
+/// Resolve `v` to a frame byte coordinate: `LocalAddr(slot)` addresses
+/// byte `slot * 8` of the 8-byte cell array, plus any folded constant
+/// displacement, through degenerate phis.
+fn frame_addr(func: &FunctionSsa, mut v: ValueId, mut off: i64) -> Option<i64> {
+    for _ in 0..16 {
+        match func.insts.get(v as usize)? {
+            Inst::LocalAddr(slot) => return Some(slot.wrapping_mul(8).wrapping_add(off)),
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs,
+                rhs_imm,
+            } => {
+                off = off.wrapping_add(*rhs_imm);
+                v = *lhs;
+            }
+            Inst::BinopI {
+                op: BinOp::Sub,
+                lhs,
+                rhs_imm,
+            } => {
+                off = off.wrapping_sub(*rhs_imm);
+                v = *lhs;
+            }
+            Inst::Phi { incoming, .. } if incoming.len() == 1 => v = incoming[0].1,
+            _ => return None,
+        }
+    }
+    None
+}
+
+fn access_width(kind: LoadKind) -> i64 {
+    match kind {
+        LoadKind::I8 | LoadKind::U8 => 1,
+        LoadKind::I16 | LoadKind::U16 => 2,
+        LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
+        LoadKind::I64 | LoadKind::F64 => 8,
+    }
+}
+
+fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
+    use crate::c5::ir::StoreKind;
+    match kind {
+        StoreKind::I8 => 1,
+        StoreKind::I16 => 2,
+        StoreKind::I32 | StoreKind::F32 => 4,
+        StoreKind::I64 | StoreKind::F64 => 8,
+    }
+}
+
+/// Fold loads of template-initialized locals. A local whose covering
+/// write is an `Mcpy` from resolvable data still holds those bytes when
+/// the load runs, so the load reads the source image under the same
+/// const rules as [`fold_loads`] -- which admits the staged initializer
+/// templates a compound literal or aggregate local is filled from, the
+/// shape a byte-level layout assertion probes. State is per block,
+/// keyed by frame byte ranges, inherited over an unconditional
+/// single-predecessor edge; a tracked write kills what it overlaps and
+/// any instruction that can write memory unpredictably clears it.
+pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
+    use alloc::collections::BTreeMap;
+    use alloc::vec;
+    // Predecessor sets, for the single-pred inheritance.
+    let nblocks = func.blocks.len();
+    let mut preds: Vec<Vec<u32>> = vec![Vec::new(); nblocks];
+    for (b, blk) in func.blocks.iter().enumerate() {
+        let mut edge = |t: u32| {
+            if let Some(p) = preds.get_mut(t as usize) {
+                p.push(b as u32);
+            }
+        };
+        match &blk.terminator {
+            Terminator::Jmp(t) | Terminator::FallThrough(t) => edge(*t),
+            Terminator::Bz {
+                target,
+                fall_through,
+                ..
+            }
+            | Terminator::Bnz {
+                target,
+                fall_through,
+                ..
+            } => {
+                edge(*target);
+                edge(*fall_through);
+            }
+            Terminator::JumpTable { table, .. } => {
+                for &t in &func.jump_tables[*table as usize] {
+                    edge(t);
+                }
+            }
+            Terminator::GotoIndirect { .. } => {
+                for &t in &func.computed_goto_targets {
+                    edge(t);
+                }
+            }
+            Terminator::AsmGoto { table } => {
+                for &t in &func.jump_tables[*table as usize] {
+                    edge(t);
+                }
+            }
+            Terminator::Return(_) | Terminator::TailExt(_) | Terminator::Unreachable => {}
+        }
+    }
+    // Frame range lo -> (hi, source data offset).
+    type State = BTreeMap<i64, (i64, i64)>;
+    let mut exit_states: Vec<Option<State>> = vec![None; nblocks];
+    let ext = extern_imm_data(func);
+    let mut changed = false;
+    for b in 0..nblocks {
+        let mut state: State = match preds[b].as_slice() {
+            [p] if (*p as usize) < b
+                && matches!(
+                    func.blocks[*p as usize].terminator,
+                    Terminator::Jmp(t) | Terminator::FallThrough(t) if t as usize == b
+                ) =>
+            {
+                exit_states[*p as usize].clone().unwrap_or_default()
+            }
+            _ => State::new(),
+        };
+        let kill = |state: &mut State, lo: i64, hi: i64| {
+            state.retain(|&s_lo, &mut (s_hi, _)| s_hi <= lo || s_lo >= hi);
+        };
+        for i in func.blocks[b].inst_range.clone() {
+            let idx = i as usize;
+            match &func.insts[idx] {
+                Inst::Mcpy { dst, src, size, .. } => {
+                    let size = *size as i64;
+                    match frame_addr(func, *dst, 0) {
+                        Some(lo) => {
+                            kill(&mut state, lo, lo + size);
+                            if let Some(s) = data_addr(func, &ext, *src, 0) {
+                                state.insert(lo, (lo + size, s));
+                            }
+                        }
+                        None => state.clear(),
+                    }
+                }
+                Inst::Store {
+                    addr, disp, kind, ..
+                } => match frame_addr(func, *addr, *disp as i64) {
+                    Some(a) => kill(&mut state, a, a + store_width(*kind)),
+                    None => state.clear(),
+                },
+                Inst::StoreLocal { off, kind, .. } => {
+                    let a = off.wrapping_mul(8);
+                    kill(&mut state, a, a + store_width(*kind));
+                }
+                Inst::Load {
+                    addr,
+                    disp,
+                    kind,
+                    volatile: false,
+                } if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
+                    let (kind, w) = (*kind, access_width(*kind));
+                    let Some(a) = frame_addr(func, *addr, *disp as i64) else {
+                        continue;
+                    };
+                    let Some((&lo, &(hi, src))) = state.range(..=a).next_back() else {
+                        continue;
+                    };
+                    if a + w > hi {
+                        continue;
+                    }
+                    let Some(raw) = cd.read(src + (a - lo), w) else {
+                        continue;
+                    };
+                    let u = u64::from_le_bytes(raw);
+                    let value = match kind {
+                        LoadKind::I8 => u as u8 as i8 as i64,
+                        LoadKind::I16 => u as u16 as i16 as i64,
+                        LoadKind::I32 => u as u32 as i32 as i64,
+                        _ => u as i64,
+                    };
+                    func.insts[idx] = Inst::Imm(value);
+                    changed = true;
+                }
+                Inst::LoadLocal {
+                    off,
+                    kind,
+                    volatile: false,
+                } if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
+                    let (kind, w) = (*kind, access_width(*kind));
+                    let a = off.wrapping_mul(8);
+                    let Some((&lo, &(hi, src))) = state.range(..=a).next_back() else {
+                        continue;
+                    };
+                    if a + w > hi {
+                        continue;
+                    }
+                    let Some(raw) = cd.read(src + (a - lo), w) else {
+                        continue;
+                    };
+                    let u = u64::from_le_bytes(raw);
+                    let value = match kind {
+                        LoadKind::I8 => u as u8 as i8 as i64,
+                        LoadKind::I16 => u as u16 as i16 as i64,
+                        LoadKind::I32 => u as u32 as i32 as i64,
+                        _ => u as i64,
+                    };
+                    func.insts[idx] = Inst::Imm(value);
+                    changed = true;
+                }
+                // Pure value producers and reads neither write nor
+                // invalidate.
+                Inst::Imm(_)
+                | Inst::ImmData(_)
+                | Inst::ImmCode(_)
+                | Inst::ImmExtCode(_)
+                | Inst::BlockAddr(_)
+                | Inst::LocalAddr(_)
+                | Inst::TlsAddr(_)
+                | Inst::Load { .. }
+                | Inst::LoadLocal { .. }
+                | Inst::LoadIndexed { .. }
+                | Inst::SegLoad { .. }
+                | Inst::Binop { .. }
+                | Inst::BinopI { .. }
+                | Inst::Fneg(_)
+                | Inst::Fma { .. }
+                | Inst::Extend { .. }
+                | Inst::FpCast { .. }
+                | Inst::ParamRef { .. }
+                | Inst::Phi { .. } => {}
+                // Calls, atomics, asm, indexed / segment stores,
+                // intrinsics, alloca bookkeeping: may write memory the
+                // walk does not model.
+                _ => state.clear(),
+            }
+        }
+        exit_states[b] = Some(state);
     }
     changed
 }
@@ -255,24 +496,14 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], program: &Program) {
                 }) => (*addr, *disp),
                 _ => continue,
             };
-            // The member address is `ImmData(base)` directly, or -- before
-            // index_fold folds the member offset into the load's `disp` --
-            // `BinopI{add, ImmData(base), k}`. An `ImmData` naming an
-            // extern symbol carries a link-time placeholder, so it says
+            // The member address is an `ImmData(base)` plus the constant
+            // displacement chain `data_addr` resolves. An `ImmData` naming
+            // an extern symbol carries a link-time placeholder, so it says
             // nothing about this unit's data.
-            let base = match f.insts.get(addr as usize) {
-                Some(Inst::ImmData(base)) if !ext.contains(&addr) => *base,
-                Some(Inst::BinopI {
-                    op: BinOp::Add,
-                    lhs,
-                    rhs_imm,
-                }) => match f.insts.get(*lhs as usize) {
-                    Some(Inst::ImmData(base)) if !ext.contains(lhs) => *base + *rhs_imm,
-                    _ => continue,
-                },
-                _ => continue,
+            let Some(member_off) = data_addr(f, &ext, addr, disp as i64) else {
+                continue;
             };
-            if !const_reloc_offsets.contains(&(base + disp as i64)) {
+            if !const_reloc_offsets.contains(&member_off) {
                 continue;
             }
             // The member holds a non-null address; the comparison is a

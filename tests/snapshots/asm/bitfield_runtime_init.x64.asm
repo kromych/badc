@@ -27,21 +27,19 @@ Disassembly of section .text:
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
                	popq	%rdx
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rdi, %rcx
-               	andq	$0xf, %rcx
-               	movl	(%rax), %edx
-               	andq	$-0x10, %rdx
-               	orq	%rdx, %rcx
-               	movl	%ecx, (%rax)
-               	leaq	-0x8(%rbp), %rdx
-               	movq	%rsi, %rax
+               	leaq	-0x8(%rbp), %rcx
+               	movq	%rdi, %rax
                	andq	$0xf, %rax
-               	movl	%ecx, %ecx
-               	andq	$-0xf1, %rcx
-               	shlq	$0x4, %rax
-               	orq	%rcx, %rax
-               	movl	%eax, (%rdx)
+               	orq	$0x0, %rax
+               	movl	%eax, (%rcx)
+               	leaq	-0x8(%rbp), %rcx
+               	movq	%rsi, %rdx
+               	andq	$0xf, %rdx
+               	movl	%eax, %eax
+               	andq	$-0xf1, %rax
+               	shlq	$0x4, %rdx
+               	orq	%rdx, %rax
+               	movl	%eax, (%rcx)
                	leaq	-0x8(%rbp), %rdx
                	movq	%r8, %rcx
                	andq	$0x1f, %rcx

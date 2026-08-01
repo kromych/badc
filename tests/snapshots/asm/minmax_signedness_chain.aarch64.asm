@@ -28,18 +28,7 @@ Disassembly of section .text:
                	ldrb	w10, [x1, #0x3]
                	strb	w10, [x0, #0x3]
                	ldr	x10, [sp], #0x10
-               	mov	x1, #0x64               // =100
-               	sub	x0, x29, #0x8
-               	ldrsw	x0, [x0]
-               	lsl	x0, x0, #3
-               	cmp	x0, #0x64
-               	b.ls	<addr>
-               	cmp	x1, #0x18
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	mov	x0, #0x18               // =24
                	mov	x1, #0xa                // =10
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0]
@@ -57,7 +46,5 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, x0
-               	b	<addr>
                	mov	x1, x0
                	b	<addr>

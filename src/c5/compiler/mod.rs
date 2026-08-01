@@ -619,6 +619,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// variant passes the tail on the stack). Set and cleared at the same
     /// sites as `indirect_callee_params`.
     pub indirect_callee_is_variadic: bool,
+    /// Signature of the last completed function-pointer cast: (cast
+    /// result tag, parameter types, variadic, pointer depth). The flat
+    /// tag carries only the return type, so `typeof(<cast>)` recovers
+    /// the prototype from here, keyed to the cast node so a larger
+    /// operand does not inherit it. Taken by
+    /// `parse_unevaluated_expr_ty`.
+    pub last_fn_ptr_cast: Option<(i64, alloc::vec::Vec<i64>, bool, i64)>,
     /// Set while parsing a function-pointer declarator's parameter list.
     /// The parameters form a prototype: their names are irrelevant, so
     /// `parse_function_params` records each type without binding the name
@@ -885,6 +892,7 @@ impl Default for Pending {
             fn_ptr_param_types: None,
             indirect_callee_params: None,
             indirect_callee_is_variadic: false,
+            last_fn_ptr_cast: None,
             parsing_fn_ptr_proto: false,
             param_decl_context: false,
             last_array_decay_size: 0,
@@ -959,6 +967,9 @@ pub struct Compiler {
     /// `__func__`) recorded as they are placed in `data`, for static
     /// DCE object boundaries. See `Program::data_object_starts`.
     data_object_starts: Vec<i64>,
+    /// `[lo, hi)` ranges of staged local-initializer templates. See
+    /// `Program::local_init_templates`.
+    local_init_templates: Vec<(i64, i64)>,
     /// Alignment-padding ranges within `data`. See
     /// `Program::data_pad_ranges`.
     data_pad_ranges: Vec<(i64, i64)>,
@@ -1736,6 +1747,7 @@ impl Compiler {
             next_ent_pc: 0,
             data,
             data_object_starts: Vec::new(),
+            local_init_templates: Vec::new(),
             data_pad_ranges: Vec::new(),
             data_align_marks: Vec::new(),
             flex_array_measured_count: None,
@@ -2246,6 +2258,7 @@ impl Compiler {
             asm_weak_names: self.asm_weak_names,
             data_align: self.data_align,
             data_object_starts: self.data_object_starts,
+            local_init_templates: self.local_init_templates,
             data_pad_ranges: self.data_pad_ranges,
             data_align_marks: self.data_align_marks,
             entry_pc,

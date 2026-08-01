@@ -5653,9 +5653,25 @@ impl<'a> Walker<'a> {
     /// that answer is fixed at translation time even though the object's
     /// own address is not. Addresses over *different* objects are left
     /// alone: their relative order is chosen by the data layout.
+    ///
+    /// An address constant against a null pointer constant also folds
+    /// (equality only): C99 6.3.2.3p3 guarantees the address of an
+    /// object or function compares unequal to null, provided the named
+    /// symbol is defined in this unit and not weak -- an undefined or
+    /// weak reference may bind to address zero. The offset must be
+    /// zero: a converted address plus an arbitrary integer may wrap.
+    /// This is the front-end fold GCC performs at every level.
     fn const_fold_addr_cmp(&self, op: BinOp, lhs: ExprId, rhs: ExprId) -> Option<i64> {
-        let l = self.addr_const_value(lhs)?;
-        let r = self.addr_const_value(rhs)?;
+        let (l, r) = match (self.addr_const_value(lhs), self.addr_const_value(rhs)) {
+            (Some(l), Some(r)) => (l, r),
+            (Some(a), None) if self.const_fold_int(rhs) == Some(0) => {
+                return self.fold_addr_vs_null(op, a);
+            }
+            (None, Some(a)) if self.const_fold_int(lhs) == Some(0) => {
+                return self.fold_addr_vs_null(op, a);
+            }
+            _ => return None,
+        };
         if l.base != r.base {
             return None;
         }
@@ -5673,6 +5689,18 @@ impl<'a> Walker<'a> {
         Some(fold_int_binop(signed, l.off, r.off))
     }
 
+    /// The `addr == null` / `addr != null` arm of the fold above.
+    fn fold_addr_vs_null(&self, op: BinOp, a: AddrConst) -> Option<i64> {
+        if !matches!(op, BinOp::Eq | BinOp::Ne) || a.off != 0 {
+            return None;
+        }
+        let nonnull = self
+            .symbols
+            .get(a.base.0 as usize)
+            .is_some_and(|s| s.defined_here && !s.is_weak);
+        nonnull.then_some((op == BinOp::Ne) as i64)
+    }
+
     /// The value of `id` as an address constant (C99 6.6p9), or None
     /// when it is not one. Casts that keep the whole address pass
     /// through; a narrowing cast does not.
@@ -5687,6 +5715,11 @@ impl<'a> Walker<'a> {
             Expr::Ident { array_size, .. } | Expr::Member { array_size, .. }
                 if *array_size != 0 =>
             {
+                self.addr_const_object(id)
+            }
+            // A function designator's value is the function's address
+            // (C99 6.3.2.1p4).
+            Expr::Ident { class, .. } if *class == Token::Fun as i64 => {
                 self.addr_const_object(id)
             }
             Expr::Cast { child, to_ty } => {
@@ -5736,12 +5769,15 @@ impl<'a> Walker<'a> {
                 is_thread_local,
                 ..
             } => {
-                if *class != Token::Glo as i64 || *is_thread_local {
+                if (*class != Token::Glo as i64 && *class != Token::Fun as i64)
+                    || *is_thread_local
+                {
                     return None;
                 }
                 // The symbol table entry is reused when a name is
-                // shadowed, so the parse-time data offset pins the
-                // object the identifier named here.
+                // shadowed, so the parse-time data offset (or a
+                // function's entry PC) pins the object the identifier
+                // named here.
                 Some(AddrConst {
                     base: (*sym, *val),
                     off: 0,

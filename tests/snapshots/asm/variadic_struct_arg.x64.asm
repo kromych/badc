@@ -93,10 +93,8 @@ Disassembly of section .text:
                	movq	%rdx, (%rax)
                	popq	%rdx
                	movl	$0x2, %edi
-               	leaq	-0x10(%rbp), %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movq	(%rax), %rsi
-               	movq	(%rcx), %rdx
+               	movabsq	$0x400000003, %rsi      # imm = 0x400000003
+               	movabsq	$0x600000005, %rdx      # imm = 0x600000005
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax

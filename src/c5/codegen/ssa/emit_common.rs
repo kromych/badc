@@ -2327,9 +2327,20 @@ fn parse_section_item(
         // `.word` is target-dependent: 2 bytes on x86 ELF, 4 on AArch64.
         let w = if tok == ".word" && is_aarch64 { 4 } else { w };
         let mut values = alloc::vec::Vec::new();
-        for a in rest.split(',') {
-            values.push(parse_section_value(a.trim())?);
+        // Split the value list on commas outside double quotes (a quoted
+        // symbol name may contain any character).
+        let (mut start, mut quoted) = (0usize, false);
+        for (i, c) in rest.bytes().enumerate() {
+            match c {
+                b'"' => quoted = !quoted,
+                b',' if !quoted => {
+                    values.push(parse_section_value(rest[start..i].trim())?);
+                    start = i + 1;
+                }
+                _ => {}
+            }
         }
+        values.push(parse_section_value(rest[start..].trim())?);
         return Ok(AsmSectionItem::Data {
             width: w as u8,
             values,
@@ -2816,8 +2827,10 @@ fn push_reloc_term<'a>(
 
 /// Flatten `s` into its additive terms, each tagged with whether it is
 /// subtracted from the whole value. `outer_neg` is the sign inherited from an
-/// enclosing `- ( ... )`. Returns false on unbalanced parentheses.
-fn flatten_addsub_terms<'a>(
+/// enclosing `- ( ... )`. A double-quoted run is opaque (a quoted symbol name
+/// may contain any character). Returns false on unbalanced parentheses or an
+/// unterminated quote.
+pub(crate) fn flatten_addsub_terms<'a>(
     s: &'a str,
     outer_neg: bool,
     out: &mut alloc::vec::Vec<(bool, &'a str)>,
@@ -2831,9 +2844,11 @@ fn flatten_addsub_terms<'a>(
     if matches!(b.get(i), Some(b'+' | b'-')) {
         i += 1;
     }
-    let (mut depth, mut start) = (0i32, i);
+    let (mut depth, mut start, mut quoted) = (0i32, i, false);
     while i < b.len() {
         match b[i] {
+            b'"' => quoted = !quoted,
+            _ if quoted => {}
             b'(' => depth += 1,
             b')' => {
                 depth -= 1;
@@ -2852,7 +2867,7 @@ fn flatten_addsub_terms<'a>(
         }
         i += 1;
     }
-    depth == 0 && push_reloc_term(&s[start..], neg, out)
+    depth == 0 && !quoted && push_reloc_term(&s[start..], neg, out)
 }
 
 /// Parse a section data value as a relocatable expression: a single symbolic
@@ -2867,6 +2882,13 @@ fn parse_reloc_expr(a: &str) -> Result<AsmSectionValue, alloc::string::String> {
     }
     let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
     let is_name = |s: &str| !s.is_empty() && s.bytes().all(ident);
+    // GNU as accepts a double-quoted symbol name wherever a bare one is
+    // valid; the quotes are not part of the name.
+    fn unquote(s: &str) -> Option<&str> {
+        s.strip_prefix('"')
+            .and_then(|r| r.strip_suffix('"'))
+            .filter(|n| !n.is_empty() && !n.contains('"'))
+    }
     // A term is a constant when it evaluates with the operand resolver treated
     // as present; a label or symbol reference does not.
     let is_const = |t: &str| eval_const_expr_ops(t, &|_| Some(0)).is_some();
@@ -2874,7 +2896,18 @@ fn parse_reloc_expr(a: &str) -> Result<AsmSectionValue, alloc::string::String> {
     let (mut names, mut dots) = (0usize, 0usize);
     let mut addend = alloc::string::String::new();
     for &(neg, t) in &terms {
-        if t == "." {
+        let (t, quoted) = match unquote(t) {
+            Some(n) => (n, true),
+            None => (t, false),
+        };
+        if quoted {
+            names += 1;
+            if neg {
+                neg_name = Some(t);
+            } else {
+                base = Some(t);
+            }
+        } else if t == "." {
             dots += 1;
             if !neg {
                 return Err(unsupported());

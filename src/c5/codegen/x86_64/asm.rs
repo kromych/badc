@@ -309,6 +309,11 @@ pub(crate) enum AsmOpnd {
         scale: u8,
         disp: i32,
     },
+    /// `sym(%%rip)` / `(sym + disp)(%%rip)`: a RIP-relative reference whose
+    /// displacement is a link-time symbol address plus a constant (the symbol
+    /// name in the instruction's `sym_target`, `disp` the addend). The disp32
+    /// field takes a PC-relative relocation against the symbol.
+    SymRipRel { disp: i32 },
     /// `%cN(%%rip)` / `%PN(%%rip)`: a RIP-relative memory reference whose
     /// displacement is an `i`-class operand substituted as a bare constant
     /// (`%c`) or a symbol / constant address (`%P`). The emitter resolves a
@@ -1671,22 +1676,22 @@ fn parse_int(s: &str) -> Option<i64> {
 }
 
 /// Split a memory-operand displacement expression whose terms are one symbol
-/// name plus integer constants (`sym`, `16+sym`, `sym-4`) into the symbol and
-/// the folded integer addend. `None` when there is no symbol term, more than
-/// one, a leading `-` on the symbol, or a non-integer term. A whole-expression
-/// integer, a template label, and a register name are not symbol
-/// displacements.
+/// name plus integer constants (`sym`, `16+sym`, `sym-4`, `(sym + 16)`) into
+/// the symbol and the folded integer addend. `None` when there is no symbol
+/// term, more than one, a leading `-` on the symbol, or a non-integer term. A
+/// whole-expression integer, a template label, and a register name are not
+/// symbol displacements.
 fn parse_sym_disp<'a>(prefix: &'a str, labels: &[&str]) -> Option<(&'a str, i64)> {
     if prefix.is_empty() || parse_int(prefix).is_some() {
         return None;
     }
+    let mut terms = Vec::new();
+    if !super::super::ssa::emit_common::flatten_addsub_terms(prefix, false, &mut terms) {
+        return None;
+    }
     let mut sym: Option<&str> = None;
     let mut addend: i64 = 0;
-    let mut rest = prefix;
-    let mut neg = false;
-    loop {
-        let end = rest.find(['+', '-']).unwrap_or(rest.len());
-        let term = rest[..end].trim();
+    for (neg, term) in terms {
         if let Some(v) = parse_int(term) {
             addend += if neg { -v } else { v };
         } else if !neg
@@ -1699,25 +1704,27 @@ fn parse_sym_disp<'a>(prefix: &'a str, labels: &[&str]) -> Option<(&'a str, i64)
         } else {
             return None;
         }
-        if end == rest.len() {
-            break;
-        }
-        neg = rest.as_bytes()[end] == b'-';
-        rest = &rest[end + 1..];
     }
     sym.map(|s| (s, addend))
 }
 
 /// Parse a memory reference whose displacement carries a link-time symbol:
-/// the no-base `sym(,%index,scale)` and the based `disp+sym(%base[, %index,
-/// scale])` forms. Returns the symbol and the operand (its addend in `disp`);
-/// `None` for any other shape.
+/// the RIP-relative `sym(%rip)`, the no-base `sym(,%index,scale)`, and the
+/// based `disp+sym(%base[, %index, scale])` forms. Returns the symbol and the
+/// operand (its addend in `disp`); `None` for any other shape.
 fn parse_sym_mem<'a>(tok: &'a str, labels: &[&str]) -> Option<(&'a str, AsmOpnd)> {
     let open = matching_open_paren(tok)?;
     let prefix = tok[..open].trim();
     let inner = tok[open + 1..tok.len() - 1].trim();
     let (sym, addend) = parse_sym_disp(prefix, labels)?;
     let disp = i32::try_from(addend).ok()?;
+    if inner
+        .strip_prefix("%%")
+        .or_else(|| inner.strip_prefix('%'))
+        == Some("rip")
+    {
+        return Some((sym, AsmOpnd::SymRipRel { disp }));
+    }
     let parts = split_asm_operands(inner);
     if parts.len() > 3 {
         return None;

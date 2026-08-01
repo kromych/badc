@@ -1576,6 +1576,14 @@ jobs:
     # and the boot uses the emulator's -kernel loader rather than badc-built
     # firmware -- booting through OVMF/AAVMF is the qemu lane's dimension.
     #
+    # x86_64 additionally needs the machine's ROM set: a self-linked emulator
+    # has no data directory, so `-L` points at the `pc-bios-x86` asset -- the
+    # firmware (SeaBIOS) and option ROMs upstream ships with the same QEMU
+    # release the emulator is built from, pinned by sha256 like every other
+    # vendor-deps asset. Those blobs are firmware data, not badc output; the
+    # emulator under test is still the one badc compiled and linked. aarch64
+    # -M virt loads no ROM.
+    #
     # `verify.py` is the gate: it fails on any unit badc cannot compile, any
     # unit that fell back, any undefined reference at link, a badc unit count
     # below the floor, and any boot that does not print the marker. The tree is
@@ -1593,17 +1601,15 @@ jobs:
       matrix:
         include:
           - { os: ubuntu-24.04-arm, label: ubuntu-arm64, arch: aarch64, floor: 3700 }
-          # TODO: x86_64 defconfig compiles with no fallback and links a valid
-          # image, but the image still faults in early init and never prints
-          # the marker. Restore this entry once it boots; it additionally needs
-          # `-L <pc-bios dir>` in --qemu-args, because the emulator's -M pc
-          # loads option ROMs and a self-linked binary has no data directory to
-          # find them in.
-          # - { os: ubuntu-24.04, label: ubuntu-x64, arch: x86_64, floor: 2500 }
+          # x86_64 measured at 2847 units, 0 fallbacks, 0 undefined refs, both
+          # boots reaching the marker; the floor sits just under that count.
+          - { os: ubuntu-24.04,     label: ubuntu-x64,   arch: x86_64,  floor: 2800 }
     runs-on: ${{ matrix.os }}
     # Measured on four 3.2 GHz aarch64 cores: fetch + configure 44 s, clean
     # defconfig build 20 min (4177 units, 2153 CPU-s), both boots 15 s. Scaled
     # by this runner's measured compile throughput that is 15-25 min of build.
+    # x86_64 measured on twelve 3.2 GHz cores: clean defconfig build 382 s
+    # (2847 units), both boots 25 s; on a four-core runner that is 15-20 min.
     # The caps are hang backstops just above that, not slack; tighten them once
     # green runs have shown the real spread.
     timeout-minutes: 50
@@ -1640,6 +1646,9 @@ jobs:
         with:
           name: qemu-bin-${{ matrix.label }}
           path: ${{ runner.temp }}/qemu
+      - name: fetch the x86 machine ROM set (pinned firmware blobs, no distro package)
+        if: matrix.arch == 'x86_64'
+        run: python demos/qemu/setup.py --pc-bios "$RUNNER_TEMP/pc-bios"
       - name: build badc
         run: cargo build --release --locked --features full --bin badc
       - name: kernel setup (fetch the pinned release, verify sha256, configure)
@@ -1659,19 +1668,22 @@ jobs:
       - name: kernel gate (badc compiles defconfig, links, boots)
         # The step cap bounds a hang in the build below the job cap; each boot
         # is separately bounded by --boot-timeout. The emulator is named
-        # explicitly, and `-nic none` drops the default NIC, whose boot ROM
-        # lives in a data directory the self-linked binary does not have.
+        # explicitly, and `-nic none` drops the default NIC, whose boot ROM is
+        # not in the ROM set (and a boot smoke needs no network).
         timeout-minutes: 40
         env:
           # The runner's reference compiler is not the one the pinned kernel
           # was released against; its warnings are not the gate's subject.
           KCFLAGS: -Wno-error
+          # x86_64's -M pc loads its firmware and option ROMs at run time; -L
+          # points at the set fetched above. aarch64 -M virt loads none.
+          ROMS: ${{ matrix.arch == 'x86_64' && format('-L {0}/pc-bios', runner.temp) || '' }}
         run: |
           chmod +x "$RUNNER_TEMP"/qemu/qemu-system-*
           python demos/linux/verify.py \
             --kernel-dir "$KERNEL_TREE" --arch ${{ matrix.arch }} \
             --qemu "$RUNNER_TEMP/qemu/qemu-system-${{ matrix.arch }}" \
-            --qemu-args "-nic none" \
+            --qemu-args "$ROMS -nic none" \
             --initramfs "$RUNNER_TEMP/initramfs.cpio.gz" \
             --expect-units ${{ matrix.floor }} --boot-timeout 90 \
             --workdir "$RUNNER_TEMP/verify" \

@@ -27,6 +27,11 @@ build inputs; the source tree is captured once and shared across targets.
 The packed asset is ``qemu-<version>-<commit8>.tar.xz`` with layout
 ``qemu-<version>/{qemu-rm, qbuild-<arch>...}``. Pin its sha256 in
 ``demos/qemu/setup.py`` and upload it to the ``vendor-deps-v1`` release.
+
+The x86 run-time ROM set is a separate, independent asset, packed straight from
+an upstream release tarball (no build directory needed):
+
+  build_qemu_bundle.py --pack-pc-bios ~/qemu-11.0.2.tar.xz --out /tmp/roms
 """
 
 from __future__ import annotations
@@ -36,6 +41,7 @@ import hashlib
 import shutil
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 # Source subtrees that are not compile inputs for the emulator. subprojects is
@@ -45,6 +51,14 @@ from pathlib import Path
 SRC_EXCLUDE = {".git", ".github", ".gitlab", ".gitlab-ci.d", "tests", "docs",
                "roms", "pc-bios"}
 NESTED_EXCLUDE = SRC_EXCLUDE | {"berkeley-softfloat-3", "berkeley-testfloat-3"}
+
+# Run-time ROM set for QEMU's x86 machines: the machine firmware plus the option
+# ROMs a `pc` / `q35` boot loads (the APIC helper, the -kernel loader, the VGA
+# BIOS). Prebuilt blobs that upstream ships in pc-bios/; not compile inputs, so
+# SRC_EXCLUDE drops them from the source capture, but an emulator linked without
+# a data directory needs -L pointed at them. --pack-pc-bios packs this set.
+PC_BIOS_X86 = ("bios-256k.bin", "kvmvapic.bin", "linuxboot_dma.bin",
+               "vgabios-stdvga.bin")
 
 # Build-directory files that are compile inputs (meson-generated headers and
 # sources, the compile database, and the linker response files). Everything else
@@ -104,6 +118,36 @@ def sha256_of(path: Path) -> str:
     return h.hexdigest()
 
 
+def pack_pc_bios(tarball: Path, out: Path) -> Path:
+    """Pack PC_BIOS_X86 out of an upstream QEMU release tarball into a flat
+    asset. The name carries the release version and the first 8 hex digits of
+    that tarball's sha256, so the asset states which release the blobs are
+    from."""
+    staged = out / "pc-bios-x86"
+    if staged.exists():
+        shutil.rmtree(staged)
+    staged.mkdir(parents=True)
+    version, found = "", set()
+    with tarfile.open(tarball, "r:*") as tf:
+        for m in tf:
+            head, _, rel = m.name.partition("/")
+            name = rel[len("pc-bios/"):] if rel.startswith("pc-bios/") else ""
+            if not m.isfile() or name not in PC_BIOS_X86:
+                continue
+            version = head.split("qemu-", 1)[-1]
+            with tf.extractfile(m) as src, (staged / name).open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+            found.add(name)
+    missing = [n for n in PC_BIOS_X86 if n not in found]
+    if missing:
+        raise SystemExit(f"{tarball}: no pc-bios/{{{','.join(missing)}}}")
+    asset = out / f"pc-bios-x86-{version}-{sha256_of(tarball)[:8]}.tar.xz"
+    print(f"packing {len(found)} ROMs from {tarball.name} -> {asset}")
+    subprocess.run(["tar", "-C", str(staged), "-cJf", str(asset), *PC_BIOS_X86],
+                   check=True)
+    return asset
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -113,7 +157,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", type=Path, required=True, help="bundle working directory")
     ap.add_argument("--version", help="override the version (default: from git)")
     ap.add_argument("--pack", action="store_true", help="tar.xz + sha256 + upload hint")
+    ap.add_argument("--pack-pc-bios", type=Path, metavar="TARBALL",
+                    help="pack the x86 ROM set from an upstream QEMU release "
+                         "tarball (independent of the bundle steps)")
     args = ap.parse_args(argv)
+
+    if args.pack_pc_bios:
+        asset = pack_pc_bios(args.pack_pc_bios, args.out)
+        print(f"\n{asset.name}\n  sha256 = {sha256_of(asset)}"
+              f"\n  size   = {asset.stat().st_size}")
+        print("\nPin in demos/qemu/setup.py (PC_BIOS_SHA256) and upload with:\n"
+              f"  gh release upload vendor-deps-v1 --repo kromych/badc {asset}")
+        return 0
 
     if args.qemu_build or args.arch or args.qemu_src:
         if not (args.qemu_src and args.qemu_build and args.arch):

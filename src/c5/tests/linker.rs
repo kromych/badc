@@ -9234,6 +9234,78 @@ int main(void) { return 0; }
 }
 
 #[test]
+fn asm_section_pointer_to_global_object_names_the_object_symbol() {
+    // A relocation reaching an external-linkage object must name that
+    // object's symbol: the binding is a property of the symbol, so reducing
+    // the reference to section+addend presents the definition to a reader as
+    // local. An internal-linkage object has no such symbol and stays
+    // section-relative, matching how an assembler reduces a local name.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const STB_LOCAL: u8 = 0;
+    const STB_GLOBAL: u8 = 1;
+    const STT_SECTION: u8 = 3;
+    let src = r#"int plain_obj = 1;
+const int const_obj = 2;
+int placed_obj __attribute__((section(".placed"))) = 3;
+static int local_obj = 4;
+asm(".section \".tbl\",\"a\"\n"
+    "\t.quad plain_obj\n"
+    "\t.quad const_obj\n"
+    "\t.quad placed_obj\n"
+    "\t.quad local_obj\n"
+    ".previous\n");
+int main(void) { return plain_obj + const_obj + placed_obj + local_obj; }
+"#;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let symtab = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".symtab")
+            .unwrap_or_else(|| panic!("{target:?}: .symtab missing"))
+            .3
+            .clone();
+        let rela = &sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.tbl")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.tbl missing"))
+            .3;
+        assert_eq!(rela.len(), 4 * 24, "{target:?}: four relocations");
+        let row = |i: usize| {
+            let r = &rela[i * 24..i * 24 + 24];
+            let r_info = u64::from_le_bytes(r[8..16].try_into().unwrap());
+            let addend = i64::from_le_bytes(r[16..24].try_into().unwrap());
+            let idx = (r_info >> 32) as usize;
+            let st_info = symtab[idx * 24 + 4];
+            (idx, st_info >> 4, st_info & 0xF, addend)
+        };
+        for (i, name) in ["plain_obj", "const_obj", "placed_obj"].iter().enumerate() {
+            let (idx, bind, _, addend) = row(i);
+            let want = elf_symbol(&bytes, name)
+                .unwrap_or_else(|| panic!("{target:?}: `{name}` symbol missing"))
+                .4;
+            assert_eq!(
+                idx, want,
+                "{target:?}: `{name}` relocation names the object"
+            );
+            assert_eq!(bind, STB_GLOBAL, "{target:?}: `{name}` binding");
+            assert_eq!(addend, 0, "{target:?}: `{name}` addend");
+        }
+        let (_, bind, sym_type, _) = row(3);
+        assert_eq!(bind, STB_LOCAL, "{target:?}: internal-linkage stays local");
+        assert_eq!(
+            sym_type, STT_SECTION,
+            "{target:?}: internal-linkage stays section-relative"
+        );
+    }
+}
+
+#[test]
 fn asm_address_constraint_renders_as_a_memory_reference() {
     // The `p` constraint takes its operand as an address in a general
     // register; `%a` renders that register as an address reference, so the

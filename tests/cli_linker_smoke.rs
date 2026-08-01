@@ -3452,6 +3452,40 @@ fn zero_length_arrays_occupy_no_storage() {
     }
 }
 
+/// A block-scope `static T x[] = {};` is the same zero-length array as
+/// the file-scope form and reserves storage the same way. Sizing it from
+/// its element width instead left several of them sharing one start
+/// offset while each claimed an element's span, which the `.rodata` carve
+/// rejects as an overlap. Both element kinds go through the deferred-size
+/// path: an aggregate element and a scalar one.
+#[test]
+fn zero_length_block_scope_statics_do_not_overlap() {
+    let dir = tempdir("zero-len-block-static");
+    let src = write_source(
+        &dir,
+        "z.c",
+        "struct e { const char *a; const char *b; const char *c; };\n\
+         extern void sink(const void *p, unsigned long n);\n\
+         static void f(void) { static const struct e t[] = {}; sink(t, sizeof t); }\n\
+         static void g(void) { static const struct e t[] = {}; sink(t, sizeof t); }\n\
+         static void h(void) { static const int t[] = {}; sink(t, sizeof t); }\n\
+         static void i(void) { static const int t[] = {}; sink(t, sizeof t); }\n\
+         static const long pad[64] = { 1 };\n\
+         int main(void) { f(); g(); h(); i(); sink(pad, sizeof pad); return 0; }\n",
+    );
+    for target in ["linux-x64", "linux-aarch64"] {
+        let out = dir.join(format!("z-{target}.o"));
+        run(
+            Command::new(badc())
+                .args(["-c", &format!("--target={target}"), "-o"])
+                .arg(&out)
+                .arg(&src)
+                .current_dir(&dir),
+            "compile zero-length block-scope statics",
+        );
+    }
+}
+
 /// The linked image keeps the read-only payload out of the writable
 /// load: `.rodata` is `SHF_ALLOC` without `SHF_WRITE` and gets a
 /// `PT_LOAD` whose `p_flags` is `PF_R` alone -- neither writable nor

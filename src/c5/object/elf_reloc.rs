@@ -1022,12 +1022,21 @@ pub(super) fn write_relocatable(
                 if w[0].0 + w[0].1 > w[1].0 {
                     // Cold path: name the objects at each offset. A bare
                     // offset does not identify them, and several
-                    // symbols can share one start.
+                    // symbols can share one start. `val` is a data offset
+                    // only for the class placed above; on any other symbol
+                    // it counts something else and must not be matched.
                     let at = |off: u64| {
                         let names: Vec<&str> = program
                             .symbols
                             .iter()
-                            .filter(|s| s.val as u64 == off && s.defined_here && !s.name.is_empty())
+                            .filter(|s| {
+                                s.class == Token::Glo as i64
+                                    && s.val as u64 == off
+                                    && s.defined_here
+                                    && !s.is_alias
+                                    && !s.is_thread_local
+                                    && !s.name.is_empty()
+                            })
                             .map(|s| s.name.as_str())
                             .collect();
                         if names.is_empty() {
@@ -1893,12 +1902,15 @@ pub(super) fn write_relocatable(
     // `.bss` for a wholly-zero object, or in the named section the
     // plan moved them to. C99 6.2.2: external-linkage objects surface
     // by name so sibling TUs can resolve `extern T x;`.
+    let mut defined_data_symidx: alloc::collections::BTreeMap<&str, u64> =
+        alloc::collections::BTreeMap::new();
     for (i, (name, val, size)) in defined_data_globals.iter().enumerate() {
         let (shndx, value) = match plan.map((*val).max(0) as u64) {
             DataHome::Data(o) => (SHIDX_DATA, o),
             DataHome::Bss(o) => (SHIDX_BSS, o),
             DataHome::Named(e, o) => (named_shndx[e], o),
         };
+        defined_data_symidx.insert(name, symbols.len() as u64);
         symbols.push(Elf64Sym {
             st_name: name_offs[defined_data_globals_start + i],
             st_info: pack_sym_info(bind_for(name), STT_OBJECT),
@@ -2281,8 +2293,8 @@ pub(super) fn write_relocatable(
     // Inline-asm section relocations join the owning table entry,
     // offset by the block's placement base. A text-offset target in a
     // carved range retargets to the named section's symbol; a name
-    // resolves to a defined function, section-relative defined data,
-    // or an undefined symbol.
+    // resolves to a defined function, a defined data object, or an
+    // undefined symbol.
     {
         use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
         // Undefined-symbol index by name. The three name lists are
@@ -2330,6 +2342,11 @@ pub(super) fn write_relocatable(
                             (idx as u64, r.addend)
                         } else if let Some(&idx) = func_symidx_by_name.get(name.as_str()) {
                             (idx as u64, r.addend)
+                        } else if let Some(&idx) = defined_data_symidx.get(name.as_str()) {
+                            // An external-linkage object carries its binding on
+                            // its own symbol; reducing to section+addend would
+                            // present it to readers as a local definition.
+                            (idx, r.addend)
                         } else if let Some(&val) = defined_data_by_name.get(name.as_str()) {
                             let (sym, off) = data_section_ref(val);
                             (sym, off + r.addend)

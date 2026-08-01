@@ -22,12 +22,13 @@ use crate::c5::ir::FunctionSsa;
 use crate::c5::program::Program;
 
 /// What the fixed point may do beyond folding constant-condition
-/// branches and pruning what they orphan. All three are off for the
+/// branches and pruning what they orphan. All are off for the
 /// post-walk cleanup: a deferred `__builtin_constant_p` must survive
-/// there for the inliner's later argument substitution, and the other
-/// two are `-O` capabilities.
+/// there for the inliner's later argument substitution, and the others
+/// are `-O` capabilities.
 struct Opts<'a> {
     const_data: Option<&'a super::const_global_fold::ConstData<'a>>,
+    addr_facts: Option<&'a super::constfold::AddrFacts>,
     resolve_constant_p: bool,
     fold_selects: bool,
 }
@@ -39,6 +40,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
             func,
             &Opts {
                 const_data: None,
+                addr_facts: None,
                 resolve_constant_p: false,
                 fold_selects: false,
             },
@@ -46,17 +48,19 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     }
 }
 
-/// The `-O` form: const-object loads and select consumers fold inside
-/// the same fixed point, and a surviving deferred
-/// `__builtin_constant_p` resolves to 0 on the way out, so no such node
-/// reaches an emitter.
+/// The `-O` form: const-object loads, select consumers, and null
+/// comparisons of non-null symbol addresses fold inside the same fixed
+/// point, and a surviving deferred `__builtin_constant_p` resolves to 0
+/// on the way out, so no such node reaches an emitter.
 pub(crate) fn run_with_const_data(funcs: &mut [FunctionSsa], program: &Program) {
     let cd = super::const_global_fold::ConstData::build(program);
+    let facts = super::constfold::addr_facts(program);
     for func in funcs {
         run_one(
             func,
             &Opts {
                 const_data: Some(&cd),
+                addr_facts: Some(&facts),
                 resolve_constant_p: true,
                 fold_selects: true,
             },
@@ -77,13 +81,16 @@ fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
     loop {
         super::constfold::run_one(func);
         let selected = opts.fold_selects && super::constfold::fold_selects(func);
+        let nulled = opts
+            .addr_facts
+            .is_some_and(|facts| super::constfold::fold_addr_compares(func, facts));
         let loaded = opts
             .const_data
             .is_some_and(|cd| super::const_global_fold::fold_loads(func, cd));
         let folded = super::constfold_branch::run_one(func);
         let pruned = super::prune_unreachable::run_one(func);
         bound -= 1;
-        if (!folded && !pruned && !loaded && !selected) || bound == 0 {
+        if (!folded && !pruned && !loaded && !selected && !nulled) || bound == 0 {
             // The fixed point is the last chance to discover a constant,
             // so survivors resolve here; a resolution that changes the
             // function re-enters the loop to fold what it exposed.

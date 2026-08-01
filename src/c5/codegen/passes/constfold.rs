@@ -32,6 +32,7 @@
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
 use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
 use crate::c5::vm::eval;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -218,6 +219,198 @@ pub(crate) fn fold_selects(func: &mut FunctionSsa) -> bool {
     changed
 }
 
+/// Program-level facts for deciding that a symbol address is non-null:
+/// the referent must be defined in this unit and not weak. An undefined
+/// symbol may bind to address zero (a weak reference by ELF rule, any
+/// extern under a model that places objects at absolute addresses), and
+/// a weak definition is preemptible, so both stay out -- the behavior
+/// GCC keeps under `-fno-delete-null-pointer-checks`, which the
+/// affected kernel-style code is built with.
+pub(crate) struct AddrFacts {
+    /// Parser-symbol indices with a non-weak definition in this unit.
+    nonnull_syms: BTreeSet<u32>,
+    /// Entry PCs of non-weak functions defined in this unit. An extern
+    /// function referenced by address carries a placeholder ent_pc with
+    /// no body, so membership -- not the extern-ref table -- is what
+    /// separates the two.
+    nonnull_code_pcs: BTreeSet<usize>,
+    /// Data-segment `[lo, hi)` ranges of weak definitions; an `ImmData`
+    /// offset inside one is preemptible storage.
+    weak_data: Vec<(i64, i64)>,
+    /// As `weak_data`, for the TLS block.
+    weak_tls: Vec<(i64, i64)>,
+}
+
+pub(crate) fn addr_facts(program: &crate::c5::program::Program) -> AddrFacts {
+    use crate::c5::token::Token;
+    let mut facts = AddrFacts {
+        nonnull_syms: BTreeSet::new(),
+        nonnull_code_pcs: BTreeSet::new(),
+        weak_data: Vec::new(),
+        weak_tls: Vec::new(),
+    };
+    for (i, s) in program.symbols.iter().enumerate() {
+        if !s.defined_here {
+            continue;
+        }
+        if !s.is_weak {
+            facts.nonnull_syms.insert(i as u32);
+            if s.class == Token::Fun as i64 {
+                facts.nonnull_code_pcs.insert(s.val as usize);
+            }
+        } else if s.class == Token::Glo as i64 && s.reserved_data_bytes > 0 {
+            let range = (s.val, s.val + s.reserved_data_bytes);
+            if s.is_thread_local {
+                facts.weak_tls.push(range);
+            } else {
+                facts.weak_data.push(range);
+            }
+        }
+    }
+    facts
+}
+
+/// Recursion budget for the non-null address walk: a base behind a few
+/// collapsed merges.
+const NONNULL_DEPTH: u32 = 8;
+
+/// Whether `v` produces an address that cannot compare equal to a null
+/// pointer constant (C99 6.3.2.3p3, 6.5.9p6): a local slot, a block
+/// address, an import stub, or a code / data / TLS address whose
+/// referent has a non-weak definition in this unit per [`AddrFacts`].
+/// Degenerate phis are chased like the constant resolver does. A
+/// displacement chain on such a base is not walked through: the IR does
+/// not distinguish pointer arithmetic (in-bounds by C99 6.5.6p8) from
+/// integer arithmetic on a converted address, and the latter may wrap
+/// to zero.
+fn is_nonnull_addr(
+    func: &FunctionSsa,
+    extern_syms: &BTreeMap<u32, u32>,
+    facts: &AddrFacts,
+    v: ValueId,
+    depth: u32,
+) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    // An extern-resolved instruction is judged by its symbol; its
+    // payload is a placeholder.
+    if let Some(sym) = extern_syms.get(&v) {
+        return facts.nonnull_syms.contains(sym);
+    }
+    let outside = |ranges: &[(i64, i64)], off: i64| {
+        !ranges.iter().any(|&(lo, hi)| off >= lo && off < hi)
+    };
+    match func.insts.get(v as usize) {
+        Some(Inst::ImmCode(pc)) => facts.nonnull_code_pcs.contains(pc),
+        Some(Inst::ImmData(off)) => outside(&facts.weak_data, *off),
+        Some(Inst::TlsAddr(off)) => outside(&facts.weak_tls, *off),
+        Some(Inst::ImmExtCode(_) | Inst::LocalAddr(_) | Inst::BlockAddr(_)) => true,
+        Some(Inst::Phi { incoming, .. }) if incoming.len() == 1 => {
+            is_nonnull_addr(func, extern_syms, facts, incoming[0].1, depth - 1)
+        }
+        _ => false,
+    }
+}
+
+/// The identity of an address-constant producer, for deciding that two
+/// SSA values denote the same link-time address. Extern-resolved
+/// instructions are keyed by their parser symbol: their payload is a
+/// placeholder, and the first function's entry PC is also 0, so the
+/// payload alone cannot distinguish them.
+#[derive(PartialEq, Eq)]
+enum AddrIdent {
+    Code(usize),
+    Data(i64),
+    Tls(i64),
+    ExtCode(i64),
+    Local(i64),
+    ExternSym(u32),
+}
+
+/// Chase degenerate phis to the defining instruction's index.
+fn resolve_value(func: &FunctionSsa, mut v: ValueId) -> ValueId {
+    for _ in 0..NONNULL_DEPTH {
+        match func.insts.get(v as usize) {
+            Some(Inst::Phi { incoming, .. }) if incoming.len() == 1 => v = incoming[0].1,
+            _ => break,
+        }
+    }
+    v
+}
+
+fn addr_ident(
+    func: &FunctionSsa,
+    extern_syms: &BTreeMap<u32, u32>,
+    v: ValueId,
+) -> Option<AddrIdent> {
+    if let Some(&sym) = extern_syms.get(&v) {
+        return Some(AddrIdent::ExternSym(sym));
+    }
+    Some(match func.insts.get(v as usize)? {
+        Inst::ImmCode(pc) => AddrIdent::Code(*pc),
+        Inst::ImmData(off) => AddrIdent::Data(*off),
+        Inst::TlsAddr(off) => AddrIdent::Tls(*off),
+        Inst::ImmExtCode(idx) => AddrIdent::ExtCode(*idx),
+        Inst::LocalAddr(slot) => AddrIdent::Local(*slot),
+        _ => return None,
+    })
+}
+
+/// Fold the comparisons a compile-time assertion on a symbol address
+/// reduces to, so the branch fold can drop the arm that calls the
+/// assertion's never-defined helper:
+///
+///   * `addr == 0` / `addr != 0` where `addr` is non-null per
+///     [`is_nonnull_addr`];
+///   * `a OP b` where both operands resolve to the same value or to
+///     the same address constant (C99 6.5.9p6: pointers to the same
+///     object or function compare equal) -- the shape inlining leaves
+///     when a call site passes the same function the callee compares
+///     its parameter against, one operand spliced from the caller and
+///     one from the callee.
+///
+/// -O only: an address is not a constant expression (C99 6.6), so this
+/// is the optimizer proving the comparison invariant.
+pub(crate) fn fold_addr_compares(func: &mut FunctionSsa, facts: &AddrFacts) -> bool {
+    let extern_syms: BTreeMap<u32, u32> = func
+        .extern_imm_code_refs
+        .iter()
+        .chain(&func.extern_imm_data_refs)
+        .chain(&func.extern_tls_refs)
+        .copied()
+        .collect();
+    let mut changed = false;
+    for idx in 0..func.insts.len() {
+        let folded = match &func.insts[idx] {
+            Inst::BinopI {
+                op: op @ (BinOp::Eq | BinOp::Ne),
+                lhs,
+                rhs_imm: 0,
+            } if is_nonnull_addr(func, &extern_syms, facts, *lhs, NONNULL_DEPTH) => {
+                Some(i64::from(*op == BinOp::Ne))
+            }
+            Inst::Binop { op, lhs, rhs } => same_operand_compare(*op).filter(|_| {
+                let (l, r) = (resolve_value(func, *lhs), resolve_value(func, *rhs));
+                l == r
+                    || matches!(
+                        (
+                            addr_ident(func, &extern_syms, l),
+                            addr_ident(func, &extern_syms, r),
+                        ),
+                        (Some(a), Some(b)) if a == b
+                    )
+            }),
+            _ => None,
+        };
+        if let Some(k) = folded {
+            func.insts[idx] = Inst::Imm(k);
+            changed = true;
+        }
+    }
+    changed
+}
+
 /// Resolve every remaining deferred `__builtin_constant_p` to 0. Called
 /// once the branch-fold fixed point stalls: no later pass discovers new
 /// constants, so an operand still not an immediate never becomes one.
@@ -292,6 +485,18 @@ fn imm_encodes_free(op: BinOp, imm: i64) -> bool {
         | BinOp::Uge => (0..4096).contains(&imm),
         _ => false,
     }
+}
+
+/// `x OP x` for the integer comparisons: reflexive ops yield 1, the
+/// strict ones 0 (C99 6.5.8p6, 6.5.9). These opcodes never carry
+/// floating operands -- the FP comparisons are the separate `Feq` /
+/// `Flt` / ... family -- so the NaN caveat does not arise.
+fn same_operand_compare(op: BinOp) -> Option<i64> {
+    Some(match op {
+        BinOp::Eq | BinOp::Le | BinOp::Ge | BinOp::Ule | BinOp::Uge => 1,
+        BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Ult | BinOp::Ugt => 0,
+        _ => return None,
+    })
 }
 
 /// `imm OP x` recast as `x OP' imm`: the op itself for commutative
@@ -425,6 +630,9 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             Inst::BinopI { op, lhs, rhs_imm } => imm_of(func, *lhs)
                 .and_then(|l| eval::fold_binop(*op, l, *rhs_imm))
                 .map(Inst::Imm),
+            Inst::Binop { op, lhs, rhs } if lhs == rhs && same_operand_compare(*op).is_some() => {
+                same_operand_compare(*op).map(Inst::Imm)
+            }
             Inst::Binop { op, lhs, rhs } => match (imm_of(func, *lhs), imm_of(func, *rhs)) {
                 (Some(l), Some(r)) => eval::fold_binop(*op, l, r).map(Inst::Imm),
                 (None, Some(r)) if to_imm_form(*op, *rhs, r) => Some(Inst::BinopI {
@@ -969,5 +1177,191 @@ mod tests {
             },
         ]);
         assert!(!fold_selects(&mut f));
+    }
+
+    #[test]
+    fn same_operand_integer_compares_fold() {
+        for (op, want) in [
+            (BinOp::Eq, 1),
+            (BinOp::Le, 1),
+            (BinOp::Ge, 1),
+            (BinOp::Ule, 1),
+            (BinOp::Uge, 1),
+            (BinOp::Ne, 0),
+            (BinOp::Lt, 0),
+            (BinOp::Gt, 0),
+            (BinOp::Ult, 0),
+            (BinOp::Ugt, 0),
+        ] {
+            let mut f = fresh(vec![
+                Inst::LocalAddr(0),
+                Inst::Binop { op, lhs: 0, rhs: 0 },
+            ]);
+            run_one(&mut f);
+            assert!(
+                matches!(f.insts[1], Inst::Imm(k) if k == want),
+                "{op:?} -> {want}"
+            );
+        }
+        // Non-compare ops on a shared operand stay put.
+        let mut f = fresh(vec![
+            Inst::LocalAddr(0),
+            Inst::Binop {
+                op: BinOp::Sub,
+                lhs: 0,
+                rhs: 0,
+            },
+        ]);
+        run_one(&mut f);
+        assert!(matches!(f.insts[1], Inst::Binop { .. }));
+    }
+
+    fn facts(nonnull_pcs: &[usize]) -> AddrFacts {
+        AddrFacts {
+            nonnull_syms: BTreeSet::new(),
+            nonnull_code_pcs: nonnull_pcs.iter().copied().collect(),
+            weak_data: Vec::new(),
+            weak_tls: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn null_compare_of_defined_function_address_folds() {
+        // `addr == 0` on a defined function's address is 0; `!= 0` is 1.
+        let mut f = fresh(vec![
+            Inst::ImmCode(7),
+            Inst::BinopI {
+                op: BinOp::Eq,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+            Inst::BinopI {
+                op: BinOp::Ne,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+        ]);
+        assert!(fold_addr_compares(&mut f, &facts(&[7])));
+        assert!(matches!(f.insts[1], Inst::Imm(0)));
+        assert!(matches!(f.insts[2], Inst::Imm(1)));
+    }
+
+    #[test]
+    fn null_compare_of_extern_placeholder_pc_is_refused() {
+        // An extern function's placeholder ent_pc is not a defined pc,
+        // so its address may bind to zero.
+        let mut f = fresh(vec![
+            Inst::ImmCode(7),
+            Inst::BinopI {
+                op: BinOp::Eq,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+        ]);
+        assert!(!fold_addr_compares(&mut f, &facts(&[])));
+        assert!(matches!(f.insts[1], Inst::BinopI { .. }));
+    }
+
+    #[test]
+    fn null_compare_of_weak_or_extern_sym_ref_is_refused() {
+        // An extern-resolved instruction is judged by its symbol: sym 5
+        // has no non-weak definition here, so no fold.
+        let mut f = fresh(vec![
+            Inst::ImmCode(0),
+            Inst::BinopI {
+                op: BinOp::Eq,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+        ]);
+        f.extern_imm_code_refs.push((0, 5));
+        assert!(!fold_addr_compares(&mut f, &facts(&[0])));
+        assert!(matches!(f.insts[1], Inst::BinopI { .. }));
+        // The same sym with a non-weak definition folds.
+        let mut g = fresh(vec![
+            Inst::ImmCode(0),
+            Inst::BinopI {
+                op: BinOp::Eq,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+        ]);
+        g.extern_imm_code_refs.push((0, 5));
+        let mut fx = facts(&[]);
+        fx.nonnull_syms.insert(5);
+        assert!(fold_addr_compares(&mut g, &fx));
+        assert!(matches!(g.insts[1], Inst::Imm(0)));
+    }
+
+    #[test]
+    fn null_compare_of_weak_data_range_is_refused() {
+        let mut fx = facts(&[]);
+        fx.weak_data.push((64, 72));
+        // Inside the weak definition's range: refused.
+        let mut f = fresh(vec![
+            Inst::ImmData(64),
+            Inst::BinopI {
+                op: BinOp::Ne,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+        ]);
+        assert!(!fold_addr_compares(&mut f, &fx));
+        // Outside it: this unit's non-weak storage, never null.
+        let mut g = fresh(vec![
+            Inst::ImmData(128),
+            Inst::BinopI {
+                op: BinOp::Ne,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+        ]);
+        assert!(fold_addr_compares(&mut g, &fx));
+        assert!(matches!(g.insts[1], Inst::Imm(1)));
+    }
+
+    #[test]
+    fn identical_address_constant_operands_fold() {
+        // Two distinct defs of the same function address -- the shape
+        // inlining leaves -- compare as the same pointer.
+        let mut f = fresh(vec![
+            Inst::ImmCode(7),
+            Inst::ImmCode(7),
+            Inst::Binop {
+                op: BinOp::Ne,
+                lhs: 0,
+                rhs: 1,
+            },
+        ]);
+        assert!(fold_addr_compares(&mut f, &facts(&[])));
+        assert!(matches!(f.insts[2], Inst::Imm(0)));
+        // Two extern placeholders with the same payload but different
+        // symbols are different addresses: refused.
+        let mut g = fresh(vec![
+            Inst::ImmCode(0),
+            Inst::ImmCode(0),
+            Inst::Binop {
+                op: BinOp::Ne,
+                lhs: 0,
+                rhs: 1,
+            },
+        ]);
+        g.extern_imm_code_refs.push((0, 3));
+        g.extern_imm_code_refs.push((1, 4));
+        assert!(!fold_addr_compares(&mut g, &facts(&[])));
+        // The same extern symbol on both sides is one address.
+        let mut h = fresh(vec![
+            Inst::ImmCode(0),
+            Inst::ImmCode(0),
+            Inst::Binop {
+                op: BinOp::Eq,
+                lhs: 0,
+                rhs: 1,
+            },
+        ]);
+        h.extern_imm_code_refs.push((0, 3));
+        h.extern_imm_code_refs.push((1, 3));
+        assert!(fold_addr_compares(&mut h, &facts(&[])));
+        assert!(matches!(h.insts[2], Inst::Imm(1)));
     }
 }

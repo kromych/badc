@@ -120,11 +120,13 @@ fn extern_imm_data(func: &FunctionSsa) -> BTreeSet<u32> {
 }
 
 /// Resolve `v` to a data-segment offset when it is an `ImmData` plus a
-/// folded constant displacement chain. An `ImmData` naming an extern
-/// symbol resolves to nothing: its payload is a placeholder, so the
-/// bytes at that offset belong to an unrelated object of this unit.
+/// folded constant displacement chain, chasing degenerate phis -- the
+/// residue a pruned branch leaves between an inlined accessor's return
+/// and its consumer. An `ImmData` naming an extern symbol resolves to
+/// nothing: its payload is a placeholder, so the bytes at that offset
+/// belong to an unrelated object of this unit.
 fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i64) -> Option<i64> {
-    for _ in 0..8 {
+    for _ in 0..16 {
         match func.insts.get(v as usize)? {
             Inst::ImmData(_) if ext.contains(&v) => return None,
             Inst::ImmData(base) => return Some(base.wrapping_add(off)),
@@ -144,6 +146,7 @@ fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i
                 off = off.wrapping_sub(*rhs_imm);
                 v = *lhs;
             }
+            Inst::Phi { incoming, .. } if incoming.len() == 1 => v = incoming[0].1,
             _ => return None,
         }
     }
@@ -255,24 +258,14 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], program: &Program) {
                 }) => (*addr, *disp),
                 _ => continue,
             };
-            // The member address is `ImmData(base)` directly, or -- before
-            // index_fold folds the member offset into the load's `disp` --
-            // `BinopI{add, ImmData(base), k}`. An `ImmData` naming an
-            // extern symbol carries a link-time placeholder, so it says
+            // The member address is an `ImmData(base)` plus the constant
+            // displacement chain `data_addr` resolves. An `ImmData` naming
+            // an extern symbol carries a link-time placeholder, so it says
             // nothing about this unit's data.
-            let base = match f.insts.get(addr as usize) {
-                Some(Inst::ImmData(base)) if !ext.contains(&addr) => *base,
-                Some(Inst::BinopI {
-                    op: BinOp::Add,
-                    lhs,
-                    rhs_imm,
-                }) => match f.insts.get(*lhs as usize) {
-                    Some(Inst::ImmData(base)) if !ext.contains(lhs) => *base + *rhs_imm,
-                    _ => continue,
-                },
-                _ => continue,
+            let Some(member_off) = data_addr(f, &ext, addr, disp as i64) else {
+                continue;
             };
-            if !const_reloc_offsets.contains(&(base + disp as i64)) {
+            if !const_reloc_offsets.contains(&member_off) {
                 continue;
             }
             // The member holds a non-null address; the comparison is a

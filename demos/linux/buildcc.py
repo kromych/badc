@@ -75,13 +75,14 @@ def rewrite(argv: list[str]) -> list[str]:
             # convention. badc's variadic prologue honors both spellings.
             out.append(a)
             i += 1
-        elif a in ("-fPIC", "-fpic", "-fno-pic", "-fno-PIC"):
+        elif a in ("-fPIC", "-fpic", "-fPIE", "-fpie", "-fno-pic", "-fno-PIC"):
             # The EFI-stub island copies its objects wholesale and rejects
-            # any absolute relocation, so units built with -fPIC must take
-            # badc's position-independent object form (label-difference
-            # switch tables). Elsewhere the default absolute form stays:
-            # its relocations name the branch targets, which the ORC pass
-            # requires.
+            # any absolute relocation, and the boot decompressor links its
+            # objects into a segment that may carry none, so units built
+            # position-independent must take badc's position-independent
+            # object form (label-difference switch tables). Elsewhere the
+            # default absolute form stays: its relocations name the branch
+            # targets, which the ORC pass requires.
             out.append(a)
             i += 1
         elif a.startswith("-"):

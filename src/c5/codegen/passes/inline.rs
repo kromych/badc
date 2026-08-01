@@ -38,7 +38,8 @@ use alloc::vec::Vec;
 use crate::c5::codegen::Abi;
 use crate::c5::codegen::abi_classify::{AggClass, RegClass, classify_aggregate};
 use crate::c5::ir::{
-    BinOp, Block, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+    AsmConstraint, BinOp, Block, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
+    Terminator, ValueId,
 };
 
 /// Outer candidacy fixpoint cap: re-evaluating candidacy after each
@@ -788,15 +789,32 @@ fn is_inline_candidate(
             Inst::Phi { .. } => {}
             // Inline asm on the reloc path: `rewrite_callee_inst` remaps the
             // operand args -- an output's destination address among them --
-            // and an asm-goto's `jump_tables` row clones into the caller. On
-            // this path the callee has no aggregate, so every output address
-            // is a relocated slot (own-local or parameter cell, riding the
-            // slot relocation), a remapped pointer, or a carried global, so
-            // no output escapes to a slot the splice cannot write.
-            Inst::InlineAsm { .. } => {
+            // and an asm-goto's `jump_tables` row clones into the caller. An
+            // output address is then a relocated slot (own-local or parameter
+            // cell, riding the slot relocation), a remapped pointer, or a
+            // carried global, so no output escapes to a slot the splice
+            // cannot write.
+            //
+            // A by-value aggregate parameter is the exception: its slot
+            // redirects to the caller's argument address, so an asm operand
+            // that writes through it would mutate the caller's object, which
+            // by-value passing forbids (C99 6.5.2.2p4 -- the parameter is a
+            // copy). Reject rather than splice.
+            Inst::InlineAsm { asm, args } => {
                 if !reloc {
                     say(format_args!("inline asm in a non-reloc callee"));
                     return false;
+                }
+                for (op, &a) in asm.operands.iter().zip(args.iter()) {
+                    if !(op.is_output || matches!(op.constraint, AsmConstraint::Mem)) {
+                        continue;
+                    }
+                    if let Some(Inst::LocalAddr(s)) = func.insts.get(a as usize)
+                        && param_agg_slots.contains(s)
+                    {
+                        say(format_args!("asm output writes a by-value aggregate parameter"));
+                        return false;
+                    }
                 }
             }
             // An intrinsic is a leaf the splice reproduces by an operand

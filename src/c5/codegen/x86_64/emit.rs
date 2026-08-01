@@ -190,7 +190,6 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
 /// 16 per saved xmm, 8 per saved GP register, 8 per operand capture.
 /// Mirrors the save-list computation in [`emit_inline_asm`].
 fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
-    use super::super::ir::AsmConstraint;
     let mut max = 0u32;
     for inst in &func.insts {
         let Inst::InlineAsm { asm, args } = inst else {
@@ -201,23 +200,68 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
         else {
             continue;
         };
-        let mut used = asm.clobber_regs;
-        let mut fp_used = asm.clobber_fp_regs;
-        for (i, op) in asm.operands.iter().enumerate() {
-            let Some(r) = op_reg[i] else { continue };
-            if matches!(op.constraint, AsmConstraint::Bound(_)) {
-                continue;
-            }
-            if matches!(op.constraint, AsmConstraint::Fp) {
-                fp_used |= 1 << r;
-            } else {
-                used |= 1 << r;
-            }
-        }
+        let Ok((used, fp_used, _)) = asm_save_masks_and_stage(asm, &op_reg) else {
+            continue;
+        };
         let bytes = fp_used.count_ones() * 16 + used.count_ones() * 8 + args.len() as u32 * 8;
         max = max.max(bytes);
     }
     super::ssa::emit_common::align16(max)
+}
+
+/// The GP / FP register masks an inline-asm statement saves around its
+/// body, and the staging register its capture / load / store-back
+/// sequences run through. The stage must not alias any GP operand
+/// register (a `register T v asm("reg")` binding can pin an operand to
+/// any GPR, including r10 / r11), so it is chosen per statement: r10 /
+/// r11 first (outside the allocator banks, nothing to save), then any
+/// clobbered non-operand register (already saved), then a free
+/// allocator-visible register, added to the save mask. Sizing
+/// (`asm_scratch_bytes`) and emission (`emit_inline_asm`) share this so
+/// the frame region always covers the emitted save list.
+fn asm_save_masks_and_stage(
+    asm: &super::super::ir::AsmBlock,
+    op_reg: &[Option<u8>],
+) -> Result<(u32, u32, Reg), String> {
+    use super::super::ir::AsmConstraint;
+    let mut used = asm.clobber_regs;
+    let mut fp_used = asm.clobber_fp_regs;
+    // GP registers the stage must avoid: every operand register (bound
+    // ones included -- their value is live into and out of the body).
+    let mut operand_gp = 0u32;
+    for (i, op) in asm.operands.iter().enumerate() {
+        let Some(r) = op_reg[i] else { continue };
+        if matches!(op.constraint, AsmConstraint::Fp) {
+            fp_used |= 1 << r;
+            continue;
+        }
+        operand_gp |= 1 << r;
+        if !matches!(op.constraint, AsmConstraint::Bound(_)) {
+            used |= 1 << r;
+        }
+    }
+    const STAGE_CANDIDATES: [u8; 14] = [10, 11, 0, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15];
+    // The stage carries no value across the template, so a clobbered
+    // register serves at no cost (it is saved regardless); r10 / r11
+    // are free even unclobbered. A free allocator-visible register may
+    // hold a live value, so it is the last resort and joins the save
+    // list.
+    let free = |r: u8| operand_gp & (1 << r) == 0;
+    let stage = [10u8, 11]
+        .into_iter()
+        .find(|&r| free(r))
+        .or_else(|| {
+            STAGE_CANDIDATES
+                .iter()
+                .copied()
+                .find(|&r| free(r) && asm.clobber_regs & (1 << r) != 0)
+        })
+        .or_else(|| STAGE_CANDIDATES.iter().copied().find(|&r| free(r)))
+        .ok_or_else(|| String::from("inline asm: no register left for operand staging"))?;
+    if stage != 10 && stage != 11 && asm.clobber_regs & (1 << stage) == 0 {
+        used |= 1 << stage;
+    }
+    Ok((used, fp_used, Reg(stage)))
 }
 
 /// True when the function is a variadic c5 callee compiled for the
@@ -7138,24 +7182,18 @@ fn emit_inline_asm(
     // from a named code label (a multiply-defined numeric label renamed above).
     let code_label_names = super::asm::scan_label_names(code_text);
     // Registers the asm overwrites: the operand registers plus the explicit
-    // clobber list. GP registers save to 8-byte scratch slots; `x` (xmm)
-    // operands and FP clobbers live in the independent XMM file and take
-    // 16-byte slots.
-    let mut used = asm.clobber_regs;
-    let mut fp_used = asm.clobber_fp_regs;
-    for (i, op) in asm.operands.iter().enumerate() {
-        let Some(r) = op_reg[i] else { continue };
-        // A bound operand's register is the one the asm was asked to see
-        // and affect, so it is not saved around the block.
-        if matches!(op.constraint, AsmConstraint::Bound(_)) {
-            continue;
+    // clobber list (a bound operand's register is the one the asm was asked
+    // to see and affect, so it is not saved around the block). GP registers
+    // save to 8-byte scratch slots; `x` (xmm) operands and FP clobbers live
+    // in the independent XMM file and take 16-byte slots. `stage` carries
+    // the capture / load / store-back sequences below.
+    let (used, fp_used, stage) = match asm_save_masks_and_stage(asm, &op_reg) {
+        Ok(t) => t,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
         }
-        if matches!(op.constraint, AsmConstraint::Fp) {
-            fp_used |= 1 << r;
-        } else {
-            used |= 1 << r;
-        }
-    }
+    };
     let save_list: alloc::vec::Vec<u8> = (0u8..16).filter(|r| used & (1 << r) != 0).collect();
     let fp_save_list: alloc::vec::Vec<u8> = (0u8..16).filter(|r| fp_used & (1 << r) != 0).collect();
     // With nothing to run on the way out -- no register outputs to store
@@ -7190,17 +7228,29 @@ fn emit_inline_asm(
         super::encode::emit_mov_mem_r(code, Reg::RBP, gp_off(k), Reg(r));
     }
     // Capture each operand's value (input) / address (output) into its
-    // slot before any asm register is written. r10 is the sole staging
-    // scratch here and in the load / call / store-back sequences below, so
-    // r11 stays free to carry a `register T v asm("r11")` bound operand.
-    for (i, &a) in args.iter().enumerate() {
-        let Some(place) = alloc.places.get(a as usize).copied() else {
-            return fail("inline asm: operand place missing");
-        };
-        let Some(r) = materialize_int(code, place, SCRATCH_R10, frame) else {
-            return fail("inline asm: operand not an integer place");
-        };
-        super::encode::emit_mov_mem_r(code, Reg::RBP, cap_off(i), r);
+    // slot before any asm register is written. An allocator-visible
+    // stage (r10 and r11 both held by operands or clobbers) may itself
+    // be some operand value's allocated register, so register-resident
+    // operands are captured in a first pass, before a spill load writes
+    // the stage.
+    let passes = if stage == SCRATCH_R10 || stage == SCRATCH_R11 {
+        1
+    } else {
+        2
+    };
+    for pass in 0..passes {
+        for (i, &a) in args.iter().enumerate() {
+            let Some(place) = alloc.places.get(a as usize).copied() else {
+                return fail("inline asm: operand place missing");
+            };
+            if passes == 2 && (pass == 1) != matches!(place, Place::Spill(_)) {
+                continue;
+            }
+            let Some(r) = materialize_int(code, place, stage, frame) else {
+                return fail("inline asm: operand not an integer place");
+            };
+            super::encode::emit_mov_mem_r(code, Reg::RBP, cap_off(i), r);
+        }
     }
     // Load inputs into their registers; a `+` output loads its current
     // value from the destination address. A memory operand instead loads its
@@ -7213,8 +7263,8 @@ fn emit_inline_asm(
             // assigned xmm. An output-only `=x` is written by the asm, so skip
             // its load; a `+x` needs the current value.
             if !op.is_output || op.is_rw {
-                super::encode::emit_mov_r_mem(code, SCRATCH_R10, Reg::RBP, cap_off(i));
-                super::encode::emit_movups_xmm_mem(code, Reg(r), SCRATCH_R10, 0);
+                super::encode::emit_mov_r_mem(code, stage, Reg::RBP, cap_off(i));
+                super::encode::emit_movups_xmm_mem(code, Reg(r), stage, 0);
             }
             continue;
         }
@@ -7228,8 +7278,8 @@ fn emit_inline_asm(
             // loads its value. Both come from the captured slot.
             super::encode::emit_mov_r_mem(code, reg, Reg::RBP, cap_off(i));
         } else if op.is_rw {
-            super::encode::emit_mov_r_mem(code, SCRATCH_R10, Reg::RBP, cap_off(i));
-            emit_asm_load_width(code, reg, SCRATCH_R10, op.width);
+            super::encode::emit_mov_r_mem(code, stage, Reg::RBP, cap_off(i));
+            emit_asm_load_width(code, reg, stage, op.width);
         }
     }
     // Local labels: definitions record the code offset they stand at; a
@@ -7397,18 +7447,13 @@ fn emit_inline_asm(
                     super::encode::emit_mov_r_mem(code, Reg(dst), Reg::RBP, cap_off(idx as usize));
                 }
                 "call" | "callq" | "jmp" | "jmpq" if insn.operands.len() == 1 => {
-                    super::encode::emit_mov_r_mem(
-                        code,
-                        SCRATCH_R10,
-                        Reg::RBP,
-                        cap_off(idx as usize),
-                    );
-                    // FF /2 (call) / FF /4 (jmp) through r10.
-                    code.extend_from_slice(&[
-                        0x41,
-                        0xFF,
-                        if name.starts_with("call") { 0xD2 } else { 0xE2 },
-                    ]);
+                    super::encode::emit_mov_r_mem(code, stage, Reg::RBP, cap_off(idx as usize));
+                    // FF /2 (call) / FF /4 (jmp) through the stage register.
+                    if stage.0 >= 8 {
+                        code.push(0x41);
+                    }
+                    code.push(0xFF);
+                    code.push(if name.starts_with("call") { 0xD0 } else { 0xE0 } | (stage.0 & 7));
                 }
                 _ => {
                     return fail("inline asm: `%c`/`%P` address operand outside lea/call/jmp");
@@ -8161,11 +8206,11 @@ fn emit_inline_asm(
                 continue;
             }
             let Some(r) = op_reg[i] else { continue };
-            super::encode::emit_mov_r_mem(code, SCRATCH_R10, Reg::RBP, cap_off(i));
+            super::encode::emit_mov_r_mem(code, stage, Reg::RBP, cap_off(i));
             if matches!(op.constraint, AsmConstraint::Fp) {
-                super::encode::emit_movups_mem_xmm(code, SCRATCH_R10, 0, Reg(r));
+                super::encode::emit_movups_mem_xmm(code, stage, 0, Reg(r));
             } else {
-                emit_asm_store_width(code, SCRATCH_R10, Reg(r), op.width);
+                emit_asm_store_width(code, stage, Reg(r), op.width);
             }
         }
     };

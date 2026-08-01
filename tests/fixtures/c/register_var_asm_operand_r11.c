@@ -1,8 +1,8 @@
-/* x86-64 r11 sits next to the emitter's reserved asm-staging scratch
-   (r10) yet is bindable: a stack-switch idiom pins a scratch value to
+/* x86-64 r11 is bindable: a stack-switch idiom pins a scratch value to
    it. A `+r` output round-trips through the register, and a value read
-   before a `call %c[fn]` survives because the indirect call stages its
-   target through r10, not the bound r11. */
+   before a `call %c[fn]` survives because the emitter's asm staging
+   (the indirect call's target included) picks a register away from the
+   bound r11. */
 long g_hit, g_saved;
 __attribute__((noinline)) void mark(void) { g_hit = 1; }
 

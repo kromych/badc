@@ -1326,10 +1326,6 @@ fn register_asm_binding_constraints() {
             "int main(void) { register long x asm(\"rsp\"); x = 5; return 0; }",
             "cannot write register variable",
         );
-        expect_compile_error(
-            "int main(void) { register long x asm(\"r10\"); return 0; }",
-            "reserved and cannot hold a register variable",
-        );
     }
     #[cfg(target_arch = "aarch64")]
     {
@@ -1347,22 +1343,20 @@ fn register_asm_binding_constraints() {
 #[test]
 fn register_asm_binding_target_specific_registers() {
     use super::super::codegen::Target;
-    // x86-64: r11 is bindable (a stack-switch idiom pins a scratch to
-    // it); r10 stays the emitter's reserved asm-staging scratch.
+    // x86-64: every GPR is bindable, including r10 / r11 (the asm
+    // emitter picks its staging scratch around bound operands; a
+    // hypercall-style ABI names r10 for an argument).
     let bind = |reg: &str| {
         format!(
             "int main(void) {{ register long v asm(\"{reg}\") = 1; long o; __asm__(\"movq %1, %0\" : \"=r\"(o) : \"r\"(v)); return (int)o; }}"
         )
     };
-    assert!(
-        compile_for_target(&bind("r11"), Target::LinuxX64).is_ok(),
-        "x86-64 `r11` must be bindable"
-    );
-    let e = compile_for_target(&bind("r10"), Target::LinuxX64).unwrap_err();
-    assert!(
-        e.contains("reserved and cannot hold a register variable"),
-        "{e}"
-    );
+    for reg in ["r10", "r11"] {
+        assert!(
+            compile_for_target(&bind(reg), Target::LinuxX64).is_ok(),
+            "x86-64 `{reg}` must be bindable"
+        );
+    }
 
     // AArch64: GCC's `rN` spelling aliases `xN` (the SMCCC headers spell
     // hypercall operands `asm("r0")`); x16/x17 stay reserved either way.

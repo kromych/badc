@@ -366,11 +366,13 @@ impl Compiler {
     /// `pointee_size` scales `p[i]` / `p + 1` by the whole row.
     pub(super) fn array_agg_type(&mut self, elem_ty: i64, dims: &[i64]) -> i64 {
         // A zero dimension (`T (*p)[0]`, GCC zero-length array) makes a
-        // complete zero-size pointee; a negative product is an unsized
-        // sentinel that leaked through a typedef carrier and keeps the
-        // single-element fallback.
-        let raw: i64 = dims.iter().product();
-        let count: i64 = if raw < 0 { 1 } else { raw };
+        // complete zero-size pointee. A negative dimension is the
+        // unspecified-bound sentinel (`T (*)[]`, C99 6.7.5.2p4 incomplete
+        // array): the size is unknown (recorded 0) and the sentinel is
+        // kept on the field so 6.7.5.2p6 compatibility and `typeof`
+        // recovery see the unspecified bound.
+        let unspecified = dims.iter().any(|&d| d < 0);
+        let count: i64 = if unspecified { -1 } else { dims.iter().product() };
         let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
         let mut name = alloc::format!("__array_{}", elem_ty);
         for d in dims {
@@ -402,7 +404,11 @@ impl Compiler {
         };
         self.structs.push(StructDef {
             name,
-            size: (count * elem_size) as usize,
+            size: if unspecified {
+                0
+            } else {
+                (count * elem_size) as usize
+            },
             align: self.align_of_type(elem_ty),
             fields: alloc::vec![field],
             is_complete: true,

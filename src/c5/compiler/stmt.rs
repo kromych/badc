@@ -1363,9 +1363,14 @@ impl Compiler {
             // accumulator already holds the object's address. The decay marker
             // distinguishes that from an ordinary rvalue.
             let saved_decay_bytes = core::mem::take(&mut self.pending.last_array_decay_bytes);
+            let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
             self.expr(Token::Assign as i64)?;
+            // The dims channel also marks rows the byte channel cannot
+            // (an unspecified bound `*(T (*)[])p` has no byte size).
             let decayed_array =
-                core::mem::replace(&mut self.pending.last_array_decay_bytes, saved_decay_bytes) > 0;
+                core::mem::replace(&mut self.pending.last_array_decay_bytes, saved_decay_bytes) > 0
+                    || !core::mem::replace(&mut self.pending.last_array_decay_dims, saved_decay_dims)
+                        .is_empty();
             let width = self.size_of_type(self.ty).min(8) as u8;
             // A `__seg_gs` / `__seg_fs`-qualified operand object is reached
             // through a segment override. Read the segment off the operand's

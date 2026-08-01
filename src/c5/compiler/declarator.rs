@@ -201,11 +201,13 @@ impl Compiler {
         }
         // The pointee dimensions of `T (*)[M1]...[Mn]`: the caller folds
         // them into an aggregate-backed tag so the pointee keeps its size.
-        // An unspecified `[]` contributes no dimension.
+        // An unspecified bound (`T (*)[]`, C99 6.7.5.2p4 incomplete array
+        // type) records the -1 sentinel.
         let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
         while self.lex.tk == Token::Brak {
             self.next()?;
             if self.lex.tk == ']' {
+                dims.push(-1);
                 self.next()?;
             } else {
                 dims.push(self.parse_constant_int()?);

@@ -1679,10 +1679,14 @@ jobs:
           # points at the set fetched above. aarch64 -M virt loads none.
           ROMS: ${{ matrix.arch == 'x86_64' && format('-L {0}/pc-bios', runner.temp) || '' }}
         run: |
-          chmod +x "$RUNNER_TEMP"/qemu/qemu-system-*
+          # The upload preserved the path below its glob's fixed prefix, so the
+          # binary sits somewhere under the download dir rather than at its top.
+          emu=$(find "$RUNNER_TEMP/qemu" -type f -name 'qemu-system-${{ matrix.arch }}' | head -1)
+          test -n "$emu" || { echo "no emulator under $RUNNER_TEMP/qemu"; find "$RUNNER_TEMP/qemu"; exit 1; }
+          chmod +x "$emu"
           python demos/linux/verify.py \
             --kernel-dir "$KERNEL_TREE" --arch ${{ matrix.arch }} \
-            --qemu "$RUNNER_TEMP/qemu/qemu-system-${{ matrix.arch }}" \
+            --qemu "$emu" \
             --qemu-args "$ROMS -nic none" \
             --initramfs "$RUNNER_TEMP/initramfs.cpio.gz" \
             --expect-units ${{ matrix.floor }} --boot-timeout 90 \

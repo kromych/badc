@@ -5379,7 +5379,11 @@ fn bss_family_named_section_is_nobits() {
         let sh_type = |n: &str| secs.iter().find(|(s, ..)| s == n).expect(n).1;
         assert_eq!(sh_type(".bss..page_aligned"), 8, "{target:?}: SHT_NOBITS");
         assert_eq!(sh_type(".bss..x"), 8, "{target:?}: SHT_NOBITS");
-        assert_eq!(sh_type(".data..page_aligned"), 1, "{target:?}: SHT_PROGBITS");
+        assert_eq!(
+            sh_type(".data..page_aligned"),
+            1,
+            "{target:?}: SHT_PROGBITS"
+        );
         assert_eq!(sh_type(".mydata"), 1, "{target:?}: SHT_PROGBITS");
     }
 }
@@ -5465,7 +5469,10 @@ fn asm_pushsection_bss_family_defaults_to_nobits() {
     assert_eq!(sections[".bss..asmz"], (32, 1));
     let secs = elf_sections(&bytes);
     assert_eq!(
-        secs.iter().find(|(n, ..)| n == ".bss..asmz").expect("asmz").1,
+        secs.iter()
+            .find(|(n, ..)| n == ".bss..asmz")
+            .expect("asmz")
+            .1,
         8,
         "SHT_NOBITS"
     );

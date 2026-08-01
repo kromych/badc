@@ -1965,8 +1965,9 @@ impl Compiler {
                     // alignment (C11 6.7.5, GNU attribute practice): an
                     // attribute-free redeclaration must not lower the
                     // recorded placement.
-                    self.symbols[id_idx].data_align =
-                        self.symbols[id_idx].data_align.max(want_align.max(1) as i64);
+                    self.symbols[id_idx].data_align = self.symbols[id_idx]
+                        .data_align
+                        .max(want_align.max(1) as i64);
                     let decl_align: usize = if want_align > 8 {
                         if thread_local && (req_align > 8 || want_align > 16) {
                             return Err(self.compile_err(

@@ -1306,9 +1306,16 @@ mod tests {
 
     /// The static `.symtab` gives each function the span to the next
     /// code boundary. Locating that boundary must be a search over the
-    /// sorted boundary list, not a scan from its front: 4x the
-    /// functions staying under 8x the time rules out the quadratic
-    /// (16x).
+    /// sorted boundary list, not a scan from its front: 5x the
+    /// functions staying under 10x the time rules out the quadratic
+    /// (25x) with margin on both sides of the linear 5x.
+    ///
+    /// The two sizes are timed alternately and reduced by minimum: the
+    /// suite runs its tests in parallel, so timing one size to
+    /// completion before the other would let a load excursion land
+    /// entirely in one side of the ratio. The whole comparison is
+    /// retried for the same reason -- a complexity change exceeds the
+    /// bound on every attempt, a scheduling excursion does not.
     #[test]
     fn image_write_cost_is_subquadratic_in_function_count() {
         let once = |n: usize| -> f64 {
@@ -1328,17 +1335,22 @@ mod tests {
             assert!(!bytes.is_empty(), "image is non-empty");
             dt
         };
-        let (mut small, mut large) = (f64::MAX, f64::MAX);
-        for _ in 0..3 {
-            small = small.min(once(4_000));
-            large = large.min(once(16_000));
+        for attempt in 0..3 {
+            let (mut small, mut large) = (f64::MAX, f64::MAX);
+            for _ in 0..3 {
+                small = small.min(once(6_000));
+                large = large.min(once(30_000));
+            }
+            assert!(small > 0.0, "no measurable image-write cost to compare");
+            if large < small * 10.0 {
+                return;
+            }
+            assert!(
+                attempt < 2,
+                "image write grew {:.1}x for 5x the functions \
+                 ({small:.3e}s -> {large:.3e}s)",
+                large / small
+            );
         }
-        assert!(small > 0.0, "no measurable image-write cost to compare");
-        assert!(
-            large < small * 8.0,
-            "image write grew {:.1}x for 4x the functions \
-             ({small:.3e}s -> {large:.3e}s)",
-            large / small
-        );
     }
 }

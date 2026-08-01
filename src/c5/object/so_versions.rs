@@ -297,17 +297,26 @@ mod tests {
             assert!(got.iter().all(|r| r.is_some()), "every import resolves");
             dt
         };
-        let (mut small, mut large) = (f64::MAX, f64::MAX);
-        for _ in 0..3 {
-            small = small.min(once(32));
-            large = large.min(once(2048));
+        // Retried, and the two sizes timed alternately: the suite runs
+        // its tests in parallel, so a scheduling excursion must not
+        // decide the ratio. A complexity change exceeds the bound on
+        // every attempt.
+        for attempt in 0..3 {
+            let (mut small, mut large) = (f64::MAX, f64::MAX);
+            for _ in 0..3 {
+                small = small.min(once(32));
+                large = large.min(once(2048));
+            }
+            assert!(small > 0.0, "no measurable resolution cost to compare");
+            if large < small * 8.0 {
+                return;
+            }
+            assert!(
+                attempt < 2,
+                "version resolution grew {:.1}x for 64x the imports \
+                 ({small:.3e}s -> {large:.3e}s)",
+                large / small
+            );
         }
-        assert!(small > 0.0, "no measurable resolution cost to compare");
-        assert!(
-            large < small * 8.0,
-            "version resolution grew {:.1}x for 64x the imports \
-             ({small:.3e}s -> {large:.3e}s)",
-            large / small
-        );
     }
 }

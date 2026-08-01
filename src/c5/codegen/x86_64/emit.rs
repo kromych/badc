@@ -9517,8 +9517,13 @@ fn detect_tail_call<'a>(
     if v == super::super::ir::NO_VALUE {
         return None;
     }
-    let inst_end = block.inst_range.end;
-    if inst_end == 0 || v + 1 != inst_end {
+    // The returned value must be this block's last instruction. `v + 1 ==
+    // end` alone also holds for an empty block whose range starts right
+    // after another block's trailing call: that call is emitted with its own
+    // block, so converting here would call the callee and then jump into it
+    // again with whatever the intervening code left in the argument
+    // registers.
+    if v < block.inst_range.start || v + 1 != block.inst_range.end {
         return None;
     }
     let (target_pc, args, arg_aggs) = match &func.insts[v as usize] {

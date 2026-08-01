@@ -890,6 +890,11 @@ fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
 /// maximum PC actually referenced; entries outside the referenced
 /// set stay `usize::MAX` and surface as a "missing ent_pc" error
 /// if the writer reaches them.
+///
+/// TODO: the table spans the whole merged `.text`, so a large link
+/// allocates and fills eight bytes per code byte for a map that is the
+/// identity. Removing it needs `Build::pc_to_native` to express the
+/// identity case, which the direct-lowering path shares.
 fn synth_pc_to_native(
     text: &[u8],
     code_relocs: &[CodeReloc],

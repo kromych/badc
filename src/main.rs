@@ -1317,7 +1317,7 @@ fn run() {
         // (from any archive). Unreferenced members stay out, so their
         // unrelated undefined or duplicate symbols cannot fail a
         // valid link.
-        let mut pending: Vec<(String, badc::NativeObject)> = Vec::new();
+        let mut pending: Vec<Option<(String, badc::NativeObject)>> = Vec::new();
         for a_path in &archives {
             let bytes = match std::fs::read(a_path) {
                 Ok(b) => b,
@@ -1345,7 +1345,7 @@ fn run() {
                     std::process::exit(1);
                 }
                 match badc::parse_native_elf(&m.bytes) {
-                    Ok(o) => pending.push((format!("{a_path}({})", m.name), o)),
+                    Ok(o) => pending.push(Some((format!("{a_path}({})", m.name), o))),
                     Err(e) => {
                         eprint_diagnostic(format!("badc: {a_path}({}): {e}", m.name));
                         std::process::exit(1);
@@ -1361,7 +1361,7 @@ fn run() {
         for (name, body) in badc::embedded_compiler_rt().iter() {
             let bytes = compile_in_memory(&format!("<compiler-rt/{name}>"), body.to_string(), &[]);
             match badc::parse_native_elf(&bytes) {
-                Ok(o) => pending.push((format!("<compiler-rt/{name}>"), o)),
+                Ok(o) => pending.push(Some((format!("<compiler-rt/{name}>"), o))),
                 Err(e) => {
                     eprint_diagnostic(format!("badc: <compiler-rt/{name}>: {e}"));
                     std::process::exit(1);
@@ -1376,7 +1376,10 @@ fn run() {
         // it -- the user's definition wins over the binding.
         if source_auto_includes.iter().any(|a| !a.is_empty()) {
             let mut defined_fns = std::collections::HashSet::<String>::new();
-            for o in native_objs.iter().chain(pending.iter().map(|(_, o)| o)) {
+            for o in native_objs
+                .iter()
+                .chain(pending.iter().flatten().map(|(_, o)| o))
+            {
                 for s in &o.symbols {
                     // STB_GLOBAL STT_FUNC section-resident definitions.
                     if s.binding == 1
@@ -1418,30 +1421,28 @@ fn run() {
             }
         }
         if !pending.is_empty() {
-            let mut defined = std::collections::HashSet::<String>::new();
-            let mut undefined = std::collections::HashSet::<String>::new();
+            type NameSet = hashbrown::HashSet<String>;
+            let mut defined = NameSet::new();
+            let mut undefined = NameSet::new();
             // A global or weak definition satisfies references; only a
             // strong (STB_GLOBAL) undefined reference pulls a member,
             // matching ELF archive practice (a weak reference left
             // unresolved does not extract members).
-            let account =
-                |o: &badc::NativeObject,
-                 defined: &mut std::collections::HashSet<String>,
-                 undefined: &mut std::collections::HashSet<String>| {
-                    for s in &o.symbols {
-                        if s.binding == 0 {
-                            continue;
-                        }
-                        if s.section == badc::NativeSymSection::Undef {
-                            if s.binding == 1 && !defined.contains(&s.name) {
-                                undefined.insert(s.name.clone());
-                            }
-                        } else {
-                            defined.insert(s.name.clone());
-                            undefined.remove(&s.name);
-                        }
+            let account = |o: &badc::NativeObject, defined: &mut NameSet, undefined: &mut NameSet| {
+                for s in &o.symbols {
+                    if s.binding == 0 {
+                        continue;
                     }
-                };
+                    if s.section == badc::NativeSymSection::Undef {
+                        if s.binding == 1 && !defined.contains(&s.name) {
+                            undefined.insert(s.name.clone());
+                        }
+                    } else {
+                        defined.insert(s.name.clone());
+                        undefined.remove(&s.name);
+                    }
+                }
+            };
             for o in &native_objs {
                 account(o, &mut defined, &mut undefined);
             }
@@ -1453,27 +1454,29 @@ fn run() {
                 undefined.insert(entry.clone());
             }
             // The archive symbol index lists strong section-resident
-            // definitions; a member is pulled on exactly those.
+            // definitions; a member is pulled on exactly those. A pulled
+            // member is taken out of its slot rather than removed from
+            // the pool: an object is large, and compacting the pool per
+            // pull would move every later member's record again.
             let mut progress = true;
             while progress {
                 progress = false;
-                let mut i = 0;
-                while i < pending.len() {
-                    let wanted = pending[i].1.symbols.iter().any(|s| {
-                        s.binding == 1
-                            && !matches!(
-                                s.section,
-                                badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
-                            )
-                            && undefined.contains(&s.name)
+                for slot in pending.iter_mut() {
+                    let wanted = slot.as_ref().is_some_and(|(_, o)| {
+                        o.symbols.iter().any(|s| {
+                            s.binding == 1
+                                && !matches!(
+                                    s.section,
+                                    badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
+                                )
+                                && undefined.contains(&s.name)
+                        })
                     });
                     if wanted {
-                        let (_, o) = pending.remove(i);
+                        let (_, o) = slot.take().expect("a wanted slot is occupied");
                         account(&o, &mut defined, &mut undefined);
                         native_objs.push(o);
                         progress = true;
-                    } else {
-                        i += 1;
                     }
                 }
             }

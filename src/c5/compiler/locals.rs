@@ -537,8 +537,8 @@ impl Compiler {
                 self.symbols[loc_idx].is_const_qualified = self.pending.base_is_const
                     && array_size == 0
                     && super::types::is_integer_scalar_ty(ty);
-                self.symbols[loc_idx].storage_is_const =
-                    self.pending.base_is_const && !super::types::is_pointer_ty(ty);
+                self.symbols[loc_idx].storage_is_const = self.pending.declarator_outer_const
+                    || (self.pending.base_is_const && !super::types::is_pointer_ty(ty));
                 if let Some(a) = &decl_align {
                     self.apply_static_local_align(loc_idx, ty, a);
                     // Declared object alignment for `__alignof__` on the

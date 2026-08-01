@@ -331,7 +331,7 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
             let idx = i as usize;
             match &func.insts[idx] {
                 Inst::Mcpy { dst, src, size, .. } => {
-                    let size = *size as i64;
+                    let size = *size;
                     match frame_addr(func, *dst, 0) {
                         Some(lo) => {
                             kill(&mut state, lo, lo + size);

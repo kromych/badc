@@ -1560,7 +1560,7 @@ fn matching_open_paren(tok: &str) -> Option<usize> {
 /// `disp(%%base, %%index, scale)` memory forms and the `LABEL(%rip)`
 /// label-address form. `None` for shapes not modelled.
 fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOpnd> {
-    let prefix = prefix.trim();
+    let prefix = strip_outer_parens(prefix);
     let inner = inner.trim();
     // `(base, index, scale)`: a SIB form. The bare `(base, index)` defaults
     // the scale to 1.
@@ -1668,6 +1668,17 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
         scale: 1,
         disp,
     })
+}
+
+/// Drop parentheses enclosing a whole memory-operand displacement. The
+/// displacement is an expression, so `(2f)(%rip)` and `2f(%rip)` name the
+/// same address; the same holds for a symbol or an integer.
+fn strip_outer_parens(s: &str) -> &str {
+    let mut s = s.trim();
+    while matching_open_paren(s) == Some(0) {
+        s = s[1..s.len() - 1].trim();
+    }
+    s
 }
 
 /// Parse a decimal or `0x`-hex integer, optionally signed.

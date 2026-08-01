@@ -110,6 +110,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_fixed_reg_output_width.c", "linux-aarch64"), // x86-64 rdtsc / fixed-reg outputs
     ("inline_asm_memory_operand.c", "linux-aarch64"), // x86-64 lock cmpxchg/xadd
     ("inline_asm_x64_catalogue.c", "linux-aarch64"), // x86-64 neg/not/xchg/rol/adc
+    ("inline_asm_x64_paren_disp.c", "linux-aarch64"), // x86-64 rip-relative label address
     ("inline_asm_x64_setcc.c", "linux-aarch64"), // x86-64 setcc
     ("inline_asm_x64_cmov.c", "linux-aarch64"), // x86-64 cmovcc
     ("inline_asm_x64_cdqe.c", "linux-aarch64"), // x86-64 cdqe

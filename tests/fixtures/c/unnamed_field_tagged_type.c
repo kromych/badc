@@ -25,7 +25,7 @@ struct filename {
 
 union inner_u {
     int iu;
-    long lu;
+    long long lu;
 };
 
 // A tagged union type as an unnamed member: its members overlap at the

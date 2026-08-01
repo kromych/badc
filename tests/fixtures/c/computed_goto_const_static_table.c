@@ -41,8 +41,8 @@ op_halt:
 }
 
 static int interp_long(const unsigned char *code) {
-    static const long tbl[] = {(long)&&op_add, (long)&&op_sub, (long)&&op_dup,
-                               (long)&&op_halt};
+    static const long long tbl[] = {(long long)&&op_add, (long long)&&op_sub,
+                                   (long long)&&op_dup, (long long)&&op_halt};
     int acc = 0, pc = 0;
     goto *(void *)tbl[code[pc++]];
 op_add:

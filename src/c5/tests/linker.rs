@@ -2735,11 +2735,27 @@ fn file_scope_asm_jcc_to_section_label_and_lock_prefix() {
         .find(|r| r.offset == (jne + 2) as u64)
         .expect("the rel32 field must carry a relocation");
     assert_eq!(r.rtype, R_X86_64_PLT32, "a branch relocates as PLT32");
-    assert_eq!(
-        obj.symbols[r.sym_idx].name, ".slowpath",
-        "the reloc targets the section-local label"
+    // The label is local and untyped, so the branch names its section
+    // with the label's offset folded in, as gas emits (`.spin - 4` for
+    // a branch to a local label defined at 0 of `.spin`).
+    let label = obj
+        .symbols
+        .iter()
+        .find(|s| s.name == ".slowpath")
+        .expect("the section-local label keeps a symbol");
+    let target = &obj.symbols[r.sym_idx];
+    assert!(
+        target.name.is_empty(),
+        "the reloc targets the label's section symbol, not the label"
     );
-    assert_eq!(r.addend, -4, "rel32 branch addend is -4");
+    // `S + A` plus the 4-byte rel32 skew resolves to the label. Both
+    // values are rebased into the parsed object's merged text blob, so
+    // the sum is the view-independent check.
+    assert_eq!(
+        target.value as i64 + r.addend + 4,
+        label.value as i64,
+        "the folded reference resolves to the label"
+    );
 }
 
 /// `sh_flags` of the first section named `want` in an ELF64 object, or 0.
@@ -5824,21 +5840,23 @@ fn file_scope_asm_numeric_labels_bind_per_definition() {
             .3;
         assert_eq!(rela.len(), 4 * 24, "{target:?}: four relocations");
         let symbols = elf_symbols(&bytes);
-        // Each reloc's symbol is a distinct per-instance label whose value
-        // is that definition's offset in `.tbl` (1, 2, 3, 4 -> 0, 1, 2, 3).
-        let mut names = alloc::vec::Vec::new();
+        let tbl_idx = sections.iter().position(|(n, _, _, _)| n == ".tbl").unwrap();
+        // Each reloc names `.tbl` at its own definition's offset (the
+        // bytes 1, 2, 3, 4 sit at 0, 1, 2, 3). The labels are local and
+        // untyped, so each reduces to the section symbol and the
+        // per-instance binding rides the addend.
         for (i, r) in rela.chunks_exact(24).enumerate() {
             let r_info = u64::from_le_bytes(r[8..16].try_into().unwrap());
-            let sym = &symbols[(r_info >> 32) as usize];
+            let r_addend = i64::from_le_bytes(r[16..24].try_into().unwrap());
+            let (name, info, shndx, _, _) = &symbols[(r_info >> 32) as usize];
+            assert_eq!(info & 0xf, 3, "{target:?}: entry {i} reduced to a section");
+            assert!(name.is_empty(), "{target:?}: section symbols are unnamed");
+            assert_eq!(*shndx as usize, tbl_idx, "{target:?}: entry {i} into .tbl");
             assert_eq!(
-                sym.3, i as u64,
+                r_addend, i as i64,
                 "{target:?}: entry {i} binds the nearest-backward definition"
             );
-            names.push(sym.0.clone());
         }
-        names.sort();
-        names.dedup();
-        assert_eq!(names.len(), 4, "{target:?}: four distinct label symbols");
     }
 }
 
@@ -6415,21 +6433,26 @@ fn inline_asm_multidef_numeric_labels_bind_by_position() {
     assert_eq!((alti[8], alti[9]), (2, 2), "first arm lengths");
     assert_eq!((alti[18], alti[19]), (5, 5), "second arm lengths");
     // The two `.long 774f - .` cross-section references bind to distinct
-    // replacement definitions, so their relocations name distinct symbols.
+    // replacement definitions. The labels are local and untyped, so each
+    // reduces to its section symbol and the per-arm binding rides the
+    // addend.
     let rela = &sections
         .iter()
         .find(|(n, _, _, _)| n == ".rela.alti")
         .expect(".rela.alti missing")
         .3;
     assert_eq!(rela.len(), 4 * 24, "four relocations");
-    let sym_at = |field: u64| -> u32 {
+    let ref_at = |field: u64| -> (u32, i64) {
         let e = (0..4)
             .map(|k| k * 24)
             .find(|&o| u64::from_le_bytes(rela[o..o + 8].try_into().unwrap()) == field)
             .expect("relocation at field offset");
-        (u64::from_le_bytes(rela[e + 8..e + 16].try_into().unwrap()) >> 32) as u32
+        (
+            (u64::from_le_bytes(rela[e + 8..e + 16].try_into().unwrap()) >> 32) as u32,
+            i64::from_le_bytes(rela[e + 16..e + 24].try_into().unwrap()),
+        )
     };
-    assert_ne!(sym_at(0x04), sym_at(0x0e), "774f binds per arm");
+    assert_ne!(ref_at(0x04), ref_at(0x0e), "774f binds per arm");
 }
 
 #[test]
@@ -6527,30 +6550,28 @@ fn asm_section_numeric_labels_are_per_instance_unique() {
         let rela = sec(".rela.btab");
         assert_eq!(rela.3.len(), 4 * 24, "{target:?}: four relocs");
         let symtab = &sec(".symtab").3;
-        // The two string references (field offsets 4 and 12) must resolve to
-        // distinct symbols, both in `.bstr`, at the two string offsets.
-        let mut str_syms = alloc::vec::Vec::new();
+        // The two string references (field offsets 4 and 12) each name
+        // `.bstr` at their own definition's offset. The labels are local
+        // and untyped, so both reduce to the section symbol and the
+        // per-instance distinction rides the addend.
+        let mut str_refs = alloc::vec::Vec::new();
         for k in 0..4 {
             let r_off = u64::from_le_bytes(rela.3[k * 24..k * 24 + 8].try_into().unwrap());
             let r_info = u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+            let r_addend = i64::from_le_bytes(rela.3[k * 24 + 16..k * 24 + 24].try_into().unwrap());
             if r_off == 4 || r_off == 12 {
                 let sym = (r_info >> 32) as usize;
+                let info = symtab[sym * 24 + 4];
                 let shndx =
                     u16::from_le_bytes(symtab[sym * 24 + 6..sym * 24 + 8].try_into().unwrap());
-                let value =
-                    u64::from_le_bytes(symtab[sym * 24 + 8..sym * 24 + 16].try_into().unwrap());
                 assert_eq!(shndx as usize, bstr_idx, "{target:?}: str ref into .bstr");
-                str_syms.push((sym, value));
+                assert_eq!(info & 0xf, 3, "{target:?}: reduced to a section symbol");
+                str_refs.push(r_addend);
             }
         }
-        assert_eq!(str_syms.len(), 2, "{target:?}: two string references");
-        assert_ne!(
-            str_syms[0].0, str_syms[1].0,
-            "{target:?}: per-instance-distinct symbols"
-        );
-        let mut values = [str_syms[0].1, str_syms[1].1];
-        values.sort_unstable();
-        assert_eq!(values, [0, 3], "{target:?}: the two string offsets");
+        assert_eq!(str_refs.len(), 2, "{target:?}: two string references");
+        str_refs.sort_unstable();
+        assert_eq!(str_refs, [0, 3], "{target:?}: the two string offsets");
     }
 }
 
@@ -9459,7 +9480,10 @@ int main(void) { return 0; }
 #[test]
 fn inline_asm_section_label_is_relocation_target() {
     // A data reference to a label defined in the same named section
-    // resolves to that label's symbol, not to an undefined import.
+    // resolves to that definition, not to an undefined import. The
+    // label is local and untyped, so the reference reduces to the
+    // section symbol with the label's offset in the addend -- gas
+    // emits `.tbl + 8` for this input.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = r#"asm(".section \".tbl\",\"a\"\n"
     "\t.quad 0\n"
@@ -9480,7 +9504,7 @@ int main(void) { return 0; }
             .iter()
             .position(|(n, _, _, _)| n == ".tbl")
             .unwrap_or_else(|| panic!("{target:?}: .tbl section missing"));
-        let (shndx, value, _, _, sym_i) = elf_symbol(&bytes, "anchor")
+        let (shndx, value, _, _, _) = elf_symbol(&bytes, "anchor")
             .unwrap_or_else(|| panic!("{target:?}: anchor symbol missing"));
         assert_eq!(shndx as usize, idx, "{target:?}: anchor section index");
         assert_eq!(value, 8, "{target:?}: anchor offset");
@@ -9491,12 +9515,14 @@ int main(void) { return 0; }
         assert_eq!(rela.3.len(), 24, "{target:?}: one relocation");
         let r_offset = u64::from_le_bytes(rela.3[0..8].try_into().unwrap());
         let r_info = u64::from_le_bytes(rela.3[8..16].try_into().unwrap());
+        let r_addend = i64::from_le_bytes(rela.3[16..24].try_into().unwrap());
         assert_eq!(r_offset, 8, "{target:?}: relocation at the second quad");
-        assert_eq!(
-            (r_info >> 32) as usize,
-            sym_i,
-            "{target:?}: relocation targets the label symbol"
-        );
+        let symbols = elf_symbols(&bytes);
+        let (tname, tinfo, tshndx, _, _) = &symbols[(r_info >> 32) as usize];
+        assert_eq!(tinfo & 0xf, 3, "{target:?}: target is a section symbol");
+        assert!(tname.is_empty(), "{target:?}: section symbols are unnamed");
+        assert_eq!(*tshndx as usize, idx, "{target:?}: the `.tbl` section");
+        assert_eq!(r_addend, 8, "{target:?}: the label offset rides the addend");
     }
 }
 
@@ -9961,5 +9987,82 @@ fn addr_null_compare_folds_only_for_defined_nonweak() {
         "kept_weak_def_obj",
     ] {
         assert!(undef(kept), "`{kept}` must survive: no sound fold applies");
+    }
+}
+
+
+/// A relocation whose target is an assembler-local label reduces to the
+/// label's section symbol with the offset folded into the addend, the
+/// form gas emits. Readers of an object's metadata sections walk those
+/// relocations and reject a symbol that is neither a section nor a
+/// function/object definition, so the reduction is what keeps such a
+/// section consumable. A `.globl` label keeps its own symbol: the
+/// binding is what a reader needs from it.
+#[test]
+fn asm_section_local_label_reloc_reduces_to_section_symbol() {
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const STT_SECTION: u8 = 3;
+    let src = "int probe(int v) {\n\
+        \t__asm__(\"1: nop\\n\"\n\
+        \t\t\".pushsection .discard.holder,\\\"a\\\"\\n\"\n\
+        \t\t\".globl vis_label\\n\"\n\
+        \t\t\"vis_label: .quad 0\\n\"\n\
+        \t\t\".popsection\\n\"\n\
+        \t\t\".pushsection .discard.refs,\\\"a\\\"\\n\"\n\
+        \t\t\".balign 8\\n\"\n\
+        \t\t\".quad 1b\\n\"\n\
+        \t\t\".quad vis_label\\n\"\n\
+        \t\t\".popsection\\n\"\n\
+        \t\t\"nop\" ::: \"memory\");\n\
+        \treturn v + 1;\n\
+        }\n\
+        int main(void) { return probe(41) == 42 ? 0 : 1; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let symbols = elf_symbols(&bytes);
+        let rela = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.discard.refs")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.discard.refs missing"));
+        assert_eq!(rela.3.len(), 2 * 24, "{target:?}: two relocations");
+        let row = |k: usize| -> (usize, i64) {
+            let info = u64::from_le_bytes(rela.3[k * 24 + 8..k * 24 + 16].try_into().unwrap());
+            let addend = i64::from_le_bytes(rela.3[k * 24 + 16..k * 24 + 24].try_into().unwrap());
+            ((info >> 32) as usize, addend)
+        };
+        // The unnamed local label reduces to a section symbol carrying
+        // the label's offset.
+        let (local_sym, local_addend) = row(0);
+        let (name, info, _, value, _) = &symbols[local_sym];
+        assert_eq!(
+            info & 0xf,
+            STT_SECTION,
+            "{target:?}: local label must reduce to a section symbol, got `{name}`"
+        );
+        assert!(
+            name.is_empty(),
+            "{target:?}: a section symbol carries no name, got `{name}`"
+        );
+        assert_eq!(*value, 0, "{target:?}: section symbol value is zero");
+        assert!(
+            local_addend > 0,
+            "{target:?}: the label offset must ride the addend, got {local_addend}"
+        );
+        // The `.globl` label keeps its own named symbol at addend zero.
+        let (vis_sym, vis_addend) = row(1);
+        let (vis_name, vis_info, _, _, _) = &symbols[vis_sym];
+        assert_eq!(vis_name, "vis_label", "{target:?}: global label symbol");
+        assert_ne!(
+            vis_info & 0xf,
+            STT_SECTION,
+            "{target:?}: a global label must not reduce to its section"
+        );
+        assert_eq!(vis_addend, 0, "{target:?}: global label addend");
     }
 }

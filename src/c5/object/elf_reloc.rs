@@ -1684,6 +1684,8 @@ pub(super) fn write_relocatable(
     struct AsmLabelSym<'a> {
         name: &'a str,
         shndx: u16,
+        /// `.symtab` index of the section symbol for `shndx`.
+        sec_sym: u64,
         value: u64,
         global: bool,
         weak: bool,
@@ -1696,9 +1698,11 @@ pub(super) fn write_relocatable(
         .zip(build.asm_sections.iter())
         .flat_map(|(&(e, base), s)| {
             let shndx = carve.shndx[e];
+            let sec_sym = carve.sym_idx[e];
             s.labels.iter().map(move |l| AsmLabelSym {
                 name: l.name.as_str(),
                 shndx,
+                sec_sym,
                 value: base + l.offset as u64,
                 global: l.global,
                 // `.weak` in the defining statement, or a file-scope `.weak`
@@ -1949,6 +1953,38 @@ pub(super) fn write_relocatable(
     // not hold a borrow of `carve` across its later mutations.
     let named_sym_idx: Vec<u64> = carve.sym_idx.clone();
     let named_shndx: Vec<u16> = carve.shndx.clone();
+    // A reference to an assembler-local label resolves to the label's
+    // section plus its offset, not to the label symbol: gas reduces a
+    // relocation against a local non-function/object symbol that way,
+    // and readers of an object's metadata sections require the
+    // section+addend form (an unexpected symbol type there aborts
+    // their relocation walk). Named globals, weak definitions, and
+    // `.type`d function / object labels keep their own symbol -- the
+    // binding and the type are what a reader needs from them.
+    let mut asm_label_secref: alloc::collections::BTreeMap<&str, (u64, i64)> =
+        alloc::collections::BTreeMap::new();
+    for l in &asm_labels {
+        if l.global || l.weak || l.st_type != STT_NOTYPE {
+            continue;
+        }
+        asm_label_secref.insert(l.name, (l.sec_sym, l.value as i64));
+    }
+    for &(n, off) in &asm_text_label_syms {
+        let (sym, value) = match carve.map_text(off as u64) {
+            Some((e, new_off)) => (named_sym_idx[e], new_off as i64),
+            None => (text_sym_idx, off as i64),
+        };
+        asm_label_secref.insert(n, (sym, value));
+    }
+    // Resolve a name an inline-asm statement defined: the folded
+    // (section symbol, offset) for a local label, else its own symbol
+    // with a zero base.
+    let asm_label_ref = |name: &str| -> Option<(u64, i64)> {
+        if let Some(&(sym, base)) = asm_label_secref.get(name) {
+            return Some((sym, base));
+        }
+        asm_label_symidx.get(name).map(|&i| (i as u64, 0))
+    };
     let home_sym = move |h: DataHome| -> (u64, i64) {
         match h {
             DataHome::Data(o) => (data_sym_idx, o as i64),
@@ -2072,22 +2108,22 @@ pub(super) fn write_relocatable(
     for site in &build.user_extern_call_sites {
         // A callee defined in this unit (a cross-named-section call)
         // resolves against its defined symbol; otherwise the UNDEF.
-        let sym_idx = match func_symidx_by_name.get(site.symbol_name.as_str()) {
-            Some(&i) => i as u64,
-            None => match asm_label_symidx.get(site.symbol_name.as_str()) {
-                Some(&i) => i as u64,
+        let (sym_idx, base) = match func_symidx_by_name.get(site.symbol_name.as_str()) {
+            Some(&i) => (i as u64, 0),
+            None => match asm_label_ref(site.symbol_name.as_str()) {
+                Some(pair) => pair,
                 None => {
                     let pos = user_extern_names
                         .iter()
                         .position(|n| *n == site.symbol_name.as_str())
                         .expect("user_extern_names contains every site's symbol name");
-                    user_extern_sym_idx[pos] as u64
+                    (user_extern_sym_idx[pos] as u64, 0)
                 }
             },
         };
         let (rtype, r_offset, r_addend) = match machine_for_rela {
-            Machine::X86_64 => (R_X86_64_PLT32, site.instr_offset as u64 + 1, -4i64),
-            Machine::Aarch64 => (R_AARCH64_CALL26, site.instr_offset as u64, 0),
+            Machine::X86_64 => (R_X86_64_PLT32, site.instr_offset as u64 + 1, base - 4),
+            Machine::Aarch64 => (R_AARCH64_CALL26, site.instr_offset as u64, base),
         };
         let r_info = (sym_idx << 32) | (rtype as u64);
         let rela = Elf64Rela {
@@ -2310,14 +2346,23 @@ pub(super) fn write_relocatable(
     for r in &build.user_extern_data_refs {
         // A name this unit's assembly defines binds to that local
         // definition, as gas binds a reference within one translation unit.
-        let sym_idx = match asm_label_symidx.get(r.symbol_name.as_str()) {
-            Some(&i) => i as u64,
+        // A GOT reference keeps the symbol: the slot is per-symbol, so the
+        // section+offset reduction has nothing to bind to there.
+        let got = got_addressed(r.symbol_name.as_str());
+        let (sym_idx, base) = match asm_label_ref(r.symbol_name.as_str()) {
+            Some(_) if got => (
+                *asm_label_symidx
+                    .get(r.symbol_name.as_str())
+                    .expect("a resolved asm label has a symbol") as u64,
+                0,
+            ),
+            Some(pair) => pair,
             None => {
                 let pos = user_extern_data_names
                     .iter()
                     .position(|n| *n == r.symbol_name.as_str())
                     .expect("user_extern_data_names contains every ref's name");
-                user_extern_data_sym_idx[pos] as u64
+                (user_extern_data_sym_idx[pos] as u64, 0)
             }
         };
         // A segment-qualified inline-asm `%a` operand takes a direct
@@ -2330,12 +2375,12 @@ pub(super) fn write_relocatable(
                 &Elf64Rela {
                     r_offset: r.instr_offset as u64 + 3,
                     r_info: (sym_idx << 32) | R_X86_64_PC32 as u64,
-                    r_addend: addend,
+                    r_addend: addend + base,
                 },
             );
             continue;
         }
-        if got_addressed(r.symbol_name.as_str()) {
+        if got {
             emit_got_ref_relocs(
                 machine_for_rela,
                 &mut rela_bytes,
@@ -2348,7 +2393,7 @@ pub(super) fn write_relocatable(
                 &mut rela_bytes,
                 r.instr_offset as u64,
                 sym_idx,
-                0,
+                base,
             );
         }
     }
@@ -2466,8 +2511,8 @@ pub(super) fn write_relocatable(
                         )));
                     }
                     AsmSectionTarget::Symbol(name) => {
-                        if let Some(&idx) = asm_label_symidx.get(name.as_str()) {
-                            (idx as u64, r.addend)
+                        if let Some((sym, base)) = asm_label_ref(name.as_str()) {
+                            (sym, base + r.addend)
                         } else if let Some(&idx) = func_symidx_by_name.get(name.as_str()) {
                             (idx as u64, r.addend)
                         } else if let Some(&idx) = defined_data_symidx.get(name.as_str()) {
@@ -2575,14 +2620,14 @@ pub(super) fn write_relocatable(
     // defining unit's storage. The addend carries the byte offset added
     // to the symbol (`&extern_arr[N]`).
     for r in &build.extern_data_relocs {
-        let sym_idx = match asm_label_symidx.get(r.symbol_name.as_str()) {
-            Some(&i) => i as u64,
+        let (sym_idx, base) = match asm_label_ref(r.symbol_name.as_str()) {
+            Some(pair) => pair,
             None => {
                 let pos = user_extern_data_names
                     .iter()
                     .position(|n| *n == r.symbol_name.as_str())
                     .expect("user_extern_data_names contains every extern_data_reloc name");
-                user_extern_data_sym_idx[pos] as u64
+                (user_extern_data_sym_idx[pos] as u64, 0)
             }
         };
         push_data_row(
@@ -2590,7 +2635,7 @@ pub(super) fn write_relocatable(
             &mut rela_data_bytes,
             r.data_offset,
             sym_idx,
-            r.addend,
+            base + r.addend,
         );
     }
     // Function-pointer initializers: same `R_*_64` shape as
@@ -2607,17 +2652,17 @@ pub(super) fn write_relocatable(
         // since the named symbol carries the target's text
         // offset directly.
         if let Some(&name) = extern_fn_by_pc.get(&ent_pc) {
-            let sym_idx = match asm_label_symidx.get(name) {
-                Some(&i) => i as u64,
+            let (sym_idx, base) = match asm_label_ref(name) {
+                Some(pair) => pair,
                 None => {
                     let pos = user_extern_names
                         .iter()
                         .position(|n| *n == name)
                         .expect("user_extern_names contains every code-reloc extern callee");
-                    user_extern_sym_idx[pos] as u64
+                    (user_extern_sym_idx[pos] as u64, 0)
                 }
             };
-            push_data_row(&mut carve, &mut rela_data_bytes, r.data_offset, sym_idx, 0);
+            push_data_row(&mut carve, &mut rela_data_bytes, r.data_offset, sym_idx, base);
             continue;
         }
         let native_off = build

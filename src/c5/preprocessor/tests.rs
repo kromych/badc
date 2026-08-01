@@ -2448,34 +2448,38 @@ fn if_not_defined_guard_form_is_recognised() {
 
 /// The cost of a unit that includes one guarded header n times must not
 /// scale with the header's size: the repeats are dropped rather than
-/// read and scanned. 4x the inclusions staying under 4x the time rules
-/// out the per-inclusion rescan, which is 4x on its own.
+/// read and scanned. Counted off the include trace, which marks a
+/// dropped inclusion `(cached)`, so the claim holds exactly rather than
+/// to within timer noise: whatever n is, the body is read once.
 #[test]
-#[cfg(not(debug_assertions))]
 fn repeat_inclusion_cost_is_independent_of_header_size() {
     let mut body = String::from("#ifndef BIG_H\n#define BIG_H\n");
-    for i in 0..4000 {
+    for i in 0..500 {
         body.push_str(&format!("int f{i}(void); /* decl {i} */\n"));
     }
     body.push_str("#endif\n");
     let (_, base) = pp_with_headers("mi-cost", &[("big.h", &body)]);
     let dir = base.to_str().unwrap().to_string();
-    let once = |n: usize| -> f64 {
+    let once = |n: usize| -> (usize, usize) {
         let src = "#include <big.h>\n".repeat(n);
         let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         pp.add_search_path(&dir);
-        let t = std::time::Instant::now();
+        pp.set_show_includes(true);
         pp.process(&src).unwrap();
-        t.elapsed().as_secs_f64()
+        let dropped = pp
+            .include_trace
+            .iter()
+            .filter(|l| l.ends_with("(cached)"))
+            .count();
+        (pp.include_trace.len() - dropped, dropped)
     };
-    once(4);
-    let small = once(4).max(1e-6);
+    let small = once(4);
     let large = once(16);
     std::fs::remove_dir_all(&base).ok();
-    assert!(
-        large < small * 4.0,
-        "4x the inclusions cost {:.1}x ({small:.4}s -> {large:.4}s); \
-         the repeats are being re-read and re-scanned",
-        large / small
+    assert_eq!(
+        (small, large),
+        ((1, 3), (1, 15)),
+        "(read, dropped) inclusions: the repeats must be dropped, not \
+         re-read and re-scanned",
     );
 }

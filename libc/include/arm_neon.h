@@ -38,6 +38,7 @@ typedef signed char int8x16_t __attribute__((vector_size(16)));
 typedef unsigned char uint8x16_t __attribute__((vector_size(16)));
 typedef unsigned char poly8x16_t __attribute__((vector_size(16)));
 typedef unsigned long long uint64x2_t __attribute__((vector_size(16)));
+typedef unsigned long long poly64x2_t __attribute__((vector_size(16)));
 typedef unsigned long long poly128_t __attribute__((vector_size(16)));
 
 static inline uint8x16_t vld1q_u8(const uint8_t *__p) {
@@ -136,6 +137,41 @@ static inline poly128_t vmull_p64(poly64_t __a, poly64_t __b) {
     return __r;
 }
 
+/* The same product over the upper d lane of each source. */
+static inline poly128_t vmull_high_p64(poly64x2_t __a, poly64x2_t __b) {
+    poly128_t __r;
+    __asm__(".arch_extension aes\n\t"
+            "pmull2 %0.1q, %1.2d, %2.2d" : "=w"(__r) : "w"(__a), "w"(__b));
+    return __r;
+}
+
+/* Reinterpretations. Every 128-bit vector type here shares one
+ * representation, so these are casts and cost nothing; they exist because
+ * portable code spells the type change through them. */
+static inline uint64x2_t vreinterpretq_u64_u8(uint8x16_t __a) {
+    return (uint64x2_t)__a;
+}
+
+static inline uint8x16_t vreinterpretq_u8_u64(uint64x2_t __a) {
+    return (uint8x16_t)__a;
+}
+
+static inline uint64x2_t vreinterpretq_u64_p128(poly128_t __a) {
+    return (uint64x2_t)__a;
+}
+
+static inline poly128_t vreinterpretq_p128_u64(uint64x2_t __a) {
+    return (poly128_t)__a;
+}
+
+static inline poly64x2_t vreinterpretq_p64_u64(uint64x2_t __a) {
+    return (poly64x2_t)__a;
+}
+
+static inline uint64x2_t vreinterpretq_u64_p64(poly64x2_t __a) {
+    return (uint64x2_t)__a;
+}
+
 /* Immediate shifts: the count is pasted into the template, so it must be an
  * integer literal (as in the reference headers, where it must be a constant
  * expression). */
@@ -155,6 +191,25 @@ static inline poly128_t vmull_p64(poly64_t __a, poly64_t __b) {
     int8x16_t __sa = (__a), __sr;                                         \
     __asm__("sshr %0.16b, %1.16b, #" #__n : "=w"(__sr) : "w"(__sa));      \
     __sr;                                                                 \
+})
+
+/* Lane read: the lane index is pasted into the template, so it must be an
+ * integer literal (as in the reference headers, where it must be a constant
+ * expression). */
+#define vgetq_lane_u64(__a, __n) __extension__({                          \
+    uint64x2_t __ga = (__a);                                              \
+    uint64_t __gr;                                                        \
+    __asm__("umov %x0, %1.d[" #__n "]" : "=r"(__gr) : "w"(__ga));         \
+    __gr;                                                                 \
+})
+
+/* Concatenate two vectors and take the 128-bit window starting at element
+ * __n; the instruction's index is in bytes. */
+#define vextq_u64(__a, __b, __n) __extension__({                          \
+    uint64x2_t __xa = (__a), __xb = (__b), __xr;                          \
+    __asm__("ext %0.16b, %1.16b, %2.16b, #" #__n "*8"                     \
+            : "=w"(__xr) : "w"(__xa), "w"(__xb));                         \
+    __xr;                                                                 \
 })
 
 #endif /* BADC_ARM_NEON_H */

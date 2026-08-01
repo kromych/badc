@@ -809,6 +809,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_vector_w.c", 42),
     ("arm_neon_intrinsics.c", 42),
     ("arm_neon_aes_pmull.c", 42),
+    ("arm_neon_lane_ext_pmull_high.c", 42),
     ("inline_asm_rw_aggregate_param.c", 42),
     ("inline_asm_a64_ld1_postindex.c", 42),
     ("inline_asm_a64_reduce.c", 42),

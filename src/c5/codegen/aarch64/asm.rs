@@ -30,6 +30,9 @@ pub(crate) enum AsmOpndA64 {
     /// `%N.T` (e.g. `%0.16b`): operand N as a SIMD vector register in the
     /// named arrangement. Valid for `w`-constraint operands only.
     RefVec { idx: u8, size: u8, q: bool },
+    /// `%N.T[i]` (e.g. `%1.d[0]`): one lane of operand N, the element view the
+    /// lane-transfer forms take. Valid for `w`-constraint operands only.
+    RefVecElem { idx: u8, size: u8, index: u8 },
     /// `%qN`: operand N's 128-bit `q` register view (`w` operands).
     RefQ(u8),
     /// `{%N.T}`: a one-register table list whose register is operand N
@@ -465,6 +468,17 @@ fn arrangement(arr: &str) -> Option<(u8, bool)> {
     })
 }
 
+/// The element-size log2 of a lane suffix (`b`/`h`/`s`/`d`).
+fn element_size(letter: &str) -> Option<u8> {
+    Some(match letter {
+        "b" => 0,
+        "h" => 1,
+        "s" => 2,
+        "d" => 3,
+        _ => return None,
+    })
+}
+
 /// A SIMD vector-arrangement register `vN.T` (e.g. `v5.4s`): the register
 /// number, the element-size log2, and the 128-bit flag.
 fn parse_vec_reg(tok: &str) -> Option<(u8, u8, bool)> {
@@ -487,13 +501,7 @@ fn parse_vec_elem(tok: &str) -> Option<(u8, u8, u8)> {
         return None;
     }
     let (letter, idx_s) = rest.split_once('[')?;
-    let size = match letter {
-        "b" => 0u8,
-        "h" => 1,
-        "s" => 2,
-        "d" => 3,
-        _ => return None,
-    };
+    let size = element_size(letter)?;
     let index: u8 = idx_s.strip_suffix(']')?.trim().parse().ok()?;
     if index >= (16u8 >> size) {
         return None;
@@ -517,13 +525,7 @@ fn parse_vec_list_lane(tok: &str) -> Option<(u8, u8, u8)> {
     if num > 31 {
         return None;
     }
-    let size = match letter.trim() {
-        "b" => 0u8,
-        "h" => 1,
-        "s" => 2,
-        "d" => 3,
-        _ => return None,
-    };
+    let size = element_size(letter.trim())?;
     let index: u8 = lane.parse().ok()?;
     if index >= (16u8 >> size) {
         return None;
@@ -782,7 +784,7 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             });
         }
         // `%N.T` (e.g. `%0.16b`): a vector-register view of operand N in the
-        // named arrangement.
+        // named arrangement, or `%N.T[i]` naming one lane of it.
         if let Some((digits, arr)) = rest.split_once('.')
             && !digits.is_empty()
             && digits.bytes().all(|c| c.is_ascii_digit())
@@ -790,6 +792,21 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             let idx: u8 = digits
                 .parse()
                 .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            if let Some((elem, lane)) = arr.split_once('[')
+                && let Some(lane) = lane.strip_suffix(']')
+            {
+                let Some(size) = element_size(elem.trim()) else {
+                    return Err(format!("inline asm: bad vector element `{tok}`"));
+                };
+                let index: u8 = lane
+                    .trim()
+                    .parse()
+                    .map_err(|_| format!("inline asm: bad lane index `{tok}`"))?;
+                if index >= (16u8 >> size) {
+                    return Err(format!("inline asm: lane index out of range `{tok}`"));
+                }
+                return Ok(AsmOpndA64::RefVecElem { idx, size, index });
+            }
             let Some((size, q)) = arrangement(arr) else {
                 return Err(format!("inline asm: bad vector arrangement `{tok}`"));
             };

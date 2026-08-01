@@ -3333,6 +3333,14 @@ fn emit_inline_asm_aarch64(
                 let r = resolve_fp_ref(&op_reg, asm, idx)?;
                 Opnd::VecReg { num: r, size, q }
             }
+            AsmOpndA64::RefVecElem { idx, size, index } => {
+                let r = resolve_fp_ref(&op_reg, asm, idx)?;
+                Opnd::VecElem {
+                    num: r,
+                    size,
+                    index,
+                }
+            }
             AsmOpndA64::RefVecList { idx, size, q } => {
                 let r = resolve_fp_ref(&op_reg, asm, idx)?;
                 Opnd::VecList {

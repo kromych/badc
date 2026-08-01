@@ -4734,17 +4734,16 @@ impl Compiler {
     }
 
     /// Parse `__builtin_offsetof ( type-name , member-designator )` (GCC /
-    /// C11, what `offsetof` may expand to) and return the member's byte
-    /// offset. The leading keyword has been consumed. The member designator
-    /// is an identifier followed by a chain of `.field` and `[constant]`
-    /// steps (C11 7.19). The offset is a compile-time constant.
-    /// Parse `__builtin_offsetof(T, member-designator)`. Returns `Some(off)`
+    /// C11, what `offsetof` may expand to); the leading keyword has been
+    /// consumed. The member designator is an identifier followed by a chain
+    /// of `.field` and `[index]` steps (C11 7.19). Returns `Some(off)`
     /// when the whole designator folds to a constant byte offset. A GCC
-    /// extension allows a non-constant array subscript (`m[i]` with runtime
-    /// `i`); when `allow_runtime` is set and such a subscript appears, the
-    /// offset `const_base + i * stride` is emitted onto the accumulator (value
-    /// stack + AST) as a `size_t` and `None` is returned. In a constant
-    /// context `allow_runtime` is false and a runtime subscript is an error.
+    /// extension allows non-constant array subscripts (`m[i]` with runtime
+    /// `i`); when `allow_runtime` is set and such subscripts appear, the
+    /// offset `const_base + sum((size_t)i_k * stride_k)` is emitted onto the
+    /// accumulator (value stack + AST) as a `size_t` and `None` is returned.
+    /// In a constant context `allow_runtime` is false and a runtime subscript
+    /// is an error.
     pub(super) fn parse_builtin_offsetof(
         &mut self,
         allow_runtime: bool,
@@ -4769,8 +4768,9 @@ impl Compiler {
             }
         };
         let mut offset: i64 = 0;
-        // Set once a non-constant subscript has been emitted onto the
-        // accumulator; the constant `offset` is added to it at the end.
+        // Set once a non-constant subscript term has been emitted onto the
+        // accumulator; later runtime terms add to it, and the constant
+        // `offset` is added at the end.
         let mut have_runtime = false;
         let mut sid = struct_id_of(ty);
         let f = self.offsetof_member(sid)?;
@@ -4806,20 +4806,23 @@ impl Compiler {
                 match self.try_parse_constant_dim()? {
                     Some(idx) => offset += idx * stride,
                     None => {
-                        // GCC extension: a runtime array subscript. The offset
-                        // is `const_base + i * stride`, a runtime value.
+                        // GCC extension: a runtime array subscript contributes
+                        // `(size_t)i * stride`; multiple runtime subscripts sum.
                         if !allow_runtime {
                             return Err(self.compile_err(
                                 "constant integer expected in `__builtin_offsetof` subscript",
                             ));
                         }
                         if have_runtime {
-                            return Err(self.compile_err(
-                                "`__builtin_offsetof` supports at most one runtime array subscript",
-                            ));
+                            self.ast_psh();
                         }
                         self.expr(Token::Assign as i64)?;
+                        self.ast_apply_assign_conv(self.size_t_ty());
+                        self.ty = self.size_t_ty();
                         self.emit_binop_with_imm(BinOp::Mul, stride);
+                        if have_runtime {
+                            self.ast_binop(BinOp::Add);
+                        }
                         have_runtime = true;
                     }
                 }

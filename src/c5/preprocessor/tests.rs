@@ -2419,6 +2419,8 @@ fn if_not_defined_guard_form_is_recognised() {
         "#if !defined(G_H)",
         "#if !defined G_H",
         "#if ! defined ( G_H )",
+        // A trailing comment becomes trailing white space in phase 3.
+        "#if !defined(G_H) /* guard */",
     ] {
         let (mut pp, base) = pp_with_headers(
             "mi-ifnd",
@@ -2427,6 +2429,20 @@ fn if_not_defined_guard_form_is_recognised() {
         let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
         std::fs::remove_dir_all(&base).ok();
         assert_eq!(out.matches("int g;").count(), 1, "{open}: {out}");
+    }
+    // Operands that are not the plain absence test must not be taken for
+    // a guard: the file is processed on every inclusion.
+    for open in ["#if !defined(A) && !defined(G_H)", "#if !G_H", "#ifdef G_H"] {
+        let (mut pp, base) = pp_with_headers(
+            "mi-ifnd-no",
+            &[(
+                "g.h",
+                &format!("{open}\n#define G_H 1\n#else\nint other;\n#endif\n"),
+            )],
+        );
+        let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert!(out.contains("int other;"), "{open}: {out}");
     }
 }
 

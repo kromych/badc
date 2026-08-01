@@ -409,10 +409,10 @@ pub(super) fn unfold_ref(source: &str) -> String {
 /// spelling of the same test and is matched by its own directive
 /// variant. `None` for every other operand.
 pub(super) fn if_operand_undefined_name(expr: &str) -> Option<&str> {
-    let rest = expr.trim_start().strip_prefix('!')?.trim_start();
+    let rest = expr.trim().strip_prefix('!')?.trim_start();
     let rest = rest.strip_prefix("defined")?;
     let name = match rest.trim_start().strip_prefix('(') {
-        Some(inner) => inner.trim_start().strip_suffix(')')?.trim_end(),
+        Some(inner) => inner.trim().strip_suffix(')')?.trim(),
         // `!definedX` is one identifier, not the operator.
         None if rest.starts_with(|c: char| c.is_whitespace()) => rest.trim(),
         None => return None,

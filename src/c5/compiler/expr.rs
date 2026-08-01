@@ -2182,8 +2182,16 @@ impl Compiler {
                     // recorded callee channel so a following call
                     // narrows each argument and splits the variadic
                     // tail per the cast, whatever the operand's own
-                    // declared type said.
+                    // declared type said. `typeof(<cast>)` recovers the
+                    // same prototype through `last_fn_ptr_cast`, keyed
+                    // to the cast's flat tag.
                     if let Some(pp) = cast_fn_proto {
+                        self.pending.last_fn_ptr_cast = Some((
+                            t,
+                            pp.types.clone(),
+                            pp.is_variadic,
+                            cast_fpi.unwrap_or(1).max(1),
+                        ));
                         self.pending.indirect_callee_is_variadic = pp.is_variadic;
                         self.pending.indirect_callee_params = if pp.types.is_empty() {
                             None

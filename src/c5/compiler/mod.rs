@@ -619,6 +619,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// variant passes the tail on the stack). Set and cleared at the same
     /// sites as `indirect_callee_params`.
     pub indirect_callee_is_variadic: bool,
+    /// Signature of the last completed function-pointer cast: (cast
+    /// result tag, parameter types, variadic, pointer depth). The flat
+    /// tag carries only the return type, so `typeof(<cast>)` recovers
+    /// the prototype from here, keyed to the cast node so a larger
+    /// operand does not inherit it. Taken by
+    /// `parse_unevaluated_expr_ty`.
+    pub last_fn_ptr_cast: Option<(i64, alloc::vec::Vec<i64>, bool, i64)>,
     /// Set while parsing a function-pointer declarator's parameter list.
     /// The parameters form a prototype: their names are irrelevant, so
     /// `parse_function_params` records each type without binding the name
@@ -877,6 +884,7 @@ impl Default for Pending {
             fn_ptr_param_types: None,
             indirect_callee_params: None,
             indirect_callee_is_variadic: false,
+            last_fn_ptr_cast: None,
             parsing_fn_ptr_proto: false,
             param_decl_context: false,
             last_array_decay_size: 0,

@@ -35,6 +35,7 @@ project's identifier for the release:
 | lua        | lua.org source + test-suite tarballs    | tarball-sha256  |
 | curl       | curl.se release tarball                 | tarball-sha256  |
 | qemu       | git v11.0.2 tag; bundle assembled off   | git (assembled) |
+| pc-bios-x86| qemu 11.0.2 release tarball `pc-bios/`  | tarball-sha256  |
 
 The full sha is recorded in `manifest.json` and in each
 demo's `setup.py` constants (`UPSTREAM_SHA`).
@@ -55,6 +56,29 @@ meson-generated build inputs (`compile_commands.json`, the
 `--pack` flow. Pin the packed asset's sha256 in
 `demos/qemu/setup.py` and upload it to the release. `manifest.json`
 does not track it (it is not produced by `build_bundle.py`).
+
+## x86 ROM set (`pc-bios-x86`)
+
+The trimmed source drops `pc-bios/` because those prebuilt blobs
+are not compile inputs, but an emulator linked without a data
+directory still loads them at run time: QEMU's `pc` / `q35`
+machines want the firmware (SeaBIOS) plus the option ROMs for the
+APIC helper, the `-kernel` loader and the VGA BIOS. The kernel
+lane boots a badc-built image under a self-linked emulator and
+passes `-L` at this set. It is packed straight from an upstream
+release tarball, so no build directory is involved:
+
+```sh
+curl -O https://download.qemu.org/qemu-11.0.2.tar.xz
+python3 scripts/vendor_deps/build_qemu_bundle.py \
+    --pack-pc-bios qemu-11.0.2.tar.xz --out /tmp/roms
+```
+
+The blob list is `PC_BIOS_X86` in that script; the asset name
+carries the release version and the first 8 hex digits of the
+release tarball's sha256. Pin the packed asset's sha256 in
+`demos/qemu/setup.py` (`PC_BIOS_SHA256`) and upload it to the
+release. `manifest.json` does not track it either.
 
 ## Refreshing the bundle
 

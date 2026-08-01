@@ -22,6 +22,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -116,7 +117,7 @@ def boot(args, arch: dict, image: Path, index: int) -> tuple[bool, int, Path]:
         "panic=-1",
     ]
     cmd = [
-        arch["qemu"], *arch["machine"],
+        args.qemu, *arch["machine"], *args.qemu_args,
         "-smp", "2", "-m", "1024", "-nographic", "-no-reboot",
         "-kernel", str(image),
         "-initrd", str(args.initramfs),
@@ -158,11 +159,19 @@ def main() -> int:
     ap.add_argument("--boots", type=int, default=2)
     ap.add_argument("--boot-timeout", type=int, default=180)
     ap.add_argument("--boot", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument("--qemu", help="emulator to boot under (default: the arch's "
+                                   "qemu-system-* on PATH)")
+    ap.add_argument("--qemu-args", default="",
+                    help="extra emulator arguments, shell-quoted; an emulator "
+                         "built without its data directory needs `-nic none` "
+                         "(the default NIC would want a boot ROM)")
     ap.add_argument("--workdir", type=Path, default=Path.cwd() / "verify-out")
     ap.add_argument("--report", type=Path, help="write the result set as JSON")
     args = ap.parse_args()
 
     arch = ARCHES[args.arch]
+    args.qemu = args.qemu or arch["qemu"]
+    args.qemu_args = shlex.split(args.qemu_args)
     tree = args.kernel_dir.resolve()
     args.badc = Path(args.badc).resolve()
     args.workdir = Path(args.workdir).resolve()
@@ -178,8 +187,8 @@ def main() -> int:
     if args.boot:
         if not args.initramfs or not Path(args.initramfs).exists():
             die("--initramfs is required unless --no-boot")
-        if not shutil.which(arch["qemu"]):
-            die(f"{arch['qemu']} not found")
+        if not shutil.which(args.qemu):
+            die(f"{args.qemu} not found")
         args.initramfs = Path(args.initramfs).resolve()
 
     manifest = args.workdir / f"manifest-{args.arch}.txt"
@@ -225,6 +234,7 @@ def main() -> int:
     if args.report:
         args.report.write_text(json.dumps({
             "arch": args.arch, "make_rc": rc, "seconds": round(secs, 1),
+            "qemu": shutil.which(args.qemu) if args.boot else None,
             "units": {k: len(v) for k, v in units.items()},
             "undefined_refs": undef, "boots": boots, "failures": failures,
         }, indent=2) + "\n")

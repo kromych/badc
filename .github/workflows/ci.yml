@@ -1547,3 +1547,137 @@ jobs:
           name: qemu-boot-${{ matrix.label }}-${{ matrix.optname }}
           path: ${{ github.workspace }}/qemu-boot-${{ matrix.label }}-${{ matrix.optname }}.log
           if-no-files-found: ignore
+      - name: publish the self-linked emulator
+        # The kernel lane boots its badc-built kernel under this binary, so
+        # the emulator under test there is badc's own build. Only the -O0
+        # lane publishes: one producer per (os, arch) keeps the artifact name
+        # unambiguous. Artifacts do not carry the executable bit; the consumer
+        # restores it.
+        if: matrix.optname == 'O0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-bin-${{ matrix.label }}
+          # The cache path carries the pinned QEMU version; glob it.
+          path: demos/qemu/.cache/qemu-*/objs/qemu-system-*
+          if-no-files-found: error
+
+  kernel:
+    needs: [qemu]
+    # Full-kernel gate. badc compiles every C translation unit of a Linux
+    # `defconfig` -- no fallback to the reference compiler -- the kernel's own
+    # link produces the bootable image, and that image boots under the
+    # emulator the qemu lane linked with badc's own linker. badc-built end to
+    # end: the compiler (this repo, built here), the kernel image, and the
+    # emulator it runs on. Not badc-built: the reference compiler still
+    # assembles the .S units, builds kbuild's host tools, and links vmlinux,
+    # and the boot uses the emulator's -kernel loader rather than badc-built
+    # firmware -- booting through OVMF/AAVMF is the qemu lane's dimension.
+    #
+    # `verify.py` is the gate: it fails on any unit badc cannot compile, any
+    # unit that fell back, any undefined reference at link, a badc unit count
+    # below the floor, and any boot that does not print the marker. The tree is
+    # rebuilt from clean, so nothing passes vacuously.
+    #
+    # The kernel source is the release `demos/linux/setup.py` pins, fetched
+    # from cdn.kernel.org and rejected unless its sha256 matches -- the same
+    # pin the sweep measures against, so the gate cannot drift from it. No
+    # vendor-deps mirror: the tarball is large, would have to be rotated on
+    # every pin bump, and cdn.kernel.org is not one of the hosts that made CI
+    # flaky.
+    name: kernel (${{ matrix.label }} defconfig, badc-built qemu)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64, arch: aarch64, floor: 3700 }
+          # TODO: x86_64 defconfig compiles with no fallback and links a valid
+          # image, but the image still faults in early init and never prints
+          # the marker. Restore this entry once it boots; it additionally needs
+          # `-L <pc-bios dir>` in --qemu-args, because the emulator's -M pc
+          # loads option ROMs and a self-linked binary has no data directory to
+          # find them in.
+          # - { os: ubuntu-24.04, label: ubuntu-x64, arch: x86_64, floor: 2500 }
+    runs-on: ${{ matrix.os }}
+    # Measured on four 3.2 GHz aarch64 cores: fetch + configure 44 s, clean
+    # defconfig build 20 min (4177 units, 2153 CPU-s), both boots 15 s. Scaled
+    # by this runner's measured compile throughput that is 15-25 min of build.
+    # The caps are hang backstops just above that, not slack; tighten them once
+    # green runs have shown the real spread.
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: kernel-${{ matrix.label }}
+      - name: apt resilience (Linux arm64 runners)
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        # ports.ubuntu.com (the only default arm64 archive) has hour-long
+        # outages that fail the lane before any project code runs. Retry
+        # transient errors, and only when the index refresh itself fails
+        # swap to the Azure-hosted mirror (resolves to a runner-local pool
+        # on most arm64 pools) and refresh again.
+        run: |
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
+          if ! sudo apt-get update -y; then
+            sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
+              /etc/apt/sources.list /etc/apt/apt-mirrors.txt \
+              $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
+            sudo apt-get update -y
+          fi
+      - name: install kernel build deps + the emulator's shared libraries
+        # No qemu-system-* package: the only emulator on this runner is the one
+        # the qemu lane built, so the boot cannot silently use a distro build.
+        run: ./scripts/apt_resilient_install.sh flex bison bc libelf-dev libssl-dev libglib2.0-dev zlib1g-dev libfdt-dev
+      - name: fetch the badc-built emulator (qemu lane, -O0)
+        uses: actions/download-artifact@v4
+        with:
+          name: qemu-bin-${{ matrix.label }}
+          path: ${{ runner.temp }}/qemu
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: kernel setup (fetch the pinned release, verify sha256, configure)
+        run: python demos/linux/setup.py --arch ${{ matrix.arch }} --cache "$RUNNER_TEMP/lk"
+      - name: switch the tree to defconfig
+        # setup.py installs the sweep's minimal config; the gate builds the
+        # architecture's own defconfig instead. The tree path carries the
+        # pinned version, so it is globbed rather than spelled out.
+        run: |
+          tree=$(echo "$RUNNER_TEMP"/lk/linux-*)
+          echo "KERNEL_TREE=$tree" >> "$GITHUB_ENV"
+          make -C "$tree" defconfig
+      - name: build the boot initramfs
+        run: python demos/linux/initramfs.py -o "$RUNNER_TEMP/initramfs.cpio.gz"
+      - name: kernel gate (badc compiles defconfig, links, boots)
+        # The step cap bounds a hang in the build below the job cap; each boot
+        # is separately bounded by --boot-timeout. The emulator is named
+        # explicitly, and `-nic none` drops the default NIC, whose boot ROM
+        # lives in a data directory the self-linked binary does not have.
+        timeout-minutes: 40
+        env:
+          # The runner's reference compiler is not the one the pinned kernel
+          # was released against; its warnings are not the gate's subject.
+          KCFLAGS: -Wno-error
+        run: |
+          chmod +x "$RUNNER_TEMP"/qemu/qemu-system-*
+          python demos/linux/verify.py \
+            --kernel-dir "$KERNEL_TREE" --arch ${{ matrix.arch }} \
+            --qemu "$RUNNER_TEMP/qemu/qemu-system-${{ matrix.arch }}" \
+            --qemu-args "-nic none" \
+            --initramfs "$RUNNER_TEMP/initramfs.cpio.gz" \
+            --expect-units ${{ matrix.floor }} --boot-timeout 90 \
+            --workdir "$RUNNER_TEMP/verify" \
+            --report "$RUNNER_TEMP/verify/verify-${{ matrix.arch }}.json"
+      - name: publish the gate result and boot logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-verify-${{ matrix.label }}
+          path: |
+            ${{ runner.temp }}/verify/verify-*.json
+            ${{ runner.temp }}/verify/boot-*.log
+            ${{ runner.temp }}/verify/manifest-*.txt
+          if-no-files-found: ignore

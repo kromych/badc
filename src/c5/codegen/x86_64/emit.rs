@@ -1562,6 +1562,7 @@ pub(crate) fn emit_function(
     no_fp_regs: bool,
     strict_align: bool,
     rodata: &mut super::RodataBuild,
+    abs_jump_tables: bool,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -2142,13 +2143,15 @@ pub(crate) fn emit_function(
                     super::encode::emit_jmp_r(code, rt);
                 }
                 Terminator::JumpTable { idx, table } => {
-                    // Table dispatch: `lea` the table base (a rel32
-                    // table in the read-only blob, kept out of the
-                    // code section so it never decodes as
-                    // instructions), sign-extend the 32-bit
-                    // table-relative entry, add, and branch. The
-                    // bounds check preceding this terminator proves
-                    // the index in range.
+                    // Table dispatch through the read-only blob (kept
+                    // out of the code section so it never decodes as
+                    // instructions). The bounds check preceding this
+                    // terminator proves the index in range. Image
+                    // output reads a 32-bit table-relative entry and
+                    // adds the base back (no load-time relocation);
+                    // relocatable output loads an 8-byte absolute
+                    // entry, the form whose relocations name the
+                    // targets directly.
                     let iplace = place_of(alloc, idx);
                     let Some(rt) = materialize_int(code, iplace, SCRATCH_R10, frame) else {
                         bail_msg("JumpTable: idx Place not int reg / spill");
@@ -2160,8 +2163,12 @@ pub(crate) fn emit_function(
                     // writer patches it (RodataAddrFixup).
                     let lea_start = code.len();
                     super::encode::emit_lea_r_rip32(code, SCRATCH_R11, 0);
-                    super::encode::emit_movsxd_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 4);
-                    super::encode::emit_rr(code, Mnem::Add, 8, SCRATCH_R10, SCRATCH_R11);
+                    if abs_jump_tables {
+                        super::encode::emit_mov_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 8);
+                    } else {
+                        super::encode::emit_movsxd_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 4);
+                        super::encode::emit_rr(code, Mnem::Add, 8, SCRATCH_R10, SCRATCH_R11);
+                    }
                     super::encode::emit_jmp_r(code, SCRATCH_R10);
                     jump_table_fixups.push((lea_start, table));
                 }
@@ -2308,11 +2315,14 @@ pub(crate) fn emit_function(
     }
 
     // Materialize each jump table into the read-only blob: one
-    // address fixup for the lea site, one rel32 slot per entry
-    // (`target - table_base` once layout is final). Runs past the
-    // last bail site so a bailed function leaves the blob untouched.
+    // address fixup for the lea site, one slot per entry (a 4-byte
+    // `target - table_base` difference, or the relocatable form's
+    // 8-byte absolute address left for the object's relocations).
+    // Runs past the last bail site so a bailed function leaves the
+    // blob untouched.
     for (lea_start, table) in &jump_table_fixups {
-        while !rodata.bytes.len().is_multiple_of(4) {
+        let width: usize = if abs_jump_tables { 8 } else { 4 };
+        while !rodata.bytes.len().is_multiple_of(width) {
             rodata.bytes.push(0);
         }
         let base = rodata.bytes.len() as u64;
@@ -2321,12 +2331,21 @@ pub(crate) fn emit_function(
             rodata_offset: base,
         });
         for (i, &t) in func.jump_tables[*table as usize].iter().enumerate() {
-            rodata.rel32.push(super::RodataRel32 {
-                slot_offset: base + (i as u64) * 4,
-                base_offset: base,
-                text_offset: block_offsets[t as usize] as u64,
-            });
-            rodata.bytes.extend_from_slice(&[0u8; 4]);
+            let slot_offset = base + (i * width) as u64;
+            let text_offset = block_offsets[t as usize] as u64;
+            if abs_jump_tables {
+                rodata.abs64.push(super::RodataAbs64 {
+                    slot_offset,
+                    text_offset,
+                });
+            } else {
+                rodata.rel32.push(super::RodataRel32 {
+                    slot_offset,
+                    base_offset: base,
+                    text_offset,
+                });
+            }
+            rodata.bytes.resize(rodata.bytes.len() + width, 0);
         }
     }
 

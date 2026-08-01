@@ -194,6 +194,7 @@ pub(crate) fn compile_function_to_bytes(
                     false,
                     false,
                     &mut rodata,
+                    false,
                 )
             };
             if !ok {

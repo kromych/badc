@@ -2204,35 +2204,54 @@ pub(super) fn write_relocatable(
         );
     }
 
-    // Switch-table entry slots: one pc-relative reloc per slot against
-    // the `.text` section symbol (or a carved function's own section):
-    // `S + A - P` with `A = text_offset + (slot - table base)`
-    // reproduces `target - table_base` at the slot wherever the linker
-    // places either section. Recorded now so the `.rela` companion
-    // bookkeeping below sees the entry as reloc-bearing; the blob's
-    // bytes join the entry with the other named-section payloads.
+    // Switch-table entry slots, one relocation per slot against the
+    // `.text` section symbol (or a carved function's own section).
+    // The 8-byte absolute rows carry `addend = text_offset`, the
+    // addend-names-the-target shape jump-table discovery keys on; a
+    // pc-relative row's `A = text_offset + (slot - table base)`
+    // reproduces `target - table_base` at the slot wherever the
+    // linker places either section. Recorded now so the `.rela`
+    // companion bookkeeping below sees the entry as reloc-bearing;
+    // the blob's bytes join the entry with the other named-section
+    // payloads.
     if let Some((e, base)) = jt_placement {
-        let rtype_pcrel32 = match machine_for_rela {
-            Machine::X86_64 => R_X86_64_PC32,
-            Machine::Aarch64 => R_AARCH64_PREL32,
+        let (rtype_pcrel32, rtype_jt_abs64) = match machine_for_rela {
+            Machine::X86_64 => (R_X86_64_PC32, R_X86_64_64),
+            Machine::Aarch64 => (R_AARCH64_PREL32, R_AARCH64_ABS64),
         };
-        let resolved: Vec<(u64, i64)> = build
+        let map = |off: u64| match carve.map_text(off) {
+            Some((te, new_off)) => (carve.sym_idx[te], new_off as i64),
+            None => (text_sym_idx, off as i64),
+        };
+        let rel32: Vec<(u64, i64, i64)> = build
             .rodata
             .rel32
             .iter()
-            .map(|r| match carve.map_text(r.text_offset) {
-                Some((te, new_off)) => (carve.sym_idx[te], new_off as i64),
-                None => (text_sym_idx, r.text_offset as i64),
+            .map(|r| {
+                let (sym, target) = map(r.text_offset);
+                let skew = r.slot_offset as i64 - r.base_offset as i64;
+                (sym, r.slot_offset as i64, target + skew)
+            })
+            .collect();
+        let abs64: Vec<(u64, i64, i64)> = build
+            .rodata
+            .abs64
+            .iter()
+            .map(|r| {
+                let (sym, target) = map(r.text_offset);
+                (sym, r.slot_offset as i64, target)
             })
             .collect();
         let ent = &mut carve.table.entries[e];
-        for (r, (sym, target)) in build.rodata.rel32.iter().zip(resolved) {
-            ent.relas.push(super::section_table::SectionRela {
-                offset: base + r.slot_offset,
-                sym,
-                rtype: rtype_pcrel32,
-                addend: target + (r.slot_offset as i64 - r.base_offset as i64),
-            });
+        for (rtype, rows) in [(rtype_pcrel32, rel32), (rtype_jt_abs64, abs64)] {
+            for (sym, slot, addend) in rows {
+                ent.relas.push(super::section_table::SectionRela {
+                    offset: base + slot as u64,
+                    sym,
+                    rtype,
+                    addend,
+                });
+            }
         }
     }
 

@@ -904,6 +904,13 @@ pub(super) fn write(
     text_bytes.resize(text_prologue_len as usize, 0xCC);
     text_bytes.extend_from_slice(&build.text);
     if !build.rodata.bytes.is_empty() {
+        // The absolute-slot form is relocatable-only; an image build
+        // carries difference slots exclusively.
+        if !build.rodata.abs64.is_empty() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "PE: absolute table slots reached a final-image build",
+            )));
+        }
         text_bytes.resize(rodata_base_in_text as usize, 0);
         text_bytes.extend_from_slice(&build.rodata.bytes);
     }

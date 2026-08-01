@@ -393,6 +393,12 @@ mod jit_impl {
         // the mapped base: each table entry holds `target -
         // table_base`, both inside this mapping.
         if !build.rodata.bytes.is_empty() {
+            // The absolute-slot form is relocatable-only.
+            if !build.rodata.abs64.is_empty() {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    "JIT: absolute table slots reached an in-memory build",
+                )));
+            }
             let full_len = rodata_blob_off + build.rodata.bytes.len();
             let bytes =
                 unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), full_len) };

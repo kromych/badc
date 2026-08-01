@@ -77,8 +77,7 @@ Disassembly of section .text:
                	movb	%sil, (%rdi)
                	jmp	<addr>
                	leaq	<rip>, %r11
-               	movslq	(%r11,%rcx,4), %r10
-               	addq	%r11, %r10
+               	movq	(%r11,%rcx,8), %r10
                	jmpq	*%r10
                	leaq	0x1(%rcx), %rdi
                	leaq	0x1(%rdx), %rsi

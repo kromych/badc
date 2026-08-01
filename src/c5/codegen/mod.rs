@@ -1783,17 +1783,34 @@ pub(crate) struct RodataRel32 {
     pub text_offset: u64,
 }
 
+/// 8-byte slot inside `RodataBuild::bytes` holding the absolute
+/// address of a `Build::text` byte. Only relocatable output uses this
+/// form: the ET_REL writer emits one `R_*_64` against the `.text`
+/// section symbol with `addend = text_offset`, the addend-names-the-
+/// target shape jump-table discovery in unwind tooling requires. A
+/// final image never carries these (its tables use [`RodataRel32`]
+/// differences, keeping the image free of load-time relocations).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RodataAbs64 {
+    /// Slot position within `RodataBuild::bytes`.
+    pub slot_offset: u64,
+    /// Target byte offset within `Build::text`.
+    pub text_offset: u64,
+}
+
 /// Read-only data materialized during native emit: switch dispatch
 /// tables. Kept out of `Build::text` so the code section holds only
 /// instructions, and out of `Build::data` because data/bss offsets
 /// are fixed before lowering runs. Writers place `bytes` in a
 /// read-only region, resolve `addr_fixups` sites, and fill each
-/// `rel32` slot.
+/// `rel32` slot; `abs64` slots surface as relocations of the
+/// relocatable object.
 #[derive(Debug, Default)]
 pub(crate) struct RodataBuild {
     pub bytes: Vec<u8>,
     pub addr_fixups: Vec<RodataAddrFixup>,
     pub rel32: Vec<RodataRel32>,
+    pub abs64: Vec<RodataAbs64>,
 }
 
 /// Object-link analogue of [`RodataRel32`]: a 4- or 8-byte slot

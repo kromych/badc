@@ -15,8 +15,7 @@ Disassembly of section .text:
                	cmpq	$0xc, %rdi
                	jae	<addr>
                	leaq	<rip>, %r11
-               	movslq	(%r11,%rdi,4), %r10
-               	addq	%r11, %r10
+               	movq	(%r11,%rdi,8), %r10
                	jmpq	*%r10
                	incq	%rsi
                	leaq	0x2(%rsi), %rdx

@@ -16,8 +16,7 @@ Disassembly of section .text:
                	cmpq	$0x11, %rax
                	jae	<addr>
                	leaq	<rip>, %r11
-               	movslq	(%r11,%rax,4), %r10
-               	addq	%r11, %r10
+               	movq	(%r11,%rax,8), %r10
                	jmpq	*%r10
                	movl	$0x1, %eax
                	retq
@@ -59,8 +58,7 @@ Disassembly of section .text:
                	cmpq	$0x9, %rax
                	jae	<addr>
                	leaq	<rip>, %r11
-               	movslq	(%r11,%rax,4), %r10
-               	addq	%r11, %r10
+               	movq	(%r11,%rax,8), %r10
                	jmpq	*%r10
                	movl	$0x1, %eax
                	retq
@@ -90,8 +88,7 @@ Disassembly of section .text:
                	cmpq	$0xa, %rax
                	jae	<addr>
                	leaq	<rip>, %r11
-               	movslq	(%r11,%rax,4), %r10
-               	addq	%r11, %r10
+               	movq	(%r11,%rax,8), %r10
                	jmpq	*%r10
                	movl	$0x1, %eax
                	retq

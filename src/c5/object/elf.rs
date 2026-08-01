@@ -2473,6 +2473,13 @@ pub(super) fn write(
     debug_assert_eq!(out.len() as u64, rodata_off);
     out.extend_from_slice(&build.data[..ro_len as usize]);
     if jt_len > 0 {
+        // The absolute-slot form is relocatable-only; an image build
+        // carries difference slots exclusively.
+        if !build.rodata.abs64.is_empty() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "ELF image: absolute table slots reached a final-image build",
+            )));
+        }
         while (out.len() as u64) < rodata_off + jt_off {
             out.push(0);
         }

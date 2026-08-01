@@ -2101,6 +2101,15 @@ pub struct NativeOptions {
     /// alignment the operand types guarantee instead of using 8-byte
     /// units. See [`access_chunk`].
     pub strict_align: bool,
+    /// Position-independent relocatable output (`-fPIC` / `-fpic`).
+    /// A switch table then emits in the label-difference form the
+    /// final images use -- no absolute relocation reaches the object,
+    /// so a consumer that relocates it wholesale at load (or forbids
+    /// absolute references outright) can take it. The default keeps
+    /// the absolute 8-byte form whose relocations name the branch
+    /// targets directly, which unwind-data discovery requires. Final
+    /// images are position-independent either way.
+    pub pic: bool,
 }
 
 /// Widest transfer unit a byte-moving lowering may use over storage of
@@ -2174,6 +2183,7 @@ impl NativeOptions {
             bss_segregate: true,
             no_fp_regs: false,
             strict_align: false,
+            pic: false,
         }
     }
 

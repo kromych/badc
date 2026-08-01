@@ -2209,7 +2209,7 @@ pub(crate) fn lower(
                 native.no_fp_regs,
                 native.strict_align,
                 &mut rodata,
-                native.output_kind == super::OutputKind::Relocatable,
+                native.output_kind == super::OutputKind::Relocatable && !native.pic,
             )
         };
         #[cfg(feature = "std")]

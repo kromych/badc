@@ -4204,3 +4204,95 @@ fn switch_table_lands_in_rodata_section_of_object() {
         );
     }
 }
+
+/// `-fPIC` (`NativeOptions::pic`): the relocatable object's switch
+/// tables take the label-difference form -- 4-byte pc-relative slots
+/// -- so no absolute relocation reaches the object and a consumer
+/// that forbids absolute references (a wholesale-relocated
+/// position-independent island) can take it.
+#[test]
+fn switch_table_pic_object_uses_pcrel_entries() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target,
+        emit_native_with_options};
+
+    const SRC: &str = "int pick(int x) {\n\
+         \tswitch (x) {\n\
+         \tcase 0: return 10;\n\
+         \tcase 1: return 11;\n\
+         \tcase 2: return 12;\n\
+         \tcase 3: return 13;\n\
+         \tcase 4: return 14;\n\
+         \tcase 5: return 15;\n\
+         \tcase 6: return 16;\n\
+         \tcase 7: return 17;\n\
+         \tcase 8: return 18;\n\
+         \tcase 9: return 19;\n\
+         \tdefault: return -1;\n\
+         \t}\n\
+         }\n";
+    let prog = Compiler::with_options(
+        SRC.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile dense switch: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        pic: true,
+        ..NativeOptions::default()
+    };
+    let bytes = emit_native_with_options(&prog, Target::LinuxX64, opts)
+        .unwrap_or_else(|e| panic!("emit pic object: {e}"));
+
+    let rd_u16 = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+    let rd_u32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd_u64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd_u64(0x28) as usize;
+    let e_shnum = rd_u16(0x3C) as usize;
+    let e_shstrndx = rd_u16(0x3E) as usize;
+    let shdr = |i: usize| e_shoff + i * 64;
+    let sh_name = |i: usize| rd_u32(shdr(i));
+    let sh_type = |i: usize| rd_u32(shdr(i) + 4);
+    let sh_offset = |i: usize| rd_u64(shdr(i) + 24) as usize;
+    let sh_size = |i: usize| rd_u64(shdr(i) + 32) as usize;
+    let shstr_off = sh_offset(e_shstrndx);
+    let name_at = |noff: u32| -> String {
+        let start = shstr_off + noff as usize;
+        let len = bytes[start..].iter().position(|&b| b == 0).unwrap();
+        String::from_utf8_lossy(&bytes[start..start + len]).into_owned()
+    };
+
+    // No absolute relocation anywhere in the object.
+    const R_X86_64_64: u32 = 1;
+    const R_X86_64_PC32: u32 = 2;
+    const SHT_RELA: u32 = 4;
+    for i in 0..e_shnum {
+        if sh_type(i) != SHT_RELA {
+            continue;
+        }
+        let (off, size) = (sh_offset(i), sh_size(i));
+        for k in 0..size / 24 {
+            let rtype = (rd_u64(off + k * 24 + 8) & 0xffff_ffff) as u32;
+            assert_ne!(
+                rtype,
+                R_X86_64_64,
+                "absolute relocation in {} row {k}",
+                name_at(sh_name(i))
+            );
+        }
+    }
+
+    // The table's rows are 4-byte-stride pc-relative entries.
+    let rela = (0..e_shnum)
+        .find(|&i| name_at(sh_name(i)) == ".rela.rodata.jump_tables")
+        .expect("pic object lacks the table relocations");
+    let (roff, rsize) = (sh_offset(rela), sh_size(rela));
+    assert!(rsize / 24 >= 10, "table must cover the 10 dense cases");
+    for k in 0..rsize / 24 {
+        let p = roff + k * 24;
+        assert_eq!(rd_u64(p), (k * 4) as u64, "entry {k} offset stride");
+        let rtype = (rd_u64(p + 8) & 0xffff_ffff) as u32;
+        assert_eq!(rtype, R_X86_64_PC32, "entry {k} relocation kind");
+    }
+}

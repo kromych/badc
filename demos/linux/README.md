@@ -179,7 +179,12 @@ Unlike the sweep, the shim forwards `-mno-sse` and
 floating-point / SIMD register file, which the kernel runs with trapped
 (no CR4.OSFXSR on x86_64, CPACR_EL1.FPEN on aarch64) and whose callers do
 not maintain the System V `al` convention. badc's variadic prologue
-honors both spellings.
+honors both spellings. It also forwards `-mstrict-align` (early-boot
+units running with the MMU off) and `-fPIC`/`-fpic`: the EFI-stub island
+copies its objects wholesale and rejects any absolute relocation, so
+those units take badc's position-independent object form
+(label-difference switch tables) while every other unit keeps the
+absolute form whose relocations the ORC pass reads.
 Environment: `BADC` (required), `BADC_REAL_CC` (default `gcc`),
 `BADC_TARGET` (default `linux-x64`), `BADC_TIMEOUT` (default 300s).
 

@@ -1228,6 +1228,9 @@ impl Compiler {
         if let Some(v) = self.try_fold_bit_builtin()? {
             return Ok(v);
         }
+        if let Some(v) = self.try_fold_strlen_builtin()? {
+            return Ok(v);
+        }
         if self.lex.tk == Token::BuiltinOffsetof {
             // GCC `__builtin_offsetof(T, member)` is an integer constant
             // expression (the member's byte offset).
@@ -1243,6 +1246,56 @@ impl Compiler {
             });
         }
         self.parse_const_expr_primary_val()
+    }
+
+    /// Fold `strlen` / `__builtin_strlen` of a string literal, which gcc
+    /// and clang admit in an integer constant expression. The count stops
+    /// at the first NUL, as the library function does, so a literal with an
+    /// embedded NUL is distinguishable from `sizeof` minus one -- which is
+    /// what the construct is normally used to assert.
+    ///
+    /// Only that exact shape folds. Any other argument leaves the token
+    /// stream untouched and declines, so a call on a runtime string stays
+    /// whatever it already was in this context -- a VLA bound, or the
+    /// error the context raises for a non-constant operand.
+    fn try_fold_strlen_builtin(&mut self) -> Result<Option<ConstVal>, C5Error> {
+        if self.lex.tk != Token::Id
+            || !matches!(
+                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                "strlen" | "__builtin_strlen"
+            )
+        {
+            return Ok(None);
+        }
+        let snap = self.lex.snapshot();
+        self.next()?;
+        if self.lex.tk != '(' {
+            self.restore_lex(snap);
+            return Ok(None);
+        }
+        self.next()?;
+        if self.lex.tk != '"' {
+            self.restore_lex(snap);
+            return Ok(None);
+        }
+        // The lexer stages the literal (adjacent ones already glued) into
+        // the data segment and leaves its offset in `lex.ival`.
+        let addr = self.take_concat_string_literal()?;
+        if self.lex.tk != ')' {
+            self.restore_lex(snap);
+            return Ok(None);
+        }
+        self.next()?;
+        let mut n = 0i128;
+        let mut p = addr;
+        while p < self.data.len() && self.data[p] != 0 {
+            n += 1;
+            p += 1;
+        }
+        Ok(Some(ConstVal::Int {
+            val: n,
+            ty: self.size_t_ty(),
+        }))
     }
 
     /// The `size_t` type tag: `unsigned long` on LP64,

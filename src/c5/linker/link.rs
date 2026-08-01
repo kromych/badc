@@ -1073,8 +1073,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         if sym.binding == 1 {
                             flat_imports.insert(sym.name.clone());
                         }
-                        let idx =
-                            record_import(&sym.name, &mut imports, &mut import_idx_for_name);
+                        let idx = record_import(&sym.name, &mut imports, &mut import_idx_for_name);
                         if is_data_binding {
                             data_import_indices.insert(idx);
                         }
@@ -1414,9 +1413,10 @@ pub fn link_native_objects_with_shared_libs<'a>(
             // The referencing unit's own definition rebases by that
             // unit's base; a resolved cross-unit one is already merged.
             let resolved_value = match sym.section {
-                NativeSymSection::Undef | NativeSymSection::Common => {
-                    defined.get(sym.name.as_str()).map(|d| d.value as i64).unwrap()
-                }
+                NativeSymSection::Undef | NativeSymSection::Common => defined
+                    .get(sym.name.as_str())
+                    .map(|d| d.value as i64)
+                    .unwrap(),
                 NativeSymSection::RoData => rodata_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Data => data_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Bss => bss_bases[i] as i64 + sym.value as i64,

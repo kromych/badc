@@ -1428,21 +1428,22 @@ fn run() {
             // strong (STB_GLOBAL) undefined reference pulls a member,
             // matching ELF archive practice (a weak reference left
             // unresolved does not extract members).
-            let account = |o: &badc::NativeObject, defined: &mut NameSet, undefined: &mut NameSet| {
-                for s in &o.symbols {
-                    if s.binding == 0 {
-                        continue;
-                    }
-                    if s.section == badc::NativeSymSection::Undef {
-                        if s.binding == 1 && !defined.contains(&s.name) {
-                            undefined.insert(s.name.clone());
+            let account =
+                |o: &badc::NativeObject, defined: &mut NameSet, undefined: &mut NameSet| {
+                    for s in &o.symbols {
+                        if s.binding == 0 {
+                            continue;
                         }
-                    } else {
-                        defined.insert(s.name.clone());
-                        undefined.remove(&s.name);
+                        if s.section == badc::NativeSymSection::Undef {
+                            if s.binding == 1 && !defined.contains(&s.name) {
+                                undefined.insert(s.name.clone());
+                            }
+                        } else {
+                            defined.insert(s.name.clone());
+                            undefined.remove(&s.name);
+                        }
                     }
-                }
-            };
+                };
             for o in &native_objs {
                 account(o, &mut defined, &mut undefined);
             }

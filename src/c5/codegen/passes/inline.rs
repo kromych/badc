@@ -812,7 +812,9 @@ fn is_inline_candidate(
                     if let Some(Inst::LocalAddr(s)) = func.insts.get(a as usize)
                         && param_agg_slots.contains(s)
                     {
-                        say(format_args!("asm output writes a by-value aggregate parameter"));
+                        say(format_args!(
+                            "asm output writes a by-value aggregate parameter"
+                        ));
                         return false;
                     }
                 }

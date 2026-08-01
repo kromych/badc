@@ -298,9 +298,8 @@ fn is_nonnull_addr(
     if let Some(sym) = extern_syms.get(&v) {
         return facts.nonnull_syms.contains(sym);
     }
-    let outside = |ranges: &[(i64, i64)], off: i64| {
-        !ranges.iter().any(|&(lo, hi)| off >= lo && off < hi)
-    };
+    let outside =
+        |ranges: &[(i64, i64)], off: i64| !ranges.iter().any(|&(lo, hi)| off >= lo && off < hi);
     match func.insts.get(v as usize) {
         Some(Inst::ImmCode(pc)) => facts.nonnull_code_pcs.contains(pc),
         Some(Inst::ImmData(off)) => outside(&facts.weak_data, *off),
@@ -1193,10 +1192,7 @@ mod tests {
             (BinOp::Ult, 0),
             (BinOp::Ugt, 0),
         ] {
-            let mut f = fresh(vec![
-                Inst::LocalAddr(0),
-                Inst::Binop { op, lhs: 0, rhs: 0 },
-            ]);
+            let mut f = fresh(vec![Inst::LocalAddr(0), Inst::Binop { op, lhs: 0, rhs: 0 }]);
             run_one(&mut f);
             assert!(
                 matches!(f.insts[1], Inst::Imm(k) if k == want),

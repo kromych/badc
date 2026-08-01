@@ -375,25 +375,24 @@ impl Compiler {
             // declared at block scope. Same handling as run_compile's
             // file-scope branch -- parse the `(args)` and bind the
             // typedef as a function-pointer alias.
-            let (typedef_ty, typedef_fpi, typedef_params, typedef_is_fn_type) = if self.lex.tk
-                == '('
-            {
-                self.next()?; // consume `(`
-                // C99 6.2.1p4: the parameter names of this function-type
-                // typedef have no scope. Record their types without binding
-                // the names, so one matching an enclosing local is not
-                // shadowed (which would corrupt the single-slot shadow the
-                // enclosing scope restores from at exit).
-                let saved = self.pending.parsing_fn_ptr_proto;
-                self.pending.parsing_fn_ptr_proto = true;
-                let pp = self.parse_function_params()?;
-                self.pending.parsing_fn_ptr_proto = saved;
-                let fty = ty + Ty::Ptr as i64;
-                (fty, 1i64, Some(pp), true)
-            } else {
-                // An alias of a function-type typedef stays a function type.
-                (ty, fn_ptr_indirection, None, bare_fn_type)
-            };
+            let (typedef_ty, typedef_fpi, typedef_params, typedef_is_fn_type) =
+                if self.lex.tk == '(' {
+                    self.next()?; // consume `(`
+                    // C99 6.2.1p4: the parameter names of this function-type
+                    // typedef have no scope. Record their types without binding
+                    // the names, so one matching an enclosing local is not
+                    // shadowed (which would corrupt the single-slot shadow the
+                    // enclosing scope restores from at exit).
+                    let saved = self.pending.parsing_fn_ptr_proto;
+                    self.pending.parsing_fn_ptr_proto = true;
+                    let pp = self.parse_function_params()?;
+                    self.pending.parsing_fn_ptr_proto = saved;
+                    let fty = ty + Ty::Ptr as i64;
+                    (fty, 1i64, Some(pp), true)
+                } else {
+                    // An alias of a function-type typedef stays a function type.
+                    (ty, fn_ptr_indirection, None, bare_fn_type)
+                };
             if block_symbols.is_some() {
                 let snap = self.capture_block_shadow(id_idx);
                 block_symbols.as_deref_mut().unwrap().push(snap);

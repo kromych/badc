@@ -5719,9 +5719,7 @@ impl<'a> Walker<'a> {
             }
             // A function designator's value is the function's address
             // (C99 6.3.2.1p4).
-            Expr::Ident { class, .. } if *class == Token::Fun as i64 => {
-                self.addr_const_object(id)
-            }
+            Expr::Ident { class, .. } if *class == Token::Fun as i64 => self.addr_const_object(id),
             Expr::Cast { child, to_ty } => {
                 if type_size_bytes(*to_ty, self.target) < 8 || is_floating_scalar(*to_ty) {
                     return None;
@@ -5769,8 +5767,7 @@ impl<'a> Walker<'a> {
                 is_thread_local,
                 ..
             } => {
-                if (*class != Token::Glo as i64 && *class != Token::Fun as i64)
-                    || *is_thread_local
+                if (*class != Token::Glo as i64 && *class != Token::Fun as i64) || *is_thread_local
                 {
                     return None;
                 }

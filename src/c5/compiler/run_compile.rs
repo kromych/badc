@@ -2236,53 +2236,11 @@ impl Compiler {
                                 self.accept_declarator_separator()?;
                                 continue;
                             }
-                            let mut i: i64 = 0;
-                            while self.lex.tk != '}' {
-                                // C99 6.7.8p7 array designator on a
-                                // struct-array element: `[N] = {field, ...}`
-                                // jumps the cursor and writes the
-                                // brace list there.
-                                if self.lex.tk == Token::Brak {
-                                    self.next()?;
-                                    let idx = self.parse_constant_int()?;
-                                    if idx < 0 || idx >= count {
-                                        return Err(self.compile_err(format!(
-                                            "array designator index {idx} out of bounds [0, {count})"
-                                        )));
-                                    }
-                                    if self.lex.tk != ']' {
-                                        return Err(self.compile_err(
-                                            "`]` expected after array designator index",
-                                        ));
-                                    }
-                                    self.next()?;
-                                    if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
-                                        // C99 6.7.8p7 compound designator
-                                        // `[N].field... = v`: override one field
-                                        // of a (zero-initialized) element.
-                                        let here = off + idx * elem_size as i64;
-                                        self.fill_element_field_designator(sid, ty, here)?;
-                                        i = idx + 1;
-                                        self.accept(',')?;
-                                        continue;
-                                    }
-                                    if self.lex.tk != Token::Assign {
-                                        return Err(
-                                            self.compile_err("`=` expected after `[N]` designator")
-                                        );
-                                    }
-                                    self.next()?;
-                                    i = idx;
-                                }
-                                if i >= count {
-                                    return Err(self.compile_err(format!("struct array element count miscount (parser scanned {count}, parsed past)")));
-                                }
-                                let here = off + i * elem_size as i64;
-                                self.init_struct_array_element(sid, here)?;
-                                i += 1;
-                                self.accept(',')?;
-                            }
-                            self.next()?; // consume `}`
+                            // Same walker the multi-dimensional case above
+                            // uses, so designators read identically at either
+                            // rank: `[N]`, the GCC range `[lo ... hi]`, and a
+                            // `.field` continuation.
+                            self.collect_struct_array_entries(ty, off, &[count])?;
                             self.symbols[id_idx].array_size = count;
                             // `struct T xs[] = {}` resolves to zero elements.
                             // Keep the array-ness (the `array_size == 0`

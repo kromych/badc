@@ -12,8 +12,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <patch_map>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	mov	x1, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -730,7 +728,6 @@ Disassembly of section .text:
                	add	x0, x2, x0
                	add	x0, x0, x1
                	add	x0, x0, #0x3
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
 

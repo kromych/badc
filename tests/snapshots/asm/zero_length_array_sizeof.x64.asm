@@ -28,7 +28,6 @@ Disassembly of section .text:
                	movq	%rsi, 0x10(%rax)
                	leaq	-0x18(%rbp), %rax
                	leaq	-0x28(%rbp), %rdi
-               	xorq	%rdx, %rdx
                	movl	0x4(%rax), %edx
                	cmpq	$0x4, %rdx
                	sete	%dl

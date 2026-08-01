@@ -339,7 +339,6 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
-               	mov	x0, #0xb                // =11
                	mov	x0, #0x9                // =9
                	mov	x0, #0x0                // =0
                	cbz	x0, <addr>

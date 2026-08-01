@@ -12,16 +12,11 @@ Disassembly of section .text:
                	brk	#0x1
 
 <f>:
-               	str	x19, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x0, #0x5                // =5
                	str	w0, [x1]
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
                	ret
 
 <main>:

@@ -24,10 +24,7 @@ Disassembly of section .text:
                	retq
 
 <put_request>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	xorq	%rax, %rax
-               	popq	%rbp
                	retq
 
 <submit>:

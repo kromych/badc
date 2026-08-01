@@ -12,8 +12,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <bank_init>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	add	x2, x0, #0x0
                	mov	x3, #0x1                // =1
                	str	w3, [x2]
@@ -151,7 +149,6 @@ Disassembly of section .text:
                	mov	x1, #0x2100             // =8448
                	str	x1, [x0, #0x10]
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>

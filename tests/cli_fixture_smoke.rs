@@ -82,6 +82,7 @@ const COMPILE_SKIPLIST: &[&str] = &[
     "ipa_const_param_guard.c",
     "addr_null_compare_inline_param.c",
     "addr_compare_same_function_inline.c",
+    "addr_fold_pruned_arm_dce.c",
     "const_struct_array_inline_accessor.c",
     "local_template_byte_probe.c",
 ];
@@ -294,6 +295,7 @@ fn dead_branch_calls_are_eliminated_under_optimize() {
         "ipa_const_param_guard.c",
         "addr_null_compare_inline_param.c",
         "addr_compare_same_function_inline.c",
+        "addr_fold_pruned_arm_dce.c",
         "const_struct_array_inline_accessor.c",
         "local_template_byte_probe.c",
     ] {

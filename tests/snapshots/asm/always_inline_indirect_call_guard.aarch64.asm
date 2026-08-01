@@ -263,7 +263,6 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	sub	x0, x29, #0x8
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
@@ -384,7 +383,6 @@ Disassembly of section .text:
                	add	x0, x21, x0
                	mov	x1, #0x2                // =2
                	stur	x1, [x29, #-0x8]
-               	sub	x1, x29, #0x8
                	mov	x1, #0xffff             // =65535
                	movk	x1, #0xffff, lsl #16
                	movk	x1, #0xffff, lsl #32
@@ -404,7 +402,6 @@ Disassembly of section .text:
                	add	x0, x21, x0
                	mov	x1, #0x3                // =3
                	stur	x1, [x29, #-0x8]
-               	sub	x1, x29, #0x8
                	mov	x1, #0xffff             // =65535
                	movk	x1, #0xffff, lsl #16
                	movk	x1, #0xffff, lsl #32
@@ -453,7 +450,6 @@ Disassembly of section .text:
                	add	x0, x20, x0
                	mov	x1, #0x5                // =5
                	stur	x1, [x29, #-0x8]
-               	sub	x1, x29, #0x8
                	mov	x1, #0xffff             // =65535
                	movk	x1, #0xffff, lsl #16
                	movk	x1, #0xffff, lsl #32
@@ -473,7 +469,6 @@ Disassembly of section .text:
                	add	x0, x20, x0
                	mov	x1, #0x6                // =6
                	stur	x1, [x29, #-0x8]
-               	sub	x1, x29, #0x8
                	mov	x1, #0xffff             // =65535
                	movk	x1, #0xffff, lsl #16
                	movk	x1, #0xffff, lsl #32
@@ -493,7 +488,6 @@ Disassembly of section .text:
                	add	x0, x20, x0
                	mov	x1, #0x7                // =7
                	stur	x1, [x29, #-0x8]
-               	sub	x1, x29, #0x8
                	mov	x1, #0xffff             // =65535
                	movk	x1, #0xffff, lsl #16
                	movk	x1, #0xffff, lsl #32
@@ -513,7 +507,6 @@ Disassembly of section .text:
                	add	x0, x20, x0
                	mov	x1, #0x8                // =8
                	stur	x1, [x29, #-0x8]
-               	sub	x1, x29, #0x8
                	mov	x1, #0xffff             // =65535
                	movk	x1, #0xffff, lsl #16
                	movk	x1, #0xffff, lsl #32
@@ -563,7 +556,6 @@ Disassembly of section .text:
                	add	x0, x20, x0
                	mov	x1, #0xa                // =10
                	stur	x1, [x29, #-0x8]
-               	sub	x1, x29, #0x8
                	mov	x1, #0xffff             // =65535
                	movk	x1, #0xffff, lsl #16
                	movk	x1, #0xffff, lsl #32
@@ -583,7 +575,6 @@ Disassembly of section .text:
                	add	x0, x20, x0
                	mov	x1, #0xb                // =11
                	stur	x1, [x29, #-0x8]
-               	sub	x1, x29, #0x8
                	mov	x1, #0xffff             // =65535
                	movk	x1, #0xffff, lsl #16
                	movk	x1, #0xffff, lsl #32

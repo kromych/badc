@@ -11,10 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	xorq	%rax, %rax
-               	popq	%rbp
                	retq
                	jmp	<addr>
                	jmp	<addr>

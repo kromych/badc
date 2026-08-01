@@ -96,11 +96,15 @@ struct ConstDesig {
 
 /// The folded value of a constant `&` operand: a byte displacement plus, when
 /// the address is symbol-relative, the symbol to relocate against.
+/// `elem_size` is the referenced type's size, driving C99 6.5.6 pointer
+/// arithmetic (`+ n` strides by it, a same-symbol difference divides by
+/// it); a cast to an integer type resets it to 1 (byte arithmetic).
 #[derive(Copy, Clone, Debug)]
 pub(super) struct ConstAddr {
     pub value: i64,
     pub sym: Option<usize>,
     pub sym_code: bool,
+    pub elem_size: i64,
 }
 
 /// Operator selector for [`Compiler::const_int_binop`], the single
@@ -348,24 +352,33 @@ impl Compiler {
                 };
                 Some(ConstVal::int(hold as i64))
             }
+            // C99 6.5.6: `p +- n` strides by the referenced type's size;
+            // `p - q` over one object yields the element-subscript
+            // difference (byte difference / element size).
             B::Add => match (l.addr(), r.addr()) {
                 (Some(a), None) => Some(ConstVal::Addr(ConstAddr {
-                    value: a.value.wrapping_add(r.as_i128() as i64),
+                    value: a
+                        .value
+                        .wrapping_add((r.as_i128() as i64).wrapping_mul(a.elem_size.max(1))),
                     ..a
                 })),
                 (None, Some(b)) => Some(ConstVal::Addr(ConstAddr {
-                    value: b.value.wrapping_add(l.as_i128() as i64),
+                    value: b
+                        .value
+                        .wrapping_add((l.as_i128() as i64).wrapping_mul(b.elem_size.max(1))),
                     ..b
                 })),
                 _ => None,
             },
             B::Sub => match (l.addr(), r.addr()) {
                 (Some(a), Some(b)) if same_sym(&a, &b) => Some(ConstVal::Int {
-                    val: (a.value - b.value) as i128,
+                    val: ((a.value - b.value) / a.elem_size.max(1)) as i128,
                     ty: Ty::LongLong as i64,
                 }),
                 (Some(a), None) => Some(ConstVal::Addr(ConstAddr {
-                    value: a.value.wrapping_sub(r.as_i128() as i64),
+                    value: a
+                        .value
+                        .wrapping_sub((r.as_i128() as i64).wrapping_mul(a.elem_size.max(1))),
                     ..a
                 })),
                 _ => None,
@@ -464,7 +477,7 @@ impl Compiler {
     /// paren/bracket depth 0. The unchosen `__builtin_choose_expr`
     /// operand in a constant expression is skipped this way -- it need
     /// not itself be constant.
-    fn skip_balanced_to_comma(&mut self) -> Result<(), C5Error> {
+    pub(super) fn skip_balanced_to_comma(&mut self) -> Result<(), C5Error> {
         let mut depth: i64 = 0;
         loop {
             if (self.lex.tk == ',' || self.lex.tk == ')') && depth == 0 {
@@ -483,7 +496,7 @@ impl Compiler {
 
     /// Skip a balanced token run through the closing `)` at depth 0
     /// (the `)` is consumed).
-    fn skip_balanced_to_close_paren(&mut self) -> Result<(), C5Error> {
+    pub(super) fn skip_balanced_to_close_paren(&mut self) -> Result<(), C5Error> {
         let mut depth: i64 = 0;
         loop {
             if self.lex.tk == '(' || self.lex.tk == Token::Brak {
@@ -1141,6 +1154,59 @@ impl Compiler {
             let v = self.eval_constant_p_operand()?;
             return Ok(ConstVal::int(v));
         }
+        if self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].name == "__builtin_has_attribute"
+        {
+            // GCC `__builtin_has_attribute(operand, attribute)` is an
+            // integer constant expression. badc does not model the queried
+            // attributes on objects or types, so under its own semantics no
+            // operand carries one -- the answer is 0. Both operands are
+            // consumed unevaluated.
+            self.next()?;
+            if self.lex.tk != '(' {
+                return Err(self.compile_err("`(` expected after `__builtin_has_attribute`"));
+            }
+            self.next()?;
+            self.skip_balanced_to_comma()?;
+            if self.lex.tk != ',' {
+                return Err(self.compile_err("`,` expected in `__builtin_has_attribute`"));
+            }
+            self.next()?;
+            self.skip_balanced_to_close_paren()?;
+            return Ok(ConstVal::int(0));
+        }
+        if self.lex.tk == Token::Id
+            && matches!(
+                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                "__builtin_abs" | "__builtin_labs" | "__builtin_llabs"
+            )
+        {
+            // GCC integer absolute-value builtins fold with a constant
+            // argument. The operand narrows to the parameter type first,
+            // and the most negative value wraps, matching the runtime
+            // behavior of the corresponding library functions.
+            let ty = match self.symbols[self.lex.curr_id_idx].name.as_str() {
+                "__builtin_abs" => Ty::Int as i64,
+                "__builtin_labs" => Ty::Long as i64,
+                _ => Ty::LongLong as i64,
+            };
+            self.next()?;
+            if self.lex.tk != '(' {
+                return Err(self.compile_err("`(` expected after absolute-value builtin"));
+            }
+            self.next()?;
+            let arg = self.parse_const_expr_cond_val()?.as_i128();
+            if self.lex.tk != ')' {
+                return Err(self.compile_err("`)` expected to close absolute-value builtin"));
+            }
+            self.next()?;
+            let val = if self.size_of_type(ty) == 4 {
+                (arg as i32).wrapping_abs() as i128
+            } else {
+                (arg as i64).wrapping_abs() as i128
+            };
+            return Ok(ConstVal::Int { val, ty });
+        }
         // GCC bit / byte builtins (`__builtin_clz` / `ctz` / `popcount` /
         // `clrsb` / `parity` / `ffs` and their `l` / `ll` forms, plus
         // `bswap16` / `bswap32` / `bswap64`) fold when the argument is a
@@ -1205,6 +1271,7 @@ impl Compiler {
             value: d.value,
             sym: d.sym,
             sym_code: d.sym_code,
+            elem_size: (self.size_of_type(d.ty) as i64).max(1),
         })
     }
 
@@ -1468,6 +1535,44 @@ impl Compiler {
         })
     }
 
+    /// Read one staged element of an array compound literal back as a
+    /// constant. Rejects an element whose bytes carry a relocation (its
+    /// value is an address known only at link time).
+    fn read_staged_const_element(
+        &mut self,
+        elem_ty: i64,
+        off: i64,
+        index: i64,
+    ) -> Result<ConstVal, C5Error> {
+        let size = self.size_of_type(elem_ty);
+        let at = off + index * size as i64;
+        if at < 0 || at as usize + size > self.data.len() {
+            return Err(self.compile_err("compound-literal subscript out of range"));
+        }
+        let (lo, hi) = (at as u64, (at as usize + size) as u64);
+        let hit = |o: u64| o >= lo && o < hi;
+        if self.data_relocs.iter().any(|r| hit(r.data_offset))
+            || self.code_relocs.iter().any(|r| hit(r.data_offset))
+            || self.extern_data_relocs.iter().any(|r| hit(r.data_offset))
+        {
+            return Err(self.compile_err(
+                "relocated compound-literal element is not an integer constant expression",
+            ));
+        }
+        let mut v: i64 = 0;
+        for k in 0..size.min(8) {
+            v |= (self.data[at as usize + k] as i64) << (k * 8);
+        }
+        if !is_unsigned_ty(elem_ty) && size < 8 {
+            let sign = 1i64 << (size * 8 - 1);
+            v = (v ^ sign).wrapping_sub(sign);
+        }
+        Ok(ConstVal::Int {
+            val: v as i128,
+            ty: elem_ty,
+        })
+    }
+
     /// Resolve the current identifier as a field of `struct_ty` and return
     /// `(byte offset, field type)`, advancing past the field name.
     fn const_struct_field(&mut self, struct_ty: i64, line: usize) -> Result<(i64, i64), C5Error> {
@@ -1531,6 +1636,30 @@ impl Compiler {
                 while self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
+                // C99 6.5.2.5 array-typed compound literal `(T[]){...}` in a
+                // value context: the literal decays to the address of its
+                // anonymous static object; a `[i]` subscript reads the staged
+                // element back as the constant value.
+                if self.lex.tk == Token::Brak {
+                    let (off, sym) = self.emit_array_compound_literal_body(target_ty)?;
+                    if self.lex.tk == Token::Brak {
+                        self.next()?;
+                        let n = self.parse_const_expr_cond_val()?.as_int();
+                        if self.lex.tk != ']' {
+                            return Err(
+                                self.compile_err("close bracket expected in constant subscript")
+                            );
+                        }
+                        self.next()?;
+                        return self.read_staged_const_element(target_ty, off, n);
+                    }
+                    return Ok(ConstVal::Addr(ConstAddr {
+                        value: off,
+                        sym: Some(sym),
+                        sym_code: false,
+                        elem_size: (self.size_of_type(target_ty) as i64).max(1),
+                    }));
+                }
                 // Parenthesized abstract declarator: `(*)(args)` (function
                 // pointer) or `(*)[N]` (pointer to array). The shared helper
                 // absorbs the suffixes and returns the pointer level (C99 6.7.7).
@@ -1544,15 +1673,43 @@ impl Compiler {
                     return Err(self.compile_err("close paren expected after cast"));
                 }
                 self.next()?;
-                let v = self.parse_const_expr_unary_val()?;
+                // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
+                // brace holds a single value; the result is that value
+                // converted to `T` through the cast fold below.
+                let braced_scalar = self.lex.tk == '{' && !is_struct_value_ty(target_ty);
+                if braced_scalar {
+                    self.next()?;
+                }
+                let v = if braced_scalar {
+                    let inner = self.parse_const_expr_cond_val()?;
+                    self.accept(',')?;
+                    if self.lex.tk != '}' {
+                        return Err(
+                            self.compile_err("scalar compound literal holds a single value")
+                        );
+                    }
+                    self.next()?;
+                    inner
+                } else {
+                    self.parse_const_expr_unary_val()?
+                };
                 // A cast of a symbol-relative address to an integer or
                 // pointer type keeps the relocation (common practice:
                 // `(unsigned long)&sym` is a link-time constant); only the
                 // type changes, so the folded value stays a `ConstVal::Addr`.
-                if let ConstVal::Addr(a) = v
+                // The cast retypes the address's arithmetic: a pointer
+                // target strides by its pointee, an integer target by bytes.
+                if let ConstVal::Addr(mut a) = v
                     && a.sym.is_some()
                     && !is_floating_ty(target_ty)
                 {
+                    let ptr_target = is_pointer_ty(target_ty)
+                        || (is_struct_ty(target_ty) && struct_ptr_depth(target_ty) > 0);
+                    a.elem_size = if ptr_target {
+                        (self.size_of_type(target_ty - Ty::Ptr as i64) as i64).max(1)
+                    } else {
+                        1
+                    };
                     return Ok(ConstVal::Addr(a));
                 }
                 return Ok(if is_floating_ty(target_ty) {
@@ -1581,6 +1738,22 @@ impl Compiler {
                 return Err(self.compile_err("close paren expected in constant expression"));
             }
             self.next()?;
+            // `((T[]){...})[i]`: a subscript on a parenthesized array
+            // compound literal folds by reading the staged element back.
+            if self.lex.tk == Token::Brak
+                && let ConstVal::Addr(a) = v
+                && let Some(idx) = a.sym
+                && self.symbols[idx].is_compound_literal
+            {
+                self.next()?;
+                let n = self.parse_const_expr_cond_val()?.as_int();
+                if self.lex.tk != ']' {
+                    return Err(self.compile_err("close bracket expected in constant subscript"));
+                }
+                self.next()?;
+                let elem_ty = self.symbols[idx].type_;
+                return self.read_staged_const_element(elem_ty, a.value, n);
+            }
             return Ok(v);
         }
         if self.lex.tk == Token::Num {
@@ -1694,10 +1867,16 @@ impl Compiler {
                         idx
                     };
                     self.symbols[idx].was_referenced = true;
+                    let elem_size = if is_fn {
+                        1
+                    } else {
+                        (self.size_of_type(self.symbols[idx].type_) as i64).max(1)
+                    };
                     return Ok(ConstVal::Addr(ConstAddr {
                         value: self.symbols[idx].val,
                         sym: Some(idx),
                         sym_code: is_fn,
+                        elem_size,
                     }));
                 }
             }

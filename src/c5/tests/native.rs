@@ -1167,6 +1167,37 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // `[K] = {field, ...}` to element K and resumes positional
     // after the jump; missing indices stay zero (6.7.8p21).
     ("struct_array_designator.c", 0),
+    // C99 6.7.8p6/p7 designators at every nested level of an array
+    // initializer, across the top-level, deferred-size, member, and
+    // compound-literal contexts (one shared struct-array walker).
+    ("nested_array_designators.c", 0),
+    // Multi-dimensional flexible array member rows filled through the
+    // shared walker, sizing the object's tail per row.
+    ("flexible_array_member_2d.c", 0),
+    // C99 6.5.2.5 compound literals in constant expressions: scalar
+    // literal values, subscripted array literals, `&literal.member`.
+    ("compound_literal_const_exprs.c", 0),
+    // C99 6.6p3: the not-taken arm of a constant initializer
+    // conditional may hold a non-constant call; it is consumed
+    // unevaluated and leaves no reference.
+    ("init_cond_dead_arm.c", 0),
+    // C99 6.5.6p9: constant pointer differences fold to the
+    // element-subscript difference; a pointer cast retypes the stride.
+    ("const_ptr_diff_fold.c", 0),
+    // Constant-maximum dimension idiom: null-pointer-constant chooser
+    // over a nested chooser with a statement-expression arm; nested
+    // declarators must not clear the outer VLA permission.
+    ("const_max_dim_stmt_expr.c", 0),
+    // A 1024-label `case` run parses iteratively, not bounded by the
+    // parser nesting limit.
+    ("switch_case_label_run.c", 0),
+    // `__builtin_has_attribute` folds to 0 with unevaluated operands.
+    ("builtin_has_attribute_fold.c", 0),
+    // `__builtin_abs` / `labs` / `llabs` fold in constant contexts.
+    ("builtin_abs_const_fold.c", 0),
+    // Deferred-size and rank-3 automatic struct arrays, constant and
+    // runtime element values.
+    ("auto_struct_array_multi_dim.c", 0),
     // C89 6.5.2 / C99 6.7.2p2 deprecated implicit-int: a decl
     // without a type specifier infers `int`. Honours
     // `f(int x) { ... }` / `g = 5;` / `main() { ... }`.

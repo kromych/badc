@@ -2918,8 +2918,14 @@ impl Compiler {
             // scope is tracked, so a case whose body is a declaration is
             // given an empty body and the declaration is parsed as the
             // next block item; a preceding case still falls through into it.
+            // A following `case` / `default` label takes the same shape:
+            // the run of labels parses iteratively as fall-through
+            // siblings instead of recursing once per label, so a long
+            // label cascade does not consume parser nesting depth.
             if !(self.lex.tk == Token::Typedef
                 || self.lex.tk == Token::StaticAssert
+                || self.lex.tk == Token::Case
+                || self.lex.tk == Token::Default
                 || self.lex_is_type_start())
             {
                 self.stmt()?;
@@ -2946,9 +2952,12 @@ impl Compiler {
             let body_before = self.ast_stmts_snapshot();
             // C23 6.8.1: a declaration may follow the `default` label;
             // give the label an empty body and let the enclosing block
-            // loop parse the declaration with correct scope.
+            // loop parse the declaration with correct scope. A following
+            // `case` label likewise parses as a fall-through sibling.
             if !(self.lex.tk == Token::Typedef
                 || self.lex.tk == Token::StaticAssert
+                || self.lex.tk == Token::Case
+                || self.lex.tk == Token::Default
                 || self.lex_is_type_start())
             {
                 self.stmt()?;

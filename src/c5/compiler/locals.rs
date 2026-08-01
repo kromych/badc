@@ -333,10 +333,14 @@ impl Compiler {
             self.pending.base_is_function_type = base_is_function_type;
             self.pending.typedef_fn_proto = base_typedef_fn_proto;
             self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
-            // C99 6.7.6.2: a non-constant dimension here is a VLA.
-            self.pending.vla_allowed = true;
+            // C99 6.7.6.2: a non-constant dimension here is a VLA. Save
+            // and restore rather than set and clear: evaluating an outer
+            // dimension can parse a nested block declaration (a statement
+            // expression inside the dimension), and that inner declarator
+            // must not clear the outer one's flag.
+            let saved_vla = core::mem::replace(&mut self.pending.vla_allowed, true);
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
-            self.pending.vla_allowed = false;
+            self.pending.vla_allowed = saved_vla;
             let asm_reg = self.parse_register_asm_binding(is_static, is_extern)?;
             // Trailing cleanup wins for this declarator; else the leading one.
             let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
@@ -762,50 +766,14 @@ impl Compiler {
                         self.data.push(0);
                     }
                     self.next()?;
-                    // 2D struct array: each top-level brace is a row of
-                    // `inner_dim` fully-braced structs; the 1D loop below would
-                    // misread a row as one struct.
+                    // Multi-dimensional struct array: fill the rows below the
+                    // deferred outer dimension through the shared struct-array
+                    // walker (designators at every level).
                     if inner_dim > 1 {
-                        let mut row: i64 = 0;
-                        while self.lex.tk != '}' {
-                            // C99 6.7.8p7 array designator naming a row:
-                            // `[N] = { ... }` moves the cursor to row N;
-                            // subsequent positional rows continue at N+1.
-                            // TODO: `[lo ... hi]` row replication and
-                            // `[N][M]`/`[N].field` chains, as the
-                            // known-size path supports.
-                            if let Some((lo, hi, chain)) =
-                                self.take_array_element_designator(count)?
-                            {
-                                if chain || hi > lo {
-                                    return Err(
-                                        self.compile_err("row designator must be a single `[N] =`")
-                                    );
-                                }
-                                row = lo;
-                            }
-                            if self.lex.tk != '{' {
-                                return Err(self.compile_err(
-                                    "row of a 2D struct array must be brace-enclosed",
-                                ));
-                            }
-                            self.next()?; // row `{`
-                            let mut j: i64 = 0;
-                            while self.lex.tk != '}' {
-                                if j >= inner_dim {
-                                    return Err(self
-                                        .compile_err("too many initializers in struct-array row"));
-                                }
-                                let here = off + (row * inner_dim + j) * elem_size as i64;
-                                self.init_struct_array_element(sid, here)?;
-                                j += 1;
-                                self.accept(',')?;
-                            }
-                            self.next()?; // row `}`
-                            row += 1;
-                            self.accept(',')?;
-                        }
-                        self.next()?; // outer `}`
+                        let mut dims = alloc::vec::Vec::new();
+                        dims.push(count);
+                        dims.extend_from_slice(&self.symbols[loc_idx].array_dims[1..]);
+                        self.collect_struct_array_entries(ty, off, &dims)?;
                         self.set_deferred_static_local_count(loc_idx, count * inner_dim);
                         if let Some(first) = self.symbols[loc_idx].array_dims.first_mut()
                             && *first == 0
@@ -1007,7 +975,7 @@ impl Compiler {
                     }
                     let here = var_offset + i * group_stride;
                     if !inner_dims.is_empty() {
-                        self.collect_struct_array_data(sid, here, &inner_dims, elem_size as i64)?;
+                        self.collect_struct_array_data(ty, here, &inner_dims)?;
                     } else {
                         self.init_struct_array_element(sid, here)?;
                     }
@@ -1497,68 +1465,45 @@ impl Compiler {
                 // Mcpy path below cannot represent those, so route to the
                 // per-element runtime store path the known-size branch
                 // uses. Mirrors the `struct V xs[N] = { ... }` handling.
+                // Elements below a deferred outer dimension: for `T xs[][M]`
+                // each counted top-level group is a row of `inner_dim`
+                // elements (C99 6.7.8p22 sizes the outer dimension from the
+                // group count).
+                let inner_dims: alloc::vec::Vec<i64> = self.symbols[loc_idx]
+                    .array_dims
+                    .get(1..)
+                    .map(|s| s.to_vec())
+                    .unwrap_or_default();
+                let inner_dim: i64 = inner_dims.iter().product::<i64>().max(1);
+                let total = count * inner_dim;
                 if self.struct_init_needs_runtime()? {
-                    self.symbols[loc_idx].array_size = count;
+                    self.symbols[loc_idx].array_size = total;
                     self.symbols[loc_idx].val =
-                        self.reserve_slots(self.local_storage_slots(ty, count));
+                        self.reserve_slots(self.local_storage_slots(ty, total));
                     let local_val = self.symbols[loc_idx].val;
                     let var_name = self.symbols[loc_idx].name.clone();
                     // Zero the whole slot (6.7.8p19 omitted-entries rule),
-                    // then overlay each element's explicit fields.
+                    // then overlay each element's explicit fields through
+                    // the shared runtime walker.
                     self.align_data_to_8();
                     let zero_off = self.data.len();
-                    for _ in 0..(count as usize * elem_size) {
+                    for _ in 0..(total as usize * elem_size) {
                         self.data.push(0);
                     }
-                    self.emit_local_array_init(local_val, zero_off, count as usize * elem_size);
-                    self.next()?; // consume outer `{`
-                    let mut i: i64 = 0;
-                    while self.lex.tk != '}' {
-                        // C99 6.7.8p7 `[N] =` (or GNU `[lo ... hi] =`)
-                        // designator jumps the cursor.
-                        // TODO: member chains (`[N].field =`) with runtime
-                        // element values route through per-field stores.
-                        let mut range_hi = i;
-                        if let Some((idx, hi, chain)) = self.take_array_element_designator(count)? {
-                            if chain {
-                                return Err(self.compile_err(
-                                    "`[N].field` designator requires constant element values",
-                                ));
-                            }
-                            i = idx;
-                            range_hi = hi;
-                        }
-                        if i >= count {
-                            return Err(self.compile_err(format!(
-                                "too many initializers for array `{}` ({} > {})",
-                                var_name,
-                                i + 1,
-                                count
-                            )));
-                        }
-                        // C99 6.7.8p20: an element's braces may be elided,
-                        // and 6.5.2.5 lets it be a whole-element compound
-                        // literal; the runtime element fill handles both.
-                        self.emit_struct_array_element_runtime(
-                            local_val,
-                            i * elem_size as i64,
-                            sid,
-                        )?;
-                        // GNU range: evaluated once into element `i`; the
-                        // rest of the range copies its bytes.
-                        if range_hi > i {
-                            self.push_runtime_range_copies(
-                                i * elem_size as i64,
-                                elem_size as i64,
-                                range_hi - i,
-                                ty,
-                            );
-                            i = range_hi;
-                        }
-                        i += 1;
-                        self.accept(',')?;
+                    self.emit_local_array_init(local_val, zero_off, total as usize * elem_size);
+                    self.emit_local_array_init_runtime(
+                        local_val,
+                        0,
+                        ty,
+                        total,
+                        &inner_dims,
+                        &var_name,
+                    )?;
+                    if let Some(first) = self.symbols[loc_idx].array_dims.first_mut()
+                        && *first == 0
+                    {
+                        *first = count;
                     }
-                    self.next()?; // consume outer `}`
                     return Ok(());
                 }
                 // Reserve the staged block before consuming `{`: lexing the
@@ -1567,41 +1512,22 @@ impl Compiler {
                 // inside or past the block.
                 self.align_data_to_8();
                 let staged_off = self.data.len();
-                for _ in 0..(count * elem_size as i64) {
+                for _ in 0..(total * elem_size as i64) {
                     self.data.push(0);
                 }
-                self.next()?;
-                let mut i: i64 = 0;
-                while self.lex.tk != '}' {
-                    // C99 6.7.8p7 `[N] =` (or GNU `[lo ... hi] =`)
-                    // designator jumps the cursor; `[N].field... =`
-                    // initializes one member of each designated element.
-                    if let Some((lo, hi, chain)) = self.take_array_element_designator(count)? {
-                        if chain || hi > lo {
-                            self.fill_element_range(
-                                sid,
-                                ty,
-                                staged_off as i64,
-                                elem_size as i64,
-                                lo..=hi,
-                                chain,
-                            )?;
-                            i = hi + 1;
-                            self.accept(',')?;
-                            continue;
-                        }
-                        i = lo;
-                    }
-                    let here = staged_off as i64 + i * elem_size as i64;
-                    self.init_struct_array_element(sid, here)?;
-                    i += 1;
-                    self.accept(',')?;
-                }
-                self.next()?;
-                self.symbols[loc_idx].array_size = count;
-                self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, count));
+                let mut dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
+                dims.push(count);
+                dims.extend_from_slice(&inner_dims);
+                self.collect_struct_array_data(ty, staged_off as i64, &dims)?;
+                self.symbols[loc_idx].array_size = total;
+                self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, total));
                 let local_val = self.symbols[loc_idx].val;
-                self.emit_local_array_init(local_val, staged_off, elem_size * count as usize);
+                self.emit_local_array_init(local_val, staged_off, elem_size * total as usize);
+                if let Some(first) = self.symbols[loc_idx].array_dims.first_mut()
+                    && *first == 0
+                {
+                    *first = count;
+                }
                 return Ok(());
             }
             // Deferred-size local scalar / pointer array. Pre-scan
@@ -1708,58 +1634,18 @@ impl Compiler {
                             staged_off,
                             elem_size * declared_array_size as usize,
                         );
-                        self.next()?; // consume outer `{`
-                        let mut i: i64 = 0;
-                        while self.lex.tk != '}' {
-                            // C99 6.7.8p7 `[N] =` (or GNU `[lo ... hi] =`)
-                            // designator jumps the cursor.
-                            // TODO: member chains (`[N].field =`) with
-                            // runtime element values route through per-field
-                            // stores.
-                            let mut range_hi = i;
-                            if let Some((idx, hi, chain)) =
-                                self.take_array_element_designator(declared_array_size)?
-                            {
-                                if chain {
-                                    return Err(self.compile_err(
-                                        "`[N].field` designator requires constant element values",
-                                    ));
-                                }
-                                i = idx;
-                                range_hi = hi;
-                            }
-                            if i >= declared_array_size {
-                                return Err(self.compile_err(format!(
-                                    "too many initializers for array `{}` ({} > {})",
-                                    var_name,
-                                    i + 1,
-                                    declared_array_size
-                                )));
-                            }
-                            // C99 6.7.8p20: an element's braces may be
-                            // elided, and 6.5.2.5 lets it be a whole-element
-                            // compound literal; the runtime element fill
-                            // handles both.
-                            self.emit_struct_array_element_runtime(
-                                local_val,
-                                i * elem_size as i64,
-                                sid,
-                            )?;
-                            // GNU range: evaluated once into element `i`;
-                            // the rest of the range copies its bytes.
-                            if range_hi > i {
-                                self.push_runtime_range_copies(
-                                    i * elem_size as i64,
-                                    elem_size as i64,
-                                    range_hi - i,
-                                    ty,
-                                );
-                                i = range_hi;
-                            }
-                            i += 1;
-                            self.accept(',')?;
-                        }
-                        self.next()?; // consume outer `}`
+                        // The shared runtime walker recurses per inner
+                        // dimension and dispatches struct elements, so a
+                        // multi-dimensional struct array fills row by row.
+                        let inner = self.inner_dims_of(loc_idx);
+                        self.emit_local_array_init_runtime(
+                            local_val,
+                            0,
+                            ty,
+                            declared_array_size,
+                            &inner,
+                            &var_name,
+                        )?;
                         return Ok(());
                     }
                     // A multi-dimensional array's top-level groups are
@@ -1898,12 +1784,7 @@ impl Compiler {
                         // C99 6.7.8p20: a struct element's braces may be
                         // elided, filling its fields from the flat list.
                         if !inner_dims.is_empty() {
-                            self.collect_struct_array_data(
-                                sid,
-                                here,
-                                &inner_dims,
-                                elem_size as i64,
-                            )?;
+                            self.collect_struct_array_data(ty, here, &inner_dims)?;
                         } else {
                             self.init_struct_array_element(sid, here)?;
                         }

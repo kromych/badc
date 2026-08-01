@@ -408,6 +408,14 @@ pub(crate) struct Symbol {
     /// only while the owner survives. `None` for file-scope symbols.
     pub owner_ent_pc: Option<u64>,
 
+    /// True for the synthetic internal symbol of an anonymous compound
+    /// literal staged in the data segment. Its initializer bytes are
+    /// final at parse time, so a constant subscript of the literal may
+    /// fold by reading them back (which is not extended to named
+    /// objects: `const int t[3]` indexed is not an integer constant
+    /// expression, matching gcc / clang).
+    pub is_compound_literal: bool,
+
     /// True once the parser has emitted any reference to this
     /// symbol after its declaration -- a read, a write, an
     /// address-of, or a decay. Set by the expression parser's
@@ -645,6 +653,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_scope_static: _,
             is_scope_typedef: _,
             owner_ent_pc: _, // code address space
+            is_compound_literal: _,
             was_referenced: _,
             was_read: _,
             was_written: _,

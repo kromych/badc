@@ -192,6 +192,19 @@ impl Compiler {
                 }
                 Some(fold_int_binop(*op, l, r))
             }
+            // A conditional with a constant condition folds to its selected
+            // arm (C99 6.6p3 exempts the unevaluated arm), so the
+            // `__builtin_choose_expr`-style constant max/min idioms remain
+            // null-pointer-constant material.
+            Expr::Ternary {
+                cond,
+                then_e,
+                else_e,
+                ..
+            } => {
+                let c = self.expr_const_int(*cond)?;
+                self.expr_const_int(if c != 0 { *then_e } else { *else_e })
+            }
             _ => None,
         }
     }

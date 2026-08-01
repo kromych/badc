@@ -597,6 +597,10 @@ impl Compiler {
             let base_is_function_type = self.pending.base_is_function_type;
             let base_typedef_fn_proto = self.pending.typedef_fn_proto;
             let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
+            // A typedef-carried type alignment applies to every declarator;
+            // an initializer's own type parses (casts, `sizeof`) reset the
+            // pending carrier, so capture it once for the whole list.
+            let base_type_align = self.pending.type_align;
             let mut declarator_count = 0usize;
             while self.lex.tk != ';' && self.lex.tk != '}' {
                 if self.pending.auto_type_single_declarator && declarator_count > 0 {
@@ -687,6 +691,9 @@ impl Compiler {
                 // the declarator (C99 6.7.7p3 + 6.7.6.1). Skip
                 // the carrier in that case.
                 let typedef_dim = self.pending.typedef_base_array_size;
+                // Declarator-added dimensions over an over-aligned element
+                // are rejected here for objects and typedef aliases alike.
+                self.check_array_elem_align(array_size, ty, typedef_dim, base_type_align)?;
                 // A fixed dimension (`> 0`) sizes the object; a deferred array
                 // typedef (`typedef T X[]`, carried as `-1`) makes the object
                 // a deferred array whose size the initializer fixes.
@@ -842,11 +849,17 @@ impl Compiler {
                     // (its own declaration's attribute, else propagated
                     // from an aligned typedef base) becomes the alias's
                     // type alignment.
-                    self.symbols[id_idx].type_align = if self.pending.attr_align > 0 {
+                    let alias_align = if self.pending.attr_align > 0 {
                         self.pending.attr_align
                     } else {
-                        self.pending.type_align
+                        base_type_align
                     };
+                    if alias_align > 0 && !(alias_align as u64).is_power_of_two() {
+                        return Err(self.compile_err(format!(
+                            "requested alignment {alias_align} is not a power of two"
+                        )));
+                    }
+                    self.symbols[id_idx].type_align = alias_align;
                     if typedef_fpi > 0 {
                         self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
                     }
@@ -1955,7 +1968,7 @@ impl Compiler {
                     let type_align = if is_pointer_ty(ty) {
                         0
                     } else {
-                        self.pending.type_align.max(0) as usize
+                        base_type_align.max(0) as usize
                     };
                     let want_align = core::cmp::max(
                         core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty)),
@@ -1968,6 +1981,20 @@ impl Compiler {
                     self.symbols[id_idx].data_align = self.symbols[id_idx]
                         .data_align
                         .max(want_align.max(1) as i64);
+                    // Declared object alignment for `__alignof__` on the
+                    // name: a declarator attribute replaces a typedef-carried
+                    // value, else raises the natural alignment; the typedef
+                    // value alone stands as given (it may lower). Distinct
+                    // from the placement above, which never lowers.
+                    let obj_align = if req_align > 0 && type_align > 0 {
+                        req_align
+                    } else if req_align > 0 {
+                        req_align.max(self.align_of_type(ty) as i64)
+                    } else {
+                        type_align as i64
+                    };
+                    self.symbols[id_idx].type_align =
+                        self.symbols[id_idx].type_align.max(obj_align);
                     let decl_align: usize = if want_align > 8 {
                         if thread_local && (req_align > 8 || want_align > 16) {
                             return Err(self.compile_err(

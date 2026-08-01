@@ -4229,6 +4229,49 @@ fn pointer_local_ignores_type_alignment() {
 }
 
 #[test]
+fn typedef_aligned_layout() {
+    // GNU `aligned(N)` carried by a typedef: object placement (static and
+    // automatic), member offsets, sizes, and `__alignof__` on types,
+    // objects and member lvalues all follow the gcc semantics, including
+    // a typedef lowering the alignment and a declarator attribute
+    // replacing the carrier.
+    assert_eq!(run_fixture("typedef_aligned_layout.c"), 0);
+}
+
+#[test]
+fn typedef_aligned_array_element_rejected() {
+    use crate::c5::Compiler;
+    // An element type whose typedef-carried alignment exceeds its size
+    // cannot tile an array; every declarator-added dimension over it is
+    // an error (gcc: "alignment of array elements is greater than element
+    // size"), while the array typedef itself stays legal.
+    let cases = [
+        "typedef int T __attribute__((aligned(16))); T a[3]; int main(void){return 0;}",
+        "typedef int T __attribute__((aligned(16))); int main(void){T a[3]; a[0]=0; return a[0];}",
+        "typedef int T __attribute__((aligned(16))); struct S { char c; T a[3]; }; \
+         int main(void){return (int)sizeof(struct S);}",
+        "typedef int T __attribute__((aligned(16))); typedef T A[3]; int main(void){return 0;}",
+        "typedef char A16[4] __attribute__((aligned(16))); A16 two[2]; int main(void){return 0;}",
+    ];
+    for src in cases {
+        let err = Compiler::new(src.to_string())
+            .compile()
+            .expect_err("over-aligned array element must be rejected");
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("alignment of array elements is greater than element size"),
+            "unexpected diagnostic for {src:?}: {msg:?}"
+        );
+    }
+    // The alignment binding to the array typedef itself is satisfiable.
+    let ok = "typedef char A16[4] __attribute__((aligned(16))); A16 one; \
+              int main(void){one[0]=1; return one[0]-1;}";
+    Compiler::new(ok.to_string())
+        .compile()
+        .expect("array typedef carrying its own alignment must compile");
+}
+
+#[test]
 fn flexible_array_member_typeof_is_array() {
     // C99 6.7.2.1p16: a flexible array member has an incomplete array type,
     // distinct from its decayed element pointer, so

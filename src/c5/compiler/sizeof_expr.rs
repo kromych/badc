@@ -24,6 +24,7 @@
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::types::{is_struct_value_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     /// Parse the operand of a `sizeof` and return its byte
@@ -505,6 +506,9 @@ impl Compiler {
         // unevaluated at unary precedence, like `sizeof`, and discard the
         // emit.
         if self.lex.tk != '(' {
+            if let Some(align) = self.alignof_object_walk(false)? {
+                return Ok(align);
+            }
             let saved_ty = self.ty;
             let saved_text_len = self.next_ent_pc;
             let saved_reloc = self.code_reloc_sym_idx.len();
@@ -522,6 +526,10 @@ impl Compiler {
         // operand is unevaluated, so parse it, read the type, and discard
         // everything the parse pushed (mirroring `sizeof`'s expression path).
         if !self.lex_is_type_start() {
+            if let Some(align) = self.alignof_object_walk(true)? {
+                self.next()?; // consume `)`
+                return Ok(align);
+            }
             let saved_ty = self.ty;
             let saved_text_len = self.next_ent_pc;
             let saved_reloc = self.code_reloc_sym_idx.len();
@@ -580,5 +588,109 @@ impl Compiler {
         };
         self.ty = saved_ty;
         Ok(align)
+    }
+
+    /// `__alignof__` on an object or a member chain (`name`, `name.f`,
+    /// `name->f.g`): the declared alignment of the designated object,
+    /// which the flat type tag cannot carry -- a typedef-carried
+    /// `aligned(N)` on the object or an explicit / typedef-carried
+    /// alignment on the final member. Consumes the chain and returns its
+    /// alignment, or rewinds and returns `None` for any other operand
+    /// shape (subscripts, calls, bitfield members, non-object names),
+    /// which the general-expression path then reports at the type's
+    /// natural alignment. `parenthesized` requires the chain to end at
+    /// `)`, left for the caller to consume.
+    fn alignof_object_walk(&mut self, parenthesized: bool) -> Result<Option<i64>, C5Error> {
+        let snap = self.lex.snapshot();
+        // Leading parentheses around the chain (`((name))`, `(name.f)`).
+        let mut inner_parens = 0usize;
+        while self.lex.tk == '(' {
+            inner_parens += 1;
+            self.next()?;
+        }
+        if self.lex.tk != Token::Id {
+            self.restore_lex(snap);
+            return Ok(None);
+        }
+        let idx = self.lex.curr_id_idx;
+        let class = self.symbols[idx].class;
+        if class != Token::Loc as i64 && class != Token::Glo as i64 {
+            self.restore_lex(snap);
+            return Ok(None);
+        }
+        let mut align = if self.symbols[idx].type_align > 0 {
+            self.symbols[idx].type_align
+        } else {
+            self.align_of_type(self.symbols[idx].type_) as i64
+        };
+        let mut cur_ty = self.symbols[idx].type_;
+        self.next()?;
+        loop {
+            let arrow = self.lex.tk == Token::Arrow;
+            if arrow || self.lex.tk == Token::Dot {
+                // `.` selects from a struct value, `->` from a pointer to
+                // one; anything else is not a plain member chain.
+                let depth = struct_ptr_depth(cur_ty);
+                let sel_ok = if arrow {
+                    depth == 1
+                } else {
+                    is_struct_value_ty(cur_ty)
+                };
+                self.next()?;
+                if !sel_ok || self.lex.tk != Token::Id {
+                    self.restore_lex(snap);
+                    return Ok(None);
+                }
+                let sid = struct_id_of(cur_ty);
+                let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                let found = self.structs[sid]
+                    .fields
+                    .iter()
+                    .find(|f| f.name == name)
+                    .map(|f| (f.ty, f.align, f.bit_width));
+                let Some((fty, falign, bit_width)) = found else {
+                    self.restore_lex(snap);
+                    return Ok(None);
+                };
+                if bit_width > 0 {
+                    self.restore_lex(snap);
+                    return Ok(None);
+                }
+                align = if falign > 0 {
+                    falign as i64
+                } else {
+                    self.align_of_type(fty) as i64
+                };
+                cur_ty = fty;
+                self.next()?;
+                continue;
+            }
+            break;
+        }
+        // Close any leading parentheses.
+        while inner_parens > 0 && self.lex.tk == ')' {
+            inner_parens -= 1;
+            self.next()?;
+        }
+        if inner_parens != 0 {
+            self.restore_lex(snap);
+            return Ok(None);
+        }
+        // The operand must be exactly the chain: a continuing postfix
+        // (subscript, call, `++`/`--`) or, in the parenthesized form,
+        // anything but `)` rewinds to the generic path.
+        let ends_operand = if parenthesized {
+            self.lex.tk == ')'
+        } else {
+            self.lex.tk != Token::Brak
+                && self.lex.tk != '('
+                && self.lex.tk != Token::Inc
+                && self.lex.tk != Token::Dec
+        };
+        if !ends_operand {
+            self.restore_lex(snap);
+            return Ok(None);
+        }
+        Ok(Some(align))
     }
 }

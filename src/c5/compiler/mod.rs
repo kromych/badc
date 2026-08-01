@@ -103,6 +103,12 @@ pub struct StructDef {
     /// over-aligning a struct above 8 buys nothing). `0` until
     /// `parse_aggregate_body` finishes.
     pub align: usize,
+    /// The attribute-derived part of `align`: the widest `aligned(N)` /
+    /// `_Alignas` reaching the aggregate through its tag, body, members,
+    /// or a member's typedef, 0 when the alignment is purely natural. An
+    /// automatic object of the type treats this like its own explicit
+    /// request when deciding on the realigned frame region.
+    pub explicit_align: u32,
     pub fields: Vec<StructField>,
     /// `true` for `union` definitions. The only effect on layout
     /// is that every field sits at offset 0 and the aggregate
@@ -221,6 +227,10 @@ pub struct StructField {
     /// clang both keep an `aligned(64)` member 64-aligned inside a
     /// packed struct), so the re-lay path needs the request preserved.
     pub explicit_align: u32,
+    /// Alignment the layout placed this field at, including a
+    /// typedef-carried `aligned(N)` the flat field type cannot express.
+    /// `__alignof__` on a member lvalue reports it. 0 for bitfields.
+    pub align: u32,
 }
 
 /// Optional preprocessor / driver knobs threaded through compiler

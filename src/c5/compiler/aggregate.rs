@@ -108,6 +108,7 @@ impl Compiler {
                     name: name.to_string(),
                     size: 0,
                     align: 1,
+                    explicit_align: 0,
                     fields: Vec::new(),
                     is_union,
                     is_complete: false,
@@ -139,6 +140,11 @@ impl Compiler {
         // non-bitfield field bumps this if its alignment exceeds the
         // running max.
         let mut struct_align: usize = 1;
+        // The attribute-derived part of it: member attributes, member
+        // typedef carriers, and nested aggregates' own attribute-derived
+        // alignment. Recorded on the StructDef for the automatic-storage
+        // placement decision.
+        let mut struct_explicit: usize = 0;
         // Bit-packing state for contiguous bitfields. `bf_bit_cursor`
         // is the next free bit position measured from the start of the
         // aggregate; the run begins at `offset * 8` when `bf_active`
@@ -420,6 +426,9 @@ impl Compiler {
                     if inner_align > struct_align {
                         struct_align = inner_align;
                     }
+                    struct_explicit = struct_explicit.max(
+                        (self.structs[inner_id].explicit_align as usize).min(inner_align.max(1)),
+                    );
                     let base_offset = if is_union {
                         0
                     } else {
@@ -481,6 +490,7 @@ impl Compiler {
                             anon_union_group: union_group,
                             anon_struct_group: struct_group,
                             explicit_align: inner_field.explicit_align,
+                            align: inner_field.align,
                         });
                     }
 
@@ -600,6 +610,15 @@ impl Compiler {
                 // carrier is reset when the next field's base
                 // type is parsed.
                 let typedef_dim = self.pending.typedef_base_array_size;
+                // A declarator-added dimension over an element whose
+                // typedef-carried alignment exceeds its size cannot tile
+                // (gcc rejects the same way).
+                self.check_array_elem_align(
+                    field_array_size,
+                    field_ty,
+                    typedef_dim,
+                    type_align_override as i64,
+                )?;
                 if typedef_dim > 0
                     && field_array_size == 0
                     && self.pending.declarator_leading_ptr_count == 0
@@ -652,6 +671,9 @@ impl Compiler {
                 // bitfield; the declared type's size. Zero for a
                 // non-bitfield field.
                 let mut bit_unit: usize = 0;
+                // Placement alignment of a non-bitfield member, recorded on
+                // the field so `__alignof__` on a member lvalue reports it.
+                let mut placed_align: usize = 0;
                 let field_offset: usize;
                 if self.lex.tk == ':' {
                     if field_array_size != 0 {
@@ -790,9 +812,20 @@ impl Compiler {
                         self.align_of_type(field_ty)
                     };
                     let field_align = natural_align.max(group_align).max(decl_align).min(pack);
+                    placed_align = field_align;
                     if field_align > struct_align {
                         struct_align = field_align;
                     }
+                    // The field's explicit alignment sources; a nested
+                    // aggregate contributes its own attribute-derived part.
+                    let mut fe = group_align.max(decl_align);
+                    if type_align_override > 0 && !is_pointer_ty(field_ty) && !attr_packed {
+                        fe = fe.max(type_align_override);
+                    }
+                    if is_struct_value_ty(field_ty) {
+                        fe = fe.max(self.structs[struct_id_of(field_ty)].explicit_align as usize);
+                    }
+                    struct_explicit = struct_explicit.max(fe.min(pack).min(field_align.max(1)));
                     field_offset = if is_union {
                         0
                     } else {
@@ -824,6 +857,7 @@ impl Compiler {
                     anon_union_group: 0,
                     anon_struct_group: 0,
                     explicit_align: group_align.max(decl_align) as u32,
+                    align: placed_align as u32,
                 });
 
                 if self.lex.tk == ',' {
@@ -864,6 +898,7 @@ impl Compiler {
         let total = round_up(offset, struct_align);
         self.structs[struct_id].size = total;
         self.structs[struct_id].align = struct_align;
+        self.structs[struct_id].explicit_align = struct_explicit.min(struct_align) as u32;
         self.structs[struct_id].is_complete = true;
         Ok(struct_id)
     }
@@ -882,6 +917,8 @@ impl Compiler {
             let align = self.structs[struct_id].align.max(req as usize);
             self.structs[struct_id].align = align;
             self.structs[struct_id].size = round_up(self.structs[struct_id].size, align);
+            self.structs[struct_id].explicit_align =
+                self.structs[struct_id].explicit_align.max(req as u32);
         }
         Ok(())
     }
@@ -898,6 +935,7 @@ impl Compiler {
     /// `packed` removes natural padding, not a requested alignment.
     pub(super) fn repack_struct(&mut self, struct_id: usize) {
         self.structs[struct_id].align = 1;
+        self.structs[struct_id].explicit_align = 0;
         if self.structs[struct_id].is_union {
             return;
         }
@@ -968,6 +1006,7 @@ impl Compiler {
                 max_explicit_align = max_explicit_align.max(explicit_align);
             }
             self.structs[struct_id].fields[i].offset = offset;
+            self.structs[struct_id].fields[i].align = explicit_align.max(1) as u32;
             let storage = if array_size > 0 {
                 self.size_of_type(ty) * array_size as usize
             } else if array_size < 0 {
@@ -999,6 +1038,11 @@ impl Compiler {
         // aggregate too, so an array of it keeps every member on its
         // requested boundary.
         self.structs[struct_id].align = max_explicit_align;
+        self.structs[struct_id].explicit_align = if max_explicit_align > 1 {
+            max_explicit_align as u32
+        } else {
+            0
+        };
         self.structs[struct_id].size = round_up(size, max_explicit_align);
     }
 

@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 
 use super::super::codegen::Target;
 use super::super::codegen::abi_classify::{FlatField, ScalarKind};
+use super::super::error::C5Error;
 use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
@@ -122,6 +123,7 @@ impl Compiler {
             name: name.to_string(),
             size: 0,
             align: 1,
+            explicit_align: 0,
             fields: Vec::new(),
             is_union: false,
             is_complete: false,
@@ -173,6 +175,7 @@ impl Compiler {
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
+            align: 0,
         };
         self.structs.push(StructDef {
             name: "__int128".to_string(),
@@ -182,6 +185,7 @@ impl Compiler {
             // containing struct and the x86-64 / AArch64 argument
             // classification both depend on.
             align: 16,
+            explicit_align: 0,
             fields: alloc::vec![half("__lo", 0), half("__hi", 8)],
             is_complete: true,
             is_union: false,
@@ -260,11 +264,13 @@ impl Compiler {
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
+            align: 0,
         };
         self.structs.push(StructDef {
             name: "__builtin_va_list".to_string(),
             size,
             align: 8,
+            explicit_align: 0,
             fields: fields.iter().map(field).collect(),
             is_complete: true,
             is_union: false,
@@ -344,11 +350,13 @@ impl Compiler {
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
+            align: 0,
         };
         self.structs.push(StructDef {
             name,
             size: n_bytes as usize,
             align: (n_bytes as usize).min(8),
+            explicit_align: 0,
             fields: alloc::vec![field],
             is_complete: true,
             is_union: false,
@@ -405,6 +413,7 @@ impl Compiler {
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
+            align: 0,
         };
         self.structs.push(StructDef {
             name,
@@ -414,6 +423,7 @@ impl Compiler {
                 (count * elem_size) as usize
             },
             align: self.align_of_type(elem_ty),
+            explicit_align: 0,
             fields: alloc::vec![field],
             is_complete: true,
             is_union: false,
@@ -594,6 +604,33 @@ impl Compiler {
         } else {
             8
         }
+    }
+
+    /// C99 6.2.5p20 lays array elements contiguously, so an element type
+    /// whose requested alignment exceeds its size cannot tile an array;
+    /// a declarator-added dimension over such an element is rejected, as
+    /// gcc does. The alignment an array typedef itself carries
+    /// (`typedef char A[4] aligned(16)`) binds to the array object, not
+    /// its elements, so only a new dimension (`declared_array_size`, from
+    /// the declarator) triggers the check; `typedef_dim` scales the
+    /// element when the base is itself an array typedef.
+    pub(super) fn check_array_elem_align(
+        &self,
+        declared_array_size: i64,
+        elem_ty: i64,
+        typedef_dim: i64,
+        type_align: i64,
+    ) -> Result<(), C5Error> {
+        if declared_array_size == 0 || type_align <= 0 || is_pointer_ty(elem_ty) {
+            return Ok(());
+        }
+        let elem_bytes = self.size_of_type(elem_ty).max(1) as i64 * typedef_dim.max(1);
+        if type_align > elem_bytes {
+            return Err(
+                self.compile_err("alignment of array elements is greater than element size")
+            );
+        }
+        Ok(())
     }
 
     /// Number of c5 stack slots required to hold a value of `ty`.

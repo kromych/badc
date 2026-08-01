@@ -1053,6 +1053,7 @@ fn run() {
     // of this path.
     if (mode == Mode::NativeExecutable || mode == Mode::SharedLibrary) && !compile_only {
         use badc::{Compiler, OutputKind};
+        let mut stats = LinkStats::new();
         let mut native_objs: Vec<badc::NativeObject> =
             Vec::with_capacity(sources.len() + objects.len() + archives.len());
 
@@ -1180,6 +1181,7 @@ fn run() {
             source_auto_includes.push(tu.auto_includes);
             native_objs.push(tu.obj);
         }
+        stats.mark("compile");
         // `--freestanding` drops the embedded startup runtime: the
         // program's own entry becomes the image entry and the entry
         // adapter resolves to it. A freestanding build is requested only
@@ -1283,6 +1285,7 @@ fn run() {
                 }
             }
         }
+        stats.mark("runtime");
         for obj_path in &objects {
             let bytes = match std::fs::read(obj_path) {
                 Ok(b) => b,
@@ -1306,6 +1309,7 @@ fn run() {
                 }
             }
         }
+        stats.mark("parse");
         // Archive members join the link on demand: a member is
         // included iff it defines a symbol some already-included
         // object still leaves undefined, iterated to a fixpoint so a
@@ -1313,7 +1317,7 @@ fn run() {
         // (from any archive). Unreferenced members stay out, so their
         // unrelated undefined or duplicate symbols cannot fail a
         // valid link.
-        let mut pending: Vec<(String, badc::NativeObject)> = Vec::new();
+        let mut pending: Vec<Option<(String, badc::NativeObject)>> = Vec::new();
         for a_path in &archives {
             let bytes = match std::fs::read(a_path) {
                 Ok(b) => b,
@@ -1341,7 +1345,7 @@ fn run() {
                     std::process::exit(1);
                 }
                 match badc::parse_native_elf(&m.bytes) {
-                    Ok(o) => pending.push((format!("{a_path}({})", m.name), o)),
+                    Ok(o) => pending.push(Some((format!("{a_path}({})", m.name), o))),
                     Err(e) => {
                         eprint_diagnostic(format!("badc: {a_path}({}): {e}", m.name));
                         std::process::exit(1);
@@ -1349,6 +1353,7 @@ fn run() {
                 }
             }
         }
+        stats.mark("archives");
         // Compiler-runtime helpers (a libgcc / compiler-rt subset) join the
         // pool on demand, after the user's archives so a real libgcc on the
         // link line wins. Source-level target gating leaves the object empty
@@ -1356,13 +1361,14 @@ fn run() {
         for (name, body) in badc::embedded_compiler_rt().iter() {
             let bytes = compile_in_memory(&format!("<compiler-rt/{name}>"), body.to_string(), &[]);
             match badc::parse_native_elf(&bytes) {
-                Ok(o) => pending.push((format!("<compiler-rt/{name}>"), o)),
+                Ok(o) => pending.push(Some((format!("<compiler-rt/{name}>"), o))),
                 Err(e) => {
                     eprint_diagnostic(format!("badc: <compiler-rt/{name}>: {e}"));
                     std::process::exit(1);
                 }
             }
         }
+        stats.mark("rtlib");
         // C89 6.3.2.2 link semantics: a definition anywhere in the
         // link set satisfies an implicitly declared call, so a name
         // the auto-include retry bound to a header's library binding
@@ -1370,7 +1376,10 @@ fn run() {
         // it -- the user's definition wins over the binding.
         if source_auto_includes.iter().any(|a| !a.is_empty()) {
             let mut defined_fns = std::collections::HashSet::<String>::new();
-            for o in native_objs.iter().chain(pending.iter().map(|(_, o)| o)) {
+            for o in native_objs
+                .iter()
+                .chain(pending.iter().flatten().map(|(_, o)| o))
+            {
                 for s in &o.symbols {
                     // STB_GLOBAL STT_FUNC section-resident definitions.
                     if s.binding == 1
@@ -1412,30 +1421,28 @@ fn run() {
             }
         }
         if !pending.is_empty() {
-            let mut defined = std::collections::HashSet::<String>::new();
-            let mut undefined = std::collections::HashSet::<String>::new();
+            type NameSet = hashbrown::HashSet<String>;
+            let mut defined = NameSet::new();
+            let mut undefined = NameSet::new();
             // A global or weak definition satisfies references; only a
             // strong (STB_GLOBAL) undefined reference pulls a member,
             // matching ELF archive practice (a weak reference left
             // unresolved does not extract members).
-            let account =
-                |o: &badc::NativeObject,
-                 defined: &mut std::collections::HashSet<String>,
-                 undefined: &mut std::collections::HashSet<String>| {
-                    for s in &o.symbols {
-                        if s.binding == 0 {
-                            continue;
-                        }
-                        if s.section == badc::NativeSymSection::Undef {
-                            if s.binding == 1 && !defined.contains(&s.name) {
-                                undefined.insert(s.name.clone());
-                            }
-                        } else {
-                            defined.insert(s.name.clone());
-                            undefined.remove(&s.name);
-                        }
+            let account = |o: &badc::NativeObject, defined: &mut NameSet, undefined: &mut NameSet| {
+                for s in &o.symbols {
+                    if s.binding == 0 {
+                        continue;
                     }
-                };
+                    if s.section == badc::NativeSymSection::Undef {
+                        if s.binding == 1 && !defined.contains(&s.name) {
+                            undefined.insert(s.name.clone());
+                        }
+                    } else {
+                        defined.insert(s.name.clone());
+                        undefined.remove(&s.name);
+                    }
+                }
+            };
             for o in &native_objs {
                 account(o, &mut defined, &mut undefined);
             }
@@ -1447,31 +1454,34 @@ fn run() {
                 undefined.insert(entry.clone());
             }
             // The archive symbol index lists strong section-resident
-            // definitions; a member is pulled on exactly those.
+            // definitions; a member is pulled on exactly those. A pulled
+            // member is taken out of its slot rather than removed from
+            // the pool: an object is large, and compacting the pool per
+            // pull would move every later member's record again.
             let mut progress = true;
             while progress {
                 progress = false;
-                let mut i = 0;
-                while i < pending.len() {
-                    let wanted = pending[i].1.symbols.iter().any(|s| {
-                        s.binding == 1
-                            && !matches!(
-                                s.section,
-                                badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
-                            )
-                            && undefined.contains(&s.name)
+                for slot in pending.iter_mut() {
+                    let wanted = slot.as_ref().is_some_and(|(_, o)| {
+                        o.symbols.iter().any(|s| {
+                            s.binding == 1
+                                && !matches!(
+                                    s.section,
+                                    badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
+                                )
+                                && undefined.contains(&s.name)
+                        })
                     });
                     if wanted {
-                        let (_, o) = pending.remove(i);
+                        let (_, o) = slot.take().expect("a wanted slot is occupied");
                         account(&o, &mut defined, &mut undefined);
                         native_objs.push(o);
                         progress = true;
-                    } else {
-                        i += 1;
                     }
                 }
             }
         }
+        stats.mark("select");
         if native_objs.is_empty() {
             eprint_diagnostic("badc: error: no inputs");
             std::process::exit(1);
@@ -1511,6 +1521,7 @@ fn run() {
                 std::process::exit(1);
             }
         };
+        stats.mark("merge");
         let plt = match merged.machine {
             badc::NativeMachine::X86_64 => badc::emit_x86_64_plt(&mut merged),
             badc::NativeMachine::Aarch64 => badc::emit_aarch64_plt(&mut merged),
@@ -1522,6 +1533,7 @@ fn run() {
                 std::process::exit(1);
             }
         };
+        stats.mark("plt");
         let entry_name = entry_override.as_deref().unwrap_or("main");
         let native_output_kind = if mode == Mode::SharedLibrary {
             OutputKind::SharedLibrary
@@ -1568,6 +1580,7 @@ fn run() {
                 std::process::exit(1);
             }
         };
+        stats.mark("image");
         let default_path;
         let out: &std::path::Path = match output_path.as_deref() {
             Some(o) => o,
@@ -1583,6 +1596,8 @@ fn run() {
         write_output(out, &bytes, target, quiet);
         set_executable(out);
         post_write_native(out, target);
+        stats.mark("write");
+        stats.report(native_objs.len());
         return;
     }
 
@@ -1981,6 +1996,49 @@ fn parse_jobs(s: &str) -> usize {
 /// the unit count, where N is `--jobs` or, absent it, the host's
 /// available parallelism. C99 leaves build parallelism to the
 /// implementation.
+/// Per-phase wall clock for the native link, reported to stderr when
+/// `BADC_LINK_STATS` is set. Off by default: `mark` is a load and a
+/// branch, so an unset environment pays nothing measurable.
+struct LinkStats {
+    on: bool,
+    marks: Vec<(&'static str, core::time::Duration)>,
+    last: std::time::Instant,
+}
+
+impl LinkStats {
+    fn new() -> Self {
+        Self {
+            on: std::env::var_os("BADC_LINK_STATS").is_some(),
+            marks: Vec::new(),
+            last: std::time::Instant::now(),
+        }
+    }
+
+    /// Close the phase that ended here and name it.
+    fn mark(&mut self, phase: &'static str) {
+        if !self.on {
+            return;
+        }
+        let now = std::time::Instant::now();
+        self.marks.push((phase, now - self.last));
+        self.last = now;
+    }
+
+    fn report(&self, inputs: usize) {
+        if !self.on {
+            return;
+        }
+        let mut line = format!("badc: link stats: inputs={inputs}");
+        let mut total = 0.0;
+        for (phase, d) in &self.marks {
+            let ms = d.as_secs_f64() * 1e3;
+            total += ms;
+            line.push_str(&format!(" {phase}={ms:.0}ms"));
+        }
+        eprintln!("{line} total={total:.0}ms");
+    }
+}
+
 fn worker_count(jobs: Option<usize>, count: usize) -> usize {
     let n = jobs.unwrap_or_else(|| {
         std::thread::available_parallelism()

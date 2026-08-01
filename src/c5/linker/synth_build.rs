@@ -891,6 +891,11 @@ fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
 /// maximum PC actually referenced; entries outside the referenced
 /// set stay `usize::MAX` and surface as a "missing ent_pc" error
 /// if the writer reaches them.
+///
+/// TODO: the table spans the whole merged `.text`, so a large link
+/// allocates and fills eight bytes per code byte for a map that is the
+/// identity. Removing it needs `Build::pc_to_native` to express the
+/// identity case, which the direct-lowering path shares.
 fn synth_pc_to_native(
     text: &[u8],
     code_relocs: &[CodeReloc],
@@ -1054,7 +1059,7 @@ mod tests {
             unit_for_debug_line_reloc: alloc::vec![],
             debug_info_text_relocs: alloc::vec![],
             debug_line_text_relocs: alloc::vec![],
-            prologue_ends: alloc::collections::BTreeMap::new(),
+            prologue_ends: hashbrown::HashMap::new(),
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,
@@ -1260,5 +1265,102 @@ mod tests {
             synth_exports(&merged, true, OutputKind::Executable).is_empty(),
             "export-all populates the export list only for a shared library"
         );
+    }
+
+    /// A merged image with `n` functions, each 8 bytes of aarch64
+    /// `mov w0, #42; ret`, with `main` first, plus one flat import and
+    /// its trampoline so the writer emits the static symbol table.
+    fn merged_with_functions(n: usize) -> (MergedNative, alloc::vec::Vec<PltTrampoline>) {
+        let mut merged = tiny_aarch64_main();
+        merged.text = alloc::vec::Vec::with_capacity(n * 8 + 12);
+        for _ in 0..n {
+            merged
+                .text
+                .extend_from_slice(&[0x40, 0x05, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6]);
+        }
+        for i in 1..n {
+            merged.defined.insert(
+                alloc::format!("f{i:07}"),
+                MergedSymbol {
+                    section: NativeSymSection::Text,
+                    value: (i * 8) as u64,
+                    size: 8,
+                },
+            );
+        }
+        let tramp = merged.text.len();
+        // adrp x16, 0 ; ldr x16, [x16] ; br x16 -- the shape
+        // `emit_aarch64_plt` lays down and the writer patches.
+        merged.text.extend_from_slice(&0x9000_0010u32.to_le_bytes());
+        merged.text.extend_from_slice(&0xF940_0210u32.to_le_bytes());
+        merged.text.extend_from_slice(&0xD61F_0200u32.to_le_bytes());
+        merged.imports.push("host_fn".to_string());
+        merged.flat_imports.insert("host_fn".to_string());
+        (
+            merged,
+            alloc::vec![PltTrampoline {
+                text_offset: tramp,
+                import_index: 0,
+            }],
+        )
+    }
+
+    /// The static `.symtab` gives each function the span to the next
+    /// code boundary. Locating that boundary must be a search over the
+    /// sorted boundary list, not a scan from its front.
+    ///
+    /// One image of `SPLIT * N` functions is compared against `SPLIT`
+    /// images of `N`: the two sides carry the same number of functions,
+    /// so a per-function cost makes them equal, while a per-function
+    /// scan makes the single large image `SPLIT` times dearer. Equal
+    /// work per side also means equal exposure to the scheduler -- the
+    /// suite runs its tests in parallel -- and the whole comparison is
+    /// retried, since a complexity change exceeds the bound on every
+    /// attempt and a load excursion does not.
+    #[test]
+    fn image_write_cost_is_subquadratic_in_function_count() {
+        const N: usize = 5_000;
+        const SPLIT: usize = 8;
+        let once = |n: usize| {
+            let (merged, plt) = merged_with_functions(n);
+            let bytes = write_native_image_from_merged(
+                &merged,
+                &plt,
+                "main",
+                None,
+                OutputKind::Executable,
+                Target::LinuxAarch64,
+                None,
+            )
+            .expect("image writes");
+            assert!(!bytes.is_empty(), "image is non-empty");
+        };
+        let timed = |f: &dyn Fn()| -> f64 {
+            let t = std::time::Instant::now();
+            f();
+            t.elapsed().as_secs_f64()
+        };
+        for attempt in 0..3 {
+            let (mut split, mut whole) = (f64::MAX, f64::MAX);
+            for _ in 0..3 {
+                split = split.min(timed(&|| {
+                    for _ in 0..SPLIT {
+                        once(N)
+                    }
+                }));
+                whole = whole.min(timed(&|| once(SPLIT * N)));
+            }
+            assert!(split > 0.0, "no measurable image-write cost to compare");
+            if whole < split * 2.5 {
+                return;
+            }
+            assert!(
+                attempt < 2,
+                "one image of {} functions cost {:.1}x {SPLIT} images of {N} \
+                 ({split:.3e}s -> {whole:.3e}s)",
+                SPLIT * N,
+                whole / split,
+            );
+        }
     }
 }

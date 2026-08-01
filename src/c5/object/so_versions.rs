@@ -225,17 +225,11 @@ pub fn resolve_import_versions(
         Machine::X86_64 => EM_X86_64,
         Machine::Aarch64 => EM_AARCH64,
     };
-    // Parse each library at most once.
+    // Each library is read and parsed at most once, on first demand;
+    // lookups go through the cached map by reference. A library's map
+    // holds every versioned export it has, so copying it per lookup
+    // would cost O(imports * candidates * exports) allocations.
     let mut lib_versions: BTreeMap<String, Option<BTreeMap<String, String>>> = BTreeMap::new();
-    let mut parse = |soname: &str| -> Option<BTreeMap<String, String>> {
-        if let Some(cached) = lib_versions.get(soname) {
-            return cached.clone();
-        }
-        let parsed = locate_so(soname, machine)
-            .and_then(|bytes| parse_so_default_versions(&bytes, expect_machine));
-        lib_versions.insert(soname.to_string(), parsed.clone());
-        parsed
-    };
 
     let mut out: Vec<Option<(String, String)>> = Vec::with_capacity(imports.len());
     for name in imports {
@@ -249,7 +243,16 @@ pub fn resolve_import_versions(
             .into_iter()
             .chain(dylibs.iter().filter(|s| Some(*s) != preferred));
         for soname in candidates {
-            if let Some(version) = parse(soname).as_ref().and_then(|m| m.get(name)) {
+            if !lib_versions.contains_key(soname) {
+                let parsed = locate_so(soname, machine)
+                    .and_then(|bytes| parse_so_default_versions(&bytes, expect_machine));
+                lib_versions.insert(soname.clone(), parsed);
+            }
+            let version = lib_versions
+                .get(soname)
+                .and_then(|m| m.as_ref())
+                .and_then(|m| m.get(name));
+            if let Some(version) = version {
                 resolved = Some((soname.clone(), version.clone()));
                 break;
             }
@@ -257,4 +260,63 @@ pub fn resolve_import_versions(
         out.push(resolved);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Version resolution must cost one library parse, not one per
+    /// lookup: a library's map holds every versioned export it has, so
+    /// copying it per import would scale with `imports * exports`. 64x
+    /// the imports staying under 8x the time rules that out.
+    ///
+    /// Needs a host library carrying a Verdef table; skips where the
+    /// probe import resolves to no version.
+    #[test]
+    fn import_version_resolution_parses_each_library_once() {
+        let machine = if cfg!(target_arch = "aarch64") {
+            Machine::Aarch64
+        } else {
+            Machine::X86_64
+        };
+        let dylibs: Vec<String> = ["libc.so.6", "libm.so.6"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        let empty = BTreeMap::new();
+        let probe = resolve_import_versions(&[String::from("malloc")], &dylibs, &empty, machine);
+        if probe[0].is_none() {
+            return;
+        }
+        let once = |n: usize| -> f64 {
+            let imports: Vec<String> = (0..n).map(|_| String::from("malloc")).collect();
+            let t = std::time::Instant::now();
+            let got = resolve_import_versions(&imports, &dylibs, &empty, machine);
+            let dt = t.elapsed().as_secs_f64();
+            assert!(got.iter().all(|r| r.is_some()), "every import resolves");
+            dt
+        };
+        // Retried, and the two sizes timed alternately: the suite runs
+        // its tests in parallel, so a scheduling excursion must not
+        // decide the ratio. A complexity change exceeds the bound on
+        // every attempt.
+        for attempt in 0..3 {
+            let (mut small, mut large) = (f64::MAX, f64::MAX);
+            for _ in 0..3 {
+                small = small.min(once(32));
+                large = large.min(once(2048));
+            }
+            assert!(small > 0.0, "no measurable resolution cost to compare");
+            if large < small * 8.0 {
+                return;
+            }
+            assert!(
+                attempt < 2,
+                "version resolution grew {:.1}x for 64x the imports \
+                 ({small:.3e}s -> {large:.3e}s)",
+                large / small
+            );
+        }
+    }
 }

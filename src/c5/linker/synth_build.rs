@@ -1306,21 +1306,22 @@ mod tests {
 
     /// The static `.symtab` gives each function the span to the next
     /// code boundary. Locating that boundary must be a search over the
-    /// sorted boundary list, not a scan from its front: 5x the
-    /// functions staying under 10x the time rules out the quadratic
-    /// (25x) with margin on both sides of the linear 5x.
+    /// sorted boundary list, not a scan from its front.
     ///
-    /// The two sizes are timed alternately and reduced by minimum: the
-    /// suite runs its tests in parallel, so timing one size to
-    /// completion before the other would let a load excursion land
-    /// entirely in one side of the ratio. The whole comparison is
-    /// retried for the same reason -- a complexity change exceeds the
-    /// bound on every attempt, a scheduling excursion does not.
+    /// One image of `SPLIT * N` functions is compared against `SPLIT`
+    /// images of `N`: the two sides carry the same number of functions,
+    /// so a per-function cost makes them equal, while a per-function
+    /// scan makes the single large image `SPLIT` times dearer. Equal
+    /// work per side also means equal exposure to the scheduler -- the
+    /// suite runs its tests in parallel -- and the whole comparison is
+    /// retried, since a complexity change exceeds the bound on every
+    /// attempt and a load excursion does not.
     #[test]
     fn image_write_cost_is_subquadratic_in_function_count() {
-        let once = |n: usize| -> f64 {
+        const N: usize = 5_000;
+        const SPLIT: usize = 8;
+        let once = |n: usize| {
             let (merged, plt) = merged_with_functions(n);
-            let t = std::time::Instant::now();
             let bytes = write_native_image_from_merged(
                 &merged,
                 &plt,
@@ -1331,25 +1332,33 @@ mod tests {
                 None,
             )
             .expect("image writes");
-            let dt = t.elapsed().as_secs_f64();
             assert!(!bytes.is_empty(), "image is non-empty");
-            dt
+        };
+        let timed = |f: &dyn Fn()| -> f64 {
+            let t = std::time::Instant::now();
+            f();
+            t.elapsed().as_secs_f64()
         };
         for attempt in 0..3 {
-            let (mut small, mut large) = (f64::MAX, f64::MAX);
+            let (mut split, mut whole) = (f64::MAX, f64::MAX);
             for _ in 0..3 {
-                small = small.min(once(6_000));
-                large = large.min(once(30_000));
+                split = split.min(timed(&|| {
+                    for _ in 0..SPLIT {
+                        once(N)
+                    }
+                }));
+                whole = whole.min(timed(&|| once(SPLIT * N)));
             }
-            assert!(small > 0.0, "no measurable image-write cost to compare");
-            if large < small * 10.0 {
+            assert!(split > 0.0, "no measurable image-write cost to compare");
+            if whole < split * 2.5 {
                 return;
             }
             assert!(
                 attempt < 2,
-                "image write grew {:.1}x for 5x the functions \
-                 ({small:.3e}s -> {large:.3e}s)",
-                large / small
+                "one image of {} functions cost {:.1}x {SPLIT} images of {N} \
+                 ({split:.3e}s -> {whole:.3e}s)",
+                SPLIT * N,
+                whole / split,
             );
         }
     }

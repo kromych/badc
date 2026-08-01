@@ -3563,3 +3563,65 @@ fn unknown_asm_section_flag_is_diagnosed() {
         "diagnostic should name the section and the flag: {err}",
     );
 }
+
+// Gated on Linux: the read-only data page only exists on the native ELF
+// link path, and the test exec's the produced binary.
+//
+// A `&&label` dispatch table is filled by stores the declaration emits,
+// so the storage is written during execution however it is qualified. Any
+// `const` spelling that put it on a read-only page faults on the first
+// store. Runs both optimization levels because placement is independent
+// of the pipeline.
+#[cfg(target_os = "linux")]
+#[test]
+fn const_label_address_table_storage_is_writable() {
+    let dir = tempdir("const-label-table");
+    let src = write_source(
+        &dir,
+        "t.c",
+        "static int p(const unsigned char *c) {\n\
+         static const void *const t[] = {&&A, &&B, &&H};\n\
+         int a = 0, i = 0;\n\
+         goto *t[c[i++]];\n\
+         A: a += c[i++]; goto *t[c[i++]];\n\
+         B: a += a; goto *t[c[i++]];\n\
+         H: return a; }\n\
+         static int q(const unsigned char *c) {\n\
+         static void *const t[] = {&&A, &&B, &&H};\n\
+         int a = 0, i = 0;\n\
+         goto *t[c[i++]];\n\
+         A: a += c[i++]; goto *t[c[i++]];\n\
+         B: a += a; goto *t[c[i++]];\n\
+         H: return a; }\n\
+         static int r(const unsigned char *c) {\n\
+         static const long t[] = {(long)&&A, (long)&&B, (long)&&H};\n\
+         int a = 0, i = 0;\n\
+         goto *(void *)t[c[i++]];\n\
+         A: a += c[i++]; goto *(void *)t[c[i++]];\n\
+         B: a += a; goto *(void *)t[c[i++]];\n\
+         H: return a; }\n\
+         int main(void) {\n\
+         static const unsigned char g[] = {0, 5, 1, 2};\n\
+         if (p(g) != 10) return 1;\n\
+         if (p(g) != 10) return 2;\n\
+         if (q(g) != 10) return 3;\n\
+         if (r(g) != 10) return 4;\n\
+         return 42; }\n",
+    );
+    for (opt, stem) in [(None, "prog"), (Some("-O"), "prog-opt")] {
+        let exe = dir.join(stem);
+        let mut cmd = Command::new(badc());
+        cmd.arg("-o").arg(&exe);
+        if let Some(o) = opt {
+            cmd.arg(o);
+        }
+        run(cmd.arg(&src).current_dir(&dir), "build label table");
+        let out = Command::new(&exe).output().expect("run prog");
+        assert_eq!(
+            out.status.code(),
+            Some(42),
+            "{stem}: label-address table storage must be writable (status {})",
+            out.status
+        );
+    }
+}

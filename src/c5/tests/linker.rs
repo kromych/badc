@@ -10266,3 +10266,52 @@ fn relocated_const_storage_follows_the_pic_model() {
         }
     }
 }
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn runtime_initialized_const_storage_stays_writable() {
+    // A `&&label` element is not a link-time constant, so the declaration
+    // fills the storage with stores and the data image stays zeroed. The
+    // program writes the object during execution however it is qualified,
+    // so no `const` spelling may put it on a read-only page -- and its
+    // trailing once-guard byte sits past the symbol's extent, so a carve
+    // would separate the two.
+    const SHF_WRITE: u64 = 0x1;
+    let src = "\
+        int a(void) { static const void *const t[2] = {&&L0, &&L1};\n\
+          goto *t[0]; L0: return 1; L1: return 2; }\n\
+        int b(void) { static void *const t[2] = {&&M0, &&M1};\n\
+          goto *t[0]; M0: return 1; M1: return 2; }\n\
+        int c(void) { static const long t[2] = {(long)&&N0, (long)&&N1};\n\
+          goto *(void *)t[0]; N0: return 1; N1: return 2; }\n\
+        static const int ro[2] = {7, 8};\n\
+        int d(void) { return ro[1]; }\n";
+    for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
+        let bytes = reloc_tu(src, target, false);
+        let sections = elf_sections(&bytes);
+        let objs = elf_data_objects(&bytes);
+        for (name, (sec, _, _, _)) in &objs {
+            if !name.starts_with("t.") {
+                continue;
+            }
+            let flags = sections
+                .iter()
+                .find(|(n, _, _, _)| n == sec)
+                .expect("section")
+                .2;
+            assert_ne!(
+                flags & SHF_WRITE,
+                0,
+                "{target:?}: `{name}` is filled by stores, so `{sec}` must be writable"
+            );
+        }
+        assert_eq!(
+            objs.keys().filter(|k| k.starts_with("t.")).count(),
+            3,
+            "{target:?}: one table per function"
+        );
+        // The relocation-free const object in the same unit still lands
+        // read-only, so the exclusion is per object rather than a retreat.
+        assert_eq!(objs["ro"].0, ".rodata", "{target:?}: plain const placement");
+    }
+}

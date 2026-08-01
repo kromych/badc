@@ -666,6 +666,14 @@ pub(in crate::c5::compiler) struct Pending {
     /// array type rather than the decayed element pointer.
     pub typeof_operand_array_bytes: i64,
 
+    /// Exact dimensions of a `typeof` operand that decayed from an
+    /// array whose full shape is known (a pointer-to-array deref / row
+    /// select, or a zero-length array). Outermost first; -1 marks an
+    /// unspecified bound and 0 a zero-length one, matching the type-name
+    /// dims encoding. Preferred over the count / byte channels, which
+    /// cannot express those bounds or a multi-dimensional row.
+    pub typeof_operand_array_dims: alloc::vec::Vec<i64>,
+
     /// Companion to `last_array_decay_size` for cases where the
     /// row's byte size is known directly but its shape can't be
     /// reduced to a single `count * sizeof(elem_ty)` pair --
@@ -884,6 +892,7 @@ impl Default for Pending {
             typeof_operand_was_array: false,
             typeof_operand_array_size: 0,
             typeof_operand_array_bytes: 0,
+            typeof_operand_array_dims: alloc::vec::Vec::new(),
             last_array_decay_bytes: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field
             // docs above.

@@ -1029,6 +1029,17 @@ fn builtin_types_compatible_array() {
 }
 
 #[test]
+fn builtin_types_compatible_ptr_array() {
+    // C99 6.7.5.2p4/p6: `T (*)[]` names a pointer to an incomplete array;
+    // `typeof` of its dereference is that array type, whose unspecified
+    // bound is compatible with any bound. Pointer-to-array pairs compare
+    // through the pointee (6.7.5.1p2), zero-length and multi-dimensional
+    // bounds stay exact, and `_Generic` selects through the same rule.
+    // Matches gcc and clang.
+    assert_eq!(run_fixture("builtin_types_compatible_ptr_array.c"), 0);
+}
+
+#[test]
 fn builtin_types_compatible_fnptr() {
     // C99 6.7.5.3p15: function and function-pointer type names as
     // `__builtin_types_compatible_p` arguments, including a typedef against

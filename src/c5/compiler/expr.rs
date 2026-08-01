@@ -1835,9 +1835,16 @@ impl Compiler {
                     let elem_ty = self.symbols[id_idx].type_;
                     let elem_size = self.size_of_type(elem_ty) as i64;
                     let dims = self.symbols[id_idx].array_dims.clone();
-                    // Record the full dimension list so a wrapping `&arr`
-                    // can rebuild the multi-dim pointer-to-array aggregate.
-                    self.pending.last_array_decay_dims = dims.clone();
+                    // Record the full dimension list so a wrapping `&arr` /
+                    // `typeof` can rebuild the undecayed array type. A 1D
+                    // symbol records no dims list; a zero-length array's
+                    // exact bound rides here so `typeof` reads `T[0]`.
+                    self.pending.last_array_decay_dims =
+                        if dims.is_empty() && self.symbols[id_idx].is_zero_len_array {
+                            alloc::vec![0]
+                        } else {
+                            dims.clone()
+                        };
                     self.seed_multi_dim_strides(&dims, elem_size);
                     // A function-pointer array element keeps the element's
                     // parameter types so a following `arr[i](args)` narrows
@@ -4550,11 +4557,15 @@ impl Compiler {
         self.seed_multi_dim_strides(&dims, elem_size);
         self.pending.last_array_decay_bytes = self.structs[id].size as i64;
         if self.structs[id].size == 0 {
-            // Zero-size row (`T (*p)[0]`): the byte channel cannot
-            // distinguish 0 from "no hint", so surface the genuine-zero
-            // sentinel the `sizeof` recovery honors.
+            // Zero-size row (`T (*p)[0]`) or unspecified bound
+            // (`T (*p)[]`): the byte channel cannot distinguish 0 from
+            // "no hint", so surface the sentinel the `sizeof` recovery
+            // reads as 0 bytes.
             self.pending.last_array_decay_size = -1;
         }
+        // Exact row dimensions (-1 = unspecified bound, C99 6.7.5.2p4)
+        // for `typeof` / `&` recovery of the undecayed array type.
+        self.pending.last_array_decay_dims = dims;
         self.ty = elem_ty + Ty::Ptr as i64;
     }
 
@@ -4659,7 +4670,7 @@ impl Compiler {
                 self.consume(b':', "`:` expected after `default`")?;
             } else {
                 let (assoc_ty, _, _) = self.parse_generic_type_name()?;
-                let is_match = winner.is_none() && generic_type_match(ctrl_ty, assoc_ty);
+                let is_match = winner.is_none() && self.tags_compatible(ctrl_ty, assoc_ty);
                 if is_match {
                     winner = Some(self.lex.snapshot());
                 }
@@ -4728,9 +4739,38 @@ impl Compiler {
         // dimensions carry the array-vs-pointer distinction a compile-time
         // element-count macro depends on. The flat tag likewise holds only
         // a function type's return type, so the signature settles the rest.
-        Ok((generic_type_match(a, b)
+        Ok((self.tags_compatible(a, b)
             && array_dims_match(&a_dims, &b_dims)
             && fn_type_match(&a_fn, &b_fn)) as i64)
+    }
+
+    /// Flat-tag compatibility for `_Generic` association selection and
+    /// `__builtin_types_compatible_p`: equal tags with qualifiers
+    /// dropped, or pointers at equal depth to array pointees whose
+    /// element types match and whose bounds are compatible (C99
+    /// 6.7.5.1p2, 6.7.5.2p6: an unspecified bound is compatible with
+    /// any). Distinct bounds intern distinct aggregate tags, so the
+    /// second test is what lets `T (*)[]` match `T (*)[N]`.
+    pub(super) fn tags_compatible(&self, a: i64, b: i64) -> bool {
+        if generic_type_match(a, b) {
+            return true;
+        }
+        let (Some(ia), Some(ib)) = (self.ptr_array_id(a), self.ptr_array_id(b)) else {
+            return false;
+        };
+        if struct_ptr_depth(a) != struct_ptr_depth(b) {
+            return false;
+        }
+        let dims_of = |id: usize| -> alloc::vec::Vec<i64> {
+            let f = &self.structs[id].fields[0];
+            if f.array_dims.len() >= 2 {
+                f.array_dims.clone()
+            } else {
+                alloc::vec![f.array_size]
+            }
+        };
+        generic_type_match(self.structs[ia].fields[0].ty, self.structs[ib].fields[0].ty)
+            && array_dims_match(&dims_of(ia), &dims_of(ib))
     }
 
     /// Parse `__builtin_offsetof ( type-name , member-designator )` (GCC /

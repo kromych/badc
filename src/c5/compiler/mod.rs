@@ -1698,20 +1698,23 @@ impl Compiler {
         for path in &opts.system_include_paths {
             pp.add_system_fallback_path(path);
         }
-        for name in &opts.force_includes {
-            pp.add_force_include(name);
-        }
         // The GCC `__builtin_*` library thunks, which gcc and clang give
         // every unit with no `#include`. The header is only `#define`s of
         // names C99 7.1.3 reserves to the implementation, so it declares
         // nothing and orders nothing; supplying it up front rather than
-        // on a parse failure keeps the compile to one front-end pass.
+        // on a parse failure keeps the compile to one front-end pass. It
+        // goes ahead of the driver's `-include` list because a forced
+        // include may itself be a translation unit's body, and the thunks
+        // have to be visible to it as they are to the main source.
         if !opts
             .force_includes
             .iter()
             .any(|h| h == BUILTIN_THUNK_HEADER)
         {
             pp.add_force_include(BUILTIN_THUNK_HEADER);
+        }
+        for name in &opts.force_includes {
+            pp.add_force_include(name);
         }
         // `-O` predefines, installed before the CLI lists so an explicit
         // `-D NDEBUG=<v>` overrides the value and `-U NDEBUG` removes it.

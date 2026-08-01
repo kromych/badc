@@ -4221,6 +4221,41 @@ fn absolute_value_builtins_fold_alongside_the_thunks() {
         .expect("the absolute-value builtins still fold");
 }
 
+/// A driver `-include` file may hold a translation unit's body rather than
+/// declarations, so the `__builtin_*` thunk header has to precede the whole
+/// forced-include list, not follow it. gcc and clang make the builtins visible
+/// before any input is read.
+#[test]
+#[cfg(feature = "full")]
+fn builtin_thunks_precede_the_forced_include_list() {
+    use crate::{CompileOptions, Compiler, Target};
+    let dir = std::env::temp_dir().join(format!("badc-force-include-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    let body = dir.join("forced_body.c");
+    std::fs::write(
+        &body,
+        "unsigned long forced_probe(const unsigned long *p)\n\
+         {\n\
+         \tunsigned long v;\n\
+         \t__builtin_memcpy(&v, p, sizeof(v));\n\
+         \treturn v;\n\
+         }\n",
+    )
+    .expect("write forced body");
+    let opts = CompileOptions::default()
+        .with_include_paths(alloc::vec![dir.display().to_string()])
+        .with_force_includes(alloc::vec!["forced_body.c".to_string()]);
+    let prog = Compiler::with_options(
+        "int main(void) { return 42; }".to_string(),
+        Target::LinuxX64,
+        opts,
+    )
+    .compile();
+    std::fs::remove_file(&body).ok();
+    std::fs::remove_dir(&dir).ok();
+    prog.expect("the thunk header is visible to a forced-include body");
+}
+
 #[test]
 #[cfg(feature = "full")]
 fn auto_include_retry_emits_what_the_force_include_would() {

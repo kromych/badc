@@ -39,9 +39,14 @@ use super::types::{apply_qual_bits, is_pointer_ty, is_struct_value_ty, struct_id
 pub(super) struct DeclAlign {
     /// The declarator's own `aligned(N)` / `_Alignas` request, 0 when absent.
     pub req_align: i64,
-    /// The declared object is a pointer, so a type-position alignment
-    /// attribute applies to the pointee rather than to the object.
-    pub obj_is_pointer: bool,
+    /// The typedef-carried `aligned(N)` type attribute, 0 when absent or
+    /// when the declared object is a pointer.
+    pub type_align: i64,
+    /// The object's declared alignment for `__alignof__`: the declarator
+    /// request when present (it replaces a typedef-carried value, else
+    /// raises the natural alignment), the typedef value otherwise (which
+    /// alone may also lower). 0 when neither applies.
+    pub obj_align: i64,
     /// Required alignment of the object when it has automatic storage.
     pub auto_align: i64,
     /// `auto_align` exceeds the 8-byte frame slot, so the object needs the
@@ -170,6 +175,7 @@ impl Compiler {
         &mut self,
         ty: i64,
         is_static: bool,
+        base_type_align: i64,
     ) -> Result<DeclAlign, C5Error> {
         let req_align = core::mem::take(&mut self.pending.attr_align);
         if req_align > 8 && !(req_align as usize).is_power_of_two() {
@@ -180,21 +186,48 @@ impl Compiler {
         // An over-alignment attribute in the type-specifier position
         // (`struct {...} __attribute__((aligned(16))) *p`) raises the pointee
         // type's alignment; a pointer object holds its own pointer-aligned
-        // value, so the request does not apply to it.
+        // value, so neither it nor a typedef-carried alignment applies.
         let obj_is_pointer = is_pointer_ty(ty);
+        let type_align = if obj_is_pointer {
+            0
+        } else {
+            base_type_align.max(0)
+        };
+        // GNU semantics: a declarator attribute replaces a typedef-carried
+        // alignment; without one it raises the natural alignment only. The
+        // typedef value alone stands as given, raising or lowering.
+        let obj_align = if req_align > 0 && type_align > 0 {
+            req_align
+        } else if req_align > 0 {
+            req_align.max(self.align_of_type(ty) as i64)
+        } else {
+            type_align
+        };
         let auto_align = if is_static || obj_is_pointer {
             0
         } else {
-            core::cmp::max(req_align.max(0), self.align_of_type(ty) as i64)
+            core::cmp::max(obj_align, self.align_of_type(ty) as i64)
         };
-        // The region takes a declarator's own request from 16 up, and any type
-        // alignment above 16. `auto_align` is 0 for a static local and for a
-        // pointer object, so neither reaches it however wide the attribute.
-        // TODO: a type alignment of exactly 16 with no request on the
-        // declarator still uses the 8-byte slots; placing the region at a
+        // The region takes an explicit request above 8 -- from the
+        // declarator, a typedef carrier, or an attribute reaching the
+        // object's aggregate type -- and any alignment above 16.
+        // `auto_align` is 0 for a static local and for a pointer object,
+        // so neither reaches it however wide the attribute.
+        // TODO: a natural type alignment of exactly 16 with no explicit
+        // request still uses the 8-byte slots; placing the region at a
         // static frame offset when 16 suffices would cover it without the
         // sp move a realigning frame needs.
-        let realign_auto = auto_align > 16 || (auto_align > 8 && req_align > 8);
+        let type_explicit = if !obj_is_pointer && is_struct_value_ty(ty) {
+            self.structs[struct_id_of(ty)].explicit_align as i64
+        } else {
+            0
+        };
+        let explicit = if req_align > 0 {
+            req_align
+        } else {
+            type_align.max(type_explicit)
+        };
+        let realign_auto = auto_align > 16 || (auto_align > 8 && explicit > 8);
         if auto_align > super::MAX_FRAME_ALIGN {
             return Err(self.compile_err(format!(
                 "requested alignment {auto_align} exceeds the maximum for an \
@@ -204,15 +237,17 @@ impl Compiler {
         }
         // A static local, or the pointee alignment a type-position attribute
         // carries, is placed like a file-scope object.
-        if req_align > super::MAX_STATIC_ALIGN as i64 {
+        if req_align.max(type_align) > super::MAX_STATIC_ALIGN as i64 {
             return Err(self.compile_err(format!(
-                "requested alignment {req_align} exceeds the supported maximum of {}",
+                "requested alignment {} exceeds the supported maximum of {}",
+                req_align.max(type_align),
                 super::MAX_STATIC_ALIGN
             )));
         }
         Ok(DeclAlign {
             req_align,
-            obj_is_pointer,
+            type_align,
+            obj_align,
             auto_align,
             realign_auto,
         })
@@ -223,14 +258,9 @@ impl Compiler {
     /// `aligned(N)` type attribute on the base. Records it on the symbol
     /// and raises the unit's `.data` alignment to match.
     pub(super) fn apply_static_local_align(&mut self, loc_idx: usize, ty: i64, a: &DeclAlign) {
-        let type_align = if a.obj_is_pointer {
-            0
-        } else {
-            self.pending.type_align.max(0) as usize
-        };
         let want_align = core::cmp::max(
             core::cmp::max(a.req_align.max(0) as usize, self.align_of_type(ty)),
-            type_align,
+            a.type_align.max(0) as usize,
         );
         self.symbols[loc_idx].data_align = want_align.max(1) as i64;
         if want_align > 8 {
@@ -312,6 +342,10 @@ impl Compiler {
             is_static = true;
         }
         let lbt = apply_qual_bits(base, qual_bits);
+        // A typedef-carried type alignment applies to every declarator of
+        // this declaration; an initializer's own type parses (casts,
+        // `sizeof`) reset the pending carrier, so capture it once here.
+        let base_type_align = self.pending.type_align;
         // A function-pointer typedef base type contributes its lineage to
         // every declarator (`fn_t a, b;`), but per-declarator symbol
         // creation consumes the carriers, so re-seed them each iteration.
@@ -405,6 +439,7 @@ impl Compiler {
             // the pointee. Peek without clearing so the rest of the comma
             // list keeps it.
             let typedef_dim = self.pending.typedef_base_array_size;
+            self.check_array_elem_align(array_size, ty, typedef_dim, base_type_align)?;
             if typedef_dim > 0 && array_size == 0 && self.pending.declarator_leading_ptr_count == 0
             {
                 array_size = typedef_dim;
@@ -452,7 +487,7 @@ impl Compiler {
             let decl_align = if is_extern {
                 None
             } else {
-                Some(self.resolve_decl_align(ty, is_static)?)
+                Some(self.resolve_decl_align(ty, is_static, base_type_align)?)
             };
 
             if is_extern {
@@ -504,6 +539,10 @@ impl Compiler {
                     self.pending.base_is_const && !super::types::is_pointer_ty(ty);
                 if let Some(a) = &decl_align {
                     self.apply_static_local_align(loc_idx, ty, a);
+                    // Declared object alignment for `__alignof__` on the
+                    // name; distinct from the placement above, which never
+                    // drops below the natural alignment.
+                    self.symbols[loc_idx].type_align = a.obj_align.max(0);
                 }
                 self.allocate_static_local(loc_idx, ty, array_size)?;
                 self.push_block_static_record(loc_idx, ty);
@@ -519,6 +558,12 @@ impl Compiler {
                 // Unconditional write so a reused symbol slot does not leak
                 // a stale binding from an outer name.
                 self.symbols[loc_idx].asm_register = asm_reg;
+                // Declared object alignment for `__alignof__` on the name.
+                // Unconditional for the same slot-reuse reason; written
+                // before the initializer parse, which may itself take
+                // `__alignof__` of the name.
+                self.symbols[loc_idx].type_align =
+                    decl_align.as_ref().map(|a| a.obj_align.max(0)).unwrap_or(0);
                 self.check_register_asm_init(asm_reg)?;
                 // This declaration can sit inside an enclosing aggregate's
                 // element initializer (an element that is a statement

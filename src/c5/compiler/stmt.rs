@@ -405,17 +405,29 @@ impl Compiler {
             self.symbols[id_idx].val = 0;
             // GNU `aligned(N)` type attribute on the alias (its own
             // attribute, else propagated from an aligned typedef base).
-            self.symbols[id_idx].type_align = if self.pending.attr_align > 0 {
+            let alias_align = if self.pending.attr_align > 0 {
                 self.pending.attr_align
             } else {
                 self.pending.type_align
             };
+            if alias_align > 0 && !(alias_align as u64).is_power_of_two() {
+                return Err(self.compile_err(format!(
+                    "requested alignment {alias_align} is not a power of two"
+                )));
+            }
+            self.symbols[id_idx].type_align = alias_align;
             // Preserve an array / vector typedef's element count (C99 6.7.7):
             // the file-scope path stores this (run_compile), but the block-scope
             // path dropped it, so a second declaration using the typedef
             // (`typedef int A4[4]; A4 a; A4 b;`) resolved A4 as a scalar. Fold
             // in a base-typedef dimension too (`typedef A4 B;`).
             let typedef_dim = self.pending.typedef_base_array_size;
+            self.check_array_elem_align(
+                td_array,
+                typedef_ty,
+                typedef_dim,
+                self.pending.type_align,
+            )?;
             if typedef_dim != 0 && td_array == 0 {
                 td_array = typedef_dim;
             }

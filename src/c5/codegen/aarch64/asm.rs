@@ -1442,6 +1442,59 @@ mod tests {
     }
 
     #[test]
+    fn parse_vector_operand_views() {
+        // `%N.T`, `%qN`, and the one-register list `{%N.T}`; the
+        // `.arch_extension` directive carries no code and is skipped.
+        let insns =
+            parse_template(b".arch_extension sha3\neor3 %0.16b, %1.16b, %2.16b, %3.16b").unwrap();
+        assert_eq!(insns.len(), 1);
+        assert_eq!(insns[0].mnemonic, "eor3");
+        assert_eq!(
+            insns[0].operands,
+            [
+                AsmOpndA64::RefVec {
+                    idx: 0,
+                    size: 0,
+                    q: true
+                },
+                AsmOpndA64::RefVec {
+                    idx: 1,
+                    size: 0,
+                    q: true
+                },
+                AsmOpndA64::RefVec {
+                    idx: 2,
+                    size: 0,
+                    q: true
+                },
+                AsmOpndA64::RefVec {
+                    idx: 3,
+                    size: 0,
+                    q: true
+                },
+            ]
+        );
+        let insns = parse_template(b"ldr %q0, [%1]; tbl %0.16b, {%1.16b}, %2.8b").unwrap();
+        assert_eq!(insns[0].operands[0], AsmOpndA64::RefQ(0));
+        assert_eq!(
+            insns[1].operands[1],
+            AsmOpndA64::RefVecList {
+                idx: 1,
+                size: 0,
+                q: true
+            }
+        );
+        assert_eq!(
+            insns[1].operands[2],
+            AsmOpndA64::RefVec {
+                idx: 2,
+                size: 0,
+                q: false
+            }
+        );
+    }
+
+    #[test]
     fn clobber_names_and_avoidance() {
         use crate::c5::ir::{AsmConstraint as C, AsmOperand};
         // GP names resolve to (false, num); the SIMD/FP views to (true, num).

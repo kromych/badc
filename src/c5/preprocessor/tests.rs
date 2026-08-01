@@ -2169,3 +2169,42 @@ fn has_include_matches_what_include_resolves() {
         "the angle form must not search the including file's directory: {out}"
     );
 }
+
+#[test]
+fn compiler_owned_header_resolves_embedded_before_search_paths() {
+    // A compiler-owned intrinsic header (arm_neon.h) resolves to the
+    // embedded copy even when a `-I` directory holds a same-named file (a
+    // foreign toolchain's private include directory folded onto the search
+    // path). An ordinary embedded name (stdarg.h) keeps `-I`-shadows-
+    // embedded, as gcc and clang do.
+    use std::io::Write;
+    let dir = std::env::temp_dir().join(format!("badc-owned-hdr-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::File::create(dir.join("arm_neon.h"))
+        .unwrap()
+        .write_all(b"int foreign_neon_marker;\n")
+        .unwrap();
+    std::fs::File::create(dir.join("stdarg.h"))
+        .unwrap()
+        .write_all(b"int shadow_stdarg_marker;\n")
+        .unwrap();
+    let mut pp = Preprocessor::new("linux-aarch64", Target::LinuxAarch64, "0.1.0");
+    pp.add_search_path(dir.to_str().unwrap());
+    let out = pp
+        .process("#include <arm_neon.h>\n#include <stdarg.h>\n")
+        .expect("owned + shadowed includes resolve");
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(
+        !out.contains("foreign_neon_marker"),
+        "arm_neon.h must resolve to the embedded copy: {out}"
+    );
+    assert!(
+        out.contains("vld1q_u8"),
+        "embedded arm_neon.h body expected: {}",
+        &out[..out.len().min(400)]
+    );
+    assert!(
+        out.contains("shadow_stdarg_marker"),
+        "a -I shadow of stdarg.h must win, as in gcc/clang"
+    );
+}

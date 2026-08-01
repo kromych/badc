@@ -9614,3 +9614,85 @@ fn c_reference_binds_to_an_asm_defined_label_in_the_same_unit() {
         );
     }
 }
+
+#[test]
+fn addr_null_compare_folds_only_for_defined_nonweak() {
+    // Null comparisons of symbol addresses fold only for non-weak
+    // definitions in the unit: the guarded undefined helper vanishes
+    // from the `-O` object for those, and survives -- as an undefined
+    // symbol -- for an extern, a weak reference, and a weak definition,
+    // whose addresses the link may still bind to zero or replace.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        extern void gone_static_fn(void);\n\
+        extern void gone_static_obj(void);\n\
+        extern void gone_inline_param(void);\n\
+        extern void gone_same_fn(void);\n\
+        extern void kept_extern_fn(void);\n\
+        extern void kept_weak_undef_fn(void);\n\
+        extern void kept_weak_def_fn(void);\n\
+        extern void kept_weak_def_obj(void);\n\
+        extern void ext_fn(void);\n\
+        extern void weak_hook(void) __attribute__((weak));\n\
+        __attribute__((weak)) void weak_def(void) {}\n\
+        __attribute__((weak)) int weak_obj;\n\
+        static int obj;\n\
+        static void local_fn(void) { obj++; }\n\
+        static inline void install(void (*fn)(void)) {\n\
+        \tif ((fn) == ((void *)0)) gone_inline_param();\n\
+        \tfn();\n\
+        }\n\
+        static inline void match_fn(void (*fn)(void)) {\n\
+        \tif (fn != local_fn) gone_same_fn();\n\
+        }\n\
+        void drive(void) {\n\
+        \tif ((local_fn) == ((void *)0)) gone_static_fn();\n\
+        \tif (&obj == (int *)0) gone_static_obj();\n\
+        \tinstall(local_fn);\n\
+        \tmatch_fn(local_fn);\n\
+        \tif ((ext_fn) == ((void *)0)) kept_extern_fn();\n\
+        \tif ((weak_hook) == ((void *)0)) kept_weak_undef_fn();\n\
+        \tif ((weak_def) == ((void *)0)) kept_weak_def_fn();\n\
+        \tif (&weak_obj == (int *)0) kept_weak_def_obj();\n\
+        }\n";
+    let program = Compiler::with_options(
+        src.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::new().with_optimize()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let undef = |name: &str| {
+        obj.symbols
+            .iter()
+            .any(|s| s.name == name && matches!(s.section, NativeSymSection::Undef))
+    };
+    for gone in [
+        "gone_static_fn",
+        "gone_static_obj",
+        "gone_inline_param",
+        "gone_same_fn",
+    ] {
+        assert!(
+            !obj.symbols.iter().any(|s| s.name == gone),
+            "`{gone}` must fold out of the object"
+        );
+    }
+    for kept in [
+        "kept_extern_fn",
+        "kept_weak_undef_fn",
+        "kept_weak_def_fn",
+        "kept_weak_def_obj",
+    ] {
+        assert!(undef(kept), "`{kept}` must survive: no sound fold applies");
+    }
+}

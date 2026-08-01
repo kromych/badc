@@ -881,6 +881,8 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_nonleaf_const_switch.c", 0),
     ("inline_multi_block_phi_caller.c", 16),
     ("inline_const_array_field_nonnull.c", 43),
+    ("addr_null_compare_defined.c", 0),
+    ("enum_unsigned_compatible.c", 0),
     ("inline_noreturn_branch_single_return.c", 42),
     ("sxtw_fold_source_liveness.c", 18),
     ("data_reloc_one_past_end.c", 10),
@@ -1758,4 +1760,30 @@ fn symbol_get_weak_hidden_undef_reads_null() {
         "symbol_get_weak_hidden",
     );
     assert_eq!(code, 0, "weak hidden undefined address must read as null");
+}
+
+/// The weak-hidden `symbol_get` guard again, under `-O`: the address
+/// comparison folds must leave the weak-undefined case to the link,
+/// which resolves it to null.
+#[test]
+fn symbol_get_weak_hidden_undef_reads_null_optimized() {
+    let outcome = build_and_run_outcome_with_options(
+        "extern void optional_hook(void);\n\
+         #define symbol_get(x) \
+         ({ extern typeof(x) x __attribute__((weak, visibility(\"hidden\"))); &(x); })\n\
+         int main(void) {\n\
+             void (*fn)(void) = symbol_get(optional_hook);\n\
+             if (fn) {\n\
+                 fn();\n\
+                 return 1;\n\
+             }\n\
+             return 0;\n\
+         }\n",
+        "symbol_get_weak_hidden_opt",
+        NativeOptions::new().with_optimize(),
+    );
+    assert!(
+        outcome.matches(0),
+        "weak hidden undefined address must read as null under -O, got {outcome:?}"
+    );
 }

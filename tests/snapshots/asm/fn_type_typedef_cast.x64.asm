@@ -17,13 +17,8 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	movl	%eax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
-               	leaq	-0x8(%rbp), %rcx
-               	cmpq	%rcx, %rax
-               	jne	<addr>
                	xorq	%rax, %rax
-               	movslq	%eax, %rax
+               	xorq	%rax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

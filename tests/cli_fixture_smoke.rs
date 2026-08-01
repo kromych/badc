@@ -75,6 +75,9 @@ const COMPILE_SKIPLIST: &[&str] = &[
     "unroll_const_trip_index_literal.c",
     "inline_zero_frame_callee_past_gate.c",
     "ipa_const_param_guard.c",
+    "addr_null_compare_inline_param.c",
+    "addr_compare_same_function_inline.c",
+    "const_struct_array_inline_accessor.c",
 ];
 
 /// Fixtures whose body carries inline asm specific to one ISA. The
@@ -281,6 +284,9 @@ fn dead_branch_calls_are_eliminated_under_optimize() {
         "unroll_const_trip_index_literal.c",
         "inline_zero_frame_callee_past_gate.c",
         "ipa_const_param_guard.c",
+        "addr_null_compare_inline_param.c",
+        "addr_compare_same_function_inline.c",
+        "const_struct_array_inline_accessor.c",
     ] {
         let src = root.join(name);
         let stem = name.trim_end_matches(".c");

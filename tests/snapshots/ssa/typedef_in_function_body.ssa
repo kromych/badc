@@ -33,25 +33,24 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v23  Imm(3)                                           -> x0
     terminator Return(v23)   (exit_acc=v23)
   block 4  start_pc=0
-    v24  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v24  LoadLocal { off=-1, kind=U32 }                   -> x0
     v25  Imm(0)                                           -> x0
-    terminator Jmp(b5)   (exit_acc=v25)
+    v26  Imm(0)                                           -> x0
+    v27  Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v27)
   block 5  start_pc=0
-    v26  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v27  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v28  Imm(3)                                           -> x0
-    v29  Imm(12884901888)                                 -> x0
+    v28  LoadLocal { off=-1, kind=U32 }                   -> x0
+    v29  LoadLocal { off=-1, kind=I32 }                   -> x0
     v30  Imm(3)                                           -> x0
-    v31  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v32  Imm(5)                                           -> x0
-    v33  Imm(21474836480)                                 -> x0
+    v31  Imm(3)                                           -> x0
+    v32  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v33  Imm(5)                                           -> x0
     v34  Imm(5)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
     v37  Imm(0)                                           -> x0
     v38  Imm(0)                                           -> x0
-    v39  Imm(0)                                           -> x0
-    terminator Return(v39)   (exit_acc=v39)
+    terminator Return(v38)   (exit_acc=v38)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

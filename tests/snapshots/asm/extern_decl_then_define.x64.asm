@@ -17,11 +17,5 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
-               	cmpq	%rcx, %rax
-               	je	<addr>
-               	movl	$0x6, %eax
-               	retq
                	xorq	%rax, %rax
                	retq

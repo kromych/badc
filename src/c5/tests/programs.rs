@@ -1809,6 +1809,20 @@ fn weak_extern_data_address() {
 }
 
 #[test]
+fn addr_null_compare_defined() {
+    // The address of a non-weak symbol defined in the unit never
+    // compares equal to a null pointer constant.
+    assert_eq!(run_fixture("addr_null_compare_defined.c"), 0);
+}
+
+#[test]
+fn enum_unsigned_compatible() {
+    // An all-non-negative enum takes the unsigned compatible type;
+    // enumerator constants that fit keep `int`.
+    assert_eq!(run_fixture("enum_unsigned_compatible.c"), 0);
+}
+
+#[test]
 fn zero_length_array_decay() {
     // A zero-length array reads as its address, not as a load of the
     // storage it does not have.

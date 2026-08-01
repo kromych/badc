@@ -2087,6 +2087,8 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("inline_nonleaf_const_switch.c", 0),
     ("inline_multi_block_phi_caller.c", 16),
     ("inline_const_array_field_nonnull.c", 43),
+    ("addr_null_compare_defined.c", 0),
+    ("enum_unsigned_compatible.c", 0),
     ("inline_noreturn_branch_single_return.c", 42),
     ("sxtw_fold_source_liveness.c", 18),
     ("data_reloc_one_past_end.c", 10),

@@ -90,12 +90,6 @@ Disassembly of section .text:
                	movl	$0x2000, %edi           # imm = 0x2000
                	leaq	-0xa8(%rbp), %rcx
                	movq	%rdi, 0x40(%rcx)
-               	cmpq	%rax, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	addq	$0xb0, %rsp
-               	popq	%rbp
-               	retq
                	movslq	(%rax), %rcx
                	cmpq	$0xa, %rcx
                	je	<addr>

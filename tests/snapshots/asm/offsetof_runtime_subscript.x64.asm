@@ -13,14 +13,6 @@ Disassembly of section .text:
 <main>:
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	0x4(%rcx), %rdx
-               	cmpq	%rdx, %rdx
-               	jne	<addr>
-               	movq	%rcx, %rdx
-               	shlq	$0x3, %rdx
-               	addq	$0x18, %rdx
-               	cmpq	%rdx, %rdx
-               	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x8, %rcx
@@ -40,22 +32,13 @@ Disassembly of section .text:
                	jl	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	0x88(%rcx), %rdx
-               	cmpq	%rdx, %rdx
-               	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x5, %rcx
                	jl	<addr>
                	xorq	%rax, %rax
                	retq
-               	movl	$0x7, %eax
-               	retq
                	movl	$0x3, %eax
-               	retq
-               	movl	$0x2, %eax
-               	retq
-               	movl	$0x1, %eax
                	retq
                	jmp	<addr>
                	jmp	<addr>

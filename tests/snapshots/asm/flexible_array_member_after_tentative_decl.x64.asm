@@ -16,12 +16,6 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rsi
-               	leaq	<rip>, %rax
-               	cmpq	%rax, %rsi
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
                	movq	0x8(%rsi), %rax
                	cmpq	$0x1, %rax
                	setne	%al
@@ -57,5 +51,4 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %eax
                	retq
-               	jmp	<addr>
                	jmp	<addr>

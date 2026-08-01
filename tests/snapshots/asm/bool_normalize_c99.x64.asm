@@ -16,17 +16,6 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	movl	$0x3, %eax
                	movl	%eax, -0x20(%rbp)
-               	leaq	-0x20(%rbp), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	andq	$0xff, %rax
-               	cmpq	$0x1, %rax
-               	je	<addr>
-               	movl	$0x7, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	xorq	%rcx, %rcx
                	movq	%rax, %xmm14

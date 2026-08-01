@@ -42,12 +42,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	cmp	x0, x0
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	ret
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
                	ret

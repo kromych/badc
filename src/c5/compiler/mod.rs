@@ -958,6 +958,9 @@ pub struct Compiler {
     /// `__func__`) recorded as they are placed in `data`, for static
     /// DCE object boundaries. See `Program::data_object_starts`.
     data_object_starts: Vec<i64>,
+    /// `[lo, hi)` ranges of staged local-initializer templates. See
+    /// `Program::local_init_templates`.
+    local_init_templates: Vec<(i64, i64)>,
     /// Alignment-padding ranges within `data`. See
     /// `Program::data_pad_ranges`.
     data_pad_ranges: Vec<(i64, i64)>,
@@ -1735,6 +1738,7 @@ impl Compiler {
             next_ent_pc: 0,
             data,
             data_object_starts: Vec::new(),
+            local_init_templates: Vec::new(),
             data_pad_ranges: Vec::new(),
             data_align_marks: Vec::new(),
             flex_array_measured_count: None,
@@ -2245,6 +2249,7 @@ impl Compiler {
             asm_weak_names: self.asm_weak_names,
             data_align: self.data_align,
             data_object_starts: self.data_object_starts,
+            local_init_templates: self.local_init_templates,
             data_pad_ranges: self.data_pad_ranges,
             data_align_marks: self.data_align_marks,
             entry_pc,

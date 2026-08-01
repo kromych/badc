@@ -141,6 +141,7 @@ fn synth_program_and_build(
         asm_weak_names: Vec::new(),
         data_align: 8,
         data_object_starts: Vec::new(),
+        local_init_templates: Vec::new(),
         data_pad_ranges: Vec::new(),
         data_align_marks: Vec::new(),
         entry_pc: 0,

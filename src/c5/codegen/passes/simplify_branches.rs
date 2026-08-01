@@ -87,10 +87,13 @@ fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
         let loaded = opts
             .const_data
             .is_some_and(|cd| super::const_global_fold::fold_loads(func, cd));
+        let forwarded = opts
+            .const_data
+            .is_some_and(|cd| super::const_global_fold::fold_template_loads(func, cd));
         let folded = super::constfold_branch::run_one(func);
         let pruned = super::prune_unreachable::run_one(func);
         bound -= 1;
-        if (!folded && !pruned && !loaded && !selected && !nulled) || bound == 0 {
+        if (!folded && !pruned && !loaded && !forwarded && !selected && !nulled) || bound == 0 {
             // The fixed point is the last chance to discover a constant,
             // so survivors resolve here; a resolution that changes the
             // function re-enters the loop to fold what it exposed.

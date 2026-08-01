@@ -1260,4 +1260,80 @@ mod tests {
             "export-all populates the export list only for a shared library"
         );
     }
+
+    /// A merged image with `n` functions, each 8 bytes of aarch64
+    /// `mov w0, #42; ret`, with `main` first, plus one flat import and
+    /// its trampoline so the writer emits the static symbol table.
+    fn merged_with_functions(n: usize) -> (MergedNative, alloc::vec::Vec<PltTrampoline>) {
+        let mut merged = tiny_aarch64_main();
+        merged.text = alloc::vec::Vec::with_capacity(n * 8 + 12);
+        for _ in 0..n {
+            merged
+                .text
+                .extend_from_slice(&[0x40, 0x05, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6]);
+        }
+        for i in 1..n {
+            merged.defined.insert(
+                alloc::format!("f{i:07}"),
+                MergedSymbol {
+                    section: NativeSymSection::Text,
+                    value: (i * 8) as u64,
+                    size: 8,
+                },
+            );
+        }
+        let tramp = merged.text.len();
+        // adrp x16, 0 ; ldr x16, [x16] ; br x16 -- the shape
+        // `emit_aarch64_plt` lays down and the writer patches.
+        merged.text.extend_from_slice(&0x9000_0010u32.to_le_bytes());
+        merged.text.extend_from_slice(&0xF940_0210u32.to_le_bytes());
+        merged.text.extend_from_slice(&0xD61F_0200u32.to_le_bytes());
+        merged.imports.push("host_fn".to_string());
+        merged.flat_imports.insert("host_fn".to_string());
+        (
+            merged,
+            alloc::vec![PltTrampoline {
+                text_offset: tramp,
+                import_index: 0,
+            }],
+        )
+    }
+
+    /// The static `.symtab` gives each function the span to the next
+    /// code boundary. Locating that boundary must be a search over the
+    /// sorted boundary list, not a scan from its front: 4x the
+    /// functions staying under 8x the time rules out the quadratic
+    /// (16x).
+    #[test]
+    fn image_write_cost_is_subquadratic_in_function_count() {
+        let once = |n: usize| -> f64 {
+            let (merged, plt) = merged_with_functions(n);
+            let t = std::time::Instant::now();
+            let bytes = write_native_image_from_merged(
+                &merged,
+                &plt,
+                "main",
+                None,
+                OutputKind::Executable,
+                Target::LinuxAarch64,
+                None,
+            )
+            .expect("image writes");
+            let dt = t.elapsed().as_secs_f64();
+            assert!(!bytes.is_empty(), "image is non-empty");
+            dt
+        };
+        let (mut small, mut large) = (f64::MAX, f64::MAX);
+        for _ in 0..3 {
+            small = small.min(once(4_000));
+            large = large.min(once(16_000));
+        }
+        assert!(small > 0.0, "no measurable image-write cost to compare");
+        assert!(
+            large < small * 8.0,
+            "image write grew {:.1}x for 4x the functions \
+             ({small:.3e}s -> {large:.3e}s)",
+            large / small
+        );
+    }
 }

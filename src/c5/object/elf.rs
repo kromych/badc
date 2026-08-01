@@ -878,12 +878,13 @@ fn build_plt_symtab(
     );
     boundaries.push(text_len);
     boundaries.sort_unstable();
+    boundaries.dedup();
     for (i, name) in build.func_names.iter().enumerate() {
         let start = build.pc_to_native[build.func_ent_pcs[i]] as u64;
+        // First boundary strictly past `start`, over the sorted list.
         let end = boundaries
-            .iter()
+            .get(boundaries.partition_point(|&b| b <= start))
             .copied()
-            .find(|&b| b > start)
             .unwrap_or(text_len);
         let st_name = strtab.len() as u32;
         strtab.extend_from_slice(name.as_bytes());

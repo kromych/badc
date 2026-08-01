@@ -55,6 +55,30 @@ fn const_operand(func: &FunctionSsa, v: ValueId) -> Option<i64> {
     }
 }
 
+fn is_ident_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+/// The distinct maximal runs of identifier characters across `texts`.
+fn identifier_runs<'a>(texts: &[&'a [u8]]) -> Vec<&'a [u8]> {
+    let mut seen: hashbrown::HashSet<&[u8]> = hashbrown::HashSet::new();
+    for t in texts {
+        let mut i = 0;
+        while i < t.len() {
+            if !is_ident_byte(t[i]) {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i < t.len() && is_ident_byte(t[i]) {
+                i += 1;
+            }
+            seen.insert(&t[start..i]);
+        }
+    }
+    seen.into_iter().collect()
+}
+
 /// Entry PCs whose function can be reached other than through the
 /// `Inst::Call` sites in `funcs`: a body materialises the address, a
 /// static initializer holds it, an alias gives it a second name, or an
@@ -88,11 +112,24 @@ pub(crate) fn escaping_functions(
             }
         }
     }
+    // A C function name is a run of identifier characters, so any
+    // occurrence of one in a template lies inside a maximal such run.
+    // Searching the distinct runs is the same test over far fewer bytes
+    // than re-scanning every template once per function.
+    let runs = identifier_runs(&asm_texts);
     for f in funcs {
-        if !f.name.is_empty()
-            && asm_texts
-                .iter()
-                .any(|t| t.windows(f.name.len()).any(|w| w == f.name.as_bytes()))
+        let name = f.name.as_bytes();
+        if name.is_empty() {
+            continue;
+        }
+        let haystacks: &[&[u8]] = if name.iter().all(|&b| is_ident_byte(b)) {
+            &runs
+        } else {
+            &asm_texts
+        };
+        if haystacks
+            .iter()
+            .any(|t| t.windows(name.len()).any(|w| w == name))
         {
             named.insert(f.name.as_str());
         }

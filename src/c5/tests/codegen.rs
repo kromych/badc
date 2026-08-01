@@ -4002,6 +4002,71 @@ fn staged_aggregate_template_is_eight_aligned() {
     );
 }
 
+/// Every function's name is looked for in every inline-asm template, to
+/// decide which bodies escape the call graph. That search must not cost
+/// functions x asm bytes: measured over the two sizes below, the
+/// per-function rescan grows 10.2x for 4x of each and searching the
+/// distinct identifier runs grows 3.2x.
+#[test]
+#[cfg(not(debug_assertions))]
+fn escape_analysis_cost_is_not_functions_times_asm_bytes() {
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+    fn unit(n: usize) -> alloc::string::String {
+        let mut s = alloc::string::String::new();
+        for i in 0..n {
+            s.push_str(&alloc::format!(
+                "static int h{i}(int a) {{ return a + {i}; }}\n\
+                 static int u{i}(int a) {{\n\
+                   int r;\n\
+                   __asm__ volatile (\"nop /* pad{i} aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+                    bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb cccccccccccccccccccccccccccccccc */\"\n\
+                     : \"=r\"(r) : : \"memory\");\n\
+                   return r + h{i}(a);\n\
+                 }}\n"
+            ));
+        }
+        s.push_str("int main(void) { int t = 0;\n");
+        for i in 0..n {
+            s.push_str(&alloc::format!("t += u{i}(1);\n"));
+        }
+        s.push_str("return t; }\n");
+        s
+    }
+    let once = |src: &str| -> f64 {
+        let program = Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_optimize(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..NativeOptions::default()
+        };
+        let t = std::time::Instant::now();
+        emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        t.elapsed().as_secs_f64()
+    };
+    let (a, b) = (unit(150), unit(600));
+    let mut best = [f64::MAX; 2];
+    for _ in 0..2 {
+        best[0] = best[0].min(once(&a));
+        best[1] = best[1].min(once(&b));
+    }
+    let (small, large) = (best[0], best[1]);
+    assert!(small > 0.0, "no measurable lowering cost to compare");
+    assert!(
+        large < small * 6.0,
+        "lowering grew {:.1}x for 4x the functions and asm bytes \
+         ({small:.3e}s -> {large:.3e}s)",
+        large / small
+    );
+}
+
 /// The `__builtin_*` library thunks are in scope from the start, so a
 /// unit that uses one and has the library name declared compiles in one
 /// front-end pass with nothing recovered.

@@ -100,30 +100,32 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_a64_dp.c", "linux-x64"), // aarch64 mul/csel (x86 mul is 1-operand)
     ("inline_asm_a64_sp_operand.c", "linux-x64"), // aarch64 sp-operand add/sub
     ("inline_asm_a64_labels.c", "linux-x64"), // aarch64 local-label branches
+    ("inline_asm_a64_label_directive.c", "linux-x64"), // aarch64 label sharing a directive statement
     ("asm_goto_immediate_operand_no_frame.c", "linux-x64"), // aarch64 asm goto + .align 3
-    ("inline_asm_a64_barriers.c", "linux-x64"), // aarch64 dmb/dsb/isb/clrex
-    ("inline_asm_a64_acqrel.c", "linux-x64"), // aarch64 ldar/stlr via `Q`
-    ("inline_asm_a64_llsc.c", "linux-x64"), // aarch64 ldxr/stxr loop via `+Q`
-    ("inline_asm_a64_llsc_prfm.c", "linux-x64"), // aarch64 prfm + ldxr/stxr via `+Q`
-    ("divq_udiv_qrnnd.c", "linux-aarch64"), // x86-64 128/64 divq
-    ("rdtsc_host_ticks.c", "linux-aarch64"), // x86-64 rdtsc
+    ("inline_asm_a64_barriers.c", "linux-x64"),        // aarch64 dmb/dsb/isb/clrex
+    ("inline_asm_a64_acqrel.c", "linux-x64"),          // aarch64 ldar/stlr via `Q`
+    ("inline_asm_a64_llsc.c", "linux-x64"),            // aarch64 ldxr/stxr loop via `+Q`
+    ("inline_asm_a64_llsc_prfm.c", "linux-x64"),       // aarch64 prfm + ldxr/stxr via `+Q`
+    ("divq_udiv_qrnnd.c", "linux-aarch64"),            // x86-64 128/64 divq
+    ("rdtsc_host_ticks.c", "linux-aarch64"),           // x86-64 rdtsc
     ("inline_asm_fixed_reg_output_width.c", "linux-aarch64"), // x86-64 rdtsc / fixed-reg outputs
-    ("inline_asm_memory_operand.c", "linux-aarch64"), // x86-64 lock cmpxchg/xadd
-    ("inline_asm_x64_catalogue.c", "linux-aarch64"), // x86-64 neg/not/xchg/rol/adc
-    ("inline_asm_x64_paren_disp.c", "linux-aarch64"), // x86-64 rip-relative label address
+    ("inline_asm_memory_operand.c", "linux-aarch64"),  // x86-64 lock cmpxchg/xadd
+    ("inline_asm_x64_catalogue.c", "linux-aarch64"),   // x86-64 neg/not/xchg/rol/adc
+    ("inline_asm_x64_paren_disp.c", "linux-aarch64"),  // x86-64 rip-relative label address
     ("inline_asm_x64_seg_prefix_wrpkru.c", "linux-aarch64"), // x86-64 segment prefix / wrpkru
-    ("inline_asm_x64_crc32.c", "linux-aarch64"), // x86-64 SSE4.2 crc32
-    ("inline_asm_x64_setcc.c", "linux-aarch64"), // x86-64 setcc
-    ("inline_asm_x64_cmov.c", "linux-aarch64"), // x86-64 cmovcc
-    ("inline_asm_x64_cdqe.c", "linux-aarch64"), // x86-64 cdqe
-    ("inline_asm_x64_movnti.c", "linux-aarch64"), // x86-64 movnti/sfence
-    ("inline_asm_x64_clflush.c", "linux-aarch64"), // x86-64 clflush/prefetch
-    ("inline_asm_x64_prefetch.c", "linux-aarch64"), // x86-64 prefetch hint family
-    ("inline_asm_x64_setjmp_label.c", "linux-aarch64"), // x86-64 asm context switch
+    ("inline_asm_x64_crc32.c", "linux-aarch64"),       // x86-64 SSE4.2 crc32
+    ("inline_asm_x64_label_directive.c", "linux-aarch64"), // x86-64 label sharing a directive statement
+    ("inline_asm_x64_setcc.c", "linux-aarch64"),           // x86-64 setcc
+    ("inline_asm_x64_cmov.c", "linux-aarch64"),            // x86-64 cmovcc
+    ("inline_asm_x64_cdqe.c", "linux-aarch64"),            // x86-64 cdqe
+    ("inline_asm_x64_movnti.c", "linux-aarch64"),          // x86-64 movnti/sfence
+    ("inline_asm_x64_clflush.c", "linux-aarch64"),         // x86-64 clflush/prefetch
+    ("inline_asm_x64_prefetch.c", "linux-aarch64"),        // x86-64 prefetch hint family
+    ("inline_asm_x64_setjmp_label.c", "linux-aarch64"),    // x86-64 asm context switch
     ("inline_asm_x64_sp_callee_regions.c", "linux-aarch64"), // x86-64 rsp capture
-    ("inline_asm_x64_mem_disp.c", "linux-aarch64"), // x86-64 disp(%reg) memory operands
-    ("inline_asm_x64_imm_mem.c", "linux-aarch64"), // x86-64 byte/word imm-to-memory ALU
-    ("inline_asm_x64_flags_push.c", "linux-aarch64"), // x86-64 pushf/popf and word push/pop
+    ("inline_asm_x64_mem_disp.c", "linux-aarch64"),        // x86-64 disp(%reg) memory operands
+    ("inline_asm_x64_imm_mem.c", "linux-aarch64"),         // x86-64 byte/word imm-to-memory ALU
+    ("inline_asm_x64_flags_push.c", "linux-aarch64"),      // x86-64 pushf/popf and word push/pop
     ("inline_asm_m_operand_array_cast.c", "linux-aarch64"), // x86-64 addq/adcq region operand
     ("inline_asm_x64_const_expr.c", "linux-aarch64"), // x86-64 addq/adcq const-expr displacements
     ("inline_asm_x64_callee_saved_operands.c", "linux-aarch64"), // x86-64 callee-saved operand pool

@@ -1302,13 +1302,15 @@ fn expand_gas_statements(
         if s.is_empty() {
             continue;
         }
-        // A label may share a statement with what follows it (`1: .irp ...`).
-        // Peel it so the directive is the first token; emitting it as its own
-        // statement names the same address.
+        // Labels may share a statement with what follows them
+        // (`1: .irp ...`). Peel them so the directive is the first token;
+        // one statement each names the same address.
         let (labels, s) = split_leading_labels(s);
-        if !labels.is_empty() && emitting(&cond) {
-            out.push_str(labels);
-            out.push('\n');
+        if emitting(&cond) {
+            for l in &labels {
+                out.push_str(l);
+                out.push('\n');
+            }
         }
         if s.is_empty() {
             continue;
@@ -1938,7 +1940,8 @@ fn base_section_shorthand(tok: &str) -> bool {
 /// follows (`1: .irp num,...`), so the first token is not always the
 /// directive. Returns the label text, empty when there is none, and the
 /// remainder, empty when the statement is labels only.
-fn split_leading_labels(s: &str) -> (&str, &str) {
+fn split_leading_labels(s: &str) -> (alloc::vec::Vec<&str>, &str) {
+    let mut labels = alloc::vec::Vec::new();
     let mut end = 0usize;
     loop {
         let rest = s[end..].trim_start();
@@ -1955,9 +1958,10 @@ fn split_leading_labels(s: &str) -> (&str, &str) {
         } else {
             1
         };
+        labels.push(&rest[..name + colons]);
         end = off + name + colons;
     }
-    (s[..end].trim_end(), s[end..].trim_start())
+    (labels, s[end..].trim_start())
 }
 
 /// Split off the first whitespace-delimited token and the trimmed remainder.

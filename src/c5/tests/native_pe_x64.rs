@@ -755,7 +755,6 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("array_range_designator_unsized.c", 0),
     ("has_attribute_in_expression.c", 0),
     ("file_scope_compound_literal_forms.c", 0),
-    ("asm_label_shares_directive_statement.c", 0),
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),
     ("octal_literal.c", 42),

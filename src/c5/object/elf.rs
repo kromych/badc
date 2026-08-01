@@ -3328,6 +3328,7 @@ mod tests {
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
             data_object_starts: Vec::new(),
+            local_init_templates: Vec::new(),
             data_pad_ranges: Vec::new(),
             data_align_marks: Vec::new(),
             entry_pc: 0,

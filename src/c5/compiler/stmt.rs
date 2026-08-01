@@ -1369,8 +1369,11 @@ impl Compiler {
             // (an unspecified bound `*(T (*)[])p` has no byte size).
             let decayed_array =
                 core::mem::replace(&mut self.pending.last_array_decay_bytes, saved_decay_bytes) > 0
-                    || !core::mem::replace(&mut self.pending.last_array_decay_dims, saved_decay_dims)
-                        .is_empty();
+                    || !core::mem::replace(
+                        &mut self.pending.last_array_decay_dims,
+                        saved_decay_dims,
+                    )
+                    .is_empty();
             // A SIMD (`w`/`x`) operand records its full size so the emitter
             // can tell a 16-byte vector from a scalar double; other operands
             // live in 8-byte registers and cap there.

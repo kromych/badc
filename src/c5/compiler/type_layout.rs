@@ -372,7 +372,11 @@ impl Compiler {
         // kept on the field so 6.7.5.2p6 compatibility and `typeof`
         // recovery see the unspecified bound.
         let unspecified = dims.iter().any(|&d| d < 0);
-        let count: i64 = if unspecified { -1 } else { dims.iter().product() };
+        let count: i64 = if unspecified {
+            -1
+        } else {
+            dims.iter().product()
+        };
         let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
         let mut name = alloc::format!("__array_{}", elem_ty);
         for d in dims {

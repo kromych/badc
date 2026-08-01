@@ -8434,13 +8434,9 @@ fn resolve_fp_ref(
             "aarch64 inline asm: vector operand view on a non-`w` operand",
         ));
     }
-    op_reg
-        .get(idx as usize)
-        .copied()
-        .flatten()
-        .ok_or_else(|| {
-            alloc::string::String::from("aarch64 inline asm: operand reference is not a register")
-        })
+    op_reg.get(idx as usize).copied().flatten().ok_or_else(|| {
+        alloc::string::String::from("aarch64 inline asm: operand reference is not a register")
+    })
 }
 
 fn materialize_int_shifted(

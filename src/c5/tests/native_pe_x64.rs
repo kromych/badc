@@ -753,6 +753,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("auto_type_declarator_attribute.c", 0),
     ("flex_array_in_union_init.c", 0),
     ("array_range_designator_unsized.c", 0),
+    ("has_attribute_in_expression.c", 0),
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),
     ("octal_literal.c", 42),

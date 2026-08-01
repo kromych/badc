@@ -617,7 +617,10 @@ impl<'a> Exp<'a> {
             // Dynamic predefines all start with `_`; then the registry
             // probe -- most identifiers are neither, and only macro
             // names need the hideset check.
-            if self.first_byte(tok) == b'_' && self.dynamic_predefine(tok, &mut out) {
+            if self.first_byte(tok) == b'_'
+                && (self.dynamic_predefine(tok, &mut out)
+                    || self.has_operator(tok, &mut rest, &mut out))
+            {
                 continue;
             }
             let (is_fn, is_obj) = {
@@ -715,6 +718,37 @@ impl<'a> Exp<'a> {
             // miss here means the two drifted.
             other => unreachable!("no expansion for dynamic predefine `{other}`"),
         }
+        true
+    }
+
+    /// The `__has_*` feature-test operators, which expand wherever they
+    /// appear rather than only in a conditional, so an ordinary expression
+    /// can test a capability. `rest` is the reversed pending stream, so the
+    /// `( identifier )` that follows sits at its tail; an operator name not
+    /// followed by that shape is left alone for the caller to pass through.
+    /// The verdict is the one the conditional path reports.
+    fn has_operator(&mut self, tok: Tok, rest: &mut Vec<Tok>, out: &mut Vec<Tok>) -> bool {
+        let known: fn(&str) -> bool = match self.text(tok) {
+            "__has_builtin" => super::builtins::has_builtin,
+            "__has_attribute" => super::cond::is_known_attribute,
+            _ => return false,
+        };
+        let n = rest.len();
+        if n < 3 {
+            return false;
+        }
+        let (open, arg, close) = (rest[n - 1], rest[n - 2], rest[n - 3]);
+        if self.text(open) != "(" || arg.kind != TokKind::Ident || self.text(close) != ")" {
+            return false;
+        }
+        let verdict = known(self.text(arg));
+        rest.truncate(n - 3);
+        let t = self.synth(
+            (if verdict { "1" } else { "0" }).to_string(),
+            TokKind::Number,
+            tok.space,
+        );
+        out.push(t);
         true
     }
 
@@ -1026,6 +1060,7 @@ impl Preprocessor {
                 }
                 let ident = &line[start..i];
                 if is_dynamic_predefine(ident)
+                    || matches!(ident, "__has_builtin" | "__has_attribute")
                     || self.macros.contains_key(ident)
                     || self.fn_macros.contains_key(ident)
                 {

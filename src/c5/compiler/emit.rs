@@ -80,7 +80,11 @@ impl Compiler {
                 self.data_pad_ranges.pop();
             }
         }
-        while self.data_align_marks.last().is_some_and(|&(off, _)| off >= end) {
+        while self
+            .data_align_marks
+            .last()
+            .is_some_and(|&(off, _)| off >= end)
+        {
             self.data_align_marks.pop();
         }
         debug_assert!(self.data_object_starts.iter().all(|&s| s < end));

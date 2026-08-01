@@ -2768,10 +2768,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
         // The candidate bodies are fixed for this iteration, so their
         // splice facts are derived once here rather than per caller and
         // per call site.
-        let facts: FactsMap = bodies
-            .iter()
-            .map(|c| (c.ent_pc, callee_facts(c)))
-            .collect();
+        let facts: FactsMap = bodies.iter().map(|c| (c.ent_pc, callee_facts(c))).collect();
         // The two caller gates below are predicates over the candidate
         // body alone, so each combination they select is one shared pool
         // rather than a per-caller copy of the candidate map.

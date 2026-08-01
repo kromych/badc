@@ -404,6 +404,22 @@ pub(super) fn unfold_ref(source: &str) -> String {
     out
 }
 
+/// Name an `#if` operand tests for absence, i.e. `!defined X` or
+/// `!defined(X)` with arbitrary white space. `#ifndef X` is the other
+/// spelling of the same test and is matched by its own directive
+/// variant. `None` for every other operand.
+pub(super) fn if_operand_undefined_name(expr: &str) -> Option<&str> {
+    let rest = expr.trim_start().strip_prefix('!')?.trim_start();
+    let rest = rest.strip_prefix("defined")?;
+    let name = match rest.trim_start().strip_prefix('(') {
+        Some(inner) => inner.trim_start().strip_suffix(')')?.trim_end(),
+        // `!definedX` is one identifier, not the operator.
+        None if rest.starts_with(|c: char| c.is_whitespace()) => rest.trim(),
+        None => return None,
+    };
+    is_ident(name).then_some(name)
+}
+
 /// Identifier check: ASCII letter or `_` to start, alnum or `_`
 /// after. Used to reject `#pragma dylib(123foo, ...)` and similar
 /// up-front so the codegen never has to worry about quirks in the

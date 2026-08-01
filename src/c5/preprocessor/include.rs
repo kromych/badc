@@ -150,11 +150,15 @@ impl Preprocessor {
                 ),
             )));
         };
-        // `#pragma once` dedups by the resolved path (file identity),
-        // not the include spelling, so two different spellings that
-        // name the same file are still included once. The handler in
-        // `process_named` records the same `resolved_path`.
-        if self.pragma_once_files.contains(&resolved_path) {
+        // Both drops key on the resolved path (file identity), not the
+        // include spelling, so two spellings of the same file are still
+        // included once; `process_named` records the same path.
+        // `#pragma once` drops unconditionally; the guard form drops only
+        // while its controlling macro is defined, since that is what makes
+        // the body inactive.
+        if self.pragma_once_files.contains(&resolved_path)
+            || self.include_is_guarded_out(&resolved_path)
+        {
             if self.show_includes {
                 let depth = self.include_stack.len() + 1;
                 self.include_trace
@@ -187,6 +191,17 @@ impl Preprocessor {
         let result = self.process_named(&content, &resolved_path, out);
         self.include_stack.pop();
         result
+    }
+
+    /// Whether a repeat `#include` of `path` would produce nothing: the
+    /// file's whole content sits inside one `#ifndef X` / `#endif` pair
+    /// and `X` is defined now, so every line of it takes the false arm.
+    /// An `#undef X` in between makes this false again, which is why the
+    /// answer is recomputed per inclusion rather than cached.
+    fn include_is_guarded_out(&self, path: &str) -> bool {
+        self.include_guards
+            .get(path)
+            .is_some_and(|m| self.is_defined_name(m))
     }
 
     /// Look `name` up and return its body plus the path it resolved

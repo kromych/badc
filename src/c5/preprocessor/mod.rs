@@ -197,6 +197,12 @@ pub(crate) struct Preprocessor {
     /// Headers that opted in to single-inclusion via `#pragma once`.
     /// A subsequent `#include` of a name in this set is dropped.
     pragma_once_files: BTreeSet<String>,
+    /// Controlling macro of each processed file whose whole content sits
+    /// inside one `#ifndef X` / `#endif` pair. While `X` is defined such
+    /// a file contributes nothing, so a repeat `#include` of that path is
+    /// dropped instead of being read and scanned again (C99 6.10.2; the
+    /// same optimization gcc and clang apply).
+    include_guards: HashMap<String, String>,
     /// Names of headers currently being expanded, used to break
     /// cycles. Pushed on `#include`, popped when we finish processing
     /// the header.
@@ -643,6 +649,7 @@ impl Preprocessor {
             dylibs: Vec::new(),
             exports: Vec::new(),
             pragma_once_files: BTreeSet::new(),
+            include_guards: HashMap::new(),
             include_stack: Vec::new(),
             search_paths: Vec::new(),
             quote_search_paths: Vec::new(),
@@ -934,6 +941,9 @@ impl Preprocessor {
         // grounded in the original source.
         let lines: Vec<&str> = source.lines().collect();
         let mut idx_iter = 0usize;
+        // Watches for the `#ifndef X` / `#endif` wrapper that lets a
+        // repeat `#include` of this file be dropped; see `include_guards`.
+        let mut guard = IncludeGuardScan::default();
         while idx_iter < lines.len() {
             let idx = idx_iter;
             let line = lines[idx];
@@ -943,6 +953,7 @@ impl Preprocessor {
             if let Some(rest) = trimmed.strip_prefix('#') {
                 let directive = rest.trim_start();
                 let parsed = parse_directive(directive);
+                guard.line(line, Some(&parsed), cond_stack.len());
                 if let Some(next) = self.apply_cond_or_macro_directive(
                     &parsed,
                     active,
@@ -1184,6 +1195,7 @@ impl Preprocessor {
                 continue;
             }
 
+            guard.line(line, None, cond_stack.len());
             if active {
                 let mut buffer = String::from(line);
                 let mut consumed = 1usize;
@@ -1273,6 +1285,13 @@ impl Preprocessor {
             )));
         }
 
+        // Only files reached through `#include` can be re-included, and
+        // only they have a resolved path to key on.
+        if !self.include_stack.is_empty()
+            && let Some(name) = guard.finish(cond_stack.len())
+        {
+            self.include_guards.insert(filename.to_string(), name);
+        }
         Ok(())
     }
 
@@ -1455,8 +1474,8 @@ mod tests;
 
 use builtins::is_operator_name;
 use directive::{
-    CondFrame, Directive, apply_elif, apply_else, apply_endif, elif_eligible, format_line_marker,
-    parse_directive,
+    CondFrame, Directive, IncludeGuardScan, apply_elif, apply_else, apply_endif, elif_eligible,
+    format_line_marker, parse_directive,
 };
 use expand::JoinScan;
 use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack};

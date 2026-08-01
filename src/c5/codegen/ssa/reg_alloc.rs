@@ -1912,7 +1912,10 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
 /// The allocator's hint policy is advisory; an unsuitable hint
 /// (register live elsewhere at the pick site) falls through to the
 /// default policy without compromising correctness.
-fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
+///
+/// Returns the number of phi visits, which is the cost measure that
+/// separates the worklist from the rescan.
+fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) -> usize {
     let phis: Vec<usize> = func
         .insts
         .iter()
@@ -1921,7 +1924,7 @@ fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
         .map(|(v, _)| v)
         .collect();
     if phis.is_empty() {
-        return;
+        return 0;
     }
     let n = func.insts.len();
     let lim = hints.len().min(n);
@@ -1963,8 +1966,10 @@ fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
     let mut next: BinaryHeap<Reverse<u32>> = BinaryHeap::new();
     let mut queued = vec![true; phis.len()];
     let mut queued_next = vec![false; phis.len()];
+    let mut visits = 0usize;
     loop {
         while let Some(Reverse(rank)) = cur.pop() {
+            visits += 1;
             queued[rank as usize] = false;
             let v = phis[rank as usize];
             let Inst::Phi { incoming, .. } = &func.insts[v] else {
@@ -2009,14 +2014,15 @@ fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
         core::mem::swap(&mut cur, &mut next);
         core::mem::swap(&mut queued, &mut queued_next);
     }
+    visits
 }
 
 /// Rescan every phi per sweep until no hint changes. Same relation as
 /// [`populate_phi_hints`], including the visit order that decides which
-/// hint a group keeps; this is the reference the test below holds the
-/// worklist to.
+/// hint a group keeps; this is the reference the tests below hold the
+/// worklist to. Returns its phi visits on the same measure.
 #[cfg(test)]
-fn populate_phi_hints_by_rescan(func: &FunctionSsa, hints: &mut [Option<u8>]) {
+fn populate_phi_hints_by_rescan(func: &FunctionSsa, hints: &mut [Option<u8>]) -> usize {
     let phis: Vec<usize> = func
         .insts
         .iter()
@@ -2024,9 +2030,11 @@ fn populate_phi_hints_by_rescan(func: &FunctionSsa, hints: &mut [Option<u8>]) {
         .filter(|(_, i)| matches!(i, Inst::Phi { .. }))
         .map(|(v, _)| v)
         .collect();
+    let mut visits = 0usize;
     loop {
         let mut changed = false;
         for &v in &phis {
+            visits += 1;
             let Inst::Phi { incoming, .. } = &func.insts[v] else {
                 continue;
             };
@@ -2061,6 +2069,7 @@ fn populate_phi_hints_by_rescan(func: &FunctionSsa, hints: &mut [Option<u8>]) {
             break;
         }
     }
+    visits
 }
 
 /// For each value, the PC index of its last use across the
@@ -3329,34 +3338,39 @@ int main(void) { return 0; }
 
     /// The rescan costs the function's phi count per propagation hop, so
     /// a chain of N phis costs N^2; the worklist visits a phi only when
-    /// a write reached it. Quadrupling the chain must not quadruple the
-    /// cost -- 16x is what the rescan would spend.
+    /// a write reached it. Both are measured in phi visits -- the
+    /// operation count the two differ in -- so the bound holds whatever
+    /// the machine is doing. Seeding the far end of the chain makes
+    /// propagation run against the sweep direction, the shape that costs
+    /// the rescan one sweep per hop.
     #[test]
     fn phi_hint_propagation_is_not_quadratic_in_the_chain() {
-        let run = |chain: usize| {
+        let visits = |chain: usize| -> (usize, usize) {
             let func = phi_chain(chain);
             let n = func.insts.len();
-            let start = std::time::Instant::now();
-            for _ in 0..4 {
-                let mut hints: Vec<Option<u8>> = alloc::vec![None; n];
-                hints[n - 1] = Some(7);
-                populate_phi_hints(&func, &mut hints);
-                assert!(hints.iter().all(|h| h.is_some()));
-            }
-            start.elapsed().as_secs_f64()
+            let (mut a, mut b) = (alloc::vec![None; n], alloc::vec![None; n]);
+            a[n - 1] = Some(7u8);
+            b[n - 1] = Some(7u8);
+            let worklist = populate_phi_hints(&func, &mut a);
+            let rescan = populate_phi_hints_by_rescan(&func, &mut b);
+            assert!(a.iter().all(|h| h.is_some()), "chain={chain} unpropagated");
+            assert_eq!(a, b, "chain={chain} assignments differ");
+            (worklist, rescan)
         };
-        // Interleaved so a load excursion on a shared machine skews
-        // both sizes rather than only the later batch; the suite runs
-        // its tests in parallel, so the two are never measured alone.
-        let (mut small, mut large) = (f64::MAX, f64::MAX);
-        for _ in 0..3 {
-            small = small.min(run(2000));
-            large = large.min(run(8000));
-        }
+        let (small, small_rescan) = visits(500);
+        let (large, large_rescan) = visits(2000);
         assert!(
-            large < small * 8.0,
-            "4x the chain cost {:.1}x, past the 8x headroom over linear",
-            large / small,
+            large < small * 6,
+            "4x the chain cost {large} phi visits against {small}, \
+             past the 6x headroom over linear",
+        );
+        // The reference the worklist replaced fails the same bound at
+        // the same sizes, so the bound separates the two algorithms.
+        assert!(
+            large_rescan >= small_rescan * 6,
+            "the rescan reference no longer costs a sweep per hop \
+             ({small_rescan} -> {large_rescan} visits); the bound above \
+             no longer proves anything",
         );
     }
 }

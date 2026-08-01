@@ -305,6 +305,26 @@ fn resolve_single_tu_extern_refs(
         .filter(|s| s.is_weak && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64))
         .map(|s| s.name.as_str())
         .collect();
+    // Data objects this unit defines, by name and unified data offset --
+    // the set the object writer binds named relocations against. An
+    // inline-asm `sym(%rip)` reference records the symbol by name, so the
+    // image finalizer needs the same lookup.
+    let defined_data_by_name: alloc::collections::BTreeMap<&str, i64> = {
+        use crate::c5::symbol::Linkage;
+        program
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.class == Token::Glo as i64
+                    && s.defined_here
+                    && !s.is_alias
+                    && !s.is_thread_local
+                    && !s.name.is_empty()
+                    && matches!(s.linkage, Linkage::External | Linkage::Internal)
+            })
+            .map(|s| (s.name.as_str(), s.val))
+            .collect()
+    };
     let data_bindings: alloc::collections::BTreeSet<&str> = build
         .imports
         .data_bindings
@@ -339,6 +359,20 @@ fn resolve_single_tu_extern_refs(
             build.func_fixups.push(crate::c5::codegen::FuncFixup {
                 adrp_offset: r.instr_offset,
                 target_native_offset: target_off,
+            });
+            continue;
+        }
+        // A data object this unit defines (weak included): the reference
+        // binds to the definition, as the linker binds the object path's
+        // named relocation. The PC-relative addend folded the -4 end skew;
+        // the data fixup targets the effective byte, so restore it.
+        if let (Some(&off), Some(addend)) = (
+            defined_data_by_name.get(r.symbol_name.as_str()),
+            r.direct_pcrel,
+        ) {
+            build.data_fixups.push(crate::c5::codegen::DataFixup {
+                adrp_offset: r.instr_offset,
+                data_offset: (off + addend + 4) as u64,
             });
             continue;
         }

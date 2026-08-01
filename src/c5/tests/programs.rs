@@ -5620,6 +5620,59 @@ fn unused_binding_diagnostics_follow_symbol_table_order() {
     assert_eq!(unused, ["zz", "aa"], "warnings: {:?}", prog.warnings);
 }
 
+/// A file-scope brace list of `n` compound-literal elements shaped like a
+/// schema table: nested dict literals with string members. The shape that
+/// exercises the initializer checkpoint/restore machinery per element.
+#[cfg(not(debug_assertions))]
+fn nested_literal_unit(n: usize) -> String {
+    let mut s = String::from(
+        "typedef struct E E; typedef struct O O;\n\
+         struct O { int type; union { const char *s; const E *d; const O *l; } u; };\n\
+         struct E { const char *key; O value; };\n\
+         const O table = { .type = 3, .u.l = ((O[]) {\n",
+    );
+    for i in 0..n {
+        s.push_str(&format!(
+            "{{ .type = 2, .u.d = ((E[]) {{ \
+             {{ \"a\", {{ .type = 1, .u.s = (\"{i}\") }} }}, \
+             {{ \"b\", {{ .type = 1, .u.s = (\"x\") }} }}, \
+             {{ \"c\", {{ .type = 1, .u.s = (\"y\") }} }}, \
+             {{}} }}) }},\n"
+        ));
+    }
+    s.push_str("{} }) };\nint main(void) { return table.type - 3; }\n");
+    s
+}
+
+#[test]
+#[cfg(not(debug_assertions))]
+fn initializer_cost_is_linear_in_element_count() {
+    // A brace list of compound-literal elements must cost per element:
+    // a value's speculative parses may only stage and roll back state
+    // the value itself appended, and the constant-conditional attempt
+    // must not run without a `?` ahead. 4x the elements staying under
+    // 8x the time rules out the quadratic rollback (16x) with margin.
+    fn once(src: &str) -> f64 {
+        let t = std::time::Instant::now();
+        let _ = compile_str(src);
+        t.elapsed().as_secs_f64()
+    }
+    let units = [nested_literal_unit(400), nested_literal_unit(1600)];
+    let mut best = [f64::MAX; 2];
+    for _ in 0..3 {
+        for (b, u) in best.iter_mut().zip(units.iter()) {
+            *b = b.min(once(u));
+        }
+    }
+    let (small, large) = (best[0], best[1]);
+    assert!(small > 0.0, "no measurable initializer cost to compare");
+    assert!(
+        large < small * 8.0,
+        "initializer cost grew {:.1}x for 4x the elements ({small:.3e}s -> {large:.3e}s)",
+        large / small
+    );
+}
+
 /// Marginal cost of one function definition at two declaration counts,
 /// measured against units carrying only the declarations so the shared
 /// parse cancels out.

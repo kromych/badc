@@ -896,6 +896,18 @@ impl Compiler {
         }
         let snap = self.lex.snapshot();
         self.next()?; // identifier
+        // A declarator may carry attributes before its initializer
+        // (`__auto_type p __attribute__((cleanup(f))) = q;`). Step over
+        // them without recording: the lexer rewinds below and the real
+        // declarator parse reads them.
+        while self.lex.tk == Token::Attribute {
+            self.next()?;
+            if self.lex.tk != '(' {
+                return Err(self.compile_err("`(` expected after attribute specifier"));
+            }
+            self.next()?;
+            self.skip_balanced_parens_after_open()?;
+        }
         if self.lex.tk != Token::Assign {
             return Err(self.compile_err("`__auto_type` declaration requires an initializer"));
         }

@@ -165,6 +165,10 @@ pub(crate) enum Mnemonic {
     /// x87 subtract-and-pop: `fsubp [%st, %st(i)]` encodes DE E0+i under
     /// GNU as operand order; the bare form is `%st, %st(1)`.
     Fsubp,
+    /// SSE4.2 accumulate-CRC32 (F2 0F 38 F0 / F1 /r). The accumulator is a
+    /// general register in ModR/M.reg and the source the r/m; the AT&T size
+    /// suffix is the source width, and only `q` widens the accumulator.
+    Crc32,
     /// A string primitive (`movs` / `cmps` / `stos` / `lods` / `scas`). Its
     /// operands are the fixed `%rsi` / `%rdi` / accumulator pair, so the AT&T
     /// size suffix alone picks the opcode and the operand-size prefix.
@@ -781,6 +785,7 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "gs" => Mnemonic::Prefix(0x65),
         // Protection-key register write (the read form is catalogued).
         "wrpkru" => Mnemonic::Fixed(&[0x0F, 0x01, 0xEF]),
+        "crc32" => Mnemonic::Crc32,
         "fninit" => Mnemonic::Fixed(&[0xDB, 0xE3]),
         // x87 wait-for-pending-exceptions (WAIT/FWAIT) and clear-exceptions.
         "fwait" | "wait" => Mnemonic::Fixed(&[0x9B]),
@@ -2611,6 +2616,46 @@ pub(crate) fn encode(
         }
         Mnemonic::Fixed(bytes) => {
             code.extend_from_slice(bytes);
+            Ok(())
+        }
+        Mnemonic::Crc32 => {
+            // AT&T `crc32<w> src, acc`: the accumulator in ModR/M.reg, the
+            // source (register or memory) the r/m. The suffix is the source
+            // width; a 16-bit source takes the operand-size prefix and a
+            // 64-bit one REX.W, both of which precede the F2 mandatory
+            // prefix in the order GNU as emits.
+            let [src, dst] = two(ops)?;
+            let (acc, _) = as_reg(dst)?;
+            if acc >= MMX_BASE {
+                return Err(String::from(
+                    "inline asm: general register expected for this instruction",
+                ));
+            }
+            let w = suffix.unwrap_or(AsmRegSize::Long);
+            let (rm, rm_b) = match src {
+                Concrete::Reg { reg, .. } if reg < MMX_BASE => (Ok(reg), reg >= 8),
+                _ => match MemRm::of(&src) {
+                    Some(mr) => (Err(mr), mr.rex_b()),
+                    None => {
+                        return Err(String::from(
+                            "inline asm: register or memory source expected for `crc32`",
+                        ));
+                    }
+                },
+            };
+            if w == AsmRegSize::Word {
+                code.push(0x66);
+            }
+            code.push(0xF2);
+            if w == AsmRegSize::Quad || acc >= 8 || rm_b {
+                code.push(rex(w == AsmRegSize::Quad, acc >= 8, false, rm_b));
+            }
+            let opcode = if w == AsmRegSize::Byte { 0xF0 } else { 0xF1 };
+            code.extend_from_slice(&[0x0F, 0x38, opcode]);
+            match rm {
+                Ok(reg) => code.push(modrm_reg(acc, reg)),
+                Err(mr) => mr.emit(code, acc),
+            }
             Ok(())
         }
         Mnemonic::Fsubp => {

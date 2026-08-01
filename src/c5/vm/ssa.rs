@@ -2264,6 +2264,13 @@ fn run_inline_asm(
                     "inline asm: SSE register ops are not supported under --interp",
                 )));
             }
+            Mnemonic::Crc32 => {
+                // No CRC unit in the interpreter, and the polynomial is the
+                // instruction's own; refused rather than mis-modelled.
+                return Err(C5Error::Runtime(alloc::string::String::from(
+                    "inline asm: `crc32` is not supported under --interp",
+                )));
+            }
             Mnemonic::Nop | Mnemonic::Rdtsc | Mnemonic::Rdtscp => {
                 // No host clock: the timestamp read produces zero in the
                 // registers it defines (rax/rdx, and rcx for rdtscp).

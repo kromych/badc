@@ -554,6 +554,11 @@ fn simd_vector() {
         enc("mul", &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]),
         0x4EA2_9C20
     );
+    // `mov Vd.T, Vn.T` (vector ORR alias; reference-assembler words).
+    assert_eq!(enc("mov", &[v(0, 0, true), v(1, 0, true)]), 0x4EA1_1C20);
+    assert_eq!(enc("mov", &[v(5, 0, false), v(9, 0, false)]), 0x0EA9_1D25);
+    assert_eq!(enc("mov", &[v(31, 0, true), v(30, 0, true)]), 0x4EBE_1FDF);
+    assert!(encode("mov", &[v(0, 1, true), v(1, 1, true)]).is_err());
     // Polynomial multiply (byte arrangement only; reference words from the
     // reference assembler).
     assert_eq!(

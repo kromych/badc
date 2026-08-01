@@ -1817,6 +1817,25 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // The `mov Rd, sp` / `mov sp, Rd` stack-pointer forms are rewritten to
     // `add ..., #0` earlier (the parser, which can tell `sp` from `xzr`).
     if mnemonic == "mov" {
+        // `mov Vd.T, Vn.T` is the vector ORR alias (byte arrangements).
+        if let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+        ] = *ops
+        {
+            if size != 0 || s1 != 0 || q != q1 {
+                return Err(String::from("inline asm: vector mov must be 8b/16b"));
+            }
+            return Ok((if q { 1u32 << 30 } else { 0 })
+                | 0x0EA0_1C00
+                | ((rn as u32) << 16)
+                | ((rn as u32) << 5)
+                | (rd as u32));
+        }
         match *ops {
             [Opnd::Reg { num: rd, is64, .. }, Opnd::Reg { num: rm, .. }] => {
                 let base = if is64 { 0xAA00_03E0u32 } else { 0x2A00_03E0 };

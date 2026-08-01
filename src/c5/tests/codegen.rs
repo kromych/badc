@@ -4002,14 +4002,20 @@ fn staged_aggregate_template_is_eight_aligned() {
     );
 }
 
-/// Every function's name is looked for in every inline-asm template, to
-/// decide which bodies escape the call graph. That search must not cost
-/// functions x asm bytes: measured over the two sizes below, the
-/// per-function rescan grows 10.2x for 4x of each and searching the
-/// distinct identifier runs grows 3.2x.
+/// Every function's name is looked for in the inline-asm templates, to
+/// decide which bodies escape the call graph. The search reads the
+/// distinct identifier runs rather than the templates themselves, which
+/// is the same test over far fewer bytes.
+///
+/// Both sizes below are measured in bytes read, against the bytes a
+/// rescan of every template per name would read, so the bound holds
+/// whatever the machine is doing. The search is still names x haystack
+/// bytes -- the runs shrink the haystack by a constant, they do not
+/// change the shape -- so the ratio, not its growth, is what is bounded,
+/// and it is checked at both sizes to catch a narrowing that decays as
+/// the unit grows.
 #[test]
-#[cfg(not(debug_assertions))]
-fn escape_analysis_cost_is_not_functions_times_asm_bytes() {
+fn escape_analysis_reads_identifier_runs_not_whole_templates() {
     use crate::{
         CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
     };
@@ -4034,7 +4040,7 @@ fn escape_analysis_cost_is_not_functions_times_asm_bytes() {
         s.push_str("return t; }\n");
         s
     }
-    let once = |src: &str| -> f64 {
+    let once = |src: &str| -> (usize, usize) {
         let program = Compiler::with_options(
             src.to_string(),
             Target::LinuxX64,
@@ -4047,24 +4053,20 @@ fn escape_analysis_cost_is_not_functions_times_asm_bytes() {
             optimize: true,
             ..NativeOptions::default()
         };
-        let t = std::time::Instant::now();
+        crate::c5::codegen::passes::ipa_const_param::ASM_NAME_SEARCH.with(|c| c.set((0, 0)));
         emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
-        t.elapsed().as_secs_f64()
+        crate::c5::codegen::passes::ipa_const_param::ASM_NAME_SEARCH.with(|c| c.get())
     };
-    let (a, b) = (unit(150), unit(600));
-    let mut best = [f64::MAX; 2];
-    for _ in 0..2 {
-        best[0] = best[0].min(once(&a));
-        best[1] = best[1].min(once(&b));
+    for n in [150usize, 600] {
+        let (read, rescan) = once(&unit(n));
+        assert!(read > 0, "n={n}: the asm-name search did not run");
+        assert!(
+            read * 8 <= rescan,
+            "n={n}: the search read {read} bytes against the {rescan} a \
+             per-name template rescan would read, under the 8x narrowing \
+             the identifier runs give",
+        );
     }
-    let (small, large) = (best[0], best[1]);
-    assert!(small > 0.0, "no measurable lowering cost to compare");
-    assert!(
-        large < small * 6.0,
-        "lowering grew {:.1}x for 4x the functions and asm bytes \
-         ({small:.3e}s -> {large:.3e}s)",
-        large / small
-    );
 }
 
 /// The `__builtin_*` library thunks are in scope from the start, so a

@@ -59,6 +59,26 @@ fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Bytes the asm-name search read, and what re-scanning every
+    /// template for every name would have read. Read by the scaling
+    /// test, which bounds the first against the second.
+    pub(crate) static ASM_NAME_SEARCH: core::cell::Cell<(usize, usize)> =
+        const { core::cell::Cell::new((0, 0)) };
+}
+
+#[cfg(test)]
+fn note_search(read: usize, rescan: usize) {
+    ASM_NAME_SEARCH.with(|c| {
+        let (a, b) = c.get();
+        c.set((a + read, b + rescan));
+    });
+}
+
+#[cfg(not(test))]
+fn note_search(_read: usize, _rescan: usize) {}
+
 /// The distinct maximal runs of identifier characters across `texts`.
 fn identifier_runs<'a>(texts: &[&'a [u8]]) -> Vec<&'a [u8]> {
     let mut seen: hashbrown::HashSet<&[u8]> = hashbrown::HashSet::new();
@@ -117,6 +137,7 @@ pub(crate) fn escaping_functions(
     // Searching the distinct runs is the same test over far fewer bytes
     // than re-scanning every template once per function.
     let runs = identifier_runs(&asm_texts);
+    let asm_bytes: usize = asm_texts.iter().map(|t| t.len()).sum();
     for f in funcs {
         let name = f.name.as_bytes();
         if name.is_empty() {
@@ -127,10 +148,11 @@ pub(crate) fn escaping_functions(
         } else {
             &asm_texts
         };
-        if haystacks
-            .iter()
-            .any(|t| t.windows(name.len()).any(|w| w == name))
-        {
+        note_search(0, asm_bytes);
+        if haystacks.iter().any(|t| {
+            note_search(t.len(), 0);
+            t.windows(name.len()).any(|w| w == name)
+        }) {
             named.insert(f.name.as_str());
         }
     }

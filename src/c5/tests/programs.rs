@@ -5701,17 +5701,13 @@ fn initializer_cost_is_linear_in_element_count() {
     );
 }
 
-/// Marginal cost of one function definition at two declaration counts,
-/// measured against units carrying only the declarations so the shared
-/// parse cancels out.
-///
-/// All four units are timed alternately rather than one configuration
-/// at a time: the figure is a difference of two timings, which is far
-/// noisier than either, and the suite runs its tests in parallel, so a
-/// load excursion during one batch would otherwise land entirely in one
-/// side of the ratio.
-#[cfg(not(debug_assertions))]
-fn per_function_compile_costs(small: usize, large: usize, functions: usize) -> (f64, f64) {
+/// Closing a function scope must cost its own bindings, not the whole
+/// symbol table. Measured in symbols examined at scope exit, so the
+/// claim holds exactly rather than to within timer noise: the same
+/// definitions examine the same symbols whatever the unit's file-scope
+/// declaration count, while a full-table scan per exit grows with it.
+#[test]
+fn function_close_cost_is_independent_of_declaration_count() {
     fn unit(globals: usize, functions: usize) -> String {
         let mut s = String::new();
         for j in 0..globals {
@@ -5725,51 +5721,28 @@ fn per_function_compile_costs(small: usize, large: usize, functions: usize) -> (
         s.push_str("int main(void) { return 0; }\n");
         s
     }
-    fn once(src: &str) -> f64 {
-        let t = std::time::Instant::now();
-        let _ = compile_str(src);
-        t.elapsed().as_secs_f64()
-    }
-    let units = [
-        unit(small, functions),
-        unit(small, 0),
-        unit(large, functions),
-        unit(large, 0),
-    ];
-    let mut best = [f64::MAX; 4];
-    for _ in 0..3 {
-        for (b, u) in best.iter_mut().zip(units.iter()) {
-            *b = b.min(once(u));
-        }
-    }
-    let per = |with: f64, without: f64| (with - without).max(0.0) / functions as f64;
-    (per(best[0], best[1]), per(best[2], best[3]))
-}
-
-#[test]
-#[cfg(not(debug_assertions))]
-fn function_close_cost_is_independent_of_declaration_count() {
-    // Closing a function scope must cost its own bindings, not the
-    // whole symbol table: a unit with 16x the file-scope declarations
-    // must not pay 16x per function definition. Measured as the
-    // marginal cost of adding the definitions, so the shared parse of
-    // the declarations cancels out.
-    //
-    // The bound is 8x, not the 1x the title suggests. Scanning the whole
-    // table would cost 16x, which this still catches with margin, but
-    // the per-function figure is not strictly independent of the table
-    // size even with the scan gone: the larger table has worse locality
-    // for the bindings a scope does touch. That constant factor is real
-    // work, not a defect, and it varies by machine.
-    let (small, large) = per_function_compile_costs(2000, 32000, 1000);
-    // A `small` at the timer floor cannot discriminate: the ratio would
-    // be whatever noise divided by noise gives.
-    assert!(small > 0.0, "no measurable per-function cost to compare");
+    let once = |globals: usize| -> (usize, usize) {
+        let src = unit(globals, 300);
+        crate::c5::compiler::SCOPE_UNWIND.with(|c| c.set((0, 0)));
+        let _ = compile_str(&src);
+        crate::c5::compiler::SCOPE_UNWIND.with(|c| c.get())
+    };
+    let (small, small_scan) = once(500);
+    let (large, large_scan) = once(16000);
+    assert!(small > 0, "no scope unwinds to compare");
+    assert_eq!(
+        small, large,
+        "32x the file-scope declarations changed the symbols the scope \
+         exits examine, so the unwind is reading the table rather than \
+         the scope's own bindings",
+    );
+    // The full-table scan this replaced does grow with the declarations,
+    // so the equality above is not something any implementation gives.
     assert!(
-        large < small * 8.0,
-        "per-function close cost grew {:.1}x for 16x the declarations \
-         ({small:.3e}s -> {large:.3e}s)",
-        large / small
+        large_scan >= small_scan * 8,
+        "a full-table scan per scope exit no longer grows with the \
+         declaration count ({small_scan} -> {large_scan}); the check \
+         above no longer proves anything",
     );
 }
 

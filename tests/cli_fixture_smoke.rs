@@ -123,6 +123,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("register_var_asm_operand_sp.c", "linux-aarch64"), // x86-64 rsp / rbp operand binding
     ("register_var_asm_operand_split.c", "linux-aarch64"), // x86-64 split-literal register name
     ("register_var_asm_operand_r11.c", "linux-aarch64"), // x86-64 r11 operand binding + %c call
+    ("register_var_asm_operand_r10.c", "linux-aarch64"), // x86-64 r10 operand binding + staging fallback
     ("inline_asm_x64_sib.c", "linux-aarch64"),          // x86-64 scaled-index memory operands
     ("inline_asm_x64_sib_nobase.c", "linux-aarch64"), // x86-64 no-base scaled-index memory operands
     ("inline_asm_x64_port_dx.c", "linux-aarch64"),    // x86-64 `(%dx)` port in/out

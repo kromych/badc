@@ -870,7 +870,14 @@ impl Compiler {
         // enclosing operator's pushed operand and make it pop the
         // wrong slot. Restore the depth after the block parse.
         let vstack_depth = self.ast_vstack.len();
-        let block = self.parse_block_stmt()?;
+        // The block may sit inside a declaration still being parsed (a
+        // typeof operand, an initializer): detach that declaration's
+        // specifier carriers, which the block's own declarations reset
+        // or consume, and restore them for the enclosing parse.
+        let specifiers = self.pending.take_decl_specifiers();
+        let block = self.parse_block_stmt();
+        self.pending.restore_decl_specifiers(specifiers);
+        let block = block?;
         self.ast_vstack.truncate(vstack_depth);
         let arena_after = self.ast.stmts.len();
         // The block's statements are sub-statements of this

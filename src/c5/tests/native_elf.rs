@@ -433,6 +433,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("arithmetic.c", 60),
     ("get_cpuid_leaf_checks.c", 0),
     ("register_var_stack_pointer.c", 0),
+    ("register_var_typeof_stmt_expr.c", 0),
     ("attribute_weak_alias.c", 0),
     ("weak_definition_not_inlined.c", 42),
     ("nested_block_decl_alignment.c", 42),

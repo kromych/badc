@@ -1470,6 +1470,12 @@ pub(crate) struct Build {
     /// on this to pick filetype, entry-point machinery, and
     /// export-table layout.
     pub output_kind: OutputKind,
+    /// Mirror of [`NativeOptions::pic`]. The relocatable writer reads it
+    /// to place `const` storage whose initializer carries a relocation:
+    /// `.rodata` without it (the absolute relocations resolve at link
+    /// time), `.data.rel.ro` with it (the load-time fixup needs a
+    /// writable page until the relocation is applied).
+    pub pic: bool,
     /// The shared library's own name, recorded in the image so a
     /// consumer that links against it by name references the file it
     /// loads at runtime (PE export-directory Name, Mach-O

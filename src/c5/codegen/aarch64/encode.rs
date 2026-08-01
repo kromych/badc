@@ -2288,6 +2288,7 @@ pub(crate) fn lower(
         exports: Vec::new(),
         dynamic_exports: Vec::new(),
         output_kind: super::OutputKind::Executable,
+        pic: native.pic,
         shared_lib_name: None,
         dllmain_pc: None,
         macho_tlv_fixups,

@@ -573,6 +573,11 @@ pub(in crate::c5::compiler) struct Pending {
     /// that is `> 0` here, distinct from the typedef's own element type
     /// being a pointer (`typedef T *A[N]; A x;` still folds).
     pub declarator_leading_ptr_count: i64,
+    /// Whether a `const` follows the declarator's outermost `*`
+    /// (`T *const p`, `T *const a[]`). That qualifier applies to the
+    /// declared object itself, unlike a `const` in the specifiers of a
+    /// pointer declaration (`const T *p`), which applies to the pointee.
+    pub declarator_outer_const: bool,
     /// Set true while parsing a block-scope object declarator, where
     /// a non-constant array dimension is a C99 6.7.6.2 variable-length
     /// array. Elsewhere (file scope, struct member, typedef, cast,
@@ -951,6 +956,7 @@ impl Default for Pending {
             typedef_base_array_size: 0,
             typedef_base_array_dims: alloc::vec::Vec::new(),
             declarator_leading_ptr_count: 0,
+            declarator_outer_const: false,
             vla_allowed: false,
             vla_dim_expr: None,
             sizeof_vla_size_slot: None,

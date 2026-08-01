@@ -717,9 +717,11 @@ impl Compiler {
                 // initializer is its value for the whole execution). A
                 // declarator that adds pointer indirection points the
                 // qualifier at the pointee instead: `p` and `t[0]` of
-                // `const char *p` / `const char *t[2]` are writable.
-                self.symbols[id_idx].storage_is_const =
-                    self.pending.base_is_const && !super::types::is_pointer_ty(ty);
+                // `const char *p` / `const char *t[2]` are writable. A
+                // `const` after the outermost `*` qualifies the object
+                // again: `char *const p`, `const char *const t[2]`.
+                self.symbols[id_idx].storage_is_const = self.pending.declarator_outer_const
+                    || (self.pending.base_is_const && !super::types::is_pointer_ty(ty));
                 if fn_ptr_indirection > 0 {
                     self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
                 }

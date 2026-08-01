@@ -812,6 +812,24 @@ pub(crate) fn apply_data_liveness(
             Err(i) => i.saturating_sub(1),
         }
     };
+    // `const`-qualified storage is read-only for the whole execution
+    // (C99 6.7.3p5), so it belongs on a read-only page. Only file-backed
+    // objects reach the writer's `.rodata` carve, so a wholly-zero one
+    // has to stay out of the zero-fill region and pay its file bytes.
+    let mut is_const_storage = alloc::vec![false; n];
+    {
+        use crate::c5::token::Token;
+        for sym in &program.symbols {
+            if sym.class == Token::Glo as i64
+                && sym.defined_here
+                && sym.storage_is_const
+                && !sym.is_thread_local
+                && (0..data_len).contains(&sym.val)
+            {
+                is_const_storage[interval_of(sym.val)] = true;
+            }
+        }
+    }
     let mut has_reloc_slot = alloc::vec![false; n];
     for off in program
         .data_relocs
@@ -850,6 +868,7 @@ pub(crate) fn apply_data_liveness(
             && i != 0
             && live[i]
             && !has_reloc_slot[i]
+            && !is_const_storage[i]
             && program.data[starts[i] as usize..obj_end(i) as usize]
                 .iter()
                 .all(|&b| b == 0)

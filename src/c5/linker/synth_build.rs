@@ -360,6 +360,7 @@ fn synth_program_and_build(
         text_align: merged.text_align,
         data: merged.data.clone(),
         data_ro_len: merged.data_ro_len,
+        pic: false,
         data_align: merged.data_align,
         bss_size: merged.bss_size as i64,
         init_fini_arrays: merged.init_fini_arrays,

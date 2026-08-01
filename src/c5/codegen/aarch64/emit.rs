@@ -3105,8 +3105,10 @@ fn emit_inline_asm_aarch64(
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
         if matches!(op.constraint, AsmConstraint::Fp) {
-            if op.width != 8 {
-                bail_msg("aarch64 inline asm: only double `w` operands are supported");
+            // A `w` operand is a double (the SSA model's FP width) or a
+            // 16-byte vector (reached through its address, like an output).
+            if op.width != 8 && op.width != 16 {
+                bail_msg("aarch64 inline asm: `w` operands must be 8 or 16 bytes");
                 return false;
             }
             fp_used_mask |= 1 << r;
@@ -3171,11 +3173,16 @@ fn emit_inline_asm_aarch64(
             bail_msg("aarch64 inline asm: operand place missing");
             return false;
         };
-        // A `w` input captures its FP value; every other operand captures an
-        // integer value (input) or a destination address (output). sp has moved
-        // by `size` since the allocator laid out its sp-relative spill slots, so
-        // a spilled place must be read through the shifted form.
-        if matches!(asm.operands[i].constraint, AsmConstraint::Fp) && !asm.operands[i].is_output {
+        // A double `w` input captures its FP value; a 16-byte `w` operand's
+        // SSA value is its address, so it captures like the integer operands.
+        // Every other operand captures an integer value (input) or a
+        // destination address (output). sp has moved by `size` since the
+        // allocator laid out its sp-relative spill slots, so a spilled place
+        // must be read through the shifted form.
+        if matches!(asm.operands[i].constraint, AsmConstraint::Fp)
+            && !asm.operands[i].is_output
+            && asm.operands[i].width == 8
+        {
             let Some(d) = materialize_fp_shifted(code, place, 16, frame, size) else {
                 bail_msg("aarch64 inline asm: `w` operand not a floating-point place");
                 return false;
@@ -3194,9 +3201,16 @@ fn emit_inline_asm_aarch64(
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
         if matches!(op.constraint, AsmConstraint::Fp) {
-            // A `w` input loads its captured FP value into the d-register; a
-            // read-write `w` output loads the current value from the address.
-            if !op.is_output {
+            // A double `w` input loads its captured FP value into the
+            // d-register; a 16-byte `w` operand (input or read-write output)
+            // loads the full q register through its captured address. A
+            // read-write double output loads the current value the same way.
+            if op.width == 16 {
+                if !op.is_output || op.is_rw {
+                    emit_sp_ldr_x(code, Reg(16), cap_off(i)); // x16 = operand address
+                    emit(code, super::encode::enc_ldr_q_imm(r, Reg(16), 0));
+                }
+            } else if !op.is_output {
                 emit_sp_ldr_d_auto(code, r, cap_off(i));
             } else if op.is_rw {
                 emit_sp_ldr_x(code, Reg(16), cap_off(i)); // x16 = destination address
@@ -3312,6 +3326,25 @@ fn emit_inline_asm_aarch64(
                         sp: false,
                     }
                 }
+            }
+            // The vector views (`%N.T`, `%qN`, `{%N.T}`) name the SIMD file, so
+            // they require a `w` operand.
+            AsmOpndA64::RefVec { idx, size, q } => {
+                let r = resolve_fp_ref(&op_reg, asm, idx)?;
+                Opnd::VecReg { num: r, size, q }
+            }
+            AsmOpndA64::RefVecList { idx, size, q } => {
+                let r = resolve_fp_ref(&op_reg, asm, idx)?;
+                Opnd::VecList {
+                    first: r,
+                    count: 1,
+                    size,
+                    q,
+                }
+            }
+            AsmOpndA64::RefQ(idx) => {
+                let r = resolve_fp_ref(&op_reg, asm, idx)?;
+                Opnd::QReg(r)
             }
             AsmOpndA64::Mem { base, off, pre } => {
                 let base = match base {
@@ -3690,7 +3723,11 @@ fn emit_inline_asm_aarch64(
             let Some(r) = op_reg[i] else { continue };
             emit_sp_ldr_x(code, Reg(16), cap_off(i));
             if matches!(op.constraint, AsmConstraint::Fp) {
-                emit(code, super::encode::enc_str_d_imm(r, Reg(16), 0));
+                if op.width == 16 {
+                    emit(code, super::encode::enc_str_q_imm(r, Reg(16), 0));
+                } else {
+                    emit(code, super::encode::enc_str_d_imm(r, Reg(16), 0));
+                }
                 continue;
             }
             match op.width {
@@ -8379,6 +8416,31 @@ fn emit_binop_imm(
 /// load still hits the correct spill slot.
 fn materialize_int(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
     materialize_int_shifted(code, place, scratch, frame, 0)
+}
+
+/// Resolve a template vector-view reference (`%N.T`, `%qN`, `{%N.T}`) to the
+/// SIMD register assigned to operand N, requiring a `w` constraint.
+fn resolve_fp_ref(
+    op_reg: &[Option<u8>],
+    asm: &super::super::ir::AsmBlock,
+    idx: u8,
+) -> Result<u8, alloc::string::String> {
+    use super::super::ir::AsmConstraint;
+    if !matches!(
+        asm.operands.get(idx as usize).map(|o| o.constraint),
+        Some(AsmConstraint::Fp)
+    ) {
+        return Err(alloc::string::String::from(
+            "aarch64 inline asm: vector operand view on a non-`w` operand",
+        ));
+    }
+    op_reg
+        .get(idx as usize)
+        .copied()
+        .flatten()
+        .ok_or_else(|| {
+            alloc::string::String::from("aarch64 inline asm: operand reference is not a register")
+        })
 }
 
 fn materialize_int_shifted(

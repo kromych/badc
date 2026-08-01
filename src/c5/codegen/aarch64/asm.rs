@@ -27,6 +27,14 @@ pub(crate) enum AsmOpndA64 {
     /// `%N` / `%wN` / `%xN`: operand N of the statement, at the register width
     /// named by the modifier (or the operand's own width when unmodified).
     Ref { idx: u8, is64: Option<bool> },
+    /// `%N.T` (e.g. `%0.16b`): operand N as a SIMD vector register in the
+    /// named arrangement. Valid for `w`-constraint operands only.
+    RefVec { idx: u8, size: u8, q: bool },
+    /// `%qN`: operand N's 128-bit `q` register view (`w` operands).
+    RefQ(u8),
+    /// `{%N.T}`: a one-register table list whose register is operand N
+    /// (the tbl/tbx table when the wrapper passes it as a `w` operand).
+    RefVecList { idx: u8, size: u8, q: bool },
     /// `%cN` / `%PN`: operand N substituted as a bare constant, without
     /// immediate syntax. Valid on an `i`-class operand; the emitter
     /// resolves the compile-time constant value.
@@ -439,15 +447,9 @@ fn parse_fp_imm(s: &str) -> Option<u8> {
     None
 }
 
-/// A SIMD vector-arrangement register `vN.T` (e.g. `v5.4s`): the register
-/// number, the element-size log2, and the 128-bit flag.
-fn parse_vec_reg(tok: &str) -> Option<(u8, u8, bool)> {
-    let (num_s, arr) = tok.strip_prefix('v')?.split_once('.')?;
-    let num: u8 = num_s.parse().ok()?;
-    if num > 31 {
-        return None;
-    }
-    let (size, q) = match arr {
+/// A vector arrangement name to (element-size log2, 128-bit flag).
+fn arrangement(arr: &str) -> Option<(u8, bool)> {
+    Some(match arr {
         "8b" => (0, false),
         "16b" => (0, true),
         "4h" => (1, false),
@@ -460,7 +462,18 @@ fn parse_vec_reg(tok: &str) -> Option<(u8, u8, bool)> {
         // pmull/pmull2 destination; other arms bound size to 0..3 and reject it.
         "1q" => (4, true),
         _ => return None,
-    };
+    })
+}
+
+/// A SIMD vector-arrangement register `vN.T` (e.g. `v5.4s`): the register
+/// number, the element-size log2, and the 128-bit flag.
+fn parse_vec_reg(tok: &str) -> Option<(u8, u8, bool)> {
+    let (num_s, arr) = tok.strip_prefix('v')?.split_once('.')?;
+    let num: u8 = num_s.parse().ok()?;
+    if num > 31 {
+        return None;
+    }
+    let (size, q) = arrangement(arr)?;
     Some((num, size, q))
 }
 
@@ -768,6 +781,30 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
                 pre: false,
             });
         }
+        // `%N.T` (e.g. `%0.16b`): a vector-register view of operand N in the
+        // named arrangement.
+        if let Some((digits, arr)) = rest.split_once('.')
+            && !digits.is_empty()
+            && digits.bytes().all(|c| c.is_ascii_digit())
+        {
+            let idx: u8 = digits
+                .parse()
+                .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            let Some((size, q)) = arrangement(arr) else {
+                return Err(format!("inline asm: bad vector arrangement `{tok}`"));
+            };
+            return Ok(AsmOpndA64::RefVec { idx, size, q });
+        }
+        // `%qN`: the 128-bit q view of operand N.
+        if let Some(digits) = rest.strip_prefix('q')
+            && !digits.is_empty()
+            && digits.bytes().all(|c| c.is_ascii_digit())
+        {
+            let idx: u8 = digits
+                .parse()
+                .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            return Ok(AsmOpndA64::RefQ(idx));
+        }
         // `%N` (natural width); the GP views `%wN` (32) / `%xN` (64); and the FP
         // scalar views `%sN` (single) / `%dN` (double). A view flag rides `is64`
         // (w/s = 32, x/d = 64) and the emitter resolves it against the operand's
@@ -815,6 +852,12 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
                 .ok_or_else(|| format!("inline asm: bad extend amount `{tok}`"))? as u8
         };
         return Ok(AsmOpndA64::Extend { option, amount });
+    }
+    // `{%N.T}`: a one-register list whose register is an operand reference.
+    if let Some(inner) = tok.strip_prefix('{').and_then(|t| t.strip_suffix('}'))
+        && let Ok(AsmOpndA64::RefVec { idx, size, q }) = parse_operand(inner.trim())
+    {
+        return Ok(AsmOpndA64::RefVecList { idx, size, q });
     }
     if let Some((num, size, index)) = parse_vec_list_lane(tok) {
         return Ok(AsmOpndA64::VecElem { num, size, index });

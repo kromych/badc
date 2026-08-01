@@ -1366,7 +1366,14 @@ impl Compiler {
             self.expr(Token::Assign as i64)?;
             let decayed_array =
                 core::mem::replace(&mut self.pending.last_array_decay_bytes, saved_decay_bytes) > 0;
-            let width = self.size_of_type(self.ty).min(8) as u8;
+            // A SIMD (`w`/`x`) operand records its full size so the emitter
+            // can tell a 16-byte vector from a scalar double; other operands
+            // live in 8-byte registers and cap there.
+            let width = if matches!(constraint, AsmConstraint::Fp) {
+                self.size_of_type(self.ty).min(16) as u8
+            } else {
+                self.size_of_type(self.ty).min(8) as u8
+            };
             // A `__seg_gs` / `__seg_fs`-qualified operand object is reached
             // through a segment override. Read the segment off the operand's
             // element type now, before the address-of below retypes `self.ty`

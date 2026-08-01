@@ -5840,7 +5840,10 @@ fn file_scope_asm_numeric_labels_bind_per_definition() {
             .3;
         assert_eq!(rela.len(), 4 * 24, "{target:?}: four relocations");
         let symbols = elf_symbols(&bytes);
-        let tbl_idx = sections.iter().position(|(n, _, _, _)| n == ".tbl").unwrap();
+        let tbl_idx = sections
+            .iter()
+            .position(|(n, _, _, _)| n == ".tbl")
+            .unwrap();
         // Each reloc names `.tbl` at its own definition's offset (the
         // bytes 1, 2, 3, 4 sit at 0, 1, 2, 3). The labels are local and
         // untyped, so each reduces to the section symbol and the
@@ -9989,7 +9992,6 @@ fn addr_null_compare_folds_only_for_defined_nonweak() {
         assert!(undef(kept), "`{kept}` must survive: no sound fold applies");
     }
 }
-
 
 /// A relocation whose target is an assembler-local label reduces to the
 /// label's section symbol with the offset folded into the addend, the

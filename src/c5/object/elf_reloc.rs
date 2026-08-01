@@ -2662,7 +2662,13 @@ pub(super) fn write_relocatable(
                     (user_extern_sym_idx[pos] as u64, 0)
                 }
             };
-            push_data_row(&mut carve, &mut rela_data_bytes, r.data_offset, sym_idx, base);
+            push_data_row(
+                &mut carve,
+                &mut rela_data_bytes,
+                r.data_offset,
+                sym_idx,
+                base,
+            );
             continue;
         }
         let native_off = build

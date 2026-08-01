@@ -11,9 +11,5 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x587, %esi            # imm = 0x587
                	xorq	%rax, %rax
-               	popq	%rbp
                	retq

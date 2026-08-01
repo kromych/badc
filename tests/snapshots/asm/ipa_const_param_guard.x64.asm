@@ -11,8 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <patch_map>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	leaq	<rip>, %rax
                	movq	(%rax), %rcx
                	addq	$0x0, %rcx
@@ -555,7 +553,6 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	addq	%rdi, %rax
                	addq	$0x3, %rax
-               	popq	%rbp
                	retq
                	jmp	<addr>
 

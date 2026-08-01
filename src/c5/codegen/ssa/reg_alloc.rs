@@ -1285,8 +1285,9 @@ fn compute_spill_weights(func: &FunctionSsa, node_of: &[ValueId]) -> Vec<u64> {
 
 /// Count consumers for every SSA value, then iterate to fixed point
 /// so transitively-dead pure insts also drop to use_count == 0.
-/// Drives the emit pass's dead-code skip.
-fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
+/// Drives the emit pass's dead-code skip, and the static DCE's
+/// address edges: both must agree on which materializations lower.
+pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
     let n = func.insts.len();
     let mut counts: Vec<u32> = vec![0; n];
     let bump_into = |counts: &mut Vec<u32>, v: ValueId| {

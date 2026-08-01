@@ -11,8 +11,6 @@ Disassembly of section .text:
                	ud2
 
 <bank_init>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	leaq	(%rdi), %rax
                	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
@@ -150,7 +148,6 @@ Disassembly of section .text:
                	movl	$0x2100, %ecx           # imm = 0x2100
                	movq	%rcx, 0x10(%rax)
                	xorq	%rax, %rax
-               	popq	%rbp
                	retq
                	jmp	<addr>
                	jmp	<addr>

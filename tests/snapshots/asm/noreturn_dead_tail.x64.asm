@@ -11,13 +11,10 @@ Disassembly of section .text:
                	ud2
 
 <f>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	leaq	<rip>, %rcx
                	movl	$0x5, %eax
                	movl	%eax, (%rcx)
                	movslq	%eax, %rax
-               	popq	%rbp
                	retq
 
 <main>:

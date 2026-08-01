@@ -1,5 +1,5 @@
 
-switch_nested_case_in_compound.x64:	file format elf64-x86-64
+addr_fold_pruned_arm_dce.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
@@ -11,9 +11,8 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	xorq	%rax, %rax
+               	movl	$0x1, %eax
                	movl	$0x7, %eax
-               	movl	$0x1064, %eax           # imm = 0x1064
-               	movl	$0x106b, %eax           # imm = 0x106B
+               	xorq	%rax, %rax
                	xorq	%rax, %rax
                	retq

@@ -357,7 +357,6 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movl	$0xb, %eax
                	movl	$0x9, %eax
                	xorq	%rax, %rax
                	testq	%rax, %rax

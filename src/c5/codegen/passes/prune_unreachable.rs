@@ -110,12 +110,22 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     func.extern_imm_data_refs = keep(&func.extern_imm_data_refs);
     func.extern_tls_refs = keep(&func.extern_tls_refs);
 
+    // The doomed blocks' instructions stay behind in the flat `insts`
+    // array. Rewrite them to inert immediates: an operand list left in
+    // one counts as a use in any scan of the whole tape -- the use
+    // counts driving the emitters' dead-code skip -- and would carry a
+    // value whose every reachable reader is gone into emission, while
+    // the static DCE, which reads the blocks, has dropped its referent.
+    // This also removes stale block ids (phis, `BlockAddr`) from the
+    // remap surface.
+    for (v, dead) in dead_value.iter().enumerate() {
+        if *dead {
+            func.insts[v] = Inst::Imm(0);
+        }
+    }
+
     // Drop every phi incoming that names a doomed predecessor -- an
-    // edge from an unreachable block is never taken. This covers phis
-    // in doomed blocks too: those instructions stay in the flat `insts`
-    // array after compaction, and leaving a removed-block id in them
-    // would make the block-id remap here (and later passes') index out
-    // of range.
+    // edge from an unreachable block is never taken.
     for inst in func.insts.iter_mut() {
         if let Inst::Phi { incoming, .. } = inst {
             incoming.retain(|&(pred, _)| (pred as usize) < n && reachable[pred as usize]);
@@ -217,6 +227,11 @@ mod tests {
         assert!(
             f.extern_call_refs.is_empty(),
             "the dead call's extern ref is dropped"
+        );
+        assert!(
+            matches!(f.insts[2], Inst::Imm(0)),
+            "the orphaned call is rewritten inert; its operands must not \
+             count as uses in a scan of the flat array"
         );
         assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(1)));
         assert!(matches!(f.blocks[1].terminator, Terminator::Return(_)));

@@ -30,7 +30,6 @@ Disassembly of section .text:
                	str	x3, [x0, #0x10]
                	sub	x0, x29, #0x18
                	sub	x4, x29, #0x28
-               	mov	x2, #0x0                // =0
                	ldr	w2, [x0, #0x4]
                	cmp	x2, #0x4
                	cset	x2, eq

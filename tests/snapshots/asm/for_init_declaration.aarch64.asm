@@ -90,7 +90,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	add	x2, x2, #0xc
                	cmp	x0, x2
-               	b.lt	<addr>
+               	b.lo	<addr>
                	sxtw	x0, w1
                	sxtw	x0, w0
                	cmp	x0, #0x7
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	add	x2, x2, #0xc
                	cmp	x0, x2
-               	b.lt	<addr>
+               	b.lo	<addr>
                	sxtw	x0, w1
                	sxtw	x0, w0
                	mov	x1, x0

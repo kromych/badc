@@ -287,6 +287,18 @@ impl Compiler {
                 }
             }
             B::Lt | B::Le | B::Gt | B::Ge | B::Eq | B::Ne => {
+                // Addresses order by unsigned magnitude, as the emitted
+                // relational compares do; the operands are re-narrowed
+                // unsigned so the high half is not sign-extended.
+                let uns = uns || ptr;
+                let (lv, rv) = if ptr {
+                    (
+                        narrow_const_int(bytes, true, false, l.as_i128()),
+                        narrow_const_int(bytes, true, false, r.as_i128()),
+                    )
+                } else {
+                    (lv, rv)
+                };
                 let hold = if uns {
                     let (a, b) = (lv as u128, rv as u128);
                     match op {

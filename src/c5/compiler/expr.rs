@@ -3617,7 +3617,13 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, name)?;
                     self.ast_binop(fp_op);
-                } else if is_unsigned_ty(self.arith_common_ty(t, self.ty)) {
+                } else if is_pointer_ty(t)
+                    || is_pointer_ty(self.ty)
+                    || is_unsigned_ty(self.arith_common_ty(t, self.ty))
+                {
+                    // Addresses order by unsigned magnitude: the common-type
+                    // rule does not apply to pointers, and a signed compare
+                    // misorders any address with bit 63 set.
                     self.ast_binop(unsigned_op);
                 } else {
                     self.ast_binop(signed_op);

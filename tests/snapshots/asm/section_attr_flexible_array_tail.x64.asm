@@ -219,12 +219,12 @@ Disassembly of section .text:
                	retq
                	leaq	0x41(%rsi), %rax
                	cmpq	%rax, %r9
-               	setl	%al
+               	setb	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	cmpq	%rsi, %r9
-               	setge	%al
+               	setae	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>

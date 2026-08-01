@@ -1538,6 +1538,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("const_expr_unsigned_fold.c", 0),
     ("shift_result_promoted_type.c", 0),
     ("ternary_arith_common_type.c", 0),
+    ("pointer_relational_unsigned.c", 0),
     ("compound_assign_unsigned_div.c", 0),
     ("decl_specifier_any_order.c", 0),
     ("branch_relaxation.c", 21),

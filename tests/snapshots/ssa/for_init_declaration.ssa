@@ -439,7 +439,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v92  ImmData(120)                                     -> x2
     v93  Imm(12)                                          -> x6
     v94  BinopI { op=add, lhs=v92, rhs_imm=12 }           -> x2
-    v95  Binop { op=lt, lhs=v89, rhs=v94 }                -> x2
+    v95  Binop { op=ult, lhs=v89, rhs=v94 }               -> x2
     terminator Bnz { cond=v95, target=b11, fall=b14 }   (exit_acc=v95)
   block 14  start_pc=0
     v105 Extend { value=v90, kind=I32 }                   -> x0
@@ -487,7 +487,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v124 ImmData(120)                                     -> x2
     v125 Imm(12)                                          -> x7
     v126 BinopI { op=add, lhs=v124, rhs_imm=12 }          -> x2
-    v127 Binop { op=lt, lhs=v121, rhs=v126 }              -> x2
+    v127 Binop { op=ult, lhs=v121, rhs=v126 }             -> x2
     terminator Bnz { cond=v127, target=b18, fall=b21 }   (exit_acc=v127)
   block 21  start_pc=0
     v137 Extend { value=v122, kind=I32 }                  -> x0

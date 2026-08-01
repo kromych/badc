@@ -203,9 +203,16 @@ boot a pass/fail check under `qemu-system-x86_64 -nographic`.
 result, as a pass/fail check rather than a measurement:
 
 ```sh
+python3 demos/linux/initramfs.py -o initramfs.cpio.gz
 python3 demos/linux/verify.py --kernel-dir <writable tree> \
-    --initramfs <image> --expect-units 1912 --report verify-x86_64.json
+    --initramfs initramfs.cpio.gz --expect-units 1912 --report verify-x86_64.json
 ```
+
+`initramfs.py` builds the boot image: a single static `/init`, compiled with
+the reference compiler, that prints the marker and then requests a reset,
+which `-no-reboot` turns into an emulator exit, so a boot ends when userspace
+is reached rather than when the timeout expires. It is the probe, not part of
+what is under test.
 
 It fails on any unit badc cannot compile, any unit that fell back to the
 reference compiler, any undefined reference at link, any boot that does not
@@ -223,6 +230,16 @@ Two parameters depend on the corpus rather than the architecture and have to
 be passed. `--expect-units` is the unit count of the configuration under test
 (1912 for the pinned x86_64 config, 1346 for the aarch64 one). `--rdinit` is
 whatever the initramfs installs, `/init` by default.
+
+`--qemu` selects the emulator; `--qemu-args` adds arguments to the boot. An
+emulator built out of tree has no data directory, so it needs `-nic none`:
+the default NIC would look for a boot ROM there and refuse to start without
+it.
+
+CI runs this against the pinned release configured with the architecture's
+own `defconfig`, and boots the result under the emulator the qemu lane
+compiles and links with badc. The lane is aarch64; the x86_64 image builds
+and links but hangs in early init, so its matrix entry is commented out.
 
 ## Scope
 

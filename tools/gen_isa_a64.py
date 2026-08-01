@@ -172,6 +172,32 @@ EXTRA_FORMS = {
         'Reg { op: 2, shift: 5 }'], 'ldxp Xd, Xd2, [Xn|SP]', 0x04),
 }
 
+# The FEAT_LSUI unprivileged atomics, absent from the database. Operand layout
+# is the LSE one -- Rs at 16, Rt at 0, base register at 5 -- so only the base
+# words differ. Acquire is bit 23, release bit 22, the 64-bit width bit 30; the
+# no-order 32-bit word of each read-modify-write stem is below. Base words taken
+# from GNU as under `.arch armv9.6-a+lsui`. The family has no exclusive-or form:
+# the assembler rejects `ldteor`.
+LSE_RMW_FIELDS = ['Reg { op: 0, shift: 16 }', 'Reg { op: 1, shift: 0 }',
+                  'Reg { op: 2, shift: 5 }']
+LSUI_RMW = {'ldtadd': 0x19200400, 'ldtclr': 0x19201400,
+            'ldtset': 0x19203400, 'swpt': 0x19208400}
+LSUI_ORDER = {'': 0, 'a': 1 << 23, 'l': 1 << 22, 'al': (1 << 23) | (1 << 22)}
+# The LSUI compare-and-swap forms are 64-bit only; GNU as rejects a W register
+# pair, so there is no 32-bit row to derive.
+LSUI_CAS = {'cast': 0xC9807C00, 'casat': 0xC9C07C00,
+            'caslt': 0xC980FC00, 'casalt': 0xC9C0FC00}
+
+for _stem, _base in LSUI_RMW.items():
+    for _suffix, _order in LSUI_ORDER.items():
+        for _w, _sf in (('W', 0), ('X', 1 << 30)):
+            EXTRA_FORMS[(_stem + _suffix, (_w, _w, 'Mem'))] = (
+                _base | _order | _sf, LSE_RMW_FIELDS,
+                f'{_stem}{_suffix} {_w}s, {_w}d, [Xn|SP]', 0x04)
+for _mnem, _base in LSUI_CAS.items():
+    EXTRA_FORMS[(_mnem, ('X', 'X', 'Mem'))] = (
+        _base, LSE_RMW_FIELDS, f'{_mnem} Xs, Xd, [Xn|SP]', 0x04)
+
 # Bare op-string tokens whose bit width is not written inline (widths verified
 # by the 32-bit row-sum constraint in the design spike).
 BARE = {'Rm': 5, 'Rn': 5, 'Rd': 5, 'Ra': 5, 'Rt': 5, 'Rt2': 5, 'Rs': 5,

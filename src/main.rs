@@ -294,6 +294,7 @@ fn run() {
     let mut quiet = false;
     let mut mno_fp_regs = false;
     let mut mstrict_align = false;
+    let mut fpic = false;
     // `--export-all` exports every non-static function in the dynamic
     // symbol table / export trie of native output, so a runtime
     // `dlopen` consumer can `dlsym` it without a source-level `#pragma
@@ -513,6 +514,15 @@ fn run() {
             // see `NativeOptions::strict_align`.
             "-mstrict-align" => mstrict_align = true,
             "-mno-strict-align" => mstrict_align = false,
+            // Position-independent relocatable output: no absolute
+            // relocation reaches the object, so a consumer that
+            // relocates it wholesale at load (or forbids absolute
+            // references outright) can take it; see
+            // `NativeOptions::pic`. badc's final images are always
+            // position-independent, so the flag only chooses the
+            // `-c` object's relocation shapes.
+            "-fPIC" | "-fpic" | "-fPIE" | "-fpie" => fpic = true,
+            "-fno-pic" | "-fno-PIC" | "-fno-pie" | "-fno-PIE" => fpic = false,
             // Export every non-static function (dlopen/dlsym visibility).
             "--export-all" => export_all = true,
             // Export every defined non-static global (function and data)
@@ -1051,6 +1061,7 @@ fn run() {
             .with_inline_cap(inline_cap);
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
+        reloc_opts.pic = fpic;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -1600,6 +1611,7 @@ fn run() {
             .with_inline_cap(inline_cap);
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
+        reloc_opts.pic = fpic;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -1721,6 +1733,7 @@ fn run() {
             .with_inline_cap(inline_cap);
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
+        reloc_opts.pic = fpic;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }

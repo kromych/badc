@@ -59,15 +59,33 @@ impl Compiler {
     /// reuses those offsets for unrelated bytes, so a stale literal
     /// boundary could split a live object and a stale padding range or
     /// alignment mark would describe live bytes as padding.
+    ///
+    /// Every entry records an offset at or near the data length at its
+    /// push, so entries at or past `len` form a suffix; dropping them
+    /// from the tail costs what the undone parse appended, keeping a
+    /// checkpoint/restore-heavy initializer linear in its element count
+    /// (a full-vector sweep per restore was quadratic).
     pub(super) fn truncate_data(&mut self, len: usize) {
         self.data.truncate(len);
         let end = len as i64;
-        self.data_object_starts.retain(|&s| s < end);
-        self.data_pad_ranges.retain_mut(|r| {
-            r.1 = r.1.min(end);
-            r.0 < r.1
-        });
-        self.data_align_marks.retain(|&(off, _)| off < end);
+        while self.data_object_starts.last().is_some_and(|&s| s >= end) {
+            self.data_object_starts.pop();
+        }
+        while self.data_pad_ranges.last().is_some_and(|r| r.0 >= end) {
+            self.data_pad_ranges.pop();
+        }
+        if let Some(last) = self.data_pad_ranges.last_mut() {
+            last.1 = last.1.min(end);
+            if last.0 >= last.1 {
+                self.data_pad_ranges.pop();
+            }
+        }
+        while self.data_align_marks.last().is_some_and(|&(off, _)| off >= end) {
+            self.data_align_marks.pop();
+        }
+        debug_assert!(self.data_object_starts.iter().all(|&s| s < end));
+        debug_assert!(self.data_pad_ranges.iter().all(|r| r.0 < r.1 && r.1 <= end));
+        debug_assert!(self.data_align_marks.iter().all(|&(off, _)| off < end));
     }
 
     /// Skip tokens until the matching close paren. Caller has

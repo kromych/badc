@@ -807,6 +807,42 @@ impl Lexer {
         p < self.src.len() && (self.src[p].is_ascii_alphabetic() || self.src[p] == b'_')
     }
 
+    /// Whether a `?` appears at the current grouping depth before the
+    /// end of the expression region the cursor is in: a depth-0 `,`,
+    /// `;`, `:`, or closing bracket ends the region. `depth` accounts
+    /// for the already-lexed current token (1 when it opens a group).
+    /// String and character literals are skipped. A byte scan, so a
+    /// speculative conditional-expression parse (with its data and
+    /// relocation staging) runs only when a conditional can be present.
+    pub fn scan_ahead_for_cond(&self, mut depth: i64) -> bool {
+        let mut p = self.pos;
+        while p < self.src.len() {
+            match self.src[p] {
+                b'?' if depth == 0 => return true,
+                b',' | b';' | b':' if depth == 0 => return false,
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => {
+                    if depth == 0 {
+                        return false;
+                    }
+                    depth -= 1;
+                }
+                q @ (b'"' | b'\'') => {
+                    p += 1;
+                    while p < self.src.len() && self.src[p] != q {
+                        if self.src[p] == b'\\' {
+                            p += 1;
+                        }
+                        p += 1;
+                    }
+                }
+                _ => {}
+            }
+            p += 1;
+        }
+        false
+    }
+
     /// Lightweight snapshot of the lexer's positional state so a
     /// caller can speculatively advance and then rewind. Captures
     /// just the fields the lexer mutates inside `next()`; identifier

@@ -1004,6 +1004,14 @@ impl Compiler {
     /// and returns `None` when the parens do not hold a conditional (so
     /// the caller's other paren handling runs).
     fn try_const_cond_init_value(&mut self) -> Result<Option<(i128, InitElemReloc)>, C5Error> {
+        // Without a `?` at this depth there is no conditional; skip the
+        // speculative parse (it would stage and roll back every nested
+        // compound literal in the operand).
+        if !self.lex.scan_ahead_for_cond(i64::from(
+            self.lex.tk == '(' || self.lex.tk == '{' || self.lex.tk == Token::Brak,
+        )) {
+            return Ok(None);
+        }
         // A bail-out may leave behind a speculatively staged compound
         // literal; restore the full initializer state.
         let cp = self.init_checkpoint();
@@ -1079,8 +1087,11 @@ impl Compiler {
         // function pointer, `&global`, or an integer). The parenthesized form
         // `( cond ? A : B )` is handled by the paren path below. The
         // speculative parse can emit a compound literal (bytes and
-        // relocations), so the bail-out restores a full checkpoint.
-        {
+        // relocations), so the bail-out restores a full checkpoint. A `?`
+        // scan gates the attempt: without one the parse cannot commit.
+        if self.lex.scan_ahead_for_cond(i64::from(
+            self.lex.tk == '(' || self.lex.tk == '{' || self.lex.tk == Token::Brak,
+        )) {
             let cp = self.init_checkpoint();
             let mut selected: Option<(i128, InitElemReloc)> = None;
             if let Ok(cond) = self.parse_const_expr_or()

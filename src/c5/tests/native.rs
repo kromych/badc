@@ -860,6 +860,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("socket_headers_abi.c", 0),
     ("posix_utime_errno_headers.c", 0),
     ("cast_fn_typedef_ptr_in_initializer.c", 0),
+    ("static_init_logical_and.c", 42),
     ("va_opt_initializer.c", 42),
     ("global_init_paren_operand.c", 0),
     ("function_type_typedef_declaration.c", 0),

@@ -403,6 +403,23 @@ pub(crate) enum Token {
     LocalLabel,
 }
 
+/// True when a token can end an operand, so a following `&&` is the binary
+/// logical AND rather than the GNU `&&label` block-address prefix. The
+/// identifier classes cover names the symbol table has already typed
+/// (`Glo`/`Loc`/`Fun`/`Sys`, and `Num` for an enumerator).
+pub(crate) fn ends_operand(tk: Tok) -> bool {
+    tk == Token::Id
+        || tk == Token::Num
+        || tk == Token::FloatNum
+        || tk == Token::Glo
+        || tk == Token::Loc
+        || tk == Token::Fun
+        || tk == Token::Sys
+        || tk == '"'
+        || tk == ')'
+        || tk == ']'
+}
+
 /// Map a token-id (the value stored in `lex.tk` as i64) back to a
 /// human-readable spelling for diagnostics. ASCII tokens (`(`,
 /// `;`, `{` etc.) render as a quoted single character; the

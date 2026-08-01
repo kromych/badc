@@ -24,9 +24,9 @@ l2:
     return 20;
 }
 
-// A logical AND inside a constant element routes to the same runtime
-// path (the initializer scan keys on the `&&` token), so its once
-// semantics are locked too.
+// A logical AND is admitted in a constant expression (C99 6.6), so this
+// list is a compile-time image rather than runtime stores; the same once
+// semantics have to hold, and a later write must survive re-entry.
 static int flag_table(int n, int set) {
     static int flags[3] = { 1 && 1, 0, 1 };
     if (set) flags[1] = 7;

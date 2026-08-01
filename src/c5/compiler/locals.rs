@@ -1103,6 +1103,12 @@ impl Compiler {
         Ok(())
     }
 
+    /// Feed the token about to be consumed to an [`OperandScan`], supplying
+    /// the typedef-name fact the scan cannot get from the token alone.
+    fn operand_scan_advance(&self, scan: &mut OperandScan) {
+        scan.advance(self.lex.tk, self.is_lex_typedef_name());
+    }
+
     /// True if the brace-list array initializer at the current `{`
     /// contains a `&&label` element at the top level. Restores the
     /// lexer so the caller re-parses the list from the `{`.
@@ -1113,15 +1119,17 @@ impl Compiler {
         self.next()?; // consume `{`
         let mut depth: i64 = 1;
         let mut found = false;
+        let mut scan = OperandScan::new();
         while depth > 0 && self.lex.tk != 0 {
             if self.lex.tk == '{' {
                 depth += 1;
             } else if self.lex.tk == '}' {
                 depth -= 1;
-            } else if self.lex.tk == Token::Lan {
+            } else if self.lex.tk == Token::Lan && !scan.ends_operand() {
                 found = true;
                 break;
             }
+            self.operand_scan_advance(&mut scan);
             self.next()?;
         }
         self.restore_lex(snap);
@@ -1220,6 +1228,16 @@ impl Compiler {
             if range_end >= count {
                 return Err(self.compile_err(format!(
                     "too many initializers for `{}`",
+                    self.symbols[loc_idx].name
+                )));
+            }
+            if self.lex.tk == '{' {
+                // TODO: descend into a brace-enclosed element and store it
+                // field by field. Only a non-constant element reaches here,
+                // so the list is one whose elements need runtime stores.
+                return Err(self.compile_err(format!(
+                    "brace-enclosed element in the runtime-initialized static \
+                     array `{}` is not yet supported",
                     self.symbols[loc_idx].name
                 )));
             }
@@ -2263,6 +2281,8 @@ impl Compiler {
         // Whether the previously scanned token was a unary/binary `&`
         // (see `init_id_needs_runtime` for the address rule).
         let mut prev_was_amp = false;
+        // Tells binary `&&` from the `&&label` prefix.
+        let mut scan = OperandScan::new();
         while depth > 0 && self.lex.tk != 0 {
             if self.lex.tk == '(' && self.lex.peek_after_whitespace(b'{') {
                 // A GNU statement expression `({ ... })` element is not a
@@ -2292,6 +2312,7 @@ impl Compiler {
                 }
                 saw_any = false;
                 prev_was_amp = false;
+                scan = OperandScan::new();
                 self.next()?;
                 continue;
             } else if self.lex.tk == Token::Id {
@@ -2305,16 +2326,20 @@ impl Compiler {
             } else if self.lex.tk == Token::Dot || self.lex.tk == Token::Arrow {
                 needs_runtime = true;
                 saw_any = true;
-            } else if self.lex.tk == Token::Lan {
+            } else if self.lex.tk == Token::Lan && !scan.ends_operand() {
                 // `&&label` (GCC labels as values): the block address is
                 // not known until the function is emitted, so the element
-                // is filled by a runtime store rather than a constant.
+                // is filled by a runtime store rather than a constant. The
+                // binary logical AND shares the spelling; only an operand
+                // can precede that one, and C99 6.6 admits it in a constant
+                // expression.
                 needs_runtime = true;
                 saw_any = true;
             } else {
                 saw_any = true;
             }
             prev_was_amp = self.lex.tk == Token::AndOp;
+            self.operand_scan_advance(&mut scan);
             self.next()?;
         }
         self.restore_lex(snap);
@@ -2646,5 +2671,56 @@ impl Compiler {
         }
         self.restore_lex(snap);
         Ok(needs_runtime)
+    }
+}
+
+/// Tracks whether the token just consumed can end an operand, which is what
+/// tells the binary `&&` from the `&&label` block-address prefix in an
+/// initializer pre-scan. A closing `)` ends an operand unless it closed a
+/// cast's type name, so paren groups are classified as they open.
+struct OperandScan {
+    ends: bool,
+    /// One flag per open paren: whether the group is a cast's type name.
+    parens: alloc::vec::Vec<bool>,
+    /// The most recent `(` still needs its group classified.
+    unclassified: bool,
+    prev_was_sizeof: bool,
+}
+
+impl OperandScan {
+    fn new() -> Self {
+        Self {
+            ends: false,
+            parens: alloc::vec::Vec::new(),
+            unclassified: false,
+            prev_was_sizeof: false,
+        }
+    }
+
+    fn ends_operand(&self) -> bool {
+        self.ends
+    }
+
+    /// Consume the token at the scan cursor. `typedef_name` is true when it is
+    /// an identifier bound to a typedef, which only the symbol table knows.
+    fn advance(&mut self, tk: super::super::token::Tok, typedef_name: bool) {
+        if self.unclassified {
+            if let Some(last) = self.parens.last_mut() {
+                *last = super::types::is_type_start_token(tk) || typedef_name;
+            }
+            self.unclassified = false;
+        }
+        if tk == '(' {
+            // `sizeof (T)` parenthesises a type name but yields a value, so
+            // its `)` ends an operand.
+            self.parens.push(false);
+            self.unclassified = !self.prev_was_sizeof;
+            self.ends = false;
+        } else if tk == ')' {
+            self.ends = !self.parens.pop().unwrap_or(false);
+        } else {
+            self.ends = super::super::token::ends_operand(tk);
+        }
+        self.prev_was_sizeof = tk == Token::Sizeof || tk == Token::Alignof;
     }
 }

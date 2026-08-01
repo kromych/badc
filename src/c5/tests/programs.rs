@@ -1546,6 +1546,14 @@ fn posix_utime_errno_headers() {
 }
 
 #[test]
+fn static_init_logical_and() {
+    // C99 6.6 admits `&&` / `||` in an integer constant expression, so a
+    // static aggregate initializer using them keeps its compile-time image;
+    // the prefix `&&label` in the same shape still fills at runtime.
+    assert_eq!(run_fixture("static_init_logical_and.c"), 42);
+}
+
+#[test]
 fn va_opt_initializer() {
     // C23 6.10.5.2: __VA_OPT__ emits its content only for a non-empty
     // variadic tail, here the comma separating a terminated pointer list.

@@ -818,6 +818,16 @@ fn section_attr_aligned_placement() {
 }
 
 #[test]
+fn section_attr_bss_family_zero_fill() {
+    // A zero-initialized object in a `.bss`-family named section is
+    // zero-fill storage; alignment requests merge to the strictest
+    // across redeclarations (the post-definition `extern typeof(obj)
+    // obj;` shape included). Runtime address and zero checks, matched
+    // against GCC on x86-64 and aarch64.
+    assert_eq!(run_fixture("section_attr_bss_family_zero_fill.c"), 0);
+}
+
+#[test]
 fn section_attr_flexible_array_tail() {
     // C99 6.7.2.1p16: a flexible array member is out of `sizeof`, but a
     // definition initializing it occupies those bytes, so the next

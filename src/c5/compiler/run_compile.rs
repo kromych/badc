@@ -2156,12 +2156,14 @@ impl Compiler {
                             // element, so a larger initializer takes fresh
                             // storage and records the move for rebasing.
                             let needed = count * inner_dim * elem_size as i64;
+                            let obj_align = self.symbols[id_idx].data_align.max(1);
                             let off = if was_tentative_glo
                                 && needed <= self.symbols[id_idx].reserved_data_bytes
+                                && self.symbols[id_idx].val % obj_align == 0
                             {
                                 self.symbols[id_idx].val
                             } else {
-                                self.align_data_to(decl_align);
+                                self.align_data_to(decl_align.max(obj_align as usize));
                                 let fresh = self.data.len() as i64;
                                 self.note_global_relocated(id_idx, was_tentative_glo, fresh);
                                 self.symbols[id_idx].reserved_data_bytes = needed;
@@ -2348,13 +2350,16 @@ impl Compiler {
                         // deferred-size tentative (`T x[];`) reserves one
                         // element, so a larger initializer takes fresh storage
                         // and records the move for rebasing.
+                        let obj_align = self.symbols[id_idx].data_align.max(1);
                         let off = if was_tentative_glo
                             && aligned <= self.symbols[id_idx].reserved_data_bytes
+                            && self.symbols[id_idx].val % obj_align == 0
                         {
                             self.symbols[id_idx].val
                         } else {
-                            if decl_align > 8 {
-                                self.align_data_to(decl_align);
+                            let eff = decl_align.max(obj_align as usize);
+                            if eff > 8 {
+                                self.align_data_to(eff);
                             } else if self.size_of_type(ty) > 1 {
                                 self.align_data_to_8();
                             }
@@ -2420,8 +2425,14 @@ impl Compiler {
                         // fresh zeroed storage would discard its value.
                         // The two-initializer case already errored at the
                         // duplicate-definition check above.
-                        let reuse_prior_storage = was_tentative_glo
+                        let obj_align = self.symbols[id_idx].data_align.max(1);
+                        let reuse_eligible = was_tentative_glo
                             || (self.symbols[id_idx].defined_here && self.lex.tk != Token::Assign);
+                        // Prior storage is reusable only when it sits on the
+                        // object's (merged) alignment; otherwise the object
+                        // moves to a fresh aligned slot below.
+                        let reuse_prior_storage =
+                            reuse_eligible && self.symbols[id_idx].val % obj_align == 0;
                         // `extern _Thread_local T x;` (no initializer) is a
                         // pure reference, not a definition: it must not
                         // reserve TLS storage. The defining unit owns the
@@ -2445,16 +2456,30 @@ impl Compiler {
                             }
                             off
                         } else {
-                            if decl_align > 8 {
-                                self.align_data_to(decl_align);
+                            let eff = decl_align.max(obj_align as usize);
+                            if eff > 8 {
+                                self.align_data_to(eff);
                             } else if self.size_of_type(ty) > 1 {
                                 self.align_data_to_8();
                             }
                             let off = self.data.len() as i64;
+                            self.note_global_relocated(id_idx, reuse_eligible, off);
+                            let prior = (
+                                self.symbols[id_idx].val,
+                                self.symbols[id_idx].reserved_data_bytes,
+                            );
                             self.symbols[id_idx].val = off;
                             self.symbols[id_idx].reserved_data_bytes = bytes;
                             for _ in 0..bytes {
                                 self.data.push(0);
+                            }
+                            // A move off a misaligned slot keeps the bytes a
+                            // prior defining declaration wrote there.
+                            if reuse_eligible && prior.1 > 0 {
+                                let n = prior.1.min(bytes) as usize;
+                                for k in 0..n {
+                                    self.data[off as usize + k] = self.data[prior.0 as usize + k];
+                                }
                             }
                             off
                         };

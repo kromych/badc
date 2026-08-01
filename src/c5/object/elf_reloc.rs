@@ -1010,16 +1010,13 @@ pub(super) fn write_relocatable(
                 }
             };
             let align = sym.data_align.max(1) as u64;
-            // A `.bss`-family member the layout left in the zero-fill
-            // region makes the section `SHT_NOBITS`; a file-backed one
-            // there carries a non-zero initializer or a relocated slot
-            // and is rejected. (An all-zero file-backed member exists
-            // only with zero-object segregation disabled and keeps
-            // `SHT_PROGBITS`.)
-            let sh_type = if is_bss_family(sec) && val >= data_file_len {
-                SHT_NOBITS
-            } else {
-                if is_bss_family(sec) {
+            // A `.bss`-family section is `SHT_NOBITS`; a member with a
+            // non-zero initializer or a relocated slot is rejected. A
+            // member in the zero-fill region satisfies that by
+            // construction; a file-backed one (compaction skipped or
+            // segregation disabled) is checked directly.
+            let sh_type = if is_bss_family(sec) {
+                if val < data_file_len {
                     let hi = ((val + size.copy).min(data_file_len)) as usize;
                     if build.data[val as usize..hi].iter().any(|&b| b != 0)
                         || reloc_slots
@@ -1035,6 +1032,8 @@ pub(super) fn write_relocatable(
                         )));
                     }
                 }
+                SHT_NOBITS
+            } else {
                 SHT_PROGBITS
             };
             let e = carve

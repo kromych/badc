@@ -5335,6 +5335,142 @@ fn named_section_object_keeps_its_flexible_array_tail() {
     }
 }
 
+#[test]
+#[cfg(feature = "native-emit")]
+fn bss_family_named_section_is_nobits() {
+    // `.bss` / `.bss.*` named placements are zero-fill: SHT_NOBITS,
+    // sh_size with no file bytes, sh_addralign the members' widest
+    // alignment -- surviving the post-definition `extern typeof(obj)
+    // obj;` redeclaration, which must not lower the recorded request.
+    // A zero object under a non-`.bss` name stays SHT_PROGBITS. Types,
+    // sizes, and alignments match `gcc -c` on the same source.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        extern unsigned long ezp[512];\n\
+        unsigned long ezp[512] __attribute__((__section__(\".bss..page_aligned\")))\n\
+            __attribute__((__aligned__(4096)));\n\
+        extern typeof(ezp) ezp;\n\
+        static char pad[16384] __attribute__((section(\".bss..x\"), aligned(4096)));\n\
+        static int dat[32]\n\
+            __attribute__((section(\".data..page_aligned\"), aligned(4096))) = {1, 2, 3};\n\
+        static long long zeronamed[8] __attribute__((section(\".mydata\")));\n\
+        long long use_all(int i) { return ezp[i] + pad[i] + dat[i] + zeronamed[i & 7]; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            src.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let (sections, syms) = elf_layout(&bytes);
+        assert_eq!(sections[".bss..page_aligned"], (4096, 4096), "{target:?}");
+        assert_eq!(sections[".bss..x"], (16384, 4096), "{target:?}");
+        assert_eq!(sections[".data..page_aligned"], (128, 4096), "{target:?}");
+        assert_eq!(sections[".mydata"], (64, 8), "{target:?}");
+        assert_eq!(syms["ezp"].1, 0, "{target:?}: member at its alignment");
+        let secs = elf_sections(&bytes);
+        let sh_type = |n: &str| secs.iter().find(|(s, ..)| s == n).expect(n).1;
+        assert_eq!(sh_type(".bss..page_aligned"), 8, "{target:?}: SHT_NOBITS");
+        assert_eq!(sh_type(".bss..x"), 8, "{target:?}: SHT_NOBITS");
+        assert_eq!(sh_type(".data..page_aligned"), 1, "{target:?}: SHT_PROGBITS");
+        assert_eq!(sh_type(".mydata"), 1, "{target:?}: SHT_PROGBITS");
+    }
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn bss_family_named_section_nobits_in_data_only_unit() {
+    // A unit with no functions skips the data compaction that
+    // segregates zero objects into the zero-fill region; the
+    // `.bss`-family classification must not depend on it. `gcc -c`:
+    // `.bss..pool NOBITS sh_size 0x1000 align 64`.
+    let bytes =
+        emit_reloc_for("__attribute__((section(\".bss..pool\"), aligned(64))) char pool[4096];\n");
+    let (sections, _) = elf_layout(&bytes);
+    assert_eq!(sections[".bss..pool"], (4096, 64));
+    let secs = elf_sections(&bytes);
+    let pool = secs.iter().find(|(n, ..)| n == ".bss..pool").expect("pool");
+    assert_eq!(pool.1, 8, "SHT_NOBITS");
+    assert!(pool.3.is_empty(), "no file bytes");
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn nonzero_initializer_in_bss_family_section_is_rejected() {
+    // gcc parity: a non-zero initializer or a relocated pointer slot
+    // cannot land in a `.bss`-family named section.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for src in [
+        "static char b[32] __attribute__((section(\".bss..p\"))) = {1};\n\
+         char use_b(int i) { return b[i]; }\n",
+        "int t;\n\
+         static int *p __attribute__((section(\".bss..q\"))) = &t;\n\
+         int use_p(void) { return *p; }\n",
+    ] {
+        let program = Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let err = emit_native_with_options(&program, Target::LinuxX64, opts)
+            .expect_err("a non-zero member of a .bss-family section must be rejected");
+        assert!(
+            err.to_string().contains("only zero initializers"),
+            "unexpected error: {err}"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn extern_declared_alignment_carries_to_definition() {
+    // The alignment attribute may sit on a prior extern declaration;
+    // the plain definition keeps the strictest request (gcc parity:
+    // `.bss` sh_addralign 4096, `f` on a 4096 boundary, st_size 4096).
+    let bytes = emit_reloc_for(
+        "extern unsigned long f[512] __attribute__((aligned(4096)));\n\
+         unsigned long f[512];\n\
+         unsigned long use_f(int i) { return f[i]; }\n",
+    );
+    let (sections, syms) = elf_layout(&bytes);
+    assert_eq!(sections[".bss"], (4096, 4096));
+    assert_eq!(syms["f"].1 % 4096, 0);
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn asm_pushsection_bss_family_defaults_to_nobits() {
+    // A `.pushsection` naming a `.bss`-family section without an
+    // explicit `@type` defaults to SHT_NOBITS, matching the
+    // assembler's default section attributes.
+    let bytes = emit_reloc_for(
+        "__asm__(\".pushsection .bss..asmz, \\\"aw\\\"\\n.skip 32\\n.popsection\");\n\
+         int keep;\n",
+    );
+    let (sections, _) = elf_layout(&bytes);
+    assert_eq!(sections[".bss..asmz"], (32, 1));
+    let secs = elf_sections(&bytes);
+    assert_eq!(
+        secs.iter().find(|(n, ..)| n == ".bss..asmz").expect("asmz").1,
+        8,
+        "SHT_NOBITS"
+    );
+}
+
 /// Minimal ELF64 section-header walk for the tests below: returns
 /// `(name, sh_type, sh_flags, bytes)` per section.
 fn elf_sections(bytes: &[u8]) -> alloc::vec::Vec<(String, u32, u64, alloc::vec::Vec<u8>)> {

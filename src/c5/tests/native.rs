@@ -430,6 +430,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("overaligned_type_placement.c", 0),
     ("page_multiple_alignment.c", 0),
     ("section_attr_aligned_placement.c", 0),
+    ("section_attr_bss_family_zero_fill.c", 0),
     ("section_attr_flexible_array_tail.c", 0),
     ("vla_basic_sum.c", 0),
     ("vla_runtime_sizeof.c", 0),

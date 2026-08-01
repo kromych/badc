@@ -124,6 +124,14 @@ const NT_BADC_ELF_TPOFF: u32 = 10;
 /// declaration did not place by name.
 const RODATA_SECTION: &str = ".rodata";
 
+/// `.bss` and `.bss.*` name zero-fill storage by convention (the
+/// assembler's default section attributes, mirrored by the linker's
+/// family classifier): such a section is `SHT_NOBITS` and admits only
+/// zero-initialized members.
+fn is_bss_family(name: &str) -> bool {
+    name == ".bss" || name.starts_with(".bss.")
+}
+
 /// Data-segment byte offsets that carry a relocated pointer slot.
 /// Storage overlapping one cannot be placed read-only: the loader has
 /// to write the resolved address into it.
@@ -1002,9 +1010,35 @@ pub(super) fn write_relocatable(
                 }
             };
             let align = sym.data_align.max(1) as u64;
+            // A `.bss`-family section is `SHT_NOBITS`; a member with a
+            // non-zero initializer or a relocated slot is rejected. A
+            // member in the zero-fill region satisfies that by
+            // construction; a file-backed one (compaction skipped or
+            // segregation disabled) is checked directly.
+            let sh_type = if is_bss_family(sec) {
+                if val < data_file_len {
+                    let hi = ((val + size.copy).min(data_file_len)) as usize;
+                    if build.data[val as usize..hi].iter().any(|&b| b != 0)
+                        || reloc_slots
+                            .range(val..val.saturating_add(size.extent))
+                            .next()
+                            .is_some()
+                    {
+                        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
+                            &alloc::format!(
+                                "only zero initializers are allowed in section `{sec}` (object `{}`)",
+                                sym.name
+                            ),
+                        )));
+                    }
+                }
+                SHT_NOBITS
+            } else {
+                SHT_PROGBITS
+            };
             let e = carve
                 .table
-                .get_or_insert(sec, SHT_PROGBITS, flags, align)
+                .get_or_insert(sec, sh_type, flags, align)
                 .map_err(internal)?;
             named_objs.push(NamedDataObj {
                 val,
@@ -1100,6 +1134,10 @@ pub(super) fn write_relocatable(
             }
         }
         let sh_type = match s.sh_type.as_deref() {
+            // Without an explicit `@type` a `.bss`-family name defaults
+            // to `SHT_NOBITS`, matching the assembler's default section
+            // attributes.
+            None if is_bss_family(&s.name) => SHT_NOBITS,
             None | Some("progbits") => SHT_PROGBITS,
             Some("nobits") => SHT_NOBITS,
             Some("note") => SHT_NOTE,
@@ -2998,11 +3036,16 @@ pub(super) fn write_relocatable(
     // bytes.
     for (k, e) in carve.table.entries.iter().enumerate() {
         debug_assert_eq!(sh.len(), carve.shndx[k] as usize);
-        let sec_off = round_up(out.len() as u64, e.align);
-        out.resize(sec_off as usize, 0);
-        if e.sh_type != SHT_NOBITS {
+        // `SHT_NOBITS` contributes no file bytes and needs no file
+        // padding; its `sh_offset` is conventional.
+        let sec_off = if e.sh_type == SHT_NOBITS {
+            out.len() as u64
+        } else {
+            let off = round_up(out.len() as u64, e.align);
+            out.resize(off as usize, 0);
             out.extend_from_slice(&e.bytes);
-        }
+            off
+        };
         sh.push(Elf64Shdr {
             sh_name: shstrtab_offs[named_names_start + k],
             sh_type: e.sh_type,

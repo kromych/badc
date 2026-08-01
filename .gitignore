@@ -222,6 +222,8 @@ tests/perf/build/
 !/tests/fixtures/c/*.c
 # The `.incbin` fixture's committed payload.
 !/tests/fixtures/c/file_scope_asm_incbin.bin
+# The computed-include fixture's committed header (digit-leading name).
+!/tests/fixtures/c/ev/
 
 badc-*-rsync/
 

@@ -383,10 +383,12 @@ impl<'a> Exp<'a> {
     }
 
     /// Render tokens back to text: one space where the source had
-    /// white space, plus a separating space wherever two adjacent
-    /// tokens would otherwise re-lex as one (C99 6.10.3.3 reserves
-    /// pasting for `##`).
-    fn serialize_into(&self, toks: &[Tok], out: &mut String) {
+    /// white space. With `relex_safe`, also a separating space
+    /// wherever two adjacent tokens would otherwise re-lex as one
+    /// (C99 6.10.3.3 reserves pasting for `##`): output that is lexed
+    /// again needs the separator, while a header-name operand keeps
+    /// the spellings verbatim (C99 6.10.2p4).
+    fn serialize_into(&self, toks: &[Tok], out: &mut String, relex_safe: bool) {
         let mut cap = toks.len();
         for &t in toks {
             cap += (t.end - t.start) as usize;
@@ -397,11 +399,12 @@ impl<'a> Exp<'a> {
         for &t in toks {
             if out.len() > first_at
                 && (t.space
-                    || pp_tokens_would_merge(
-                        prev_kind,
-                        *out.as_bytes().last().unwrap(),
-                        self.first_byte(t),
-                    ))
+                    || (relex_safe
+                        && pp_tokens_would_merge(
+                            prev_kind,
+                            *out.as_bytes().last().unwrap(),
+                            self.first_byte(t),
+                        )))
             {
                 out.push(' ');
             }
@@ -949,6 +952,32 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> Cow<'l, str> {
+        self.substitute_serialized(line, filename, line_no, true)
+    }
+
+    /// [`Self::substitute`] for a header-name operand (`#include` /
+    /// `__has_include` with pp-token form): spellings joined with a
+    /// space only where the source had white space. The re-lex
+    /// separators `substitute` inserts would land in the header name:
+    /// a digit-leading file name such as `1x.h` arrives as the tokens
+    /// `1x` `.` `h`, and only their verbatim concatenation names the
+    /// file (C99 6.10.2p4).
+    pub(super) fn substitute_spelling<'l>(
+        &self,
+        line: &'l str,
+        filename: &str,
+        line_no: usize,
+    ) -> Cow<'l, str> {
+        self.substitute_serialized(line, filename, line_no, false)
+    }
+
+    fn substitute_serialized<'l>(
+        &self,
+        line: &'l str,
+        filename: &str,
+        line_no: usize,
+        relex_safe: bool,
+    ) -> Cow<'l, str> {
         if !self.line_mentions_macro(line) {
             return Cow::Borrowed(line);
         }
@@ -963,7 +992,7 @@ impl Preprocessor {
         // output quote it.
         let indent = &line[..line.len() - line.trim_start().len()];
         let mut out = String::from(indent);
-        ex.serialize_into(&expanded, &mut out);
+        ex.serialize_into(&expanded, &mut out, relex_safe);
         ex.put_vec(expanded);
         Cow::Owned(out)
     }

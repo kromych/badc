@@ -1485,6 +1485,76 @@ fn has_include_next_resumes_after_the_current_entry() {
     assert!(out.contains("NEXT_MISSING"), "{out}");
 }
 
+/// The computed-include macro chain of the tests below: the header
+/// name is assembled from a parameter inside `<dir/n.h>`, so a
+/// digit-leading argument substitutes as the tokens `1x` `.` `h`.
+const COMPUTED_ANGLE: &str = "#define NAME_D 1x\n#define NAME_A ab\n\
+                              #define ANGLE_(n) <ev/n.h>\n#define ANGLE(n) ANGLE_(n)\n";
+
+fn computed_include_dir(tag: &str) -> std::path::PathBuf {
+    let base = std::env::temp_dir().join(format!("badc-{tag}-{}", std::process::id()));
+    let ev = base.join("ev");
+    std::fs::create_dir_all(&ev).unwrap();
+    std::fs::write(ev.join("1x.h"), "int marker_1x;\n").unwrap();
+    std::fs::write(ev.join("ab.h"), "int marker_ab;\n").unwrap();
+    base
+}
+
+#[test]
+fn computed_include_combines_pp_number_spelling() {
+    // C99 6.10.2p4: the expanded operand is reparsed as a header
+    // name built from the token spellings, a space only where the
+    // source had white space. `1x` followed by `.h` must reassemble
+    // as `ev/1x.h` (gcc parity); a re-lex separator would misname
+    // the file.
+    let base = computed_include_dir("cinc");
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.add_search_path(base.to_str().unwrap());
+    let src = format!("{COMPUTED_ANGLE}#include ANGLE(NAME_A)\n#include ANGLE(NAME_D)\n");
+    let out = pp.process(&src).unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert!(out.contains("marker_ab"), "{out}");
+    assert!(out.contains("marker_1x"), "{out}");
+}
+
+#[test]
+fn computed_has_include_combines_pp_number_spelling() {
+    // C23 6.10.1: a pp-token `__has_include` operand expands and
+    // reparses as a header name under the same spelling rule as the
+    // computed `#include`.
+    let base = computed_include_dir("chas");
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.add_search_path(base.to_str().unwrap());
+    let src = format!(
+        "{COMPUTED_ANGLE}#if __has_include(ANGLE(NAME_D))\nint FOUND;\n#else\nint MISSING;\n#endif\n"
+    );
+    let out = pp.process(&src).unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert!(out.contains("FOUND"), "{out}");
+}
+
+#[test]
+fn stringize_and_expansion_spacing_around_pp_numbers() {
+    // gcc -E parity. `1x.h` is one pp-number (C99 6.4.8), so `#`
+    // spells it whole; the substitution-created `1x` `.` `h`
+    // adjacency stringizes with no space (C99 6.10.3.2 inserts one
+    // only where the argument had white space). Plain expanded text
+    // keeps the re-lex separator: `ND.h` prints as `1x .h`, which
+    // lexes back to the same three tokens.
+    let src = "#define STR_(x) #x\n#define STR(x) STR_(x)\n#define ND 1x\n\
+               STR_(1x.h)\nSTR(ND.h)\nSTR_(1x .h)\nSTR(tr/ND.h)\nND.h\n";
+    let out = process(src);
+    let lines: Vec<&str> = out
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
+        .collect();
+    assert_eq!(
+        lines,
+        ["\"1x.h\"", "\"1x.h\"", "\"1x .h\"", "\"tr/1x.h\"", "1x .h"],
+        "{out}"
+    );
+}
+
 #[test]
 fn include_next_resumes_after_the_current_files_search_path() {
     // Two search paths each hold a `foo.h`. The first is a shim that

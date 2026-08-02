@@ -108,6 +108,38 @@ impl Compiler {
         s.block_extern_active = false;
     }
 
+    /// Record the locals a scope declared before its bindings are
+    /// restored. The function-close collection walks the symbol table,
+    /// which no longer holds them, so without this a local declared in a
+    /// nested block or a `for` initializer reaches neither the DWARF
+    /// variable list nor `FinishedFunction::multi_cell_slots` -- and an
+    /// aggregate missing from the latter has its interior cells
+    /// unreserved for slot coalescing. `function_bc_pc` is filled in at
+    /// function close (see `run_compile.rs`). Slots 0 and 1 are the
+    /// saved-frame area, not user names.
+    pub(super) fn capture_block_locals(&mut self, scope: &[BlockShadow]) {
+        for b in scope {
+            let sym = &self.symbols[b.idx];
+            if sym.class == Token::Loc as i64
+                && sym.val != 0
+                && sym.val != 1
+                && !sym.name.is_empty()
+            {
+                self.pending_block_locals
+                    .push(crate::c5::program::VariableInfo {
+                        function_bc_pc: 0,
+                        name: sym.name.clone(),
+                        type_tag: sym.type_,
+                        fp_slot: sym.val,
+                        is_parameter: false,
+                        decl_line: sym.decl_line as u32,
+                        array_size: sym.array_size.max(0) as u32,
+                        decl_file: sym.decl_file,
+                    });
+            }
+        }
+    }
+
     /// `for (init; cond; step) body`. The body is emitted between the
     /// condition (which falls through to it) and the step (which the
     /// body's tail jumps back to). `continue` patches into the step
@@ -295,6 +327,7 @@ impl Compiler {
         // the binding's scope ends with the for statement
         // (C99 6.8.5.3 / 6.8p3). Restore in reverse order to
         // unwind multiple shadows in declaration order.
+        self.capture_block_locals(&for_init_symbols);
         for b in for_init_symbols.into_iter().rev() {
             self.restore_block_shadow(b);
         }
@@ -821,33 +854,7 @@ impl Compiler {
             self.warn_at(line, msg);
         }
 
-        // Capture block-scoped locals for DWARF before the restore
-        // below unbinds them. The function-close collection walks the
-        // symbol table, which no longer holds these bindings; without
-        // this a debugger cannot inspect any local declared inside a
-        // nested block or a `for` initializer. function_bc_pc is filled
-        // in at function close (see run_compile.rs). Slots 0 and 1 are
-        // the saved-frame area, not user names.
-        for b in &block_symbols {
-            let sym = &self.symbols[b.idx];
-            if sym.class == Token::Loc as i64
-                && sym.val != 0
-                && sym.val != 1
-                && !sym.name.is_empty()
-            {
-                self.pending_block_locals
-                    .push(crate::c5::program::VariableInfo {
-                        function_bc_pc: 0,
-                        name: sym.name.clone(),
-                        type_tag: sym.type_,
-                        fp_slot: sym.val,
-                        is_parameter: false,
-                        decl_line: sym.decl_line as u32,
-                        array_size: sym.array_size.max(0) as u32,
-                        decl_file: sym.decl_file,
-                    });
-            }
-        }
+        self.capture_block_locals(&block_symbols);
 
         // Restore shadowed bindings on block exit. A block-scope `extern`
         // that shadowed a bound name reverts to the saved class/type/val

@@ -4849,6 +4849,7 @@ fn aarch64_data_ref_object(
         bss_align: 1,
         tls_data: alloc::vec::Vec::new(),
         tls_bss_size: 0,
+        prologue_ends: alloc::vec::Vec::new(),
         symbols: alloc::vec![
             NativeSymbol {
                 name: String::new(),

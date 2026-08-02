@@ -16,8 +16,6 @@ Disassembly of section .text:
 
 <halt>:
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

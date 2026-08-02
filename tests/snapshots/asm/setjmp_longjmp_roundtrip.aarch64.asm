@@ -149,5 +149,3 @@ Disassembly of section .text:
                	bl	<addr>
                	uxtb	w0, w0
                	brk	#0x1
-               	b	<addr>
-               	b	<addr>

@@ -13,8 +13,7 @@ Disassembly of section .text:
 
 <fast_path>:
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <error_path>:
@@ -23,8 +22,7 @@ Disassembly of section .text:
 
 <hot_decl>:
                	lsl	x0, x0, #1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:

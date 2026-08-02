@@ -29,8 +29,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1, #0xc]
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -51,7 +50,6 @@ Disassembly of section .text:
                	cmp	x3, #0x0
                	b.ne	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	cmp	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

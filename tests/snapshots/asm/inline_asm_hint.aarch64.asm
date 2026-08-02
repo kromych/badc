@@ -25,7 +25,6 @@ Disassembly of section .text:
                	cmp	x2, #0x5
                	b.lt	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	cmp	x0, #0xa
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -42,7 +41,6 @@ Disassembly of section .text:
                	cmp	x2, #0xa
                	b.lt	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	cmp	x0, #0x2d
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

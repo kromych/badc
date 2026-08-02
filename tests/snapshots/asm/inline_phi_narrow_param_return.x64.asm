@@ -16,8 +16,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	imulq	$0xf4243, %rcx, %rcx    # imm = 0xF4243
                	addq	%rax, %rcx
-               	movslq	%ecx, %rsi
-               	movslq	%esi, %rcx
+               	movslq	%ecx, %rcx
                	incq	%rcx
                	leaq	0x1(%rdx), %rax
                	movslq	%eax, %rdx

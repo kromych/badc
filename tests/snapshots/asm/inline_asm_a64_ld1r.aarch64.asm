@@ -83,8 +83,7 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x20]
                	ldursw	x1, [x29, #-0x18]
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

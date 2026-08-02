@@ -50,7 +50,6 @@ Disassembly of section .text:
                	cmp	x2, x3
                	b.lt	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	sub	sp, x29, #0x40
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50

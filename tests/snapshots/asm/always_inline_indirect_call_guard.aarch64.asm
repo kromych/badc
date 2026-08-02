@@ -106,7 +106,6 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	str	x1, [x20]
-               	sxtw	x0, w0
                	b	<addr>
                	mov	x3, #0x0                // =0
                	mov	w1, w1
@@ -119,8 +118,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x1, #0x0                // =0
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	b	<addr>
                	mov	x2, #0x0                // =0
                	mov	w1, w1
@@ -135,7 +133,6 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	str	x1, [x20]
-               	sxtw	x0, w0
                	b	<addr>
 
 <main>:
@@ -160,7 +157,6 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	str	x1, [x21]
-               	sxtw	x0, w0
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	cset	x0, ne
@@ -190,7 +186,6 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	str	x1, [x21]
                	sxtw	x0, w0
-               	sxtw	x0, w0
                	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
@@ -218,8 +213,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x1, #0x0                // =0
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	sxtw	x0, w0
                	cmp	x0, #0x2
                	cset	x0, ne
@@ -248,7 +242,6 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	str	x1, [x21]
-               	sxtw	x0, w0
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	cset	x0, ne
@@ -337,7 +330,6 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	str	x1, [x21]
                	sxtw	x0, w0
-               	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	add	x21, x0, #0x0
@@ -365,8 +357,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x1, #0x0                // =0
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1
@@ -433,7 +424,6 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	str	x1, [x21]
-               	sxtw	x0, w0
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1
@@ -538,8 +528,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x1, #0x0                // =0
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1

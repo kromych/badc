@@ -155,11 +155,10 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movl	$0x5, %edi
                	callq	<addr>
-               	movslq	%eax, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movslq	%eax, %rcx
+               	movq	%rax, %rcx
                	movslq	%ecx, %rax
+               	testq	%rax, %rax
+               	je	<addr>
                	popq	%rbp
                	retq
                	movl	$0x7, %edi

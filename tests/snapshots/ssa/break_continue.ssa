@@ -45,12 +45,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v7   BinopI { op=lt, lhs=v6, rhs_imm=10 }             -> x6
     terminator Bnz { cond=v7, target=b1, fall=b7 }   (exit_acc=v7)
   block 7  start_pc=0
-    v14  Extend { value=v4, kind=I32 }                    -> x1
-    v15  BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x0
-    v16  Extend { value=v14, kind=I32 }                   -> x0
-    terminator Return(v16)   (exit_acc=v16)
-  block 8  start_pc=0
-    terminator Jmp(b7)
+    v14  Extend { value=v4, kind=I32 }                    -> x0
+    v15  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x1
+    v16  Extend { value=v14, kind=I32 }                   -> x1
+    terminator Return(v14)   (exit_acc=v14)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

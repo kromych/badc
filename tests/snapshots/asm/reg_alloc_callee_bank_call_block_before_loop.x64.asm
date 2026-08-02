@@ -127,4 +127,3 @@ Disassembly of section .text:
                	addq	$0x100, %rsp            # imm = 0x100
                	popq	%rbp
                	retq
-               	jmp	<addr>

@@ -173,8 +173,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x20
                	ldr	x0, [x0]
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret

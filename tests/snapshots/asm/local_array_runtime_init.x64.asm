@@ -21,8 +21,7 @@ Disassembly of section .text:
                	movq	%rdx, %rcx
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <probe_int>:
@@ -74,8 +73,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rcx
                	movsbq	0x3(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

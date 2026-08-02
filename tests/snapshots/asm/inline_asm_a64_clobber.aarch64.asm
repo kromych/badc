@@ -84,8 +84,7 @@ Disassembly of section .text:
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	fcvtzs	x0, d0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

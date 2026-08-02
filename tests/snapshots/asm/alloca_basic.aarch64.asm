@@ -56,7 +56,6 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x60
                	ret
-               	b	<addr>
 
 <dynamic>:
                	str	x19, [sp, #-0x40]!
@@ -93,8 +92,7 @@ Disassembly of section .text:
                	sxtw	x3, w1
                	cmp	x3, #0xa
                	b.lt	<addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	sub	sp, x29, #0x30
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp], #0x40
@@ -227,7 +225,6 @@ Disassembly of section .text:
                	cmp	x1, x4
                	b.lt	<addr>
                	sxtw	x0, w2
-               	sxtw	x0, w0
                	sub	sp, x29, #0x30
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp], #0x40
@@ -293,7 +290,6 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x60
                	ret
-               	b	<addr>
 
 <main>:
                	str	x20, [sp, #-0x30]!

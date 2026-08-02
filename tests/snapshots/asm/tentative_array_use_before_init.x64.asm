@@ -24,8 +24,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movslq	0xc(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -46,7 +45,6 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	jne	<addr>
                	movslq	%ecx, %rax
-               	movslq	%eax, %rax
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x1, %eax

@@ -12,12 +12,11 @@ Disassembly of section .text:
 
 <add>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <pick>:
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax        # <addr>
                	retq
 
 <main>:

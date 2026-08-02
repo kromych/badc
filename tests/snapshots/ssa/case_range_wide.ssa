@@ -48,8 +48,6 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
   block 13  start_pc=0
     v14  Imm(1)                                           -> x0
     terminator Return(v14)   (exit_acc=v14)
-  block 14  start_pc=0
-    terminator Jmp(b6)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=classify_s
 fn ent_pc=1 n_params=1 variadic=false locals=0

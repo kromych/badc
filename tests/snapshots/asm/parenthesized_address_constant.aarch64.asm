@@ -13,8 +13,7 @@ Disassembly of section .text:
 
 <fn>:
                	add	x0, x0, #0x64
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <check>:
@@ -540,11 +539,10 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x30
                	ret
                	bl	<addr>
-               	sxtw	x1, w0
-               	cmp	x1, #0x0
-               	b.eq	<addr>
-               	sxtw	x1, w0
+               	mov	x1, x0
                	sxtw	x0, w1
+               	cmp	x0, #0x0
+               	b.eq	<addr>
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x30

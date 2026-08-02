@@ -23,7 +23,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0, #0x4]
                	add	x0, x1, x0
-               	sxtw	x3, w0
+               	sxtw	x0, w0
                	sub	x2, x29, #0x8
                	mov	x1, #0xffff             // =65535
                	movk	x1, #0xffff, lsl #16
@@ -32,7 +32,6 @@ Disassembly of section .text:
                	str	w1, [x2]
                	sub	x2, x29, #0x8
                	str	w1, [x2, #0x4]
-               	sxtw	x0, w3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10

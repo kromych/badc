@@ -81,8 +81,7 @@ Disassembly of section .text:
                	addq	$0x0, %rcx
                	incq	%rcx
                	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	popq	%r11

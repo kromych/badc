@@ -65,9 +65,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     terminator Bnz { cond=v32, target=b5, fall=b8 }   (exit_acc=v32)
   block 8  start_pc=0
     v45  Extend { value=v29, kind=I32 }                   -> x0
-    v46  BinopI { op=shl, lhs=v29, rhs_imm=32 }           -> x1
-    v47  Extend { value=v45, kind=I32 }                   -> x0
-    terminator Return(v47)   (exit_acc=v47)
+    v46  BinopI { op=shl, lhs=v45, rhs_imm=32 }           -> x1
+    v47  Extend { value=v45, kind=I32 }                   -> x1
+    terminator Return(v45)   (exit_acc=v45)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=0

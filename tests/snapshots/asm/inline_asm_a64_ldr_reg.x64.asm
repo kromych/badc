@@ -13,6 +13,5 @@ Disassembly of section .text:
 <main>:
                	leaq	<rip>, %rax
                	movq	0x10(%rax), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq

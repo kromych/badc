@@ -76,30 +76,30 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v5   StoreLocal { off=-1, value=v4, kind=I32 }        -> -
     v6   Extend { value=v4, kind=I32 }                    -> x1
     v7   BinopI { op=and, lhs=v6, rhs_imm=255 }           -> x1
-    v8   Load { addr=v1, disp=0, kind=I32 }               -> x1
-    v9   Imm(0)                                           -> x0
-    v10  LocalAddr(-1)                                    -> x0
+    v8   Load { addr=v1, disp=0, kind=I32 }               -> x0
+    v9   Imm(0)                                           -> x1
+    v10  LocalAddr(-1)                                    -> x1
     v11  Imm(0)                                           -> x2
-    v12  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x0
-    v13  ImmData(288)                                     -> x0
+    v12  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x1
+    v13  ImmData(288)                                     -> x1
     v14  Imm(0)                                           -> x2
     v15  Store { addr=v13, disp=0, value=v14, kind=I32 }  -> -
-    v16  Imm(700)                                         -> x0
+    v16  Imm(700)                                         -> x1
     v17  Imm(700)                                         -> x7
-    v18  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x1
     v19  ImmData(24)                                      -> x2
     v20  ImmData(280)                                     -> x6
-    v21  Load { addr=v20, disp=0, kind=I32 }              -> x0
+    v21  Load { addr=v20, disp=0, kind=I32 }              -> x1
     v22  BinopI { op=add, lhs=v21, rhs_imm=1 }            -> x8
     v23  Store { addr=v20, disp=0, value=v22, kind=I32 }  -> -
     v24  BinopI { op=shl, lhs=v21, rhs_imm=2 }            -> x6
     v25  Binop { op=add, lhs=v19, rhs=v24 }               -> x6
     v26  StoreIndexed { base=v19, index=v21, scale=4, value=v17, kind=I32 } -> -
-    v27  Imm(0)                                           -> x0
-    v28  Extend { value=v8, kind=I32 }                    -> x0
-    v29  BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
-    v30  Extend { value=v28, kind=I32 }                   -> x0
-    terminator Return(v30)   (exit_acc=v30)
+    v27  Imm(0)                                           -> x1
+    v28  Extend { value=v8, kind=I32 }                    -> x1
+    v29  BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x2
+    v30  Extend { value=v28, kind=I32 }                   -> x1
+    terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
 fn ent_pc=7 n_params=0 variadic=false locals=6

@@ -29,8 +29,7 @@ Disassembly of section .text:
                	fcvtzs	x1, s0
                	add	x0, x0, x1
                	add	x0, x0, x2
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -90,8 +89,7 @@ Disassembly of section .text:
                	fcvtzs	x1, s0
                	add	x0, x0, x1
                	add	x0, x0, #0x7
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x2, x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

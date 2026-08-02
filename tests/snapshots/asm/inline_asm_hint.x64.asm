@@ -23,7 +23,6 @@ Disassembly of section .text:
                	cmpq	$0x5, %rdx
                	jl	<addr>
                	movslq	%ecx, %rax
-               	movslq	%eax, %rax
                	cmpq	$0xa, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -39,7 +38,6 @@ Disassembly of section .text:
                	cmpq	$0xa, %rdx
                	jl	<addr>
                	movslq	%ecx, %rax
-               	movslq	%eax, %rax
                	cmpq	$0x2d, %rax
                	je	<addr>
                	movl	$0x2, %eax

@@ -22,14 +22,12 @@ Disassembly of section .text:
                	movl	$0x12, %ecx
                	movslq	-0x8(%rbp), %rcx
                	addq	%rcx, %rcx
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	movslq	%ecx, %rcx
                	cmpq	$0x2a, %rcx
                	je	<addr>
                	movl	$0x400, %eax            # imm = 0x400
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

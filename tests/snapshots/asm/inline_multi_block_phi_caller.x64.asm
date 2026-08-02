@@ -81,6 +81,5 @@ Disassembly of section .text:
                	xorq	%rcx, %rax
                	movl	%eax, %eax
                	andq	$0x7f, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq

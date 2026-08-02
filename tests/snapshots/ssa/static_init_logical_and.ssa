@@ -115,10 +115,10 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v87  Imm(1)                                           -> x0
     v88  BinopI { op=add, lhs=v82, rhs_imm=1 }            -> x0
     v89  BinopI { op=shl, lhs=v88, rhs_imm=32 }           -> x1
-    v90  Extend { value=v88, kind=I32 }                   -> x1
-    v91  BinopI { op=shl, lhs=v88, rhs_imm=32 }           -> x0
-    v92  Extend { value=v90, kind=I32 }                   -> x0
-    terminator Return(v92)   (exit_acc=v92)
+    v90  Extend { value=v88, kind=I32 }                   -> x0
+    v91  BinopI { op=shl, lhs=v90, rhs_imm=32 }           -> x1
+    v92  Extend { value=v90, kind=I32 }                   -> x1
+    terminator Return(v90)   (exit_acc=v90)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=1

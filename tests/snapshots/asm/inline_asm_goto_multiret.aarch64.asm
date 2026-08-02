@@ -42,4 +42,3 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x4                // =4
                	b	<addr>
-               	b	<addr>

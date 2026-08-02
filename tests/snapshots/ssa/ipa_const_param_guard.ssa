@@ -1286,8 +1286,6 @@ fn ent_pc=0 n_params=2 variadic=false locals=1
     v1276 LoadLocal { off=3, kind=I32 }                    -> x1
     v1277 BinopI { op=add, lhs=v1275, rhs_imm=3 }          -> x0
     terminator Return(v1277)   (exit_acc=v1277)
-  block 4  start_pc=0
-    terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=map_a
 fn ent_pc=1 n_params=1 variadic=false locals=0

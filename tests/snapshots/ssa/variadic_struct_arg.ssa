@@ -46,9 +46,9 @@ fn ent_pc=0 n_params=1 variadic=true locals=5
     v32  LocalAddr(-5)                                    -> x0
     v33  Intrinsic { kind=6, args=[v32] }                 -> x0
     v34  Extend { value=v8, kind=I32 }                    -> x0
-    v35  BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
-    v36  Extend { value=v34, kind=I32 }                   -> x0
-    terminator Return(v36)   (exit_acc=v36)
+    v35  BinopI { op=shl, lhs=v34, rhs_imm=32 }           -> x1
+    v36  Extend { value=v34, kind=I32 }                   -> x1
+    terminator Return(v34)   (exit_acc=v34)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=2

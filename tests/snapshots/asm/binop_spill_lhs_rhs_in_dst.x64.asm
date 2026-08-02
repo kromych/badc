@@ -24,8 +24,7 @@ Disassembly of section .text:
                	cmpq	%rdx, %rcx
                	jle	<addr>
                	addq	%r9, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -60,8 +59,6 @@ Disassembly of section .text:
                	cmpq	$0x4, %rdx
                	jle	<addr>
                	leaq	(%rcx,%r8), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
                	movslq	%eax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp

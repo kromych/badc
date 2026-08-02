@@ -123,9 +123,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

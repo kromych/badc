@@ -34,7 +34,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movslq	%ebx, %rax
-               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x30, %rsp
                	popq	%rbp

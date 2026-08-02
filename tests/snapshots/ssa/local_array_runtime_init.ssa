@@ -36,10 +36,10 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v30  BinopI { op=and, lhs=v17, rhs_imm=65535 }        -> x1
     v31  Binop { op=add, lhs=v24, rhs=v30 }               -> x0
     v32  BinopI { op=shl, lhs=v31, rhs_imm=32 }           -> x1
-    v33  Extend { value=v31, kind=I32 }                   -> x1
-    v34  BinopI { op=shl, lhs=v31, rhs_imm=32 }           -> x0
-    v35  Extend { value=v33, kind=I32 }                   -> x0
-    terminator Return(v35)   (exit_acc=v35)
+    v33  Extend { value=v31, kind=I32 }                   -> x0
+    v34  BinopI { op=shl, lhs=v33, rhs_imm=32 }           -> x1
+    v35  Extend { value=v33, kind=I32 }                   -> x1
+    terminator Return(v33)   (exit_acc=v33)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=probe_int
 fn ent_pc=2 n_params=2 variadic=false locals=2
@@ -231,10 +231,10 @@ fn ent_pc=4 n_params=1 variadic=false locals=1
     v88  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v88)
   block 2  start_pc=0
-    v89  Extend { value=v81, kind=I32 }                   -> x1
-    v90  BinopI { op=shl, lhs=v81, rhs_imm=32 }           -> x0
-    v91  Extend { value=v89, kind=I32 }                   -> x0
-    terminator Return(v91)   (exit_acc=v91)
+    v89  Extend { value=v81, kind=I32 }                   -> x0
+    v90  BinopI { op=shl, lhs=v89, rhs_imm=32 }           -> x1
+    v91  Extend { value=v89, kind=I32 }                   -> x1
+    terminator Return(v89)   (exit_acc=v89)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
 fn ent_pc=5 n_params=0 variadic=false locals=4

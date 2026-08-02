@@ -154,8 +154,7 @@ Disassembly of section .text:
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movq	%rcx, %rax
                	retq
                	xorq	%rax, %rax
                	retq
@@ -173,5 +172,4 @@ Disassembly of section .text:
                	movl	$0x20, %eax
                	jmp	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
                	jmp	<addr>

@@ -137,12 +137,8 @@ Disassembly of section .text:
                	shlq	$0x3, %rcx
                	addq	$0xa, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>

@@ -38,8 +38,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp, #0x20]
                	ldr	x22, [sp, #0x10]

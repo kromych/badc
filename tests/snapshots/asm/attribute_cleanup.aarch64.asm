@@ -66,22 +66,20 @@ Disassembly of section .text:
                	str	w1, [x0]
                	mov	x1, #0x0                // =0
                	stur	w1, [x29, #-0x8]
-               	ldrsw	x1, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	ldrsw	x0, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	mov	x2, #0x0                // =0
-               	str	w2, [x0]
+               	str	w2, [x1]
                	mov	x4, #0x2bc              // =700
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	ldrsw	x0, [x3]
-               	add	x5, x0, #0x1
+               	ldrsw	x1, [x3]
+               	add	x5, x1, #0x1
                	str	w5, [x3]
-               	str	w4, [x2, x0, lsl #2]
-               	sxtw	x0, w1
-               	sxtw	x0, w0
+               	str	w4, [x2, x1, lsl #2]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

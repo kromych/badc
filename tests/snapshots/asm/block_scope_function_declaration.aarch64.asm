@@ -87,14 +87,12 @@ Disassembly of section .text:
 <sum3>:
                	add	x0, x0, x1
                	add	x0, x0, x2
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <add>:
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <label>:

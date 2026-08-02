@@ -13,4 +13,3 @@ Disassembly of section .text:
 <main>:
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>

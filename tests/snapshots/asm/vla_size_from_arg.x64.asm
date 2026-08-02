@@ -49,7 +49,6 @@ Disassembly of section .text:
                	cmpq	%rdi, %rdx
                	jl	<addr>
                	movslq	%ecx, %rax
-               	movslq	%eax, %rax
                	leaq	-0x30(%rbp), %rsp
                	addq	$0x30, %rsp
                	popq	%rbp

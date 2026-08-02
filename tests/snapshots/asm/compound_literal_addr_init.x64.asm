@@ -89,11 +89,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	movslq	%eax, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movslq	%eax, %rcx
+               	movq	%rax, %rcx
                	movslq	%ecx, %rax
+               	testq	%rax, %rax
+               	je	<addr>
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
@@ -129,7 +128,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rax, %rax
                	xorq	%rax, %rax
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>

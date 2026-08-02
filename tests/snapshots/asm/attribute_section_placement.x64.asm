@@ -21,10 +21,11 @@ Disassembly of section .text:
                	movslq	(%rax), %rax
                	addq	$0x7, %rax
                	subq	$0x2a, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
                	addb	%al, (%rax)
+               	addb	%al, (%rax)
+               	addb	%bh, 0x7(%rax)
 
 <boot>:
                	movl	$0x7, %eax

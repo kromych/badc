@@ -17,8 +17,7 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -29,8 +28,7 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -47,8 +45,7 @@ Disassembly of section .text:
 <doubler>:
                	movq	%rdi, %rax
                	shlq	%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <take_slot>:
@@ -61,8 +58,7 @@ Disassembly of section .text:
 
 <plain_func>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -74,8 +70,7 @@ Disassembly of section .text:
                	movl	$0x15, %edi
                	movq	%rbx, %rax
                	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -86,8 +81,7 @@ Disassembly of section .text:
                	leaq	-<rip>, %rax       # <addr>
                	movl	$0xa, %edi
                	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0xb, %rax
                	je	<addr>
                	movl	$0x2, %eax
@@ -110,8 +104,7 @@ Disassembly of section .text:
                	movl	$0x10, %edi
                	movq	%rbx, %rax
                	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x20, %rax
                	je	<addr>
                	movl	$0x4, %eax

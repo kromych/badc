@@ -13,8 +13,7 @@ Disassembly of section .text:
 
 <export_me>:
                	add	x0, x0, #0x2
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <read_sp>:

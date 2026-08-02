@@ -23,7 +23,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	movslq	%edx, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq

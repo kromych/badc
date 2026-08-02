@@ -150,12 +150,6 @@ Disassembly of section .text:
                	str	x1, [x0, #0x10]
                	mov	x0, #0x0                // =0
                	ret
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
 
 <main>:
                	stp	x20, x21, [sp, #-0x30]!
@@ -337,5 +331,3 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	b	<addr>
-               	b	<addr>

@@ -11,10 +11,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v5   Imm(0)                                           -> x0
     v6   FpCast { kind=FpToInt, value=v4 }                -> x0
     v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x1
-    v8   Extend { value=v6, kind=I32 }                    -> x1
-    v9   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x0
-    v10  Extend { value=v8, kind=I32 }                    -> x0
-    terminator Return(v10)   (exit_acc=v10)
+    v8   Extend { value=v6, kind=I32 }                    -> x0
+    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
+    v10  Extend { value=v8, kind=I32 }                    -> x1
+    terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

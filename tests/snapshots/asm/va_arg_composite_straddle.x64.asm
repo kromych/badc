@@ -149,8 +149,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	addq	$0x20, %rsp
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	addq	$0x20, %rsp

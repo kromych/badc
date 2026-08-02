@@ -50,8 +50,6 @@ Disassembly of section .text:
                	addq	$0xe, %rcx
                	movl	%ecx, (%rax)
                	movslq	-0x8(%rbp), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

@@ -15,7 +15,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	imulq	$0xa, %rcx, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	cmpq	$0x32, %rax
                	jl	<addr>
                	cmpq	$0x46, %rax
@@ -91,4 +90,3 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %eax
                	retq
-               	jmp	<addr>

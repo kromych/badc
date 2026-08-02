@@ -21,10 +21,10 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     terminator Jmp(b2)   (exit_acc=v11)
   block 2  start_pc=0
     v13  Phi { incoming=[b1:v11, b3:v20], kind=I64 }      -> x0
-    v14  Extend { value=v13, kind=I32 }                   -> x1
-    v15  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x0
-    v16  Extend { value=v14, kind=I32 }                   -> x0
-    terminator Return(v16)   (exit_acc=v16)
+    v14  Extend { value=v13, kind=I32 }                   -> x0
+    v15  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x1
+    v16  Extend { value=v14, kind=I32 }                   -> x1
+    terminator Return(v14)   (exit_acc=v14)
   block 3  start_pc=0
     v17  LoadLocal { off=4, kind=I32 }                    -> x0
     v18  BinopI { op=sub, lhs=v5, rhs_imm=1 }             -> x0

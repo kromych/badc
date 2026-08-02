@@ -50,10 +50,10 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v36  Extend { value=v11, kind=I32 }                   -> x1
     v37  Binop { op=add, lhs=v17, rhs=v11 }               -> x0
     v38  BinopI { op=shl, lhs=v37, rhs_imm=32 }           -> x1
-    v39  Extend { value=v37, kind=I32 }                   -> x1
-    v40  BinopI { op=shl, lhs=v37, rhs_imm=32 }           -> x0
-    v41  Extend { value=v39, kind=I32 }                   -> x0
-    terminator Return(v41)   (exit_acc=v41)
+    v39  Extend { value=v37, kind=I32 }                   -> x0
+    v40  BinopI { op=shl, lhs=v39, rhs_imm=32 }           -> x1
+    v41  Extend { value=v39, kind=I32 }                   -> x1
+    terminator Return(v39)   (exit_acc=v39)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=3
@@ -126,14 +126,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v56  Extend { value=v34, kind=I32 }                   -> x0
     v57  Binop { op=add, lhs=v39, rhs=v34 }               -> x0
     v58  BinopI { op=shl, lhs=v57, rhs_imm=32 }           -> x1
-    v59  Extend { value=v57, kind=I32 }                   -> x1
-    v60  BinopI { op=shl, lhs=v57, rhs_imm=32 }           -> x0
-    v61  Extend { value=v59, kind=I32 }                   -> x0
-    terminator Jmp(b6)   (exit_acc=v61)
+    v59  Extend { value=v57, kind=I32 }                   -> x0
+    v60  BinopI { op=shl, lhs=v59, rhs_imm=32 }           -> x1
+    v61  Extend { value=v59, kind=I32 }                   -> x1
+    terminator Jmp(b6)   (exit_acc=v59)
   block 6  start_pc=0
-    v25  BinopI { op=shl, lhs=v61, rhs_imm=32 }           -> x1
-    v26  Extend { value=v61, kind=I32 }                   -> x0
-    terminator Return(v26)   (exit_acc=v26)
+    v25  BinopI { op=shl, lhs=v59, rhs_imm=32 }           -> x2
+    v26  Extend { value=v61, kind=I32 }                   -> x1
+    terminator Return(v59)   (exit_acc=v59)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

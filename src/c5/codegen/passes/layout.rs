@@ -3,13 +3,15 @@
 //! The walker lowers `for` / `while` as (header, post, body, after)
 //! with the header's exit test branching over `post`, so every
 //! iteration takes three branches: header -> body, body -> post,
-//! post -> header. This pass only reorders `func.blocks` and remaps
-//! block ids (instructions never move between blocks), letting the
-//! emitters' next-block jump elision collapse the reordered chains:
+//! post -> header. Apart from dropping the blocks threading strands,
+//! this pass only reorders `func.blocks` and remaps block ids
+//! (instructions never move between blocks), letting the emitters'
+//! next-block jump elision collapse the reordered chains:
 //!
 //! * an edge into a chain of empty `Jmp` blocks is retargeted to the
 //!   chain's end, stopping one hop short of a phi-carrying block
-//!   (that hop holds the edge's phi moves);
+//!   (that hop holds the edge's phi moves), and the bypassed blocks
+//!   are pruned;
 //! * blocks are placed depth-first from the entry with every natural
 //!   loop's body contiguous;
 //! * a loop whose header conditionally exits the loop is rotated to
@@ -47,6 +49,12 @@ fn run_one(func: &mut FunctionSsa, chains: &mut JumpChains) {
         return;
     }
     thread_jumps(func, chains);
+    // Threading is the last CFG edit in the pipeline, and the only one
+    // after the branch fold's own prune: bypassing a chain strands the
+    // blocks it went through, and every stranded block still emits its
+    // terminator. Drop them here, which also shrinks the input to the
+    // layout below and to the liveness bitsets, sized blocks x values.
+    super::prune_unreachable::run_one(func);
     let rpo = rpo_numbers(func);
     let idom = dominators(func);
     if is_irreducible(func, &idom, &rpo) {
@@ -233,8 +241,8 @@ fn walk_chain(func: &FunctionSsa, start: BlockId) -> (BlockId, usize) {
 }
 
 /// Retarget every terminator edge through [`JumpChains::target`].
-/// Bypassed blocks keep their own edges; any that become unreachable
-/// are placed after the reachable code by the layout order.
+/// Bypassed blocks keep their own edges; the caller prunes the ones
+/// that no edge reaches any more.
 fn thread_jumps(func: &mut FunctionSsa, chains: &mut JumpChains) {
     chains.build(func);
     for i in 0..func.blocks.len() {
@@ -975,6 +983,58 @@ mod tests {
         );
         thread_jumps(&mut f, &mut JumpChains::default());
         assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(3)));
+    }
+
+    #[test]
+    fn blocks_stranded_by_threading_are_dropped() {
+        // Same chain as above, run through the whole pass: nothing
+        // reaches b1 or b2 once b0 targets b3, and a surviving stranded
+        // block would emit its own branch after the return.
+        let mut f = func_with(
+            vec![Inst::Imm(0), Inst::Imm(3)],
+            vec![
+                block(0..1, Terminator::Jmp(1)),
+                block(1..1, Terminator::Jmp(2)),
+                block(1..1, Terminator::Jmp(3)),
+                block(1..2, Terminator::Return(1)),
+            ],
+        );
+        run_one(&mut f, &mut JumpChains::default());
+        assert_eq!(f.blocks.len(), 2, "the two bypassed blocks are dropped");
+        assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(1)));
+        assert!(matches!(f.blocks[1].terminator, Terminator::Return(1)));
+    }
+
+    #[test]
+    fn threading_keeps_a_chain_block_that_still_carries_an_edge() {
+        // b0 -Bz-> b1(empty) / b3; b1 -Jmp-> b2(phi). Threading stops at
+        // b1 because b2 carries a phi, so b1 stays reachable and the
+        // prune must leave the function intact.
+        let mut f = func_with(
+            vec![
+                Inst::Imm(0),
+                Inst::Phi {
+                    incoming: vec![(1, 0), (3, 0)],
+                    kind: LoadKind::I64,
+                },
+                Inst::Imm(0),
+            ],
+            vec![
+                block(
+                    0..1,
+                    Terminator::Bz {
+                        cond: 0,
+                        target: 1,
+                        fall_through: 3,
+                    },
+                ),
+                block(1..1, Terminator::Jmp(2)),
+                block(1..2, Terminator::Return(1)),
+                block(2..3, Terminator::Jmp(2)),
+            ],
+        );
+        run_one(&mut f, &mut JumpChains::default());
+        assert_eq!(f.blocks.len(), 4, "every block still carries an edge");
     }
 
     #[test]

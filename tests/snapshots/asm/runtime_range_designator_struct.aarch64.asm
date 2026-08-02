@@ -358,8 +358,6 @@ Disassembly of section .text:
                	add	sp, sp, #0xd0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	b	<addr>
 
 <check_member_range>:
                	adrp	x0, <page>
@@ -472,7 +470,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -480,22 +477,19 @@ Disassembly of section .text:
                	mov	x0, #0xd                // =13
                	bl	<addr>
                	cbz	x0, <addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x11               // =17
                	bl	<addr>
                	cbz	x0, <addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1d               // =29
                	bl	<addr>
                	cbz	x0, <addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0

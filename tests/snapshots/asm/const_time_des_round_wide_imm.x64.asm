@@ -700,8 +700,7 @@ Disassembly of section .text:
                	shrq	$0x18, %rax
                	xorq	%rcx, %rax
                	andq	$0xff, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
                	popq	%rbp

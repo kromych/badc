@@ -12,8 +12,7 @@ Disassembly of section .text:
 
 <add_std>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <record>:

@@ -92,10 +92,10 @@ fn ent_pc=1 n_params=2 variadic=false locals=2
     v21  LoadLocal { off=-1, kind=I32 }                   -> x1
     v22  Binop { op=add, lhs=v20, rhs=v21 }               -> x0
     v23  BinopI { op=shl, lhs=v22, rhs_imm=32 }           -> x1
-    v24  Extend { value=v22, kind=I32 }                   -> x1
-    v25  BinopI { op=shl, lhs=v22, rhs_imm=32 }           -> x0
-    v26  Extend { value=v24, kind=I32 }                   -> x0
-    terminator Return(v26)   (exit_acc=v26)
+    v24  Extend { value=v22, kind=I32 }                   -> x0
+    v25  BinopI { op=shl, lhs=v24, rhs_imm=32 }           -> x1
+    v26  Extend { value=v24, kind=I32 }                   -> x1
+    terminator Return(v24)   (exit_acc=v24)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

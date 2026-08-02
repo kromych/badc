@@ -84,8 +84,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x0
                	add	x1, x1, #0x1
                	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10

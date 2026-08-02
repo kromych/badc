@@ -226,4 +226,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	jmp	<addr>

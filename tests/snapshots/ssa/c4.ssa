@@ -1207,80 +1207,6 @@ fn ent_pc=12 n_params=0 variadic=false locals=1
     v256 Load { addr=v254, disp=0, kind=I64 }             -> x1
     v257 Store { addr=v252, disp=0, value=v256, kind=I64 } -> -
     terminator Return(v255)   (exit_acc=v255)
-  block 209  start_pc=0
-    terminator Jmp(b82)
-  block 210  start_pc=0
-    terminator Jmp(b81)
-  block 211  start_pc=0
-    terminator Jmp(b7)
-  block 212  start_pc=0
-    terminator Jmp(b9)
-  block 213  start_pc=0
-    terminator Jmp(b82)
-  block 214  start_pc=0
-    terminator Jmp(b82)
-  block 215  start_pc=0
-    terminator Jmp(b82)
-  block 216  start_pc=0
-    terminator Jmp(b82)
-  block 217  start_pc=0
-    terminator Jmp(b141)
-  block 218  start_pc=0
-    terminator Jmp(b146)
-  block 219  start_pc=0
-    terminator Jmp(b150)
-  block 220  start_pc=0
-    terminator Jmp(b146)
-  block 221  start_pc=0
-    terminator Jmp(b173)
-  block 222  start_pc=0
-    terminator Jmp(b146)
-  block 223  start_pc=0
-    terminator Jmp(b146)
-  block 224  start_pc=0
-    terminator Jmp(b82)
-  block 225  start_pc=0
-    terminator Jmp(b82)
-  block 226  start_pc=0
-    terminator Jmp(b82)
-  block 227  start_pc=0
-    terminator Jmp(b82)
-  block 228  start_pc=0
-    terminator Jmp(b132)
-  block 229  start_pc=0
-    terminator Jmp(b126)
-  block 230  start_pc=0
-    terminator Jmp(b82)
-  block 231  start_pc=0
-    terminator Jmp(b82)
-  block 232  start_pc=0
-    terminator Jmp(b82)
-  block 233  start_pc=0
-    terminator Jmp(b82)
-  block 234  start_pc=0
-    terminator Jmp(b82)
-  block 235  start_pc=0
-    terminator Jmp(b106)
-  block 236  start_pc=0
-    terminator Jmp(b82)
-  block 237  start_pc=0
-    terminator Jmp(b100)
-  block 238  start_pc=0
-    terminator Jmp(b82)
-  block 239  start_pc=0
-    terminator Jmp(b82)
-  block 240  start_pc=0
-    terminator Jmp(b82)
-  block 241  start_pc=0
-    terminator Jmp(b82)
-  block 242  start_pc=0
-    terminator Jmp(b82)
-  block 243  start_pc=0
-    terminator Jmp(b82)
-  block 244  start_pc=0
-    terminator Jmp(b82)
-  block 245  start_pc=0
-    terminator Jmp(b82)
 ; --- SSA dump (ok=true) ent_pc=13 ---
 ; name=expr
 fn ent_pc=13 n_params=1 variadic=false locals=1
@@ -3135,102 +3061,6 @@ fn ent_pc=13 n_params=1 variadic=false locals=1
     terminator Unreachable
   block 217  start_pc=0
     terminator Jmp(b200)
-  block 218  start_pc=0
-    terminator Jmp(b97)
-  block 219  start_pc=0
-    terminator Jmp(b97)
-  block 220  start_pc=0
-    terminator Jmp(b97)
-  block 221  start_pc=0
-    terminator Jmp(b97)
-  block 222  start_pc=0
-    terminator Jmp(b116)
-  block 223  start_pc=0
-    terminator Jmp(b116)
-  block 224  start_pc=0
-    terminator Jmp(b97)
-  block 225  start_pc=0
-    terminator Jmp(b97)
-  block 226  start_pc=0
-    terminator Jmp(b136)
-  block 227  start_pc=0
-    terminator Jmp(b97)
-  block 228  start_pc=0
-    terminator Jmp(b146)
-  block 229  start_pc=0
-    terminator Jmp(b97)
-  block 230  start_pc=0
-    terminator Jmp(b97)
-  block 231  start_pc=0
-    terminator Jmp(b97)
-  block 232  start_pc=0
-    terminator Jmp(b97)
-  block 233  start_pc=0
-    terminator Jmp(b97)
-  block 234  start_pc=0
-    terminator Jmp(b97)
-  block 235  start_pc=0
-    terminator Jmp(b97)
-  block 236  start_pc=0
-    terminator Jmp(b97)
-  block 237  start_pc=0
-    terminator Jmp(b97)
-  block 238  start_pc=0
-    terminator Jmp(b97)
-  block 239  start_pc=0
-    terminator Jmp(b203)
-  block 240  start_pc=0
-    terminator Jmp(b97)
-  block 241  start_pc=0
-    terminator Jmp(b97)
-  block 242  start_pc=0
-    terminator Jmp(b97)
-  block 243  start_pc=0
-    terminator Jmp(b97)
-  block 244  start_pc=0
-    terminator Jmp(b97)
-  block 245  start_pc=0
-    terminator Jmp(b97)
-  block 246  start_pc=0
-    terminator Jmp(b97)
-  block 247  start_pc=0
-    terminator Jmp(b97)
-  block 248  start_pc=0
-    terminator Jmp(b97)
-  block 249  start_pc=0
-    terminator Jmp(b97)
-  block 250  start_pc=0
-    terminator Jmp(b97)
-  block 251  start_pc=0
-    terminator Jmp(b97)
-  block 252  start_pc=0
-    terminator Jmp(b97)
-  block 253  start_pc=0
-    terminator Jmp(b97)
-  block 254  start_pc=0
-    terminator Jmp(b97)
-  block 255  start_pc=0
-    terminator Jmp(b97)
-  block 256  start_pc=0
-    terminator Jmp(b97)
-  block 257  start_pc=0
-    terminator Jmp(b97)
-  block 258  start_pc=0
-    terminator Jmp(b97)
-  block 259  start_pc=0
-    terminator Jmp(b97)
-  block 260  start_pc=0
-    terminator Jmp(b97)
-  block 261  start_pc=0
-    terminator Jmp(b97)
-  block 262  start_pc=0
-    terminator Jmp(b97)
-  block 263  start_pc=0
-    terminator Jmp(b68)
-  block 264  start_pc=0
-    terminator Jmp(b97)
-  block 265  start_pc=0
-    terminator Jmp(b91)
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=stmt
 fn ent_pc=14 n_params=0 variadic=false locals=1
@@ -3480,18 +3310,6 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
     v171 Imm(-1)                                          -> x7
     v172 CallExt { binding_idx=77, args=[v171], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
-  block 36  start_pc=0
-    terminator Jmp(b8)
-  block 37  start_pc=0
-    terminator Jmp(b8)
-  block 38  start_pc=0
-    terminator Jmp(b8)
-  block 39  start_pc=0
-    terminator Jmp(b8)
-  block 40  start_pc=0
-    terminator Jmp(b8)
-  block 41  start_pc=0
-    terminator Jmp(b8)
 ; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=main
 fn ent_pc=15 n_params=2 variadic=false locals=2
@@ -5473,24 +5291,6 @@ fn ent_pc=15 n_params=2 variadic=false locals=2
     terminator Jmp(b4)
   block 256  start_pc=0
     terminator Jmp(b2)
-  block 257  start_pc=0
-    terminator Jmp(b113)
-  block 258  start_pc=0
-    terminator Jmp(b125)
-  block 259  start_pc=0
-    terminator Jmp(b223)
-  block 260  start_pc=0
-    terminator Jmp(b223)
-  block 261  start_pc=0
-    terminator Jmp(b223)
-  block 262  start_pc=0
-    terminator Jmp(b223)
-  block 263  start_pc=0
-    terminator Jmp(b223)
-  block 264  start_pc=0
-    terminator Jmp(b223)
-  block 265  start_pc=0
-    terminator Jmp(b223)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -390,8 +390,6 @@ Disassembly of section .text:
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
 
 <check_member_range>:
                	leaq	<rip>, %rax
@@ -509,7 +507,6 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -518,24 +515,21 @@ Disassembly of section .text:
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	movl	$0x11, %edi
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	movl	$0x1d, %edi
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	xorq	%rax, %rax

@@ -27,7 +27,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0xa0, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
                	leaq	<rip>, %rax
                	leaq	-0x78(%rbp), %rcx
                	leaq	<rip>, %rdx
@@ -53,8 +52,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	movabsq	$-0x1, %rcx
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	jge	<addr>
                	movabsq	$-0x1, %rcx
@@ -62,7 +60,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
@@ -90,8 +87,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	movabsq	$-0x1, %rcx
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	jge	<addr>
                	movabsq	$-0x1, %rcx
@@ -99,7 +95,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
@@ -127,8 +122,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	movabsq	$-0x1, %rcx
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	jge	<addr>
                	movabsq	$-0x1, %rcx
@@ -136,7 +130,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
@@ -186,7 +179,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
@@ -237,7 +229,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x5, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
@@ -296,8 +287,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	movabsq	$-0x1, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jge	<addr>
                	movabsq	$-0x1, %rax
@@ -305,7 +295,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
@@ -316,7 +305,6 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	movslq	%eax, %rax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
@@ -393,34 +381,4 @@ Disassembly of section .text:
                	movl	%ecx, %ecx
                	andq	$0x3, %rcx
                	movslq	(%rax,%rcx,4), %rcx
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>

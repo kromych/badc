@@ -139,40 +139,6 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   block 27  start_pc=0
     v25  Imm(0)                                           -> x0
     terminator Return(v25)   (exit_acc=v25)
-  block 28  start_pc=0
-    terminator Jmp(b13)
-  block 29  start_pc=0
-    terminator Jmp(b1)
-  block 30  start_pc=0
-    terminator Jmp(b3)
-  block 31  start_pc=0
-    terminator Jmp(b2)
-  block 32  start_pc=0
-    terminator Jmp(b5)
-  block 33  start_pc=0
-    terminator Jmp(b4)
-  block 34  start_pc=0
-    terminator Jmp(b7)
-  block 35  start_pc=0
-    terminator Jmp(b6)
-  block 36  start_pc=0
-    terminator Jmp(b9)
-  block 37  start_pc=0
-    terminator Jmp(b8)
-  block 38  start_pc=0
-    terminator Jmp(b10)
-  block 39  start_pc=0
-    terminator Jmp(b13)
-  block 40  start_pc=0
-    terminator Jmp(b15)
-  block 41  start_pc=0
-    terminator Jmp(b14)
-  block 42  start_pc=0
-    terminator Jmp(b17)
-  block 43  start_pc=0
-    terminator Jmp(b16)
-  block 44  start_pc=0
-    terminator Jmp(b18)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

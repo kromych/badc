@@ -19,8 +19,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cmp	x1, #0x2
                	b.eq	<addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16

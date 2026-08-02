@@ -25,8 +25,6 @@ Disassembly of section .text:
                	cmpq	$0x8, %rcx
                	jl	<addr>
                	movswq	0xe(%rsi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
                	cmpq	$0x15, %rax
                	je	<addr>
                	movl	$0x1, %eax

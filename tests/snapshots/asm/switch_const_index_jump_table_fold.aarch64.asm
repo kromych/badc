@@ -14,7 +14,6 @@ Disassembly of section .text:
 <pick_folded>:
                	mov	x0, #0xc                // =12
                	ret
-               	b	<addr>
 
 <pick_live>:
                	sxtw	x0, w0

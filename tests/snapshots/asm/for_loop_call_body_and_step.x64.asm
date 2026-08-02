@@ -15,17 +15,14 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	jmp	<addr>
                	incq	%rcx
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	incq	%rax
-               	movslq	%eax, %rdx
-               	movslq	%edx, %rax
+               	movslq	%eax, %rax
                	movslq	%eax, %rdx
                	cmpq	$0x7, %rdx
                	jl	<addr>
                	imulq	$0x6, %rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -33,16 +30,12 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	jmp	<addr>
                	incq	%rcx
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	incq	%rax
-               	movslq	%eax, %rdx
-               	movslq	%edx, %rax
+               	movslq	%eax, %rax
                	movslq	%eax, %rdx
                	cmpq	$0x7, %rdx
                	jl	<addr>
                	imulq	$0x6, %rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
                	movslq	%eax, %rax
                	retq

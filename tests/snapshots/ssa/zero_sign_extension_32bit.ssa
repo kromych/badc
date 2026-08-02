@@ -388,62 +388,6 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v352 BinopI { op=shl, lhs=v351, rhs_imm=32 }          -> x1
     v353 Extend { value=v351, kind=I32 }                  -> x1
     terminator Return(v351)   (exit_acc=v351)
-  block 65  start_pc=0
-    terminator Jmp(b3)
-  block 66  start_pc=0
-    terminator Jmp(b2)
-  block 67  start_pc=0
-    terminator Jmp(b4)
-  block 68  start_pc=0
-    terminator Jmp(b8)
-  block 69  start_pc=0
-    terminator Jmp(b7)
-  block 70  start_pc=0
-    terminator Jmp(b9)
-  block 71  start_pc=0
-    terminator Jmp(b12)
-  block 72  start_pc=0
-    terminator Jmp(b15)
-  block 73  start_pc=0
-    terminator Jmp(b18)
-  block 74  start_pc=0
-    terminator Jmp(b22)
-  block 75  start_pc=0
-    terminator Jmp(b21)
-  block 76  start_pc=0
-    terminator Jmp(b23)
-  block 77  start_pc=0
-    terminator Jmp(b27)
-  block 78  start_pc=0
-    terminator Jmp(b26)
-  block 79  start_pc=0
-    terminator Jmp(b28)
-  block 80  start_pc=0
-    terminator Jmp(b31)
-  block 81  start_pc=0
-    terminator Jmp(b34)
-  block 82  start_pc=0
-    terminator Jmp(b37)
-  block 83  start_pc=0
-    terminator Jmp(b42)
-  block 84  start_pc=0
-    terminator Jmp(b41)
-  block 85  start_pc=0
-    terminator Jmp(b44)
-  block 86  start_pc=0
-    terminator Jmp(b47)
-  block 87  start_pc=0
-    terminator Jmp(b50)
-  block 88  start_pc=0
-    terminator Jmp(b53)
-  block 89  start_pc=0
-    terminator Jmp(b56)
-  block 90  start_pc=0
-    terminator Jmp(b60)
-  block 91  start_pc=0
-    terminator Jmp(b59)
-  block 92  start_pc=0
-    terminator Jmp(b61)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -50,8 +50,6 @@ Disassembly of section .text:
                	add	x1, x1, #0xe
                	str	w1, [x0]
                	ldursw	x0, [x29, #-0x8]
-               	sxtw	x1, w0
-               	sxtw	x0, w1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

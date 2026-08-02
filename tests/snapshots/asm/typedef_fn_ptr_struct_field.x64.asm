@@ -13,8 +13,7 @@ Disassembly of section .text:
 <doer>:
                	movq	%rdi, %rax
                	imulq	%rsi, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:

@@ -443,11 +443,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     terminator Bnz { cond=v95, target=b11, fall=b14 }   (exit_acc=v95)
   block 14  start_pc=0
     v105 Extend { value=v90, kind=I32 }                   -> x0
-    v106 BinopI { op=shl, lhs=v90, rhs_imm=32 }           -> x1
-    v107 Extend { value=v105, kind=I32 }                  -> x0
-    terminator Jmp(b15)   (exit_acc=v107)
+    v106 BinopI { op=shl, lhs=v105, rhs_imm=32 }          -> x1
+    v107 Extend { value=v105, kind=I32 }                  -> x1
+    terminator Jmp(b15)   (exit_acc=v105)
   block 15  start_pc=0
-    v23  BinopI { op=ne, lhs=v107, rhs_imm=7 }            -> x0
+    v23  BinopI { op=ne, lhs=v105, rhs_imm=7 }            -> x0
     terminator Bz { cond=v23, target=b23, fall=b16 }   (exit_acc=v23)
   block 16  start_pc=0
     v24  ImmData(78)                                      -> x6
@@ -491,20 +491,16 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     terminator Bnz { cond=v127, target=b18, fall=b21 }   (exit_acc=v127)
   block 21  start_pc=0
     v137 Extend { value=v122, kind=I32 }                  -> x0
-    v138 BinopI { op=shl, lhs=v122, rhs_imm=32 }          -> x1
-    v139 Extend { value=v137, kind=I32 }                  -> x0
-    terminator Jmp(b22)   (exit_acc=v139)
+    v138 BinopI { op=shl, lhs=v137, rhs_imm=32 }          -> x1
+    v139 Extend { value=v137, kind=I32 }                  -> x1
+    terminator Jmp(b22)   (exit_acc=v137)
   block 22  start_pc=0
-    v25  CallExt { binding_idx=0, args=[v24, v139], fp_arg_mask=0x0 } -> x0
+    v25  CallExt { binding_idx=0, args=[v24, v137], fp_arg_mask=0x0 } -> x0
     v26  Imm(5)                                           -> x0
     terminator Return(v26)   (exit_acc=v26)
   block 23  start_pc=0
     v27  Imm(0)                                           -> x0
     terminator Return(v27)   (exit_acc=v27)
-  block 24  start_pc=0
-    terminator Jmp(b4)
-  block 25  start_pc=0
-    terminator Jmp(b10)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -33,8 +33,7 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	subq	$0x3, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq

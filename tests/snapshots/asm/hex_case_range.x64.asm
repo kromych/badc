@@ -26,7 +26,6 @@ Disassembly of section .text:
                	jg	<addr>
                	movl	$0x1, %eax
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
@@ -65,5 +64,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	jmp	<addr>

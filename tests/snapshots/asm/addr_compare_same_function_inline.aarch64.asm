@@ -20,8 +20,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	sxtw	x1, w0
-               	sxtw	x0, w1
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

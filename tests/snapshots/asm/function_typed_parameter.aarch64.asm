@@ -19,8 +19,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
@@ -33,8 +32,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
@@ -53,8 +51,7 @@ Disassembly of section .text:
 
 <doubler>:
                	lsl	x0, x0, #1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <take_slot>:
@@ -67,8 +64,7 @@ Disassembly of section .text:
 
 <plain_func>:
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -81,8 +77,7 @@ Disassembly of section .text:
                	mov	x0, #0x15               // =21
                	mov	x9, x20
                	blr	x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -96,8 +91,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0xb
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -124,8 +118,7 @@ Disassembly of section .text:
                	mov	x0, #0x10               // =16
                	mov	x9, x20
                	blr	x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0x20
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

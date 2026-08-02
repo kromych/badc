@@ -11,10 +11,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v5   LoadLocal { off=2, kind=I32 }                    -> x0
     v6   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
     v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x1
-    v8   Extend { value=v6, kind=I32 }                    -> x1
-    v9   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x0
-    v10  Extend { value=v8, kind=I32 }                    -> x0
-    terminator Return(v10)   (exit_acc=v10)
+    v8   Extend { value=v6, kind=I32 }                    -> x0
+    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
+    v10  Extend { value=v8, kind=I32 }                    -> x1
+    terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=fixup_style
 fn ent_pc=1 n_params=1 variadic=false locals=0
@@ -27,10 +27,10 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v4   LoadLocal { off=2, kind=I32 }                    -> x0
     v5   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
     v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x1
-    v7   Extend { value=v5, kind=I32 }                    -> x1
-    v8   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x0
-    v9   Extend { value=v7, kind=I32 }                    -> x0
-    terminator Return(v9)   (exit_acc=v9)
+    v7   Extend { value=v5, kind=I32 }                    -> x0
+    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
+    v9   Extend { value=v7, kind=I32 }                    -> x1
+    terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=0

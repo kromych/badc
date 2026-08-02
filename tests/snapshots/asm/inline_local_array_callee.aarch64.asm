@@ -18,8 +18,7 @@ Disassembly of section .text:
                	mov	x17, #0x64              // =100
                	mul	x1, x1, x17
                	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <f2>:
@@ -30,8 +29,7 @@ Disassembly of section .text:
                	mov	x17, #0x64              // =100
                	mul	x0, x0, x17
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <f3>:
@@ -41,8 +39,7 @@ Disassembly of section .text:
                	mov	x17, #0x64              // =100
                	mul	x0, x0, x17
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -245,4 +242,3 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>

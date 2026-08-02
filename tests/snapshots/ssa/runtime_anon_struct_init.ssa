@@ -315,10 +315,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=6
     v12  Imm(0)                                           -> x1
     terminator Bz { cond=v11, target=b2, fall=b1 }   (exit_acc=v11)
   block 1  start_pc=0
-    v13  Extend { value=v11, kind=I32 }                   -> x1
-    v14  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x0
-    v15  Extend { value=v13, kind=I32 }                   -> x0
-    terminator Return(v15)   (exit_acc=v15)
+    v13  Extend { value=v11, kind=I32 }                   -> x0
+    v14  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x1
+    v15  Extend { value=v13, kind=I32 }                   -> x1
+    terminator Return(v13)   (exit_acc=v13)
   block 2  start_pc=0
     v16  LoadLocal { off=-6, kind=I64 }                   -> x0
     terminator Jmp(b3)
@@ -367,9 +367,9 @@ fn ent_pc=4 n_params=0 variadic=false locals=6
     terminator Bz { cond=v62, target=b10, fall=b9 }   (exit_acc=v62)
   block 9  start_pc=0
     v18  Extend { value=v62, kind=I32 }                   -> x1
-    v19  BinopI { op=shl, lhs=v62, rhs_imm=32 }           -> x0
-    v20  Extend { value=v18, kind=I32 }                   -> x0
-    terminator Return(v20)   (exit_acc=v20)
+    v19  BinopI { op=shl, lhs=v62, rhs_imm=32 }           -> x2
+    v20  Extend { value=v18, kind=I32 }                   -> x1
+    terminator Return(v62)   (exit_acc=v62)
   block 10  start_pc=0
     v21  Imm(24)                                          -> x0
     v22  StoreLocal { off=-3, value=v21, kind=I64, volatile } -> -
@@ -379,10 +379,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=6
     v26  Imm(0)                                           -> x1
     terminator Bz { cond=v25, target=b12, fall=b11 }   (exit_acc=v25)
   block 11  start_pc=0
-    v27  Extend { value=v25, kind=I32 }                   -> x1
-    v28  BinopI { op=shl, lhs=v25, rhs_imm=32 }           -> x0
-    v29  Extend { value=v27, kind=I32 }                   -> x0
-    terminator Return(v29)   (exit_acc=v29)
+    v27  Extend { value=v25, kind=I32 }                   -> x0
+    v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x1
+    v29  Extend { value=v27, kind=I32 }                   -> x1
+    terminator Return(v27)   (exit_acc=v27)
   block 12  start_pc=0
     v30  Imm(0)                                           -> x0
     terminator Return(v30)   (exit_acc=v30)

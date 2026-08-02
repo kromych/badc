@@ -29,10 +29,7 @@ Disassembly of section .text:
                	movl	%eax, (%rcx)
                	movslq	%eax, %rax
                	subq	$0x2a, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	jmp	<addr>

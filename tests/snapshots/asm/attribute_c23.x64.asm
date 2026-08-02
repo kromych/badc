@@ -18,8 +18,7 @@ Disassembly of section .text:
                	cmpq	$0x2, %rdi
                	je	<addr>
                	movabsq	$-0x1, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
                	incq	%rax
                	jmp	<addr>
@@ -40,6 +39,4 @@ Disassembly of section .text:
                	retq
 
 <die>:
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>

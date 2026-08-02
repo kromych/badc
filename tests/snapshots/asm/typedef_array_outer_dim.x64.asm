@@ -230,7 +230,6 @@ Disassembly of section .text:
                	jl	<addr>
                	movq	%rdx, %rax
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

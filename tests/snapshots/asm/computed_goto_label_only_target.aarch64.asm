@@ -21,16 +21,14 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x8]
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
                	ret
                	ldursw	x0, [x29, #0x10]
                	add	x0, x0, #0x2
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
@@ -51,8 +49,7 @@ Disassembly of section .text:
                	b	<addr>
                	ldursw	x0, [x29, #0x10]
                	add	x0, x0, #0x14
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x20
@@ -61,8 +58,7 @@ Disassembly of section .text:
                	br	x0
                	ldursw	x0, [x29, #0x10]
                	add	x0, x0, #0xa
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x20

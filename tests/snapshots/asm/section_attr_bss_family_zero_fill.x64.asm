@@ -114,6 +114,3 @@ Disassembly of section .text:
                	retq
                	movl	$0x4, %eax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>

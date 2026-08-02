@@ -20,11 +20,9 @@ Disassembly of section .text:
                	orq	%rdi, %rax
                	movq	%rax, (%rcx)
                	andq	$0x3, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
                	xorq	%rax, %rax
-               	jmp	<addr>
                	jmp	<addr>
 
 <main>:
@@ -85,8 +83,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	andq	$0x3, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
@@ -105,8 +102,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	andq	$0x3, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x4, %eax
@@ -190,19 +186,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	jmp	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>

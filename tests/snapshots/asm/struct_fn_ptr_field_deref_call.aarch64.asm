@@ -13,14 +13,12 @@ Disassembly of section .text:
 
 <adder3>:
                	add	x0, x0, #0x3
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <adder7>:
                	add	x0, x0, #0x7
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:

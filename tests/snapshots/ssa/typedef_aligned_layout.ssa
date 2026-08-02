@@ -151,10 +151,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=11
     v117 Extend { value=v115, kind=I32 }                  -> x1
     v118 BinopI { op=sub, lhs=v115, rhs_imm=36 }          -> x0
     v119 BinopI { op=shl, lhs=v118, rhs_imm=32 }          -> x1
-    v120 Extend { value=v118, kind=I32 }                  -> x1
-    v121 BinopI { op=shl, lhs=v118, rhs_imm=32 }          -> x0
-    v122 Extend { value=v120, kind=I32 }                  -> x0
-    terminator Return(v122)   (exit_acc=v122)
+    v120 Extend { value=v118, kind=I32 }                  -> x0
+    v121 BinopI { op=shl, lhs=v120, rhs_imm=32 }          -> x1
+    v122 Extend { value=v120, kind=I32 }                  -> x1
+    terminator Return(v120)   (exit_acc=v120)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=declarator_vs_typedef
 fn ent_pc=1 n_params=0 variadic=false locals=5
@@ -195,10 +195,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v28  Extend { value=v26, kind=I32 }                   -> x2
     v29  Binop { op=add, lhs=v21, rhs=v26 }               -> x0
     v30  BinopI { op=shl, lhs=v29, rhs_imm=32 }           -> x1
-    v31  Extend { value=v29, kind=I32 }                   -> x1
-    v32  BinopI { op=shl, lhs=v29, rhs_imm=32 }           -> x0
-    v33  Extend { value=v31, kind=I32 }                   -> x0
-    terminator Return(v33)   (exit_acc=v33)
+    v31  Extend { value=v29, kind=I32 }                   -> x0
+    v32  BinopI { op=shl, lhs=v31, rhs_imm=32 }           -> x1
+    v33  Extend { value=v31, kind=I32 }                   -> x1
+    terminator Return(v31)   (exit_acc=v31)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=10
@@ -298,27 +298,27 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     terminator Return(v60)   (exit_acc=v60)
   block 16  start_pc=0
     v61  Imm(9)                                           -> x7
-    v62  Call { target_pc=0, args=[v61], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v63  Imm(0)                                           -> x1
-    v64  Extend { value=v62, kind=I32 }                   -> x1
-    v65  BinopI { op=ne, lhs=v64, rhs_imm=0 }             -> x1
+    v62  Call { target_pc=0, args=[v61], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v63  Imm(0)                                           -> x0
+    v64  Extend { value=v62, kind=I32 }                   -> x0
+    v65  BinopI { op=ne, lhs=v64, rhs_imm=0 }             -> x2
     terminator Bz { cond=v65, target=b18, fall=b17 }   (exit_acc=v65)
   block 17  start_pc=0
     v66  Extend { value=v62, kind=I32 }                   -> x1
-    v67  BinopI { op=shl, lhs=v62, rhs_imm=32 }           -> x0
-    v68  Extend { value=v66, kind=I32 }                   -> x0
-    terminator Return(v68)   (exit_acc=v68)
+    v67  BinopI { op=shl, lhs=v64, rhs_imm=32 }           -> x2
+    v68  Extend { value=v66, kind=I32 }                   -> x1
+    terminator Return(v64)   (exit_acc=v64)
   block 18  start_pc=0
-    v69  Call { target_pc=1, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v70  Imm(0)                                           -> x1
-    v71  Extend { value=v69, kind=I32 }                   -> x1
-    v72  BinopI { op=ne, lhs=v71, rhs_imm=0 }             -> x1
+    v69  Call { target_pc=1, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v70  Imm(0)                                           -> x0
+    v71  Extend { value=v69, kind=I32 }                   -> x0
+    v72  BinopI { op=ne, lhs=v71, rhs_imm=0 }             -> x2
     terminator Bz { cond=v72, target=b20, fall=b19 }   (exit_acc=v72)
   block 19  start_pc=0
     v73  Extend { value=v69, kind=I32 }                   -> x1
-    v74  BinopI { op=shl, lhs=v69, rhs_imm=32 }           -> x0
-    v75  Extend { value=v73, kind=I32 }                   -> x0
-    terminator Return(v75)   (exit_acc=v75)
+    v74  BinopI { op=shl, lhs=v71, rhs_imm=32 }           -> x2
+    v75  Extend { value=v73, kind=I32 }                   -> x1
+    terminator Return(v71)   (exit_acc=v71)
   block 20  start_pc=0
     v76  Imm(0)                                           -> x0
     terminator Return(v76)   (exit_acc=v76)

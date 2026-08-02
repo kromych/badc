@@ -729,7 +729,6 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	add	x0, x0, #0x3
                	ret
-               	b	<addr>
 
 <map_a>:
                	stp	x29, x30, [sp, #-0x10]!

@@ -174,11 +174,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	callq	<addr>
-               	movslq	%eax, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movslq	%eax, %rcx
+               	movq	%rax, %rcx
                	movslq	%ecx, %rax
+               	testq	%rax, %rax
+               	je	<addr>
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

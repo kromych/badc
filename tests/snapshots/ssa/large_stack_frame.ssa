@@ -16,12 +16,12 @@ fn ent_pc=6 n_params=1 variadic=false locals=1
     v10  LoadLocal { off=-1, kind=I32 }                   -> x1
     v11  BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x0
     v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
-    v13  Extend { value=v11, kind=I32 }                   -> x1
-    v14  Imm(0)                                           -> x2
-    v15  LoadLocal { off=-1, kind=I32 }                   -> x2
-    v16  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x0
-    v17  Extend { value=v13, kind=I32 }                   -> x0
-    terminator Return(v17)   (exit_acc=v17)
+    v13  Extend { value=v11, kind=I32 }                   -> x0
+    v14  Imm(0)                                           -> x1
+    v15  LoadLocal { off=-1, kind=I32 }                   -> x1
+    v16  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x1
+    v17  Extend { value=v13, kind=I32 }                   -> x1
+    terminator Return(v13)   (exit_acc=v13)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
 fn ent_pc=7 n_params=0 variadic=false locals=0

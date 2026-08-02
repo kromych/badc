@@ -15,16 +15,14 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	ldrsw	x0, [x0, #0x4]
                	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <via_scalar_pointer>:
                	ldrsw	x1, [x0]
                	ldrsw	x0, [x0, #0xc]
                	add	x0, x1, x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:

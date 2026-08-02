@@ -49,9 +49,7 @@ Disassembly of section .text:
                	wait
                	emms
                	movq	-0x10(%rbp), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>

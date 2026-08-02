@@ -53,13 +53,6 @@ Disassembly of section .text:
                	cmpq	$0x30, %rdi
                	je	<addr>
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
 
 <main>:
                	movl	$0x1, %eax
@@ -73,13 +66,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>

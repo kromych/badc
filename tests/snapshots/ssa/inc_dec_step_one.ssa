@@ -69,11 +69,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v59, target=b6, fall=b9 }   (exit_acc=v59)
   block 9  start_pc=0
     v68  Extend { value=v57, kind=I32 }                   -> x0
-    v69  BinopI { op=shl, lhs=v57, rhs_imm=32 }           -> x1
-    v70  Extend { value=v68, kind=I32 }                   -> x0
-    terminator Jmp(b10)   (exit_acc=v70)
+    v69  BinopI { op=shl, lhs=v68, rhs_imm=32 }           -> x1
+    v70  Extend { value=v68, kind=I32 }                   -> x1
+    terminator Jmp(b10)   (exit_acc=v68)
   block 10  start_pc=0
-    v34  BinopI { op=ne, lhs=v70, rhs_imm=42 }            -> x0
+    v34  BinopI { op=ne, lhs=v68, rhs_imm=42 }            -> x0
     terminator Bz { cond=v34, target=b12, fall=b11 }   (exit_acc=v34)
   block 11  start_pc=0
     v35  Imm(5)                                           -> x0

@@ -12,8 +12,7 @@ Disassembly of section .text:
 
 <fast_path>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <error_path>:
@@ -23,8 +22,7 @@ Disassembly of section .text:
 <hot_decl>:
                	movq	%rdi, %rax
                	shlq	%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:

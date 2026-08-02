@@ -55,7 +55,6 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
 
 <dynamic>:
                	pushq	%rbp
@@ -93,8 +92,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rsi
                	cmpq	$0xa, %rsi
                	jl	<addr>
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	leaq	-0x20(%rbp), %rsp
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -235,7 +233,6 @@ Disassembly of section .text:
                	cmpq	%rdi, %rcx
                	jl	<addr>
                	movslq	%edx, %rax
-               	movslq	%eax, %rax
                	leaq	-0x20(%rbp), %rsp
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -298,7 +295,6 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

@@ -18,10 +18,10 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v10  LoadLocal { off=3, kind=I32 }                    -> x0
     v11  Binop { op=sub, lhs=v1, rhs=v3 }                 -> x0
     v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
-    v13  Extend { value=v11, kind=I32 }                   -> x1
-    v14  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x0
-    v15  Extend { value=v13, kind=I32 }                   -> x0
-    terminator Return(v15)   (exit_acc=v15)
+    v13  Extend { value=v11, kind=I32 }                   -> x0
+    v14  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x1
+    v15  Extend { value=v13, kind=I32 }                   -> x1
+    terminator Return(v13)   (exit_acc=v13)
   block 2  start_pc=0
     v16  LoadLocal { off=3, kind=I32 }                    -> x0
     v17  LoadLocal { off=2, kind=I32 }                    -> x0

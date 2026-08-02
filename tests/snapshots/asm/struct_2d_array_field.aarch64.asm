@@ -76,10 +76,7 @@ Disassembly of section .text:
                	cmp	x2, #0x3
                	b.lt	<addr>
                	sub	x0, x1, #0x6f
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	b	<addr>

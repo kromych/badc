@@ -48,7 +48,6 @@ Disassembly of section .text:
                	cmpq	$0x4, %rdx
                	jl	<addr>
                	movslq	%ecx, %rax
-               	movslq	%eax, %rax
                	cmpq	$0x46, %rax
                	jne	<addr>
                	xorq	%rax, %rax

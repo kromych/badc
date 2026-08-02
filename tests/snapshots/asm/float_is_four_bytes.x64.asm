@@ -264,7 +264,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movl	$0x10, %ebx
                	movslq	%ebx, %rax
-               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x50, %rsp
                	popq	%rbp

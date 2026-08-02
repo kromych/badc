@@ -147,5 +147,3 @@ Disassembly of section .text:
                	callq	<addr>
                	movzbq	%al, %rax
                	ud2
-               	jmp	<addr>
-               	jmp	<addr>

@@ -70,7 +70,6 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	ret
 
 <same_target>:
@@ -91,8 +90,6 @@ Disassembly of section .text:
 
 <splice_then_goto>:
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
                	sxtw	x0, w0
                	sub	sp, sp, #0x10
                	str	x0, [sp, #0x8]
@@ -118,8 +115,7 @@ Disassembly of section .text:
                	cmp	x1, #0xa
                	b.le	<addr>
                	mov	x0, #0x9                // =9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
                	sub	sp, sp, #0x10
                	str	x0, [sp, #0x8]
@@ -232,7 +228,6 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	cmp	x0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -312,8 +307,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	b	<addr>
                	mov	x0, #0x7                // =7
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0x7
                	cset	x1, ne
                	mov	x0, #0x1                // =1
@@ -332,8 +326,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	b	<addr>
                	mov	x0, #0x7                // =7
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0x5
                	cset	x0, ne
                	cmp	x0, #0x0

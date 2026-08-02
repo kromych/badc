@@ -184,7 +184,6 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x0, x3
                	ret
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

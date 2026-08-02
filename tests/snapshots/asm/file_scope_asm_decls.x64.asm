@@ -12,8 +12,7 @@ Disassembly of section .text:
 
 <export_me>:
                	leaq	0x2(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <read_sp>:

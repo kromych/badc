@@ -34,8 +34,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	mov	x17, #0x3               // =3
                	mul	x1, x1, x17
-               	sxtw	x2, w1
-               	sxtw	x20, w2
+               	sxtw	x20, w1
                	ldrsw	x1, [x0, #0x4]
                	mov	x17, #0x3               // =3
                	mul	x1, x1, x17
@@ -83,8 +82,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x1]
                	mov	x17, #0x3               // =3
                	mul	x1, x1, x17
-               	sxtw	x2, w1
-               	sxtw	x1, w2
+               	sxtw	x1, w1
                	cmp	x20, x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

@@ -17,8 +17,7 @@ Disassembly of section .text:
 <twice>:
                	movslq	(%rdi), %rax
                	shlq	%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:

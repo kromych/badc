@@ -554,7 +554,6 @@ Disassembly of section .text:
                	addq	%rdi, %rax
                	addq	$0x3, %rax
                	retq
-               	jmp	<addr>
 
 <map_a>:
                	pushq	%rbp

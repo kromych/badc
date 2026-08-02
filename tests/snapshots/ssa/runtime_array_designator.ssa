@@ -142,10 +142,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v5   Imm(0)                                           -> x1
     terminator Bz { cond=v4, target=b2, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
-    v6   Extend { value=v4, kind=I32 }                    -> x1
-    v7   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x0
-    v8   Extend { value=v6, kind=I32 }                    -> x0
-    terminator Return(v8)   (exit_acc=v8)
+    v6   Extend { value=v4, kind=I32 }                    -> x0
+    v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x1
+    v8   Extend { value=v6, kind=I32 }                    -> x1
+    terminator Return(v6)   (exit_acc=v6)
   block 2  start_pc=0
     v9   Imm(4)                                           -> x0
     v10  Imm(9)                                           -> x0

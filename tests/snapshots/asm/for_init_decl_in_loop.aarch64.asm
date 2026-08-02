@@ -84,9 +84,7 @@ Disassembly of section .text:
                	cmp	x3, #0x5
                	b.lt	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	ret
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

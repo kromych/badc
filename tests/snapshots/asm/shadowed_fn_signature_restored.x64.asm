@@ -61,7 +61,6 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	movslq	%ecx, %rax
-               	movslq	%eax, %rax
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq

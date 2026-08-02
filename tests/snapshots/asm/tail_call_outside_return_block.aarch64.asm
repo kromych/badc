@@ -112,9 +112,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, x0
                	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
 
 <main>:
                	str	x19, [sp, #-0x20]!

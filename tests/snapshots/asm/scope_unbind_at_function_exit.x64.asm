@@ -41,14 +41,12 @@ Disassembly of section .text:
 
 <use_n>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <use_n2>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -102,8 +100,6 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
                	cmpq	$0x58, %rax
                	je	<addr>
                	movl	$0xf, %eax
@@ -113,8 +109,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movslq	(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x6e, %rax
                	je	<addr>
                	movl	$0x10, %eax
@@ -124,12 +119,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movslq	(%rcx), %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x79, %rax
                	je	<addr>
                	movl	$0x11, %eax
                	retq
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>

@@ -13,14 +13,12 @@ Disassembly of section .text:
 
 <add>:
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <sub>:
                	sub	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -50,8 +48,7 @@ Disassembly of section .text:
                	mov	x0, x1
                	mov	x1, x2
                	blr	x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

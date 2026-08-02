@@ -15,18 +15,18 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v5   LoadLocal { off=2, kind=I32 }                    -> x0
     v6   BinopI { op=mul, lhs=v1, rhs_imm=-1 }            -> x0
     v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x1
-    v8   Extend { value=v6, kind=I32 }                    -> x1
-    v9   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x0
-    v10  Extend { value=v8, kind=I32 }                    -> x0
-    terminator Return(v10)   (exit_acc=v10)
+    v8   Extend { value=v6, kind=I32 }                    -> x0
+    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
+    v10  Extend { value=v8, kind=I32 }                    -> x1
+    terminator Return(v8)   (exit_acc=v8)
   block 3  start_pc=0
     v11  LoadLocal { off=2, kind=I32 }                    -> x0
     v12  BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
     v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x1
-    v14  Extend { value=v12, kind=I32 }                   -> x1
-    v15  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x0
-    v16  Extend { value=v14, kind=I32 }                   -> x0
-    terminator Return(v16)   (exit_acc=v16)
+    v14  Extend { value=v12, kind=I32 }                   -> x0
+    v15  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x1
+    v16  Extend { value=v14, kind=I32 }                   -> x1
+    terminator Return(v14)   (exit_acc=v14)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=classify
 fn ent_pc=1 n_params=1 variadic=false locals=1

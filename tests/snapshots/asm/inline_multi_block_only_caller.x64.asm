@@ -15,12 +15,10 @@ Disassembly of section .text:
                	addq	%rsi, %rax
                	movslq	%edi, %rcx
                	addq	%rcx, %rcx
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	addq	%rcx, %rax
                	addq	%rsi, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:

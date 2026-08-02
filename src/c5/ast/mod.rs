@@ -39,6 +39,10 @@ pub(crate) type StmtId = u32;
 /// Index into [`Ast::decls`].
 pub(crate) type DeclId = u32;
 
+/// `Expr::StmtExpr::value_item` for a block that wrote no item, whose
+/// statement expression therefore has no value.
+pub(crate) const NO_VALUE_ITEM: u32 = u32::MAX;
+
 /// Forward-referenced label slot for `goto`. Allocated at the first
 /// `goto` or label definition; resolved when the matching
 /// `Stmt::Labeled` is emitted.
@@ -425,11 +429,18 @@ pub(crate) enum Expr {
     /// GCC statement expression `({ ... })` (Annex J.5 common
     /// extension). `block` is the enclosed compound statement (or,
     /// for a single-item block, the bare statement `ast_wrap_block_items`
-    /// yields). The value and type are those of the last
-    /// expression-statement; `ty` is `Ty::Void` when the trailing
-    /// block-item is not an expression statement.
+    /// yields). `value_item` indexes the block item the value and type
+    /// come from: the last expression-statement the source wrote, which
+    /// is not the block's last item once the parser has appended the
+    /// scope-exit statements (`cleanup` destructor calls, the VLA stack
+    /// restore). `NO_VALUE_ITEM` when the block wrote no item, and `ty`
+    /// is `Ty::Int` when the item is not an expression statement.
     #[allow(clippy::enum_variant_names)]
-    StmtExpr { block: StmtId, ty: i64 },
+    StmtExpr {
+        block: StmtId,
+        ty: i64,
+        value_item: u32,
+    },
     /// GCC checked-arithmetic builtin
     /// `__builtin_{add,sub,mul}_overflow(a, b, dst)`. `op` is 0 = add,
     /// 1 = sub, 2 = mul. `dst` is the result pointer; `elem_ty` is its

@@ -3268,13 +3268,13 @@ impl<'a> Walker<'a> {
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         block: StmtId,
+        value_item: u32,
     ) -> Result<super::super::ir::ValueId, WalkError> {
         let items: alloc::vec::Vec<super::BlockItem> = match self.ast.stmt(block) {
             Stmt::Compound(items) => items.clone(),
             _ => alloc::vec![super::BlockItem::Stmt(block)],
         };
         let mut result: Option<super::super::ir::ValueId> = None;
-        let n = items.len();
         for (i, item) in items.into_iter().enumerate() {
             if !b.is_block_open() {
                 let dead = b.new_block();
@@ -3282,8 +3282,10 @@ impl<'a> Walker<'a> {
             }
             match item {
                 super::BlockItem::Stmt(mut s) => {
-                    let last = i + 1 == n;
-                    if last {
+                    // The scope-exit statements after it are walked for
+                    // effect only, which is C's scope-exit order.
+                    let carries_value = i as u32 == value_item;
+                    if carries_value {
                         while let Stmt::Labeled { label, body } = self.ast.stmt(s) {
                             let (label, body) = (*label, *body);
                             let label_blk = self.block_for_label(b, label);
@@ -3297,8 +3299,11 @@ impl<'a> Walker<'a> {
                     if let Stmt::Expr(e) = self.ast.stmt(s) {
                         let e = *e;
                         let v = self.walk_expr_rvalue(b, e)?;
-                        if last {
-                            result = Some(v);
+                        if carries_value {
+                            // A value the item left in a closed block
+                            // (a noreturn call) is unreachable; the
+                            // placeholder below stands for it.
+                            result = b.is_block_open().then_some(v);
                         }
                     } else {
                         let _ = self.walk_stmt(b, s)?;
@@ -5074,10 +5079,12 @@ impl<'a> Walker<'a> {
             }
             // GCC statement expression `({ ... })`: emit the block for
             // its side effects; the value is that of the last
-            // expression-statement.
-            Expr::StmtExpr { block, .. } => {
-                let block = *block;
-                self.walk_stmt_expr(b, block)
+            // expression-statement the source wrote.
+            Expr::StmtExpr {
+                block, value_item, ..
+            } => {
+                let (block, value_item) = (*block, *value_item);
+                self.walk_stmt_expr(b, block, value_item)
             }
             // GCC `__builtin_mem*` with a constant byte count.
             Expr::MemTransfer {

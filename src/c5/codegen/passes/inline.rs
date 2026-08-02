@@ -1255,8 +1255,7 @@ fn splice_arg_addresses(
         callee.param_aggs.get(i).copied().flatten().is_some()
             && callee.param_local_slots.get(i).copied().unwrap_or(0) != 0
     };
-    let value_form =
-        |i: usize| redirected(i) && arg_aggs.get(i).copied().flatten().is_none();
+    let value_form = |i: usize| redirected(i) && arg_aggs.get(i).copied().flatten().is_none();
     if !(0..args.len()).any(value_form) {
         return Some(args.to_vec());
     }
@@ -2809,8 +2808,7 @@ fn inline_caller(
                     }
                     // A value-form aggregate argument the splice cannot
                     // resolve to an address leaves the site out of line.
-                    let Some(bound) = splice_arg_addresses(&caller.insts, args, arg_aggs, c)
-                    else {
+                    let Some(bound) = splice_arg_addresses(&caller.insts, args, arg_aggs, c) else {
                         continue;
                     };
                     hit = Some((b_idx, pc, *c, bound, *ret_slot_local));

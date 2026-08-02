@@ -60,6 +60,18 @@ pub(crate) fn aarch64_add_lo12_to_zero(text: &mut [u8], offset: usize) -> bool {
     true
 }
 
+/// `ldr xt, [xn, #lo12]` at `offset` -- the second half of an
+/// unrelaxed GOT pair -- to `movz xt, #0`. The slot the load would
+/// read does not exist for a symbol nothing defines, so the
+/// destination takes the null address directly.
+pub(crate) fn aarch64_got_load_to_zero(text: &mut [u8], offset: usize) -> bool {
+    let Some(instr) = read_u32(text, offset) else {
+        return false;
+    };
+    write_u32(text, offset, 0xd280_0000 | (instr & 0x1f));
+    true
+}
+
 /// `call rel32` / `jmp rel32` at `offset` -> the 5-byte `nop`.
 pub(crate) fn x86_64_branch_to_nop(text: &mut [u8], offset: usize) -> bool {
     let Some(slot) = text.get_mut(offset..offset + 5) else {
@@ -76,10 +88,20 @@ pub(crate) fn x86_64_branch_to_nop(text: &mut [u8], offset: usize) -> bool {
 /// imm32`). The modrm reg field moves to rm, so the REX.R bit becomes
 /// REX.B; REX.W carries over.
 pub(crate) fn x86_64_lea_to_zero(text: &mut [u8], offset: usize) -> bool {
+    x86_64_rip_ref_to_zero(text, offset, 0x8D)
+}
+
+/// `REX mov reg, [rip+disp32]` at `offset` -- an unrelaxed GOT load --
+/// to `mov reg, 0`. Same encoding shape as the `lea`, different opcode.
+pub(crate) fn x86_64_got_load_to_zero(text: &mut [u8], offset: usize) -> bool {
+    x86_64_rip_ref_to_zero(text, offset, 0x8B)
+}
+
+fn x86_64_rip_ref_to_zero(text: &mut [u8], offset: usize, opcode: u8) -> bool {
     let Some(slot) = text.get_mut(offset..offset + 7) else {
         return false;
     };
-    if !(0x40..=0x4f).contains(&slot[0]) || slot[1] != 0x8D || slot[2] & 0xC7 != 0x05 {
+    if !(0x40..=0x4f).contains(&slot[0]) || slot[1] != opcode || slot[2] & 0xC7 != 0x05 {
         return false;
     }
     let rex = slot[0];
@@ -117,6 +139,30 @@ mod tests {
     fn non_lea_shape_is_rejected() {
         let mut text = vec![0x48, 0x8B, 0x05, 0, 0, 0, 0];
         assert!(!x86_64_lea_to_zero(&mut text, 0));
+        assert!(!x86_64_got_load_to_zero(
+            &mut [0x48, 0x8D, 0x05, 0, 0, 0, 0],
+            0
+        ));
+    }
+
+    #[test]
+    fn got_load_becomes_mov_zero() {
+        // 48 8b 05 <disp32> -- mov rax, [rip+disp32], the unrelaxed
+        // GOT load a reference to an undefined symbol keeps.
+        let mut text = vec![0x48, 0x8B, 0x05, 0x11, 0x22, 0x33, 0x44];
+        assert!(x86_64_got_load_to_zero(&mut text, 0));
+        assert_eq!(text, vec![0x48, 0xC7, 0xC0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn got_slot_load_becomes_movz_destination() {
+        // ldr x7, [x9, #0x10] -> movz x7, #0.
+        let mut text = 0xf940_0927u32.to_le_bytes().to_vec();
+        assert!(aarch64_got_load_to_zero(&mut text, 0));
+        assert_eq!(
+            u32::from_le_bytes(text[..].try_into().unwrap()),
+            0xd280_0007
+        );
     }
 
     #[test]

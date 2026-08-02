@@ -816,6 +816,11 @@ pub(crate) struct ResolvedImport {
     /// `dlopen`. The Mach-O writer emits a flat-lookup bind; the ELF
     /// writer an undefined `.dynsym` entry with no `DT_NEEDED`.
     pub flat_lookup: bool,
+    /// `true` when an input symbol table typed the symbol `STT_OBJECT`.
+    /// The ELF writer republishes the type on the undefined `.dynsym`
+    /// entry; `false` publishes `STT_FUNC`, which is what a reference
+    /// with no type information carries.
+    pub is_object: bool,
     /// `true` if the binding's prototype ended with `, ...)`. The
     /// lowering reads this to decide whether the call site needs
     /// the platform's variadic ABI (macOS arm64 stack-packing,
@@ -998,6 +1003,7 @@ impl ResolvedImports {
             real_symbol: b.real_symbol.clone(),
             dylib_index,
             flat_lookup: false,
+            is_object: false,
             is_variadic: b.is_variadic,
             fixed_args: b.fixed_args,
             return_type_tag: b.return_type_tag,
@@ -1116,6 +1122,7 @@ impl ResolvedImports {
                 real_symbol: b.real_symbol.clone(),
                 dylib_index,
                 flat_lookup: false,
+                is_object: false,
                 is_variadic: b.is_variadic,
                 fixed_args: b.fixed_args,
                 return_type_tag: b.return_type_tag,

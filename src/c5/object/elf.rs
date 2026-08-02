@@ -921,22 +921,25 @@ fn text_body_len(boundaries: &[u64], start: u64) -> u64 {
 /// Build .dynsym. Layout:
 ///
 /// * Index 0: zero sentinel (required by ELF).
-/// * `[1, 1+n_imports)`: undefined imports (`STB_GLOBAL |
-///   STT_NOTYPE`, `st_shndx = SHN_UNDEF`). Loader resolves
-///   these via `.rela.dyn`.
+/// * `[1, 1+n_imports)`: undefined imports (`STB_GLOBAL`,
+///   `st_shndx = SHN_UNDEF`). Loader resolves these via `.rela.dyn`.
 /// * `[1+n_imports, 1+n_imports+n_exports)`: defined exports, each
 ///   carrying the runtime VA, size, type, binding, and section index
 ///   of the definition it publishes.
 fn build_dynsym(
     import_name_offsets: &[u32],
+    import_is_object: &[bool],
     exports: &[DynsymExport],
-    copy_name_offsets: &[u32],
-    copy_addrs: &[u64],
-    copy_sizes: &[u64],
-    copy_is_bss: &[bool],
-    data_shndx: u16,
-    bss_shndx: u16,
+    copies: &DynsymCopyTargets<'_>,
 ) -> Vec<u8> {
+    let DynsymCopyTargets {
+        name_offsets: copy_name_offsets,
+        addrs: copy_addrs,
+        sizes: copy_sizes,
+        is_bss: copy_is_bss,
+        data_shndx,
+        bss_shndx,
+    } = *copies;
     debug_assert_eq!(copy_name_offsets.len(), copy_addrs.len());
     debug_assert_eq!(copy_name_offsets.len(), copy_sizes.len());
     let n_total = 1 + import_name_offsets.len() + exports.len() + copy_name_offsets.len();
@@ -955,27 +958,25 @@ fn build_dynsym(
         },
     );
 
-    for &name_off in import_name_offsets {
+    debug_assert_eq!(import_name_offsets.len(), import_is_object.len());
+    for (i, &name_off) in import_name_offsets.iter().enumerate() {
         write_struct(
             &mut out,
             &Elf64Sym {
                 st_name: name_off,
-                // c5's only dynamic-import mechanism today is
-                // `#pragma binding(<lib>::<name>, "<sym>")`, and
-                // every binding is reached via `Inst::CallExt`
-                // (a call site) -- there's no path that imports a
-                // data symbol. So tagging every import `STT_FUNC`
-                // is correct in practice and gives `gdb` / `nm`
-                // the right hint about callability. If we ever
-                // grow an `extern int errno;`-style data import,
-                // `ResolvedImport` would need an `is_function`
-                // discriminator and this branch would pick
-                // `STT_OBJECT` for the data case. The dynamic
-                // linker doesn't care either way -- it resolves
-                // by name -- so the worst case for a future
-                // mis-tag is a confused debugger, not a broken
-                // load.
-                st_info: (STB_GLOBAL << 4) | STT_FUNC,
+                // The type comes from the referencing unit's symbol
+                // table: a reference to a data object republishes
+                // STT_OBJECT, everything else STT_FUNC. A reference
+                // that carried no type reaches here as STT_FUNC, which
+                // is what a call site is. The dynamic linker resolves
+                // by name either way; the type is what `nm` and a
+                // consuming linker read.
+                st_info: (STB_GLOBAL << 4)
+                    | if import_is_object[i] {
+                        STT_OBJECT
+                    } else {
+                        STT_FUNC
+                    },
                 st_other: 0, // STV_DEFAULT
                 st_shndx: SHN_UNDEF,
                 st_value: 0,
@@ -1193,6 +1194,20 @@ struct ElfExport {
     weak: bool,
 }
 
+/// The copy-relocation targets `.dynsym` publishes: one defined
+/// `STT_OBJECT` per data binding, in `Build::copy_relocs` order.
+#[derive(Clone, Copy)]
+struct DynsymCopyTargets<'a> {
+    name_offsets: &'a [u32],
+    addrs: &'a [u64],
+    sizes: &'a [u64],
+    is_bss: &'a [bool],
+    /// Section indices the targets resolve into; zero while the layout
+    /// is still being sized.
+    data_shndx: u16,
+    bss_shndx: u16,
+}
+
 /// An `ElfExport` resolved against the final layout, ready to write.
 struct DynsymExport {
     name_off: u32,
@@ -1378,11 +1393,12 @@ fn patch_lea_rip32(
 
 /// Patch a data-import GOT reference so it loads the import's address from
 /// its GOT slot at `slot_vmaddr`. The reference reads the slot's value
-/// (an imported data object's address), not a call thunk. GOT relaxation
-/// (see `link.rs`) left a `lea r64, [rip+disp32]` (opcode 0x8D); flip it
-/// back to `mov r64, [rip+disp32]` (0x8B) against the slot. `mov` and
-/// `lea` share the 7-byte REX-prefixed encoding and disp32 position, so
-/// the disp is patched with the same `patch_lea_rip32` math.
+/// (an imported data object's address), not a call thunk. The site is
+/// either the `lea r64, [rip+disp32]` (opcode 0x8D) GOT relaxation left
+/// behind (see `link.rs`) or the unrelaxed `mov r64, [rip+disp32]`
+/// (0x8B); both end as the `mov`. The two share the 7-byte REX-prefixed
+/// encoding and disp32 position, so the disp is patched with the same
+/// `patch_lea_rip32` math.
 fn patch_got_data_load(
     out: &mut [u8],
     code_base_in_file: u64,
@@ -1392,10 +1408,10 @@ fn patch_got_data_load(
     label: &str,
 ) -> Result<(), C5Error> {
     let opcode_off = (code_base_in_file + instr_offset_in_code + 1) as usize;
-    if out[opcode_off] != 0x8D {
+    if out[opcode_off] != 0x8D && out[opcode_off] != 0x8B {
         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
             &format!(
-                "ELF: {label} expected lea opcode 0x8D at file+{opcode_off:#x}, found {:#04x}",
+                "ELF: {label} expected lea 0x8D or mov 0x8B at file+{opcode_off:#x}, found {:#04x}",
                 out[opcode_off],
             ),
         )));
@@ -1604,6 +1620,7 @@ pub(super) fn write(
     //      sizes for layout calculations. ----
     let (mut dynstr, name_offsets, lib_strtab_offsets, export_name_offsets, copy_name_offsets) =
         build_dynstr(&build.imports, &export_names, &build.copy_relocs);
+    let import_is_object: Vec<bool> = build.imports.imports.iter().map(|i| i.is_object).collect();
     let copy_sizes: Vec<u64> = build.copy_relocs.iter().map(|cr| cr.size).collect();
     let copy_is_bss: Vec<bool> = build.copy_relocs.iter().map(|cr| cr.is_bss).collect();
     let n_copy = build.copy_relocs.len();
@@ -1623,13 +1640,16 @@ pub(super) fn write(
         .collect();
     let dynsym = build_dynsym(
         &name_offsets,
+        &import_is_object,
         &exports_placeholder,
-        &copy_name_offsets,
-        &copy_addrs_placeholder,
-        &copy_sizes,
-        &copy_is_bss,
-        0,
-        0,
+        &DynsymCopyTargets {
+            name_offsets: &copy_name_offsets,
+            addrs: &copy_addrs_placeholder,
+            sizes: &copy_sizes,
+            is_bss: &copy_is_bss,
+            data_shndx: 0,
+            bss_shndx: 0,
+        },
     );
     // The hash table must cover every `.dynsym` entry, in dynsym
     // order: imports occupy indices [1, 1+n_imports), exports the
@@ -2403,13 +2423,16 @@ pub(super) fn write(
         .collect();
     let final_dynsym = build_dynsym(
         &name_offsets,
+        &import_is_object,
         &final_exports,
-        &copy_name_offsets,
-        &copy_addrs,
-        &copy_sizes,
-        &copy_is_bss,
-        data_shndx,
-        bss_shndx,
+        &DynsymCopyTargets {
+            name_offsets: &copy_name_offsets,
+            addrs: &copy_addrs,
+            sizes: &copy_sizes,
+            is_bss: &copy_is_bss,
+            data_shndx,
+            bss_shndx,
+        },
     );
     debug_assert_eq!(final_dynsym.len(), dynsym.len());
     out.extend_from_slice(&final_dynsym);
@@ -3539,6 +3562,7 @@ mod tests {
                     real_symbol: "exit".into(),
                     dylib_index: 0,
                     flat_lookup: false,
+                    is_object: false,
                     is_variadic: false,
                     fixed_args: 1,
                     return_type_tag: 0,

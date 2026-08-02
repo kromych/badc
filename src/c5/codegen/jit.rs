@@ -804,6 +804,7 @@ mod jit_impl {
                     real_symbol: host.clone(),
                     dylib_index: *dylib,
                     flat_lookup: true,
+                    is_object: false,
                     is_variadic: false,
                     fixed_args: 0,
                     return_type_tag: 0,

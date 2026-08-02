@@ -33,13 +33,9 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	retq
                	jmp	<addr>
-               	cmpq	$0x3, %rdi
-               	je	<addr>
                	jmp	<addr>
                	cmpq	$0x2, %rdi
                	jl	<addr>
-               	cmpq	$0x2, %rdi
-               	jne	<addr>
                	movl	$0x14, %eax
                	retq
                	cmpq	$0x1, %rdi

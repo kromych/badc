@@ -58,8 +58,6 @@ Disassembly of section .text:
                	eor	x4, x4, x6
                	str	w4, [x2, x3, lsl #2]
                	b	<addr>
-               	cmp	x4, #0x0
-               	b.ne	<addr>
                	mov	w4, w2
                	mov	w6, w3
                	adrp	x2, <page>

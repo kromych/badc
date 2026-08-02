@@ -35,14 +35,6 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	leaq	0x5(%rax), %rcx
-               	movabsq	$0x123456789abcdf4, %r11 # imm = 0x123456789ABCDF4
-               	cmpq	%r11, %rcx
-               	je	<addr>
-               	movl	$0x25, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
                	cmpq	$0x64, %rax
                	seta	%cl
                	movzbq	%cl, %rcx

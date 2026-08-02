@@ -22,3 +22,4 @@ pub(crate) mod store_forward;
 pub(crate) mod struct_return_reg;
 pub(crate) mod tailrec;
 pub(crate) mod unroll;
+pub(crate) mod value_range;

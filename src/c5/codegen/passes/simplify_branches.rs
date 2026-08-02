@@ -31,6 +31,7 @@ struct Opts<'a> {
     addr_facts: Option<&'a super::constfold::AddrFacts>,
     resolve_constant_p: bool,
     fold_selects: bool,
+    implied_ranges: bool,
 }
 
 /// The post-walk correctness cleanup, run at every optimization level.
@@ -43,6 +44,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                 addr_facts: None,
                 resolve_constant_p: false,
                 fold_selects: false,
+                implied_ranges: false,
             },
         );
     }
@@ -63,6 +65,7 @@ pub(crate) fn run_with_const_data(funcs: &mut [FunctionSsa], program: &Program) 
                 addr_facts: Some(&facts),
                 resolve_constant_p: true,
                 fold_selects: true,
+                implied_ranges: true,
             },
         );
     }
@@ -90,10 +93,13 @@ fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
         let forwarded = opts
             .const_data
             .is_some_and(|cd| super::const_global_fold::fold_template_loads(func, cd));
+        let ranged = opts.implied_ranges && super::value_range::run_one(func);
         let folded = super::constfold_branch::run_one(func);
         let pruned = super::prune_unreachable::run_one(func);
         bound -= 1;
-        if (!folded && !pruned && !loaded && !forwarded && !selected && !nulled) || bound == 0 {
+        if (!folded && !pruned && !loaded && !forwarded && !selected && !nulled && !ranged)
+            || bound == 0
+        {
             // The fixed point is the last chance to discover a constant,
             // so survivors resolve here; a resolution that changes the
             // function re-enters the loop to fold what it exposed.

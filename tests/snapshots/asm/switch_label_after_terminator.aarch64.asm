@@ -29,8 +29,6 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	sxtw	x0, w1
                	ret
-               	cmp	x0, #0x2
-               	b.ne	<addr>
                	mov	x0, #0x2                // =2
                	b	<addr>
                	cmp	x0, #0x1

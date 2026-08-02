@@ -38,14 +38,14 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
   block 8  start_pc=0
     terminator Jmp(b5)
   block 9  start_pc=0
-    v15  BinopI { op=eq, lhs=v1, rhs_imm=3 }              -> x0
-    terminator Bnz { cond=v15, target=b6, fall=b3 }   (exit_acc=v15)
+    v15  Imm(1)                                           -> x0
+    terminator Jmp(b6)   (exit_acc=v15)
   block 10  start_pc=0
     v11  BinopI { op=lt, lhs=v1, rhs_imm=2 }              -> x0
     terminator Bnz { cond=v11, target=b13, fall=b11 }   (exit_acc=v11)
   block 11  start_pc=0
-    v14  BinopI { op=eq, lhs=v1, rhs_imm=2 }              -> x0
-    terminator Bz { cond=v14, target=b3, fall=b12 }   (exit_acc=v14)
+    v14  Imm(1)                                           -> x0
+    terminator Jmp(b12)   (exit_acc=v14)
   block 12  start_pc=0
     v6   Imm(20)                                          -> x0
     terminator Return(v6)   (exit_acc=v6)

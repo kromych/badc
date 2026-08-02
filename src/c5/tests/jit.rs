@@ -188,6 +188,67 @@ fn always_inline_callee_passing_an_aggregate_by_value_is_spliced() {
 }
 
 #[test]
+fn a_dominating_condition_decides_the_comparison_it_implies() {
+    // Three shapes whose answer follows from the condition guarding the
+    // block rather than from any immediate: a loop guard settling the
+    // sign of the induction variable (the query a widely used min()/max()
+    // macro set puts to `__builtin_constant_p`), a masked switch operand
+    // whose value set the labels cover, and an enumerated state the loop
+    // condition excludes. The undefined `bug` fails the JIT load if any
+    // guarded arm survives.
+    let src = "
+        extern void bug(void);
+        #define statically_true(x) (__builtin_constant_p(x) && (x))
+        #define is_signed_type(type) (((type)(-1)) < (type)1)
+        #define __is_nonneg(ux) statically_true((long long)(ux) >= 0)
+        #define __sign_use(ux) (is_signed_type(typeof(ux)) ? \
+            (2 + __is_nonneg(ux)) : (1 + 2 * (sizeof(ux) < 4)))
+        #define __types_ok(ux, uy) (__sign_use(ux) & __sign_use(uy))
+        #define MIN(x, y) ({                    \
+            __auto_type ux = (x);               \
+            __auto_type uy = (y);               \
+            if (!__types_ok(ux, uy)) bug();     \
+            ux < uy ? ux : uy;                  \
+        })
+        static unsigned long chunks;
+        static void drain(int len) {
+            while (len > 0) {
+                unsigned int n = MIN(len, 4096UL);
+                chunks += n;
+                len -= n;
+            }
+        }
+        static int masked(unsigned int flags) {
+            switch (flags & 3u) {
+            case 0: return 10;
+            case 1: return 20;
+            case 2: return 30;
+            case 3: return 40;
+            default: bug(); return 0;
+            }
+        }
+        static int stage(int v) {
+            if (v > 4) {
+                if (v <= 4) bug();
+                if (v < 0) bug();
+                return 1;
+            }
+            if (v > 4) bug();
+            return 0;
+        }
+        int main(void) {
+            drain(10000);
+            if (chunks != 10000ul) return 1;
+            if (masked(0u) != 10 || masked(5u) != 20) return 2;
+            if (masked(6u) != 30 || masked(7u) != 40) return 3;
+            if (stage(9) != 1 || stage(4) != 0) return 4;
+            return 7;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-implied-cmp"]), 7);
+}
+
+#[test]
 fn select_of_two_constants_folds_its_guard() {
     // A value produced by a runtime `?:` between two constants keeps a
     // guard on it live unless the guard is evaluated per incoming: the

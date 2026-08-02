@@ -41,8 +41,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x12c              // =300
                	b	<addr>
-               	cmp	x0, #0x1
-               	b.ne	<addr>
                	mov	x0, #0xc8               // =200
                	b	<addr>
                	cmp	x0, #0x0

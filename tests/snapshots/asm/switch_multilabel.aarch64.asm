@@ -27,16 +27,10 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x1                // =1
                	ret
-               	cmp	x0, #0x63
-               	b.eq	<addr>
                	b	<addr>
-               	cmp	x0, #0x62
-               	b.eq	<addr>
                	b	<addr>
                	cmp	x0, #0x61
                	b.lt	<addr>
-               	cmp	x0, #0x61
-               	b.eq	<addr>
                	b	<addr>
                	cmp	x0, #0x42
                	b.ne	<addr>
@@ -48,20 +42,14 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cmp	x0, #0x41
                	b.lt	<addr>
-               	cmp	x0, #0x41
-               	b.eq	<addr>
                	b	<addr>
                	cmp	x0, #0x33
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	cmp	x0, #0x32
-               	b.eq	<addr>
                	b	<addr>
                	cmp	x0, #0x31
                	b.lt	<addr>
-               	cmp	x0, #0x31
-               	b.eq	<addr>
                	b	<addr>
                	cmp	x0, #0x30
                	b.eq	<addr>

@@ -64,8 +64,8 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v16  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v15)
   block 6  start_pc=0
-    v21  BinopI { op=eq, lhs=v1, rhs_imm=1 }              -> x0
-    terminator Bz { cond=v21, target=b3, fall=b7 }   (exit_acc=v21)
+    v21  Imm(1)                                           -> x0
+    terminator Jmp(b7)   (exit_acc=v21)
   block 7  start_pc=0
     v13  Imm(200)                                         -> x0
     v14  Imm(0)                                           -> x1

@@ -404,39 +404,46 @@ fn is_inline_candidate(
         say(format_args!("calls a returns-twice function"));
         return false;
     }
-    // Host-ABI aggregates are admitted only in the shapes the splice can
-    // reproduce: a by-value parameter passed in integer registers (it
-    // arrives as the address of the caller's copy in one argument, and the
-    // body's field loads off the parameter slot redirect to that address),
-    // and a return passed in one or two integer registers (the flat splice
-    // redirects the body's result-slot writes to the caller's return slot;
-    // the reloc splice copies the returned aggregate into it field by
-    // field). Memory-class and FP-class shapes stay rejected.
-    if !func.agg_descs.is_empty() {
-        // Every descriptor must pass by value in integer registers. A
-        // by-value parameter arrives as a single argument value -- the
-        // address of the caller's copy (the SSA `Inst::Call` carries one
-        // arg per struct parameter regardless of how many registers the
-        // ABI marshals it into), which the splice redirects the body's
-        // `LocalAddr(slot)` reads to. So a one- or two-register integer
-        // aggregate parameter is admissible; the redirect is identical
-        // either way. A return is delivered in the integer return
-        // registers (rax:rdx / x0:x1), so it may occupy one or two.
-        // FP-class and memory-class shapes stay rejected.
-        for (i, d) in func.agg_descs.iter().enumerate() {
-            let is_ret = func.ret_agg == Some(i as u32);
-            let max_regs = 2;
-            match classify_aggregate(d.size, d.align, &d.fields, abi, is_ret) {
-                AggClass::Regs(regs)
-                    if !regs.is_empty()
-                        && regs.len() <= max_regs
-                        && regs.iter().all(|r| *r == RegClass::Integer) => {}
-                _ => {
-                    say(format_args!(
-                        "aggregate not in one or two integer registers"
-                    ));
-                    return false;
-                }
+    // Host-ABI aggregates the splice itself has to reproduce: the callee's
+    // by-value parameters, whose frame copy redirects to the caller's
+    // argument address, and its return, which the splice delivers into the
+    // caller's return slot. `agg_descs` also holds the layouts a nested
+    // call's `arg_aggs` names; those are marshalled by the per-arch call
+    // plan exactly as they would be out of line, so their class is not
+    // this pass's concern.
+    let spliced_aggs: BTreeSet<u32> = func
+        .param_aggs
+        .iter()
+        .flatten()
+        .copied()
+        .chain(func.ret_agg)
+        .collect();
+    // Each must pass by value in integer registers. A by-value parameter
+    // arrives as a single argument value -- the address of the caller's
+    // copy (the SSA `Inst::Call` carries one arg per struct parameter
+    // regardless of how many registers the ABI marshals it into), which
+    // the splice redirects the body's `LocalAddr(slot)` reads to. So a
+    // one- or two-register integer aggregate parameter is admissible; the
+    // redirect is identical either way. A return is delivered in the
+    // integer return registers (rax:rdx / x0:x1), so it may occupy one or
+    // two. FP-class and memory-class shapes stay rejected.
+    for &i in &spliced_aggs {
+        let Some(d) = func.agg_descs.get(i as usize) else {
+            say(format_args!("aggregate descriptor {i} out of range"));
+            return false;
+        };
+        let is_ret = func.ret_agg == Some(i);
+        let max_regs = 2;
+        match classify_aggregate(d.size, d.align, &d.fields, abi, is_ret) {
+            AggClass::Regs(regs)
+                if !regs.is_empty()
+                    && regs.len() <= max_regs
+                    && regs.iter().all(|r| *r == RegClass::Integer) => {}
+            _ => {
+                say(format_args!(
+                    "aggregate not in one or two integer registers"
+                ));
+                return false;
             }
         }
     }
@@ -449,7 +456,7 @@ fn is_inline_candidate(
     // caller. `JumpTable` / `GotoIndirect` stay out of line: their
     // block-id references (the switch bounds check / the `BlockAddr`
     // computed-goto set) are not remapped here.
-    let no_agg = func.agg_descs.is_empty();
+    let no_agg = spliced_aggs.is_empty();
     let mut return_blocks = 0usize;
     for blk in &func.blocks {
         match blk.terminator {
@@ -679,7 +686,7 @@ fn is_inline_candidate(
                 // path rejects exactly those; the flat path keeps the strict
                 // result-slot gate (the redirect to the caller's return slot
                 // is its only reproducible write).
-                if !func.agg_descs.is_empty() {
+                if !spliced_aggs.is_empty() {
                     if reloc {
                         if param_agg_slots
                             .iter()
@@ -706,7 +713,7 @@ fn is_inline_candidate(
                 // template init (an `ImmData` template copied into the result
                 // slot) is admitted.
                 if reloc {
-                    if !func.agg_descs.is_empty()
+                    if !spliced_aggs.is_empty()
                         && param_agg_slots
                             .iter()
                             .any(|&p| slot_base_offset(func, *dst, p).is_some())

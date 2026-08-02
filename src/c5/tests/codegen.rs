@@ -3702,6 +3702,113 @@ fn post_inline_orphaned_static_and_its_relocations_drop() {
     }
 }
 
+/// Section header table of an ELF64 object as
+/// `(name, sh_type, sh_size, sh_link, sh_info)`.
+fn elf64_section_table(obj: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u32, u64, u32, u32)> {
+    let u16a = |o: usize| u16::from_le_bytes(obj[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(obj[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(obj[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let hdr = |i: usize| shoff + i * shentsize;
+    let str_off = u64a(hdr(u16a(0x3e) as usize) + 0x18) as usize;
+    (0..shnum)
+        .map(|i| {
+            let h = hdr(i);
+            let s = str_off + u32a(h) as usize;
+            let e = obj[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+            (
+                alloc::string::String::from_utf8_lossy(&obj[s..e]).into_owned(),
+                u32a(h + 4),
+                u64a(h + 0x20),
+                u32a(h + 0x28),
+                u32a(h + 0x2c),
+            )
+        })
+        .collect()
+}
+
+/// A relocation section with no entries describes nothing, and a
+/// consumer that reaches one through its target's `sh_info` link has no
+/// entry to read. Emitting one is also outside what any other producer
+/// does, so the writer drops it and compacts the section numbering; the
+/// checks below cover both halves.
+#[test]
+fn relocatable_objects_carry_no_empty_relocation_sections() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SHT_RELA: u32 = 4;
+    const SHT_SYMTAB: u32 = 2;
+    const SHN_LORESERVE: u16 = 0xff00;
+    // Each source leaves a different subset of the fixed relocation
+    // tables empty: no relocations at all, code-only, data-only, and
+    // both.
+    const CASES: &[&str] = &[
+        "int f(int x){return x+1;}",
+        "int g=3; int f(void){return g;}",
+        "extern int e; int *p=&e;",
+        "extern int e; int *p=&e; int f(void){return *p;}",
+        "_Thread_local int t; int f(void){return t;}",
+        "__attribute__((section(\"placed\"))) int s=7; int f(void){return s;}",
+    ];
+    for src in CASES {
+        for debug in [false, true] {
+            for target in [Target::LinuxX64, Target::LinuxAarch64] {
+                let program = Compiler::with_options(
+                    src.to_string(),
+                    target,
+                    CompileOptions::default().with_no_entry_point(true),
+                )
+                .compile()
+                .unwrap_or_else(|e| panic!("compile ({src}, {target:?}): {e}"));
+                let opts = NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::new().with_debug_info(debug)
+                };
+                let obj = crate::emit_native_with_options(&program, target, opts)
+                    .unwrap_or_else(|e| panic!("emit ({src}, {target:?}): {e}"));
+                let secs = elf64_section_table(&obj);
+                let ctx = alloc::format!("{src} [{target:?}, debug={debug}]");
+                for (name, ty, size, link, info) in &secs {
+                    if *ty != SHT_RELA {
+                        continue;
+                    }
+                    assert!(*size != 0, "{ctx}: `{name}` has no entries");
+                    assert_eq!(
+                        secs.get(*link as usize).map(|s| s.1),
+                        Some(SHT_SYMTAB),
+                        "{ctx}: `{name}` sh_link does not name the symbol table"
+                    );
+                    let base = name.strip_prefix(".rela").expect("relocation section name");
+                    assert_eq!(
+                        secs.get(*info as usize).map(|s| s.0.as_str()),
+                        Some(base),
+                        "{ctx}: `{name}` sh_info does not name `{base}`"
+                    );
+                }
+                // Every section index recorded in the symbol table still
+                // names a section after the numbering was compacted.
+                for (sym, shndx) in elf_symbol_shndx(&obj) {
+                    assert!(
+                        shndx >= SHN_LORESERVE || (shndx as usize) < secs.len(),
+                        "{ctx}: symbol `{sym}` names section {shndx} of {}",
+                        secs.len()
+                    );
+                }
+                // A defined data object lands in a content section, not
+                // in a relocation or string table.
+                for (sym, shndx) in elf_symbol_shndx(&obj) {
+                    if sym != "g" && sym != "p" && sym != "s" {
+                        continue;
+                    }
+                    let sec = &secs[shndx as usize];
+                    assert_ne!(sec.1, SHT_RELA, "{ctx}: `{sym}` resolves to `{}`", sec.0);
+                }
+            }
+        }
+    }
+}
+
 /// The post-inline recompaction lowers prebuilt bodies, so the import
 /// table has to come from those bodies rather than from the ASTs. An
 /// import whose only source reference is a static helper the inliner

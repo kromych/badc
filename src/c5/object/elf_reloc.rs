@@ -217,6 +217,9 @@ const STT_FILE: u8 = 4;
 const STT_SECTION: u8 = 3;
 const STT_TLS: u8 = 6;
 const SHN_UNDEF: u16 = 0;
+/// First reserved `st_shndx` value: at or above this an index names a
+/// convention (`SHN_ABS`, `SHN_COMMON`, ...), not a section header.
+const SHN_LORESERVE: u16 = 0xff00;
 const SHN_ABS: u16 = 0xfff1;
 
 /// Name prefix for the synthetic STB_LOCAL STT_NOTYPE symbols
@@ -835,7 +838,11 @@ pub(super) fn write_relocatable(
     // Plus the null section at index 0. The TLS sections are
     // appended last so adding them leaves every other section
     // index -- and the hardcoded symtab indices below -- stable.
+    // This is the nominal numbering; `shndx_map` below compacts it
+    // once the relocation tables are final, dropping every `.rela*`
+    // section that ended up with no entries.
     const SHIDX_TEXT: u16 = 1;
+    const SHIDX_RELA_TEXT: u16 = 2;
     const SHIDX_DATA: u16 = 3;
     const SHIDX_BSS: u16 = 4;
     const SHIDX_SYMTAB: u16 = 5;
@@ -2508,15 +2515,6 @@ pub(super) fn write_relocatable(
         );
     }
 
-    let symtab_bytes: Vec<u8> = symbols
-        .iter()
-        .flat_map(|s| {
-            let mut v = Vec::with_capacity(ELF64_SYM_SIZE);
-            write_struct(&mut v, s);
-            v
-        })
-        .collect();
-
     // Route `.rela.text` rows applying within a carved range into the
     // owning named section, and retarget rows whose text-section
     // addend the carve moved.
@@ -2766,64 +2764,6 @@ pub(super) fn write_relocatable(
         .iter()
         .filter(|e| !e.relas.is_empty())
         .count();
-    // `+ 1` is `.comment`: the producer fingerprint rides a non-alloc
-    // section here rather than the `.text` tail final images use, so
-    // the code section stays a pure instruction stream for decoders.
-    let num_sections: usize =
-        base_sections + named_section_count + named_rela_count + 2 * init_sections.len() + 1;
-
-    // Section name table. Index map below mirrors the SHIDX_*
-    // constants above (one entry per non-null section).
-    let mut shstrtab_names: Vec<&str> = alloc::vec![
-        ".text",
-        ".rela.text",
-        ".data",
-        ".bss",
-        ".symtab",
-        ".strtab",
-        ".shstrtab",
-        ".rela.data",
-        ".note.badc",
-        ".debug_info",
-        ".rela.debug_info",
-        ".debug_abbrev",
-        ".debug_line",
-        ".rela.debug_line",
-    ];
-    // `.tdata` / `.tbss` names land at offsets [14] / [15] when the
-    // unit carries TLS; gated so a TLS-free object's name table is
-    // byte-identical to before.
-    if has_tls {
-        shstrtab_names.push(".tdata");
-        shstrtab_names.push(".tbss");
-    }
-    // Named sections (attribute placements + inline-asm payloads) take
-    // the indices right after the fixed set; the on-demand `.rela`
-    // companions follow the block.
-    let named_names_start = shstrtab_names.len();
-    for e in &carve.table.entries {
-        shstrtab_names.push(e.name.as_str());
-    }
-    // `named_rela_pos[k]` is entry k's position among the rela-bearing
-    // entries; only those contribute a `.rela<name>` string.
-    let named_rela_names_start = shstrtab_names.len();
-    let mut named_rela_pos: Vec<usize> = Vec::with_capacity(carve.table.entries.len());
-    for e in &carve.table.entries {
-        named_rela_pos.push(shstrtab_names.len() - named_rela_names_start);
-        if !e.relas.is_empty() {
-            shstrtab_names.push(e.rela_name.as_str());
-        }
-    }
-    // `.init_array*` / `.fini_array*` names and their `.rela.*`
-    // companions, appended last so the fixed and TLS indices stay put.
-    let init_names_start = shstrtab_names.len();
-    for s in &init_sections {
-        shstrtab_names.push(s.name.as_str());
-        shstrtab_names.push(s.rela_name.as_str());
-    }
-    let comment_name_idx = shstrtab_names.len();
-    shstrtab_names.push(".comment");
-    let (shstrtab_bytes, shstrtab_offs) = build_strtab(&shstrtab_names);
 
     // Generate the DWARF triple for this TU. Address slots end
     // up as placeholders paired with `DwarfReloc` records that
@@ -2867,6 +2807,133 @@ pub(super) fn write_relocatable(
             ),
         );
     }
+
+    // Every relocation table of the fixed set is final here. A
+    // relocation section with no entries is dropped: it describes
+    // nothing, and a consumer reaching one through its target's
+    // `sh_info` link has no entry to read. `shndx_map` renumbers the
+    // nominal layout over the sections that survive; the named and
+    // `.init_array` groups that follow the fixed set shift by the
+    // total. Applied to every recorded index before it is written.
+    let fixed_rela_empty = [
+        (SHIDX_RELA_TEXT, rela_bytes.is_empty()),
+        (SHIDX_RELA_DATA, rela_data_bytes.is_empty()),
+        (SHIDX_RELA_DEBUG_INFO, rela_debug_info_bytes.is_empty()),
+        (SHIDX_RELA_DEBUG_LINE, rela_debug_line_bytes.is_empty()),
+    ];
+    let dropped_below = |n: u16| -> u16 {
+        fixed_rela_empty
+            .iter()
+            .filter(|&&(idx, empty)| empty && idx < n)
+            .count() as u16
+    };
+    let dropped_sections = dropped_below(base_sections as u16);
+    let shndx_map = |n: u16| -> u16 {
+        if n == 0 || n >= SHN_LORESERVE {
+            n
+        } else if n >= base_sections as u16 {
+            n - dropped_sections
+        } else {
+            n - dropped_below(n)
+        }
+    };
+    for s in &mut symbols {
+        s.st_shndx = shndx_map(s.st_shndx);
+    }
+    for x in &mut carve.shndx {
+        *x = shndx_map(*x);
+    }
+    let shidx_text = shndx_map(SHIDX_TEXT);
+    let shidx_data = shndx_map(SHIDX_DATA);
+    let shidx_symtab = shndx_map(SHIDX_SYMTAB);
+    let shidx_strtab = shndx_map(SHIDX_STRTAB);
+    let shidx_shstrtab = shndx_map(SHIDX_SHSTRTAB);
+    let shidx_debug_info = shndx_map(SHIDX_DEBUG_INFO);
+    let shidx_debug_line = shndx_map(SHIDX_DEBUG_LINE);
+
+    // `+ 1` is `.comment`: the producer fingerprint rides a non-alloc
+    // section here rather than the `.text` tail final images use, so
+    // the code section stays a pure instruction stream for decoders.
+    let num_sections: usize = base_sections - dropped_sections as usize
+        + named_section_count
+        + named_rela_count
+        + 2 * init_sections.len()
+        + 1;
+
+    // Section name table. One entry per non-null section, in section
+    // order, so the name of section `n` sits at `shndx_map(n) - 1`.
+    let fixed_names: [&str; 14] = [
+        ".text",
+        ".rela.text",
+        ".data",
+        ".bss",
+        ".symtab",
+        ".strtab",
+        ".shstrtab",
+        ".rela.data",
+        ".note.badc",
+        ".debug_info",
+        ".rela.debug_info",
+        ".debug_abbrev",
+        ".debug_line",
+        ".rela.debug_line",
+    ];
+    let mut shstrtab_names: Vec<&str> = Vec::with_capacity(num_sections);
+    for (i, name) in fixed_names.iter().enumerate() {
+        let nominal = i as u16 + 1;
+        if !fixed_rela_empty
+            .iter()
+            .any(|&(idx, empty)| empty && idx == nominal)
+        {
+            shstrtab_names.push(name);
+        }
+    }
+    // `.tdata` / `.tbss` names follow the fixed set when the unit
+    // carries TLS.
+    if has_tls {
+        shstrtab_names.push(".tdata");
+        shstrtab_names.push(".tbss");
+    }
+    // Named sections (attribute placements + inline-asm payloads) take
+    // the indices right after the fixed set; the on-demand `.rela`
+    // companions follow the block.
+    let named_names_start = shstrtab_names.len();
+    for e in &carve.table.entries {
+        shstrtab_names.push(e.name.as_str());
+    }
+    // `named_rela_pos[k]` is entry k's position among the rela-bearing
+    // entries; only those contribute a `.rela<name>` string.
+    let named_rela_names_start = shstrtab_names.len();
+    let mut named_rela_pos: Vec<usize> = Vec::with_capacity(carve.table.entries.len());
+    for e in &carve.table.entries {
+        named_rela_pos.push(shstrtab_names.len() - named_rela_names_start);
+        if !e.relas.is_empty() {
+            shstrtab_names.push(e.rela_name.as_str());
+        }
+    }
+    // `.init_array*` / `.fini_array*` names and their `.rela.*`
+    // companions, appended last so the fixed and TLS indices stay put.
+    let init_names_start = shstrtab_names.len();
+    for s in &init_sections {
+        shstrtab_names.push(s.name.as_str());
+        shstrtab_names.push(s.rela_name.as_str());
+    }
+    let comment_name_idx = shstrtab_names.len();
+    shstrtab_names.push(".comment");
+    let (shstrtab_bytes, shstrtab_offs) = build_strtab(&shstrtab_names);
+    // Name offset of a fixed section, addressed by its nominal index.
+    let fixed_name = |nominal: u16| shstrtab_offs[shndx_map(nominal) as usize - 1];
+
+    // Serialized last of all, so `shndx_map` has already compacted
+    // every `st_shndx`.
+    let symtab_bytes: Vec<u8> = symbols
+        .iter()
+        .flat_map(|s| {
+            let mut v = Vec::with_capacity(ELF64_SYM_SIZE);
+            write_struct(&mut v, s);
+            v
+        })
+        .collect();
 
     // Section data layout. Each section's offset starts at the
     // running tail of the output, rounded to its alignment.
@@ -2919,7 +2986,7 @@ pub(super) fn write_relocatable(
     out.resize(text_off as usize, 0);
     out.extend_from_slice(&text_body);
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[0],
+        sh_name: fixed_name(SHIDX_TEXT),
         sh_type: SHT_PROGBITS,
         sh_flags: SHF_ALLOC | SHF_EXECINSTR,
         sh_offset: text_off,
@@ -2932,21 +2999,23 @@ pub(super) fn write_relocatable(
     // points at the symbol table; `sh_info` at the section the
     // relocations apply to (`.text`). The `SHF_INFO_LINK` flag
     // signals the latter usage of `sh_info`.
-    let rela_off = round_up(out.len() as u64, 8);
-    out.resize(rela_off as usize, 0);
-    out.extend_from_slice(&rela_bytes);
-    sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[1],
-        sh_type: SHT_RELA,
-        sh_flags: SHF_INFO_LINK,
-        sh_offset: rela_off,
-        sh_size: rela_bytes.len() as u64,
-        sh_link: SHIDX_SYMTAB as u32,
-        sh_info: SHIDX_TEXT as u32,
-        sh_addralign: 8,
-        sh_entsize: ELF64_RELA_SIZE as u64,
-        ..Default::default()
-    });
+    if !rela_bytes.is_empty() {
+        let rela_off = round_up(out.len() as u64, 8);
+        out.resize(rela_off as usize, 0);
+        out.extend_from_slice(&rela_bytes);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_RELA_TEXT),
+            sh_type: SHT_RELA,
+            sh_flags: SHF_INFO_LINK,
+            sh_offset: rela_off,
+            sh_size: rela_bytes.len() as u64,
+            sh_link: shidx_symtab as u32,
+            sh_info: shidx_text as u32,
+            sh_addralign: 8,
+            sh_entsize: ELF64_RELA_SIZE as u64,
+            ..Default::default()
+        });
+    }
 
     // .data -- `sh_addralign` carries the alignment of the content the
     // plan keeps here. Objects moved into a named section copy their
@@ -3011,7 +3080,7 @@ pub(super) fn write_relocatable(
     out.resize(data_off as usize, 0);
     out.extend_from_slice(&data_body);
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[2],
+        sh_name: fixed_name(SHIDX_DATA),
         sh_type: SHT_PROGBITS,
         sh_flags: SHF_ALLOC | SHF_WRITE,
         sh_offset: data_off,
@@ -3025,7 +3094,7 @@ pub(super) fn write_relocatable(
     // zero-init objects the plan keeps in it; a fixed 16 would
     // silently under-align an over-aligned one.
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[3],
+        sh_name: fixed_name(SHIDX_BSS),
         sh_type: SHT_NOBITS,
         sh_flags: SHF_ALLOC | SHF_WRITE,
         sh_offset: out.len() as u64,
@@ -3039,11 +3108,11 @@ pub(super) fn write_relocatable(
     out.resize(symtab_off as usize, 0);
     out.extend_from_slice(&symtab_bytes);
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[4],
+        sh_name: fixed_name(SHIDX_SYMTAB),
         sh_type: SHT_SYMTAB,
         sh_offset: symtab_off,
         sh_size: symtab_bytes.len() as u64,
-        sh_link: SHIDX_STRTAB as u32,
+        sh_link: shidx_strtab as u32,
         sh_info: first_global,
         sh_addralign: 8,
         sh_entsize: ELF64_SYM_SIZE as u64,
@@ -3054,7 +3123,7 @@ pub(super) fn write_relocatable(
     let strtab_off = out.len() as u64;
     out.extend_from_slice(&strtab_bytes);
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[5],
+        sh_name: fixed_name(SHIDX_STRTAB),
         sh_type: SHT_STRTAB,
         sh_offset: strtab_off,
         sh_size: strtab_bytes.len() as u64,
@@ -3066,7 +3135,7 @@ pub(super) fn write_relocatable(
     let shstrtab_off = out.len() as u64;
     out.extend_from_slice(&shstrtab_bytes);
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[6],
+        sh_name: fixed_name(SHIDX_SHSTRTAB),
         sh_type: SHT_STRTAB,
         sh_offset: shstrtab_off,
         sh_size: shstrtab_bytes.len() as u64,
@@ -3076,22 +3145,23 @@ pub(super) fn write_relocatable(
 
     // .rela.data -- built and carve-partitioned above, before the
     // section-count planning.
-    let rela_data_off = round_up(out.len() as u64, 8);
-    out.resize(rela_data_off as usize, 0);
-    out.extend_from_slice(&rela_data_bytes);
-    sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[7],
-        sh_type: SHT_RELA,
-        sh_flags: SHF_INFO_LINK,
-        sh_offset: rela_data_off,
-        sh_size: rela_data_bytes.len() as u64,
-        sh_link: SHIDX_SYMTAB as u32,
-        sh_info: SHIDX_DATA as u32,
-        sh_addralign: 8,
-        sh_entsize: ELF64_RELA_SIZE as u64,
-        ..Default::default()
-    });
-    let _ = SHIDX_RELA_DATA;
+    if !rela_data_bytes.is_empty() {
+        let rela_data_off = round_up(out.len() as u64, 8);
+        out.resize(rela_data_off as usize, 0);
+        out.extend_from_slice(&rela_data_bytes);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_RELA_DATA),
+            sh_type: SHT_RELA,
+            sh_flags: SHF_INFO_LINK,
+            sh_offset: rela_data_off,
+            sh_size: rela_data_bytes.len() as u64,
+            sh_link: shidx_symtab as u32,
+            sh_info: shidx_data as u32,
+            sh_addralign: 8,
+            sh_entsize: ELF64_RELA_SIZE as u64,
+            ..Default::default()
+        });
+    }
 
     // .note.badc -- vendor note section. Two records under
     // namesz="badc\0":
@@ -3119,7 +3189,7 @@ pub(super) fn write_relocatable(
     out.resize(note_off as usize, 0);
     out.extend_from_slice(&note_bytes);
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[8],
+        sh_name: fixed_name(SHIDX_NOTE_BADC),
         sh_type: SHT_NOTE,
         sh_offset: note_off,
         sh_size: note_bytes.len() as u64,
@@ -3134,7 +3204,7 @@ pub(super) fn write_relocatable(
     let debug_info_off = out.len() as u64;
     out.extend_from_slice(&dwarf.debug_info);
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[9],
+        sh_name: fixed_name(SHIDX_DEBUG_INFO),
         sh_type: SHT_PROGBITS,
         sh_offset: debug_info_off,
         sh_size: dwarf.debug_info.len() as u64,
@@ -3143,21 +3213,23 @@ pub(super) fn write_relocatable(
     });
 
     // .rela.debug_info -- placeholder slots described above.
-    let rela_debug_info_off = round_up(out.len() as u64, 8);
-    out.resize(rela_debug_info_off as usize, 0);
-    out.extend_from_slice(&rela_debug_info_bytes);
-    sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[10],
-        sh_type: SHT_RELA,
-        sh_flags: SHF_INFO_LINK,
-        sh_offset: rela_debug_info_off,
-        sh_size: rela_debug_info_bytes.len() as u64,
-        sh_link: SHIDX_SYMTAB as u32,
-        sh_info: SHIDX_DEBUG_INFO as u32,
-        sh_addralign: 8,
-        sh_entsize: ELF64_RELA_SIZE as u64,
-        ..Default::default()
-    });
+    if !rela_debug_info_bytes.is_empty() {
+        let rela_debug_info_off = round_up(out.len() as u64, 8);
+        out.resize(rela_debug_info_off as usize, 0);
+        out.extend_from_slice(&rela_debug_info_bytes);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_RELA_DEBUG_INFO),
+            sh_type: SHT_RELA,
+            sh_flags: SHF_INFO_LINK,
+            sh_offset: rela_debug_info_off,
+            sh_size: rela_debug_info_bytes.len() as u64,
+            sh_link: shidx_symtab as u32,
+            sh_info: shidx_debug_info as u32,
+            sh_addralign: 8,
+            sh_entsize: ELF64_RELA_SIZE as u64,
+            ..Default::default()
+        });
+    }
 
     // .debug_abbrev -- abbreviation table. No relocs; the slot
     // it's referenced from in `.debug_info` already carries the
@@ -3165,7 +3237,7 @@ pub(super) fn write_relocatable(
     let debug_abbrev_off = out.len() as u64;
     out.extend_from_slice(&dwarf.debug_abbrev);
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[11],
+        sh_name: fixed_name(SHIDX_DEBUG_ABBREV),
         sh_type: SHT_PROGBITS,
         sh_offset: debug_abbrev_off,
         sh_size: dwarf.debug_abbrev.len() as u64,
@@ -3178,7 +3250,7 @@ pub(super) fn write_relocatable(
     let debug_line_off = out.len() as u64;
     out.extend_from_slice(&dwarf.debug_line);
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[12],
+        sh_name: fixed_name(SHIDX_DEBUG_LINE),
         sh_type: SHT_PROGBITS,
         sh_offset: debug_line_off,
         sh_size: dwarf.debug_line.len() as u64,
@@ -3187,21 +3259,23 @@ pub(super) fn write_relocatable(
     });
 
     // .rela.debug_line -- the placeholder slots above.
-    let rela_debug_line_off = round_up(out.len() as u64, 8);
-    out.resize(rela_debug_line_off as usize, 0);
-    out.extend_from_slice(&rela_debug_line_bytes);
-    sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[13],
-        sh_type: SHT_RELA,
-        sh_flags: SHF_INFO_LINK,
-        sh_offset: rela_debug_line_off,
-        sh_size: rela_debug_line_bytes.len() as u64,
-        sh_link: SHIDX_SYMTAB as u32,
-        sh_info: SHIDX_DEBUG_LINE as u32,
-        sh_addralign: 8,
-        sh_entsize: ELF64_RELA_SIZE as u64,
-        ..Default::default()
-    });
+    if !rela_debug_line_bytes.is_empty() {
+        let rela_debug_line_off = round_up(out.len() as u64, 8);
+        out.resize(rela_debug_line_off as usize, 0);
+        out.extend_from_slice(&rela_debug_line_bytes);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_RELA_DEBUG_LINE),
+            sh_type: SHT_RELA,
+            sh_flags: SHF_INFO_LINK,
+            sh_offset: rela_debug_line_off,
+            sh_size: rela_debug_line_bytes.len() as u64,
+            sh_link: shidx_symtab as u32,
+            sh_info: shidx_debug_line as u32,
+            sh_addralign: 8,
+            sh_entsize: ELF64_RELA_SIZE as u64,
+            ..Default::default()
+        });
+    }
     // TLS sections (only when the unit carries `_Thread_local`
     // storage). `.tdata` holds the initialised slice
     // `tls_data[..tls_init_size]`; `.tbss` is the zero-fill
@@ -3216,7 +3290,7 @@ pub(super) fn write_relocatable(
         out.resize(tdata_off as usize, 0);
         out.extend_from_slice(&program.tls_data[..tls_init_size]);
         sh.push(Elf64Shdr {
-            sh_name: shstrtab_offs[14],
+            sh_name: fixed_name(SHIDX_TDATA),
             sh_type: SHT_PROGBITS,
             sh_flags: SHF_ALLOC | SHF_WRITE | SHF_TLS,
             sh_offset: tdata_off,
@@ -3226,7 +3300,7 @@ pub(super) fn write_relocatable(
         });
         // .tbss (no file bytes). Size is the zero-fill remainder.
         sh.push(Elf64Shdr {
-            sh_name: shstrtab_offs[15],
+            sh_name: fixed_name(SHIDX_TBSS),
             sh_type: SHT_NOBITS,
             sh_flags: SHF_ALLOC | SHF_WRITE | SHF_TLS,
             sh_offset: out.len() as u64,
@@ -3293,7 +3367,7 @@ pub(super) fn write_relocatable(
             sh_flags: SHF_INFO_LINK,
             sh_offset: rela_off,
             sh_size: rb.len() as u64,
-            sh_link: SHIDX_SYMTAB as u32,
+            sh_link: shidx_symtab as u32,
             sh_info: carve.shndx[k] as u32,
             sh_addralign: 8,
             sh_entsize: ELF64_RELA_SIZE as u64,
@@ -3330,7 +3404,7 @@ pub(super) fn write_relocatable(
             sh_flags: SHF_INFO_LINK,
             sh_offset: rela_off,
             sh_size: s.rela.len() as u64,
-            sh_link: SHIDX_SYMTAB as u32,
+            sh_link: shidx_symtab as u32,
             sh_info: array_shndx,
             sh_addralign: 8,
             sh_entsize: ELF64_RELA_SIZE as u64,
@@ -3382,7 +3456,7 @@ pub(super) fn write_relocatable(
         e_phnum: 0,
         e_shentsize: ELF64_SHDR_SIZE as u16,
         e_shnum: num_sections as u16,
-        e_shstrndx: SHIDX_SHSTRTAB,
+        e_shstrndx: shidx_shstrtab,
     };
     let mut hdr_bytes: Vec<u8> = Vec::with_capacity(ELF64_EHDR_SIZE);
     write_struct(&mut hdr_bytes, &ehdr);

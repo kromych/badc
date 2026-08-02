@@ -63,6 +63,30 @@ def collect_units(kdir: Path) -> list[tuple[str, list[str]]]:
     return units
 
 
+def perf_wrap(cmd: list[str], counters: str, stat_path: Path) -> list[str]:
+    """Prefix a command with `perf stat`. Retired-instruction counts are a
+    property of the work done, not of who else is on the machine, so they
+    stay comparable across runs taken under different load; wall and CPU
+    time do not."""
+    return ["perf", "stat", "-x,", "-e", counters, "-o", str(stat_path),
+            "--", *cmd]
+
+
+def read_perf_stat(path: Path) -> dict:
+    out: dict = {}
+    try:
+        for line in path.read_text().splitlines():
+            f = line.split(",")
+            if len(f) >= 3 and f[0].strip() and f[0][0].isdigit():
+                try:
+                    out[f[2]] = int(f[0])
+                except ValueError:
+                    pass
+    except OSError:
+        pass
+    return out
+
+
 def run_measured(cmd: list[str], cwd: Path, out_path: Path | None,
                  timeout: float) -> dict:
     """Run one child and return its wall time, CPU split, peak RSS, status.
@@ -114,6 +138,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--badc")
     ap.add_argument("-j", "--jobs", type=int, default=1)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--stride", type=int, default=1,
+                    help="measure every Nth unit of the sorted corpus; the "
+                         "corpus is ordered by path, so a stride samples "
+                         "across subsystems rather than truncating")
     ap.add_argument("--timeout", type=float, default=300.0)
     ap.add_argument("--mode", choices=("full", "pp", "both"), default="both")
     ap.add_argument("--opt", choices=("recorded", "O0", "O"), default="recorded",
@@ -123,14 +151,24 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--scratch", type=Path)
     ap.add_argument("--keep-objects", action="store_true")
     ap.add_argument("--only", help="substring filter on the source path")
+    ap.add_argument("--reps", type=int, default=1,
+                    help="repeat each unit N times and keep the cheapest "
+                         "observation; the minimum is the least-contended "
+                         "sample, which is what a quiet machine would give")
+    ap.add_argument("--counters",
+                    help="perf stat event list to record per unit, e.g. "
+                         "instructions,cycles; costs one perf exec per unit")
     args = ap.parse_args(argv)
 
     badc = sweep.resolve_badc(args.badc)
     kdir = args.kernel_dir.resolve()
     target = sweep.TARGETS[args.arch]
     units = collect_units(kdir)
+    n_all = len(units)
     if args.only:
         units = [u for u in units if args.only in u[0]]
+    if args.stride > 1:
+        units = units[:: args.stride]
     if args.limit:
         units = units[: args.limit]
     if not units:
@@ -138,8 +176,9 @@ def main(argv: list[str] | None = None) -> int:
 
     scratch = (args.scratch or (sweep.LINUX_DIR / ".work" / f"timing-{args.arch}"))
     scratch.mkdir(parents=True, exist_ok=True)
-    log(f"badc={badc} target={target} units={len(units)} jobs={args.jobs} "
-        f"mode={args.mode} opt={args.opt}")
+    log(f"badc={badc} target={target} units={len(units)}/{n_all} "
+        f"stride={args.stride} jobs={args.jobs} mode={args.mode} "
+        f"opt={args.opt}")
 
     def flags_for(gcc_argv: list[str]) -> list[str]:
         f = sweep.rewrite(gcc_argv)
@@ -159,21 +198,39 @@ def main(argv: list[str] | None = None) -> int:
             "src_bytes": (kdir / src).stat().st_size if (kdir / src).is_file() else 0,
             "opt": "-O" if "-O" in flags else "-O0",
         }
+        statf = scratch / (stem + ".stat")
+
+        def wrap(c: list[str]) -> list[str]:
+            return perf_wrap(c, args.counters, statf) if args.counters else c
+
+        def cheapest(cmd: list[str], out: Path | None) -> dict:
+            best = None
+            for _ in range(args.reps):
+                r = run_measured(cmd, kdir, out, args.timeout)
+                if args.counters:
+                    r["counters"] = read_perf_stat(statf)
+                if r["rc"] != 0:
+                    return r
+                if best is None or r["utime"] + r["stime"] < best["utime"] + best["stime"]:
+                    best = r
+            return best if best is not None else r
+
         if args.mode in ("pp", "both"):
             pp_out = scratch / (stem + ".i")
-            r = run_measured(base[:-1] + ["-E", src], kdir, pp_out, args.timeout)
+            r = cheapest(wrap(base[:-1] + ["-E", src]), pp_out)
             rec["pp"] = r
             rec["pp_bytes"] = pp_out.stat().st_size if pp_out.is_file() else 0
             if not args.keep_objects and pp_out.is_file():
                 pp_out.unlink()
         if args.mode in ("full", "both"):
             obj = scratch / (stem + ".o")
-            r = run_measured(base[:-1] + ["-c", "-o", str(obj), src], kdir,
-                             None, args.timeout)
+            r = cheapest(wrap(base[:-1] + ["-c", "-o", str(obj), src]), None)
             rec["full"] = r
             rec["obj_bytes"] = obj.stat().st_size if obj.is_file() else 0
             if not args.keep_objects and obj.is_file():
                 obj.unlink()
+        if statf.is_file():
+            statf.unlink()
         return rec
 
     t0 = time.monotonic()
@@ -195,6 +252,8 @@ def main(argv: list[str] | None = None) -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps({
         "arch": args.arch,
+        "corpus_units": n_all,
+        "stride": args.stride,
         "mode": args.mode,
         "opt": args.opt,
         "jobs": args.jobs,

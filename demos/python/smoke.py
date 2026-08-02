@@ -57,16 +57,26 @@ SRC = PY_DIR / ".cache" / f"Python-{VERSION}"
 BASELINE_FAILURES = 0
 
 # Test-suite slice to run once the interpreter is up. Every module here was
-# verified to pass on the badc-built interpreter on linux-x64 and
-# linux-aarch64. The second group is chosen to complement `build.py`'s
-# slices rather than repeat them: compression and hashing (zlib, lzma, the
-# HACL hashes), the file and temporary-file paths, and the pure-Python
-# library corners those two do not reach.
+# verified to pass on the badc-built interpreter on linux-x64,
+# linux-aarch64 and macos-aarch64. The second group is chosen to complement
+# `build.py`'s slices rather than repeat them: compression and hashing
+# (zlib, lzma, the HACL hashes), the file and temporary-file paths, and the
+# pure-Python library corners those two do not reach.
+#
+# The last group (`test_pickle` onwards) covers the `dlopen`'d extension
+# modules that bind the interpreter's data globals -- `_pickle`, `_ssl`,
+# `pyexpat` and `_elementtree` all resolve `_PyByteArray_empty_string`
+# or `_Py_HashSecret`, both zero-initialized.
+#
+# `test_generators` needs the process to start with SIGINT at its default
+# disposition: one case raises SIGINT and expects `KeyboardInterrupt` in a
+# generator. A shell that starts this script as a background job sets
+# SIGINT to SIG_IGN, and the case then fails for the reference interpreter
+# too.
 #
 # Deliberately absent, each with a tracked cause:
-#   test_pickle, test_ssl  -- the extension modules do not load: a BSS
-#     data global of the interpreter is missing from the executable's
-#     dynamic symbol table, so the dlopen'd module cannot bind it.
+#   test_coroutines (macOS)-- an async comprehension faults in the
+#     badc-built interpreter on macos-aarch64; passes on linux-x64.
 #   test_time              -- <time.h> lacks CLOCK_THREAD_CPUTIME_ID, so
 #     time.thread_time() is absent.
 #   test_json              -- json.tool's colour cases spawn an isolated
@@ -92,11 +102,17 @@ TEST_SLICE = [
     "test_types",
     "test_abc",
     "test_generators",
-    "test_coroutines",
     "test_fileio",
     "test_tempfile",
     "test_posixpath",
+    "test_pickle",
+    "test_ssl",
+    "test_pyexpat",
+    "test_xml_etree",
 ]
+# Runs everywhere but macos-aarch64; see the note above.
+if sys.platform != "darwin":
+    TEST_SLICE.append("test_coroutines")
 
 
 def run(cmd, **kw):

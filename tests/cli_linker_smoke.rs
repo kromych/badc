@@ -3625,3 +3625,88 @@ fn const_label_address_table_storage_is_writable() {
         );
     }
 }
+
+// A `dlopen`'d module resolves the host executable's symbols through
+// its dynamic symbol table. Gated on POSIX (dlopen) and on a system C
+// driver to build the module: the point is the cross-toolchain
+// boundary an extension module actually crosses.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn dlopened_module_binds_host_data_and_bss_globals() {
+    let cc = ["cc", "gcc", "clang"].into_iter().find(|c| {
+        Command::new(c)
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    });
+    let Some(cc) = cc else {
+        eprintln!("skipping dlopened_module_binds_host_data_and_bss_globals: no system C driver");
+        return;
+    };
+    let dir = tempdir("dlopen-host-globals");
+    let host = write_source(
+        &dir,
+        "host.c",
+        "#include <dlfcn.h>\n\
+         #include <stdio.h>\n\
+         int host_initialized = 7;\n\
+         int host_zero;\n\
+         char host_empty[] = \"\";\n\
+         int host_fn(void) { return 11; }\n\
+         int main(int argc, char **argv) {\n\
+             void *h; int (*probe)(void);\n\
+             host_zero = 3;\n\
+             h = dlopen(argv[1], RTLD_NOW);\n\
+             if (!h) { printf(\"dlopen: %s\\n\", dlerror()); return 1; }\n\
+             probe = (int (*)(void))dlsym(h, \"probe\");\n\
+             if (!probe) { printf(\"dlsym: %s\\n\", dlerror()); return 2; }\n\
+             (void)argc; return probe(); }\n",
+    );
+    let module = write_source(
+        &dir,
+        "module.c",
+        "extern int host_initialized;\n\
+         extern int host_zero;\n\
+         extern char host_empty[];\n\
+         extern int host_fn(void);\n\
+         int probe(void) {\n\
+             return host_initialized + host_zero + host_empty[0] + host_fn(); }\n",
+    );
+    let exe = dir.join("host");
+    run(
+        Command::new(badc())
+            // The data half of the export set is what a zero-init
+            // global needs; the code half resolves `host_fn`.
+            .arg("--export-all")
+            .arg("--export-data")
+            .arg("-o")
+            .arg(&exe)
+            .arg(&host)
+            .current_dir(&dir),
+        "link host executable",
+    );
+    let so = dir.join(if cfg!(target_os = "macos") {
+        "module.dylib"
+    } else {
+        "module.so"
+    });
+    let mut build = Command::new(cc);
+    build.arg("-shared").arg("-fPIC").arg("-o").arg(&so);
+    if cfg!(target_os = "macos") {
+        build.arg("-undefined").arg("dynamic_lookup");
+    }
+    run(build.arg(&module).current_dir(&dir), "build module");
+
+    let out = Command::new(&exe)
+        .arg(&so)
+        .output()
+        .expect("run host executable");
+    assert_eq!(
+        out.status.code(),
+        Some(21),
+        "the module must bind the host's .data, .bss and .text globals \
+         (stdout {:?})",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}

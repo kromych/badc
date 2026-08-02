@@ -22,10 +22,12 @@ evaluator, the object and memory model, Unicode, and the parser.
   per-benchmark output parity (a differential correctness check over a workload
   broader than the test slice), and reports timings relative to the reference.
 
-CPython's object allocator embeds mimalloc, whose per-thread heap tables use a
-thread-local pointer initialized with the address of a global -- a relocation
-against the TLS template badc does not yet emit. The build disables mimalloc so
-`Objects/obmalloc.c` uses the pymalloc allocator.
+`smoke.py` configures `--without-mimalloc --without-remote-debug`; its docstring
+carries the first error each knob produces today. In short: mimalloc's
+per-thread heap table is a thread-local pointer initialized with the address of
+a global, which badc rejects, and the remote-debugging code needs
+`process_vm_readv` on Linux and `libproc.h` on macOS. `--with-ensurepip` has no
+effect on what badc compiles.
 
 CI builds and tests every target with `build.py` -- a matrix over macOS, Linux
 x64/arm64, and Windows x64/arm64; each lane builds and runs natively. `smoke.py`

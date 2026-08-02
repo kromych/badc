@@ -761,9 +761,12 @@ impl Compiler {
                     let pack = self.lex.current_pack();
                     let elem_size = self.size_of_type(field_ty);
                     // A complete but empty `struct {}` member contributes no
-                    // storage and no alignment (GCC): the following member
-                    // shares its offset, which is what the `__DECLARE_FLEX_ARRAY`
-                    // idiom (`struct {} __empty; T arr[];`) relies on.
+                    // storage (GCC), so the following member shares its
+                    // offset -- which is what the `__DECLARE_FLEX_ARRAY`
+                    // idiom (`struct {} __empty; T arr[];`) relies on. Its
+                    // alignment still applies: an empty type carrying
+                    // `aligned(N)` places the member, and raises the
+                    // containing type, at N.
                     let is_empty_aggregate = is_struct_value_ty(field_ty)
                         && self.structs[struct_id_of(field_ty)].fields.is_empty();
                     let field_storage = if is_empty_aggregate {
@@ -789,7 +792,7 @@ impl Compiler {
                     // through a pointer declarator or under `packed`,
                     // which drops a type attribute to 1 (a member
                     // `_Alignas` survives packing via `decl_align`).
-                    let natural_align = if is_empty_aggregate || attr_packed {
+                    let natural_align = if attr_packed {
                         1
                     } else if type_align_override > 0 && !is_pointer_ty(field_ty) {
                         type_align_override

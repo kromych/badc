@@ -827,6 +827,9 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // Constant-count `__builtin_memcpy` / `memmove` / `memset` expand
     // inline; a count past the cap falls back to the library.
     ("builtin_mem_transfer_inline.c", 0),
+    // An empty structure member contributes no storage but keeps its
+    // alignment, so an `aligned(N)` empty type spaces what follows.
+    ("empty_struct_member_align.c", 0),
     // A function designator initializes a static slot with its address
     // only when it is the whole initializer; a foldable call is a value.
     ("static_init_fn_designator.c", 0),

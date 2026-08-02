@@ -1802,8 +1802,7 @@ impl Compiler {
         while (self.data.len() as i64 - off) % 8 != 0 {
             self.data.push(0);
         }
-        let sym_idx =
-            self.intern_compound_literal_symbol(off, elem_ty, (count * elem_size) as i64);
+        let sym_idx = self.intern_compound_literal_symbol(off, elem_ty, (count * elem_size) as i64);
         Ok((off as i128, InitElemReloc::Data(Some(sym_idx))))
     }
 

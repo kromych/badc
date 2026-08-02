@@ -63,10 +63,14 @@ BASELINE_FAILURES = 0
 # HACL hashes), the file and temporary-file paths, and the pure-Python
 # library corners those two do not reach.
 #
+# The last group (`test_pickle` onwards) covers the `dlopen`'d extension
+# modules that bind the interpreter's data globals -- `_pickle`, `_ssl`,
+# `pyexpat` and `_elementtree` all resolve `_PyByteArray_empty_string`
+# or `_Py_HashSecret`, both zero-initialized.
+#
 # Deliberately absent, each with a tracked cause:
-#   test_pickle, test_ssl  -- the extension modules do not load: a BSS
-#     data global of the interpreter is missing from the executable's
-#     dynamic symbol table, so the dlopen'd module cannot bind it.
+#   test_coroutines (macOS)-- an async comprehension faults in the
+#     badc-built interpreter on macos-aarch64; passes on linux-x64.
 #   test_time              -- <time.h> lacks CLOCK_THREAD_CPUTIME_ID, so
 #     time.thread_time() is absent.
 #   test_json              -- json.tool's colour cases spawn an isolated
@@ -92,11 +96,17 @@ TEST_SLICE = [
     "test_types",
     "test_abc",
     "test_generators",
-    "test_coroutines",
     "test_fileio",
     "test_tempfile",
     "test_posixpath",
+    "test_pickle",
+    "test_ssl",
+    "test_pyexpat",
+    "test_xml_etree",
 ]
+# Runs everywhere but macos-aarch64; see the note above.
+if sys.platform != "darwin":
+    TEST_SLICE.append("test_coroutines")
 
 
 def run(cmd, **kw):

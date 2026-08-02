@@ -83,6 +83,33 @@ pub(crate) enum UnOp {
     Deref,
 }
 
+/// Memory transfer the compiler expands inline, from a GCC
+/// `__builtin_mem*` call whose byte count is an integer constant
+/// expression.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MemTransferOp {
+    /// C99 7.21.2.1 `memcpy` -- the objects may not overlap.
+    Copy,
+    /// C99 7.21.2.2 `memmove` -- the objects may overlap.
+    Move,
+    /// C99 7.21.6.1 `memset` -- fill with a byte value.
+    Fill,
+}
+
+/// Widest access the inline expansion of a memory transfer may use at
+/// `align`-byte endpoint alignment.
+pub(crate) fn mem_transfer_unit(align: u32) -> u32 {
+    align.clamp(1, 8)
+}
+
+/// Number of accesses that expansion emits for `size` bytes: whole
+/// units, then one access per set bit of the remainder as the width
+/// halves down to a byte.
+pub(crate) fn mem_transfer_accesses(size: i64, align: u32) -> i64 {
+    let unit = i64::from(mem_transfer_unit(align));
+    size / unit + i64::from((size % unit).count_ones())
+}
+
 /// C11 7.17 generic atomic operation. The operand width is the
 /// pointee type of the first argument; the walker lowers each kind
 /// to ordinary load / store / read-modify-write on that width.
@@ -415,6 +442,20 @@ pub(crate) enum Expr {
         b: ExprId,
         dst: ExprId,
         elem_ty: i64,
+        ty: i64,
+    },
+    /// GCC `__builtin_memcpy` / `__builtin_memmove` / `__builtin_memset`
+    /// with an integer-constant-expression byte count. `src` is the
+    /// source address for the copies and the fill byte for the set.
+    /// `align` is the alignment both endpoints satisfy by virtue of
+    /// their pointer types (C99 6.3.2.3p7). The walker expands the
+    /// transfer inline; the value is the destination address (`ty`).
+    MemTransfer {
+        op: MemTransferOp,
+        dst: ExprId,
+        src: ExprId,
+        size: i64,
+        align: u32,
         ty: i64,
     },
 }
@@ -845,7 +886,8 @@ impl Ast {
                 | Expr::VlaBase { .. }
                 | Expr::VlaSizeof { .. }
                 | Expr::StmtExpr { .. }
-                | Expr::CheckedArith { .. } => {}
+                | Expr::CheckedArith { .. }
+                | Expr::MemTransfer { .. } => {}
             }
         }
         for decl in &mut self.decls {
@@ -1039,7 +1081,8 @@ fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
         | Expr::Atomic { ty, .. }
         | Expr::VlaBase { ty, .. }
         | Expr::StmtExpr { ty, .. }
-        | Expr::CheckedArith { ty, .. } => f(ty),
+        | Expr::CheckedArith { ty, .. }
+        | Expr::MemTransfer { ty, .. } => f(ty),
         Expr::VlaSizeof { .. } => {}
         Expr::Cast { to_ty, .. } => f(to_ty),
         Expr::CompoundLiteral { ty, init, .. } => {

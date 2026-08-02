@@ -17,7 +17,9 @@
 // here. Every translation unit gets this header, so nothing in it may
 // shadow a name the compiler evaluates itself: the absolute-value
 // thunks would, and live in <_builtins_abs.h>, auto-included when one
-// of them is used outside a constant expression.
+// of them is used outside a constant expression. The memory-transfer
+// builtins would too: the compiler expands them for a constant byte
+// count and calls the library function of the same name otherwise.
 
 #pragma once
 
@@ -47,9 +49,6 @@
 // `constant_p` folds to 1 when its unevaluated operand is a constant
 // expression, else 0.
 
-#define __builtin_memcpy memcpy
-#define __builtin_memmove memmove
-#define __builtin_memset memset
 #define __builtin_memcmp memcmp
 #define __builtin_memchr memchr
 #define __builtin_strcpy strcpy

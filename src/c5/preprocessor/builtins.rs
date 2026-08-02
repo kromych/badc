@@ -111,6 +111,12 @@ pub(super) const BUILTINS: &[Builtin] = &[
     direct("__builtin_add_overflow"),
     direct("__builtin_sub_overflow"),
     direct("__builtin_mul_overflow"),
+    // Memory transfers with an integer-constant-expression byte count,
+    // expanded inline at the call site. A count the expansion declines
+    // falls back to the library function through <_builtins_mem.h>.
+    direct("__builtin_memcpy"),
+    direct("__builtin_memmove"),
+    direct("__builtin_memset"),
     // Hints with no code-generation effect: predefined as macros, either
     // by the preprocessor or by the auto-included <_builtins.h>.
     direct("__builtin_expect"),

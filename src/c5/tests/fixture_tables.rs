@@ -824,6 +824,9 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // literal selects a branch at translation time and the dead arms'
     // calls are never emitted.
     ("builtin_str_compare_fold.c", 0),
+    // Constant-count `__builtin_memcpy` / `memmove` / `memset` expand
+    // inline; a count past the cap falls back to the library.
+    ("builtin_mem_transfer_inline.c", 0),
     // A function designator initializes a static slot with its address
     // only when it is the whole initializer; a foldable call is a value.
     ("static_init_fn_designator.c", 0),

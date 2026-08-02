@@ -2908,6 +2908,85 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Expand a GCC `__builtin_memcpy` / `__builtin_memmove` /
+    /// `__builtin_memset` whose byte count is a constant. The copy rides
+    /// `Inst::Mcpy`, which transfers forward in units and so carries the
+    /// non-overlap requirement of C99 7.21.2.1. The move loads every unit
+    /// before storing any, which is defined for overlapping objects
+    /// (7.21.2.2). The fill splats its byte across a register and stores
+    /// it. The value is the destination address.
+    fn walk_mem_transfer(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        op: super::MemTransferOp,
+        dst_expr: ExprId,
+        src_expr: ExprId,
+        size: i64,
+        align: u32,
+    ) -> Result<super::super::ir::ValueId, WalkError> {
+        use super::MemTransferOp;
+        let dst = self.walk_expr_rvalue(b, dst_expr)?;
+        let src = self.walk_expr_rvalue(b, src_expr)?;
+        if op == MemTransferOp::Copy {
+            b.mcpy(dst, src, size, align);
+            return Ok(dst);
+        }
+        // Chunk into the widest accesses the endpoints' alignment
+        // permits; the width is not raised past it, so the expansion
+        // holds on a target that faults on a misaligned access.
+        let unit = super::mem_transfer_unit(align);
+        let mut chunks: alloc::vec::Vec<(i64, LoadKind, StoreKind)> = alloc::vec::Vec::new();
+        let mut off = 0i64;
+        while off < size {
+            let left = size - off;
+            let w = [8u32, 4, 2, 1]
+                .into_iter()
+                .find(|w| *w <= unit && i64::from(*w) <= left)
+                .unwrap_or(1);
+            chunks.push(match w {
+                8 => (off, LoadKind::I64, StoreKind::I64),
+                4 => (off, LoadKind::U32, StoreKind::I32),
+                2 => (off, LoadKind::U16, StoreKind::I16),
+                _ => (off, LoadKind::U8, StoreKind::I8),
+            });
+            off += i64::from(w);
+        }
+        if op == MemTransferOp::Fill {
+            // C99 7.21.6.1p2 converts the fill value to `unsigned char`;
+            // the splat repeats that byte across the store width.
+            let byte = b.binop_imm(BinOp::And, src, 0xff);
+            let mut splat = [(1u32, byte); 4].map(|(w, v)| (w, v));
+            for i in 1..4 {
+                let (w, prev) = splat[i - 1];
+                let shifted = b.binop_imm(BinOp::Shl, prev, i64::from(w) * 8);
+                splat[i] = (w * 2, b.binop(BinOp::Or, prev, shifted));
+            }
+            for (off, _, sk) in chunks {
+                let v = match sk {
+                    StoreKind::I64 => splat[3].1,
+                    StoreKind::I32 => splat[2].1,
+                    StoreKind::I16 => splat[1].1,
+                    _ => byte,
+                };
+                let p = b.binop_imm(BinOp::Add, dst, off);
+                b.store(p, v, sk);
+            }
+            return Ok(dst);
+        }
+        let loaded: alloc::vec::Vec<(i64, StoreKind, super::super::ir::ValueId)> = chunks
+            .into_iter()
+            .map(|(off, lk, sk)| {
+                let p = b.binop_imm(BinOp::Add, src, off);
+                (off, sk, b.load(p, lk))
+            })
+            .collect();
+        for (off, sk, v) in loaded {
+            let p = b.binop_imm(BinOp::Add, dst, off);
+            b.store(p, v, sk);
+        }
+        Ok(dst)
+    }
+
     /// Lower a GCC `__builtin_{add,sub,mul}_overflow(a, b, dst)`. Stores
     /// the wrapped `a op b` through `dst` (pointee `elem_ty`) and yields
     /// the overflow flag (0 / 1). For widths under 8 bytes the operands
@@ -4744,6 +4823,7 @@ impl<'a> Walker<'a> {
                     Expr::VlaSizeof { .. } => Ty::Int as i64,
                     Expr::StmtExpr { ty, .. } => *ty,
                     Expr::CheckedArith { ty, .. } => *ty,
+                    Expr::MemTransfer { ty, .. } => *ty,
                     // `&&label` is a `void *` (char-pointer encoding).
                     Expr::LabelAddr(_) => {
                         crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64
@@ -4998,6 +5078,18 @@ impl<'a> Walker<'a> {
             Expr::StmtExpr { block, .. } => {
                 let block = *block;
                 self.walk_stmt_expr(b, block)
+            }
+            // GCC `__builtin_mem*` with a constant byte count.
+            Expr::MemTransfer {
+                op,
+                dst,
+                src,
+                size,
+                align,
+                ..
+            } => {
+                let (op, dst, src, size, align) = (*op, *dst, *src, *size, *align);
+                self.walk_mem_transfer(b, op, dst, src, size, align)
             }
             // GCC `__builtin_{add,sub,mul}_overflow(a, b, dst)`.
             Expr::CheckedArith {
@@ -6704,7 +6796,8 @@ pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
         | Expr::Atomic { ty, .. }
         | Expr::VlaBase { ty, .. }
         | Expr::StmtExpr { ty, .. }
-        | Expr::CheckedArith { ty, .. } => Some(*ty),
+        | Expr::CheckedArith { ty, .. }
+        | Expr::MemTransfer { ty, .. } => Some(*ty),
         Expr::Cast { to_ty, .. } => Some(*to_ty),
         Expr::Sizeof(s) => Some(s.result_ty),
         // `sizeof <vla>` is a runtime `size_t`; c5 types it as `int`.
@@ -6907,6 +7000,7 @@ fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::VlaSizeof { .. } => "VlaSizeof",
         Expr::StmtExpr { .. } => "StmtExpr",
         Expr::CheckedArith { .. } => "CheckedArith",
+        Expr::MemTransfer { .. } => "MemTransfer",
         Expr::InlineAsm(_) => "InlineAsm",
     }
 }

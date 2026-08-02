@@ -38,6 +38,20 @@ use super::super::ir::LoadKind;
 use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
+
+/// Largest byte count `__builtin_memcpy` is expanded inline for; gcc's
+/// threshold on both supported targets. The copy rides `Inst::Mcpy`,
+/// which streams, so the bound is on bytes rather than accesses.
+const MAX_MEM_TRANSFER_BYTES: i64 = 256;
+/// Largest number of stores the `__builtin_memset` expansion emits.
+const MAX_MEM_FILL_ACCESSES: i64 = 32;
+/// Same for `__builtin_memmove`, whose expansion holds every loaded
+/// unit live at once so the objects may overlap; the bound is on
+/// simultaneously live values.
+const MAX_MEM_MOVE_ACCESSES: i64 = 8;
+/// Alignment ceiling for the derived endpoint alignment: the widest
+/// access `Inst::Mcpy` and the inline expansions use.
+const MAX_MEM_TRANSFER_ALIGN: u32 = 8;
 use super::types::{
     UNSIGNED_BIT, VOLATILE_BIT, apply_qual_bits, format_type, fp_result_ty, integer_promote,
     is_bool_ty, is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_struct_value_ty,
@@ -311,6 +325,130 @@ impl Compiler {
         );
         self.ty = ty;
         self.ast_acc = Some(id);
+        Ok(())
+    }
+
+    /// Parse a GCC memory-transfer builtin (`__builtin_memcpy`,
+    /// `__builtin_memmove`, `__builtin_memset`) with the opening `(`
+    /// already consumed. A byte count that is an integer constant
+    /// expression within the expansion cap builds the inline-expansion
+    /// node; any other count builds a call to the library function of
+    /// the same name -- the split gcc makes between an expanded and a
+    /// called transfer. The decision is per call site, so one declined
+    /// count in a translation unit does not withdraw the expansion from
+    /// the rest.
+    fn parse_mem_transfer_builtin(
+        &mut self,
+        op: super::super::ast::MemTransferOp,
+        name: &str,
+    ) -> Result<(), C5Error> {
+        use super::super::ast::{Expr, ExprId, MemTransferOp};
+        let mut args: Vec<ExprId> = Vec::new();
+        let mut ptr_align = MAX_MEM_TRANSFER_ALIGN;
+        if self.lex.tk != ')' {
+            loop {
+                self.expr(Token::Assign as i64)?;
+                // The pointer operands guarantee their pointee type's
+                // alignment (C99 6.3.2.3p7); the fill byte contributes
+                // nothing. `void *` is `unsigned char *` here, so an
+                // untyped endpoint yields 1.
+                if args.len() < 2 && !(op == MemTransferOp::Fill && args.len() == 1) {
+                    let a = if is_pointer_ty(self.ty) {
+                        self.align_of_type(self.ty - Ty::Ptr as i64) as u32
+                    } else {
+                        1
+                    };
+                    ptr_align = ptr_align.min(a.max(1));
+                }
+                if let Some(a) = self.ast_acc {
+                    args.push(a);
+                }
+                if self.lex.tk == ',' {
+                    self.next()?;
+                    continue;
+                }
+                break;
+            }
+        }
+        if self.lex.tk != ')' || args.len() != 3 {
+            return Err(self.compile_err(format!("`{name}` expects (dst, src, count)")));
+        }
+        self.next()?;
+        let fits = |n: i64| {
+            n >= 0
+                && match op {
+                    MemTransferOp::Copy => n <= MAX_MEM_TRANSFER_BYTES,
+                    MemTransferOp::Move => {
+                        super::super::ast::mem_transfer_accesses(n, ptr_align)
+                            <= MAX_MEM_MOVE_ACCESSES
+                    }
+                    MemTransferOp::Fill => {
+                        super::super::ast::mem_transfer_accesses(n, ptr_align)
+                            <= MAX_MEM_FILL_ACCESSES
+                    }
+                }
+        };
+        // Both forms yield the destination address (C99 7.21.2.1p2).
+        let ty = Ty::Char as i64 + UNSIGNED_BIT + Ty::Ptr as i64;
+        let size = match self.expr_const_int(args[2]) {
+            Some(n) if fits(n) => n,
+            _ => return self.emit_mem_transfer_libcall(op, &args, ty),
+        };
+        self.mark_emit_other();
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            Expr::MemTransfer {
+                op,
+                dst: args[0],
+                src: args[1],
+                size,
+                align: ptr_align,
+                ty,
+            },
+            pos,
+        );
+        self.ty = ty;
+        self.ast_acc = Some(id);
+        Ok(())
+    }
+
+    /// Build the call a declined memory-transfer expansion falls back
+    /// to: the library function of the same name, with the arguments
+    /// already parsed. An undeclared library name reports the same
+    /// "unknown function" the ordinary call path does, so the
+    /// auto-include retry brings its header in (C99 7.1.4p2).
+    fn emit_mem_transfer_libcall(
+        &mut self,
+        op: super::super::ast::MemTransferOp,
+        args: &[super::super::ast::ExprId],
+        ty: i64,
+    ) -> Result<(), C5Error> {
+        use super::super::ast::MemTransferOp;
+        let name = match op {
+            MemTransferOp::Copy => "memcpy",
+            MemTransferOp::Move => "memmove",
+            MemTransferOp::Fill => "memset",
+        };
+        let idx = super::super::lexer::find_symbol(&self.symbols, &self.symbol_index, name);
+        let callable = idx.filter(|&i| {
+            self.symbols[i].class == Token::Fun as i64 || self.symbols[i].class == Token::Sys as i64
+        });
+        let Some(idx) = callable else {
+            let suggestion = match super::super::headers::header_declaring(name) {
+                Some(h) => format!(" -- try `#include <{h}>`"),
+                None => String::new(),
+            };
+            return Err(self.compile_err(format!("unknown function `{name}`{suggestion}")));
+        };
+        self.symbols[idx].was_referenced = true;
+        self.flush_pending_stores();
+        self.pending.last_emit_was_indirect_call = false;
+        self.mark_emit_other();
+        let callee_ty = self.symbols[idx].type_;
+        let callee = self.ast_synthesize_callee(idx as u32, callee_ty);
+        self.ast_acc = None;
+        self.ast_emit_call(callee, args.iter().map(|a| Some(*a)).collect(), ty);
+        self.ty = ty;
         Ok(())
     }
 
@@ -873,7 +1011,17 @@ impl Compiler {
                 // operands (badc does not model the queried attributes).
                 let is_has_attribute =
                     not_real_fn && self.symbols[id_idx].name == "__builtin_has_attribute";
-                if is_choose_expr {
+                // GCC memory transfers, expanded inline when the byte
+                // count is an integer constant expression.
+                let mem_transfer = if not_real_fn {
+                    mem_transfer_op(self.symbols[id_idx].name.as_str())
+                } else {
+                    None
+                };
+                if let Some(mop) = mem_transfer {
+                    let name = self.symbols[id_idx].name.clone();
+                    self.parse_mem_transfer_builtin(mop, &name)?;
+                } else if is_choose_expr {
                     self.parse_choose_expr_builtin()?;
                 } else if is_constant_p {
                     self.parse_constant_p_builtin()?;
@@ -5181,6 +5329,18 @@ fn atomic_kind_from_intrinsic(id: i64) -> Option<super::super::ast::AtomicKind> 
         Intrinsic::AtomicFetchOr => AtomicKind::FetchOr,
         Intrinsic::AtomicFetchXor => AtomicKind::FetchXor,
         Intrinsic::AtomicCompareExchangeStrong => AtomicKind::CompareExchangeStrong,
+        _ => return None,
+    })
+}
+
+/// Map a GCC memory-transfer builtin name to its transfer kind;
+/// `None` for any other name.
+fn mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferOp> {
+    use super::super::ast::MemTransferOp;
+    Some(match name {
+        "__builtin_memcpy" => MemTransferOp::Copy,
+        "__builtin_memmove" => MemTransferOp::Move,
+        "__builtin_memset" => MemTransferOp::Fill,
         _ => return None,
     })
 }

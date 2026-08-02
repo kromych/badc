@@ -720,7 +720,10 @@ fn is_inline_candidate(
     // return register leaves them unspecified too, so they need not match
     // and full coverage is not required.
     let redirected = match (result_slot, &out_ptr) {
-        (Some(rs), _) => Some((rs, func.agg_descs[func.ret_agg.unwrap() as usize].size as i64)),
+        (Some(rs), _) => Some((
+            rs,
+            func.agg_descs[func.ret_agg.unwrap() as usize].size as i64,
+        )),
         (None, Some(o)) => Some((o.slot, o.size)),
         (None, None) => None,
     };

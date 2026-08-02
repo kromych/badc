@@ -731,6 +731,7 @@ pub(crate) fn emit_function(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     no_fp_regs: bool,
     strict_align: bool,
+    hardening: super::Hardening,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -752,6 +753,7 @@ pub(crate) fn emit_function(
         let mut a = target.abi();
         a.no_fp_varargs = no_fp_regs;
         a.strict_align = strict_align;
+        a.hardening = hardening;
         a
     };
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
@@ -790,6 +792,14 @@ pub(crate) fn emit_function(
     // inline-asm body is the entire function (an interrupt vector or ISR
     // returning via `eret`). The matching `Terminator::Return` emits nothing.
     if !func.is_naked {
+        // Branch protection: a function entry is reachable by `BLR` and
+        // by a `BR` through x16/x17 (a PLT trampoline's), so it takes a
+        // `BTI C` ahead of the prologue. A naked function is excluded --
+        // its body is the whole function, and prefixing an instruction
+        // would displace a hand-built entry sequence.
+        if abi.hardening.bti {
+            emit(code, super::encode::BTI_C);
+        }
         emit_prologue(code, func, alloc, frame, abi);
     }
     super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());
@@ -971,6 +981,15 @@ pub(crate) fn emit_function(
     // rewritten to the region's final text offset. A bailed emit returns
     // false and drops this, so no snapshot is needed.
     let mut deferred_regions: Vec<DeferredAsmRegion> = Vec::new();
+    // Blocks a `BR` can reach: switch-table successors and the blocks
+    // whose address `&&label` took. Each needs a `BTI J` landing pad at
+    // its head, recorded before the block loop so the pad lands at the
+    // offset every branch fixup resolves to.
+    let bti_targets = if abi.hardening.bti {
+        indirect_branch_target_blocks(func)
+    } else {
+        alloc::collections::BTreeSet::new()
+    };
     for (block_idx, block) in func.blocks.iter().enumerate() {
         block_offsets[block_idx] = code.len();
         super::ssa::emit_common::record_block_start_pc(
@@ -979,6 +998,9 @@ pub(crate) fn emit_function(
             pc_to_native,
             code.len(),
         );
+        if bti_targets.contains(&(block_idx as BlockId)) {
+            emit(code, super::encode::BTI_J);
+        }
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
             let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
@@ -1871,6 +1893,21 @@ fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<Reg>) {
             emit_stack_probe(code);
         }
     }
+}
+
+/// Blocks this function can enter through a `BR`: every successor of a
+/// `Terminator::JumpTable` and every block whose address was taken by
+/// `&&label`. A `Terminator::AsmGoto` label is excluded -- the inline-asm
+/// lowering reaches it with a direct branch, which sets no BTYPE.
+fn indirect_branch_target_blocks(func: &FunctionSsa) -> alloc::collections::BTreeSet<BlockId> {
+    let mut out: alloc::collections::BTreeSet<BlockId> =
+        func.computed_goto_targets.iter().copied().collect();
+    for block in &func.blocks {
+        if let Terminator::JumpTable { table, .. } = block.terminator {
+            out.extend(func.jump_tables[table as usize].iter().copied());
+        }
+    }
+    out
 }
 
 /// Emit the function prologue.
@@ -9418,6 +9455,7 @@ mod tests {
                 &alloc::collections::BTreeMap::new(),
                 false,
                 false,
+                super::super::Hardening::NONE,
             )
         };
         assert!(
@@ -9594,6 +9632,7 @@ mod tests {
                 &alloc::collections::BTreeMap::new(),
                 false,
                 false,
+                super::super::Hardening::NONE,
             )
         };
         assert!(ok, "binop handler should cover Add + Shl + Shr");
@@ -9669,6 +9708,7 @@ mod tests {
                 &alloc::collections::BTreeMap::new(),
                 false,
                 false,
+                super::super::Hardening::NONE,
             )
         };
         assert!(

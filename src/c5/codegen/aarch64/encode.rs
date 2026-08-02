@@ -1053,6 +1053,15 @@ pub(crate) fn enc_blr(rn: Reg) -> u32 {
     0xD63F_0000 | ((rn.0 as u32) << 5)
 }
 
+/// `BTI C` -- branch-target landing pad accepting an indirect call
+/// (`BLR`, PSTATE.BTYPE 0b10) and a `BR` through x16/x17 (0b01).
+/// `HINT #34`, so it decodes as a NOP where FEAT_BTI is absent.
+pub(crate) const BTI_C: u32 = 0xD503_245F;
+
+/// `BTI J` -- landing pad accepting a `BR` through any register
+/// (PSTATE.BTYPE 0b11) as well as 0b01. `HINT #36`.
+pub(crate) const BTI_J: u32 = 0xD503_249F;
+
 /// `BR <Xn>` -- branch (no link) to the address in `Xn`. Used by
 /// the `Terminator::TailExt` lowering to forward control to the
 /// IAT/GOT-resolved libc address without saving a return point:
@@ -2074,6 +2083,7 @@ pub(crate) fn lower(
                 &name2entpc,
                 native.no_fp_regs,
                 native.strict_align,
+                native.hardening,
             )
         };
         if !ok {

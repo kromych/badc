@@ -106,6 +106,7 @@ pub(crate) fn compile_function_to_bytes(
                     &alloc::collections::BTreeMap::new(),
                     false,
                     false,
+                    super::super::Hardening::NONE,
                 )
             };
             if !ok {
@@ -195,6 +196,7 @@ pub(crate) fn compile_function_to_bytes(
                     false,
                     &mut rodata,
                     false,
+                    super::super::Hardening::NONE,
                 )
             };
             if !ok {

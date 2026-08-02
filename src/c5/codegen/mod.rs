@@ -2066,6 +2066,47 @@ pub(crate) struct FuncFixup {
     pub target_native_offset: usize,
 }
 
+/// Compiler-side speculative-execution mitigations, selected by the
+/// gcc `-m` hardening flags and off in every field by default: with no
+/// flag present the emitted code is byte-identical to an unhardened
+/// build. Fields name the construct the backend changes rather than the
+/// flag, so one field serves several spellings.
+///
+/// The x86_64 thunks are external by contract -- the flags request a
+/// branch to a name the execution environment defines, so the object
+/// carries an undefined symbol and a branch relocation, not a generated
+/// thunk body.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Hardening {
+    /// `-mindirect-branch=thunk-extern`: an indirect call or jump
+    /// transfers through `__x86_indirect_thunk_<reg>` instead of
+    /// through the register.
+    pub indirect_branch_thunk: bool,
+    /// `-mfunction-return=thunk-extern`: a return transfers to
+    /// `__x86_return_thunk` instead of executing `ret`.
+    pub function_return_thunk: bool,
+    /// `-mharden-sls=return`: a trapping instruction follows a `ret`,
+    /// leaving no architectural successor to speculate into.
+    pub sls_return: bool,
+    /// `-mharden-sls=indirect-jmp`: the same trap after an indirect
+    /// jump, including the jump that enters an indirect-branch thunk.
+    pub sls_indirect_jmp: bool,
+    /// `-mbranch-protection=bti`: AArch64 BTI landing pads at function
+    /// entries and at indirect-branch targets (Arm ARM D24.2.2).
+    pub bti: bool,
+}
+
+impl Hardening {
+    /// Every mitigation off: the emitters keep their unhardened forms.
+    pub const NONE: Self = Self {
+        indirect_branch_thunk: false,
+        function_return_thunk: false,
+        sls_return: false,
+        sls_indirect_jmp: false,
+        bti: false,
+    };
+}
+
 /// User-controllable knobs for the native lowering pass. Distinct
 /// from [`TargetOptions`] (which encodes platform ABI -- not user
 /// choosable). Threaded through [`emit_native_with_options`],
@@ -2136,6 +2177,9 @@ pub struct NativeOptions {
     /// targets directly, which unwind-data discovery requires. Final
     /// images are position-independent either way.
     pub pic: bool,
+    /// Speculative-execution mitigations (the `-m` hardening flags).
+    /// Default is every field off; see [`Hardening`].
+    pub hardening: Hardening,
 }
 
 /// Widest transfer unit a byte-moving lowering may use over storage of
@@ -2210,6 +2254,7 @@ impl NativeOptions {
             no_fp_regs: false,
             strict_align: false,
             pic: false,
+            hardening: Hardening::NONE,
         }
     }
 
@@ -2639,6 +2684,10 @@ pub(crate) struct Abi {
     /// for its width. Per-run (from [`NativeOptions::strict_align`]), not
     /// a `Target::abi` row property; see [`access_chunk`].
     pub strict_align: bool,
+    /// Speculative-execution mitigations the emitters must honour.
+    /// Per-run (from [`NativeOptions::hardening`]), not a `Target::abi`
+    /// row property; see [`Hardening`].
+    pub hardening: Hardening,
 }
 
 impl Abi {
@@ -2720,7 +2769,8 @@ impl Target {
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
                 strict_align: false,
-            },
+                hardening: Hardening::NONE,
+                },
             Target::LinuxAarch64 => Abi {
                 arch: Arch::Aarch64,
                 int_arg_regs: AARCH64_INT_ARGS,
@@ -2731,7 +2781,8 @@ impl Target {
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
                 strict_align: false,
-            },
+                hardening: Hardening::NONE,
+                },
             Target::LinuxX64 => Abi {
                 arch: Arch::X86_64,
                 int_arg_regs: SYSV_INT_ARGS,
@@ -2742,7 +2793,8 @@ impl Target {
                 variadic_zero_xmm_count: true,
                 no_fp_varargs: false,
                 strict_align: false,
-            },
+                hardening: Hardening::NONE,
+                },
             Target::WindowsX64 => Abi {
                 arch: Arch::X86_64,
                 int_arg_regs: WIN64_INT_ARGS,
@@ -2753,7 +2805,8 @@ impl Target {
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
                 strict_align: false,
-            },
+                hardening: Hardening::NONE,
+                },
             Target::WindowsAarch64 => Abi {
                 arch: Arch::Aarch64,
                 int_arg_regs: AARCH64_INT_ARGS,
@@ -2764,7 +2817,8 @@ impl Target {
                 variadic_zero_xmm_count: false,
                 no_fp_varargs: false,
                 strict_align: false,
-            },
+                hardening: Hardening::NONE,
+                },
         }
     }
 

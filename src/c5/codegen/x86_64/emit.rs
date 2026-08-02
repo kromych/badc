@@ -1609,6 +1609,7 @@ pub(crate) fn emit_function(
     strict_align: bool,
     rodata: &mut super::RodataBuild,
     abs_jump_tables: bool,
+    hardening: super::Hardening,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -1668,6 +1669,7 @@ pub(crate) fn emit_function(
         let mut a = target.abi();
         a.no_fp_varargs = no_fp_regs;
         a.strict_align = strict_align;
+        a.hardening = hardening;
         a
     };
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
@@ -2064,7 +2066,7 @@ pub(crate) fn emit_function(
                             bail_rollback!();
                         }
                     } else {
-                        emit_return(code, v, alloc, frame, func, abi)
+                        emit_return(code, v, alloc, frame, func, abi, asm_extern_call_sites)
                     }
                 }
                 Terminator::Jmp(t) => {
@@ -2196,7 +2198,7 @@ pub(crate) fn emit_function(
                         bail_msg("GotoIndirect: target Place not int reg / spill");
                         bail_rollback!();
                     };
-                    super::encode::emit_jmp_r(code, rt);
+                    emit_hardened_jmp_r(code, rt, abi, asm_extern_call_sites);
                 }
                 Terminator::JumpTable { idx, table } => {
                     // Table dispatch through the read-only blob (kept
@@ -2225,7 +2227,7 @@ pub(crate) fn emit_function(
                         super::encode::emit_movsxd_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 4);
                         super::encode::emit_rr(code, Mnem::Add, 8, SCRATCH_R10, SCRATCH_R11);
                     }
-                    super::encode::emit_jmp_r(code, SCRATCH_R10);
+                    emit_hardened_jmp_r(code, SCRATCH_R10, abi, asm_extern_call_sites);
                     jump_table_fixups.push((lea_start, table));
                 }
                 Terminator::AsmGoto { table } => {
@@ -3449,6 +3451,7 @@ fn emit_inst(
             *ret_agg,
             *ret_slot_local,
             func,
+            asm_extern_call_sites,
         ),
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
@@ -5973,6 +5976,7 @@ fn emit_call_indirect(
     ret_agg: Option<u32>,
     ret_slot_local: i64,
     func: &super::super::ir::FunctionSsa,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
 ) -> bool {
     let target_place = place_of(alloc, target);
     // Collect every register `marshal_args` reads or writes for
@@ -6081,7 +6085,7 @@ fn emit_call_indirect(
         if sysv_variadic_call {
             super::encode::emit_mov_al_imm8(code, xmm_used);
         }
-        super::encode::emit_call_r(code, target_scratch);
+        emit_hardened_call_r(code, target_scratch, abi, extern_sites);
         if plan.scratch_bytes > 0 {
             emit_add_rsp_imm32(code, plan.scratch_bytes);
         }
@@ -6119,7 +6123,7 @@ fn emit_call_indirect(
         if sysv_variadic_call {
             super::encode::emit_mov_al_imm8(code, xmm_used);
         }
-        super::encode::emit_call_r(code, SCRATCH_R10);
+        emit_hardened_call_r(code, SCRATCH_R10, abi, extern_sites);
         if plan.scratch_bytes > 0 {
             emit_add_rsp_imm32(code, plan.scratch_bytes);
         }
@@ -9686,6 +9690,7 @@ fn emit_return(
     frame: Frame,
     func: &FunctionSsa,
     abi: super::Abi,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
 ) {
     // Staging through rcx is needed only when the return value
     // itself lives in a callee-saved register the epilogue is about
@@ -9758,7 +9763,7 @@ fn emit_return(
                 int_i += 1;
             }
         }
-        emit_epilogue_ret(code, func, frame, alloc, abi);
+        emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
         return;
     }
     // A floating-point scalar return rides xmm0 (C99 6.2.5p10). The
@@ -9838,7 +9843,7 @@ fn emit_return(
     // AMD64 / Win64: scalar floating returns in xmm0). The receiving
     // call site is FP-classed (`Inst::Call::fp_return`) and reads
     // xmm0, so no rax mirror is emitted.
-    emit_epilogue_ret(code, func, frame, alloc, abi);
+    emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
 }
 
 /// Frame teardown + `ret` (callee-saved restores already ran): drop
@@ -9855,6 +9860,7 @@ fn emit_epilogue_ret(
     frame: Frame,
     alloc: &Allocation,
     abi: super::Abi,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
 ) {
     if !is_full_leaf(func, frame, alloc, abi) {
         if frame.frame_bytes > 0 {
@@ -9867,7 +9873,90 @@ fn emit_epilogue_ret(
             emit_push_r(code, Reg::R11);
         }
     }
+    emit_hardened_ret(code, abi, extern_sites);
+}
+
+/// Branch to a symbol this unit does not define: `E8`/`E9 rel32` with a
+/// zero displacement plus the by-name call site the writer turns into a
+/// relocation against an undefined symbol.
+fn emit_extern_branch(
+    code: &mut Vec<u8>,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+    symbol: &str,
+    is_call: bool,
+) {
+    extern_sites.push(super::UserExternCallSite {
+        instr_offset: code.len(),
+        symbol_name: symbol.into(),
+        is_tail: !is_call,
+    });
+    if is_call {
+        super::encode::emit_call_rel32(code, 0);
+    } else {
+        super::encode::emit_jmp_rel32(code, 0);
+    }
+}
+
+/// Function return. `-mfunction-return=thunk-extern` replaces `ret` with
+/// a jump to the external return thunk, which returns itself; the
+/// straight-line-speculation trap then has no `ret` to guard.
+fn emit_hardened_ret(
+    code: &mut Vec<u8>,
+    abi: super::Abi,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+) {
+    if abi.hardening.function_return_thunk {
+        emit_extern_branch(
+            code,
+            extern_sites,
+            super::encode::RETURN_THUNK_SYMBOL,
+            false,
+        );
+        return;
+    }
     emit_ret(code);
+    if abi.hardening.sls_return {
+        super::encode::emit_int3(code);
+    }
+}
+
+/// Indirect call through `target`. `-mindirect-branch=thunk-extern`
+/// replaces `call *%reg` with a direct call to the register's thunk. A
+/// call has an architectural successor either way, so `-mharden-sls=`
+/// places no trap here.
+fn emit_hardened_call_r(
+    code: &mut Vec<u8>,
+    target: Reg,
+    abi: super::Abi,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+) {
+    if abi.hardening.indirect_branch_thunk {
+        let symbol = super::encode::indirect_thunk_symbol(target);
+        emit_extern_branch(code, extern_sites, symbol, true);
+        return;
+    }
+    super::encode::emit_call_r(code, target);
+}
+
+/// Indirect jump through `target` (computed goto, switch-table
+/// dispatch), routed through the register's thunk under
+/// `-mindirect-branch=thunk-extern`; `-mharden-sls=indirect-jmp` traps
+/// after the transfer in either form.
+fn emit_hardened_jmp_r(
+    code: &mut Vec<u8>,
+    target: Reg,
+    abi: super::Abi,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+) {
+    if abi.hardening.indirect_branch_thunk {
+        let symbol = super::encode::indirect_thunk_symbol(target);
+        emit_extern_branch(code, extern_sites, symbol, false);
+    } else {
+        super::encode::emit_jmp_r(code, target);
+    }
+    if abi.hardening.sls_indirect_jmp {
+        super::encode::emit_int3(code);
+    }
 }
 
 #[cfg(test)]

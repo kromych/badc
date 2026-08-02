@@ -5115,3 +5115,418 @@ fn frame_past_the_addressable_maximum_is_a_diagnostic() {
         }
     }
 }
+
+/// Section bodies of a relocatable ELF object, keyed by name.
+fn elf_section_bodies(
+    bytes: &[u8],
+) -> alloc::vec::Vec<(alloc::string::String, alloc::vec::Vec<u8>)> {
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+    let shoff = u64le(0x28);
+    let shentsize = u16le(0x3A);
+    let shnum = u16le(0x3C);
+    let shstrndx = u16le(0x3E);
+    let stroff = u64le(shoff + shstrndx * shentsize + 0x18);
+    let mut out = alloc::vec::Vec::new();
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        let name_off = stroff + u32le(sh);
+        let end = bytes[name_off..].iter().position(|&c| c == 0).unwrap();
+        let name =
+            alloc::string::String::from_utf8_lossy(&bytes[name_off..name_off + end]).into_owned();
+        let off = u64le(sh + 0x18);
+        let size = u64le(sh + 0x20);
+        // SHT_NOBITS (8) occupies no file bytes.
+        let body = if u32le(sh + 4) == 8 {
+            alloc::vec::Vec::new()
+        } else {
+            bytes[off..off + size].to_vec()
+        };
+        out.push((name, body));
+    }
+    out
+}
+
+/// `(offset, symbol name, addend)` for every `.rela.text` entry whose
+/// type is `R_X86_64_PLT32` (4): the branches this unit leaves for the
+/// linker to resolve by name.
+fn x64_branch_relocs(obj: &[u8]) -> alloc::vec::Vec<(u64, alloc::string::String, i64)> {
+    let sections = elf_section_bodies(obj);
+    let body = |n: &str| {
+        sections
+            .iter()
+            .find(|(name, _)| name == n)
+            .map(|(_, b)| b.clone())
+            .unwrap_or_default()
+    };
+    let (rela, symtab, strtab) = (body(".rela.text"), body(".symtab"), body(".strtab"));
+    let mut out = alloc::vec::Vec::new();
+    for e in rela.chunks_exact(24) {
+        let r_offset = u64::from_le_bytes(e[0..8].try_into().unwrap());
+        let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+        let r_addend = i64::from_le_bytes(e[16..24].try_into().unwrap());
+        if r_info & 0xffff_ffff != 4 {
+            continue;
+        }
+        let sym = (r_info >> 32) as usize;
+        let name_off =
+            u32::from_le_bytes(symtab[sym * 24..sym * 24 + 4].try_into().unwrap()) as usize;
+        let end = strtab[name_off..].iter().position(|&b| b == 0).unwrap() + name_off;
+        out.push((
+            r_offset,
+            alloc::string::String::from_utf8_lossy(&strtab[name_off..end]).into_owned(),
+            r_addend,
+        ));
+    }
+    out
+}
+
+/// Compile `src` to a relocatable object for `target` under `hardening`.
+fn emit_hardened(
+    src: &str,
+    target: crate::Target,
+    hardening: crate::Hardening,
+) -> alloc::vec::Vec<u8> {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    let prog = crate::Compiler::with_options(
+        alloc::string::String::from(src),
+        target,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        hardening,
+        ..NativeOptions::default()
+    };
+    emit_native_with_options(&prog, target, opts).unwrap_or_else(|e| panic!("emit: {e}"))
+}
+
+/// One unit reaching every site the mitigations touch: a return, an
+/// indirect call, a switch-table dispatch and a computed goto.
+const HARDENING_SRC: &str = "\
+    typedef int (*fp)(int);\n\
+    int viaptr(fp f, int x) { int a = f(x); return a + 1; }\n\
+    int sw(int x) {\n\
+      switch (x) {\n\
+      case 0: return 10; case 1: return 21; case 2: return 32; case 3: return 43;\n\
+      case 4: return 54; case 5: return 65; case 6: return 76; case 7: return 87;\n\
+      case 8: return 98; default: return -1;\n\
+      }\n\
+    }\n\
+    int cgoto(int x) {\n\
+      static void *tab[] = { &&a, &&b };\n\
+      goto *tab[x & 1];\n\
+      a: return 1;\n\
+      b: return 2;\n\
+    }\n";
+
+/// Every `FF /2` (indirect call) and `FF /4` (indirect jump) in ModRM
+/// register mode: `0xFF` followed by `D0..D7` or `E0..E7`.
+fn x64_register_indirect_forms(text: &[u8]) -> usize {
+    text.windows(2)
+        .filter(|w| {
+            w[0] == 0xFF && ((0xD0..=0xD7).contains(&w[1]) || (0xE0..=0xE7).contains(&w[1]))
+        })
+        .count()
+}
+
+#[test]
+fn x64_function_return_thunk_replaces_every_ret() {
+    // `-mfunction-return=thunk-extern`: each return becomes a `jmp rel32`
+    // (0xE9) with a zero displacement and a PLT32 relocation naming the
+    // externally provided return thunk, addend -4 -- the form gcc emits
+    // for the same flag.
+    let plain = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening::NONE,
+    );
+    let hardened = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            function_return_thunk: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    assert!(
+        elf_text(&plain).contains(&0xC3),
+        "the unhardened object returns by `ret`"
+    );
+
+    let text = elf_text(&hardened);
+    let thunk: alloc::vec::Vec<_> = x64_branch_relocs(&hardened)
+        .into_iter()
+        .filter(|(_, n, _)| n == "__x86_return_thunk")
+        .collect();
+    assert!(
+        !thunk.is_empty(),
+        "the hardened object branches to the return thunk"
+    );
+    for (off, _, addend) in &thunk {
+        assert_eq!(*addend, -4, "branch relocation addend");
+        // The relocation lands on the rel32 field, so the byte before it
+        // is the `jmp rel32` opcode and the displacement stays zero.
+        assert_eq!(text[*off as usize - 1], 0xE9, "jmp rel32 opcode");
+        assert_eq!(&text[*off as usize..*off as usize + 4], [0, 0, 0, 0]);
+    }
+}
+
+#[test]
+fn x64_indirect_branch_thunk_covers_call_switch_and_computed_goto() {
+    // `-mindirect-branch=thunk-extern`: the indirect call, the
+    // switch-table dispatch and the computed goto each become a direct
+    // branch to the thunk named for the register holding the target.
+    let plain = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening::NONE,
+    );
+    let hardened = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            indirect_branch_thunk: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    let names: alloc::vec::Vec<alloc::string::String> = x64_branch_relocs(&hardened)
+        .into_iter()
+        .map(|(_, n, _)| n)
+        .filter(|n| n.starts_with("__x86_indirect_thunk_"))
+        .collect();
+    assert!(
+        names.len() >= 3,
+        "call, switch dispatch and computed goto all thunked, got {names:?}"
+    );
+    assert!(
+        x64_register_indirect_forms(&elf_text(&plain)) > 0,
+        "the unhardened object branches through registers"
+    );
+    assert_eq!(
+        x64_register_indirect_forms(&elf_text(&hardened)),
+        0,
+        "no register-indirect transfer survives"
+    );
+}
+
+#[test]
+fn x64_direct_tail_call_is_not_routed_through_a_thunk() {
+    // A call in tail position becomes a direct `jmp` to the callee: it is
+    // neither a return nor an indirect branch. The callee's own epilogue
+    // carries the return thunk, so converting this site would enter the
+    // thunk instead of the callee. gcc likewise leaves it a plain `jmp`.
+    const SRC: &str = "static int leaf(int x) { return x + 1; }\n\
+                       int tail(int x) { return leaf(x); }\n";
+    let hardened = emit_hardened(
+        SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            function_return_thunk: true,
+            indirect_branch_thunk: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    // `leaf` is defined here, so the tail branch resolves inside the unit
+    // and names no thunk; only the two returns reach the return thunk.
+    let relocs = x64_branch_relocs(&hardened);
+    assert!(
+        !relocs.is_empty() && relocs.iter().all(|(_, n, _)| n == "__x86_return_thunk"),
+        "the tail branch stays a direct jump: {relocs:?}"
+    );
+}
+
+#[test]
+fn x64_harden_sls_traps_after_ret_and_indirect_jmp() {
+    // `-mharden-sls=return` puts an int3 after each `ret`;
+    // `=indirect-jmp` after each indirect jump. gcc emits `C3 CC` and
+    // `FF E0 CC` for the two. A byte scan alone cannot tell an opcode
+    // from a displacement or SIB byte holding the same value, so each
+    // case uses a fixture with exactly one guarded transfer and checks
+    // the one-byte growth as well as the pattern.
+    const ONE_RET: &str = "int f(int x) { return x + 1; }\n";
+    const ONE_INDIRECT: &str = "int g(int x) {\n\
+          static void *tab[] = { &&a, &&b };\n\
+          goto *tab[x & 1];\n\
+          a: return 1;\n\
+          b: return 2;\n\
+        }\n";
+    let text = |src: &str, h: crate::Hardening| elf_text(&emit_hardened(src, crate::Target::LinuxX64, h));
+
+    let sls_return = crate::Hardening {
+        sls_return: true,
+        ..crate::Hardening::NONE
+    };
+    let sls_jmp = crate::Hardening {
+        sls_indirect_jmp: true,
+        ..crate::Hardening::NONE
+    };
+
+    // One function, one return: the trap adds exactly one byte, and the
+    // text ends `C3 CC`.
+    let plain = text(ONE_RET, crate::Hardening::NONE);
+    let trapped = text(ONE_RET, sls_return);
+    assert_eq!(*plain.last().unwrap(), 0xC3, "the fixture ends in `ret`");
+    assert_eq!(trapped.len(), plain.len() + 1, "one trap, one byte");
+    assert_eq!(trapped[trapped.len() - 2..], [0xC3, 0xCC]);
+
+    // Two returns and one indirect jump. `return` traps the two returns
+    // and leaves the jump bare; `indirect-jmp` does the reverse, so the
+    // selectors are independent rather than one combined switch.
+    let plain = text(ONE_INDIRECT, crate::Hardening::NONE);
+    assert_eq!(
+        text(ONE_INDIRECT, sls_return).len(),
+        plain.len() + 2,
+        "`return` traps both returns and not the jump"
+    );
+    let trapped = text(ONE_INDIRECT, sls_jmp);
+    assert_eq!(
+        trapped.len(),
+        plain.len() + 1,
+        "`indirect-jmp` traps the jump and neither return"
+    );
+    assert!(
+        trapped
+            .windows(3)
+            .any(|w| w[0] == 0xFF && (0xE0..=0xE7).contains(&w[1]) && w[2] == 0xCC),
+        "the trap follows the indirect jump"
+    );
+}
+
+#[test]
+fn x64_return_thunk_suppresses_the_sls_return_trap() {
+    // A thunked return leaves no `ret` for the trap to guard, and the
+    // branch into the thunk is not an indirect jump. gcc emits no int3
+    // there under `-mharden-sls=all -mfunction-return=thunk-extern`.
+    let obj = emit_hardened(
+        "int f(int x) { return x + 1; }\n",
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            function_return_thunk: true,
+            sls_return: true,
+            sls_indirect_jmp: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    let text = elf_text(&obj);
+    assert!(!text.contains(&0xC3), "no `ret` at a thunked return");
+    assert!(!text.contains(&0xCC), "no trap at a thunked return");
+}
+
+#[test]
+fn x64_naked_function_gets_no_return_thunk() {
+    // A naked function's inline-asm body is the whole function and
+    // supplies its own transfer (`iretq`, `sysretq`, a bare `ret`). The
+    // compiler emits no epilogue for it, so no return thunk either.
+    const SRC: &str = "__attribute__((naked)) void n(void) { __asm__ volatile(\"ret\"); }\n";
+    let obj = emit_hardened(
+        SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            function_return_thunk: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    assert!(
+        x64_branch_relocs(&obj).is_empty(),
+        "a naked body keeps its own return"
+    );
+    assert!(
+        elf_text(&obj).contains(&0xC3),
+        "the asm-supplied `ret` survives"
+    );
+}
+
+#[test]
+fn a64_branch_protection_lands_pads_at_entries_and_indirect_targets() {
+    // `-mbranch-protection=bti`: `BTI C` opens every function, since an
+    // entry is reachable by `BLR` and by a `BR` through x16/x17; `BTI J`
+    // opens every block a `BR` can enter (switch-table successors,
+    // computed-goto labels).
+    const BTI_C: u32 = 0xD503_245F;
+    const BTI_J: u32 = 0xD503_249F;
+    let words = |o: &[u8]| -> alloc::vec::Vec<u32> {
+        elf_text(o)
+            .chunks_exact(4)
+            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .collect()
+    };
+    let plain = words(&emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxAarch64,
+        crate::Hardening::NONE,
+    ));
+    let hardened = words(&emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxAarch64,
+        crate::Hardening {
+            bti: true,
+            ..crate::Hardening::NONE
+        },
+    ));
+    assert_eq!(
+        plain.iter().filter(|&&w| w == BTI_C || w == BTI_J).count(),
+        0,
+        "no landing pad without the flag"
+    );
+    assert_eq!(
+        hardened.iter().filter(|&&w| w == BTI_C).count(),
+        3,
+        "one entry pad per function in the fixture"
+    );
+    assert!(
+        hardened.iter().filter(|&&w| w == BTI_J).count() >= 3,
+        "switch and computed-goto targets take a jump pad"
+    );
+}
+
+#[test]
+fn a64_branch_protection_skips_a_naked_body() {
+    // Same admission rule as the x86 return thunk: a naked function's
+    // body is the entire function, so nothing is prefixed to it.
+    const SRC: &str = "__attribute__((naked)) void n(void) { __asm__ volatile(\"ret\"); }\n";
+    let obj = emit_hardened(
+        SRC,
+        crate::Target::LinuxAarch64,
+        crate::Hardening {
+            bti: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    let first = u32::from_le_bytes(elf_text(&obj)[0..4].try_into().unwrap());
+    assert_ne!(first, 0xD503_245F, "no pad ahead of a naked body");
+}
+
+#[test]
+fn hardening_absent_leaves_the_object_unchanged() {
+    // The mitigations are opt-in: an object emitted with every field off
+    // is byte-identical to one emitted with the option left at its
+    // default, on both architectures.
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(HARDENING_SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let baseline = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::default()
+            },
+        )
+        .expect("emit");
+        let explicit = emit_hardened(HARDENING_SRC, target, crate::Hardening::NONE);
+        assert_eq!(
+            baseline, explicit,
+            "{target:?}: no drift with mitigations off"
+        );
+    }
+}

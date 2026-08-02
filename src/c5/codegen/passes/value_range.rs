@@ -366,14 +366,19 @@ fn apply_edge(func: &FunctionSsa, facts: &mut Facts, pred: BlockId, holds: bool)
         _ => return,
     };
     let insts = func.insts.as_slice();
-    facts.narrow(
-        key_of(insts, cond),
-        if holds {
-            Range { lo: 1, hi: 1 }
-        } else {
-            Range { lo: 0, hi: 0 }
-        },
-    );
+    // The branch tests the condition against zero, so the taken edge
+    // says only that it is not zero -- `if (x & 4)` reaches its body
+    // with the value 4, not 1.
+    let key = key_of(insts, cond);
+    let current = facts.get(key);
+    let cond_range = if holds {
+        implied(BinOp::Ne, 0, true, current)
+    } else {
+        Some(Range { lo: 0, hi: 0 })
+    };
+    if let Some(r) = cond_range {
+        facts.narrow(key, r);
+    }
     // A condition that is itself a comparison narrows what it compares.
     let (op, lhs, rhs_range) = match insts.get(cond as usize) {
         Some(Inst::BinopI { op, lhs, rhs_imm }) => (*op, *lhs, Range::exact(*rhs_imm)),

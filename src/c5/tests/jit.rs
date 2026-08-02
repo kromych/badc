@@ -249,6 +249,52 @@ fn a_dominating_condition_decides_the_comparison_it_implies() {
 }
 
 #[test]
+fn a_taken_branch_says_its_condition_is_nonzero_not_one() {
+    // A branch tests its condition against zero, so the taken edge says
+    // only that the value is not zero. Reading it as 1 would decide the
+    // comparisons below wrongly -- a masked flag word arrives holding
+    // the mask, and a subtraction arrives holding whatever it computed.
+    let src = "
+        static int sink;
+        static volatile unsigned int in_u;
+        static volatile int in_a, in_b;
+        int flags(void);
+        int flags(void) {
+            unsigned int m = in_u & 0x24u;
+            if (m) {
+                if (m == 1u) sink |= 1;
+                if (m > 0x24u) sink |= 2;
+                return (int) m;
+            }
+            return 0;
+        }
+        int spread(void);
+        int spread(void) {
+            int d = in_a - in_b;
+            if (d) {
+                if (d == 1) sink |= 4;
+                if (d < -100 || d > 100) return 99;
+                return d;
+            }
+            return 0;
+        }
+        int main(void) {
+            in_u = 0xffu; if (flags() != 0x24) return 1;
+            in_u = 0x20u; if (flags() != 0x20) return 2;
+            in_u = 0x04u; if (flags() != 4) return 3;
+            in_u = 0x08u; if (flags() != 0) return 4;
+            in_a = 10; in_b = 3;   if (spread() != 7) return 5;
+            in_a = 3;  in_b = 10;  if (spread() != -7) return 6;
+            in_a = 5;  in_b = 5;   if (spread() != 0) return 7;
+            in_a = 500; in_b = 1;  if (spread() != 99) return 8;
+            if (sink != 0) return 9;
+            return 6;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-nonzero-cond"]), 6);
+}
+
+#[test]
 fn select_of_two_constants_folds_its_guard() {
     // A value produced by a runtime `?:` between two constants keeps a
     // guard on it live unless the guard is evaluated per incoming: the

@@ -109,6 +109,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("unroll_volatile_stays_rolled.c", 0),
     ("sroa_const_index_local_array.c", 0),
     ("sroa_runtime_index_stays_memory.c", 0),
+    ("sroa_struct_fields_promote.c", 0),
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),
     ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4
@@ -983,6 +984,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("unroll_volatile_stays_rolled.c", 0),
     ("sroa_const_index_local_array.c", 0),
     ("sroa_runtime_index_stays_memory.c", 0),
+    ("sroa_struct_fields_promote.c", 0),
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),
     ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4
@@ -1635,6 +1637,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("unroll_volatile_stays_rolled.c", 0),
     ("sroa_const_index_local_array.c", 0),
     ("sroa_runtime_index_stays_memory.c", 0),
+    ("sroa_struct_fields_promote.c", 0),
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),
     ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4
@@ -2522,6 +2525,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("unroll_volatile_stays_rolled.c", 0),
     ("sroa_const_index_local_array.c", 0),
     ("sroa_runtime_index_stays_memory.c", 0),
+    ("sroa_struct_fields_promote.c", 0),
     ("goto.c", 5),
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),
@@ -2986,6 +2990,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("unroll_volatile_stays_rolled.c", 0),
     ("sroa_const_index_local_array.c", 0),
     ("sroa_runtime_index_stays_memory.c", 0),
+    ("sroa_struct_fields_promote.c", 0),
     ("recursion_factorial.c", 120),
     ("return_value_in_callee_saved.c", 7),
     ("divmod_preserves_rdx.c", 0),

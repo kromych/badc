@@ -42,62 +42,11 @@ Disassembly of section .text:
                	retq
 
 <two_pages>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x1000, %rsp           # imm = 0x1000
-               	movq	$0x0, (%rsp)
-               	subq	$0x1000, %rsp           # imm = 0x1000
-               	movq	$0x0, (%rsp)
-               	subq	$0x330, %rsp            # imm = 0x330
-               	leaq	-0x2328(%rbp), %rax
-               	movl	$0x1, %ecx
-               	movb	%cl, (%rax)
-               	movl	$0x2, %ecx
-               	leaq	0x1194(%rax), %rdx
-               	movb	%cl, (%rdx)
-               	leaq	0x2327(%rax), %rcx
-               	movl	$0x3, %edx
-               	movb	%dl, (%rcx)
-               	movsbq	(%rax), %rcx
-               	leaq	0x1194(%rax), %rdx
-               	movsbq	(%rdx), %rdx
-               	addq	%rdx, %rcx
-               	addq	$0x2327, %rax           # imm = 0x2327
-               	movsbq	(%rax), %rax
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
-               	addq	$0x2330, %rsp           # imm = 0x2330
-               	popq	%rbp
+               	movl	$0x6, %eax
                	retq
 
 <fifty_pages>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x30, %r11d
-               	subq	$0x1000, %rsp           # imm = 0x1000
-               	movq	$0x0, (%rsp)
-               	subq	$0x1, %r11
-               	jne	<addr>
-               	subq	$0xd40, %rsp            # imm = 0xD40
-               	leaq	-0x30d40(%rbp), %rax
-               	movl	$0x1, %ecx
-               	movb	%cl, (%rax)
-               	movl	$0x2, %ecx
-               	leaq	0x186a0(%rax), %rdx
-               	movb	%cl, (%rdx)
-               	leaq	0x30d3f(%rax), %rcx
-               	movl	$0x3, %edx
-               	movb	%dl, (%rcx)
-               	movsbq	(%rax), %rcx
-               	leaq	0x186a0(%rax), %rdx
-               	movsbq	(%rdx), %rdx
-               	addq	%rdx, %rcx
-               	addq	$0x30d3f, %rax          # imm = 0x30D3F
-               	movsbq	(%rax), %rax
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
-               	addq	$0x30d40, %rsp          # imm = 0x30D40
-               	popq	%rbp
+               	movl	$0x6, %eax
                	retq
 
 <by_value>:

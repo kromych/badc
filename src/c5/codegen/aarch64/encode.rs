@@ -1784,14 +1784,13 @@ pub(crate) fn lower(
                 }
             }
         });
-        // Split constant-index local arrays that unrolling exposed into
-        // per-element slots and re-run mem2reg to promote them to SSA
-        // values. Gated to functions the unroll pass expanded so the
-        // mem2reg rebuild is confined; see x86_64.rs's matching block.
+        // Split address-taken local aggregates into per-field slots and
+        // re-run mem2reg to promote them to SSA values; see encode.rs's
+        // matching block on x86_64.
         super::ssa::emit_common::time_pass("passes::sroa::run (aarch64)", || {
             let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target);
             for f in &mut ssa_funcs {
-                if f.did_unroll {
+                if f.did_unroll || f.did_inline {
                     let promoted = crate::c5::codegen::passes::sroa::run(f, usable_gpr);
                     if !promoted.is_empty() {
                         promoted_local_slots

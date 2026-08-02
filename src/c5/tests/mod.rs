@@ -25,6 +25,7 @@ mod codegen;
 mod deferred;
 #[cfg(feature = "full")]
 mod dwarf;
+mod fixture_tables;
 mod inline_asm;
 #[cfg(feature = "full")]
 mod inline_linkage;

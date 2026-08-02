@@ -1140,10 +1140,14 @@ pub(crate) struct FunctionSsa {
     pub is_inline: bool,
     /// True if the function carried a *mandatory* inline request --
     /// `__attribute__((always_inline))` or MSVC `__forceinline` -- as
-    /// opposed to the plain `inline` hint. Implies `is_inline`. The
-    /// inliner warns when it cannot honour the request, matching the
-    /// gcc / MSVC diagnostic; a plain `inline` that stays out of line is
-    /// silent (it is only a hint).
+    /// opposed to the plain `inline` hint. Implies `is_inline`. No size
+    /// or frame budget applies to it, matching gcc and clang, which
+    /// report a diagnostic rather than silently declining. gcc's is an
+    /// error because its inliner admits nearly any callee shape; badc's
+    /// candidate filter is narrower, so an unhonoured request is a
+    /// warning -- an error would reject conforming programs over a
+    /// coverage gap. A plain `inline` that stays out of line is silent
+    /// (it is only a hint).
     pub is_always_inline: bool,
     /// True if the function carried `__attribute__((naked))`: emit no
     /// prologue/epilogue and no implicit return; the body (inline asm) is the

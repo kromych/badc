@@ -1670,7 +1670,17 @@ pub(crate) fn emit_function(
         a.strict_align = strict_align;
         a
     };
+    if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
+        bail_msg(&super::ssa::emit_common::frame_too_large_msg(bytes));
+        return false;
+    }
     let frame = compute_frame(func, alloc, abi);
+    if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
+        bail_msg(&super::ssa::emit_common::frame_too_large_msg(
+            frame.frame_bytes as i64,
+        ));
+        return false;
+    }
 
     // A per-inst `Inst::ParamRef` materialises its parameter from the
     // incoming host argument register. The allocator can pack several

@@ -83,6 +83,46 @@ pub(crate) const MAX_UNPROBED_STACK_STEP: u32 = STACK_PROBE_PAGE - 16;
 /// crossover at a handful of steps.
 pub(crate) const STACK_PROBE_UNROLL_MAX: u32 = 4;
 
+/// Largest stack frame the backends can address. Every frame byte
+/// offset is emitted as a signed 32-bit displacement -- x86-64 `disp32`,
+/// the aarch64 frame-address sequence -- and the prologue's stack
+/// adjustment carries the same width, so a larger frame has no
+/// representation. gcc reports the equivalent target limit rather than
+/// emitting an unrepresentable frame.
+pub(crate) const MAX_FRAME_BYTES: u32 = i32::MAX as u32;
+
+/// Byte size of the function's declared local slots, checked against
+/// [`MAX_FRAME_BYTES`] before `compute_frame_base` narrows the i64 slot
+/// count to `u32`. `Some(bytes)` rejects the function.
+pub(crate) fn locals_bytes_over_limit(func: &super::super::ir::FunctionSsa) -> Option<i64> {
+    let bytes = func.locals.max(0).saturating_mul(8);
+    (bytes > MAX_FRAME_BYTES as i64).then_some(bytes)
+}
+
+/// Diagnostic for a frame the target's frame addressing cannot reach.
+pub(crate) fn frame_too_large_msg(bytes: i64) -> alloc::string::String {
+    alloc::format!("stack frame of {bytes} bytes exceeds the {MAX_FRAME_BYTES}-byte maximum")
+}
+
+/// Reject any function whose declared local slots already exceed
+/// [`MAX_FRAME_BYTES`], before the optimizer and the per-slot passes walk a
+/// frame no backend can emit. The per-function emit re-checks the summed
+/// frame, which the inliner can grow past this point.
+pub(crate) fn check_frame_limits(
+    funcs: &[super::super::ir::FunctionSsa],
+) -> Result<(), crate::c5::error::C5Error> {
+    for f in funcs {
+        if let Some(bytes) = locals_bytes_over_limit(f) {
+            return Err(crate::c5::error::C5Error::Compile(alloc::format!(
+                "error: function `{name}`: {body}",
+                name = f.name,
+                body = frame_too_large_msg(bytes),
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// True when the emitted form of `inst` addresses the locals region
 /// (negative slot offset): slot loads / stores / address-takes, a
 /// non-zero `AllocaInit` (its reserved slot keeps the locals region

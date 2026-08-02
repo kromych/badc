@@ -4999,3 +4999,107 @@ fn duplicate_initializer_retires_the_overridden_relocation() {
         );
     }
 }
+
+/// `always_inline` is a mandatory request: gcc and clang report an error
+/// when they cannot honour one rather than silently leaving the call out
+/// of line, so the inliner's size and frame budgets do not apply to it and
+/// a chain of such callees is admitted whatever the caller's frame costs.
+/// Every relocated callee slot must still address correctly.
+#[test]
+fn always_inline_is_admitted_regardless_of_caller_frame() {
+    use crate::{Compiler, NativeOptions, Target};
+    let mut src = alloc::string::String::from(
+        "static __attribute__((always_inline)) inline long helper(long n) {\n\
+             char buf[1000000];\n\
+             long i = n & 0xffff;\n\
+             buf[i] = (char)n;\n\
+             if (n > 0) { buf[i + 1] = (char)(n + 1); } else { buf[i + 1] = 0; }\n\
+             return (long)buf[i] + (long)buf[i + 1];\n\
+         }\n\
+         long caller(long n) {\n\
+             long s = 0;\n",
+    );
+    for i in 0..20 {
+        src.push_str(&alloc::format!("    s += helper(n + {i});\n"));
+    }
+    src.push_str("    return s;\n}\nint main(void) { return (int)caller(1); }\n");
+
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        let program = Compiler::with_target(src.clone(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::new().with_optimize(),
+        )
+        .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
+        assert!(!bytes.is_empty());
+    }
+}
+
+/// A frame past the 24-bit reach of the immediate `ADD`/`SUB` must still
+/// emit: the aarch64 teardown materialises the byte count and applies it
+/// with the extended-register form, and the body addresses its slots the
+/// same way. Before that this aborted the compiler in the epilogue.
+#[test]
+fn frame_past_the_immediate_reach_emits_register_form() {
+    use crate::{Compiler, NativeOptions, Target};
+    let src = "long f(long n) { char buf[20000000]; long i = n & 0xffff; \
+               buf[i] = (char)n; return (long)buf[i]; } \
+               int main(void) { return (int)f(1); }";
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
+        if target == Target::LinuxAarch64 {
+            // `add sp, sp, x16` -- the immediate forms top out at 16 MiB.
+            let want = 0x8B30_63FFu32.to_le_bytes();
+            assert!(
+                bytes.windows(4).any(|w| w == want),
+                "expected the register-form stack teardown in the aarch64 image",
+            );
+        }
+    }
+}
+
+/// A frame larger than the backends' frame addressing can represent is a
+/// compile diagnostic on every target, not a panic and not a truncated
+/// stack adjustment. The frame byte count is carried as `u32`, so past
+/// 4 GiB an unchecked one wrapped: a 4295000008-byte frame allocated
+/// 32720 bytes and the program ran on top of its own caller.
+#[test]
+fn frame_past_the_addressable_maximum_is_a_diagnostic() {
+    use crate::{Compiler, NativeOptions, Target};
+    for (size, bytes) in [
+        (2_500_000_000u64, 2_500_000_008u64),
+        (4_295_000_000, 4_295_000_008),
+    ] {
+        let src = alloc::format!(
+            "long f(long n) {{ long a; char buf[{size}]; a = n + 1; (void)buf; return a; }} \
+             int main(void) {{ return (int)f(1); }}"
+        );
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            let program = Compiler::with_target(src.clone(), target)
+                .compile()
+                .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+            let err = crate::c5::object::emit_native_single_tu_for_test(
+                &program,
+                target,
+                NativeOptions::default(),
+            )
+            .expect_err("an over-maximum frame has no representation");
+            let msg = alloc::format!("{err}");
+            assert!(
+                msg.contains(&alloc::format!("stack frame of {bytes} bytes exceeds")),
+                "{target:?}: expected the frame-size diagnostic, got: {msg}",
+            );
+        }
+    }
+}

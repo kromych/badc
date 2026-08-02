@@ -1774,11 +1774,19 @@ impl Compiler {
             }
             self.write_array_init_into_data(off, elem_ty, &elements);
         }
+        // An empty element list reserves a slot of its own: the literal
+        // is a distinct unnamed object (C99 6.5.2.5p3) and the data-object
+        // model identifies an object by its start offset, so it must not
+        // share one with whatever is placed next.
+        if self.data.len() as i64 == off {
+            self.data.push(0);
+        }
         // Pad the anonymous array's storage up to an 8-byte boundary.
         while (self.data.len() as i64 - off) % 8 != 0 {
             self.data.push(0);
         }
-        let sym_idx = self.intern_compound_literal_symbol(off, elem_ty);
+        let sym_idx =
+            self.intern_compound_literal_symbol(off, elem_ty, (count * elem_size) as i64);
         Ok((off as i128, InitElemReloc::Data(Some(sym_idx))))
     }
 
@@ -1797,9 +1805,21 @@ impl Compiler {
 
     /// Create a synthetic internal `__compound.N` symbol anchored at
     /// data offset `off`, used as the relocation target for an
-    /// anonymous compound literal stored in the data segment. Returns
-    /// its symbol index.
-    pub(super) fn intern_compound_literal_symbol(&mut self, off: i64, ty: i64) -> usize {
+    /// anonymous compound literal stored in the data segment. `bytes` is
+    /// the storage reserved for it -- the whole array for an array-typed
+    /// literal, not its first element (C99 6.5.2.5) -- recorded on the
+    /// symbol rather than re-derived from `ty`, which describes one
+    /// element. Returns its symbol index.
+    ///
+    /// The symbol is registered against its storage so a truncation of
+    /// the data segment retires it: a speculative parse stages literals
+    /// it may roll back, and the offsets go on to unrelated objects.
+    pub(super) fn intern_compound_literal_symbol(
+        &mut self,
+        off: i64,
+        ty: i64,
+        bytes: i64,
+    ) -> usize {
         let counter = self.next_compound_literal_id;
         self.next_compound_literal_id += 1;
         let sym_name = alloc::format!("__compound.{counter}");
@@ -1811,6 +1831,7 @@ impl Compiler {
             class: Token::Glo as i64,
             type_: ty,
             val: off,
+            data_byte_size: bytes.max(0),
             linkage: crate::c5::symbol::Linkage::Internal,
             defined_here: true,
             has_initializer: true,
@@ -1819,6 +1840,10 @@ impl Compiler {
         };
         self.symbols.push(sym);
         self.symbol_index.record(hash);
+        // Ordered by offset: an inner literal staged while an outer one
+        // fills is interned first, at the higher offset.
+        let at = self.staged_literal_syms.partition_point(|&(v, _)| v <= off);
+        self.staged_literal_syms.insert(at, (off, new_idx));
         new_idx
     }
 
@@ -1834,13 +1859,16 @@ impl Compiler {
         cl_ty: i64,
     ) -> Result<(i64, usize), C5Error> {
         self.align_data_to_8();
-        let size = self.size_of_type(cl_ty);
+        // A zero-sized type still takes a slot: the literal is a distinct
+        // unnamed object (C99 6.5.2.5p3) and the data-object model
+        // identifies an object by its start offset.
+        let size = self.size_of_type(cl_ty).max(1);
         let aligned = size.div_ceil(8) * 8;
         let off = self.data.len() as i64;
         for _ in 0..aligned {
             self.data.push(0);
         }
-        let sym_idx = self.intern_compound_literal_symbol(off, cl_ty);
+        let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
         self.collect_struct_initializer(struct_id_of(cl_ty), off)?;
         Ok((off, sym_idx))
     }

@@ -77,8 +77,10 @@ impl Compiler {
     /// Truncate the data segment (a speculative parse is being undone)
     /// and drop everything recorded past the new end: later growth
     /// reuses those offsets for unrelated bytes, so a stale literal
-    /// boundary could split a live object and a stale padding range or
-    /// alignment mark would describe live bytes as padding.
+    /// boundary could split a live object, a stale padding range or
+    /// alignment mark would describe live bytes as padding, and a
+    /// staged-literal symbol left anchored there would claim storage
+    /// an unrelated object owns.
     ///
     /// Every entry records an offset at or near the data length at its
     /// push, so entries at or past `len` form a suffix; dropping them
@@ -107,9 +109,20 @@ impl Compiler {
         {
             self.data_align_marks.pop();
         }
+        while let Some(&(off, idx)) = self.staged_literal_syms.last() {
+            if off < end {
+                break;
+            }
+            self.staged_literal_syms.pop();
+            let sym = &mut self.symbols[idx];
+            sym.defined_here = false;
+            sym.has_initializer = false;
+            sym.is_compound_literal = false;
+        }
         debug_assert!(self.data_object_starts.iter().all(|&s| s < end));
         debug_assert!(self.data_pad_ranges.iter().all(|r| r.0 < r.1 && r.1 <= end));
         debug_assert!(self.data_align_marks.iter().all(|&(off, _)| off < end));
+        debug_assert!(self.staged_literal_syms.iter().all(|&(off, _)| off < end));
     }
 
     /// Skip tokens until the matching close paren. Caller has

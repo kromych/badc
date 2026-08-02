@@ -161,14 +161,59 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_a64_bug_table_labels.c", "linux-x64"),  // aarch64 brk bug-table entry
 ];
 
+/// Targets the sweep below builds every fixture for. Also the set the
+/// second column of `TARGET_SPECIFIC_ASM` must name.
+const SMOKE_TARGETS: &[&str] = &["linux-aarch64", "linux-x64"];
+
+/// Absolute path of `tests/fixtures/c`.
+fn fixtures_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("c")
+}
+
+/// An entry whose fixture is gone stops excluding anything without
+/// failing, so a fixture and its registration can both be lost
+/// unnoticed. The converse is normal: the sweep below discovers
+/// unregistered fixtures from the directory. The backend tables carry
+/// the same check in `src/c5/tests/fixture_tables.rs`.
+#[test]
+fn every_table_entry_names_a_fixture() {
+    let dir = fixtures_dir();
+    let mut bad: Vec<String> = Vec::new();
+    let mut checked = 0usize;
+    for name in COMPILE_SKIPLIST {
+        checked += 1;
+        if !dir.join(name).exists() {
+            bad.push(format!("COMPILE_SKIPLIST: {name}"));
+        }
+    }
+    for (name, target) in TARGET_SPECIFIC_ASM {
+        checked += 1;
+        if !dir.join(name).exists() {
+            bad.push(format!("TARGET_SPECIFIC_ASM: {name}"));
+        }
+        if !SMOKE_TARGETS.contains(target) {
+            bad.push(format!(
+                "TARGET_SPECIFIC_ASM: {name} names unswept target {target}"
+            ));
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "{} of {} table entries are stale ({} holds the fixtures):\n  {}",
+        bad.len(),
+        checked,
+        dir.display(),
+        bad.join("\n  ")
+    );
+}
+
 #[test]
 fn every_fixture_compiles_standalone_for_linux() {
     let badc = env!("CARGO_BIN_EXE_badc");
-    let manifest = env!("CARGO_MANIFEST_DIR");
-    let fixtures_dir = PathBuf::from(manifest)
-        .join("tests")
-        .join("fixtures")
-        .join("c");
+    let fixtures_dir = fixtures_dir();
     let mut entries: Vec<PathBuf> = std::fs::read_dir(&fixtures_dir)
         .expect("read tests/fixtures/c")
         .filter_map(|e| e.ok().map(|e| e.path()))
@@ -186,13 +231,12 @@ fn every_fixture_compiles_standalone_for_linux() {
 
     let mut failures: Vec<String> = Vec::new();
     let mut attempts = 0usize;
-    let targets = ["linux-aarch64", "linux-x64"];
     for fixture in &entries {
         let name = fixture.file_name().unwrap().to_str().unwrap();
         if COMPILE_SKIPLIST.contains(&name) {
             continue;
         }
-        for target in targets {
+        for target in SMOKE_TARGETS.iter().copied() {
             if TARGET_SPECIFIC_ASM.contains(&(name, target)) {
                 continue;
             }

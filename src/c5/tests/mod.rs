@@ -210,6 +210,44 @@ pub fn link_executable_with_runtime(
     .map_err(|e| format!("write image: {e}"))
 }
 
+/// Link one translation unit into a shared library, the way the CLI's
+/// `--shared` does: no startup runtime, and an unresolved global becomes
+/// a load-time import the host supplies.
+#[cfg(feature = "full")]
+#[allow(dead_code)] // used by the feature-gated shared-library tests
+pub fn link_shared_library(
+    program: &Program,
+    target: crate::Target,
+    opts: crate::NativeOptions,
+) -> Result<Vec<u8>, String> {
+    use crate::{
+        NativeMachine, OutputKind, emit_aarch64_plt, emit_native_with_options, emit_x86_64_plt,
+        link_native_objects_with_options, parse_native_elf, write_native_image_from_merged,
+    };
+    let mut reloc = opts;
+    reloc.output_kind = OutputKind::Relocatable;
+    let bytes = emit_native_with_options(program, target, reloc)
+        .map_err(|e| format!("emit program object: {e}"))?;
+    let obj = parse_native_elf(&bytes).map_err(|e| format!("parse program object: {e}"))?;
+    let mut merged =
+        link_native_objects_with_options(&[obj], true).map_err(|e| format!("link: {e}"))?;
+    let plt = match merged.machine {
+        NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+    }
+    .map_err(|e| format!("plt: {e}"))?;
+    write_native_image_from_merged(
+        &merged,
+        &plt,
+        program.entry_name.as_deref().unwrap_or("main"),
+        program.subsystem,
+        OutputKind::SharedLibrary,
+        target,
+        Some("libbadctest"),
+    )
+    .map_err(|e| format!("write image: {e}"))
+}
+
 /// Like [`link_executable_with_runtime`] but links several user
 /// translation units into one image, mirroring a multi-`.o` CLI link.
 /// `programs[0]` carries the entry point and subsystem. Used to exercise

@@ -134,6 +134,7 @@ fn route_single_tu_data_imports(build: &mut Build, target: Target) {
                 real_symbol: host.clone(),
                 dylib_index: 0,
                 flat_lookup: true,
+                is_object: false,
                 is_variadic: false,
                 fixed_args: 0,
                 return_type_tag: 0,

@@ -56,7 +56,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0xd0
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, <lo12>]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x9, x0

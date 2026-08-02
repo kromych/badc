@@ -2773,17 +2773,19 @@ fn patch_iat_data_load(
     match machine {
         Machine::X86_64 => {
             let opcode_off = (instr_offset_in_text + 1) as usize;
-            if text[opcode_off] != 0x8D {
+            if text[opcode_off] != 0x8D && text[opcode_off] != 0x8B {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                     &format!(
-                        "PE: data-import load expected lea opcode 0x8D at text+{opcode_off:#x}, \
-                         found {:#04x}",
+                        "PE: data-import load expected lea 0x8D or mov 0x8B at \
+                         text+{opcode_off:#x}, found {:#04x}",
                         text[opcode_off],
                     ),
                 )));
             }
-            // Flip lea (0x8D) to mov r64, [rip+disp32] (0x8B). The
-            // disp32 follows the same +3 offset and 7-byte length.
+            // The site is either the `lea` a relaxed GOT reference left
+            // behind or the unrelaxed `mov` itself; both end as a load of
+            // the slot. The disp32 follows at +3 in a 7-byte instruction
+            // either way.
             text[opcode_off] = 0x8B;
             let instr_rva = text_section_rva + instr_offset_in_text;
             let after_rva = instr_rva + (x86_64::LEA_RIP32_LEN as u32);

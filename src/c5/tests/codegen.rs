@@ -877,18 +877,19 @@ fn macho_section_addr_bytes(b: &[u8], want: &[u8]) -> Option<(u64, alloc::vec::V
 }
 
 /// `(code address, code bytes, address range of the import slots)` of a
-/// linked image: the IAT entry the loader fills for a PE, the `.got` /
-/// `__got` region for the other two formats.
+/// linked image: the IAT entry named by `pe_import` for a PE, the `.got`
+/// / `__got` region for the other two formats.
 #[cfg(feature = "full")]
 fn import_slot_layout(
     image: &[u8],
     target: crate::Target,
+    pe_import: &str,
 ) -> Option<(u64, alloc::vec::Vec<u8>, core::ops::Range<u64>)> {
     use crate::Target;
     match target {
         Target::WindowsX64 | Target::WindowsAarch64 => {
             let (text_rva, text) = pe_text_section(image)?;
-            let slot = pe_iat_slot_rva(image, "_timezone")? as u64;
+            let slot = pe_iat_slot_rva(image, pe_import)? as u64;
             Some((text_rva as u64, text.to_vec(), slot..slot + 8))
         }
         Target::LinuxX64 | Target::LinuxAarch64 => {
@@ -982,8 +983,9 @@ fn an_import_slot_reference_reads_the_slot_on_every_target() {
         Target::WindowsAarch64,
         Target::MacOSAarch64,
     ];
-    // An ELF x86_64 image resolves a bound data object by copy
-    // relocation instead, so it reads no slot; every other target does.
+    // An ELF x86_64 image resolves the bound data object by copy
+    // relocation, so `timezone` reads no slot there; `&puts` still does,
+    // so every target ends up reading one.
     let mut reading = 0usize;
     for target in targets {
         let program = Compiler::with_target(SRC.to_string(), target)
@@ -991,7 +993,7 @@ fn an_import_slot_reference_reads_the_slot_on_every_target() {
             .unwrap_or_else(|e| panic!("{target:?}: compile: {e:?}"));
         let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
             .unwrap_or_else(|e| panic!("{target:?}: link: {e}"));
-        let (code_va, code, slots) = import_slot_layout(&image, target)
+        let (code_va, code, slots) = import_slot_layout(&image, target, "_timezone")
             .unwrap_or_else(|| panic!("{target:?}: image carries no import-slot region"));
         let (through, addressed) = count_slot_references(target, code_va, &code, &slots);
         assert_eq!(
@@ -1003,9 +1005,55 @@ fn an_import_slot_reference_reads_the_slot_on_every_target() {
     }
     assert_eq!(
         reading,
-        targets.len() - 1,
+        targets.len(),
         "the scan proves nothing unless the images actually read their import slots"
     );
+}
+
+/// A shared library's reference to an undefined data symbol reaches the
+/// object through the import slot the loader fills. Routing it to a call
+/// stub instead leaves the reference pointing at code, so every read
+/// returns instruction bytes -- with no diagnostic at link or load. The
+/// source materialises no other in-code address, so a page-relative
+/// address landing inside the code section is that misrouting.
+#[cfg(feature = "full")]
+#[test]
+fn a_shared_library_data_import_reads_its_slot_on_every_target() {
+    use crate::{Compiler, NativeOptions, Target};
+    const SRC: &str = "extern int host_var;\nextern int host_fn(void);\n\
+                       #pragma export(read_var)\nint read_var(void) { return host_var; }\n\
+                       #pragma export(call_fn)\nint call_fn(void) { return host_fn(); }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let program = Compiler::with_target(SRC.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: compile: {e:?}"));
+        let image = super::link_shared_library(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("{target:?}: link: {e}"));
+        let (code_va, code, slots) = import_slot_layout(&image, target, "host_var")
+            .unwrap_or_else(|| panic!("{target:?}: image carries no import-slot region"));
+        let (through, addressed) = count_slot_references(target, code_va, &code, &slots);
+        assert_eq!(
+            addressed, 0,
+            "{target:?}: a data import's slot is read, never addressed"
+        );
+        assert!(
+            through > 0,
+            "{target:?}: the data reference must read the import slot"
+        );
+        let text = code_va..code_va + code.len() as u64;
+        let (_, into_text) = count_slot_references(target, code_va, &code, &text);
+        assert_eq!(
+            into_text, 0,
+            "{target:?}: {into_text} reference(s) materialise an address inside the code \
+             section -- a data import bound to a call stub"
+        );
+    }
 }
 
 /// Walk an emitted ELF64 `.symtab` and return `(name, st_size)` for

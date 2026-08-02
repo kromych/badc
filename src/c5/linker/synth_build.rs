@@ -605,6 +605,7 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             },
             dylib_index,
             flat_lookup,
+            is_object: merged.object_imports.contains(&i),
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
@@ -693,7 +694,6 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
         });
     }
 
-    let data_imports = &merged.data_import_indices;
     for reloc in &merged.pending_imports {
         match merged.machine {
             NativeMachine::Aarch64 => {
@@ -705,13 +705,7 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
                 )?;
             }
             NativeMachine::X86_64 => {
-                project_x86_64_pending(
-                    reloc,
-                    data_imports,
-                    &mut got_fixups,
-                    &mut data_fixups,
-                    &mut func_fixups,
-                )?;
+                project_x86_64_pending(reloc, &mut got_fixups, &mut data_fixups, &mut func_fixups)?;
             }
         }
     }
@@ -728,6 +722,8 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
 // reach across the module boundary for a private constant.
 const R_X86_64_PC32: u32 = 2;
 const R_X86_64_PLT32: u32 = 4;
+const R_X86_64_GOTPCREL: u32 = 9;
+const R_X86_64_REX_GOTPCRELX: u32 = 42;
 const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
 const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
@@ -735,6 +731,8 @@ const R_AARCH64_LDST8_ABS_LO12_NC: u32 = 284;
 const R_AARCH64_LDST16_ABS_LO12_NC: u32 = 285;
 const R_AARCH64_LDST32_ABS_LO12_NC: u32 = 286;
 const R_AARCH64_LDST64_ABS_LO12_NC: u32 = 287;
+const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
+const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
 
 fn project_aarch64_pending(
     reloc: &super::link::PendingImportReloc,
@@ -747,7 +745,8 @@ fn project_aarch64_pending(
         | R_AARCH64_LDST8_ABS_LO12_NC
         | R_AARCH64_LDST16_ABS_LO12_NC
         | R_AARCH64_LDST32_ABS_LO12_NC
-        | R_AARCH64_LDST64_ABS_LO12_NC => {
+        | R_AARCH64_LDST64_ABS_LO12_NC
+        | R_AARCH64_LD64_GOT_LO12_NC => {
             // The matching ADRP entry owns the fixup; patch_adrp_add writes
             // both halves -- the `add` or the scaled load/store low-12 -- from
             // one DataFixup / FuncFixup / GotFixup record.
@@ -787,6 +786,17 @@ fn project_aarch64_pending(
                 "synthesizer: aarch64 ADR_PREL_PG_HI21 targeting {other:?} not supported"
             ))),
         },
+        // An unrelaxed GOT page reference: the site loads the slot the
+        // loader fills. The pair is already `adrp` + `ldr`, the shape
+        // the writer's slot patch produces either way.
+        R_AARCH64_ADR_GOT_PAGE if reloc.target_section == NativeSymSection::Undef => {
+            got_fixups.push(GotFixup {
+                adrp_offset: reloc.text_offset as usize,
+                import_index: reloc.import_index,
+                is_data_load: false,
+            });
+            Ok(())
+        }
         other => Err(synth_err(&alloc::format!(
             "synthesizer: aarch64 rtype {other} not supported"
         ))),
@@ -795,17 +805,10 @@ fn project_aarch64_pending(
 
 fn project_x86_64_pending(
     reloc: &super::link::PendingImportReloc,
-    data_imports: &alloc::collections::BTreeSet<usize>,
     got_fixups: &mut Vec<GotFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
 ) -> Result<(), C5Error> {
-    if reloc.rtype != R_X86_64_PC32 && reloc.rtype != R_X86_64_PLT32 {
-        return Err(synth_err(&alloc::format!(
-            "synthesizer: x86_64 rtype {} not supported",
-            reloc.rtype
-        )));
-    }
     // Per SysV AMD64 psABI ch. 4.4 the `r_offset` of R_X86_64_PC32
     // and R_X86_64_PLT32 names the byte location of the 32-bit
     // displacement field, not the instruction start. The writer's
@@ -814,11 +817,16 @@ fn project_x86_64_pending(
     // aarch64 ADRP analogue) so each x86_64 form steps back from
     // the displacement to the instruction's first byte:
     //   * `lea reg, [rip + disp32]`  -- 7-byte REX form, disp32 at +3
+    //   * `mov reg, [rip + disp32]`  -- same shape, unrelaxed GOT load
     //   * `call rel32`                -- 5-byte form,    disp32 at +1
     let instr_back_off = match reloc.rtype {
-        R_X86_64_PC32 => 3,
+        R_X86_64_PC32 | R_X86_64_GOTPCREL | R_X86_64_REX_GOTPCRELX => 3,
         R_X86_64_PLT32 => 1,
-        _ => unreachable!(),
+        other => {
+            return Err(synth_err(&alloc::format!(
+                "synthesizer: x86_64 rtype {other} not supported"
+            )));
+        }
     };
     let instr_offset = (reloc.text_offset as usize)
         .checked_sub(instr_back_off)
@@ -852,16 +860,15 @@ fn project_x86_64_pending(
             Ok(())
         }
         NativeSymSection::Undef => {
-            // A data import re-parked by `emit_x86_64_plt` reaches
-            // here with no call thunk; its `lea reg, [rip+disp32]`
-            // must become a `mov reg, [rip+disp32]` loading the IAT
-            // slot's value. A function import flows through its
-            // trampoline GotFixup and takes the IAT-lookup form.
-            let is_data_load = data_imports.contains(&reloc.import_index);
+            // A slot-read site re-parked by `emit_x86_64_plt` reaches
+            // here with no call thunk; it ends as a
+            // `mov reg, [rip+disp32]` loading the IAT slot's value. A
+            // branch flows through its trampoline GotFixup instead and
+            // takes the IAT-lookup form.
             got_fixups.push(GotFixup {
                 adrp_offset: instr_offset,
                 import_index: reloc.import_index,
-                is_data_load,
+                is_data_load: reloc.slot_load,
             });
             Ok(())
         }
@@ -1061,7 +1068,7 @@ mod tests {
             macho_tlv_descriptors: alloc::vec![],
             macho_tlv_fixups: alloc::vec![],
             copy_relocs: alloc::vec![],
-            data_import_indices: alloc::collections::BTreeSet::new(),
+            object_imports: alloc::collections::BTreeSet::new(),
             dylibs: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],

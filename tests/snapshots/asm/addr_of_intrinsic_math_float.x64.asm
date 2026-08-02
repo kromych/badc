@@ -17,10 +17,10 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
-               	leaq	<rip>, %rax       # <addr>
-               	leaq	<rip>, %rbx       # <addr>
-               	leaq	<rip>, %r12       # <addr>
-               	leaq	<rip>, %r13       # <addr>
+               	movq	<rip>, %rax
+               	movq	<rip>, %rbx
+               	movq	<rip>, %r12
+               	movq	<rip>, %r13
                	movl	$0x41800000, %edi       # imm = 0x41800000
                	movq	%rdi, %xmm0
                	callq	*%rax
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax       # <addr>
+               	movq	<rip>, %rax
                	movl	$0x40600000, %ebx       # imm = 0x40600000
                	movq	%rbx, %xmm0
                	movl	$0x80000000, %r10d      # imm = 0x80000000

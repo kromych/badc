@@ -19,11 +19,11 @@ Disassembly of section .text:
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
                	movq	%r15, 0x20(%rsp)
-               	leaq	<rip>, %rax       # <addr>
-               	leaq	<rip>, %rbx       # <addr>
-               	leaq	<rip>, %r12       # <addr>
-               	leaq	<rip>, %r13       # <addr>
-               	leaq	<rip>, %r14       # <addr>
+               	movq	<rip>, %rax
+               	movq	<rip>, %rbx
+               	movq	<rip>, %r12
+               	movq	<rip>, %r13
+               	movq	<rip>, %r14
                	movabsq	$0x400c000000000000, %r15 # imm = 0x400C000000000000
                	movq	%r15, %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000

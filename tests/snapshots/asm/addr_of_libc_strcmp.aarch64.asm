@@ -17,7 +17,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	adrp	x20, <page>
-               	add	x20, x20, <lo12>
+               	ldr	x20, [x20, <lo12>]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>

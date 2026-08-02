@@ -13,7 +13,7 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x0                // =0
-               	nop
+               	mov	x0, #0x0                // =0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

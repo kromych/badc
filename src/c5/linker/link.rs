@@ -54,6 +54,19 @@ const R_AARCH64_PREL64: u32 = 260;
 const R_AARCH64_TLSLE_ADD_TPREL_HI12: u32 = 549;
 const R_AARCH64_TLSLE_ADD_TPREL_LO12_NC: u32 = 551;
 
+/// A relocation whose site reads a GOT slot: the value it wants is the
+/// symbol's address, taken from storage the loader fills, not a
+/// PC-relative distance to the symbol itself.
+pub(crate) const fn is_got_reloc(rtype: u32) -> bool {
+    matches!(
+        rtype,
+        R_X86_64_GOTPCREL
+            | R_X86_64_REX_GOTPCRELX
+            | R_AARCH64_ADR_GOT_PAGE
+            | R_AARCH64_LD64_GOT_LO12_NC
+    )
+}
+
 /// Result of merging N [`NativeObject`]s. Carries enough state
 /// for a final-image writer to lay out `.text` / `.data` at the
 /// target's expected virtual addresses, materialise the PLT
@@ -172,13 +185,10 @@ pub struct MergedNative {
     /// final-image writer binds each local data symbol it defines to the
     /// host's data object with an `R_*_COPY` relocation.
     pub copy_relocs: Vec<(String, String)>,
-    /// Indices into [`Self::imports`] for `#pragma binding(data ...)`
-    /// locals that reached the merge as an UNDEF (the host data symbol
-    /// lives in a dylib; Mach-O routes the reference through the GOT).
-    /// The PLT pass skips these -- a data import takes no call stub, and
-    /// its reference loads the GOT slot directly rather than branching
-    /// through a trampoline.
-    pub data_import_indices: alloc::collections::BTreeSet<usize>,
+    /// Indices into [`Self::imports`] an input symbol table typed
+    /// `STT_OBJECT`. The writers republish the type on the undefined
+    /// dynamic symbol instead of tagging every import a function.
+    pub object_imports: alloc::collections::BTreeSet<usize>,
     /// Concatenated standard DWARF byte streams from every
     /// input unit. Each unit's blob starts at
     /// `debug_*_bases[unit_idx]` inside the merged stream; the
@@ -381,6 +391,12 @@ pub struct PendingImportReloc {
     pub addend: i64,
     /// Section the target lives in (see the type-level doc).
     pub target_section: NativeSymSection,
+    /// The site reads the import's slot to obtain the symbol's address
+    /// rather than branching to the symbol. Such a site takes no call
+    /// stub -- a stub is code, so reading through it returns
+    /// instructions. Per site, not per import: a function's address may
+    /// be taken at one site and called at another.
+    pub slot_load: bool,
 }
 
 /// Merge `objs` into a single [`MergedNative`]. Per-unit
@@ -876,9 +892,9 @@ pub fn link_native_objects_with_shared_libs<'a>(
         .iter()
         .flat_map(|o| o.copy_relocs.iter().map(|(local, _host)| local.as_str()))
         .collect();
-    // Import indices for the data-binding locals admitted as GOT imports
-    // (Mach-O). The PLT pass consults this to skip stub creation.
-    let mut data_import_indices: alloc::collections::BTreeSet<usize> =
+    // Import indices an input symbol table typed `STT_OBJECT`. The
+    // writer republishes the type on the undefined dynamic symbol.
+    let mut object_imports: alloc::collections::BTreeSet<usize> =
         alloc::collections::BTreeSet::new();
     // Names with dylib routing from any unit's binding map. The c5 `.o`
     // writer emits its libc imports as STB_WEAK UNDEF paired with a map
@@ -930,14 +946,32 @@ pub fn link_native_objects_with_shared_libs<'a>(
             {
                 continue;
             }
-            // GOT-relaxation: badc's own image is ET_EXEC (no symbol
-            // preemption), so an emitted GOT reference (adrp :got: + ldr) to a
+            // An STB_WEAK definition is overridable: a strong definition
+            // of the same name in a sibling unit wins (ELF/SysV). Resolve
+            // it through the merged table instead of this unit's copy,
+            // which is what the UNDEF arm already does.
+            let sym_section = if sym.binding == 2 {
+                NativeSymSection::Undef
+            } else {
+                sym.section
+            };
+            // A GOT reference whose symbol this link defines needs no
+            // indirection, so it relaxes to a direct page-relative one.
+            // A reference the link cannot resolve keeps the GOT: the
+            // slot is where the loader writes the symbol's address, and
+            // the relaxed form would instead materialize an address
+            // inside this image -- for an import, its call stub.
+            let resolved_here = !matches!(sym_section, NativeSymSection::Undef)
+                || defined.contains_key(sym.name.as_str());
+            // GOT-relaxation: an emitted GOT reference (adrp :got: + ldr) to a
             // resolvable symbol is materialized directly. Convert the pair to
             // ADR_PREL / ADD_ABS and rewrite the `ldr` back to the `add` it came
             // from; the rest of the loop then resolves it like any direct
             // page-relative reference. An external linker keeps the GOT.
             let relaxed_reloc;
-            let reloc = if reloc.rtype == R_AARCH64_ADR_GOT_PAGE
+            let reloc = if !resolved_here {
+                reloc
+            } else if reloc.rtype == R_AARCH64_ADR_GOT_PAGE
                 || reloc.rtype == R_AARCH64_LD64_GOT_LO12_NC
             {
                 if reloc.rtype == R_AARCH64_LD64_GOT_LO12_NC && patch_offset + 4 <= text.len() {
@@ -974,15 +1008,6 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 &relaxed_reloc
             } else {
                 reloc
-            };
-            // An STB_WEAK definition is overridable: a strong definition
-            // of the same name in a sibling unit wins (ELF/SysV). Resolve
-            // it through the merged table instead of this unit's copy,
-            // which is what the UNDEF arm already does.
-            let sym_section = if sym.binding == 2 {
-                NativeSymSection::Undef
-            } else {
-                sym.section
             };
             match sym_section {
                 NativeSymSection::Text
@@ -1064,6 +1089,17 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         // the object through the GOT, never a PLT stub.
                         let is_data_binding = data_binding_locals.contains(sym.name.as_str())
                             || shlib_data_exports.contains(sym.name.as_str());
+                        // A site wanting the symbol's address takes no
+                        // call stub -- a stub is code. The relocation
+                        // kind is the reference toolchain's
+                        // discriminator and survives here because an
+                        // unresolvable GOT reference stays unrelaxed;
+                        // the symbol type covers the direct
+                        // page-relative pair the aarch64 codegen uses
+                        // for extern data.
+                        let slot_load = is_data_binding
+                            || is_got_reloc(reloc.rtype)
+                            || sym.kind == super::object::STT_OBJECT;
                         // STB_WEAK = 2. An unresolved weak reference with
                         // no dylib routing resolves to address 0 (C
                         // practice; ELF leaves the symbol 0 so the
@@ -1098,8 +1134,8 @@ pub fn link_native_objects_with_shared_libs<'a>(
                             flat_imports.insert(sym.name.clone());
                         }
                         let idx = record_import(&sym.name, &mut imports, &mut import_idx_for_name);
-                        if is_data_binding {
-                            data_import_indices.insert(idx);
+                        if sym.kind == super::object::STT_OBJECT {
+                            object_imports.insert(idx);
                         }
                         pending_imports.push(PendingImportReloc {
                             text_offset: patch_offset as u64,
@@ -1107,6 +1143,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                             rtype: reloc.rtype,
                             addend: reloc.addend,
                             target_section: NativeSymSection::Undef,
+                            slot_load,
                         });
                     } else {
                         // UNDEF with no name -- shouldn't
@@ -1775,7 +1812,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
         macho_tlv_descriptors,
         macho_tlv_fixups,
         copy_relocs,
-        data_import_indices,
+        object_imports,
         debug_info,
         debug_abbrev,
         debug_line,
@@ -1979,18 +2016,16 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
     // get put back so the writer can resolve them against its
     // own `.data` vmaddr later.
     let pending = core::mem::take(&mut merged.pending_imports);
-    let data_imports = merged.data_import_indices.clone();
     let mut parked_back: Vec<PendingImportReloc> = Vec::new();
     for reloc in &pending {
         if reloc.import_index == usize::MAX {
             parked_back.push(reloc.clone());
             continue;
         }
-        // A data import takes no call stub: its reference loads the
-        // IAT slot directly. Re-park the reloc unchanged so
-        // `synth_fixups` projects it to a data-load GotFixup
-        // (lea -> mov against the slot).
-        if data_imports.contains(&reloc.import_index) {
+        // A slot-read site takes no call stub. Re-park the reloc
+        // unchanged so `synth_fixups` projects it to a data-load
+        // GotFixup (lea -> mov against the slot).
+        if reloc.slot_load {
             parked_back.push(reloc.clone());
             continue;
         }
@@ -2029,7 +2064,7 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
         if reloc.import_index == usize::MAX {
             continue;
         }
-        if data_imports.contains(&reloc.import_index) {
+        if reloc.slot_load {
             continue;
         }
         let site = reloc.text_offset as usize;
@@ -2110,17 +2145,16 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
     let mut tramp_for_import: BTreeMap<usize, usize> = BTreeMap::new();
     let mut trampolines: Vec<PltTrampoline> = Vec::new();
     let pending = core::mem::take(&mut merged.pending_imports);
-    let data_imports = merged.data_import_indices.clone();
     let mut parked_back: Vec<PendingImportReloc> = Vec::new();
     for reloc in &pending {
         if reloc.import_index == usize::MAX {
             parked_back.push(reloc.clone());
             continue;
         }
-        // A data import takes no call stub: its reference loads the GOT
-        // slot directly. Re-park the reloc unchanged so `synth_fixups`
-        // projects it to a GotFixup (adrp + ldr) against the slot.
-        if data_imports.contains(&reloc.import_index) {
+        // A slot-read site takes no call stub. Re-park the reloc
+        // unchanged so `synth_fixups` projects it to a GotFixup
+        // (adrp + ldr) against the slot.
+        if reloc.slot_load {
             parked_back.push(reloc.clone());
             continue;
         }
@@ -2161,7 +2195,7 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
         if reloc.import_index == usize::MAX {
             continue;
         }
-        if data_imports.contains(&reloc.import_index) {
+        if reloc.slot_load {
             continue;
         }
         let site = reloc.text_offset as usize;
@@ -2191,6 +2225,7 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
                     rtype: reloc.rtype,
                     addend: tramp as i64,
                     target_section: NativeSymSection::Text,
+                    slot_load: false,
                 });
             }
             _ => unreachable!("pass 1 rejected every other rtype"),
@@ -2271,12 +2306,24 @@ fn resolve_weak_undef_to_zero(
         (NativeMachine::Aarch64, R_AARCH64_ADD_ABS_LO12_NC) => {
             wu::aarch64_add_lo12_to_zero(text, patch_offset)
         }
+        // An unrelaxed GOT pair: the page half takes the same rewrite as
+        // ADR_PREL, the load half becomes the null address itself.
+        (NativeMachine::Aarch64, R_AARCH64_ADR_GOT_PAGE) => {
+            wu::aarch64_adrp_to_zero(text, patch_offset)
+        }
+        (NativeMachine::Aarch64, R_AARCH64_LD64_GOT_LO12_NC) => {
+            wu::aarch64_got_load_to_zero(text, patch_offset)
+        }
         (NativeMachine::X86_64, R_X86_64_PLT32) | (NativeMachine::X86_64, R_X86_64_PC32) => {
             // `r_offset` names the disp32 field; the instruction starts
             // one byte ahead for `call rel32`, three for a rip-relative
             // `lea`.
             (patch_offset >= 1 && wu::x86_64_branch_to_nop(text, patch_offset - 1))
                 || (patch_offset >= 3 && wu::x86_64_lea_to_zero(text, patch_offset - 3))
+        }
+        (NativeMachine::X86_64, R_X86_64_GOTPCREL)
+        | (NativeMachine::X86_64, R_X86_64_REX_GOTPCRELX) => {
+            patch_offset >= 3 && wu::x86_64_got_load_to_zero(text, patch_offset - 3)
         }
         _ => return Err(unsupported(&format!("reloc type {}", reloc.rtype))),
     };
@@ -2405,6 +2452,7 @@ fn park_section_ref(
         rtype: reloc.rtype,
         addend: target_offset,
         target_section,
+        slot_load: false,
     });
 }
 
@@ -2613,10 +2661,10 @@ mod tests {
     fn shared_library_data_object_resolves_as_data_import() {
         // A reference to a shared library's data object (a `STT_OBJECT`
         // export) must resolve to the object's address through the GOT --
-        // a data import -- not to a
-        // PLT stub, whose bytes are code. The `data_exports` set drives
-        // this: it routes the reference like a `#pragma binding(data ...)`
-        // local so the PLT pass skips a call stub for it.
+        // a slot read -- not to a PLT stub, whose bytes are code. The
+        // `data_exports` set drives this: it marks the site the way a
+        // `#pragma binding(data ...)` local's is marked, so the PLT pass
+        // skips a call stub for it.
         let target = Target::LinuxAarch64;
         let mut opts = NativeOptions::new().with_debug_info(false);
         opts.output_kind = OutputKind::Relocatable;
@@ -2638,9 +2686,81 @@ mod tests {
             .position(|n| n == "tbl")
             .expect("tbl recorded as an import");
         assert!(
-            merged.data_import_indices.contains(&idx),
-            "a shared-library data object must route as a data import, not a call stub",
+            merged
+                .pending_imports
+                .iter()
+                .filter(|p| p.import_index == idx)
+                .all(|p| p.slot_load),
+            "a shared-library data object must route as a slot read, not a call stub",
         );
+    }
+
+    /// A shared library's own undefined references: the host supplies
+    /// both at load time, so both become imports, but only the call gets
+    /// a stub. A stub for the data symbol would leave every read of it
+    /// returning the stub's instruction bytes.
+    #[test]
+    fn shared_library_undefined_data_reference_takes_no_call_stub() {
+        let src = "extern int host_var;\nextern int host_fn(void);\n\
+                   int read_var(void) { return host_var; }\n\
+                   int call_fn(void) { return host_fn(); }\n";
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let mut opts = NativeOptions::new().with_debug_info(false);
+            opts.output_kind = OutputKind::Relocatable;
+            let copts = crate::CompileOptions::default().with_no_entry_point(true);
+            let obj = compile_native_with(src, target, opts, copts);
+            let mut merged = link_native_objects_with_options(&[obj], true)
+                .expect("a shared library admits both undefined references");
+            let idx = |n: &str| {
+                merged
+                    .imports
+                    .iter()
+                    .position(|i| i == n)
+                    .unwrap_or_else(|| panic!("{target:?}: {n} recorded as an import"))
+            };
+            let (data, code) = (idx("host_var"), idx("host_fn"));
+            // `(sites reading the slot, sites branching)` per import.
+            let sites = |i: usize| -> (usize, usize) {
+                let mut counts = (0usize, 0usize);
+                for p in merged
+                    .pending_imports
+                    .iter()
+                    .filter(|p| p.import_index == i)
+                {
+                    if p.slot_load {
+                        counts.0 += 1;
+                    } else {
+                        counts.1 += 1;
+                    }
+                }
+                counts
+            };
+            let (data_reads, data_branches) = sites(data);
+            assert!(
+                data_reads > 0 && data_branches == 0,
+                "{target:?}: every site of an undefined data reference reads its slot, \
+                 got {data_reads} read(s) and {data_branches} branch(es)",
+            );
+            let (code_reads, code_branches) = sites(code);
+            assert!(
+                code_branches > 0 && code_reads == 0,
+                "{target:?}: a call site branches, got {code_reads} read(s) and \
+                 {code_branches} branch(es)",
+            );
+            let plt = match merged.machine {
+                NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+                NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+            }
+            .expect("plt pass");
+            assert!(
+                plt.iter().all(|t| t.import_index != data),
+                "{target:?}: the data import must get no call stub",
+            );
+            assert!(
+                plt.iter().any(|t| t.import_index == code),
+                "{target:?}: the call must get a stub",
+            );
+        }
     }
 
     #[test]

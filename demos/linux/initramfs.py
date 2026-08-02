@@ -29,9 +29,59 @@ import tempfile
 from pathlib import Path
 
 INIT_C = r"""
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
-#include <unistd.h>
+#include <string.h>
 #include <sys/reboot.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+static const char *const modules[] = { @MODULES@ };
+
+/* Several passes, because a module whose dependency has not been loaded yet
+   fails with ENOENT; the list carries no dependency order. */
+static void load_modules(void)
+{
+    static char done[512];
+    unsigned n, i, pass, loaded = 0, progress;
+
+    for (n = 0; modules[n]; n++)
+        ;
+    for (pass = 0; pass < 4; pass++) {
+        progress = 0;
+        for (i = 0; i < n; i++) {
+            int fd;
+            long rc;
+
+            if (done[i])
+                continue;
+            fd = open(modules[i], O_RDONLY);
+            if (fd < 0) {
+                printf("BADC-MODULE %s open errno=%d\n", modules[i], errno);
+                fflush(stdout);
+                done[i] = 1;
+                continue;
+            }
+            rc = syscall(SYS_finit_module, fd, "", 0);
+            close(fd);
+            if (rc == 0) {
+                printf("BADC-MODULE %s loaded\n", modules[i]);
+                done[i] = 1;
+                loaded++;
+                progress = 1;
+            } else if (pass == 3) {
+                printf("BADC-MODULE %s errno=%d %s\n", modules[i], errno,
+                       strerror(errno));
+            }
+            fflush(stdout);
+        }
+        if (!progress)
+            break;
+    }
+    printf("BADC-MODULE-DONE loaded=%u of=%u\n", loaded, n);
+    fflush(stdout);
+}
 
 int main(void)
 {
@@ -39,6 +89,7 @@ int main(void)
     for (i = 1; i <= 5; i++)
         printf("BADC-VMLINUX-OK %d/5\n", i);
     fflush(stdout);
+    load_modules();
     sync();
     reboot(RB_AUTOBOOT);
     reboot(RB_POWER_OFF);
@@ -72,17 +123,27 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-o", "--output", type=Path, required=True)
     ap.add_argument("--cc", default="gcc", help="compiler for /init (default: gcc)")
+    ap.add_argument("--module", type=Path, action="append", default=[],
+                    help="module to carry and load with finit_module(2); "
+                         "repeatable. Each load prints BADC-MODULE <name> "
+                         "loaded or errno=<n>.")
     args = ap.parse_args()
+
+    names = [m.name for m in args.module]
+    decl = "".join('"/%s", ' % n for n in names) + "0"
 
     with tempfile.TemporaryDirectory() as td:
         src = Path(td) / "init.c"
         exe = Path(td) / "init"
-        src.write_text(INIT_C)
+        src.write_text(INIT_C.replace("@MODULES@", decl))
         cmd = [args.cc, "-static", "-O2", "-o", str(exe), str(src)]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:
             sys.exit(f"linux initramfs: {' '.join(cmd)} failed:\n{r.stderr.strip()}")
-        image = cpio_newc([("init", 0o100755, exe.read_bytes())])
+        entries = [("init", 0o100755, exe.read_bytes())]
+        entries += [(n, 0o100644, m.read_bytes())
+                    for n, m in zip(names, args.module)]
+        image = cpio_newc(entries)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(gzip.compress(image, 9))

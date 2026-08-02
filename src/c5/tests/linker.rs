@@ -1434,6 +1434,79 @@ int main(void) { return 0; }
 }
 
 #[test]
+fn file_scope_asm_type_space_form_and_set_location_size() {
+    // GNU as makes the comma in `.type name, @type` optional and accepts the
+    // `STT_` spellings, so `.type name STT_FUNC` names the same type. A `.set`
+    // whose value is a location difference takes that value where it is
+    // written, and `.size` then consumes the symbol. Verified against gas:
+    // FUNC / GLOBAL / size 5 for this section.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const STT_FUNC: u8 = 2;
+    let src = r#"asm(".pushsection .text.spaceform, \"ax\"\n"
+    ".globl spaced\n"
+    ".type spaced STT_FUNC\n"
+    "spaced:\n"
+    ".byte 0x90, 0x90, 0x90, 0x90, 0x90\n"
+    ".set spaced_len, . - spaced\n"
+    ".size spaced, spaced_len\n"
+    ".popsection\n");
+int main(void) { return 0; }
+"#;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let sym = obj
+            .symbols
+            .iter()
+            .find(|s| s.name == "spaced")
+            .unwrap_or_else(|| panic!("{target:?}: `spaced` symbol missing"));
+        assert_eq!(
+            sym.kind, STT_FUNC,
+            "{target:?}: `.type name STT_FUNC` must set STT_FUNC"
+        );
+        assert_eq!(
+            sym.size, 5,
+            "{target:?}: `.size` through a `.set` location difference must be 5"
+        );
+    }
+}
+
+#[test]
+fn file_scope_asm_set_rejects_a_location_value() {
+    // A `.set` whose value is a location rather than an absolute (`. + 4`)
+    // gives GNU as a section-relative symbol, and a field referencing it takes
+    // a relocation against the section. badc's section symbols are absolute
+    // values, so such an assignment is diagnosed rather than emitted as an
+    // offset that would be wrong once the section is placed.
+    // TODO location-valued section symbols.
+    use crate::c5::Target;
+    let src = r#"asm(".pushsection .rodata.locval, \"a\"\n"
+    ".globl locbase\n"
+    "locbase:\n"
+    ".byte 1, 2\n"
+    ".set locptr, . + 4\n"
+    ".long locptr\n"
+    ".popsection\n");
+int main(void) { return 0; }
+"#;
+    let err = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .expect_err("a location-valued `.set` is not an absolute value");
+    assert!(
+        format!("{err:?}").contains("location"),
+        "diagnostic must name the location value: {err:?}"
+    );
+}
+
+#[test]
 fn libc_address_trampoline_is_per_tu_local() {
     // Two translation units that each take the address of the same
     // libc function in a `.data` function-pointer table both emit a

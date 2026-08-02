@@ -13,8 +13,6 @@ Disassembly of section .text:
 
 <classify>:
                	sxtw	x0, w0
-               	cmp	x0, #0x7d1
-               	b.hs	<addr>
                	adr	x17, <addr>
                	ldrsw	x16, [x17, x0, lsl #2]
                	add	x17, x17, x16

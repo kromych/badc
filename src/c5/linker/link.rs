@@ -323,7 +323,11 @@ pub struct DataPcRel {
     pub width: u8,
 }
 
-/// Where a defined symbol lives in the merged image.
+/// Where a defined symbol lives in the merged image, and the
+/// `.symtab` attributes the defining unit gave it. The image writers
+/// republish those attributes in the dynamic symbol table, so they
+/// have to survive the merge rather than being re-derived from the
+/// section.
 #[derive(Debug, Clone, Copy)]
 pub struct MergedSymbol {
     pub section: NativeSymSection,
@@ -332,6 +336,14 @@ pub struct MergedSymbol {
     /// symbol, `merged.data[value..]` for a Data symbol).
     pub value: u64,
     pub size: u64,
+    /// `STT_NOTYPE` / `STT_OBJECT` / `STT_FUNC`.
+    pub kind: u8,
+    /// `STV_DEFAULT` (0) or a restricted visibility; see
+    /// [`super::object::NativeSymbol::visibility`].
+    pub visibility: u8,
+    /// `STB_WEAK` definition -- a strong definition of the same name
+    /// anywhere in the process overrides it.
+    pub weak: bool,
 }
 
 /// Call-site / address-of reloc the linker parks for the
@@ -689,6 +701,9 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 section,
                 value: base as u64 + sym.value,
                 size: sym.size,
+                kind: sym.kind,
+                visibility: sym.visibility,
+                weak: sym.binding == 2,
             };
             if sym.binding == 2 {
                 // Multiple weak definitions -- keep the first, no error.
@@ -808,6 +823,9 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 section: NativeSymSection::Bss,
                 value: slot_offset,
                 size: *size,
+                kind: super::object::STT_OBJECT,
+                visibility: super::object::STV_DEFAULT,
+                weak: false,
             },
         );
     }
@@ -829,6 +847,12 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 section: NativeSymSection::Data,
                 value: off,
                 size: 0,
+                // A boundary address, not an object: the same
+                // `STT_NOTYPE` the reference toolchain gives `_edata`
+                // and `__bss_start`.
+                kind: super::object::STT_NOTYPE,
+                visibility: super::object::STV_DEFAULT,
+                weak: false,
             },
         );
     }
@@ -2949,6 +2973,7 @@ mod tests {
                     size: 0,
                     binding: 0,
                     kind: 0,
+                    visibility: 0,
                 },
                 super::super::object::NativeSymbol {
                     name: "common_var".to_string(),
@@ -2957,6 +2982,7 @@ mod tests {
                     size,
                     binding: 1,
                     kind: 1,
+                    visibility: 0,
                 },
             ],
             text_relocs: alloc::vec::Vec::new(),
@@ -3025,6 +3051,7 @@ mod tests {
                     size: 0,
                     binding: 0,
                     kind: 0,
+                    visibility: 0,
                 },
                 super::super::object::NativeSymbol {
                     name: "common_var".to_string(),
@@ -3033,6 +3060,7 @@ mod tests {
                     size: 4,
                     binding: 1,
                     kind: 1,
+                    visibility: 0,
                 },
             ],
             text_relocs: if with_reloc {
@@ -3113,6 +3141,7 @@ mod tests {
                     size: 0,
                     binding: 0,
                     kind: 0,
+                    visibility: 0,
                 },
                 super::super::object::NativeSymbol {
                     name: "x".to_string(),
@@ -3121,6 +3150,7 @@ mod tests {
                     size: 4,
                     binding: 1,
                     kind: 1,
+                    visibility: 0,
                 },
             ],
             text_relocs: alloc::vec::Vec::new(),
@@ -3163,6 +3193,7 @@ mod tests {
                     size: 0,
                     binding: 0,
                     kind: 0,
+                    visibility: 0,
                 },
                 super::super::object::NativeSymbol {
                     name: "x".to_string(),
@@ -3171,6 +3202,7 @@ mod tests {
                     size: 4,
                     binding: 1,
                     kind: 1,
+                    visibility: 0,
                 },
             ],
             text_relocs: alloc::vec::Vec::new(),
@@ -3217,6 +3249,7 @@ mod tests {
             size: 0,
             binding: 0,
             kind: 0,
+            visibility: 0,
         };
         let mk = |text: alloc::vec::Vec<u8>,
                   data: alloc::vec::Vec<u8>,
@@ -3271,6 +3304,7 @@ mod tests {
                         size: 1,
                         binding: 2,
                         kind: 2,
+                        visibility: 0,
                     },
                 ],
                 alloc::vec::Vec::new(),
@@ -3289,6 +3323,7 @@ mod tests {
                     size: 0,
                     binding: 1,
                     kind: 0,
+                    visibility: 0,
                 },
             ],
             alloc::vec![NativeReloc {
@@ -3318,6 +3353,7 @@ mod tests {
                         size: 4,
                         binding: 1,
                         kind: 1,
+                        visibility: 0,
                     },
                 ],
                 alloc::vec::Vec::new(),
@@ -3510,6 +3546,7 @@ mod tests {
             size: 0,
             binding: 1,
             kind: 2,
+            visibility: 0,
         };
         // Unit B defines `ext_fn` in .text.
         let mut b = base();

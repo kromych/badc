@@ -3214,13 +3214,160 @@ fn export_data_exposes_data_globals_in_dynsym() {
     );
 }
 
+/// One `.dynsym` entry of a linked ELF image, as `readelf --dyn-syms`
+/// prints it: `(section name, st_value, st_size, st_info, st_other)`.
+#[cfg(feature = "native-emit")]
+type DynsymEntry = (String, u64, u64, u8, u8);
+
+/// Read every named `.dynsym` entry of a linked ELF image, resolving
+/// `st_shndx` to its section name.
+#[cfg(feature = "native-emit")]
+fn elf_dynsym_entries(bytes: &[u8]) -> std::collections::BTreeMap<String, DynsymEntry> {
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64le(0x28) as usize;
+    let shnum = u16le(0x3c) as usize;
+    let shstrndx = u16le(0x3e) as usize;
+    let shdr = |i: usize| shoff + i * 64;
+    let cstr = |base: usize, off: usize| -> String {
+        let s = base + off;
+        let end = bytes[s..].iter().position(|&b| b == 0).unwrap() + s;
+        String::from_utf8_lossy(&bytes[s..end]).into_owned()
+    };
+    let shstr_off = u64le(shdr(shstrndx) + 0x18) as usize;
+    let sec_name = |i: usize| -> String {
+        if i == 0 || i >= shnum {
+            return String::new();
+        }
+        cstr(shstr_off, u32le(shdr(i)) as usize)
+    };
+    let mut out = std::collections::BTreeMap::new();
+    for i in 0..shnum {
+        // SHT_DYNSYM = 11.
+        if u32le(shdr(i) + 4) != 11 {
+            continue;
+        }
+        let symoff = u64le(shdr(i) + 0x18) as usize;
+        let symsize = u64le(shdr(i) + 0x20) as usize;
+        let strtab_off = u64le(shdr(u32le(shdr(i) + 0x28) as usize) + 0x18) as usize;
+        for k in 0..symsize / 24 {
+            let e = symoff + k * 24;
+            let name = cstr(strtab_off, u32le(e) as usize);
+            if name.is_empty() {
+                continue;
+            }
+            out.insert(
+                name,
+                (
+                    sec_name(u16le(e + 6) as usize),
+                    u64le(e + 8),
+                    u64le(e + 16),
+                    bytes[e + 4],
+                    bytes[e + 5],
+                ),
+            );
+        }
+    }
+    out
+}
+
+#[test]
+fn dynamic_exports_carry_section_size_binding_and_visibility() {
+    // A `dlopen`'d module binds a host symbol through `.dynsym`, and a
+    // consumer that copy-relocates a data object needs its size, so an
+    // export has to republish the definition's own attributes:
+    //
+    //   * a zero-init global reaches `.dynsym` at all, attributed to
+    //     `.bss` rather than dropped for having no file-backed bytes;
+    //   * every data object carries its real `st_size`;
+    //   * a `STB_WEAK` definition stays weak;
+    //   * a non-default-visibility definition never enters the table.
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged_ex,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         int initialized_global = 7;\n\
+         int uninitialized_global;\n\
+         char empty_array_global[] = \"\";\n\
+         __attribute__((weak)) int weak_global = 3;\n\
+         __attribute__((visibility(\"hidden\"))) int hidden_global = 4;\n\
+         __attribute__((visibility(\"hidden\"))) int hidden_fn(void) {{ return 5; }}\n\
+         int main(void) {{ return initialized_global + uninitialized_global +\n\
+                                  empty_array_global[0] + weak_global +\n\
+                                  hidden_global + hidden_fn(); }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let image = write_native_image_from_merged_ex(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        Target::LinuxX64,
+        None,
+        true,
+        true,
+    )
+    .expect("write executable");
+
+    let syms = elf_dynsym_entries(&image);
+    // STB_GLOBAL/STB_WEAK in the high nibble, STT_OBJECT/STT_FUNC in
+    // the low one.
+    const GLOBAL_OBJECT: u8 = (1 << 4) | 1;
+    const WEAK_OBJECT: u8 = (2 << 4) | 1;
+    for (name, section, size) in [
+        ("initialized_global", ".data", 4u64),
+        ("uninitialized_global", ".bss", 4),
+        ("empty_array_global", ".bss", 1),
+    ] {
+        let e = syms
+            .get(name)
+            .unwrap_or_else(|| panic!("`{name}` must reach .dynsym"));
+        assert_eq!(e.0, section, "`{name}` section");
+        assert_eq!(e.2, size, "`{name}` st_size");
+        assert_eq!(e.3, GLOBAL_OBJECT, "`{name}` binding + type");
+        assert_eq!(e.4, 0, "`{name}` visibility must be STV_DEFAULT");
+    }
+    assert_eq!(
+        syms.get("weak_global").expect("weak_global export").3,
+        WEAK_OBJECT,
+        "a weak definition must stay STB_WEAK when exported"
+    );
+    assert!(
+        !syms.contains_key("hidden_global"),
+        "a hidden data global must not enter the dynamic symbol table"
+    );
+    assert!(
+        !syms.contains_key("hidden_fn"),
+        "a hidden function must not enter the dynamic symbol table"
+    );
+    // The exported functions keep their real body length, which a
+    // profiler needs to attribute a sample to a name.
+    let main = syms.get("main").expect("main export");
+    assert_eq!(main.0, ".text", "main section");
+    assert!(main.2 > 0, "an exported function must carry its size");
+}
+
 #[test]
 fn macho_executable_exports_globals_through_dyld_info_trie() {
     // macOS publishes every global of an executable so a dlopen'd module
     // resolves them against the host. dyld resolves an image carrying
     // LC_DYLD_INFO exclusively through the export trie -- a symtab-only
-    // entry is invisible to it -- so a text and a data global must both
-    // resolve through the trie at their symtab addresses.
+    // entry is invisible to it -- so a text, a data and a zero-init
+    // global must all resolve through the trie at their symtab
+    // addresses.
     use crate::c5::linker::{
         emit_aarch64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
@@ -3229,7 +3376,8 @@ fn macho_executable_exports_globals_through_dyld_info_trie() {
         alloc::format!(
             "{TEST_PRELUDE}\
              int host_data = 7;\n\
-             int host_api(int x) {{ return x + host_data; }}\n\
+             int host_zero;\n\
+             int host_api(int x) {{ return x + host_data + host_zero; }}\n\
              int main(void) {{ return host_api(0); }}\n"
         ),
         Target::MacOSAarch64,
@@ -3350,13 +3498,37 @@ fn macho_executable_exports_globals_through_dyld_info_trie() {
             })
             .unwrap_or_else(|| panic!("symtab must carry {name}"))
     };
-    for name in ["_host_api", "_host_data"] {
+    for name in ["_host_api", "_host_data", "_host_zero"] {
         assert_eq!(
             trie_lookup(trie, name),
             Some(n_value_of(name) - image_base),
             "{name} must resolve through the export trie at its symtab address"
         );
     }
+    // The zero-init global's address lies in the __bss zero-fill tail,
+    // past the file-backed __data bytes.
+    let bss_addr = {
+        let mut p = 32usize;
+        let mut found = None;
+        while p < 32 + sizeofcmds {
+            if read_u32(p) == 0x19 && exe[p + 8..p + 15] == *b"__DATA\0" {
+                let nsects = read_u32(p + 64) as usize;
+                for s in 0..nsects {
+                    let sec = p + 72 + s * 80;
+                    if exe[sec..sec + 6] == *b"__bss\0" {
+                        found = Some(read_u64(sec + 32));
+                    }
+                }
+            }
+            p += read_u32(p + 4) as usize;
+        }
+        found.expect("__DATA,__bss must be present")
+    };
+    assert_eq!(
+        n_value_of("_host_zero"),
+        bss_addr,
+        "a zero-init export must address the __bss section, not __data"
+    );
 }
 
 #[test]
@@ -4206,6 +4378,7 @@ fn unrouted_weak_undef_resolves_to_zero() {
         size: 0,
         binding: 0,
         kind: 0,
+        visibility: 0,
     };
     let weak_undef = || NativeSymbol {
         name: "hook".to_string(),
@@ -4214,6 +4387,7 @@ fn unrouted_weak_undef_resolves_to_zero() {
         size: 0,
         binding: 2, // STB_WEAK
         kind: 0,
+        visibility: 0,
     };
     let mk = |machine: NativeMachine,
               text: alloc::vec::Vec<u8>,

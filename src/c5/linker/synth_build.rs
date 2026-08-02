@@ -44,7 +44,7 @@ use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
 use super::link::{MergedNative, MergedTarget, PltTrampoline};
-use super::object::{NativeMachine, NativeSymSection};
+use super::object::{NativeMachine, NativeSymSection, STT_FUNC, STT_OBJECT, STV_DEFAULT};
 
 /// Synthesize a Program + Build for `merged` against `target` and
 /// produce the per-format native image bytes. `entry_name` resolves
@@ -321,24 +321,38 @@ fn synth_program_and_build(
             .defined
             .iter()
             .filter_map(|(name, sym)| {
-                if name.is_empty() {
+                if name.is_empty() || sym.visibility != STV_DEFAULT {
                     return None;
                 }
-                let section = match sym.section {
-                    NativeSymSection::Text if export_funcs => DynamicExportSection::Text,
-                    NativeSymSection::Data if export_data_globals => DynamicExportSection::Data,
-                    // TODO: a zero-init (Bss) global is not dynamically
-                    // exportable. Its `value` here is the pre-compaction data
-                    // offset; bss compaction (codegen) later relocates the
-                    // storage past the file image, so the export would bind to
-                    // a stale address. A fix must remap export offsets through
-                    // compaction and tag the bss section in each writer.
+                // A `.bss` definition rides the same data-byte offset
+                // space as `.data`, biased past the file image.
+                let (section, offset) = match sym.section {
+                    NativeSymSection::Text if export_funcs => {
+                        (DynamicExportSection::Text, sym.value)
+                    }
+                    NativeSymSection::Data if export_data_globals => {
+                        (DynamicExportSection::Data, sym.value)
+                    }
+                    NativeSymSection::Bss if export_data_globals => (
+                        DynamicExportSection::Data,
+                        merged.data.len() as u64 + sym.value,
+                    ),
                     _ => return None,
                 };
                 Some(DynamicExport {
                     name: name.clone(),
                     section,
-                    offset: sym.value,
+                    offset,
+                    size: sym.size,
+                    is_object: match sym.kind {
+                        STT_OBJECT => true,
+                        STT_FUNC => false,
+                        // Untyped (a linker boundary symbol, an
+                        // assembly label with no `.type`): the section
+                        // it landed in decides.
+                        _ => section == DynamicExportSection::Data,
+                    },
+                    weak: sym.weak,
                 })
             })
             .collect()
@@ -945,14 +959,14 @@ fn synth_exports(
     // Promote the source-declared `#pragma export` names (unioned by
     // the linker into `merged.exports`) to export-table records,
     // resolving each to its `.text`-defined entry. Names that resolve
-    // to a non-text or undefined symbol are skipped. The per-format
-    // writers consume this only for shared-library output; an
-    // executable's export list is ignored.
+    // to a non-text or undefined symbol are skipped, as is any
+    // definition whose visibility keeps it out of the dynamic scope.
     let mut exports: Vec<ExportedFunction> = Vec::new();
     let mut seen: alloc::collections::BTreeSet<String> = alloc::collections::BTreeSet::new();
     for name in &merged.exports {
         if let Some(sym) = merged.defined.get(name)
             && matches!(sym.section, NativeSymSection::Text)
+            && sym.visibility == STV_DEFAULT
             && seen.insert(name.clone())
         {
             exports.push(ExportedFunction {
@@ -968,6 +982,7 @@ fn synth_exports(
         for (name, sym) in &merged.defined {
             if !name.is_empty()
                 && matches!(sym.section, NativeSymSection::Text)
+                && sym.visibility == STV_DEFAULT
                 && seen.insert(name.clone())
             {
                 exports.push(ExportedFunction {
@@ -1019,6 +1034,9 @@ mod tests {
                 section: NativeSymSection::Text,
                 value: 0,
                 size: 8,
+                kind: crate::c5::linker::object::STT_FUNC,
+                visibility: 0,
+                weak: false,
             },
         );
         MergedNative {
@@ -1201,6 +1219,9 @@ mod tests {
                 section: NativeSymSection::Text,
                 value: 0x40,
                 size: 16,
+                kind: crate::c5::linker::object::STT_FUNC,
+                visibility: 0,
+                weak: false,
             },
         );
         merged.defined.insert(
@@ -1209,6 +1230,9 @@ mod tests {
                 section: NativeSymSection::Data,
                 value: 0,
                 size: 4,
+                kind: crate::c5::linker::object::STT_OBJECT,
+                visibility: 0,
+                weak: false,
             },
         );
         // `main` is defined but not exported; `helper` and `g_count`
@@ -1244,6 +1268,9 @@ mod tests {
                 section: NativeSymSection::Text,
                 value: 0x40,
                 size: 16,
+                kind: crate::c5::linker::object::STT_FUNC,
+                visibility: 0,
+                weak: false,
             },
         );
         merged.defined.insert(
@@ -1252,6 +1279,9 @@ mod tests {
                 section: NativeSymSection::Data,
                 value: 0,
                 size: 4,
+                kind: crate::c5::linker::object::STT_OBJECT,
+                visibility: 0,
+                weak: false,
             },
         );
         // No `#pragma export` at all; `--export-all` carries them.
@@ -1285,6 +1315,9 @@ mod tests {
                     section: NativeSymSection::Text,
                     value: (i * 8) as u64,
                     size: 8,
+                    kind: crate::c5::linker::object::STT_FUNC,
+                    visibility: 0,
+                    weak: false,
                 },
             );
         }

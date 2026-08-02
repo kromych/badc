@@ -677,7 +677,7 @@ pub(super) fn write(
                             &format!("PE: data export `{}` without a .data section", d.name),
                         )));
                     }
-                    data_rva + d.offset as u32
+                    data_off_to_rva(d.offset as u32)
                 }
             };
             entries.push((d.name.clone(), rva));
@@ -3167,11 +3167,29 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        build.dynamic_exports = alloc::vec![crate::c5::codegen::DynamicExport {
-            name: "bump".to_string(),
-            section: super::super::DynamicExportSection::Text,
-            offset: 0,
-        }];
+        // A zero-init global is addressed by a data-byte offset past
+        // `build.data`, which names a byte in the `.data` section's
+        // zero-fill tail rather than in the file-backed prefix.
+        build.data = alloc::vec![0u8; 16];
+        build.bss_size = 8;
+        build.dynamic_exports = alloc::vec![
+            crate::c5::codegen::DynamicExport {
+                name: "bump".to_string(),
+                section: super::super::DynamicExportSection::Text,
+                offset: 0,
+                size: 0,
+                is_object: false,
+                weak: false,
+            },
+            crate::c5::codegen::DynamicExport {
+                name: "zero_global".to_string(),
+                section: super::super::DynamicExportSection::Data,
+                offset: 16,
+                size: 8,
+                is_object: true,
+                weak: false,
+            },
+        ];
         let bytes = write(
             &program,
             &build,
@@ -3185,6 +3203,10 @@ mod tests {
         assert!(
             bytes.windows(5).any(|w| w == b"bump\0"),
             "the export name must appear in the image"
+        );
+        assert!(
+            bytes.windows(12).any(|w| w == b"zero_global\0"),
+            "a zero-init global must reach the export directory"
         );
 
         // Without dynamic exports the executable carries no directory.

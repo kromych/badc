@@ -125,6 +125,9 @@ const VER_NDX_FIRST: u16 = 2;
 /// `.dynsym`'s loader-visible globals.
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
+/// `STB_WEAK` -- a definition a strong one elsewhere in the process
+/// overrides.
+const STB_WEAK: u8 = 2;
 /// `STT_FUNC` symbol type -- `st_info` low nibble for both
 /// imported and exported functions. Imports use it so debuggers
 /// (`gdb`, `lldb`) treat the dynamic-symbol entry as a callable
@@ -860,32 +863,10 @@ fn build_plt_symtab(
     // without DWARF (perf maps a sample by `[st_value, st_value +
     // st_size)`, so a zero size leaves the function unattributable).
     // `func_names` covers global and static functions on the merged
-    // path. The size is the span to the next function or trampoline
-    // start, capped at the text length; collecting all of them as
-    // boundaries handles any code layout.
-    let text_len = build.text.len() as u64;
-    let mut boundaries: Vec<u64> = build
-        .func_ent_pcs
-        .iter()
-        .map(|&pc| build.pc_to_native[pc] as u64)
-        .collect();
-    boundaries.extend(
-        build
-            .plt_trampoline_offsets
-            .iter()
-            .flatten()
-            .map(|&o| o as u64),
-    );
-    boundaries.push(text_len);
-    boundaries.sort_unstable();
-    boundaries.dedup();
+    // path.
+    let boundaries = text_boundaries(build);
     for (i, name) in build.func_names.iter().enumerate() {
         let start = build.pc_to_native[build.func_ent_pcs[i]] as u64;
-        // First boundary strictly past `start`, over the sorted list.
-        let end = boundaries
-            .get(boundaries.partition_point(|&b| b <= start))
-            .copied()
-            .unwrap_or(text_len);
         let st_name = strtab.len() as u32;
         strtab.extend_from_slice(name.as_bytes());
         strtab.push(0);
@@ -897,11 +878,44 @@ fn build_plt_symtab(
                 st_other: 0,
                 st_shndx: text_shndx,
                 st_value: text_vmaddr + start,
-                st_size: end.saturating_sub(start),
+                st_size: text_body_len(&boundaries, start),
             },
         );
     }
     (symtab, strtab)
+}
+
+/// Sorted native `.text` offsets that end a function body: every
+/// defined function entry, every import trampoline, and the end of
+/// `.text`. Collecting all of them handles any code layout.
+fn text_boundaries(build: &super::Build) -> Vec<u64> {
+    let mut boundaries: Vec<u64> = build
+        .func_ent_pcs
+        .iter()
+        .filter_map(|&pc| build.pc_to_native.get(pc).map(|&o| o as u64))
+        .collect();
+    boundaries.extend(
+        build
+            .plt_trampoline_offsets
+            .iter()
+            .flatten()
+            .map(|&o| o as u64),
+    );
+    boundaries.push(build.text.len() as u64);
+    boundaries.sort_unstable();
+    boundaries.dedup();
+    boundaries
+}
+
+/// Byte length of the body starting at `start`: the span to the next
+/// boundary past it. A zero size leaves the function unattributable to
+/// a profiler, which maps a sample by `[st_value, st_value + st_size)`.
+fn text_body_len(boundaries: &[u64], start: u64) -> u64 {
+    boundaries
+        .get(boundaries.partition_point(|&b| b <= start))
+        .copied()
+        .unwrap_or_else(|| boundaries.last().copied().unwrap_or(start))
+        .saturating_sub(start)
 }
 
 /// Build .dynsym. Layout:
@@ -910,34 +924,22 @@ fn build_plt_symtab(
 /// * `[1, 1+n_imports)`: undefined imports (`STB_GLOBAL |
 ///   STT_NOTYPE`, `st_shndx = SHN_UNDEF`). Loader resolves
 ///   these via `.rela.dyn`.
-/// * `[1+n_imports, 1+n_imports+n_exports)`: defined exports
-///   (`STB_GLOBAL | STT_FUNC`, `st_shndx = 1` -- a placeholder
-///   non-zero index since we don't emit section headers, but
-///   `dlsym` only checks `SHN_UNDEF` to gate a name as
-///   resolvable). `st_value` is the runtime VA of the
-///   function.
-#[allow(clippy::too_many_arguments)]
+/// * `[1+n_imports, 1+n_imports+n_exports)`: defined exports, each
+///   carrying the runtime VA, size, type, binding, and section index
+///   of the definition it publishes.
 fn build_dynsym(
     import_name_offsets: &[u32],
-    export_name_offsets: &[u32],
-    export_addrs: &[u64],
-    export_is_data: &[bool],
+    exports: &[DynsymExport],
     copy_name_offsets: &[u32],
     copy_addrs: &[u64],
     copy_sizes: &[u64],
     copy_is_bss: &[bool],
-    // Section-header indices a defined symbol resides in, so `nm` /
-    // `readelf -s` attribute each export to its real section.
-    text_shndx: u16,
     data_shndx: u16,
     bss_shndx: u16,
 ) -> Vec<u8> {
-    debug_assert_eq!(export_name_offsets.len(), export_addrs.len());
-    debug_assert_eq!(export_name_offsets.len(), export_is_data.len());
     debug_assert_eq!(copy_name_offsets.len(), copy_addrs.len());
     debug_assert_eq!(copy_name_offsets.len(), copy_sizes.len());
-    let n_total =
-        1 + import_name_offsets.len() + export_name_offsets.len() + copy_name_offsets.len();
+    let n_total = 1 + import_name_offsets.len() + exports.len() + copy_name_offsets.len();
     let mut out = Vec::with_capacity(n_total * ELF64_SYM_SIZE as usize);
 
     // Sentinel at index 0 -- all zero. Required by ELF.
@@ -982,28 +984,16 @@ fn build_dynsym(
         );
     }
 
-    for ((&name_off, &addr), &is_data) in export_name_offsets
-        .iter()
-        .zip(export_addrs.iter())
-        .zip(export_is_data.iter())
-    {
-        // A code export is STT_FUNC; a data global (`--export-data`,
-        // e.g. a `PyTypeObject`) is STT_OBJECT so `nm` / a debugger
-        // classify it correctly. The dynamic linker resolves by name
-        // and ignores the type, so a `dlsym` lookup works either way.
-        let st_type = if is_data { STT_OBJECT } else { STT_FUNC };
+    for e in exports {
         write_struct(
             &mut out,
             &Elf64Sym {
-                st_name: name_off,
-                st_info: (STB_GLOBAL << 4) | st_type,
-                st_other: 0,
-                // The export resides in .data (a data global) or .text
-                // (a code export). dlsym resolves by name regardless,
-                // but section-attributing consumers need the real index.
-                st_shndx: if is_data { data_shndx } else { text_shndx },
-                st_value: addr,
-                st_size: 0,
+                st_name: e.name_off,
+                st_info: e.st_info,
+                st_other: 0, // STV_DEFAULT -- restricted visibility never exports
+                st_shndx: e.shndx,
+                st_value: e.addr,
+                st_size: e.size,
             },
         );
     }
@@ -1190,13 +1180,28 @@ struct DynamicInfo {
 }
 
 /// A defined dynamic-symbol export for the ELF writer. `offset` is a
-/// byte offset within `build.text` (`section == Text`) or `build.data`
-/// (`section == Data`); the writer adds the matching runtime base and
-/// picks STT_FUNC or STT_OBJECT.
+/// byte offset within `build.text` (`section == Text`) or within the
+/// merged data-byte space (`section == Data`); the writer resolves it
+/// to a runtime address and to the `.rodata` / `.data` / `.bss`
+/// section that holds it.
 struct ElfExport {
     name: String,
     section: super::DynamicExportSection,
     offset: u64,
+    size: u64,
+    is_object: bool,
+    weak: bool,
+}
+
+/// An `ElfExport` resolved against the final layout, ready to write.
+struct DynsymExport {
+    name_off: u32,
+    addr: u64,
+    size: u64,
+    /// `STB_GLOBAL` / `STB_WEAK` binding packed with `STT_FUNC` /
+    /// `STT_OBJECT`.
+    st_info: u8,
+    shndx: u16,
 }
 
 /// One `.gnu.version_r` Vernaux: `(version dynstr offset, elf_hash,
@@ -1545,12 +1550,31 @@ pub(super) fn write(
     // `Build::exports`) and `--export-data` (every global, function and
     // data, via `Build::dynamic_exports`) -- the `-rdynamic` behaviour
     // that lets a `dlopen`'d module resolve the host's symbols from the
-    // global scope. Each entry carries the section it lives in so the
-    // dynsym picks STT_FUNC (`.text`) or STT_OBJECT (`.data`); the offset
-    // is a byte offset within `build.text` / `build.data`. An ordinary
-    // executable has no exports, so the tables are unchanged.
-    let mut elf_exports: Vec<ElfExport> = Vec::new();
+    // global scope. An ordinary executable has no exports, so the tables
+    // are unchanged.
+    // `dynamic_exports` comes first: it is resolved from the merged
+    // symbol table and carries each definition's real size, type, and
+    // binding, so a name in both lists takes those over the
+    // entry-point-only record in `build.exports`.
+    let mut elf_exports: Vec<ElfExport> = build
+        .dynamic_exports
+        .iter()
+        .map(|d| ElfExport {
+            name: d.name.clone(),
+            section: d.section,
+            offset: d.offset,
+            size: d.size,
+            is_object: d.is_object,
+            weak: d.weak,
+        })
+        .collect();
+    let exported_names: alloc::collections::BTreeSet<String> =
+        elf_exports.iter().map(|e| e.name.clone()).collect();
+    let text_bounds = text_boundaries(build);
     for exp in &build.exports {
+        if exported_names.contains(exp.name.as_str()) {
+            continue;
+        }
         let native_off = build
             .pc_to_native
             .get(exp.ent_pc)
@@ -1569,22 +1593,12 @@ pub(super) fn write(
             name: exp.name.clone(),
             section: super::DynamicExportSection::Text,
             offset: native_off as u64,
+            size: text_body_len(&text_bounds, native_off as u64),
+            is_object: false,
+            weak: false,
         });
     }
-    for d in &build.dynamic_exports {
-        if !elf_exports.iter().any(|e| e.name == d.name) {
-            elf_exports.push(ElfExport {
-                name: d.name.clone(),
-                section: d.section,
-                offset: d.offset,
-            });
-        }
-    }
     let export_names: Vec<&str> = elf_exports.iter().map(|e| e.name.as_str()).collect();
-    let export_is_data: Vec<bool> = elf_exports
-        .iter()
-        .map(|e| e.section == super::DynamicExportSection::Data)
-        .collect();
 
     // ---- Build the dynamic-linking metadata up front so we know the
     //      sizes for layout calculations. ----
@@ -1593,23 +1607,27 @@ pub(super) fn write(
     let copy_sizes: Vec<u64> = build.copy_relocs.iter().map(|cr| cr.size).collect();
     let copy_is_bss: Vec<bool> = build.copy_relocs.iter().map(|cr| cr.is_bss).collect();
     let n_copy = build.copy_relocs.len();
-    // Compute each export's and copy target's runtime VA. We fill in the
-    // real values after layout is fixed and `code_vmaddr` is known; here
-    // we just reserve the slots.
-    let export_addrs_placeholder: Vec<u64> = vec![0; elf_exports.len()];
+    // Each export's and copy target's runtime VA is filled in after
+    // layout is fixed and `code_vmaddr` is known; here we only need the
+    // table's byte size, so addresses and section indices stay zero.
     let copy_addrs_placeholder: Vec<u64> = vec![0; n_copy];
-    // Size-only placeholder build (zero addresses); the section indices
-    // here are irrelevant because only the final build below is written.
+    let exports_placeholder: Vec<DynsymExport> = export_name_offsets
+        .iter()
+        .map(|&name_off| DynsymExport {
+            name_off,
+            addr: 0,
+            size: 0,
+            st_info: 0,
+            shndx: 0,
+        })
+        .collect();
     let dynsym = build_dynsym(
         &name_offsets,
-        &export_name_offsets,
-        &export_addrs_placeholder,
-        &export_is_data,
+        &exports_placeholder,
         &copy_name_offsets,
         &copy_addrs_placeholder,
         &copy_sizes,
         &copy_is_bss,
-        0,
         0,
         0,
     );
@@ -2176,6 +2194,7 @@ pub(super) fn write(
         dwarf: if emit_dwarf { 5 } else { 0 },
         plt_symtab: emit_plt_symtab,
     });
+    let rodata_shndx: u16 = plan.index_of(Sec::RoData);
     let data_shndx: u16 = plan.index_of(Sec::Data);
     let bss_shndx: u16 = plan.index_of(Sec::Bss);
     let n_section_headers: u64 = plan.len() as u64;
@@ -2333,14 +2352,39 @@ pub(super) fn write(
     // placeholder we built up front (with `st_value = 0`)
     // had the right byte count for layout; the real values
     // go in here.
-    let export_addrs: Vec<u64> = elf_exports
+    let final_exports: Vec<DynsymExport> = elf_exports
         .iter()
-        .map(|e| match e.section {
+        .zip(export_name_offsets.iter())
+        .map(|(e, &name_off)| {
             // Code blob layout is `[stub_len bytes of _start][build.text]`;
             // shared-library output has stub_len=0 so the shift is a
-            // no-op there. A data export's offset is within `build.data`.
-            super::DynamicExportSection::Text => code_vmaddr + stub_len + e.offset,
-            super::DynamicExportSection::Data => data_off_to_vaddr(e.offset),
+            // no-op there. A data offset partitions into `.rodata`, the
+            // writable `.data`, or the zero-fill `.bss` tail exactly as
+            // `data_off_to_vaddr` does.
+            let (addr, shndx) = match e.section {
+                super::DynamicExportSection::Text => {
+                    (code_vmaddr + stub_len + e.offset, text_shndx)
+                }
+                super::DynamicExportSection::Data => (
+                    data_off_to_vaddr(e.offset),
+                    if e.offset < ro_len {
+                        rodata_shndx
+                    } else if e.offset < file_data_len {
+                        data_shndx
+                    } else {
+                        bss_shndx
+                    },
+                ),
+            };
+            let binding = if e.weak { STB_WEAK } else { STB_GLOBAL };
+            let st_type = if e.is_object { STT_OBJECT } else { STT_FUNC };
+            DynsymExport {
+                name_off,
+                addr,
+                size: e.size,
+                st_info: (binding << 4) | st_type,
+                shndx,
+            }
         })
         .collect();
     // Copy-relocation targets sit in the static data segment: a `.data`
@@ -2359,14 +2403,11 @@ pub(super) fn write(
         .collect();
     let final_dynsym = build_dynsym(
         &name_offsets,
-        &export_name_offsets,
-        &export_addrs,
-        &export_is_data,
+        &final_exports,
         &copy_name_offsets,
         &copy_addrs,
         &copy_sizes,
         &copy_is_bss,
-        text_shndx,
         data_shndx,
         bss_shndx,
     );

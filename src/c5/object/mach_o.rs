@@ -207,6 +207,10 @@ const N_UNDF: u8 = 0x0;
 const N_SECT: u8 = 0xE;
 const N_EXT: u8 = 0x01;
 const NO_SECT: u8 = 0;
+/// `N_WEAK_DEF` (`n_desc` bit) and its export-trie counterpart: a
+/// definition dyld may coalesce with a strong one from another image.
+const N_WEAK_DEF: u16 = 0x0080;
+const EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION: u64 = 0x04;
 /// `DYNAMIC_LOOKUP_ORDINAL` (<mach-o/nlist.h>): the n_desc library
 /// ordinal for a symbol resolved through the flat namespace rather than
 /// a specific LC_LOAD_DYLIB.
@@ -221,6 +225,11 @@ const SECT_INDEX_TEXT: u8 = 1;
 /// (section 3); the `__thread_*` sections, when present, come after.
 /// Used as `n_sect` for an exported data symbol.
 const SECT_INDEX_DATA: u8 = 3;
+/// 1-based index of `__DATA,__bss`, which follows `__data` and the two
+/// `__thread_*` sections when TLS is present.
+fn sect_index_bss(tls_present: bool) -> u8 {
+    SECT_INDEX_DATA + if tls_present { 3 } else { 1 }
+}
 
 /// Segment indices, in the order they appear as `LC_SEGMENT_64` load
 /// commands. Bind opcodes refer to segments by this index.
@@ -496,29 +505,31 @@ fn put_uleb128(out: &mut Vec<u8>, mut v: u64) {
     }
 }
 
-/// Build the `LC_DYLD_INFO` export trie from `(disk name, address)` pairs
-/// where `address` is the symbol's offset from the image base. dyld
-/// resolves two-level-namespace imports and `dlsym` through this trie, not
-/// the classic symbol table, so a shared library without it exports
-/// nothing dyld can bind against. The trie is a radix tree over the names;
-/// a terminal node carries the export flags (0 = regular) and the address.
-/// Child-edge offsets are ULEB128, so node sizes depend on each other; the
-/// layout iterates to a fixed point before emitting.
-fn build_export_trie(entries: &[(String, u64)]) -> Vec<u8> {
+/// Build the `LC_DYLD_INFO` export trie from `(disk name, address,
+/// flags)` triples where `address` is the symbol's offset from the
+/// image base. dyld resolves two-level-namespace imports and `dlsym`
+/// through this trie, not the classic symbol table, so a shared library
+/// without it exports nothing dyld can bind against. The trie is a
+/// radix tree over the names; a terminal node carries the export flags
+/// and the address. Child-edge offsets are ULEB128, so node sizes
+/// depend on each other; the layout iterates to a fixed point before
+/// emitting.
+fn build_export_trie(entries: &[(String, u64, u64)]) -> Vec<u8> {
     if entries.is_empty() {
         return Vec::new();
     }
     struct Node {
-        addr: Option<u64>,
+        /// `(address, export flags)` on a terminal node.
+        term: Option<(u64, u64)>,
         edges: Vec<(Vec<u8>, usize)>,
         offset: usize,
     }
     let mut nodes: Vec<Node> = alloc::vec![Node {
-        addr: None,
+        term: None,
         edges: Vec::new(),
         offset: 0,
     }];
-    for (name, addr) in entries {
+    for (name, addr, flags) in entries {
         let bytes = name.as_bytes();
         let mut cur = 0usize;
         let mut pos = 0usize;
@@ -541,7 +552,7 @@ fn build_export_trie(entries: &[(String, u64)]) -> Vec<u8> {
                 // Partial match: split the edge at the common prefix.
                 let split = nodes.len();
                 nodes.push(Node {
-                    addr: None,
+                    term: None,
                     edges: alloc::vec![(label[k..].to_vec(), child)],
                     offset: 0,
                 });
@@ -552,7 +563,7 @@ fn build_export_trie(entries: &[(String, u64)]) -> Vec<u8> {
             }
             let leaf = nodes.len();
             nodes.push(Node {
-                addr: None,
+                term: None,
                 edges: Vec::new(),
                 offset: 0,
             });
@@ -560,12 +571,12 @@ fn build_export_trie(entries: &[(String, u64)]) -> Vec<u8> {
             cur = leaf;
             pos = bytes.len();
         }
-        nodes[cur].addr = Some(*addr);
+        nodes[cur].term = Some((*addr, *flags));
     }
     let body = |node: &Node, nodes: &[Node]| -> Vec<u8> {
         let mut term = Vec::new();
-        if let Some(addr) = node.addr {
-            put_uleb128(&mut term, 0);
+        if let Some((addr, flags)) = node.term {
+            put_uleb128(&mut term, flags);
             put_uleb128(&mut term, addr);
         }
         let mut out = Vec::new();
@@ -1720,7 +1731,7 @@ fn nlist_local(n_strx: u32, n_value: u64, n_sect: u8) -> Vec<u8> {
     out
 }
 
-fn nlist_defined(n_strx: u32, n_value: u64, n_sect: u8) -> Vec<u8> {
+fn nlist_defined(n_strx: u32, n_value: u64, n_sect: u8, weak: bool) -> Vec<u8> {
     let mut out = Vec::with_capacity(NLIST_64_SIZE);
     write_struct(
         &mut out,
@@ -1728,7 +1739,7 @@ fn nlist_defined(n_strx: u32, n_value: u64, n_sect: u8) -> Vec<u8> {
             n_strx,
             n_type: N_EXT | N_SECT,
             n_sect,
-            n_desc: 0,
+            n_desc: if weak { N_WEAK_DEF } else { 0 },
             n_value,
         },
     );
@@ -2116,7 +2127,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // `build.text`.
     // The export trie carries the same defined externals as the symtab's
     // extdef range, addressed relative to the image base (TEXT_VMADDR_BASE).
-    let mut export_trie_entries: Vec<(String, u64)> = Vec::new();
+    let mut export_trie_entries: Vec<(String, u64, u64)> = Vec::new();
     for (i, exp) in build.exports.iter().enumerate() {
         let n_strx = str_indices[n_locals + i];
         let native_off = build
@@ -2134,17 +2145,18 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             )));
         }
         let n_value = code_vmaddr_base + native_off as u64;
-        symtab.extend_from_slice(&nlist_defined(n_strx, n_value, SECT_INDEX_TEXT));
-        export_trie_entries.push((export_disk_names[i].clone(), n_value - TEXT_VMADDR_BASE));
+        symtab.extend_from_slice(&nlist_defined(n_strx, n_value, SECT_INDEX_TEXT, false));
+        export_trie_entries.push((export_disk_names[i].clone(), n_value - TEXT_VMADDR_BASE, 0));
     }
 
     // [Defined dynamic exports] (N_EXT | N_SECT) -- the program's
     // global symbols, so a dlopen'd module binds against them. A text
     // symbol's value is the code base plus its byte offset within
-    // `build.text`; a data symbol's value is the `__data` section
-    // vmaddr plus its byte offset within `build.data`. dyld resolves
-    // an image carrying LC_DYLD_INFO through the export trie only, so
-    // each dynamic export joins the trie alongside its symtab entry.
+    // `build.text`; a data symbol's value comes from the merged
+    // data-byte offset, which lands in `__data` or in the zero-fill
+    // `__bss` tail past it. dyld resolves an image carrying
+    // LC_DYLD_INFO through the export trie only, so each dynamic export
+    // joins the trie alongside its symtab entry.
     let dyn_export_str_base = n_locals + export_disk_names.len();
     for (i, d) in dyn_exports_emit.iter().enumerate() {
         let n_strx = str_indices[dyn_export_str_base + i];
@@ -2152,16 +2164,25 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             crate::c5::codegen::DynamicExportSection::Text => {
                 (code_vmaddr_base + d.offset, SECT_INDEX_TEXT)
             }
-            crate::c5::codegen::DynamicExportSection::Data => {
-                // Data exports are never bss-resident today (synth_build drops
-                // zero-init globals from the export set). When that is wired
-                // up, a `d.offset >= program_data_size` export needs n_sect =
-                // __DATA,__bss, not __data.
-                (data_off_to_vaddr(d.offset), SECT_INDEX_DATA)
-            }
+            crate::c5::codegen::DynamicExportSection::Data => (
+                data_off_to_vaddr(d.offset),
+                if d.offset < program_data_size {
+                    SECT_INDEX_DATA
+                } else {
+                    sect_index_bss(tls_present)
+                },
+            ),
         };
-        symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect));
-        export_trie_entries.push((dyn_export_disk_names[i].clone(), n_value - TEXT_VMADDR_BASE));
+        symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect, d.weak));
+        export_trie_entries.push((
+            dyn_export_disk_names[i].clone(),
+            n_value - TEXT_VMADDR_BASE,
+            if d.weak {
+                EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION
+            } else {
+                0
+            },
+        ));
     }
     // [Undefined imports] (N_EXT | N_UNDF). Indices in
     // `str_indices` are shifted past the locals + exports.
@@ -3017,9 +3038,9 @@ mod tests {
         // Shared prefixes ("_Init...") exercise the radix edge splitting.
         // A minimal walker decodes each name back to its address.
         let entries = [
-            ("_InitWindow".to_string(), 0x1234u64),
-            ("_InitAudioDevice".to_string(), 0x5678u64),
-            ("_DrawRectangle".to_string(), 0x9abcu64),
+            ("_InitWindow".to_string(), 0x1234u64, 0u64),
+            ("_InitAudioDevice".to_string(), 0x5678u64, 0u64),
+            ("_DrawRectangle".to_string(), 0x9abcu64, 0u64),
         ];
         let trie = build_export_trie(&entries);
         assert!(!trie.is_empty(), "non-empty input must produce a trie");
@@ -3075,7 +3096,7 @@ mod tests {
                 }
             }
         };
-        for (name, addr) in &entries {
+        for (name, addr, _) in &entries {
             assert_eq!(lookup(&trie, name), Some(*addr), "trie lookup {name}");
         }
         assert_eq!(lookup(&trie, "_Nonexistent"), None);
@@ -3114,20 +3135,38 @@ mod tests {
 
     #[test]
     fn dynamic_exports_emitted_as_external_defined() {
-        // A text and a data global carried as dynamic exports must
-        // appear in the symbol table as N_EXT | N_SECT entries with
-        // the right section index, so a dlopen'd module can bind them.
+        // A text, a data and a zero-init global carried as dynamic
+        // exports must appear in the symbol table as N_EXT | N_SECT
+        // entries with the right section index, so a dlopen'd module
+        // can bind them. The zero-init one is addressed by a data-byte
+        // offset past `build.data`, which resolves into `__DATA,__bss`.
         let mut build = tiny_build();
+        build.data = alloc::vec![0u8; 16];
+        build.bss_size = 8;
         build.dynamic_exports = vec![
             crate::c5::codegen::DynamicExport {
                 name: "myfunc".into(),
                 section: super::super::DynamicExportSection::Text,
                 offset: 0,
+                size: 0,
+                is_object: false,
+                weak: false,
             },
             crate::c5::codegen::DynamicExport {
                 name: "myglobal".into(),
                 section: super::super::DynamicExportSection::Data,
                 offset: 8,
+                size: 4,
+                is_object: true,
+                weak: false,
+            },
+            crate::c5::codegen::DynamicExport {
+                name: "myzero".into(),
+                section: super::super::DynamicExportSection::Data,
+                offset: 16,
+                size: 8,
+                is_object: true,
+                weak: false,
             },
         ];
         let bytes = write(&tiny_program(), &build).unwrap();
@@ -3151,7 +3190,7 @@ mod tests {
                     let start = stroff + n_strx;
                     let len = bytes[start..].iter().position(|&b| b == 0).unwrap();
                     let name = String::from_utf8_lossy(&bytes[start..start + len]).into_owned();
-                    if name == "_myfunc" || name == "_myglobal" {
+                    if matches!(name.as_str(), "_myfunc" | "_myglobal" | "_myzero") {
                         found.push((name, n_type, n_sect));
                     }
                 }
@@ -3175,6 +3214,17 @@ mod tests {
         assert_eq!(data.1 & N_EXT, N_EXT, "data export must be external");
         assert_eq!(data.1 & N_SECT, N_SECT, "data export must be N_SECT");
         assert_eq!(data.2, SECT_INDEX_DATA, "data export n_sect");
+
+        let zero = found
+            .iter()
+            .find(|(n, _, _)| n == "_myzero")
+            .expect("_myzero export");
+        assert_eq!(zero.1 & N_EXT, N_EXT, "bss export must be external");
+        assert_eq!(
+            zero.2,
+            sect_index_bss(false),
+            "a data offset past build.data must resolve to __DATA,__bss"
+        );
     }
 
     #[test]

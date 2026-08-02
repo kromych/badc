@@ -394,6 +394,14 @@ pub enum NativeSymSection {
     DebugStr,
 }
 
+/// `st_info & 0xf` symbol types the linker distinguishes.
+pub const STT_NOTYPE: u8 = 0;
+pub const STT_OBJECT: u8 = 1;
+pub const STT_FUNC: u8 = 2;
+/// `st_other & 0x3` -- the only visibility that reaches the dynamic
+/// symbol table.
+pub const STV_DEFAULT: u8 = 0;
+
 /// One entry from the unit's `.symtab`. Section symbols (the
 /// `STT_SECTION` LOCAL entries the writer emits) are dropped
 /// during parse -- they're an internal convenience for the
@@ -412,6 +420,11 @@ pub struct NativeSymbol {
     pub binding: u8,
     /// `STT_NOTYPE` / `STT_OBJECT` / `STT_FUNC` etc. (`st_info & 0xf`).
     pub kind: u8,
+    /// `STV_DEFAULT` (0) / `STV_INTERNAL` (1) / `STV_HIDDEN` (2) /
+    /// `STV_PROTECTED` (3) -- `st_other & 0x3`. Anything but
+    /// `STV_DEFAULT` keeps the definition out of the image's dynamic
+    /// symbol table.
+    pub visibility: u8,
 }
 
 /// One entry from the unit's `.rela.text`. Patched by the
@@ -975,6 +988,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             size: sym.st_size,
             binding,
             kind,
+            visibility: sym.st_other & 0x3,
         });
     }
 

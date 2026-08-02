@@ -1218,25 +1218,38 @@ pub(crate) struct CopyRelocReq {
 /// segments and patches the codegen's GOT / data / function-pointer
 /// placeholders with the actual vmaddrs.
 /// A defined global symbol exported from an executable image so a
-/// dynamically loaded module can bind against it. `offset` is the
-/// byte offset within the symbol's section; the writer adds the
-/// section's runtime base to form the symbol value.
+/// dynamically loaded module can bind against it. Carries the
+/// attributes the defining unit's `.symtab` gave the symbol, so the
+/// writers republish them rather than re-deriving them.
 #[derive(Debug, Clone)]
 pub(crate) struct DynamicExport {
     pub name: String,
     pub section: DynamicExportSection,
+    /// Byte offset within the section's offset space (see
+    /// [`DynamicExportSection`]).
     pub offset: u64,
+    /// Byte length of the object or function body; zero when the
+    /// definition carried no size. A consumer resolving a copy
+    /// relocation against a data export needs it.
+    pub size: u64,
+    /// Data object rather than code -- `STT_OBJECT` / `STT_FUNC`.
+    pub is_object: bool,
+    /// `STB_WEAK` definition: a strong definition elsewhere in the
+    /// process overrides it.
+    pub weak: bool,
 }
 
-/// The image section a [`DynamicExport`] lives in. Selects the
-/// Mach-O section index and runtime base the writer applies.
-/// Uninitialized (`.bss`) globals are not exported: badc lays its
-/// program globals into the file-backed data section, so a `.bss`
-/// section symbol (a coalesced tentative definition) has no mapped
-/// data-segment address to publish.
+/// The offset space a [`DynamicExport`] addresses. The writer maps
+/// the offset to a runtime address and to the output section that
+/// holds it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DynamicExportSection {
+    /// Byte offset within [`Build::text`].
     Text,
+    /// Byte offset within the merged data-byte space
+    /// `[read-only prefix][writable data][zero-fill tail]`: the same
+    /// space [`DataFixup`] addresses, so an offset at or past
+    /// `Build::data.len()` names a `.bss` byte.
     Data,
 }
 

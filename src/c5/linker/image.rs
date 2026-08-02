@@ -1071,6 +1071,9 @@ mod tests {
                 section: NativeSymSection::Text,
                 value: 0,
                 size: 8,
+                kind: crate::c5::linker::object::STT_FUNC,
+                visibility: 0,
+                weak: false,
             },
         );
         MergedNative {

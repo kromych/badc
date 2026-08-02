@@ -154,6 +154,10 @@
 #pragma binding(libc::realpath,  "_realpath")
 #pragma binding(libc::fchdir,    "_fchdir")
 #pragma binding(libc::getopt,    "_getopt")
+#pragma binding(data libc::optarg, "_optarg")
+#pragma binding(data libc::optind, "_optind")
+#pragma binding(data libc::opterr, "_opterr")
+#pragma binding(data libc::optopt, "_optopt")
 #pragma binding(libc::sync,      "_sync")
 #pragma binding(libc::confstr,   "_confstr")
 // macOS does not expose the SysV-style `environ` global through
@@ -308,6 +312,10 @@ extern char **environ;
 #pragma binding(libc::realpath,  "realpath")
 #pragma binding(libc::fchdir,    "fchdir")
 #pragma binding(libc::getopt,    "getopt")
+#pragma binding(data libc::optarg, "optarg")
+#pragma binding(data libc::optind, "optind")
+#pragma binding(data libc::opterr, "opterr")
+#pragma binding(data libc::optopt, "optopt")
 #pragma binding(libc::sync,      "sync")
 #pragma binding(libc::confstr,   "confstr")
 // POSIX `environ` is exposed on Linux as the data symbol `__environ`
@@ -539,6 +547,12 @@ int unsetenv(char *name);
 char *realpath(char *path, char *resolved);
 int fchdir(int fd);
 int getopt(int argc, char **argv, char *opts);
+// POSIX.1 requires <unistd.h> to declare the getopt parser state
+// alongside getopt itself; <getopt.h> adds the GNU long-option surface.
+extern char *optarg;
+extern int optind;
+extern int opterr;
+extern int optopt;
 int sync();
 int confstr(int name, char *buf, int len);
 

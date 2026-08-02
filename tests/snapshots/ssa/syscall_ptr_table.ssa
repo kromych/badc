@@ -4,7 +4,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=19
   spill_count=0 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(48)                                      -> x0
+    v1   ImmData(80)                                      -> x0
     v2   Imm(0)                                           -> x1
     v3   Load { addr=v1, disp=0, kind=I64 }               -> x1
     v4   Imm(0)                                           -> x2
@@ -28,7 +28,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=19
     v22  BinopI { op=add, lhs=v1, rhs_imm=40 }            -> x2
     v23  Load { addr=v1, disp=40, kind=I64 }              -> x15
     v24  Imm(0)                                           -> x0
-    v25  ImmData(96)                                      -> x7
+    v25  ImmData(128)                                     -> x7
     v26  Imm(66)                                          -> x6
     v27  Imm(420)                                         -> x2
     v28  LoadLocal { off=-19, kind=I64 }                  -> x0

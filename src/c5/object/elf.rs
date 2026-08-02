@@ -927,16 +927,29 @@ fn text_body_len(boundaries: &[u64], start: u64) -> u64 {
 /// * `[1+n_imports, 1+n_imports+n_exports)`: defined exports, each
 ///   carrying the runtime VA, size, type, binding, and section index
 ///   of the definition it publishes.
+/// The copy-relocation targets a `.dynsym` carries, one entry per
+/// index across the four slices.
+#[derive(Clone, Copy)]
+struct DynsymCopies<'a> {
+    name_offsets: &'a [u32],
+    addrs: &'a [u64],
+    sizes: &'a [u64],
+    is_bss: &'a [bool],
+}
+
 fn build_dynsym(
     import_name_offsets: &[u32],
     exports: &[DynsymExport],
-    copy_name_offsets: &[u32],
-    copy_addrs: &[u64],
-    copy_sizes: &[u64],
-    copy_is_bss: &[bool],
+    copies: DynsymCopies<'_>,
     data_shndx: u16,
     bss_shndx: u16,
 ) -> Vec<u8> {
+    let DynsymCopies {
+        name_offsets: copy_name_offsets,
+        addrs: copy_addrs,
+        sizes: copy_sizes,
+        is_bss: copy_is_bss,
+    } = copies;
     debug_assert_eq!(copy_name_offsets.len(), copy_addrs.len());
     debug_assert_eq!(copy_name_offsets.len(), copy_sizes.len());
     let n_total = 1 + import_name_offsets.len() + exports.len() + copy_name_offsets.len();
@@ -1624,10 +1637,12 @@ pub(super) fn write(
     let dynsym = build_dynsym(
         &name_offsets,
         &exports_placeholder,
-        &copy_name_offsets,
-        &copy_addrs_placeholder,
-        &copy_sizes,
-        &copy_is_bss,
+        DynsymCopies {
+            name_offsets: &copy_name_offsets,
+            addrs: &copy_addrs_placeholder,
+            sizes: &copy_sizes,
+            is_bss: &copy_is_bss,
+        },
         0,
         0,
     );
@@ -2404,10 +2419,12 @@ pub(super) fn write(
     let final_dynsym = build_dynsym(
         &name_offsets,
         &final_exports,
-        &copy_name_offsets,
-        &copy_addrs,
-        &copy_sizes,
-        &copy_is_bss,
+        DynsymCopies {
+            name_offsets: &copy_name_offsets,
+            addrs: &copy_addrs,
+            sizes: &copy_sizes,
+            is_bss: &copy_is_bss,
+        },
         data_shndx,
         bss_shndx,
     );

@@ -51,6 +51,12 @@ jobs:
       # full` so `main.rs` and the full-only targets are linted too.
       - name: cargo clippy (full)
         run: cargo clippy --all-targets --features full -- -D warnings
+      # The kernel gate's KASLR harness writes a device tree and reads the
+      # displacement back out of a boot log; both are pure functions with a
+      # self-check, so they are verified here rather than in the kernel lane,
+      # which runs on a fraction of the pushes and takes an hour to say so.
+      - name: kernel gate KASLR harness self-test
+        run: python3 demos/linux/kaslr.py
       # Sources and docs are ASCII-only. Smart quotes / em dashes /
       # arrows tend to sneak in via copy-paste and rendered editor
       # autocorrect; keep them out at the gate. A fixture that exercises
@@ -1600,7 +1606,10 @@ jobs:
     # `verify.py` is the gate: it fails on any unit badc cannot compile, any
     # unit that fell back, any undefined reference at link, a badc unit count
     # below the floor, and any boot that does not print the marker. The tree is
-    # rebuilt from clean, so nothing passes vacuously.
+    # rebuilt from clean, so nothing passes vacuously. Each boot runs at a
+    # KASLR displacement the gate picked -- pinned per boot on aarch64, drawn
+    # by the machine on x86_64, which takes no seed -- and it also fails if a
+    # randomizing configuration produced no displaced boot.
     #
     # The kernel source is the release `demos/linux/setup.py` pins, fetched
     # from cdn.kernel.org and rejected unless its sha256 matches -- the same
@@ -1621,10 +1630,12 @@ jobs:
           - { os: ubuntu-24.04,     label: ubuntu-x64,   arch: x86_64,  floor: 2900 }
     runs-on: ${{ matrix.os }}
     # Measured on four 3.2 GHz aarch64 cores: fetch + configure 44 s, clean
-    # defconfig build 20 min (4177 units, 2153 CPU-s), both boots 15 s. Scaled
-    # by this runner's measured compile throughput that is 15-25 min of build.
-    # x86_64 measured on twelve 3.2 GHz cores: clean defconfig build 382 s
-    # (2847 units), both boots 25 s; on a four-core runner that is 15-20 min.
+    # defconfig build 20 min (4177 units, 2153 CPU-s). Scaled by this runner's
+    # measured compile throughput that is 15-25 min of build. x86_64 measured
+    # on twelve 3.2 GHz cores: clean defconfig build 382 s (2847 units); on a
+    # four-core runner that is 15-20 min. The boot phase is four boots plus a
+    # displacement probe per distinct displacement: 25 s on aarch64 (eight
+    # emulator starts), 50 s on x86_64 (five, one probe covering them all).
     # The sweep release since bumped to 4434 / 2921 units, within these caps.
     # The caps are hang backstops just above that, not slack; tighten them once
     # green runs have shown the real spread.
@@ -1716,5 +1727,6 @@ jobs:
           path: |
             ${{ runner.temp }}/verify/verify-*.json
             ${{ runner.temp }}/verify/boot-*.log
+            ${{ runner.temp }}/verify/probe-*.log
             ${{ runner.temp }}/verify/manifest-*.txt
           if-no-files-found: ignore

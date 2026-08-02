@@ -5286,6 +5286,93 @@ fn constant_p_inline_param_folds_assert_call_at_o() {
 }
 
 #[test]
+fn interprocedural_param_range_folds_out_of_line_sign_assert() {
+    // The signedness canary of a compile-time min()/max(): the guard is
+    // true only if the compiler can decide `(long long)p >= 0` at
+    // translation time. `keeps` is too large to inline, so nothing
+    // inside it bounds `p`; every call site widens an unsigned 32-bit
+    // value, which bounds the parameter on entry. gcc closes the same
+    // shape with interprocedural range propagation at -O2 and keeps the
+    // reference at -O0.
+    //
+    // The negative halves must keep theirs: `mixed` is reached with a
+    // signed argument, `escaped`'s address leaves the unit, and `ext`
+    // has external linkage, so in each case a call the pass cannot see
+    // the arguments of may pass a negative value.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let body = |err: &str| {
+        alloc::format!(
+            "long acc = 0;\n\
+             if (!(__builtin_constant_p((long long)(p) >= 0) && ((long long)(p) >= 0)))\n\
+                 {err}();\n\
+             acc += work(p, 1); acc += work(acc, 2); acc += work(acc, 3);\n\
+             acc += work(acc, 4); acc += work(acc, 5); acc += work(acc, 6);\n\
+             acc += work(acc, 7); acc += work(acc, 8); acc += work(acc, 9);\n\
+             acc += work(acc, 10); acc += work(acc, 11); acc += work(acc, 12);\n\
+             acc += work(acc, 13); acc += work(acc, 14); acc += work(acc, 15);\n\
+             acc += work(acc, 16); acc += work(acc, 17); acc += work(acc, 18);\n\
+             return acc;\n"
+        )
+    };
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         extern void sign_folded(void);\n\
+         extern void sign_mixed(void);\n\
+         extern void sign_escaped(void);\n\
+         extern void sign_ext(void);\n\
+         extern long work(long, long);\n\
+         static long keeps(long p) {{ {} }}\n\
+         static long mixed(long p) {{ {} }}\n\
+         static long escaped(long p) {{ {} }}\n\
+         long ext(long p) {{ {} }}\n\
+         long c1(unsigned v) {{ return keeps(v) + mixed(v) + escaped(v) + ext(v); }}\n\
+         long c2(unsigned v) {{ return keeps(v + 1) + escaped(v + 1); }}\n\
+         long c3(long v) {{ return mixed(v); }}\n\
+         long (*take(void))(long) {{ return escaped; }}\n\
+         int main(void) {{ return (int)(c1(1) + c2(2) + c3(3) + (take() != 0)); }}\n",
+        body("sign_folded"),
+        body("sign_mixed"),
+        body("sign_escaped"),
+        body("sign_ext"),
+    ))
+    .compile()
+    .expect("compile");
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit -O");
+        let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+        assert!(
+            !has(b"sign_folded"),
+            "{target:?}: every call site bounds the parameter, so the canary must fold at -O"
+        );
+        for (name, why) in [
+            (&b"sign_mixed"[..], "a signed argument reaches it"),
+            (&b"sign_escaped"[..], "its address leaves the unit"),
+            (&b"sign_ext"[..], "it has external linkage"),
+        ] {
+            assert!(
+                has(name),
+                "{target:?}: the canary must survive because {why}"
+            );
+        }
+    }
+    // Without -O there is no interprocedural fact, as with gcc -O0.
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit -O0");
+    assert!(
+        bytes.windows(11).any(|w| w == b"sign_folded"),
+        "without -O the canary keeps its reference"
+    );
+}
+
+#[test]
 fn weak_alias_used_bindings_in_relocatable() {
     // `weak` binds STB_WEAK on definitions and declarations;
     // `alias("target")` emits an additional symbol at the target's

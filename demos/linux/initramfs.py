@@ -33,7 +33,9 @@ INIT_C = r"""
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mount.h>
 #include <sys/reboot.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -81,6 +83,20 @@ static void load_modules(void)
     }
     printf("BADC-MODULE-DONE loaded=%u of=%u\n", loaded, n);
     fflush(stdout);
+
+    /* /proc/modules reports each module's state, which separates a module
+       that loaded from one whose init function also completed. */
+    mkdir("/proc", 0755);
+    if (n && mount("proc", "/proc", "proc", 0, 0) == 0) {
+        FILE *f = fopen("/proc/modules", "r");
+        char line[256];
+
+        while (f && fgets(line, sizeof(line), f))
+            printf("BADC-MODSTATE %s", line);
+        if (f)
+            fclose(f);
+        fflush(stdout);
+    }
 }
 
 int main(void)

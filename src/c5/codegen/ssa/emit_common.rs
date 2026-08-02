@@ -931,6 +931,14 @@ pub(crate) enum AsmSectionItem {
         name: alloc::string::String,
         target: alloc::string::String,
     },
+    /// `.set name, expr` whose value is an expression over section-local
+    /// locations (`.set .Lsz, . - f`) rather than a constant or a plain
+    /// symbol. `name` takes the expression's value at the assignment, and
+    /// expressions materialized afterwards resolve the name to it.
+    SetExpr {
+        name: alloc::string::String,
+        expr: alloc::string::String,
+    },
 }
 
 /// A parsed `.pushsection` / `.section` block of a template.
@@ -1235,12 +1243,12 @@ struct GasMacro {
 const GAS_MACRO_DEPTH_LIMIT: usize = 64;
 
 /// Expand the GNU as macro directives an inline-asm block uses to generate
-/// instructions: `.irp`/`.endr` (repeat), `.macro`/`.endm`/`.purgem` (local
-/// macro definition, invocation, removal), `.equ`/`.set` (symbol assignment),
-/// and `.inst` (emit an `inst_width`-byte instruction word). `.inst`
-/// expressions fold to a `.byte` run, macro invocations to their expanded
-/// bodies, and `.equ` symbols resolve in every expression. `None` when the
-/// template uses none of these (the common case).
+/// instructions: `.rept`/`.irp`/`.endr` (repeat), `.macro`/`.endm`/`.purgem`
+/// (local macro definition, invocation, removal), `.equ`/`.set` (symbol
+/// assignment), and `.inst` (emit an `inst_width`-byte instruction word).
+/// `.inst` expressions fold to a `.byte` run, macro invocations to their
+/// expanded bodies, and `.equ` symbols resolve in every expression. `None`
+/// when the template uses none of these (the common case).
 ///
 /// `subst` resolves an operand reference (`%0` / `%w0` / `%c0`) to its
 /// register-name or constant text, applied across the template before the
@@ -1255,6 +1263,7 @@ pub(crate) fn expand_asm_gas_macros(
     subst: &dyn Fn(&str) -> Option<alloc::string::String>,
 ) -> Result<Option<alloc::string::String>, alloc::string::String> {
     if !(text.contains(".irp")
+        || text.contains(".rept")
         || text.contains(".macro")
         || text.contains(".inst")
         || text.contains(".equ")
@@ -1357,7 +1366,7 @@ fn expand_gas_statements(
             // `.endm` / `.endr` does not leak into the enclosing stream.
             match tok {
                 ".macro" => i = collect_gas_body(stmts, i, ".macro", ".endm")?.1,
-                ".irp" => i = collect_gas_body(stmts, i, ".irp", ".endr")?.1,
+                ".irp" | ".rept" => i = collect_gas_repeat_body(stmts, i)?.1,
                 _ => {}
             }
             continue;
@@ -1388,7 +1397,7 @@ fn expand_gas_statements(
             }
             ".irp" => {
                 let (var, values) = parse_gas_irp_header(rest)?;
-                let (body, next) = collect_gas_body(stmts, i, ".irp", ".endr")?;
+                let (body, next) = collect_gas_repeat_body(stmts, i)?;
                 i = next;
                 for val in &values {
                     let mut map = alloc::collections::BTreeMap::new();
@@ -1398,9 +1407,21 @@ fn expand_gas_statements(
                     expand_gas_statements(&expanded, macros, equ, out, inst_width, depth + 1)?;
                 }
             }
+            ".rept" => {
+                let table = &*equ;
+                let n = eval_asm_expr_with_labels(rest, &|t| table.get(t).copied())
+                    .ok_or_else(|| {
+                        alloc::format!("inline asm: `.rept` count `{rest}` is not constant")
+                    })?;
+                let (body, next) = collect_gas_repeat_body(stmts, i)?;
+                i = next;
+                for _ in 0..n.max(0) {
+                    expand_gas_statements(&body, macros, equ, out, inst_width, depth + 1)?;
+                }
+            }
             ".endr" => {
                 return Err(alloc::string::String::from(
-                    "inline asm: `.endr` without `.irp`",
+                    "inline asm: `.endr` without `.rept` or `.irp`",
                 ));
             }
             ".equ" | ".set" | ".equiv" => {
@@ -1416,18 +1437,12 @@ fn expand_gas_statements(
                     Some(v) => {
                         equ.insert(alloc::string::String::from(sym.trim()), v);
                     }
-                    // A symbol-valued assignment (`.set alias, target`) is an
-                    // object-level alias, not an assembler constant; pass it
-                    // through for the section parser.
-                    None if is_asm_symbol_name(expr.trim()) => {
+                    // A value the expander cannot fold names a symbol or reads
+                    // the location counter; neither is known before layout, so
+                    // pass it through for the section parser.
+                    None => {
                         out.push_str(s);
                         out.push('\n');
-                    }
-                    None => {
-                        return Err(alloc::format!(
-                            "inline asm: `{tok} {}` value is not constant",
-                            sym.trim()
-                        ));
                     }
                 }
             }
@@ -1558,73 +1573,13 @@ fn bind_gas_macro_args(
     map
 }
 
-/// Expand GNU as `.rept N` / `.endr` (repeat the enclosed lines N times) into
-/// straight-line text. `None` when the text has no `.rept` (the common case).
-/// `N` is a constant expression; a non-constant count, a stray `.endr`, or an
-/// unclosed `.rept` is an error as in GNU as, and `N <= 0` emits the body zero
-/// times. Nested `.rept` expand through the same pass. An AArch64 ALTERNATIVE
-/// replacement uses it to pad (a repeated `nop`) the out-of-line replacement to
-/// the original sequence's length.
-pub(crate) fn expand_asm_rept(
-    text: &str,
-) -> Result<Option<alloc::string::String>, alloc::string::String> {
-    if !text.contains(".rept") {
-        return Ok(None);
-    }
-    let stmts: alloc::vec::Vec<alloc::string::String> = text
-        .split([';', '\n'])
-        .map(|s| alloc::string::String::from(s.trim()))
-        .collect();
-    let mut out = alloc::string::String::with_capacity(text.len());
-    expand_rept_statements(&stmts, &mut out, 0)?;
-    Ok(Some(out))
+/// The directive a statement names, with any leading labels peeled as the
+/// expansion loop peels them (`1: .endr`).
+fn stmt_directive(s: &str) -> &str {
+    split_first_token(split_leading_labels(s).1).0
 }
 
-fn expand_rept_statements(
-    stmts: &[alloc::string::String],
-    out: &mut alloc::string::String,
-    depth: usize,
-) -> Result<(), alloc::string::String> {
-    if depth > GAS_MACRO_DEPTH_LIMIT {
-        return Err(alloc::string::String::from(
-            "inline asm: `.rept` nested too deep",
-        ));
-    }
-    let mut i = 0usize;
-    while i < stmts.len() {
-        let s = stmts[i].as_str();
-        i += 1;
-        let (tok, rest) = match s.find(char::is_whitespace) {
-            Some(p) => (&s[..p], s[p..].trim()),
-            None => (s, ""),
-        };
-        match tok {
-            ".rept" => {
-                let n = eval_asm_expr_with_labels(rest, &|_| None).ok_or_else(|| {
-                    alloc::format!("inline asm: `.rept` count `{rest}` is not constant")
-                })?;
-                let (body, next) = collect_gas_body(stmts, i, ".rept", ".endr")?;
-                i = next;
-                for _ in 0..n.max(0) as usize {
-                    expand_rept_statements(&body, out, depth + 1)?;
-                }
-            }
-            ".endr" => {
-                return Err(alloc::string::String::from(
-                    "inline asm: `.endr` without `.rept`",
-                ));
-            }
-            _ => {
-                out.push_str(s);
-                out.push('\n');
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Collect a `.macro` / `.irp` / `.rept` body up to its matching `close`,
-/// nesting-aware.
+/// Collect a `.macro` body up to its matching `close`, nesting-aware.
 fn collect_gas_body(
     stmts: &[alloc::string::String],
     start: usize,
@@ -1635,10 +1590,7 @@ fn collect_gas_body(
     let mut body = alloc::vec::Vec::new();
     let mut i = start;
     while i < stmts.len() {
-        let first = stmts[i]
-            .split(char::is_whitespace)
-            .next()
-            .unwrap_or(stmts[i].as_str());
+        let first = stmt_directive(stmts[i].as_str());
         if first == open {
             depth += 1;
         } else if first == close {
@@ -1651,6 +1603,35 @@ fn collect_gas_body(
         i += 1;
     }
     Err(alloc::format!("inline asm: `{open}` without `{close}`"))
+}
+
+/// Collect a `.rept` / `.irp` body up to its matching `.endr`. GNU as closes
+/// every repeat directive with `.endr`, so the nesting count spans the family
+/// rather than one spelling: a `.rept` inside an `.irp` closes first.
+fn collect_gas_repeat_body(
+    stmts: &[alloc::string::String],
+    start: usize,
+) -> Result<(alloc::vec::Vec<alloc::string::String>, usize), alloc::string::String> {
+    let mut depth = 1i32;
+    let mut body = alloc::vec::Vec::new();
+    let mut i = start;
+    while i < stmts.len() {
+        match stmt_directive(stmts[i].as_str()) {
+            ".rept" | ".irp" => depth += 1,
+            ".endr" => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok((body, i + 1));
+                }
+            }
+            _ => {}
+        }
+        body.push(stmts[i].clone());
+        i += 1;
+    }
+    Err(alloc::string::String::from(
+        "inline asm: `.rept` / `.irp` without `.endr`",
+    ))
 }
 
 /// Parse a `.macro` header `NAME[,] p1[, p2 ...]`; a `=default` / `:qualifier`
@@ -2492,19 +2473,28 @@ fn parse_section_item(
             }
             Ok(AsmSectionItem::Local(alloc::string::String::from(name)))
         }
-        // A `.set` / `.equ` with a constant value is consumed by the macro
-        // expander; the symbol-valued form (`.set alias, target`) survives it.
+        // A `.set` / `.equ` with a literal-constant value is consumed by the
+        // macro expander; what survives it names a symbol (`.set alias,
+        // target`, a unit-level alias) or an expression over section-local
+        // locations (`.set .Lsz, . - f`).
         ".set" | ".equ" => {
-            let (name, target) = rest
+            let (name, value) = rest
                 .split_once(',')
                 .map(|(n, t)| (n.trim(), t.trim()))
-                .filter(|(n, t)| is_asm_symbol_name(n) && is_asm_symbol_name(t))
+                .filter(|(n, t)| is_asm_symbol_name(n) && !t.is_empty())
                 .ok_or_else(|| {
-                    alloc::format!("inline asm: `{tok} {rest}` is not `name, symbol`")
+                    alloc::format!("inline asm: `{tok} {rest}` is not `name, value`")
                 })?;
-            Ok(AsmSectionItem::SymSet {
-                name: alloc::string::String::from(name),
-                target: alloc::string::String::from(target),
+            let name = alloc::string::String::from(name);
+            if is_asm_symbol_name(value) {
+                return Ok(AsmSectionItem::SymSet {
+                    name,
+                    target: alloc::string::String::from(value),
+                });
+            }
+            Ok(AsmSectionItem::SetExpr {
+                name,
+                expr: alloc::string::String::from(value),
             })
         }
         ".incbin" => parse_incbin_directive(rest),
@@ -2607,22 +2597,42 @@ pub(crate) fn push_fill(out: &mut alloc::vec::Vec<u8>, count: i64, unit: u8, val
     }
 }
 
-/// `.type name, @function|@object`. GNU as also spells the type with a
-/// leading `%` on some targets and accepts a bare word; only `function`
-/// and `object` occur in inline asm, any other is rejected.
+/// Split a directive's leading symbol name from the rest of its operands.
+/// GNU as ends the name at the first non-symbol character and then skips one
+/// optional comma, so `name, rest` and `name rest` are the same input.
+fn split_symbol_operand(rest: &str) -> (&str, &str) {
+    let rest = rest.trim();
+    let end = rest
+        .find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '$')))
+        .unwrap_or(rest.len());
+    let (name, tail) = rest.split_at(end);
+    let tail = tail.trim_start();
+    (name, tail.strip_prefix(',').unwrap_or(tail).trim())
+}
+
+/// `.type name[,] type`. GNU as makes the comma optional and reads the type
+/// word bare or behind one `@` / `%` / `#` / `"` sigil, so `.type f STT_FUNC`
+/// and `.type f, @function` name the same type. Each ELF type has a bare and
+/// an `STT_` spelling; badc's symbol model covers function, object, and
+/// untyped, and any other type is rejected.
 fn parse_type_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
-    let (name, ty) = rest
-        .split_once(',')
-        .ok_or_else(|| alloc::format!("inline asm: `.type` expects `name, @type`, got `{rest}`"))?;
-    let name = name.trim();
+    let (name, ty) = split_symbol_operand(rest);
     if !is_asm_symbol_name(name) {
         return Err(alloc::format!("inline asm: bad `.type` symbol `{name}`"));
     }
-    let ty = ty.trim();
-    let sym_type = match ty.strip_prefix(['@', '%']).unwrap_or(ty) {
-        // GNU as accepts the ELF constant spellings alongside the bare names.
+    if ty.is_empty() {
+        return Err(alloc::format!(
+            "inline asm: `.type` expects `name, @type`, got `{rest}`"
+        ));
+    }
+    let word = ty
+        .strip_prefix(['@', '%', '#', '"'])
+        .unwrap_or(ty)
+        .trim_end_matches('"');
+    let sym_type = match word {
         "function" | "STT_FUNC" => AsmSymType::Func,
         "object" | "STT_OBJECT" => AsmSymType::Object,
+        "notype" | "STT_NOTYPE" => AsmSymType::NoType,
         _ => return Err(alloc::format!("inline asm: unsupported `.type` `{ty}`")),
     };
     Ok(AsmSectionItem::Type {
@@ -3282,6 +3292,9 @@ fn asm_operand_data_base(insts: &[crate::c5::ir::Inst], arg: u32) -> Option<(u32
 /// pre-existing sink length cancels.
 pub(crate) struct SectionLabelOffsets {
     map: alloc::collections::BTreeMap<alloc::string::String, (alloc::string::String, i64)>,
+    /// `.set` / `.equ` symbols assigned an expression over section-local
+    /// locations, each holding the expression's value at its assignment.
+    syms: alloc::collections::BTreeMap<alloc::string::String, i64>,
 }
 
 impl SectionLabelOffsets {
@@ -3299,6 +3312,51 @@ impl SectionLabelOffsets {
             .get(numeric_label_digits(name).unwrap_or(name))
             .map(|(s, _)| s.as_str())
     }
+    /// The value of a `.set` symbol assigned a section-local expression.
+    pub(crate) fn symbol(&self, name: &str) -> Option<i64> {
+        self.syms.get(name).copied()
+    }
+}
+
+/// Evaluate a `.set` value over section-local locations: `.` is the offset at
+/// the assignment, an identifier is a label of the same section, a symbol an
+/// earlier `.set` assigned, or an operand constant. Only an absolute result is
+/// admitted, which evaluating at two section bases decides. GNU as also gives
+/// a location-valued assignment a section-relative symbol, which a referencing
+/// field takes a relocation against. TODO location-valued section symbols.
+fn eval_section_set_expr(
+    name: &str,
+    expr: &str,
+    key: &str,
+    at: i64,
+    labels: &alloc::collections::BTreeMap<alloc::string::String, (alloc::string::String, i64)>,
+    syms: &alloc::collections::BTreeMap<alloc::string::String, i64>,
+    const_of: &dyn Fn(u8) -> Option<i64>,
+) -> Result<i64, alloc::string::String> {
+    let at_base = |base: i64| -> Option<i64> {
+        let resolved = subst_asm_idents(expr, &|t| {
+            if t == "." {
+                return Some(base + at);
+            }
+            if let Some(v) = syms.get(t) {
+                return Some(*v);
+            }
+            labels
+                .get(numeric_label_digits(t).unwrap_or(t))
+                .filter(|(sk, _)| sk == key)
+                .map(|(_, off)| base + off)
+        });
+        eval_asm_count(&resolved, const_of)
+    };
+    let v = at_base(0).ok_or_else(|| {
+        alloc::format!("inline asm: `.set {name}, {expr}` does not resolve in this section")
+    })?;
+    if at_base(1 << 20) != Some(v) {
+        return Err(alloc::format!(
+            "inline asm: `.set {name}, {expr}` is a location, not an absolute value"
+        ));
+    }
+    Ok(v)
 }
 
 /// Bytes needed to advance `at` to the next multiple of `align`, or zero when
@@ -3369,6 +3427,15 @@ pub(crate) fn measure_asm_section_offsets(
         alloc::collections::BTreeMap::new();
     let mut lens: alloc::collections::BTreeMap<alloc::string::String, i64> =
         alloc::collections::BTreeMap::new();
+    // `.set` assignments in source order with the offset each was written at;
+    // evaluated below, once every label offset is known, so a value may name a
+    // label defined later in the section.
+    let mut sets: alloc::vec::Vec<(
+        alloc::string::String,
+        alloc::string::String,
+        alloc::string::String,
+        i64,
+    )> = alloc::vec::Vec::new();
     for b in blocks {
         let key = alloc::format!("{}\u{0}{}\u{0}{:?}", b.name, b.flags, b.sh_type);
         let mut at = *lens.get(&key).unwrap_or(&0);
@@ -3385,6 +3452,9 @@ pub(crate) fn measure_asm_section_offsets(
                 | AsmSectionItem::Weak(_)
                 | AsmSectionItem::Local(_)
                 | AsmSectionItem::SymSet { .. } => {}
+                AsmSectionItem::SetExpr { name, expr } => {
+                    sets.push((name.clone(), expr.clone(), key.clone(), at));
+                }
                 AsmSectionItem::Data { width, values } => {
                     at += *width as i64 * values.len() as i64;
                 }
@@ -3431,7 +3501,13 @@ pub(crate) fn measure_asm_section_offsets(
         }
         lens.insert(key, at);
     }
-    Ok(SectionLabelOffsets { map })
+    let mut syms: alloc::collections::BTreeMap<alloc::string::String, i64> =
+        alloc::collections::BTreeMap::new();
+    for (name, expr, key, at) in &sets {
+        let v = eval_section_set_expr(name, expr, key, *at, &map, &syms, const_of)?;
+        syms.insert(name.clone(), v);
+    }
+    Ok(SectionLabelOffsets { map, syms })
 }
 
 /// A label defined by one `materialize_asm_sections` call, reported so a
@@ -3636,7 +3712,9 @@ pub(crate) fn materialize_asm_sections(
                 // out. `.set name, sym` is a unit-level alias; the file-scope
                 // parse records both, the operand emit paths reject them.
                 AsmSectionItem::Weak(name) => weak_names.push(name.clone()),
-                AsmSectionItem::SymSet { .. } => {}
+                // `.set name, sym` is a unit-level alias; a `.set` over
+                // section-local locations was valued during measurement.
+                AsmSectionItem::SymSet { .. } | AsmSectionItem::SetExpr { .. } => {}
                 // A section label is local unless `.globl` marked it; record a
                 // pending entry so the definition below keeps that binding.
                 AsmSectionItem::Local(name) => {
@@ -3686,32 +3764,29 @@ pub(crate) fn materialize_asm_sections(
                     }
                 }
                 AsmSectionItem::Size { name, expr } => {
-                    // `.` is the offset at the directive; a term is that,
-                    // a section label's offset, or a constant. `A - B`
-                    // yields the byte distance the symbol spans.
+                    // `.` is the offset at the directive; an identifier is a
+                    // section label, a `.set` symbol, or an operand constant.
+                    // A difference of two locations yields the byte distance
+                    // the symbol spans.
                     let cur = sec.bytes.len() as i64;
-                    let term = |t: &str| -> Option<i64> {
-                        let t = t.trim();
+                    let resolved = subst_asm_idents(expr, &|t| {
                         if t == "." {
                             return Some(cur);
+                        }
+                        if let Some(v) = measured.symbol(t) {
+                            return Some(v);
                         }
                         let ln = numeric_label_digits(t)
                             .and_then(|d| num_unique.get(d).map(alloc::string::String::as_str))
                             .unwrap_or(t);
-                        if let Some(l) = sec
-                            .labels
+                        sec.labels
                             .iter()
                             .find(|l| l.name == ln && l.offset != PENDING_LABEL)
-                        {
-                            return Some(l.offset as i64);
-                        }
-                        eval_const_expr_ops(t, &|i| const_of(i))
-                    };
-                    let bad = || alloc::format!("inline asm: bad `.size` expression `{expr}`");
-                    let val = match expr.split_once('-') {
-                        Some((a, b)) => term(a).ok_or_else(bad)? - term(b).ok_or_else(bad)?,
-                        None => term(expr).ok_or_else(bad)?,
-                    };
+                            .map(|l| l.offset as i64)
+                    });
+                    let val = eval_asm_count(&resolved, &|i| const_of(i)).ok_or_else(|| {
+                        alloc::format!("inline asm: bad `.size` expression `{expr}`")
+                    })?;
                     if val < 0 {
                         return Err(alloc::format!(
                             "inline asm: `.size` expression `{expr}` is negative"
@@ -3772,7 +3847,8 @@ pub(crate) fn materialize_asm_sections(
                                 }
                             },
                             AsmSectionValue::Expr(text) => {
-                                let c = eval_const_expr_ops(text, &|idx| const_of(idx))
+                                let text = subst_asm_idents(text, &|t| measured.symbol(t));
+                                let c = eval_const_expr_ops(&text, &|idx| const_of(idx))
                                     .ok_or_else(|| {
                                         alloc::string::String::from(
                                             "inline asm: non-constant section data value",
@@ -3780,6 +3856,30 @@ pub(crate) fn materialize_asm_sections(
                                     })?;
                                 sec.bytes.extend_from_slice(
                                     &(c as u64).to_le_bytes()[..*width as usize],
+                                );
+                            }
+                            // A `.set` symbol assigned a section-local
+                            // expression holds an absolute value; the field
+                            // takes it directly rather than a relocation.
+                            AsmSectionValue::Ref {
+                                name,
+                                pcrel: false,
+                                addend,
+                            } if measured.symbol(name).is_some() => {
+                                let sym = measured.symbol(name).unwrap_or_default();
+                                let add = if addend.is_empty() {
+                                    0
+                                } else {
+                                    eval_const_expr_ops(addend, &|i| const_of(i)).ok_or_else(
+                                        || {
+                                            alloc::string::String::from(
+                                                "inline asm: non-constant section data addend",
+                                            )
+                                        },
+                                    )?
+                                };
+                                sec.bytes.extend_from_slice(
+                                    &((sym + add) as u64).to_le_bytes()[..*width as usize],
                                 );
                             }
                             AsmSectionValue::Ref {
@@ -6026,28 +6126,26 @@ mod asm_section_tests {
         );
     }
 
+    fn rept(text: &str) -> Result<alloc::string::String, alloc::string::String> {
+        Ok(expand_asm_gas_macros(text, 4, &|_| None)?.expect("`.rept` triggers the pass"))
+    }
+
     #[test]
     fn rept_expands_repeats_and_rejects_malformed() {
-        // No `.rept`: not this pass's business.
-        assert!(expand_asm_rept("nop\nret\n").unwrap().is_none());
+        // No `.rept` and no other macro directive: not this pass's business.
+        assert!(
+            expand_asm_gas_macros("nop\nret\n", 4, &|_| None)
+                .unwrap()
+                .is_none()
+        );
         // `.rept 3` repeats the body three times (the ALTERNATIVE nop
         // padding); `.rept 0` drops it; nested counts multiply.
-        let out = expand_asm_rept("swpb w0, w1, [x2]\n.rept 3\nnop\n.endr\n")
-            .unwrap()
-            .unwrap();
+        let out = rept("swpb w0, w1, [x2]\n.rept 3\nnop\n.endr\n").unwrap();
         assert_eq!(out.matches("nop").count(), 3, "{out}");
         assert!(out.contains("swpb"));
+        assert_eq!(rept(".rept 0\nnop\n.endr\n").unwrap().matches("nop").count(), 0);
         assert_eq!(
-            expand_asm_rept(".rept 0\nnop\n.endr\n")
-                .unwrap()
-                .unwrap()
-                .matches("nop")
-                .count(),
-            0
-        );
-        assert_eq!(
-            expand_asm_rept(".rept 2\n.rept 3\nnop\n.endr\n.endr\n")
-                .unwrap()
+            rept(".rept 2\n.rept 3\nnop\n.endr\n.endr\n")
                 .unwrap()
                 .matches("nop")
                 .count(),
@@ -6056,20 +6154,77 @@ mod asm_section_tests {
         // A non-constant count, a stray `.endr`, and an unclosed `.rept` are
         // errors rather than a mis-counted expansion.
         assert!(
-            expand_asm_rept(".rept 1b-2b\nnop\n.endr\n")
+            rept(".rept 1b-2b\nnop\n.endr\n")
                 .unwrap_err()
                 .contains("not constant")
         );
         assert!(
-            expand_asm_rept("nop\n.rept 2\nnop\n.endr\n.endr\n")
+            rept("nop\n.rept 2\nnop\n.endr\n.endr\n")
                 .unwrap_err()
                 .contains(".endr")
         );
-        assert!(
-            expand_asm_rept(".rept 2\nnop\n")
-                .unwrap_err()
-                .contains(".endr")
-        );
+        assert!(rept(".rept 2\nnop\n").unwrap_err().contains(".endr"));
+    }
+
+    #[test]
+    fn rept_nests_with_macros_and_irp() {
+        // A `.rept` in a macro body expands on invocation, with the count
+        // bound from the macro argument.
+        let out = rept(".macro nops, num\n.rept \\num\nnop\n.endr\n.endm\nnops 3\n").unwrap();
+        assert_eq!(out.matches("nop").count(), 3, "{out}");
+        // `.endr` closes the whole repeat family, so the two spellings nest
+        // through each other.
+        let out = rept(".irp r,1,2\n.rept 2\nnop\n.endr\n.endr\n").unwrap();
+        assert_eq!(out.matches("nop").count(), 4, "{out}");
+        let out = rept(".rept 2\n.irp r,1,2,3\nnop\n.endr\n.endr\n").unwrap();
+        assert_eq!(out.matches("nop").count(), 6, "{out}");
+        // The count is an expression over the `.set` table, as in GNU as.
+        let out = rept(".set n, 2\n.rept n + 1\nnop\n.endr\n").unwrap();
+        assert_eq!(out.matches("nop").count(), 3, "{out}");
+        // A `.rept` in a dead conditional branch consumes its body.
+        let out = rept(".if 0\n.rept 2\nnop\n.endr\n.endif\nret\n").unwrap();
+        assert_eq!(out.matches("nop").count(), 0, "{out}");
+        assert!(out.contains("ret"));
+    }
+
+    #[test]
+    fn type_directive_accepts_the_gas_spellings() {
+        let ty = |rest: &str| parse_type_directive(rest);
+        for rest in [
+            "f,STT_FUNC",
+            "f, STT_FUNC",
+            "f STT_FUNC",
+            "f @function",
+            "f %function",
+            "f #function",
+            "f function",
+            "f \"function\"",
+        ] {
+            assert_eq!(
+                ty(rest).unwrap(),
+                AsmSectionItem::Type {
+                    name: alloc::string::String::from("f"),
+                    sym_type: AsmSymType::Func,
+                },
+                "{rest}"
+            );
+        }
+        assert!(matches!(
+            ty("f STT_OBJECT").unwrap(),
+            AsmSectionItem::Type {
+                sym_type: AsmSymType::Object,
+                ..
+            }
+        ));
+        assert!(matches!(
+            ty("f, @notype").unwrap(),
+            AsmSectionItem::Type {
+                sym_type: AsmSymType::NoType,
+                ..
+            }
+        ));
+        assert!(ty("f STT_TLS").unwrap_err().contains("unsupported"));
+        assert!(ty("f").unwrap_err().contains("expects"));
     }
 }
 

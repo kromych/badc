@@ -2778,11 +2778,6 @@ fn encode_deferred_asm_region(
     use super::asm::{AsmOpndA64, parse_template};
     use super::table::{self, Opnd};
     use alloc::string::String;
-    // Expand `.rept N ... .endr` (repeated padding in an ALTERNATIVE
-    // replacement) to straight-line text so the loop encodes and measures the
-    // repeated bytes: `.byte 664f-663f` and the `.org` see the expanded size.
-    let expanded = super::ssa::emit_common::expand_asm_rept(text)?;
-    let text = expanded.as_deref().unwrap_or(text);
     let mut bytes: Vec<u8> = Vec::new();
     let mut labels: Vec<(u32, usize)> = Vec::new();
     // Branches to a region-local label, patched after the loop once every
@@ -3075,17 +3070,6 @@ fn emit_inline_asm_aarch64(
         bail_msg(&m);
         return false;
     }
-    // Expand `.rept N ... .endr` in the main stream to straight-line text, as
-    // the deferred-region path does: a standalone padding block (`.rept 8;
-    // nop; .endr`) otherwise reaches the instruction parse unexpanded.
-    let rept = match super::ssa::emit_common::expand_asm_rept(code_text) {
-        Ok(r) => r,
-        Err(m) => {
-            bail_msg(&m);
-            return false;
-        }
-    };
-    let code_text = rept.as_deref().unwrap_or(code_text);
     let insns = match parse_template(code_text.as_bytes()) {
         Ok(i) => i,
         Err(m) => {

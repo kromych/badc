@@ -11,6 +11,16 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#0x1
 
+<rt>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
+               	stur	w0, [x29, #-0x8]
+               	ldursw	x0, [x29, #-0x8]
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+
 <make_pair>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -67,5 +77,163 @@ Disassembly of section .text:
                	ret
 
 <main>:
+               	stp	x20, x21, [sp, #-0x40]!
+               	stp	x22, x23, [sp, #0x10]
+               	stp	x24, x25, [sp, #0x20]
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
+               	mov	x0, #0xb                // =11
+               	bl	<addr>
+               	mov	x20, x0
+               	mov	x0, #0x16               // =22
+               	bl	<addr>
+               	sxtw	x20, w20
+               	sxtw	x21, w0
+               	mov	x0, #0x7                // =7
+               	bl	<addr>
+               	mov	x17, #0x1589            // =5513
+               	movk	x17, #0x12, lsl #16
+               	add	x0, x0, x17
+               	sxtw	x1, w0
+               	sxtw	x0, w1
+               	sxtw	x0, w0
+               	cmp	x0, #0x0
+               	b.ne	<addr>
+               	mov	x0, #0x63               // =99
+               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	sxtw	x0, w20
+               	cmp	x0, #0xb
+               	b.eq	<addr>
+               	mov	x0, #0x1                // =1
+               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	sxtw	x0, w21
+               	cmp	x0, #0x16
+               	b.eq	<addr>
+               	mov	x0, #0x2                // =2
+               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	mov	x0, #0x3                // =3
+               	bl	<addr>
+               	mov	x20, x0
+               	mov	x0, #0x4                // =4
+               	bl	<addr>
+               	sxtw	x1, w20
+               	sxtw	x0, w0
+               	sxtw	x1, w1
+               	cmp	x1, #0x3
+               	b.eq	<addr>
+               	mov	x0, #0x3                // =3
+               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	sxtw	x0, w0
+               	cmp	x0, #0x4
+               	b.eq	<addr>
+               	mov	x0, #0x4                // =4
+               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	mov	x0, #0x64               // =100
+               	bl	<addr>
+               	mov	x20, x0
+               	mov	x0, #0xc8               // =200
+               	bl	<addr>
+               	sxtw	x20, w20
+               	sxtw	x21, w0
+               	mov	x0, #0x12c              // =300
+               	bl	<addr>
+               	mov	x22, x0
+               	mov	x0, #0x190              // =400
+               	bl	<addr>
+               	sxtw	x1, w22
+               	sxtw	x0, w0
+               	sxtw	x2, w20
+               	cmp	x2, #0x64
+               	b.eq	<addr>
+               	mov	x0, #0x5                // =5
+               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	sxtw	x2, w21
+               	cmp	x2, #0xc8
+               	b.eq	<addr>
+               	mov	x0, #0x6                // =6
+               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	sxtw	x1, w1
+               	cmp	x1, #0x12c
+               	b.eq	<addr>
+               	mov	x0, #0x7                // =7
+               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	sxtw	x0, w0
+               	cmp	x0, #0x190
+               	b.eq	<addr>
+               	mov	x0, #0x8                // =8
+               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	mov	x0, #0x1                // =1
+               	bl	<addr>
+               	mov	x20, x0
+               	mov	x0, #0x2                // =2
+               	bl	<addr>
+               	mov	x21, x0
+               	mov	x0, #0x3                // =3
+               	bl	<addr>
+               	mov	x22, x0
+               	mov	x0, #0x4                // =4
+               	bl	<addr>
+               	add	x1, x20, x22
+               	sxtw	x1, w1
+               	add	x0, x21, x0
+               	sxtw	x0, w0
+               	sxtw	x1, w1
+               	cmp	x1, #0x4
+               	b.eq	<addr>
+               	mov	x0, #0x9                // =9
+               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	sxtw	x0, w0
+               	cmp	x0, #0x6
+               	b.eq	<addr>
+               	mov	x0, #0xa                // =10
+               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
                	mov	x0, #0x0                // =0
+               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x24, x25, [sp, #0x20]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
                	ret

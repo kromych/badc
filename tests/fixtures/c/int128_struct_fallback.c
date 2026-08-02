@@ -48,39 +48,44 @@ static inline bool lt(Int128 a, Int128 b) {
     return a.hi < b.hi || (a.hi == b.hi && a.lo < b.lo);
 }
 
+// `volatile` keeps the operands runtime values, so the carry / borrow
+// arithmetic and the 16-byte struct passing are emitted, not folded.
+static uint64_t rt(uint64_t v) { volatile uint64_t t = v; return t; }
+
 int main(void) {
     // Carry across the boundary: UINT64_MAX + 1.
-    Int128 s = add(make64(0xffffffffffffffffULL), make64(1));
+    Int128 s = add(make64(rt(0xffffffffffffffffULL)), make64(rt(1)));
     if (s.lo != 0 || s.hi != 1) {
         return 1;
     }
     // Borrow: 2^64 - 1.
-    Int128 d = sub(make128(0, 1), make64(1));
+    Int128 d = sub(make128(rt(0), rt(1)), make64(rt(1)));
     if (d.lo != 0xffffffffffffffffULL || d.hi != 0) {
         return 2;
     }
     // -1 is all ones.
-    Int128 n = neg(make64(1));
+    Int128 n = neg(make64(rt(1)));
     if (n.lo != 0xffffffffffffffffULL || (uint64_t)n.hi != 0xffffffffffffffffULL) {
         return 3;
     }
     // 1 << 64 lands in the high half.
-    Int128 l = lshift(make64(1), 64);
+    Int128 l = lshift(make64(rt(1)), 64);
     if (l.lo != 0 || l.hi != 1) {
         return 4;
     }
     // 1 << 100.
-    Int128 l2 = lshift(make64(1), 100);
+    Int128 l2 = lshift(make64(rt(1)), 100);
     if (l2.lo != 0 || (uint64_t)l2.hi != (1ULL << 36)) {
         return 5;
     }
     // Arithmetic right shift keeps the sign.
-    Int128 r = rshift(make128(0, 0x8000000000000000ULL), 4);
+    Int128 r = rshift(make128(rt(0), rt(0x8000000000000000ULL)), 4);
     if ((uint64_t)r.hi != 0xf800000000000000ULL) {
         return 6;
     }
     // Comparisons.
-    if (!eq(s, make128(0, 1)) || !lt(make64(5), make64(9)) || lt(make64(9), make64(5))) {
+    if (!eq(s, make128(rt(0), rt(1))) || !lt(make64(rt(5)), make64(rt(9)))
+            || lt(make64(rt(9)), make64(rt(5)))) {
         return 7;
     }
     return 0;

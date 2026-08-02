@@ -28,19 +28,23 @@ static void rmw_d(struct S *p) { p->d++; }
 
 int main() {
     struct S s;
-    s.a = 1;
-    s.b = 22;
-    s.c = 333;
-    s.e = 44;
-    s.d = 5;
-    set_b(&s, 99);
-    set_c(&s, 777);
-    rmw_b(&s, 1);   // 99 -> 100
-    rmw_c(&s, 10);  // 777 -> 787
-    rmw_d(&s);      // 5 -> 6
-    if (get_b(&s) != 100) return 1;
-    if (get_c(&s) != 787) return 2;
-    if (get_e(&s) != 44) return 3;
-    if (get_d(&s) != 6) return 4;
+    // A volatile pointer keeps the object in memory, so every access
+    // below really computes a base + offset address.
+    struct S *volatile vp = &s;
+    struct S *p = vp;
+    p->a = 1;
+    p->b = 22;
+    p->c = 333;
+    p->e = 44;
+    p->d = 5;
+    set_b(p, 99);
+    set_c(p, 777);
+    rmw_b(p, 1);   // 99 -> 100
+    rmw_c(p, 10);  // 777 -> 787
+    rmw_d(p);      // 5 -> 6
+    if (get_b(p) != 100) return 1;
+    if (get_c(p) != 787) return 2;
+    if (get_e(p) != 44) return 3;
+    if (get_d(p) != 6) return 4;
     return 0;
 }

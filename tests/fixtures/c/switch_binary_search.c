@@ -28,25 +28,31 @@ static int classify_unsigned(unsigned u) {
     }
 }
 
+/* Opaque call targets: a volatile pointer load keeps each call real, so
+   the dispatch is emitted once per function rather than inlined and folded
+   to the arm the constant argument selects. */
+static int (*volatile signed_p)(int) = classify_signed;
+static int (*volatile unsigned_p)(unsigned) = classify_unsigned;
+
 int main(void) {
     // Each case value routes to its result; unmatched falls to default.
-    if (classify_signed(-100) != 1) return 11;
-    if (classify_signed(-3)   != 2) return 12;
-    if (classify_signed(0)    != 3) return 13;
-    if (classify_signed(1)    != 4) return 14;
-    if (classify_signed(7)    != 5) return 15;
-    if (classify_signed(42)   != 6) return 16;
-    if (classify_signed(1000) != 7) return 17;
-    if (classify_signed(-1)   != 0) return 18;
-    if (classify_signed(8)    != 0) return 19;
-    if (classify_signed(999)  != 0) return 20;
+    if (signed_p(-100) != 1) return 11;
+    if (signed_p(-3)   != 2) return 12;
+    if (signed_p(0)    != 3) return 13;
+    if (signed_p(1)    != 4) return 14;
+    if (signed_p(7)    != 5) return 15;
+    if (signed_p(42)   != 6) return 16;
+    if (signed_p(1000) != 7) return 17;
+    if (signed_p(-1)   != 0) return 18;
+    if (signed_p(8)    != 0) return 19;
+    if (signed_p(999)  != 0) return 20;
 
-    if (classify_unsigned(0u)          != 1) return 31;
-    if (classify_unsigned(5u)          != 2) return 32;
-    if (classify_unsigned(0x7fffffffu) != 3) return 33;
-    if (classify_unsigned(0x80000000u) != 4) return 34;
-    if (classify_unsigned(0xffffffffu) != 5) return 35;
-    if (classify_unsigned(1u)          != 0) return 36;
-    if (classify_unsigned(0x80000001u) != 0) return 37;
+    if (unsigned_p(0u)          != 1) return 31;
+    if (unsigned_p(5u)          != 2) return 32;
+    if (unsigned_p(0x7fffffffu) != 3) return 33;
+    if (unsigned_p(0x80000000u) != 4) return 34;
+    if (unsigned_p(0xffffffffu) != 5) return 35;
+    if (unsigned_p(1u)          != 0) return 36;
+    if (unsigned_p(0x80000001u) != 0) return 37;
     return 0;
 }

@@ -195,6 +195,52 @@ fn always_inline_callee_passing_an_aggregate_by_value_is_spliced() {
 }
 
 #[test]
+fn always_inline_callee_returning_a_large_struct_is_spliced() {
+    // A callee returning an aggregate too large for the return registers
+    // gets a caller-provided destination -- the hidden out-pointer
+    // argument (System V AMD64 MEMORY class, Win64 over the by-value
+    // size) or the indirect-result register (AAPCS64 above 16 bytes).
+    // Both are mandatory-request shapes the splice has to reproduce, and
+    // honouring the request is what turns the returned fields into
+    // constants: the undefined `bug` in the arms they decide would
+    // otherwise fail the JIT load.
+    //
+    // `mk_state` also reaches its result through another function, which
+    // has to see the redirected destination, and `wrap` returns the
+    // result of a second by-address callee -- the nested shape whose
+    // whole-object copy the splice drops.
+    let src = "
+        extern void bug(void);
+        struct state { void *base; void *table; unsigned long span;
+                       unsigned long off; unsigned int level;
+                       unsigned short idx; unsigned char kind; };
+        static void tag(struct state *s, unsigned char k) { s->kind = k; }
+        static __attribute__((always_inline))
+        struct state mk_state(void *base, unsigned int level) {
+            struct state s = { .base = base, .level = level, .span = 4096ul };
+            tag(&s, 7);
+            return s;
+        }
+        static __attribute__((always_inline))
+        struct state wrap(void *base) { return mk_state(base, 0u); }
+        static unsigned long sink;
+        int main(void) {
+            struct state a = mk_state(&sink, 3u);
+            if (a.level != 3u) bug();
+            if (a.kind != 7) bug();
+            if (a.span != 4096ul) bug();
+            if (a.table != 0 || a.off != 0ul || a.idx != 0) bug();
+            struct state b = wrap(&sink);
+            if (b.level != 0u) bug();
+            if (b.base != (void *) &sink) return 1;
+            sink = a.span + b.span + a.level + a.kind;
+            return sink == 4096ul + 4096ul + 3ul + 7ul ? 6 : 2;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-sret-inline"]), 6);
+}
+
+#[test]
 fn a_dominating_condition_decides_the_comparison_it_implies() {
     // Three shapes whose answer follows from the condition guarding the
     // block rather than from any immediate: a loop guard settling the

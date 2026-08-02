@@ -119,21 +119,7 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	-0x30(%rbp), %rcx
-               	leaq	<rip>, %rdx
-               	pushq	%rax
-               	movzbq	(%rdx), %rax
-               	movb	%al, (%rcx)
-               	movzbq	0x1(%rdx), %rax
-               	movb	%al, 0x1(%rcx)
-               	movzbq	0x2(%rdx), %rax
-               	movb	%al, 0x2(%rcx)
-               	movzbq	0x3(%rdx), %rax
-               	movb	%al, 0x3(%rcx)
-               	popq	%rax
                	movl	%eax, %ecx
-               	leaq	-0x30(%rbp), %rdx
-               	movl	%ecx, (%rdx)
                	movl	%ecx, %ecx
                	movl	%ecx, %ecx
                	movl	%eax, %edx

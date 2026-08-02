@@ -110,22 +110,7 @@ Disassembly of section .text:
                	str	w1, [x0]
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	sub	x1, x29, #0x30
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x2]
-               	strb	w10, [x1]
-               	ldrb	w10, [x2, #0x1]
-               	strb	w10, [x1, #0x1]
-               	ldrb	w10, [x2, #0x2]
-               	strb	w10, [x1, #0x2]
-               	ldrb	w10, [x2, #0x3]
-               	strb	w10, [x1, #0x3]
-               	ldr	x10, [sp], #0x10
                	mov	w1, w0
-               	sub	x2, x29, #0x30
-               	str	w1, [x2]
                	mov	w1, w1
                	mov	w1, w1
                	mov	w2, w0

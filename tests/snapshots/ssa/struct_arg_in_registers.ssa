@@ -50,17 +50,17 @@ fn ent_pc=7 n_params=0 variadic=false locals=9
     v18  Imm(1)                                           -> x0
     terminator Return(v18)   (exit_acc=v18)
   block 2  start_pc=0
-    v19  LocalAddr(-3)                                    -> x0
+    v19  Imm(0)                                           -> x0
     v20  Imm(1000)                                        -> x0
     v21  Imm(0)                                           -> x0
-    v22  LocalAddr(-3)                                    -> x0
-    v23  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(0)                                           -> x0
     v24  Imm(337)                                         -> x0
     v25  Imm(0)                                           -> x0
-    v26  LocalAddr(-3)                                    -> x0
-    v27  Load { addr=v26, disp=0, kind=I64 }              -> x1
-    v28  BinopI { op=add, lhs=v26, rhs_imm=8 }            -> x1
-    v29  Load { addr=v26, disp=8, kind=I64 }              -> x0
+    v26  Imm(0)                                           -> x0
+    v27  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v28  Imm(0)                                           -> x0
+    v29  LoadLocal { off=-2, kind=I64 }                   -> x0
     v30  Imm(1337)                                        -> x0
     v31  Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v31)

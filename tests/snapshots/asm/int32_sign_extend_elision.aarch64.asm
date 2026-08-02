@@ -12,27 +12,5 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	sub	x0, x29, #0x18
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldrb	w10, [x1, #0x10]
-               	strb	w10, [x0, #0x10]
-               	ldrb	w10, [x1, #0x11]
-               	strb	w10, [x0, #0x11]
-               	ldrb	w10, [x1, #0x12]
-               	strb	w10, [x0, #0x12]
-               	ldrb	w10, [x1, #0x13]
-               	strb	w10, [x0, #0x13]
-               	ldr	x10, [sp], #0x10
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret

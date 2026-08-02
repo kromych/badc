@@ -373,33 +373,15 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x1a0
                	ret
                	sub	x0, x29, #0x158
-               	sub	x1, x29, #0xf0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
-               	mov	x0, x1
+               	ldr	x1, [x0]
+               	ldr	x2, [x0, #0x8]
                	sub	x0, x29, #0x168
-               	sub	x1, x29, #0x100
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
-               	mov	x0, x1
-               	sub	x1, x29, #0xf0
-               	sub	x2, x29, #0x100
+               	ldr	x3, [x0]
+               	ldr	x4, [x0, #0x8]
                	sub	x0, x29, #0x90
-               	ldr	x3, [x1]
-               	ldr	x4, [x2]
-               	eor	x3, x3, x4
-               	str	x3, [x0]
-               	ldr	x1, [x1, #0x8]
-               	ldr	x2, [x2, #0x8]
-               	eor	x1, x1, x2
+               	eor	x1, x1, x3
+               	str	x1, [x0]
+               	eor	x1, x2, x4
                	str	x1, [x0, #0x8]
                	sub	x1, x29, #0x110
                	str	x10, [sp, #-0x10]!

@@ -150,14 +150,14 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0xf0
-               	sub	x0, x29, #0xe0
+               	sub	x0, x29, #0xe8
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0xc0
+               	sub	x0, x29, #0xc8
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
@@ -172,7 +172,7 @@ Disassembly of section .text:
                	ldrb	w10, [x1, #0xb]
                	strb	w10, [x0, #0xb]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0xd8
+               	sub	x0, x29, #0xe0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
@@ -185,7 +185,7 @@ Disassembly of section .text:
                	ldrb	w10, [x1, #0x3]
                	strb	w10, [x0, #0x3]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0x98
+               	sub	x0, x29, #0xa0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
@@ -194,7 +194,7 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x8]
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0xb0
+               	sub	x0, x29, #0xb8
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
@@ -205,13 +205,13 @@ Disassembly of section .text:
                	ldr	x10, [x1, #0x10]
                	str	x10, [x0, #0x10]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0xe0
+               	sub	x0, x29, #0xe8
                	mov	x1, #0x3e8              // =1000
-               	sub	x2, x29, #0xc0
-               	sub	x3, x29, #0xd8
-               	sub	x4, x29, #0x98
+               	sub	x2, x29, #0xc8
+               	sub	x3, x29, #0xe0
+               	sub	x4, x29, #0xa0
                	mov	x5, #0x7d0              // =2000
-               	sub	x6, x29, #0xb0
+               	sub	x6, x29, #0xb8
                	mov	x7, #0xbb8              // =3000
                	sub	sp, sp, #0x10
                	str	x6, [sp]
@@ -242,58 +242,48 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
                	mov	x0, #0x46               // =70
-               	sub	x8, x29, #0x20
+               	sub	x8, x29, #0x28
                	bl	<addr>
-               	sub	x0, x29, #0x20
-               	sub	x1, x29, #0x70
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [x0, #0x10]
-               	str	x10, [x1, #0x10]
-               	ldr	x10, [sp], #0x10
-               	mov	x0, x1
-               	sub	x0, x29, #0x70
-               	ldrsw	x0, [x0]
+               	sub	x0, x29, #0x28
+               	ldr	w1, [x0]
+               	ldr	w2, [x0, #0x4]
+               	ldr	w3, [x0, #0x8]
+               	ldr	w4, [x0, #0xc]
+               	ldr	w5, [x0, #0x10]
+               	ldr	w6, [x0, #0x14]
+               	sxtw	x0, w1
                	cmp	x0, #0x46
                	cset	x1, ne
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
-               	sub	x0, x29, #0x70
-               	ldrsw	x0, [x0, #0x4]
+               	sxtw	x0, w2
                	cmp	x0, #0x47
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x0, ne
                	mov	x1, #0x1                // =1
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x70
-               	ldrsw	x0, [x0, #0x8]
+               	sxtw	x0, w3
                	cmp	x0, #0x48
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x1, ne
                	mov	x2, #0x1                // =1
                	cbnz	x1, <addr>
-               	sub	x0, x29, #0x70
-               	ldrsw	x0, [x0, #0xc]
+               	sxtw	x0, w4
                	cmp	x0, #0x49
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x2, ne
                	mov	x0, #0x1                // =1
                	cbnz	x2, <addr>
-               	sub	x0, x29, #0x70
-               	ldrsw	x0, [x0, #0x10]
+               	sxtw	x0, w5
                	cmp	x0, #0x4a
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x70
-               	ldrsw	x0, [x0, #0x14]
+               	sxtw	x0, w6
                	cmp	x0, #0x4b
                	cset	x0, ne
                	cbz	x0, <addr>

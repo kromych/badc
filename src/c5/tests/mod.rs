@@ -26,6 +26,7 @@ mod deferred;
 #[cfg(feature = "full")]
 mod dwarf;
 mod fixture_tables;
+mod frame_slot_fuzz;
 mod inline_asm;
 #[cfg(feature = "full")]
 mod inline_linkage;

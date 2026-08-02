@@ -18,8 +18,11 @@
 //! inlined table lookup behind a folded bounds check) still folds and
 //! can decide the next branch.
 
+use super::value_range::Range;
 use crate::c5::ir::FunctionSsa;
 use crate::c5::program::Program;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 
 /// What the fixed point may do beyond folding constant-condition
 /// branches and pruning what they orphan. All are off for the
@@ -32,6 +35,9 @@ struct Opts<'a> {
     resolve_constant_p: bool,
     fold_selects: bool,
     implied_ranges: bool,
+    /// Entry range per declared parameter, from the interprocedural
+    /// join in [`super::ipa_const_param`]. Empty when none is known.
+    param_ranges: &'a [Range],
 }
 
 /// The post-walk correctness cleanup, run at every optimization level.
@@ -45,6 +51,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                 resolve_constant_p: false,
                 fold_selects: false,
                 implied_ranges: false,
+                param_ranges: &[],
             },
         );
     }
@@ -54,10 +61,17 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
 /// comparisons of non-null symbol addresses fold inside the same fixed
 /// point, and a surviving deferred `__builtin_constant_p` resolves to 0
 /// on the way out, so no such node reaches an emitter.
-pub(crate) fn run_with_const_data(funcs: &mut [FunctionSsa], program: &Program) {
+pub(crate) fn run_with_const_data(
+    funcs: &mut [FunctionSsa],
+    program: &Program,
+    param_ranges: &BTreeMap<usize, Vec<Range>>,
+) {
     let cd = super::const_global_fold::ConstData::build(program);
     let facts = super::constfold::addr_facts(program);
     for func in funcs {
+        let ranges = param_ranges
+            .get(&func.ent_pc)
+            .map_or(&[][..], |r| r.as_slice());
         run_one(
             func,
             &Opts {
@@ -66,6 +80,7 @@ pub(crate) fn run_with_const_data(funcs: &mut [FunctionSsa], program: &Program) 
                 resolve_constant_p: true,
                 fold_selects: true,
                 implied_ranges: true,
+                param_ranges: ranges,
             },
         );
     }
@@ -93,7 +108,7 @@ fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
         let forwarded = opts
             .const_data
             .is_some_and(|cd| super::const_global_fold::fold_template_loads(func, cd));
-        let ranged = opts.implied_ranges && super::value_range::run_one(func);
+        let ranged = opts.implied_ranges && super::value_range::run_one(func, opts.param_ranges);
         let folded = super::constfold_branch::run_one(func);
         let pruned = super::prune_unreachable::run_one(func);
         bound -= 1;

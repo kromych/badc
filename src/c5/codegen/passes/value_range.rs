@@ -21,6 +21,11 @@
 //! emitted in two blocks -- reads the fact recorded for the other. The
 //! key covers only pure arithmetic; a load or a call is opaque, so
 //! nothing is carried across a write to memory.
+//!
+//! `run_one` takes an entry range per parameter, which
+//! [`super::ipa_const_param`] derives from the call sites of a function
+//! only this translation unit can reach. `Inst::ParamRef` is the
+//! parameter's entry value, so that range bounds every read of it.
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
@@ -31,12 +36,12 @@ use crate::c5::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, Terminator, Val
 /// signed integer. `i128` so intersection and the +-1 steps below cannot
 /// overflow at the extremes.
 #[derive(Clone, Copy, PartialEq, Eq)]
-struct Range {
+pub(crate) struct Range {
     lo: i128,
     hi: i128,
 }
 
-const UNIVERSE: Range = Range {
+pub(crate) const UNIVERSE: Range = Range {
     lo: i64::MIN as i128,
     hi: i64::MAX as i128,
 };
@@ -54,6 +59,19 @@ impl Range {
             lo: self.lo.max(other.lo),
             hi: self.hi.min(other.hi),
         }
+    }
+
+    /// Smallest range containing both. Used to join what the separate
+    /// call sites of one function pass for a parameter.
+    pub(crate) fn hull(self, other: Range) -> Range {
+        Range {
+            lo: self.lo.min(other.lo),
+            hi: self.hi.max(other.hi),
+        }
+    }
+
+    pub(crate) fn is_universe(self) -> bool {
+        self == UNIVERSE
     }
 
     fn contains(self, other: Range) -> bool {
@@ -295,8 +313,9 @@ fn implied(op: BinOp, k: i128, holds: bool, current: Range) -> Option<Range> {
     })
 }
 
-/// Forward bounds for an instruction, given its operands' ranges.
-fn eval(insts: &[Inst], facts: &Facts, inst: &Inst) -> Range {
+/// Forward bounds for an instruction, given its operands' ranges and
+/// the entry range of each parameter.
+fn eval(insts: &[Inst], facts: &Facts, inst: &Inst, params: &[Range]) -> Range {
     let range_of = |v: ValueId| facts.get(key_of(insts, v));
     match inst {
         Inst::Imm(k) => Range::exact(*k),
@@ -353,10 +372,40 @@ fn eval(insts: &[Inst], facts: &Facts, inst: &Inst) -> Range {
         },
         // A width-limited read cannot produce a value outside the width
         // it extends from.
-        Inst::Load { kind, .. } | Inst::LoadLocal { kind, .. } | Inst::ParamRef { kind, .. } => {
+        Inst::Load { kind, .. } | Inst::LoadLocal { kind, .. } => {
             extend_range(*kind).unwrap_or(UNIVERSE)
         }
+        // A floating parameter's value is not an integer, so an
+        // interprocedural bound does not describe it.
+        Inst::ParamRef {
+            kind: LoadKind::F32 | LoadKind::F64,
+            ..
+        } => UNIVERSE,
+        // Plus, for an integer parameter, whatever every call site
+        // agrees the argument is bounded by. A narrow parameter reads
+        // its own width out of the incoming register, so the caller's
+        // range describes the parameter only when that read cannot
+        // change a value inside it -- an argument range wider than the
+        // parameter says nothing about what the parameter becomes.
+        Inst::ParamRef { idx, kind } => {
+            let w = extend_range(*kind).unwrap_or(UNIVERSE);
+            match params.get(*idx as usize) {
+                Some(r) if w.contains(*r) => *r,
+                _ => w,
+            }
+        }
         _ => UNIVERSE,
+    }
+}
+
+/// Bounds an argument expression carries with no dominating facts in
+/// scope: the instruction's own shape only. Operand ranges read as
+/// [`UNIVERSE`], so nothing here depends on another function's
+/// parameter ranges and the interprocedural join needs no fixed point.
+pub(crate) fn arg_range(insts: &[Inst], v: ValueId) -> Range {
+    match insts.get(v as usize) {
+        Some(inst) => eval(insts, &Facts::default(), inst, &[]),
+        None => UNIVERSE,
     }
 }
 
@@ -401,10 +450,11 @@ fn apply_edge(func: &FunctionSsa, facts: &mut Facts, pred: BlockId, holds: bool)
     }
 }
 
-/// Rewrite every comparison the dominating conditions settle. Returns
-/// whether the function changed, so the caller's fixed point can
-/// re-run the branch fold and the prune on the result.
-pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
+/// Rewrite every comparison the dominating conditions settle. `params`
+/// is the entry range of each declared parameter, empty when none is
+/// known. Returns whether the function changed, so the caller's fixed
+/// point can re-run the branch fold and the prune on the result.
+pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
     let n = func.blocks.len();
     if n == 0 {
         return false;
@@ -462,7 +512,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
         for pc in range.start..range.end {
             let inst = &func.insts[pc as usize];
             let key = key_of(func.insts.as_slice(), pc);
-            let r = eval(func.insts.as_slice(), &facts, inst).meet(facts.get(key));
+            let r = eval(func.insts.as_slice(), &facts, inst, params).meet(facts.get(key));
             let decided = match inst {
                 Inst::BinopI { op, lhs, rhs_imm } => decide(
                     *op,
@@ -492,4 +542,85 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
         func.insts[pc as usize] = Inst::Imm(v);
     }
     !folded.is_empty()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::c5::ir::{Block, Terminator};
+    use alloc::vec;
+
+    fn fresh(insts: Vec<Inst>, n_params: usize) -> FunctionSsa {
+        let n = insts.len();
+        FunctionSsa {
+            n_params,
+            inst_src: vec![(0, 0); n],
+            f32_values: vec![false; n],
+            insts,
+            blocks: vec![Block {
+                start_pc: 0,
+                inst_range: 0..n as u32,
+                terminator: Terminator::Return(crate::c5::ir::NO_VALUE),
+                exit_acc: 0,
+            }],
+            ..FunctionSsa::default()
+        }
+    }
+
+    /// `p >= 0` for a parameter read at a narrower width than the
+    /// register the caller filled. The read is what produces the
+    /// parameter's value, so a caller range reaching outside the read
+    /// width says nothing: the entry value of an `I32` parameter whose
+    /// argument was `0x80000000` is `INT_MIN`, not `0x80000000`.
+    #[test]
+    fn narrow_parameter_declines_a_range_wider_than_its_read() {
+        let insts = |kind| {
+            alloc::vec![
+                Inst::ParamRef { idx: 0, kind },
+                Inst::BinopI {
+                    op: BinOp::Ge,
+                    lhs: 0,
+                    rhs_imm: 0,
+                },
+            ]
+        };
+        let wide = Range {
+            lo: 0,
+            hi: 0xffff_ffff,
+        };
+        let mut f = fresh(insts(LoadKind::I32), 1);
+        assert!(
+            !run_one(&mut f, &[wide]),
+            "a range wider than the parameter's read width must not decide the comparison"
+        );
+        // The same range on a parameter read at full width does decide
+        // it, and so does a range the narrow read leaves untouched.
+        let mut f = fresh(insts(LoadKind::I64), 1);
+        assert!(run_one(&mut f, &[wide]));
+        assert!(matches!(f.insts[1], Inst::Imm(1)));
+        let mut f = fresh(insts(LoadKind::I32), 1);
+        assert!(run_one(&mut f, &[Range { lo: 0, hi: 1000 }]));
+        assert!(matches!(f.insts[1], Inst::Imm(1)));
+    }
+
+    /// A floating parameter's entry value is not an integer, so an
+    /// integer bound must not reach it.
+    #[test]
+    fn floating_parameter_takes_no_interprocedural_range() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::F64,
+                },
+                Inst::BinopI {
+                    op: BinOp::Ge,
+                    lhs: 0,
+                    rhs_imm: 0,
+                },
+            ],
+            1,
+        );
+        assert!(!run_one(&mut f, &[Range { lo: 0, hi: 1000 }]));
+    }
 }

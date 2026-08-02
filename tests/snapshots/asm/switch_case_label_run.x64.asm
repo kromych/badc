@@ -12,8 +12,6 @@ Disassembly of section .text:
 
 <classify>:
                	movslq	%edi, %rdi
-               	cmpq	$0x7d1, %rdi            # imm = 0x7D1
-               	jae	<addr>
                	leaq	<rip>, %r11
                	movq	(%r11,%rdi,8), %r10
                	jmpq	*%r10

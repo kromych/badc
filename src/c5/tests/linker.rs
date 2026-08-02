@@ -4594,6 +4594,293 @@ fn unrouted_weak_undef_resolves_to_zero() {
     assert_eq!(word(8), 0xd503_201f, "bl becomes a nop");
 }
 
+/// `adrp x0, blob` paired with each low-12 addressing form the
+/// AArch64 ELF ABI defines, and the relocation type that patches the
+/// second instruction of each pair.
+const AARCH64_LO12_PAIRS: &[(u32, u32, u32)] = &[
+    (0x9000_0000, 0x3940_0001, 278), // ldrb w1, [x0, #:lo12:blob]
+    (0x9000_0000, 0x7940_0001, 284), // ldrh w1, [x0, #:lo12:blob]
+    (0x9000_0000, 0xb940_0001, 285), // ldr  w1, [x0, #:lo12:blob]
+    (0x9000_0000, 0xf940_0001, 286), // ldr  x1, [x0, #:lo12:blob]
+    (0x9000_0000, 0x3dc0_0000, 299), // ldr  q0, [x0, #:lo12:blob]
+    (0x9000_0000, 0x9100_0001, 277), // add  x1, x0, #:lo12:blob
+];
+
+/// One aarch64 object whose `.text` is `words` with `relocs` against
+/// the `.data` symbol `blob`. `.data` is page-aligned and `blob` sits
+/// 16 bytes in, so its runtime low-12 offset is 16 for every scaled
+/// form and no immediate under test is trivially zero.
+fn aarch64_data_ref_object(
+    words: &[u32],
+    relocs: &[(u64, u32)],
+) -> crate::c5::linker::NativeObject {
+    use crate::c5::linker::object::{NativeReloc, NativeSymbol};
+    use crate::c5::linker::{NativeMachine, NativeSymSection};
+
+    let mut text = alloc::vec::Vec::new();
+    for w in words {
+        text.extend_from_slice(&w.to_le_bytes());
+    }
+    // Unrelocated trailer the placement helper locates in the written
+    // image to recover where the merged text landed.
+    text.extend_from_slice(TEXT_MARKER);
+    let text_relocs = relocs
+        .iter()
+        .map(|(offset, rtype)| NativeReloc {
+            offset: *offset,
+            sym_idx: 1,
+            rtype: *rtype,
+            addend: 0,
+        })
+        .collect();
+    // `_start` at text offset 0 gives the image writer an entry point.
+    let sym = |name: &str, section, value| NativeSymbol {
+        name: name.to_string(),
+        section,
+        value,
+        size: 0,
+        binding: 1,
+        kind: 0,
+        visibility: 0,
+    };
+    crate::c5::linker::NativeObject {
+        machine: NativeMachine::Aarch64,
+        text,
+        text_align: 16,
+        rodata: alloc::vec::Vec::new(),
+        rodata_align: 8,
+        data: alloc::vec![0u8; 64],
+        data_align: 0x1000,
+        bss_size: 0,
+        bss_align: 1,
+        tls_data: alloc::vec::Vec::new(),
+        tls_bss_size: 0,
+        symbols: alloc::vec![
+            NativeSymbol {
+                name: String::new(),
+                section: NativeSymSection::Undef,
+                value: 0,
+                size: 0,
+                binding: 0,
+                kind: 0,
+                visibility: 0,
+            },
+            sym("blob", NativeSymSection::Data, 16),
+            sym("_start", NativeSymSection::Text, 0),
+        ],
+        text_relocs,
+        data_relocs: alloc::vec::Vec::new(),
+        init_funcs: alloc::vec::Vec::new(),
+        dylibs: alloc::vec::Vec::new(),
+        import_dylib_map: alloc::vec::Vec::new(),
+        exports: alloc::vec::Vec::new(),
+        tls_index_fixups: alloc::vec::Vec::new(),
+        macho_tlv_descriptors: alloc::vec::Vec::new(),
+        macho_tlv_fixups: alloc::vec::Vec::new(),
+        tls_symbols: alloc::vec::Vec::new(),
+        macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+        elf_tpoff_fixups: alloc::vec::Vec::new(),
+        copy_relocs: alloc::vec::Vec::new(),
+        debug_info: alloc::vec::Vec::new(),
+        debug_abbrev: alloc::vec::Vec::new(),
+        debug_line: alloc::vec::Vec::new(),
+        debug_str: alloc::vec::Vec::new(),
+        debug_info_relocs: alloc::vec::Vec::new(),
+        debug_line_relocs: alloc::vec::Vec::new(),
+    }
+}
+
+/// The object [`AARCH64_LO12_PAIRS`] describes, laid out as
+/// consecutive 8-byte `adrp` + low-12 pairs against `blob`.
+fn aarch64_lo12_object() -> crate::c5::linker::NativeObject {
+    const R_ADR_PREL_PG_HI21: u32 = 275;
+    let mut words = alloc::vec::Vec::new();
+    let mut relocs = alloc::vec::Vec::new();
+    for (adrp, lo12, rtype) in AARCH64_LO12_PAIRS {
+        let base = words.len() as u64 * 4;
+        words.push(*adrp);
+        words.push(*lo12);
+        relocs.push((base, R_ADR_PREL_PG_HI21));
+        relocs.push((base + 4, *rtype));
+    }
+    aarch64_data_ref_object(&words, &relocs)
+}
+
+/// Recover the address each `adrp` + low-12 pair in `text` computes.
+/// `text_vaddr` is the runtime address of `text[0]`.
+fn aarch64_lo12_pair_targets(text: &[u8], text_vaddr: u64) -> alloc::vec::Vec<u64> {
+    let word = |i: usize| u32::from_le_bytes(text[i..i + 4].try_into().unwrap());
+    (0..AARCH64_LO12_PAIRS.len())
+        .map(|i| {
+            let adrp = word(i * 8);
+            let lo12 = word(i * 8 + 4);
+            // Bytes per unit of the second instruction's imm12: the
+            // access size for a load/store, 1 for `add`.
+            let scale = u64::from(1u32 << aarch64_uimm12_scale_log2(lo12));
+            let pages = i64::from((((adrp >> 3) & 0x1f_fffc) | ((adrp >> 29) & 0x3)) << 11) >> 11;
+            let page = ((text_vaddr + (i as u64 * 8)) & !0xfff).wrapping_add((pages << 12) as u64);
+            page + u64::from((lo12 >> 10) & 0xfff) * scale
+        })
+        .collect()
+}
+
+/// log2 of the imm12 scale an unsigned-offset load/store applies.
+/// `size` (bits 31..30) plus, for the SIMD/FP forms (V, bit 26),
+/// `opc<1>` (bit 23), which is the only encoding of a 128-bit access.
+/// An `add` immediate is unscaled.
+fn aarch64_uimm12_scale_log2(instr: u32) -> u32 {
+    if instr & 0x3b00_0000 != 0x3900_0000 {
+        return 0;
+    }
+    let size = instr >> 30;
+    if instr & (1 << 26) != 0 {
+        size | ((instr >> 23) & 1) << 2
+    } else {
+        size
+    }
+}
+
+#[test]
+fn aarch64_lo12_relocations_all_reach_the_same_target() {
+    // AArch64 ELF ABI: `R_AARCH64_ADD_ABS_LO12_NC` writes bits [11:0]
+    // of `S + A` into the `add` imm12 and each
+    // `R_AARCH64_LDST<n>_ABS_LO12_NC` writes bits [11:log2(n)] into
+    // the matching load/store imm12, which the instruction scales back
+    // by its access size. Every form therefore addresses the same
+    // byte. A relocation matched under a neighbouring type's arm is
+    // left unpatched or scaled by the wrong size, and this comparison
+    // catches both.
+    use crate::c5::linker::{
+        emit_aarch64_plt, link_native_objects, write_native_image_from_merged,
+    };
+    use crate::c5::{OutputKind, Target};
+    let mut merged = link_native_objects(&[aarch64_lo12_object()]).expect("link");
+    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "_start",
+        None,
+        OutputKind::Executable,
+        Target::LinuxAarch64,
+        None,
+    )
+    .expect("an object using the ABI's low-12 forms must link");
+    let lo12_len = AARCH64_LO12_PAIRS.len() * 8;
+    let (text_off, text_vaddr) = elf64_text_placement(&exe, lo12_len);
+    let targets = aarch64_lo12_pair_targets(&exe[text_off..text_off + lo12_len], text_vaddr);
+    let add_form = *targets.last().expect("one target per pair");
+    let in_page = add_form & 0xfff;
+    assert!(
+        in_page != 0 && in_page.is_multiple_of(16),
+        "`blob`'s in-page offset {in_page:#x} must be a non-zero multiple of 16 for \
+         every scaled form to be encodable and none to be trivially zero"
+    );
+    for (i, t) in targets.iter().enumerate() {
+        assert_eq!(
+            *t, add_form,
+            "low-12 form {i} resolved to {t:#x}, the `add` form to {add_form:#x}"
+        );
+    }
+}
+
+/// Trailer [`aarch64_data_ref_object`] parks at the end of its
+/// `.text`. No relocation touches it, so it survives into the written
+/// image verbatim and pins where the merged text landed.
+const TEXT_MARKER: &[u8] = &[0x5f, 0x6c, 0x6f, 0x31, 0x32, 0x6d, 0x61, 0x72];
+
+/// File offset and runtime address of the object's `.text` in a
+/// written ELF64 executable. `marker_offset` is where the trailer sits
+/// within that text; the `PT_LOAD` covering it supplies the address.
+fn elf64_text_placement(exe: &[u8], marker_offset: usize) -> (usize, u64) {
+    let hits: alloc::vec::Vec<usize> = exe
+        .windows(TEXT_MARKER.len())
+        .enumerate()
+        .filter(|(_, w)| *w == TEXT_MARKER)
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(hits.len(), 1, "text marker must occur once: {hits:?}");
+    let text_off = hits[0] - marker_offset;
+    let rd64 = |o: usize| u64::from_le_bytes(exe[o..o + 8].try_into().unwrap());
+    let rd16 = |o: usize| u16::from_le_bytes(exe[o..o + 2].try_into().unwrap());
+    let phoff = rd64(0x20) as usize;
+    let phentsize = rd16(0x36) as usize;
+    for i in 0..rd16(0x38) as usize {
+        let ph = phoff + i * phentsize;
+        let p_type = u32::from_le_bytes(exe[ph..ph + 4].try_into().unwrap());
+        let p_offset = rd64(ph + 8) as usize;
+        let p_filesz = rd64(ph + 32) as usize;
+        if p_type == 1 && (p_offset..p_offset + p_filesz).contains(&text_off) {
+            return (text_off, rd64(ph + 16) + (text_off - p_offset) as u64);
+        }
+    }
+    panic!("no PT_LOAD covers the merged text at file offset {text_off:#x}");
+}
+
+#[test]
+fn unhandled_relocation_type_is_a_link_error_naming_it() {
+    // An object carrying a relocation form the linker has no patcher
+    // for is an unsupported input, not a broken badc invariant: the
+    // diagnostic must name the type and the symbol, and must not be
+    // an internal compiler error. `R_AARCH64_MOVW_PREL_G0` (287) sits
+    // one slot past `R_AARCH64_LDST64_ABS_LO12_NC` (286) in the ABI
+    // table, so a table copied one row short accepted it under the
+    // load/store arm and dropped the fixup with no diagnostic.
+    use crate::c5::linker::{
+        emit_aarch64_plt, link_native_objects, write_native_image_from_merged,
+    };
+    use crate::c5::{OutputKind, Target};
+    const MOVZ_X2: u32 = 0xd280_0002;
+    const R_AARCH64_MOVW_PREL_G0: u32 = 287;
+    let obj = aarch64_data_ref_object(&[MOVZ_X2], &[(0, R_AARCH64_MOVW_PREL_G0)]);
+    // The rejection may come from either stage; what matters is that
+    // the image is never written with the site left unpatched.
+    let e = link_native_objects(&[obj])
+        .and_then(|mut merged| {
+            let plt = emit_aarch64_plt(&mut merged)?;
+            write_native_image_from_merged(
+                &merged,
+                &plt,
+                "_start",
+                None,
+                OutputKind::Executable,
+                Target::LinuxAarch64,
+                None,
+            )
+        })
+        .expect_err("an unpatchable relocation form must not link silently");
+    let msg = alloc::format!("{e}");
+    assert!(
+        msg.contains("R_AARCH64_MOVW_PREL_G0 (287)") && msg.contains("blob"),
+        "diagnostic must name the relocation type and the symbol: {msg}"
+    );
+    assert!(
+        !msg.contains("internal compiler error"),
+        "an unsupported input is a link error, not an ICE: {msg}"
+    );
+}
+
+#[test]
+fn aarch64_lo12_relocations_link_through_the_elf64_image_writer() {
+    // `write_executable_elf64` patches each parked low-12 relocation
+    // on its own rather than through the paired ADRP fixup, so it
+    // needs the same ABI numbering and the same access-size scaling.
+    use crate::c5::linker::{link_native_objects, write_executable_elf64};
+    let merged = link_native_objects(&[aarch64_lo12_object()]).expect("link");
+    let exe = write_executable_elf64(&merged, "_start")
+        .expect("an object using the ABI's low-12 forms must link");
+    let lo12_len = AARCH64_LO12_PAIRS.len() * 8;
+    let (text_off, text_vaddr) = elf64_text_placement(&exe, lo12_len);
+    let targets = aarch64_lo12_pair_targets(&exe[text_off..text_off + lo12_len], text_vaddr);
+    let add_form = *targets.last().expect("six pairs");
+    for (i, t) in targets.iter().enumerate() {
+        assert_eq!(
+            *t, add_form,
+            "low-12 form {i} resolved to {t:#x}, the `add` form to {add_form:#x}"
+        );
+    }
+}
+
 #[test]
 fn elf_section_offsets_respect_their_claimed_alignment() {
     // gABI: `sh_addr` (and the file offset for SHF_ALLOC sections)

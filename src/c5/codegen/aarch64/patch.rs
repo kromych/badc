@@ -80,7 +80,7 @@ pub(crate) fn lo12_word(word: u32, in_page: u32) -> Result<u32, PairError> {
     let imm12 = if is_add_imm(word) {
         in_page
     } else if is_ldst_unsigned(word) {
-        let scale = 1u32 << (word >> 30);
+        let scale = 1u32 << ldst_scale_log2(word);
         if !in_page.is_multiple_of(scale) {
             return Err(PairError::Lo12Unscalable { in_page, scale });
         }
@@ -99,6 +99,19 @@ fn is_add_imm(word: u32) -> bool {
 /// Load/store with an unsigned, size-scaled 12-bit immediate offset.
 fn is_ldst_unsigned(word: u32) -> bool {
     word & 0x3B00_0000 == 0x3900_0000
+}
+
+/// log2 of the access size such a load/store scales its imm12 by.
+/// `size` (bits 31..30) gives it for the general-register forms; the
+/// SIMD/FP forms (V, bit 26) extend it with `opc<1>` (bit 23), which is
+/// the only encoding of a 128-bit access.
+fn ldst_scale_log2(word: u32) -> u32 {
+    let size = word >> 30;
+    if word & (1 << 26) != 0 {
+        size | ((word >> 23) & 1) << 2
+    } else {
+        size
+    }
 }
 
 /// Access width of a slot load: `ldr w` or `ldr x`.

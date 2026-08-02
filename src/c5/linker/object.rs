@@ -346,6 +346,16 @@ pub enum NativeMachine {
     Aarch64,
 }
 
+/// Name a relocation type the way `readelf -r` prints it, for
+/// diagnostics about an object the linker cannot handle.
+pub(crate) fn reloc_desc(machine: NativeMachine, rtype: u32) -> String {
+    use crate::c5::object::elf_reloc_types::{aarch64_reloc_desc, x86_64_reloc_desc};
+    match machine {
+        NativeMachine::X86_64 => x86_64_reloc_desc(rtype),
+        NativeMachine::Aarch64 => aarch64_reloc_desc(rtype),
+    }
+}
+
 /// Which section a symbol's value lives in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeSymSection {

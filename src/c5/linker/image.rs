@@ -31,9 +31,11 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
+// Reloc kinds the dynamic linker resolves at startup.
+use crate::c5::object::elf_reloc_types::{R_AARCH64_JUMP_SLOT, R_X86_64_JUMP_SLOT};
 
 use super::link::MergedNative;
-use super::object::{NativeMachine, NativeSymSection};
+use super::object::{NativeMachine, NativeSymSection, reloc_desc};
 use crate::c5::layout::round_up;
 
 /// Page-align `n` up to the next multiple of [`PAGE_SIZE`].
@@ -76,10 +78,6 @@ const DT_JMPREL: u64 = 23;
 const DT_FLAGS: u64 = 30;
 
 const DF_BIND_NOW: u64 = 0x8;
-
-// Reloc kinds the dynamic linker resolves at startup.
-const R_X86_64_JUMP_SLOT: u32 = 7;
-const R_AARCH64_JUMP_SLOT: u32 = 1026;
 
 // Symbol-table bookkeeping for `.dynsym`.
 const STB_GLOBAL: u8 = 1;
@@ -879,11 +877,12 @@ fn patch_data_refs(
     pending: &[super::link::PendingImportReloc],
     machine: NativeMachine,
 ) -> Result<(), C5Error> {
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_PG_HI21, R_X86_64_PC32, R_X86_64_PLT32,
+        aarch64_ldst_lo12_scale,
+    };
+
     use super::link::PendingImportReloc;
-    const R_X86_64_PC32: u32 = 2;
-    const R_X86_64_PLT32: u32 = 4;
-    const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
-    const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 
     for r in pending {
         let r: &PendingImportReloc = r;
@@ -923,6 +922,26 @@ fn patch_data_refs(
                 text.len(),
             )));
         }
+        // `R_AARCH64_LDST<n>_ABS_LO12_NC` writes bits [11:log2(n)] of
+        // `S + A` into the unsigned-offset load/store imm12, which the
+        // instruction scales back by its access size.
+        if machine == NativeMachine::Aarch64
+            && let Some(scale) = aarch64_ldst_lo12_scale(r.rtype)
+        {
+            let lo12 = (target_vaddr as u64) & 0xfff;
+            if !lo12.is_multiple_of(scale.into()) {
+                return Err(link_err(&format!(
+                    "{} at text offset {site:#x}: target low-12 offset {lo12:#x} is not a \
+                     multiple of the {scale}-byte access size",
+                    reloc_desc(machine, r.rtype),
+                )));
+            }
+            let mut w = u32::from_le_bytes(text[site..site + 4].try_into().unwrap());
+            w &= !(0xfff << 10);
+            w |= (lo12 as u32 / scale) << 10;
+            text[site..site + 4].copy_from_slice(&w.to_le_bytes());
+            continue;
+        }
         match (machine, r.rtype) {
             (NativeMachine::X86_64, R_X86_64_PC32) | (NativeMachine::X86_64, R_X86_64_PLT32) => {
                 let disp = target_vaddr - site_vaddr as i64;
@@ -956,9 +975,10 @@ fn patch_data_refs(
                 text[site..site + 4].copy_from_slice(&w.to_le_bytes());
             }
             _ => {
-                return Err(err(&format!(
-                    "data-ref reloc at text[{site:#x}]: unsupported (machine={:?}, rtype={})",
-                    machine, r.rtype
+                return Err(link_err(&format!(
+                    "unsupported {} against a {:?}-section reference at text offset {site:#x}",
+                    reloc_desc(machine, r.rtype),
+                    r.target_section,
                 )));
             }
         }

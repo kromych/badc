@@ -12,6 +12,8 @@ pub(crate) mod elf;
 #[cfg(feature = "native-emit")]
 pub(crate) mod elf_reloc;
 #[cfg(feature = "native-emit")]
+pub(crate) mod elf_reloc_types;
+#[cfg(feature = "native-emit")]
 pub(crate) mod mach_o;
 #[cfg(feature = "native-emit")]
 pub(crate) mod pe;

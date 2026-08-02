@@ -36,6 +36,27 @@ use super::Build;
 use super::Machine;
 use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget, DwarfRelocWidth};
 use crate::c5::layout::{round_up, write_struct};
+// Relocation types this writer emits. `R_X86_64_TPOFF32` and the
+// `R_AARCH64_TLSLE_ADD_TPREL_*` pair carry local-exec TLS: the linker
+// writes the symbol's TP-relative offset into the `add` immediate
+// (x86_64 variant-2, negative; aarch64 variant-1, split across a shifted
+// high and a low 12-bit field). `R_AARCH64_ADR_GOT_PAGE` /
+// `R_AARCH64_LD64_GOT_LO12_NC` take a dylib-routed import's address
+// through the GOT, because the symbol binds against a shared object at
+// load time; a direct page relocation would force a copy relocation or
+// a canonical PLT entry for a symbol that always lives in a shared
+// library. `R_X86_64_REX_GOTPCRELX` is the relaxable GOT load (psABI
+// B.2): a linker that resolves the symbol within the image rewrites the
+// `REX mov reg, [rip+disp32]` to `lea` and drops the GOT entry, so a
+// fully static link needs no GOT; otherwise it behaves exactly like
+// `R_X86_64_GOTPCREL`, which linkers never relax.
+use super::elf_reloc_types::{
+    R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
+    R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32,
+    R_AARCH64_PREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC,
+    R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
+    R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32,
+};
 
 // ELF64 constants (Elf.h subset).
 const ELF_CLASS_64: u8 = 2;
@@ -167,43 +188,6 @@ const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
 const SHF_INFO_LINK: u64 = 0x40;
 
-// x86_64 reloc types (System V psABI x86_64 supplement, table 4.10).
-const R_X86_64_64: u32 = 1;
-const R_X86_64_PC32: u32 = 2;
-const R_X86_64_PLT32: u32 = 4;
-const R_X86_64_32: u32 = 10;
-const R_X86_64_32S: u32 = 11;
-const R_X86_64_PC64: u32 = 24;
-// Relaxable GOT load (psABI B.2): marks a `REX mov reg, [rip+disp32]`
-// whose disp32 is the GOT-entry offset. A linker resolving the symbol
-// within the image relaxes the load to `lea` and drops the GOT entry,
-// so fully static links need no GOT; otherwise it behaves exactly like
-// `R_X86_64_GOTPCREL`, which linkers never relax.
-const R_X86_64_REX_GOTPCRELX: u32 = 42;
-// Local-exec TLS: the linker writes the (negative, variant-2) TP-relative
-// offset of the symbol into the `add r64, imm32` immediate.
-const R_X86_64_TPOFF32: u32 = 23;
-
-// AArch64 reloc types (ELF for the ARM 64-bit architecture, table 5-1).
-const R_AARCH64_ABS64: u32 = 257;
-const R_AARCH64_ABS32: u32 = 258;
-const R_AARCH64_PREL64: u32 = 260;
-const R_AARCH64_PREL32: u32 = 261;
-const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
-const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
-const R_AARCH64_CALL26: u32 = 283;
-// GOT-indirect page + offset: address-taking a dylib-routed import goes
-// through the GOT because the symbol binds against a shared object at
-// load time (a direct ADR_PREL page relocation would force a copy
-// relocation / canonical PLT entry for a symbol that always lives in a
-// shared library).
-const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
-const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
-// Local-exec TLS pair over the two-`add` sequence: the linker splits the
-// TP-relative offset (variant-1, 16-byte TCB bias included) into the
-// shifted high and low 12-bit immediates.
-const R_AARCH64_TLSLE_ADD_TPREL_HI12: u32 = 549;
-const R_AARCH64_TLSLE_ADD_TPREL_LO12_NC: u32 = 551;
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
 const STB_WEAK: u8 = 2;

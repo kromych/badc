@@ -238,9 +238,21 @@ which `-no-reboot` turns into an emulator exit, so a boot ends when userspace
 is reached rather than when the timeout expires. It is the probe, not part of
 what is under test.
 
+Reaching userspace is a claim about the boot path and nothing else, so `/init`
+then exercises the kernel it booted and reports that separately. It mounts
+procfs and sysfs and reads a fixed set of files from each, asserting their
+contents, in 64-byte requests so a file spans several `read()` calls, and once
+more from a non-zero offset -- a seq_file reaches one by replaying records
+rather than by continuing. Only if every check passes does it print the second
+marker, `BADC-SELFTEST-OK`. Each file is named on the console before it is
+opened (`BADC-SELFTEST-STEP`), so a boot that stops reports which file it
+stopped on, and the gate quotes that line in the failure. A kernel whose
+procfs reads never return prints the boot marker and hangs, which the boot
+marker alone cannot distinguish from a pass.
+
 It fails on any unit badc cannot compile, any unit that fell back to the
 reference compiler, any undefined reference at link, any boot that does not
-reach the marker, and on a build that compiled fewer units than
+reach either marker, and on a build that compiled fewer units than
 `--expect-units` -- make skips units whose objects are current, so without a
 floor a tree that rebuilt nothing would pass while testing nothing. For the
 same reason the tree is rebuilt from clean by default.

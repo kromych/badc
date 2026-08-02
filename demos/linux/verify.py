@@ -4,8 +4,15 @@
 Runs the hybrid build described in README.md ("Hybrid build") with an empty
 fallback list, so every kernel C unit goes through badc, then boots the result
 under qemu. Unlike sweep.py, which measures and ranks, this asserts: any unit
-badc cannot compile, any undefined reference at link, or any boot that does
-not reach the marker fails the run.
+badc cannot compile, any undefined reference at link, any boot that does not
+reach the marker, or any boot whose userspace could not read the kernel back
+fails the run.
+
+A boot makes two claims and they are checked separately. Reaching userspace is
+the first marker; serving reads of /proc and /sys is the second, which the
+initramfs prints only after its checks pass (initramfs.py). A kernel that boots
+and then cannot serve a procfs read fails on the second, and the failure names
+the file it stopped on.
 
     python3 demos/linux/verify.py --kernel-dir <writable tree> \
         --initramfs <image> --expect-units 1912
@@ -65,6 +72,11 @@ ARCHES = {
 }
 
 DEFAULT_MARKER = "BADC-VMLINUX-OK"
+# The initramfs prints this only after its /proc and /sys checks pass; see
+# initramfs.py. Reaching userspace and serving a read are separate claims, so
+# they are separate markers and a boot has to make both.
+DEFAULT_CHECK_MARKER = "BADC-SELFTEST-OK"
+CHECK_STEP = "BADC-SELFTEST-STEP"
 # A boot that only reports its displacement: nothing is at this path, so the
 # kernel panics once it reaches userspace and the panic notifier prints
 # `Kernel Offset:`. panic=-1 (already on the command line) then ends the boot.
@@ -196,6 +208,15 @@ def seed_trees(args, arch: dict, plan: list[int | None]) -> dict[int, Path]:
     return out
 
 
+def last_step(text: str) -> str:
+    """The last check the initramfs announced, which is the one a boot that
+    stopped mid-check stopped on."""
+    steps = [l for l in text.splitlines() if CHECK_STEP in l]
+    if not steps:
+        return ""
+    return f", last step {steps[-1].split(CHECK_STEP, 1)[1].strip()!r}"
+
+
 def kaslr_configured(tree: Path) -> bool:
     """Whether the tree's configuration randomizes the kernel base."""
     cfg = tree / ".config"
@@ -230,6 +251,9 @@ def main() -> int:
     ap.add_argument("--initramfs", type=Path, help="boot initramfs; omit with --no-boot")
     ap.add_argument("--rdinit", default="/init")
     ap.add_argument("--marker", default=DEFAULT_MARKER)
+    ap.add_argument("--check-marker", default=DEFAULT_CHECK_MARKER,
+                    help="marker the initramfs prints once its kernel checks "
+                         "pass; empty string requires only --marker")
     ap.add_argument("--boots", type=int, default=4,
                     help="boots, each at its own KASLR displacement")
     ap.add_argument("--kaslr-seed", action="append", metavar="SEED",
@@ -331,21 +355,26 @@ def main() -> int:
         for i, seed in enumerate(plan, start=1):
             out = Path(args.workdir) / f"boot-{args.arch}-{i}.log"
             text = boot(args, arch, image, out, args.rdinit, trees.get(seed))
-            ok, lines = args.marker in text, text.count("\n")
+            booted, lines = args.marker in text, text.count("\n")
+            checked = not args.check_marker or args.check_marker in text
+            ok = booted and checked
             tag = f"0x{seed:016x}" if seed is not None else "unpinned"
             # An unpinned boot draws its own displacement, which the probe's
             # does not stand for, so it is left unattributed.
             disp = (kaslr.format_offset(offsets.get(seed))
                     if seed is not None else "drawn")
             log(f"boot {i}/{len(plan)}: seed={tag} displacement={disp} "
-                f"marker={'yes' if ok else 'NO'} console-lines={lines}")
-            boots.append({"ok": ok, "lines": lines, "log": str(out),
+                f"marker={'yes' if booted else 'NO'} "
+                f"checks={'yes' if checked else 'NO'} console-lines={lines}")
+            boots.append({"ok": ok, "booted": booted, "checked": checked,
+                          "lines": lines, "log": str(out),
                           "seed": tag, "offset": disp})
             if not ok:
                 replay = (f"; replay with --kaslr-seed 0x{seed:016x}"
                           if seed is not None else "")
-                failures.append(f"boot {i} did not reach {args.marker!r} "
-                                f"(see {out}){replay}")
+                want = args.marker if not booted else args.check_marker
+                failures.append(f"boot {i} did not reach {want!r}"
+                                f"{last_step(text)} (see {out}){replay}")
         failures.extend(kaslr.displacement_failures(
             kaslr_configured(tree), plan, offsets))
 
@@ -371,8 +400,8 @@ def main() -> int:
     pinned = [s for s in plan if s is not None]
     where = (f" at {len({offsets.get(s) for s in pinned})} pinned displacements"
              if pinned else " at displacements the machine drew")
-    booted = (f", {len(boots)}/{len(boots)} boots reached the marker{where}"
-              if boots else "; not booted")
+    booted = (f", {len(boots)}/{len(boots)} boots reached the marker and "
+              f"passed the kernel checks{where}" if boots else "; not booted")
     built = (f"{len(units['badc'])} units, 0 fallbacks, 0 undefined refs"
              if args.build else "not built")
     log(f"PASS: {built}{booted}")

@@ -5058,6 +5058,25 @@ fn rotate_inline_const_count_matches_interpreter() {
 }
 
 #[test]
+fn phi_group_dead_phi_interference_terminates() {
+    // A dead phi shared the loop counter's register because the
+    // interference sweep sequenced the block's phi definitions, so the
+    // counter's phi was already retired when the dead one was scanned.
+    // The predecessor-edge copy then reset the counter every iteration
+    // and the -O loop never exited. The fixture tables run this at -O.
+    assert_eq!(run_fixture("phi_group_dead_phi_interference.c"), 0);
+}
+
+#[test]
+fn inline_by_value_aggregate_param_copy_is_a_copy() {
+    // C99 6.5.2.2p4: the splice must copy the argument into the
+    // parameter's relocated cell rather than bind the cell to the
+    // caller's object, which made a write through an aliasing pointer
+    // visible in the parameter.
+    assert_eq!(run_fixture("inline_by_value_aggregate_param_copy.c"), 0);
+}
+
+#[test]
 fn generic_selection_subscript_arm() {
     // A `_Generic` arm containing a subscript (`&x[0]`) must not break the
     // balanced-bracket association scan.

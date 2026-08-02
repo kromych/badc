@@ -16,9 +16,10 @@
 //!   `for_each_operand` walks a known set of `ValueId` fields. A
 //!   `LocalAddr` naming a frame slot is admitted only where the splice
 //!   has somewhere to send it: a register-passed struct parameter's slot
-//!   redirects to the caller's argument address, the slot a return
-//!   delivers through redirects to the caller's object, and the reloc
-//!   path relocates a callee's own slots into the caller's frame.
+//!   relocates into the caller's frame and the prefix copies the argument
+//!   into it, the slot a return delivers through redirects to the
+//!   caller's object, and the reloc path relocates a callee's own slots
+//!   into the caller's frame.
 //!
 //! Those constraints cover the small leaf helpers (R / Ch / Maj /
 //! Sigma / sigma in SHA-512, `lerp` / `fastfloor` / `grad` in
@@ -489,8 +490,8 @@ fn is_inline_candidate(
         return false;
     }
     // Host-ABI aggregates the splice itself has to reproduce: the callee's
-    // by-value parameters, whose frame copy redirects to the caller's
-    // argument address, and its return, which the splice delivers into the
+    // by-value parameters, whose frame copy the prefix re-emits from the
+    // caller's argument, and its return, which the splice delivers into the
     // caller's return slot. `agg_descs` also holds the layouts a nested
     // call's `arg_aggs` names; those are marshalled by the per-arch call
     // plan exactly as they would be out of line, so their class is not
@@ -505,10 +506,10 @@ fn is_inline_candidate(
     // A by-value parameter arrives as a single argument value -- the
     // address of the caller's copy (the SSA `Inst::Call` carries one arg
     // per struct parameter regardless of how many registers the ABI
-    // marshals it into), which the splice redirects the body's
-    // `LocalAddr(slot)` reads to. So a one- or two-register integer
-    // aggregate parameter is admissible; the redirect is identical either
-    // way. FP-class and memory-class parameters stay rejected. The return
+    // marshals it into), which the splice copies into the relocated
+    // parameter cell the body's `LocalAddr(slot)` reads. So a one- or
+    // two-register integer aggregate parameter is admissible; the copy is
+    // identical either way. FP-class and memory-class parameters stay rejected. The return
     // and the parameters are classified separately: a function whose
     // parameter and return share a layout interns one descriptor, and the
     // two sides classify differently (a return may be indirect where the
@@ -530,6 +531,19 @@ fn is_inline_candidate(
         if !integer_regs(d, false) {
             say(format_args!(
                 "aggregate parameter not in one or two integer registers"
+            ));
+            return false;
+        }
+    }
+    // A by-value aggregate parameter's cell is filled by the prologue from
+    // the incoming argument. The splice reproduces that copy into the
+    // relocated cell, which needs the cell to sit inside the callee's own
+    // local range the splice relocates.
+    for (i, _) in func.param_aggs.iter().enumerate().filter(|(_, a)| a.is_some()) {
+        let s = func.param_local_slots.get(i).copied().unwrap_or(0);
+        if s != 0 && !(s < 0 && -s <= func.locals) {
+            say(format_args!(
+                "by-value aggregate parameter cell outside the relocatable frame"
             ));
             return false;
         }
@@ -638,9 +652,9 @@ fn is_inline_candidate(
     // argument (a parameter past the ABI's argument registers).
     let forwarded = forwarded_param_cells(func, &used);
     // Frame slots holding a register-passed struct parameter's bytes. A
-    // body `LocalAddr` of one of these redirects to the caller's
-    // argument address at the splice; any other `LocalAddr` names a
-    // caller frame slot that does not exist after inlining.
+    // body `LocalAddr` of one of these names the relocated cell the splice
+    // copies the argument into; any other `LocalAddr` names a caller frame
+    // slot that does not exist after inlining.
     let param_agg_slots: BTreeSet<i64> = func
         .param_aggs
         .iter()
@@ -657,9 +671,9 @@ fn is_inline_candidate(
     // relocate into the caller frame), what gives an address-taken own
     // local a caller slot, and what carries an aggregate across blocks: an
     // aggregate return is copied field by field from the returned address
-    // into the caller's return slot, and a struct-parameter slot redirects
-    // to the caller's argument address. Every other single-block callee
-    // takes the flat path and keeps its strict gates.
+    // into the caller's return slot, and a struct-parameter slot is filled
+    // from the caller's argument. Every other single-block callee takes
+    // the flat path and keeps its strict gates.
     let reloc = func.blocks.len() > 1 || needs_reloc_splice(func);
     // On the flat path an aggregate return lives in the slot named by the
     // single `Return(LocalAddr(result_slot))`; the splice redirects that
@@ -695,8 +709,8 @@ fn is_inline_candidate(
     let out_ptr = if reloc { None } else { out_ptr_return(func) };
     // The per-field copy reads the returned address, so every aggregate
     // Return must carry one. A prologue-spilled struct-parameter slot
-    // would both relocate (its spill) and redirect (its address); reject
-    // the overlap.
+    // would take both the spill's relocation and the prefix copy into the
+    // same cell; reject the overlap.
     if reloc {
         if func.ret_agg.is_some()
             && func
@@ -1346,6 +1360,88 @@ fn rewrite_callee_inst(
     }
 }
 
+/// Frame slots holding a by-value aggregate parameter's bytes. These are
+/// `param_local_slots` entries: storage no instruction writes, filled by
+/// the prologue from the incoming argument registers.
+fn param_agg_slots(c: &FunctionSsa) -> BTreeSet<i64> {
+    c.param_aggs
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| a.is_some())
+        .filter_map(|(i, _)| c.param_local_slots.get(i).copied())
+        .filter(|&s| s != 0)
+        .collect()
+}
+
+/// Whether the splice must reproduce the prologue's copy of a by-value
+/// aggregate argument into the parameter's cell, rather than binding the
+/// cell to the caller's argument address.
+///
+/// Binding is the cheaper form and observationally equal while nothing
+/// writes the caller's object for the body's duration (C99 6.5.2.2p4:
+/// the parameter holds the argument's value as of the call). The pass
+/// has no alias analysis, so any write the body makes outside its own
+/// frame slots is taken to reach that object and forces the copy.
+///
+/// The match is exhaustive by design: a new instruction must be
+/// classified here rather than defaulting to "cannot write".
+fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
+    let agg_slots = param_agg_slots(c);
+    if agg_slots.is_empty() {
+        return false;
+    }
+    // An address the callee owns: one of its own frame slots. A bound
+    // parameter cell names the caller's object, so it is not one.
+    let own = |v: ValueId| {
+        matches!(c.insts.get(v as usize),
+            Some(Inst::LocalAddr(s)) if *s < 0 && !agg_slots.contains(s))
+    };
+    c.insts.iter().any(|i| match i {
+        Inst::Store { addr, .. } | Inst::SegStore { addr, .. } => !own(*addr),
+        Inst::Mcpy { dst, .. } => !own(*dst),
+        // A scaled index can leave the base object.
+        Inst::StoreIndexed { .. } => true,
+        Inst::StoreLocal { off, .. } => agg_slots.contains(off),
+        Inst::AtomicRmw { .. } | Inst::AtomicCas { .. } => true,
+        Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
+            true
+        }
+        // Extended asm writes through its output operands' destination
+        // addresses; a `"memory"` clobber widens that to anything, and
+        // stack-pointer asm is outside the model entirely.
+        Inst::InlineAsm { asm, args } => {
+            asm.clobber_memory
+                || asm.references_sp()
+                || asm
+                    .operands
+                    .iter()
+                    .zip(args)
+                    .any(|(o, &a)| o.is_output && !own(a))
+        }
+        Inst::Intrinsic { .. } => true,
+        Inst::Imm(_)
+        | Inst::ImmData(_)
+        | Inst::ImmCode(_)
+        | Inst::ImmExtCode(_)
+        | Inst::BlockAddr(_)
+        | Inst::LocalAddr(_)
+        | Inst::TlsAddr(_)
+        | Inst::Load { .. }
+        | Inst::LoadLocal { .. }
+        | Inst::LoadIndexed { .. }
+        | Inst::SegLoad { .. }
+        | Inst::Binop { .. }
+        | Inst::BinopI { .. }
+        | Inst::Fneg(_)
+        | Inst::Fma { .. }
+        | Inst::Extend { .. }
+        | Inst::FpCast { .. }
+        | Inst::AllocaInit(_)
+        | Inst::ParamRef { .. }
+        | Inst::Phi { .. } => false,
+    })
+}
+
 /// The argument list a splice binds the callee's parameters to, with
 /// every by-value aggregate argument in address form.
 ///
@@ -1355,27 +1451,27 @@ fn rewrite_callee_inst(
 /// parameter list is not in scope at the call site -- a redeclaration
 /// that drops it, or a call past the declared parameters -- the walker
 /// instead loads the aggregate's single eightbyte into a machine word
-/// and leaves `arg_aggs[i]` unset. The splice binds the callee's
-/// parameter cell to the operand and the body reads members off it, so
-/// it needs the address: recover the one that load reads, which is the
-/// address of the caller's copy either way.
+/// and leaves `arg_aggs[i]` unset. The splice copies from the operand
+/// into the parameter's cell, so it needs the address: recover the one
+/// that load reads, which is the address of the caller's copy either
+/// way.
 ///
 /// `None` when a value-form argument is not a recoverable load, so the
-/// caller declines the site rather than binding a value where the body
-/// dereferences an address.
+/// caller declines the site rather than copying from a value where the
+/// body needs an address.
 fn splice_arg_addresses(
     insts: &[Inst],
     args: &[ValueId],
     arg_aggs: &[Option<u32>],
     callee: &FunctionSsa,
 ) -> Option<Vec<ValueId>> {
-    // Parameters whose cell the splice redirects to the argument;
-    // mirrors the `param_slot_arg` maps both splice paths build.
-    let redirected = |i: usize| {
+    // Parameters whose cell the splice fills from the argument; mirrors
+    // the `param_slot_copy` list `splice_multi_block` builds.
+    let copied = |i: usize| {
         callee.param_aggs.get(i).copied().flatten().is_some()
             && callee.param_local_slots.get(i).copied().unwrap_or(0) != 0
     };
-    let value_form = |i: usize| redirected(i) && arg_aggs.get(i).copied().flatten().is_none();
+    let value_form = |i: usize| copied(i) && arg_aggs.get(i).copied().flatten().is_none();
     if !(0..args.len()).any(value_form) {
         return Some(args.to_vec());
     }
@@ -1569,18 +1665,46 @@ fn splice_multi_block(
         .ret_agg
         .map(|i| agg_pieces(&callee.agg_descs[i as usize]));
     // Frame slots holding a register-passed struct parameter's bytes,
-    // mapped to the parameter index whose argument replaces the body's
-    // `LocalAddr(slot)`. That argument is the address of the caller's
-    // copy because `splice_arg_addresses` normalised the list to the
-    // address form before the site was accepted.
-    let param_slot_arg: BTreeMap<i64, usize> = callee
-        .param_aggs
-        .iter()
-        .enumerate()
-        .filter(|(_, a)| a.is_some())
-        .filter_map(|(i, _)| callee.param_local_slots.get(i).map(|&s| (s, i)))
-        .filter(|&(s, _)| s != 0)
-        .collect();
+    // mapped to (parameter index, layout). The cell relocates into the
+    // caller frame with the callee's other own locals; the prefix copies
+    // the argument into it, which is what the prologue does out of line.
+    // `splice_arg_addresses` normalised each such argument to the address
+    // of the caller's copy, so it is the copy's source. A cell the body
+    // never names is unobservable and takes no copy.
+    let names_slot = |s: i64| {
+        callee.insts.iter().any(|i| match i {
+            Inst::LocalAddr(o) | Inst::LoadLocal { off: o, .. } | Inst::StoreLocal { off: o, .. } => {
+                *o == s
+            }
+            _ => false,
+        })
+    };
+    let param_slot_copy: Vec<(i64, usize, u32)> = if needs_param_agg_copy(callee) {
+        callee
+            .param_aggs
+            .iter()
+            .enumerate()
+            .filter_map(|(i, a)| a.map(|d| (i, d)))
+            .filter_map(|(i, d)| callee.param_local_slots.get(i).map(|&s| (s, i, d)))
+            .filter(|&(s, ..)| s != 0 && names_slot(s))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    // Cells with no copy bind to the caller's argument instead; the body's
+    // `LocalAddr(slot)` reads resolve to it and no instruction is emitted.
+    let param_slot_arg: BTreeMap<i64, usize> = if param_slot_copy.is_empty() {
+        callee
+            .param_aggs
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| a.is_some())
+            .filter_map(|(i, _)| callee.param_local_slots.get(i).map(|&s| (s, i)))
+            .filter(|&(s, _)| s != 0)
+            .collect()
+    } else {
+        BTreeMap::new()
+    };
     // Caller-block-id remap: blocks > splice shift by +1 to make room
     // for the postfix.
     let shift_caller_bid = |b: u32| -> u32 {
@@ -1759,6 +1883,9 @@ fn splice_multi_block(
         for pc in splice_block.inst_range.start..call_pc {
             count(pc, &mut remap, &mut at);
         }
+        // The by-value aggregate parameter copies close the prefix block:
+        // a `LocalAddr` of the relocated cell plus the `Mcpy` per parameter.
+        at += 2 * param_slot_copy.len() as u32;
         // The aggregate-return copy opens the postfix block: one
         // `LocalAddr(ret_slot)` plus a load and a store per piece. The ids
         // are position arithmetic like everything else; only the copy's own
@@ -1802,9 +1929,8 @@ fn splice_multi_block(
                             at - 1
                         };
                     }
-                    // A struct-parameter slot's address is the caller's
-                    // argument, normalised to the address of its copy by
-                    // `splice_arg_addresses`; no instruction is emitted.
+                    // A bound parameter cell resolves to the caller's
+                    // argument; no instruction is emitted for it.
                     Inst::LocalAddr(s) if param_slot_arg.contains_key(s) => {
                         callee_remap[ce_pc as usize] = counted_args
                             .get(param_slot_arg[s])
@@ -1914,6 +2040,30 @@ fn splice_multi_block(
                 &mut remap,
                 &mut original,
             );
+        }
+        // The prologue's copy of each by-value aggregate argument into the
+        // parameter's cell, reproduced here because the splice removes the
+        // prologue. C99 6.5.2.2p4: the parameter holds the argument's value
+        // as of the call, so the body must not read the caller's object --
+        // which a write through another pointer into it would change.
+        for &(slot, i, desc) in &param_slot_copy {
+            let src = call_args.get(i).map(|&a| map_v(a, &remap)).unwrap_or(NO_VALUE);
+            let d = &callee.agg_descs[desc as usize];
+            let dst = new_insts.len() as u32;
+            new_insts.push(Inst::LocalAddr(slot - region_base));
+            new_inst_src.push((0, 0));
+            new_f32.push(false);
+            // The type's alignment is the bound both endpoints are known
+            // to meet: the destination is a frame slot and the source is
+            // the caller's object of this type.
+            new_insts.push(Inst::Mcpy {
+                dst,
+                src,
+                size: d.size as i64,
+                align: d.align,
+            });
+            new_inst_src.push((0, 0));
+            new_f32.push(false);
         }
         let callee_entry_new_id = callee_block_base;
         new_blocks.push(Block {
@@ -2095,10 +2245,8 @@ fn splice_multi_block(
                         );
                         continue;
                     }
-                    // A struct-parameter slot redirects to the caller's
-                    // argument -- the address of its copy, normalised by
-                    // `splice_arg_addresses` -- with no instruction emitted,
-                    // mirroring the counting pass and the flat splice.
+                    // A bound parameter cell resolves to the caller's
+                    // argument, mirroring the counting pass.
                     Inst::LocalAddr(s) if param_slot_arg.contains_key(s) => {
                         callee_remap[ce_pc as usize] = remapped_args
                             .get(param_slot_arg[s])
@@ -2506,6 +2654,13 @@ fn needs_reloc_splice(c: &FunctionSsa) -> bool {
     if c.insts.iter().any(|i| matches!(i, Inst::InlineAsm { .. })) {
         return true;
     }
+    // A by-value aggregate parameter's cell that needs the argument copy
+    // is relocated into the caller frame and filled there, which only the
+    // relocating path emits. A cell that binds to the argument instead
+    // needs nothing this path does not already provide.
+    if needs_param_agg_copy(c) {
+        return true;
+    }
     let result = flat_result_slot(c);
     c.insts
         .iter()
@@ -2665,9 +2820,15 @@ fn inline_caller(
                     let out_ptr = out_ptr_return(callee);
                     // A register-passed struct parameter is read in the
                     // body through `LocalAddr(slot)`; map each such slot to
-                    // its parameter index so the splice redirects it to the
+                    // its parameter index so the splice binds it to the
                     // caller's argument address (`splice_arg_addresses`
-                    // established that the argument is one).
+                    // established that the argument is one). A cell needing
+                    // the argument copy instead takes the relocating path,
+                    // which `needs_reloc_splice` routes it to.
+                    debug_assert!(
+                        !needs_param_agg_copy(callee),
+                        "flat splice reached a callee whose parameter cell needs the argument copy"
+                    );
                     let param_slot_arg: BTreeMap<i64, usize> = callee
                         .param_aggs
                         .iter()

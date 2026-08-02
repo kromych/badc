@@ -13,8 +13,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
-               	leaq	-0x48(%rbp), %rax
+               	subq	$0x70, %rsp
+               	leaq	-0x68(%rbp), %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -29,11 +29,11 @@ Disassembly of section .text:
                	cmpq	$0x127a9e, %rax         # imm = 0x127A9E
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x50, %rsp
+               	addq	$0x70, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x50, %rsp
+               	addq	$0x70, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax

@@ -1932,6 +1932,70 @@ fn always_inline_immediate_asm_operand_drops_standalone_body() {
 }
 
 #[test]
+fn always_inline_large_struct_return_folds_on_both_return_conventions() {
+    // A >16-byte aggregate return reaches its caller through a
+    // caller-provided destination, and which one is the target's
+    // business: the hidden out-pointer argument on System V AMD64
+    // (MEMORY class) and the indirect-result register on AAPCS64. Both
+    // are mandatory-request shapes the splice reproduces, so neither
+    // target may leave the request unhonoured -- the guard on the
+    // returned `level` then folds and the undefined `bug` it decides
+    // leaves no reference in the object.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        extern void bug(void);\n\
+        struct state { void *base; void *table; unsigned long span;\n\
+                       unsigned long off; unsigned int level;\n\
+                       unsigned short idx; unsigned char kind; };\n\
+        static void tag(struct state *s, unsigned char k) { s->kind = k; }\n\
+        static __attribute__((always_inline))\n\
+        struct state mk_state(void *base, unsigned int level) {\n\
+            struct state s = { .base = base, .level = level, .span = 4096ul };\n\
+            tag(&s, 7);\n\
+            return s;\n\
+        }\n\
+        static __attribute__((always_inline))\n\
+        struct state wrap(void *base) { return mk_state(base, 5u); }\n\
+        unsigned long probe(void *p);\n\
+        unsigned long probe(void *p) {\n\
+            struct state s = mk_state(p, 3u);\n\
+            if (s.level != 3u) bug();\n\
+            if (s.kind != 7) bug();\n\
+            if (s.table != 0 || s.off != 0ul || s.idx != 0) bug();\n\
+            struct state w = wrap(p);\n\
+            if (w.level != 5u) bug();\n\
+            return s.span + s.level + w.level;\n\
+        }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            gnu: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(String::from(src), target, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            optimize: true,
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        assert!(
+            !obj.symbols.iter().any(|s| s.name == "bug"),
+            "{target:?}: the folded guard must leave no reference to `bug`"
+        );
+        assert!(
+            !obj.symbols.iter().any(|s| s.name == "mk_state"),
+            "{target:?}: the inlined callee must not keep an out-of-line body"
+        );
+    }
+}
+
+#[test]
 fn asm_replacement_mem_operand_resolves_nested_global_offset() {
     // A replacement instruction in an executable inline-asm section
     // (`.pushsection ...,"ax"`) whose `%a[N]` memory operand names a

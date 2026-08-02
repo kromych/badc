@@ -112,9 +112,9 @@ Disassembly of section .text:
                	b	<addr>
                	mov	w1, w0
                	mov	w1, w1
-               	mov	w1, w1
-               	mov	w2, w0
-               	cmp	x1, x2
+               	mov	w2, w1
+               	mov	w1, w0
+               	cmp	x2, x1
                	b.ne	<addr>
                	mov	w0, w0
                	add	x0, x0, #0x1

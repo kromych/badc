@@ -50,39 +50,9 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
-               	movl	$0xa, %edi
-               	callq	<addr>
-               	cmpq	$-0x3de, %rax           # imm = 0xFC22
-               	je	<addr>
-               	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0xa, %edi
-               	callq	<addr>
-               	cmpq	$0xc27, %rax            # imm = 0xC27
-               	je	<addr>
-               	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0xa, %edi
-               	callq	<addr>
-               	cmpq	$0x8a3, %rax            # imm = 0x8A3
-               	je	<addr>
-               	movl	$0x3, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
+               	movabsq	$-0xa, %rax
+               	movl	$0x1f, %ecx
+               	movl	$0x16, %eax
                	movl	$0x2, %eax
                	movl	$0x17, %ecx
                	xorq	%rax, %rax

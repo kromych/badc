@@ -121,9 +121,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	%eax, %ecx
                	movl	%ecx, %ecx
-               	movl	%ecx, %ecx
-               	movl	%eax, %edx
-               	cmpq	%rdx, %rcx
+               	movl	%ecx, %edx
+               	movl	%eax, %ecx
+               	cmpq	%rcx, %rdx
                	jne	<addr>
                	movl	%eax, %eax
                	incq	%rax

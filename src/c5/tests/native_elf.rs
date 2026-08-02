@@ -943,3 +943,64 @@ fn strict_align_aggregate_copy_moves_every_byte_aarch64() {
         );
     }
 }
+
+/// A frame past the 24-bit reach of the immediate `ADD`/`SUB`, driven
+/// through an `always_inline` helper (no size or frame budget applies to
+/// one). The probed prologue, the register-form teardown and the
+/// materialised slot addresses must all agree. The indices come from
+/// `argc` so the buffer survives store forwarding. Runs under a raised
+/// stack limit so the frame fits.
+#[test]
+fn frame_past_the_immediate_reach_runs() {
+    const SIZE: usize = 20_000_000;
+    let src = format!(
+        "static __attribute__((always_inline)) inline long helper(char *p, long i, long j) {{\n\
+             p[i] = 2;\n\
+             p[j] = 3;\n\
+             return (long)p[i] + (long)p[j];\n\
+         }}\n\
+         int main(int argc, char **argv) {{\n\
+             char buf[{SIZE}];\n\
+             long i;\n\
+             long j;\n\
+             (void)argv;\n\
+             i = argc & 0xffff;\n\
+             j = (long)sizeof buf - i;\n\
+             return (int)helper(buf, i, j);\n\
+         }}\n"
+    );
+
+    let program = Compiler::new(super::with_prelude(&src))
+        .compile()
+        .expect("compile");
+    let bytes = emit_native_with_options(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::new().with_optimize(),
+    )
+    .expect("emit_native");
+    // `add sp, sp, x16` -- the immediate forms top out at 16 MiB.
+    assert!(
+        bytes.windows(4).any(|w| w == 0x8B30_63FFu32.to_le_bytes()),
+        "expected the register-form stack teardown"
+    );
+
+    let path = unique_temp_path("badc-elf-aarch64-frame", "large_frame");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(format!("ulimit -s 65536 && exec {}", path.display()))
+        .output()
+        .expect("run under a raised stack limit");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(5),
+        "a frame past the immediate stack-adjustment reach miscomputed"
+    );
+}

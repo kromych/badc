@@ -3122,7 +3122,11 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             // the threshold and is unaffected. A non-recursive caller is
             // bounded by the cumulative code-growth budget instead, so small
             // fragments cannot compound across the fixpoint into a function
-            // whose frame overflows a small stack.
+            // whose frame overflows a small stack. Both budgets are runtime
+            // stack / code-size heuristics, not a codegen bound: a marked
+            // callee is admitted at any caller size, and the frame it grows
+            // is representable up to the backends' addressable maximum,
+            // which the per-function emit checks and reports.
             let recursive = caller
                 .insts
                 .iter()

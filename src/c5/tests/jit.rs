@@ -1348,6 +1348,42 @@ fn long_lived_base_pointer_survives_shift_count_and_store_scratch() {
     );
 }
 
+/// `always_inline` is a mandatory request -- gcc and clang report a
+/// diagnostic when they cannot honour one rather than declining -- so the
+/// inliner's size and frame budgets do not apply to it, and the splice
+/// relocates the callee's own slots into the caller's frame. Every
+/// relocated slot must still address correctly past the single-instruction
+/// and scaled-immediate reaches. The index comes from the parameter so the
+/// buffer survives store forwarding; the frame stays under the guest main
+/// thread's 8 MiB stack. Reach past the 24-bit immediate form is covered by
+/// the encoder and image tests.
+#[test]
+fn always_inline_frame_growth_runs_correctly() {
+    const COPIES: usize = 20;
+    let mut src = String::from(
+        "static __attribute__((always_inline)) inline long helper(long n) {\n\
+             char buf[300000];\n\
+             long i = n & 0xffff;\n\
+             buf[i] = (char)n;\n\
+             if (n > 0) { buf[i + 1] = 2; } else { buf[i + 1] = 0; }\n\
+             return (long)buf[i] + (long)buf[i + 1];\n\
+         }\n\
+         int main(void) {\n\
+             long s = 0;\n",
+    );
+    for _ in 0..COPIES {
+        src.push_str("    s += helper(1);\n");
+    }
+    src.push_str("    return (int)s;\n}\n");
+    // helper(1) == 1 + 2.
+    let want = (COPIES * 3) as i32;
+    assert_eq!(
+        jit_exit_native_optimized(&src, &["always-inline-frame"]),
+        want,
+        "an always_inline chain that grew the caller frame miscomputed"
+    );
+}
+
 #[test]
 fn large_stack_frame_is_page_probed() {
     // A function whose frame exceeds one 4 KiB page. On Win64 the

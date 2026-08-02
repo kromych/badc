@@ -314,6 +314,26 @@ pub(crate) fn enc_add_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     0x9140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `ADD <Xd|SP>, <Xn|SP>, <Xm>, UXTX #0` -- the extended-register
+/// form, the only register add whose Rn / Rd may be SP (the
+/// shifted-register form reads register 31 as XZR).
+pub(crate) fn enc_add_ext_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0x8B20_6000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `SUB <Xd|SP>, <Xn|SP>, <Xm>, UXTX #0`. Mirror of
+/// [`enc_add_ext_reg`].
+pub(crate) fn enc_sub_ext_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0xCB20_6000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// True when `bytes` fits the two-instruction split of `ADD` / `SUB`
+/// (immediate): a 12-bit value plus a 12-bit value left-shifted by 12.
+/// Past it an offset must be materialised into a register.
+pub(crate) fn add_sub_imm24_in_range(bytes: u32) -> bool {
+    bytes < (1 << 24)
+}
+
 /// Subtract `bytes` from SP in one instruction. AArch64's `SUB
 /// (immediate)` carries a 12-bit value optionally left-shifted by 12, so
 /// `bytes < 4096` encodes directly and a multiple of 4096 encodes
@@ -346,7 +366,7 @@ pub(crate) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
         return;
     }
     assert!(
-        bytes < (1 << 24),
+        add_sub_imm24_in_range(bytes),
         "stack adjustment too large for 24-bit ADD immediate: {bytes} bytes"
     );
     let high = bytes & !0xfff;
@@ -357,6 +377,21 @@ pub(crate) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
     if low != 0 {
         emit(code, enc_add_imm(Reg::SP, Reg::SP, low));
     }
+}
+
+/// Add any 32-bit `bytes` to SP. Past the 24-bit immediate reach the
+/// count is materialised into `scratch` and applied with the
+/// extended-register form, so the frame size is bounded by the
+/// frame-offset width rather than by the immediate encoding. Growing sp
+/// needs no probe: it moves back over bytes the frame already reached.
+/// `scratch` must be dead across the adjustment.
+pub(crate) fn emit_add_sp_imm_scratch(code: &mut Vec<u8>, bytes: u32, scratch: Reg) {
+    if add_sub_imm24_in_range(bytes) {
+        emit_add_sp_imm(code, bytes);
+        return;
+    }
+    load_imm64(code, scratch, bytes as u64);
+    emit(code, enc_add_ext_reg(Reg::SP, Reg::SP, scratch));
 }
 
 // ---- 3-register arithmetic / bitwise (shifted-register form, no shift). ----
@@ -1665,6 +1700,7 @@ pub(crate) fn lower(
             alloc::collections::BTreeMap::new(),
         ),
     };
+    super::ssa::emit_common::check_frame_limits(&ssa_funcs)?;
     // Frame slots mem2reg promoted to registers (-O) or that slot
     // coalescing moved onto shared storage: the debug-info emitter drops
     // their stale frame location. Slots coalescing moved to a new exclusive
@@ -2694,6 +2730,36 @@ mod tests {
         assert_eq!(enc_lslv(r(0), r(1), r(2)), 0x9AC2_2020);
         assert_eq!(enc_asrv(r(0), r(1), r(2)), 0x9AC2_2820);
         assert_eq!(enc_lsrv(r(0), r(1), r(2)), 0x9AC2_2420);
+    }
+
+    #[test]
+    fn extended_register_forms_accept_sp() {
+        // sub sp, sp, x16 / add sp, sp, x16 / add x0, sp, x0
+        assert_eq!(enc_sub_ext_reg(Reg::SP, Reg::SP, r(16)), 0xCB30_63FF);
+        assert_eq!(enc_add_ext_reg(Reg::SP, Reg::SP, r(16)), 0x8B30_63FF);
+        assert_eq!(enc_add_ext_reg(r(0), Reg::SP, r(0)), 0x8B20_63E0);
+    }
+
+    #[test]
+    fn sp_restore_past_immediate_reach_uses_register_form() {
+        // Tearing down a frame beyond the 24-bit immediate reach materialises
+        // the byte count and applies it with the extended-register form rather
+        // than truncating or refusing.
+        let bytes = 20_000_016u32;
+        assert!(!add_sub_imm24_in_range(bytes));
+        let mut add = Vec::new();
+        emit_add_sp_imm_scratch(&mut add, bytes, Reg(16));
+        let mut want = Vec::new();
+        load_imm64(&mut want, Reg(16), bytes as u64);
+        emit(&mut want, enc_add_ext_reg(Reg::SP, Reg::SP, Reg(16)));
+        assert_eq!(add, want);
+
+        // In-reach counts keep the two-instruction immediate form.
+        let mut small = Vec::new();
+        emit_add_sp_imm_scratch(&mut small, 0x11180, Reg(16));
+        let mut want_small = Vec::new();
+        emit_add_sp_imm(&mut want_small, 0x11180);
+        assert_eq!(small, want_small);
     }
 
     #[test]

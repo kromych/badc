@@ -424,9 +424,15 @@ fn sp_imm12_in_range(off: u32, access_size: u32) -> bool {
 }
 
 /// Materialise `sp + off` into `dst`. Uses the shift-12 + remainder
-/// split of `ADD (immediate)` (24-bit reach), which covers any frame
-/// size the prologue itself can allocate.
+/// split of `ADD (immediate)` (24-bit reach); past that the offset is
+/// built into `dst` and applied with the extended-register form (the
+/// only register add that accepts SP as the source).
 fn emit_sp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
+    if !super::encode::add_sub_imm24_in_range(off) {
+        super::encode::load_imm64(code, dst, off as u64);
+        emit(code, super::encode::enc_add_ext_reg(dst, Reg(31), dst));
+        return;
+    }
     let hi = off & !0xfff;
     let lo = off & 0xfff;
     if hi != 0 {
@@ -448,6 +454,11 @@ fn emit_sp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
 /// frame-relative address of the first variadic argument: the macOS
 /// arm64 incoming-stack slot, or the Windows arm64 gr-save slot.
 fn emit_sp_plus_off_from_fp(code: &mut Vec<u8>, dst: Reg, off: u32) {
+    if !super::encode::add_sub_imm24_in_range(off) {
+        super::encode::load_imm64(code, dst, off as u64);
+        emit(code, super::encode::enc_add_reg(dst, Reg(29), dst));
+        return;
+    }
     let hi = off & !0xfff;
     let lo = off & 0xfff;
     if hi != 0 {
@@ -560,8 +571,14 @@ fn fp_spill_delta(frame: Frame, sp_off: u32) -> u32 {
     frame.frame_bytes - sp_off
 }
 
-/// Materialise `fp - delta` into `dst` (imm12 + shift-12 split).
+/// Materialise `fp - delta` into `dst` (imm12 + shift-12 split, then
+/// the register form past the 24-bit reach).
 fn emit_fp_minus_off(code: &mut Vec<u8>, dst: Reg, delta: u32) {
+    if !super::encode::add_sub_imm24_in_range(delta) {
+        super::encode::load_imm64(code, dst, delta as u64);
+        emit(code, super::encode::enc_sub_reg(dst, Reg(29), dst));
+        return;
+    }
     let hi = delta & !0xfff;
     let lo = delta & 0xfff;
     if hi != 0 {
@@ -737,7 +754,17 @@ pub(crate) fn emit_function(
         a.strict_align = strict_align;
         a
     };
+    if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
+        bail_msg(&super::ssa::emit_common::frame_too_large_msg(bytes));
+        return false;
+    }
     let frame = compute_frame(func, alloc, abi, target);
+    if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
+        bail_msg(&super::ssa::emit_common::frame_too_large_msg(
+            frame.frame_bytes as i64,
+        ));
+        return false;
+    }
     let scratch = ScratchPool::new();
     let snapshot = code.len();
     // Snapshot every fixup vector at function entry so a partial
@@ -6997,21 +7024,9 @@ fn emit_local_addr(
             return false;
         }
     };
-    // `add rd, sp, #region_off` -- region_off fits the 24-bit add-imm reach.
-    let r = region_off as u64;
-    let hi = r & !0xfff;
-    let lo = r & 0xfff;
-    if hi != 0 {
-        emit(
-            code,
-            super::encode::enc_add_imm_lsl12(rd, Reg(31), (hi >> 12) as u32),
-        );
-        if lo != 0 {
-            emit(code, enc_add_imm(rd, rd, lo as u32));
-        }
-    } else {
-        emit(code, enc_add_imm(rd, Reg(31), lo as u32));
-    }
+    // `rd = sp + region_off`, through the shared sp-relative helper so an
+    // offset past the immediate reach materialises rather than truncating.
+    emit_sp_plus_off(code, rd, region_off.max(0) as u32);
     spill_local_addr_to_dst(code, dst, rd, frame);
     true
 }
@@ -7073,10 +7088,16 @@ fn emit_local_addr_fp(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) ->
         spill_local_addr_to_dst(code, dst, rd, frame);
         return true;
     }
-    bail_msg(&alloc::format!(
-        "LocalAddr: offset {bytes} exceeds 24-bit reach"
-    ));
-    false
+    // Past the 24-bit immediate reach: build the displacement and apply
+    // it with the register form.
+    super::encode::load_imm64(code, rd, abs);
+    if bytes >= 0 {
+        emit(code, super::encode::enc_add_reg(rd, Reg(29), rd));
+    } else {
+        emit(code, super::encode::enc_sub_reg(rd, Reg(29), rd));
+    }
+    spill_local_addr_to_dst(code, dst, rd, frame);
+    true
 }
 
 /// Pick the working register for a single-result int inst:
@@ -9190,7 +9211,9 @@ fn emit_return(
     } else {
         emit_epilogue_restore_regs(code, alloc, frame, 0);
         if frame.frame_bytes > 0 {
-            emit_add_sp_imm(code, frame.frame_bytes);
+            // x16 is call-clobbered and carries no result, so it is free
+            // to hold a frame size past the immediate reach.
+            super::encode::emit_add_sp_imm_scratch(code, frame.frame_bytes, Reg(16));
         }
         emit(code, enc_ldp_post(Reg(29), Reg(30), Reg(31), 16));
     }

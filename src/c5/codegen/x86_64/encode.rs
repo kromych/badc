@@ -1793,6 +1793,7 @@ pub(crate) fn lower(
             alloc::collections::BTreeMap::new(),
         ),
     };
+    super::ssa::emit_common::check_frame_limits(&ssa_funcs)?;
     // Frame slots mem2reg promoted to registers (-O) or that slot
     // coalescing moved onto shared storage: the debug-info emitter drops
     // their stale frame location. Slots coalescing moved to a new exclusive

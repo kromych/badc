@@ -46,18 +46,27 @@ static int check_const(void) {
 // Regression: a NAMED union still initializes correctly.
 struct Named { union { unsigned char d[4]; int x; } un; int tag; };
 
+// A volatile pointer keeps the object in memory, so the initializer's
+// stores are emitted and read back rather than forwarded to the checks.
+static void *opaque(void *p) { void *volatile q = p; return q; }
+
 static int check_runtime(int p, int q) {
     // Runtime-local: anon union array member filled with runtime values.
     UUID u = { { { p, q, p + q, p * q } } };
-    if (u.data[0] != (unsigned char)p || u.data[3] != (unsigned char)(p * q)) return 10;
+    UUID *ru = opaque(&u);
+    if (ru->data[0] != (unsigned char)p || ru->data[3] != (unsigned char)(p * q)) return 10;
 
     struct Named n = { { { 9, 8, 7, 6 } }, p };
-    if (n.un.d[0] != 9 || n.un.d[3] != 6 || n.tag != p) return 11;
+    struct Named *rn = opaque(&n);
+    if (rn->un.d[0] != 9 || rn->un.d[3] != 6 || rn->tag != p) return 11;
     return 0;
 }
 
 int main(void) {
     int rc = check_const();
     if (rc) return rc;
-    return check_runtime(3, 5);
+    // `volatile` keeps the element values runtime values, so the runtime
+    // store path is really emitted.
+    volatile int p = 3, q = 5;
+    return check_runtime(p, q);
 }

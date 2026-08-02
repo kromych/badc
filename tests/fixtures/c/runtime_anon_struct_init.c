@@ -26,32 +26,46 @@ struct nested {
     struct with_anon_struct inner;
 };
 
+/* A volatile pointer keeps the object in memory, so the initializer's
+   stores are emitted and read back rather than forwarded to the checks. */
+static void *opaque(void *p) { void *volatile q = p; return q; }
+
 static int check_anon_struct(void *p, unsigned long n) {
     /* positional brace on the flattened anon-struct region */
     struct with_anon_struct s1 = { .a = 1, { p, n }, .b = 7 };
     /* flattened members named directly as designators */
     struct with_anon_struct s2 = { .a = 2, .p = p, .n = n, .b = 8 };
-    if (s1.a != 1 || s1.p != p || s1.n != n || s1.b != 7) return 1;
-    if (s2.a != 2 || s2.p != p || s2.n != n || s2.b != 8) return 2;
+    struct with_anon_struct *r1 = opaque(&s1);
+    struct with_anon_struct *r2 = opaque(&s2);
+    if (r1->a != 1 || r1->p != p || r1->n != n || r1->b != 7) return 1;
+    if (r2->a != 2 || r2->p != p || r2->n != n || r2->b != 8) return 2;
     return 0;
 }
 
 static int check_anon_union(void *p) {
     struct with_anon_union u = { .tag = 3, .ptr = p };
-    return (u.tag == 3 && u.ptr == p) ? 0 : 3;
+    struct with_anon_union *r = opaque(&u);
+    return (r->tag == 3 && r->ptr == p) ? 0 : 3;
 }
 
 static int check_nested(void *p, unsigned long n) {
     struct nested nn = { .a = 9, .inner = { .a = 4, { p, n }, .b = 5 } };
-    return (nn.a == 9 && nn.inner.a == 4 && nn.inner.p == p
-            && nn.inner.n == n && nn.inner.b == 5) ? 0 : 4;
+    struct nested *r = opaque(&nn);
+    return (r->a == 9 && r->inner.a == 4 && r->inner.p == p
+            && r->inner.n == n && r->inner.b == 5) ? 0 : 4;
 }
 
 int main(void) {
     int x = 0;
     int r;
-    if ((r = check_anon_struct(&x, 16))) return r;
-    if ((r = check_anon_union(&x))) return r;
-    if ((r = check_nested(&x, 24))) return r;
+    /* `volatile` keeps the element values runtime values, so the runtime
+       store path is really emitted rather than folded to the checks. */
+    int *volatile xp = &x;
+    volatile unsigned long n = 16;
+    int *p = xp;
+    if ((r = check_anon_struct(p, n))) return r;
+    if ((r = check_anon_union(p))) return r;
+    n = 24;
+    if ((r = check_nested(p, n))) return r;
     return 0;
 }

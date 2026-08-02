@@ -18,13 +18,19 @@ int g;
 int arr[4] = {10, 20, 30, 40};
 
 int main(void) {
+    // `volatile` keeps the initialized values out of the folder, so the
+    // runtime initialization really runs and its result is read back.
+    volatile unsigned long seen;
+
     // Address tagging through OR / shift: runtime initialization.
     struct tagged a = (struct tagged){.bits = ((unsigned long)&g) | 1u};
-    if ((a.bits & 1u) == 0) return 1;
-    if ((a.bits & ~1ul) != (unsigned long)&g) return 2;
+    seen = a.bits;
+    if ((seen & 1u) == 0) return 1;
+    if ((seen & ~1ul) != (unsigned long)&g) return 2;
 
     struct tagged b = (struct tagged){.bits = ((unsigned long)&g) >> 2};
-    if (b.bits != (((unsigned long)&g) >> 2)) return 3;
+    seen = b.bits;
+    if (seen != (((unsigned long)&g) >> 2)) return 3;
 
     // Bare address and address-plus-constant stay link-time constants.
     struct ptrs c = (struct ptrs){.p = &g, .q = &arr[2]};

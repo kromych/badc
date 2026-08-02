@@ -775,3 +775,102 @@ fn dylib_export_dlopen_call_returns_42() {
     let _ = std::fs::remove_file(&path);
     assert_eq!(exit_code, 42, "dylib export returned wrong value");
 }
+
+/// The symbols this process publishes for the shared library below to
+/// bind against. `#[used]` keeps each in the executable's export table
+/// -- the scope a flat-namespace bind resolves against -- past the
+/// linker's dead-strip; a function needs a `#[used]` reference of its
+/// own since the attribute applies to statics.
+#[used]
+#[unsafe(no_mangle)]
+pub static badc_host_var: std::os::raw::c_int = 0x5eed;
+
+#[unsafe(no_mangle)]
+pub extern "C" fn badc_host_fn() -> std::os::raw::c_int {
+    0xbeef
+}
+
+#[used]
+static BADC_HOST_FN_KEEP: extern "C" fn() -> std::os::raw::c_int = badc_host_fn;
+
+/// A shared library reads a data symbol only the host defines. The read
+/// has to reach the host's object; binding it to the library's own call
+/// stub returns the stub's instruction bytes instead, which no
+/// diagnostic catches -- the load succeeds and the value is wrong. The
+/// paired call proves the stub path still works.
+#[test]
+fn dylib_reads_host_data_symbol_through_its_import_slot() {
+    use crate::NativeOptions;
+    use std::ffi::CString;
+    use std::os::raw::{c_int, c_void};
+
+    let src = "
+        extern int badc_host_var;
+        extern int badc_host_fn(void);
+        #pragma export(read_host_var)
+        int read_host_var(void) { return badc_host_var; }
+        #pragma export(call_host_fn)
+        int call_host_fn(void) { return badc_host_fn(); }
+    ";
+    let program = Compiler::with_target(src.to_string(), Target::MacOSAarch64)
+        .compile()
+        .expect("compile");
+    let bytes =
+        super::link_shared_library(&program, Target::MacOSAarch64, NativeOptions::default())
+            .expect("link shared library");
+
+    let path = std::env::temp_dir().join("badc-dylib-host-data-test.dylib");
+    std::fs::write(&path, &bytes).unwrap();
+    codesign(&path);
+
+    unsafe extern "C" {
+        fn dlopen(filename: *const std::os::raw::c_char, flag: c_int) -> *mut c_void;
+        fn dlsym(handle: *mut c_void, name: *const std::os::raw::c_char) -> *mut c_void;
+        fn dlclose(handle: *mut c_void) -> c_int;
+        fn dlerror() -> *const std::os::raw::c_char;
+    }
+    // RTLD_NOW | RTLD_GLOBAL: bind every reference up front so a
+    // misrouted one shows up here rather than at first use.
+    const RTLD_NOW_GLOBAL: c_int = 2 | 8;
+
+    let path_c = CString::new(path.to_str().unwrap()).unwrap();
+    let fail = |what: &str| -> String {
+        let err = unsafe { dlerror() };
+        let msg = if err.is_null() {
+            "(no message)".to_string()
+        } else {
+            unsafe { std::ffi::CStr::from_ptr(err) }
+                .to_string_lossy()
+                .into_owned()
+        };
+        format!("{what}: {msg}")
+    };
+    let (read_var, call_fn);
+    unsafe {
+        let handle = dlopen(path_c.as_ptr(), RTLD_NOW_GLOBAL);
+        if handle.is_null() {
+            let msg = fail("dlopen");
+            let _ = std::fs::remove_file(&path);
+            panic!("{msg}");
+        }
+        let r = dlsym(handle, c"read_host_var".as_ptr());
+        let c = dlsym(handle, c"call_host_fn".as_ptr());
+        if r.is_null() || c.is_null() {
+            let msg = fail("dlsym");
+            dlclose(handle);
+            let _ = std::fs::remove_file(&path);
+            panic!("{msg}");
+        }
+        let rf: extern "C" fn() -> c_int = std::mem::transmute(r);
+        let cf: extern "C" fn() -> c_int = std::mem::transmute(c);
+        read_var = rf();
+        call_fn = cf();
+        dlclose(handle);
+    }
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        read_var, badc_host_var,
+        "the data import read {read_var:#x} instead of the host's object",
+    );
+    assert_eq!(call_fn, 0xbeef, "the call import returned {call_fn:#x}");
+}

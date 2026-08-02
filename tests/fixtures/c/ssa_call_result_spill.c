@@ -18,20 +18,22 @@ static u64 rot(u64 x, int c) { return (x >> c) | (x << (64 - c)); }
 static u64 ch(u64 x, u64 y, u64 z) { return (x & y) ^ (~x & z); }
 static u64 bs1(u64 x) { return rot(x, 14) ^ rot(x, 18) ^ rot(x, 41); }
 
+// Opaque call targets: a volatile pointer load keeps each invocation a
+// real Call, so its return value goes through the allocator's placement
+// (including a spill slot) instead of being inlined and folded.
+static u64 (*volatile bs1p)(u64) = bs1;
+static u64 (*volatile chp)(u64, u64, u64) = ch;
+
 int main(void) {
     // Eight live u64 locals plus a loop counter exceeds every
     // target's caller-saved pool. Helpers are non-inlined static
     // functions so each invocation goes through a Call instruction.
-    // `volatile` keeps the seeds runtime values so the calls survive
-    // constant folding.
-    volatile u64 seed[8] = {0x100, 0x200, 0x400, 0x800,
-                            0x1000, 0x2000, 0x4000, 0x8000};
-    u64 a = seed[0], b = seed[1], c = seed[2], d = seed[3];
-    u64 e = seed[4], f = seed[5], g = seed[6], h = seed[7];
+    u64 a = 0x100, b = 0x200, c = 0x400, d = 0x800;
+    u64 e = 0x1000, f = 0x2000, g = 0x4000, h = 0x8000;
     int j;
     for (j = 0; j < 4; j++) {
-        u64 t1 = bs1(e) + ch(e, f, g) + h;
-        u64 t2 = bs1(a);
+        u64 t1 = bs1p(e) + chp(e, f, g) + h;
+        u64 t2 = bs1p(a);
         h = g; g = f; f = e; e = d + t1;
         d = c; c = b; b = a; a = t1 + t2;
     }

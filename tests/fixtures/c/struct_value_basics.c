@@ -12,14 +12,18 @@
 struct Point { int x; int y; };
 struct Line  { struct Point *a; struct Point *b; int label; };
 
-// `volatile` keeps a stored value a runtime value, so the field
-// stores and loads below are emitted rather than folded.
+// `volatile` keeps a stored value a runtime value, and letting the
+// addresses escape through a volatile pointer keeps both structs in
+// memory, so `.field` really addresses their stack slots.
 static int rt(int v) { volatile int t = v; return t; }
+static void *opaque(void *p) { void *volatile q = p; return q; }
 
 int main() {
     struct Point p;
     struct Point q;
     int sum;
+    struct Point *pv = opaque(&p);
+    struct Point *qv = opaque(&q);
 
     p.x = rt(3);
     p.y = rt(4);
@@ -53,6 +57,10 @@ int main() {
     // Field arithmetic on multiple struct values.
     sum = p.x + p.y + q.x + q.y;       // 30 + 40 + 100 + 200 = 370
     if (sum != 370) return 9;
+
+    // The writes above must be visible through the escaped pointers.
+    if (pv->x != 30 || pv->y != 40) return 10;
+    if (qv->x != 100 || qv->y != 200) return 11;
 
     return 0;
 }

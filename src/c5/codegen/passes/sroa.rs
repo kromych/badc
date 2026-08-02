@@ -1,43 +1,41 @@
 //! Scalar promotion of an address-taken automatic aggregate (SROA).
 //!
 //! Runs under `-O` after the inliner and the post-inline mem2reg. An
-//! automatic aggregate stays memory-resident whenever its base address
-//! is taken (`Inst::LocalAddr`), which mem2reg treats as an unanalysable
-//! pin. This pass replaces every access through that address with an
-//! access to a per-field frame slot and re-runs mem2reg, which promotes
-//! the now address-free field slots to SSA values and inserts phis
-//! across any surrounding loop. A field carried in a value is visible to
-//! the constant folder, the branch folder, and the dominator-scoped
-//! range analysis; the memory form is not, because a store anywhere in
-//! between may alias it.
+//! aggregate whose base address is taken (`Inst::LocalAddr`) is an
+//! unanalysable pin to mem2reg, so it stays memory-resident and no fact
+//! about a member survives a store that may alias it. This pass rewrites
+//! every access through that address to a per-field frame slot and
+//! re-runs mem2reg, which lifts the now address-free slots to SSA values
+//! (with phis across any surrounding loop) that the constant folder, the
+//! branch folder, and the range analysis can read.
 //!
-//! Admission. An object is split only when every value that resolves to
-//! an address inside it -- a `LocalAddr` of its base plus a chain of
-//! constant `Add` / `Sub` -- is used exclusively as either
+//! Admission: an object is split only when every value resolving to an
+//! address inside it -- a `LocalAddr` of its base plus constant `Add` /
+//! `Sub` -- is used exclusively as
 //!
 //!   * the address of a non-volatile `Load` / `Store` whose byte range
 //!     lies inside the object, or
 //!   * the destination of an `Mcpy` starting at the object's first byte
-//!     (a template initializer or a whole-object assignment).
+//!     (a template initializer or a whole-object assignment),
 //!
-//! Any other use -- a call argument, a stored pointer, a comparison, a
-//! runtime index, a terminator operand, an `Mcpy` source, an atomic or
-//! segment-relative access -- lets the object be reached through a
-//! pointer this pass does not track, so the object is declined. The
-//! accessed byte ranges must also partition the object: two accesses are
-//! either the same `(offset, width)` field or disjoint, so no field's
-//! storage is ever observed at a second width. Storage written outside
-//! the instruction tape (a by-value aggregate parameter's prologue copy,
-//! the indirect-result address) and over-aligned objects are never
-//! candidates.
+//! and the accessed ranges partition the object: two accesses are the
+//! same `(offset, width)` field or disjoint, so no field's storage is
+//! observed at a second width. Every other use -- a call argument, a
+//! stored pointer, a comparison, a runtime index, a terminator operand,
+//! an `Mcpy` source, an atomic or segment-relative access -- can reach
+//! the object through a pointer this pass does not track, and declines
+//! it. `Block::exit_acc` is not such a use: it names the block's last
+//! defined value for liveness, and every rewrite here leaves that id
+//! defining something. Storage written outside the instruction tape (a
+//! by-value aggregate parameter's prologue copy, the indirect-result
+//! address) and over-aligned objects are never candidates.
 //!
-//! Each field gets its own frame slot. The object's own cells are reused
-//! when every field starts on a distinct 8-byte boundary -- the shape a
-//! fully unrolled constant-index array produces -- and fresh single-cell
-//! slots are allocated otherwise, since a struct member's byte offset
-//! need not be a multiple of the slot pitch. Either way the object's
-//! base address becomes dead and the frame compaction reclaims whatever
-//! is left unreferenced.
+//! A field takes the object's own cell when every field starts on a
+//! distinct 8-byte boundary -- what a fully unrolled constant-index
+//! array produces -- and a fresh single-cell slot otherwise, since a
+//! member's byte offset need not be a multiple of the slot pitch. Either
+//! way the base address dies and the frame compaction reclaims what is
+//! left unreferenced.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
@@ -257,16 +255,13 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
         if let Some(base) = base_of(v) {
             declined.insert(base);
         }
-        if let Some(base) = base_of(block.exit_acc) {
-            declined.insert(base);
-        }
     }
     // A block copy's own value id must have no operand consumer: the
     // decomposition below replaces it with per-field stores, which do
     // not produce the copied object's address. `Block::exit_acc` is not
-    // a consumer -- it pins the block's last accumulator write for
-    // liveness, and the expansion's final store takes that role, as it
-    // already does for a plain `Store`.
+    // a consumer -- it names the block's last defined value so liveness
+    // keeps it to the block end, and every rewrite here leaves that id
+    // defining some value.
     if !inits.is_empty() {
         let mut used: BTreeSet<ValueId> = BTreeSet::new();
         for inst in &func.insts {
@@ -790,6 +785,18 @@ mod tests {
         let split = split_objects(&mut f, 1);
         assert!(split.is_empty(), "over-budget object must not split");
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
+    }
+
+    /// `Block::exit_acc` naming an address into the object is a liveness
+    /// pin, not a use of the address, so it must not decline the split;
+    /// the neutralised expression still defines a value there.
+    #[test]
+    fn base_address_as_exit_acc_still_splits() {
+        let mut f = two_elem_array();
+        f.blocks[0].exit_acc = 9; // LocalAddr(-2)
+        let split = split_objects(&mut f, 64);
+        assert_eq!(split, alloc::vec![(-2, alloc::vec![-2, -1])]);
+        assert!(matches!(f.insts[9], Inst::Imm(0)));
     }
 
     #[test]

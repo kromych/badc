@@ -297,6 +297,12 @@ fn eval(insts: &[Inst], facts: &Facts, inst: &Inst) -> Range {
     let range_of = |v: ValueId| facts.get(key_of(insts, v));
     match inst {
         Inst::Imm(k) => Range::exact(*k),
+        // A floating-point widening produces no integer, so it carries
+        // no bounds; `I64` is the identity.
+        Inst::Extend {
+            kind: LoadKind::F32 | LoadKind::F64,
+            ..
+        } => UNIVERSE,
         Inst::Extend { value, kind } => {
             let src = range_of(*value);
             match extend_range(*kind) {

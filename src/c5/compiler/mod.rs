@@ -1574,11 +1574,15 @@ pub struct Compiler {
     /// symbol idx per emitted reloc -- so the parallel arrays
     /// don't drift out of sync.
     pub(super) data_reloc_sym_idx: alloc::vec::Vec<usize>,
-    /// One past the highest `Program::data` offset any recorded
-    /// initializer relocation covers. A write at or above it cannot
-    /// override a relocated slot, which keeps the C99 6.7.8p19 override
-    /// scan off the monotonically advancing common path.
-    pub(super) init_reloc_high: usize,
+    /// `Program::data` offsets that currently carry an initializer
+    /// relocation, so a byte write can ask whether the range it
+    /// overwrites holds one and run the C99 6.7.8p19 retirement only
+    /// where there is something to retire. A bound on the highest
+    /// recorded offset does not answer that: an element holding the
+    /// address of a compound literal appends the literal, then writes the
+    /// pointer back into the element's slot below it, so the write offset
+    /// retreats below the highest recorded slot on every such element.
+    pub(super) init_reloc_slots: alloc::collections::BTreeSet<u64>,
     /// Per-libc-symbol trampoline registry. When source code
     /// reaches for the *address* of a `Token::Sys` binding --
     /// either bare (`fp = lstat;`) or in a static initializer
@@ -1946,7 +1950,7 @@ impl Compiler {
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
             glo_imm_refs: alloc::vec::Vec::new(),
             data_reloc_sym_idx: alloc::vec::Vec::new(),
-            init_reloc_high: 0,
+            init_reloc_slots: alloc::collections::BTreeSet::new(),
             next_compound_literal_id: 0,
             staged_literal_syms: Vec::new(),
             pending_block_static_syms: Vec::new(),

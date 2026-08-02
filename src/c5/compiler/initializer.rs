@@ -204,11 +204,29 @@ impl Compiler {
         }
     }
 
-    /// Record that a relocation now covers the 8-byte data slot at `off`,
-    /// maintaining the bound a byte write consults before scanning for a
-    /// relocation to retire.
+    /// Record that a relocation now covers the data slot at `off`.
     pub(super) fn note_init_reloc(&mut self, off: usize) {
-        self.init_reloc_high = self.init_reloc_high.max(off + 8);
+        self.init_reloc_slots.insert(off as u64);
+    }
+
+    /// True when a recorded initializer relocation lies in `[lo, hi)`.
+    fn init_reloc_in(&self, lo: usize, hi: usize) -> bool {
+        self.init_reloc_slots
+            .range(lo as u64..hi as u64)
+            .next()
+            .is_some()
+    }
+
+    /// Release the slots in `[lo, hi)`.
+    fn forget_init_relocs_in(&mut self, lo: usize, hi: usize) {
+        let doomed: alloc::vec::Vec<u64> = self
+            .init_reloc_slots
+            .range(lo as u64..hi as u64)
+            .copied()
+            .collect();
+        for off in doomed {
+            self.init_reloc_slots.remove(&off);
+        }
     }
 
     /// Drop any initializer relocation already recorded in the byte range
@@ -216,6 +234,7 @@ impl Compiler {
     /// after a range fill already wrote `[N].p`) overwrites the bytes; the
     /// stale relocation must go too, or both apply and corrupt the slot.
     fn clear_init_relocs_in(&mut self, lo: usize, hi: usize) {
+        self.forget_init_relocs_in(lo, hi);
         let (lo, hi) = (lo as u64, hi as u64);
         let hit = |off: u64| off >= lo && off < hi;
         if self.code_relocs.iter().any(|r| hit(r.data_offset)) {
@@ -327,7 +346,7 @@ impl Compiler {
         // C99 6.7.8p19: a later initializer for a subobject overrides the
         // earlier one. The bytes are about to be replaced, so the relocation
         // an overridden initializer recorded for them is stale and goes too.
-        if here < self.init_reloc_high {
+        if self.init_reloc_in(here, here + n_bytes) {
             self.clear_init_relocs_in(here, here + n_bytes);
         }
         // `value` carries at most 16 significant bytes; zero a wider
@@ -2221,6 +2240,27 @@ impl Compiler {
     pub(super) fn restore_init_checkpoint(&mut self, cp: InitCheckpoint) {
         self.restore_lex(cp.lex);
         self.next_ent_pc = cp.next_ent_pc;
+        // The records below are about to go, so their slots are free
+        // again. One record per slot, so releasing a popped record's
+        // offset cannot release a surviving record's.
+        let mut popped = alloc::vec::Vec::new();
+        let off = |r: &crate::c5::program::DataReloc| r.data_offset;
+        popped.extend(self.data_relocs.iter().skip(cp.data_relocs).map(off));
+        popped.extend(
+            self.code_relocs
+                .iter()
+                .skip(cp.code_relocs)
+                .map(|r| r.data_offset),
+        );
+        popped.extend(
+            self.extern_data_relocs
+                .iter()
+                .skip(cp.extern_data_relocs)
+                .map(|r| r.data_offset),
+        );
+        for slot in popped {
+            self.init_reloc_slots.remove(&slot);
+        }
         self.truncate_data(cp.data);
         self.data_object_starts.truncate(cp.data_object_starts);
         self.data_relocs.truncate(cp.data_relocs);

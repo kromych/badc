@@ -6,10 +6,27 @@ harness, not a pass/fail smoke: it replays every C compile of a completed
 gcc reference build against badc and buckets the failures by normalized
 error signature, producing a ranked work list for kernel support.
 
-Pinned kernels (known-booting minimal configs, vendored under `configs/`):
+## Pinned kernels
 
-- x86_64: linux 6.12.8, `configs/x86_64-6.12.8.config`
-- aarch64: linux 6.10.1, `configs/aarch64-6.10.1.config`
+Two pins, with distinct jobs and no shared version:
+
+| `--config` | kernel | configuration | used by |
+|---|---|---|---|
+| `defconfig` (default) | 7.1.5, both arches | the tree's own `make defconfig` | the sweep |
+| `minimal` | 6.12.8 (x86_64), 6.10.1 (aarch64) | vendored `configs/<arch>-<version>.config` | the link-and-boot gate |
+
+The sweep corpus is defconfig on the latest stable release: it is what a
+distribution builds, and it moves forward with the kernel, which is what makes
+it a gap finder. The configuration is not vendored. The tarball sha256 pins the
+tree and `make defconfig` is a function of the tree, so the configuration is
+already reproducible; a vendored copy would be a second artifact to regenerate
+on every version bump, and one that can silently disagree with the tree.
+
+The minimal configs are the opposite case and stay vendored. They are
+known-booting configurations that cannot be derived from the tree, and the
+link-and-boot gate's `--expect-units` floors are counts of exactly those
+configurations. A `.config` is only meaningful against the tree it was produced
+for, so each keeps its own release rather than being carried forward.
 
 ## Run
 
@@ -21,13 +38,20 @@ python3 demos/linux/sweep.py \
 ```
 
 `setup.py` downloads the pinned release from cdn.kernel.org (sha256-verified),
-installs the vendored config, runs `make olddefconfig`, and records every
-option the host toolchain forced or dropped in
+installs the configuration `--config` selects, runs `make olddefconfig`, and
+records every option the host toolchain forced or dropped in
 `.cache/config-deviations-<arch>.txt`. `CONFIG_INITRAMFS_SOURCE` is cleared:
 the sweep needs compile commands, not boot artifacts. `--build` then runs the
-gcc reference build (`make -jN`); that build validates the config and writes
-the per-object `.<name>.o.cmd` files Kbuild leaves next to each object, which
-are the replay corpus.
+gcc reference build; that build validates the config and writes the per-object
+`.<name>.o.cmd` files Kbuild leaves next to each object, which are the replay
+corpus. It runs `make -jN -k KCFLAGS=-Wno-error`, because the corpus has to
+cover the tree rather than stop at the first object the host gcc rejects: a
+kernel and a compiler of different vintages disagree over warnings the kernel
+promotes to errors. The `.cmd` file count is reported and is what says whether
+the build was usable.
+
+The build is native per architecture: run it on a box of the architecture being
+measured.
 
 Requirements for the reference build: gcc, make, flex, bison, bc, and the
 libelf + openssl development headers.
@@ -228,10 +252,10 @@ into the tree.
 
 Two parameters depend on the corpus rather than the architecture and have to
 be passed. `--expect-units` is a floor on the unit count of the configuration
-under test: at defconfig the trees measure 2847 (x86_64) and 4177 (aarch64),
-and the minimal configs 1912 and 1346, so set it just under whichever one is
-being built. `--rdinit` is whatever the initramfs installs, `/init` by
-default.
+under test: at defconfig the sweep tree measures 2921 (x86_64) and 4434
+(aarch64), and the vendored minimal configs 1912 and 1346, so set it just
+under whichever one is being built. `--rdinit` is whatever the initramfs
+installs, `/init` by default.
 
 `--qemu` selects the emulator; `--qemu-args` adds arguments to the boot. An
 emulator built out of tree has no data directory, so it needs `-nic none`:

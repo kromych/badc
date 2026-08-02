@@ -13,18 +13,24 @@ struct rec {
     int *p;
 };
 
+// A volatile pointer keeps the object in memory, so the initializer's
+// stores are emitted and read back rather than forwarded to the checks.
+static void *opaque(void *p) { void *volatile q = p; return q; }
+
 int main(void) {
     // Struct: field 0 is a runtime read of `g`; field 1 a string with
     // trailing zero-fill; field 2 the constant address of a global.
     struct rec b = {g, "hola", &g};
-    if (b.i != 3) return 1;
-    if (b.s[0] != 'h' || b.s[1] != 'o' || b.s[2] != 'l' || b.s[3] != 'a') return 2;
-    if (b.s[4] != 0 || b.s[9] != 0) return 3;
-    if (b.p != &g) return 4;
+    struct rec *r = opaque(&b);
+    if (r->i != 3) return 1;
+    if (r->s[0] != 'h' || r->s[1] != 'o' || r->s[2] != 'l' || r->s[3] != 'a') return 2;
+    if (r->s[4] != 0 || r->s[9] != 0) return 3;
+    if (r->p != &g) return 4;
 
     // Array: a runtime global read sits beside constants.
     int xs[3] = {g, arr_src, 5};
-    if (xs[0] != 3 || xs[1] != 7 || xs[2] != 5) return 5;
+    int *v = opaque(xs);
+    if (v[0] != 3 || v[1] != 7 || v[2] != 5) return 5;
 
     // A bare global pointer read by value is runtime, too.
     char *m = label;

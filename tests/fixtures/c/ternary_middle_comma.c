@@ -17,9 +17,13 @@
 
 #include <stdio.h>
 
+// `volatile` keeps the condition operand a runtime value so both arms
+// are emitted and the comma's store really runs.
+static int rt(int v) { volatile int t = v; return t; }
+
 int main(void) {
     unsigned char a[4] = {0};
-    int B = 42;
+    int B = rt(42);
 
     // Flavour A: full parens around the comma expression.
     int n_a = ((unsigned int)B < 0x80u) ? (a[0] = (unsigned char)B, 1) : 99;
@@ -45,7 +49,7 @@ int main(void) {
     }
 
     // Flavour D: longer comma chain (three side effects + value).
-    int x = 0, y = 0, z = 0;
+    int x = rt(0), y = rt(0), z = rt(0);
     int n_d = (B > 0) ? (x = 1), (y = 2), (z = 3), x + y + z : -1;
     if (n_d != 6 || x != 1 || y != 2 || z != 3) {
         printf("FAIL D: n=%d x=%d y=%d z=%d\n", n_d, x, y, z);
@@ -54,7 +58,7 @@ int main(void) {
 
     // Flavour E: rhs branch with no side effects (control).
     unsigned char e[4] = {0};
-    B = 200;  /* >= 0x80: takes alt branch */
+    B = rt(200);  /* >= 0x80: takes alt branch */
     int n_e = ((unsigned int)B < 0x80u) ? (e[0] = (unsigned char)B), 1 : 99;
     if (n_e != 99 || e[0] != 0) {
         printf("FAIL E: n=%d e[0]=%d\n", n_e, e[0]);

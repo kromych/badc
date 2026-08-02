@@ -24,13 +24,24 @@ static long f12(long a, long b, long c, long d, long e, long g, long h, long i,
     return a + b + c + d + e + g + h + i + s.a * 100 + s.b * 10 + s.c;
 }
 
+/* Opaque call targets: a volatile pointer load keeps each call real, so
+   the arguments are marshalled through the stack argument area instead of
+   being inlined and folded away. */
+static long (*volatile f16p)(long, long, long, long, long, long, long, long,
+                             struct ll) = f16;
+static long (*volatile f12p)(long, long, long, long, long, long, long, long,
+                             struct t3) = f12;
+
 int main(void) {
+    /* `volatile` also keeps the argument values runtime values. */
+    volatile long one = 1;
+    volatile int two = 2;
     struct ll s = {3, 4};
-    if (f16(1, 2, 3, 4, 5, 6, 7, 8, s) != 3040) {
+    if (f16p(one, 2, 3, 4, 5, 6, 7, 8, s) != 3040) {
         return 1;
     }
-    struct t3 t = {2, 3, 4};
-    if (f12(1, 2, 3, 4, 5, 6, 7, 8, t) != 270) {
+    struct t3 t = {two, 3, 4};
+    if (f12p(one, 2, 3, 4, 5, 6, 7, 8, t) != 270) {
         return 2;
     }
     return 0;

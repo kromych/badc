@@ -14,22 +14,34 @@ struct S {
 
 int g = 42;
 
+// A volatile pointer keeps the object in memory, so the initializer's
+// stores are emitted and read back rather than forwarded to the checks.
+static void *opaque(void *p) { void *volatile q = p; return q; }
+
 static int runtime_elem(int tag, int *p) {
     struct S s = (struct S){ .tag = tag, { .a = p } };
-    return (s.tag == tag && s.a == p) ? 0 : 1;
+    struct S *r = opaque(&s);
+    return (r->tag == tag && r->a == p) ? 0 : 1;
 }
 
 int main(void) {
-    if (runtime_elem(7, &g)) return 1;
+    /* `volatile` keeps the element values runtime values, so the runtime
+       store path is really emitted. */
+    volatile int tag = 7;
+    int *volatile gp = &g;
+    if (runtime_elem(tag, gp)) return 1;
 
     struct S c1 = (struct S){ .tag = 1, { .a = &g } };
-    if (c1.tag != 1 || c1.a != &g || *c1.a != 42) return 2;
+    struct S *r1 = opaque(&c1);
+    if (r1->tag != 1 || r1->a != &g || *r1->a != 42) return 2;
 
     struct S c2 = { .tag = 3, { .b = 99 } };
-    if (c2.tag != 3 || c2.b != 99) return 3;
+    struct S *r2 = opaque(&c2);
+    if (r2->tag != 3 || r2->b != 99) return 3;
 
     struct S c3 = (struct S){ .tag = 5, { &g } };
-    if (c3.tag != 5 || c3.a != &g) return 4;
+    struct S *r3 = opaque(&c3);
+    if (r3->tag != 5 || r3->a != &g) return 4;
 
     return 0;
 }

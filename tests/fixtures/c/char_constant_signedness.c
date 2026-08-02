@@ -15,15 +15,23 @@ static int pick(char *s) {
     }
 }
 
+// Opaque call target plus a volatile byte: the switch is emitted once
+// and the char load really runs, instead of folding to the taken arm.
+static int (*volatile pick_p)(char *) = pick;
+
 int main(void) {
-    char c = (char)0x80;
+    volatile int byte = 0x80;
+    char c = (char)byte;
     if ('\x80' != c) return 1;
-    char d = (char)0xFF;
+    byte = 0xFF;
+    char d = (char)byte;
     if ('\xff' != d) return 2;
     char b[1];
-    b[0] = (char)0x80;
-    if (pick(b) != 1) return 3;
-    b[0] = (char)0xFF;
-    if (pick(b) != 2) return 4;
+    byte = 0x80;
+    b[0] = (char)byte;
+    if (pick_p(b) != 1) return 3;
+    byte = 0xFF;
+    b[0] = (char)byte;
+    if (pick_p(b) != 2) return 4;
     return 0;
 }

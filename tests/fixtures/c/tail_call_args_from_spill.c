@@ -51,7 +51,10 @@ static int forward(int seed) {
 }
 
 int main(void) {
-    int r = forward(10);
+    // `volatile` keeps the seed a runtime value so `forward` is emitted
+    // with its spill slots and tail call rather than folded away.
+    volatile int seed = 10;
+    int r = forward(seed);
     // v2=12, v5=15, v9=19, v13=23 -> 12*1 + 15*2 + 19*3 + 23*4 = 12+30+57+92 = 191
     printf("%d\n", r);
     return r == 191 ? 0 : 1;

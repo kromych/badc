@@ -43,23 +43,31 @@ static int s32(int32_t t) {
     }
 }
 
+/* Opaque call targets: a volatile pointer load keeps each call real, so
+   the dispatch is emitted once per function rather than inlined and folded
+   to the arm the constant argument selects. */
+static int (*volatile u32_p)(uint32_t) = u32;
+static int (*volatile u16_p)(uint16_t) = u16;
+static int (*volatile u8_p)(uint8_t) = u8;
+static int (*volatile s32_p)(int32_t) = s32;
+
 int main(void) {
     // unsigned int: the negative label matches the wrapped value.
-    if (u32((uint32_t)-1) != 100) return 1;
-    if (u32((uint32_t)-2) != 200) return 2;
-    if (u32(5) != 5) return 3;
-    if (u32(0) != 999) return 4;
+    if (u32_p((uint32_t)-1) != 100) return 1;
+    if (u32_p((uint32_t)-2) != 200) return 2;
+    if (u32_p(5) != 5) return 3;
+    if (u32_p(0) != 999) return 4;
 
     // unsigned short / char promote to int: the negative label is dead.
-    if (u16((uint16_t)-1) != 999) return 5;
-    if (u16(7) != 7) return 6;
-    if (u8((uint8_t)-1) != 999) return 7;
-    if (u8(3) != 3) return 8;
+    if (u16_p((uint16_t)-1) != 999) return 5;
+    if (u16_p(7) != 7) return 6;
+    if (u8_p((uint8_t)-1) != 999) return 7;
+    if (u8_p(3) != 3) return 8;
 
     // Signed discriminant keeps working.
-    if (s32(-1) != 100) return 9;
-    if (s32(-2) != 200) return 10;
-    if (s32(5) != 999) return 11;
+    if (s32_p(-1) != 100) return 9;
+    if (s32_p(-2) != 200) return 10;
+    if (s32_p(5) != 999) return 11;
 
     return 0;
 }

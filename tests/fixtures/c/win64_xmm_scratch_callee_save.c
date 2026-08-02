@@ -28,8 +28,12 @@ static struct pair make(double a, double b, double c, double d, double e, double
     return p;
 }
 
+// `volatile` keeps an argument a runtime value so the FP calls are
+// emitted and the save / restore paths really run.
+static double rt(double v) { volatile double t = v; return t; }
+
 int main(void) {
-    struct pair p = make(1.0, 2.0, 3.0, 4.0, 5.0, 6.0); // 2 + 12 + 30 = 44
+    struct pair p = make(rt(1.0), rt(2.0), rt(3.0), rt(4.0), rt(5.0), rt(6.0)); // 2 + 12 + 30 = 44
     if (p.lo != 44) {
         return 1;
     }
@@ -37,7 +41,7 @@ int main(void) {
         return 2;
     }
     // A second call with different arguments to exercise the path again.
-    struct pair q = make(10.0, 1.0, 0.0, 0.0, 0.0, 0.0); // 10
+    struct pair q = make(rt(10.0), rt(1.0), rt(0.0), rt(0.0), rt(0.0), rt(0.0)); // 10
     if (q.lo != 10) {
         return 3;
     }

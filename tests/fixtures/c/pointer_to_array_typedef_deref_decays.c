@@ -29,16 +29,20 @@ struct box {
 
 int main(void) {
     jb a;
-    a[0] = -1;
-    a[7] = -1;
+    // `volatile` keeps the stored value and the slot runtime values so
+    // the decay is emitted rather than folded to the checks.
+    volatile long long seed = -1;
+    void *volatile slot = &a;
+    a[0] = seed;
+    a[7] = seed;
 
     struct box b;
-    b.slot = &a; // void * <- pointer to array
+    b.slot = slot; // void * <- pointer to array
 
     // `*(jb *)b.slot` decays to `(long long *)&a`. If it instead loaded
     // a[0] (== -1) and passed that as the pointer, the store faults or
     // writes to a wild address.
-    store_through(*(jb *)b.slot, 0x1234567);
+    store_through(*(jb *)b.slot, seed + 0x1234568);
     if (a[0] != 0x1234567 || a[7] != 0x1234568) {
         return 1;
     }

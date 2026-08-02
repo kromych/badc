@@ -12,13 +12,21 @@
 struct Point { int x; int y; };
 struct Line  { struct Point *a; struct Point *b; int label; };
 
+// `volatile` keeps a stored value a runtime value, and letting the
+// addresses escape through a volatile pointer keeps both structs in
+// memory, so `.field` really addresses their stack slots.
+static int rt(int v) { volatile int t = v; return t; }
+static void *opaque(void *p) { void *volatile q = p; return q; }
+
 int main() {
     struct Point p;
     struct Point q;
     int sum;
+    struct Point *pv = opaque(&p);
+    struct Point *qv = opaque(&q);
 
-    p.x = 3;
-    p.y = 4;
+    p.x = rt(3);
+    p.y = rt(4);
 
     if (p.x != 3) return 1;
     if (p.y != 4) return 2;
@@ -33,22 +41,26 @@ int main() {
         pp = &p;
         if (pp->x != 3) return 3;
         if (pp->y != 4) return 4;
-        pp->x = 30;
-        pp->y = 40;
+        pp->x = rt(30);
+        pp->y = rt(40);
     }
     if (p.x != 30) return 5;
     if (p.y != 40) return 6;
 
     // A second struct local sharing the same type. Both must be
     // disjoint -- writing through one mustn't touch the other.
-    q.x = 100;
-    q.y = 200;
+    q.x = rt(100);
+    q.y = rt(200);
     if (p.x != 30) return 7;
     if (q.x != 100) return 8;
 
     // Field arithmetic on multiple struct values.
     sum = p.x + p.y + q.x + q.y;       // 30 + 40 + 100 + 200 = 370
     if (sum != 370) return 9;
+
+    // The writes above must be visible through the escaped pointers.
+    if (pv->x != 30 || pv->y != 40) return 10;
+    if (qv->x != 100 || qv->y != 200) return 11;
 
     return 0;
 }

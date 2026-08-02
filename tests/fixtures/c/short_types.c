@@ -22,10 +22,14 @@ static int as_ushort(int v) {
     return v & 0xFFFF;
 }
 
+// `volatile` keeps the seeds runtime values so the short arithmetic,
+// shifts and narrowing stores are emitted rather than folded.
+static int rt(int v) { volatile int t = v; return t; }
+
 int main() {
     // ---- basic load + store of signed short ----
-    short a = 1234;
-    short b = -42;
+    short a = rt(1234);
+    short b = rt(-42);
     if (a != 1234) return 1;
     if (b != -42) return 2;
 
@@ -42,7 +46,7 @@ int main() {
     if (g != 2) return 7;
 
     // ---- shift behavior ----
-    short h = 1;
+    short h = rt(1);
     short hi = h << 14;       // 16384
     if (hi != 16384) return 8;
 
@@ -53,13 +57,13 @@ int main() {
     if (would_set_sign_bit != -32768) return 10;
 
     // Right shift on signed short keeps sign on c5 (long path).
-    short neg = -8;
+    short neg = rt(-8);
     short neg_shr = neg >> 1; // -4 under arithmetic shift
     if (neg_shr != -4) return 11;
 
     // ---- unsigned short arithmetic ----
-    unsigned short ua = 0xFFFE;
-    unsigned short ub = 1;
+    unsigned short ua = rt(0xFFFE);
+    unsigned short ub = rt(1);
     int sum_int = (int)ua + (int)ub;     // 0xFFFF
     unsigned short usum = as_ushort(sum_int);
     if (usum != 0xFFFF) return 12;
@@ -69,8 +73,8 @@ int main() {
     if (uwrap != 0) return 13;
 
     // ---- signed/unsigned mix ----
-    short s = -1;
-    unsigned short us = 1;
+    short s = rt(-1);
+    unsigned short us = rt(1);
     int mixed = (int)us + (int)s;  // 0
     if (mixed != 0) return 14;
 
@@ -84,25 +88,25 @@ int main() {
     if (u_shifted != 0x8000) return 17;
 
     // Right shift of unsigned short keeps zero in the high bit.
-    unsigned short u_high = 0x8000;
+    unsigned short u_high = rt(0x8000);
     int u_high_int = u_high & 0xFFFF;
     int u_high_shifted = u_high_int >> 1;  // 0x4000
     if (u_high_shifted != 0x4000) return 18;
 
     // ---- pointer-to-short load/store ----
     short arr[4];
-    arr[0] = 100;
-    arr[1] = 200;
-    arr[2] = -300;
+    arr[0] = rt(100);
+    arr[1] = rt(200);
+    arr[2] = rt(-300);
     arr[3] = as_short(arr[0] + arr[1] + arr[2]);  // 0
     if (arr[3] != 0) return 19;
 
     // ---- struct fields ----
     struct sx { short s1; short s2; unsigned short s3; };
     struct sx x;
-    x.s1 = 7;
-    x.s2 = -7;
-    x.s3 = 0xC0DE;
+    x.s1 = rt(7);
+    x.s2 = rt(-7);
+    x.s3 = rt(0xC0DE);
     if (x.s1 + x.s2 != 0) return 20;
     if (x.s3 != 0xC0DE) return 21;
 

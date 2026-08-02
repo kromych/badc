@@ -1038,7 +1038,10 @@ mod tests {
         let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 2)]);
         let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
-        assert!(split.is_empty(), "object read by a block copy must not split");
+        assert!(
+            split.is_empty(),
+            "object read by a block copy must not split"
+        );
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
     }
 

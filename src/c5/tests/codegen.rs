@@ -4609,11 +4609,7 @@ fn for_init_declaration_is_recorded_as_a_function_local() {
     )
     .compile()
     .expect("compile");
-    let names: alloc::vec::Vec<&str> = program
-        .variables
-        .iter()
-        .map(|v| v.name.as_str())
-        .collect();
+    let names: alloc::vec::Vec<&str> = program.variables.iter().map(|v| v.name.as_str()).collect();
     for name in ["p", "q", "r"] {
         assert!(
             names.contains(&name),
@@ -4636,7 +4632,11 @@ fn for_init_declaration_is_recorded_as_a_function_local() {
             .unwrap_or(0)
     };
     assert_eq!(cells("p"), 2, "the for-init aggregate reserves two cells");
-    assert_eq!(cells("q"), 2, "the block-scope aggregate reserves two cells");
+    assert_eq!(
+        cells("q"),
+        2,
+        "the block-scope aggregate reserves two cells"
+    );
 }
 
 /// A state machine over an address-taken automatic aggregate. The loop

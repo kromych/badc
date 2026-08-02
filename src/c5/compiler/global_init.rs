@@ -83,6 +83,18 @@ impl Compiler {
         Ok(reloc)
     }
 
+    /// True when the identifier under the cursor is the whole
+    /// initializer. A function designator names its address only when
+    /// nothing follows it: `f(...)` is a call, whose value the constant
+    /// evaluator decides. The cursor is left where it was.
+    fn id_ends_initializer(&mut self) -> Result<bool, C5Error> {
+        let snap = self.lex.snapshot();
+        self.next()?;
+        let ends = self.at_initializer_end();
+        self.restore_lex(snap);
+        Ok(ends)
+    }
+
     /// True when the cursor sits on a token that ends a scalar
     /// initializer: the declarator list's `,` / `;`, the `}` of a
     /// `{ value }` wrapper, or the `)` of a parenthesized initializer.
@@ -302,6 +314,7 @@ impl Compiler {
         if self.lex.tk == Token::Id
             && (self.symbols[self.lex.curr_id_idx].class == Token::Fun as i64
                 || self.symbols[self.lex.curr_id_idx].class == Token::Sys as i64)
+            && self.id_ends_initializer()?
         {
             if is_thread_local {
                 return Err(self.compile_err_at(

@@ -1231,6 +1231,12 @@ impl Compiler {
         if let Some(v) = self.try_fold_strlen_builtin()? {
             return Ok(v);
         }
+        if let Some(v) = self.try_fold_string_compare_builtin()? {
+            return Ok(ConstVal::Int {
+                val: v as i128,
+                ty: Ty::Int as i64,
+            });
+        }
         if self.lex.tk == Token::BuiltinOffsetof {
             // GCC `__builtin_offsetof(T, member)` is an integer constant
             // expression (the member's byte offset).
@@ -1296,6 +1302,107 @@ impl Compiler {
             val: n,
             ty: self.size_t_ty(),
         }))
+    }
+
+    /// Fold `strcmp` / `strncmp` / `memcmp` of two string literals, which
+    /// gcc folds at every optimization level and admits in an integer
+    /// constant expression. Any other argument shape, a wide literal, or a
+    /// name bound to something other than a function declines with the
+    /// token stream untouched.
+    pub(super) fn try_fold_string_compare_builtin(&mut self) -> Result<Option<i64>, C5Error> {
+        if self.lex.tk != Token::Id {
+            return Ok(None);
+        }
+        let name = self.symbols[self.lex.curr_id_idx].name.as_str();
+        let counted = match name {
+            "strcmp" | "__builtin_strcmp" => false,
+            "strncmp" | "memcmp" | "__builtin_strncmp" | "__builtin_memcmp" => true,
+            _ => return Ok(None),
+        };
+        let stop_at_nul = !name.ends_with("memcmp");
+        // A local, a global object, or an enum constant of this name is
+        // not the library function.
+        let class = self.symbols[self.lex.curr_id_idx].class;
+        if class != 0 && class != Token::Fun as i64 && class != Token::Sys as i64 {
+            return Ok(None);
+        }
+        let snap = self.lex.snapshot();
+        let data_len = self.data.len();
+        let nonconst = self.pending.const_expr_nonconst;
+        match self.try_take_string_compare_args(counted)? {
+            Some((a, alen, b, blen, n)) => {
+                let r = compare_literal_bytes(&self.data, (a, alen), (b, blen), n, stop_at_nul);
+                // The literals were staged only to be read here.
+                self.truncate_data(data_len);
+                if r.is_none() {
+                    self.pending.const_expr_nonconst = nonconst;
+                    self.restore_lex(snap);
+                }
+                Ok(r)
+            }
+            None => {
+                self.truncate_data(data_len);
+                self.pending.const_expr_nonconst = nonconst;
+                self.restore_lex(snap);
+                Ok(None)
+            }
+        }
+    }
+
+    /// Consume `("literal", "literal"[, count])`, returning each literal's
+    /// data offset and byte length (the trailing NUL is not staged) plus
+    /// the count. `None` leaves the lexer at the mismatch for the caller
+    /// to restore.
+    #[allow(clippy::type_complexity)]
+    fn try_take_string_compare_args(
+        &mut self,
+        counted: bool,
+    ) -> Result<Option<(usize, usize, usize, usize, Option<usize>)>, C5Error> {
+        self.next()?;
+        if self.lex.tk != '(' {
+            return Ok(None);
+        }
+        self.next()?;
+        let Some((a, alen)) = self.try_take_narrow_string_literal()? else {
+            return Ok(None);
+        };
+        if self.lex.tk != ',' {
+            return Ok(None);
+        }
+        self.next()?;
+        let Some((b, blen)) = self.try_take_narrow_string_literal()? else {
+            return Ok(None);
+        };
+        let mut n = None;
+        if counted {
+            if self.lex.tk != ',' {
+                return Ok(None);
+            }
+            self.next()?;
+            // A non-constant count is not an error here, just a call
+            // that does not fold; the caller re-parses it as one.
+            let count = match self.parse_const_expr_cond_val() {
+                Ok(ConstVal::Int { val, .. }) if val >= 0 => val as usize,
+                _ => return Ok(None),
+            };
+            n = Some(count);
+        }
+        if self.lex.tk != ')' {
+            return Ok(None);
+        }
+        self.next()?;
+        Ok(Some((a, alen, b, blen, n)))
+    }
+
+    /// Stage a narrow string literal (adjacent parts already glued) and
+    /// return its data offset and byte length. A wide literal declines:
+    /// its elements are not bytes.
+    fn try_take_narrow_string_literal(&mut self) -> Result<Option<(usize, usize)>, C5Error> {
+        if self.lex.tk != '"' || self.lex.str_is_wide {
+            return Ok(None);
+        }
+        let start = self.take_concat_string_literal()?;
+        Ok(Some((start, self.data.len() - start)))
     }
 
     /// The `size_t` type tag: `unsigned long` on LP64,
@@ -1972,4 +2079,38 @@ impl Compiler {
             super::super::token::describe(self.lex.tk),
         )))
     }
+}
+
+/// Compare two staged literals, each `(offset, length)` into `data` with
+/// an unstaged NUL at `offset + length`. `n` bounds the comparison (`None`
+/// for `strcmp`) and `stop_at_nul` ends it at a shared NUL, which `memcmp`
+/// does not do. The result is the sign of the first differing byte pair
+/// compared as `unsigned char`; C99 7.21.4 fixes only the sign, and gcc
+/// likewise normalizes to -1 / 0 / 1. `None` declines a count that reads
+/// past either literal's object.
+fn compare_literal_bytes(
+    data: &[u8],
+    a: (usize, usize),
+    b: (usize, usize),
+    n: Option<usize>,
+    stop_at_nul: bool,
+) -> Option<i64> {
+    let byte = |(off, len): (usize, usize), i: usize| -> Option<u8> {
+        match i.cmp(&len) {
+            core::cmp::Ordering::Less => Some(data[off + i]),
+            core::cmp::Ordering::Equal => Some(0),
+            core::cmp::Ordering::Greater => None,
+        }
+    };
+    let limit = n.unwrap_or(usize::MAX);
+    for i in 0..limit {
+        let (ca, cb) = (byte(a, i)?, byte(b, i)?);
+        if ca != cb {
+            return Some(if ca < cb { -1 } else { 1 });
+        }
+        if stop_at_nul && ca == 0 {
+            break;
+        }
+    }
+    Some(0)
 }

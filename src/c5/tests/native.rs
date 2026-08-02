@@ -1214,6 +1214,13 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("builtin_has_attribute_fold.c", 0),
     // `__builtin_abs` / `labs` / `llabs` fold in constant contexts.
     ("builtin_abs_const_fold.c", 0),
+    // `strcmp` / `strncmp` / `memcmp` of two string literals fold, so a
+    // literal selects a branch at translation time and the dead arms'
+    // calls are never emitted.
+    ("builtin_str_compare_fold.c", 0),
+    // A function designator initializes a static slot with its address
+    // only when it is the whole initializer; a foldable call is a value.
+    ("static_init_fn_designator.c", 0),
     // Deferred-size and rank-3 automatic struct arrays, constant and
     // runtime element values.
     ("auto_struct_array_multi_dim.c", 0),

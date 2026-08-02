@@ -796,6 +796,13 @@ impl Compiler {
             // plain string literal -- the same `Expr::StrLit`
             // carrier).
             self.ast_emit_str_lit(offset, self.ty);
+        } else if let Some(v) = self.try_fold_string_compare_builtin()? {
+            // A string comparison of two literals is a constant here as
+            // well as in a constant expression, which is what makes a
+            // comparison against a literal a translation-time selector.
+            self.emit_imm(v);
+            self.ty = Ty::Int as i64;
+            self.ast_emit_int_lit(v, self.ty);
         } else if self.lex.tk == Token::Id {
             let id_idx = self.lex.curr_id_idx;
             self.next()?;

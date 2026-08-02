@@ -1871,16 +1871,20 @@ pub(crate) fn lower(
             crate::c5::codegen::passes::unroll::run(&mut ssa_funcs);
         });
         // Seed a parameter every call site of an internal function
-        // agrees a constant for. After unrolling and before inlining:
-        // a callee the inliner absorbs gets the same constant by
-        // argument substitution, so this is what reaches the bodies
-        // that stay out of line.
-        super::ssa::emit_common::time_pass("passes::ipa_const_param::run (x86_64)", || {
-            let escaping = crate::c5::codegen::passes::ipa_const_param::escaping_functions(
-                &ssa_funcs, program,
-            );
-            crate::c5::codegen::passes::ipa_const_param::run(&mut ssa_funcs, &escaping);
-        });
+        // agrees a constant for, and record the range each parameter's
+        // argument stays inside for the range analysis below. After
+        // unrolling and before inlining: a callee the inliner absorbs
+        // gets the same constant by argument substitution, so this is
+        // what reaches the bodies that stay out of line.
+        // Interprocedural parameter ranges, by entry PC; read by the
+        // range analysis inside the branch-fold fixed point below.
+        let param_ranges =
+            super::ssa::emit_common::time_pass("passes::ipa_const_param::run (x86_64)", || {
+                let escaping = crate::c5::codegen::passes::ipa_const_param::escaping_functions(
+                    &ssa_funcs, program,
+                );
+                crate::c5::codegen::passes::ipa_const_param::run(&mut ssa_funcs, &escaping)
+            });
         // Inline after mem2reg so the candidate filter sees the
         // promoted form: dead cell loads / stores are gone and the
         // callee's body reads its parameters via `ParamRef`.
@@ -1986,6 +1990,7 @@ pub(crate) fn lower(
             crate::c5::codegen::passes::simplify_branches::run_with_const_data(
                 &mut ssa_funcs,
                 program,
+                &param_ranges,
             );
         });
     }

@@ -1,4 +1,6 @@
-//! Propagate a constant argument into the parameter it initialises.
+//! Propagate what the call sites agree about an argument into the
+//! parameter it initialises: the constant it is, and the range it lies
+//! in.
 //!
 //! C99 6.9.1p10: the arguments of a call are the initial values of the
 //! callee's parameters. A function with internal linkage (6.2.2) whose
@@ -23,7 +25,16 @@
 //! A rewritten `ParamRef` leaves the parameter's incoming register with
 //! no reader; `FunctionSsa::const_params` records that so the prologue
 //! drops the cell's entry spill as it does for a seeded one.
+//!
+//! The same admission test licenses a weaker fact for the parameters no
+//! single constant reaches: the hull of the ranges the arguments carry,
+//! returned for [`super::value_range`] to use as the callee's entry
+//! facts. Each argument's range is read from its own instruction shape
+//! with nothing else in scope, so no parameter range depends on another
+//! function's, and a recursive or mutually recursive call contributes
+//! its argument like any other site -- one pass, no fixed point.
 
+use super::value_range::{Range, UNIVERSE};
 use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, ValueId};
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
@@ -166,10 +177,24 @@ pub(crate) fn escaping_functions(
     out
 }
 
+/// What the call sites of one function agree about its parameters.
+struct Agreed {
+    /// The constant every site seen so far passes, cleared as soon as
+    /// one site disagrees.
+    consts: Vec<Option<i64>>,
+    /// The hull of the ranges the arguments carry. The first site
+    /// assigns; every later one joins.
+    ranges: Vec<Range>,
+}
+
 /// Replace every parameter read that every call site agrees on with
-/// the constant it agrees on. `escaping` names the functions with a
+/// the constant it agrees on, and report the range each parameter's
+/// argument stays inside. `escaping` names the functions with a
 /// reachable path the call sites do not describe.
-pub(crate) fn run(funcs: &mut [FunctionSsa], escaping: &BTreeSet<usize>) {
+pub(crate) fn run(
+    funcs: &mut [FunctionSsa],
+    escaping: &BTreeSet<usize>,
+) -> BTreeMap<usize, Vec<Range>> {
     // Candidates keyed by entry PC. A variadic list has no fixed
     // parameter positions, and a naked body is machine code the pass
     // does not model.
@@ -185,14 +210,20 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], escaping: &BTreeSet<usize>) {
         .map(|f| (f.ent_pc, f.n_params))
         .collect();
     if params.is_empty() {
-        return;
+        return BTreeMap::new();
     }
 
-    // Per candidate: the constant every site seen so far passes for
-    // each parameter, cleared as soon as one site disagrees.
-    let mut agreed: BTreeMap<usize, Vec<Option<i64>>> = params
+    let mut agreed: BTreeMap<usize, Agreed> = params
         .iter()
-        .map(|(&pc, &n)| (pc, alloc::vec![None; n]))
+        .map(|(&pc, &n)| {
+            (
+                pc,
+                Agreed {
+                    consts: alloc::vec![None; n],
+                    ranges: alloc::vec![UNIVERSE; n],
+                },
+            )
+        })
         .collect();
     let mut called: BTreeSet<usize> = BTreeSet::new();
     for f in funcs.iter() {
@@ -203,33 +234,34 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], escaping: &BTreeSet<usize>) {
             else {
                 continue;
             };
-            let Some(slots) = agreed.get_mut(target_pc) else {
+            let Some(n) = agreed.get(target_pc).map(|a| a.consts.len()) else {
                 continue;
             };
             // A site whose argument list does not match the declared
             // one leaves the parameter positions undetermined.
-            if args.len() != slots.len() {
+            if args.len() != n {
                 agreed.remove(target_pc);
                 continue;
             }
             let first = called.insert(*target_pc);
-            for (i, slot) in slots.iter_mut().enumerate() {
-                match (const_operand(f, args[i]), *slot) {
-                    (Some(k), None) if first => *slot = Some(k),
+            let slots = agreed.get_mut(target_pc).expect("looked up above");
+            for (i, &arg) in args.iter().enumerate() {
+                match (const_operand(f, arg), slots.consts[i]) {
+                    (Some(k), None) if first => slots.consts[i] = Some(k),
                     (Some(k), Some(prev)) if k == prev => {}
-                    _ => *slot = None,
+                    _ => slots.consts[i] = None,
                 }
+                let r = super::value_range::arg_range(f.insts.as_slice(), arg);
+                slots.ranges[i] = if first { r } else { slots.ranges[i].hull(r) };
             }
         }
     }
+    agreed.retain(|pc, _| called.contains(pc));
 
     for f in funcs.iter_mut() {
-        let Some(slots) = agreed.get(&f.ent_pc) else {
+        let Some(slots) = agreed.get(&f.ent_pc).map(|a| &a.consts) else {
             continue;
         };
-        if !called.contains(&f.ent_pc) {
-            continue;
-        }
         // A `ParamRef` still feeding its own cell's entry spill is the
         // record that the cell holds that argument, which the inliner
         // reads to resolve the cell at a splice. Leave those; the
@@ -267,4 +299,13 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], escaping: &BTreeSet<usize>) {
         }
         f.const_params |= folded;
     }
+
+    // Only the functions some parameter is bounded for are worth
+    // carrying; an all-unbounded row says nothing the callee's own
+    // parameter widths do not.
+    agreed
+        .into_iter()
+        .filter(|(_, a)| a.ranges.iter().any(|r| !r.is_universe()))
+        .map(|(pc, a)| (pc, a.ranges))
+        .collect()
 }

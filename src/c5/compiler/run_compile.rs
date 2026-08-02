@@ -734,7 +734,7 @@ impl Compiler {
                 // synthesising placeholder parameter types would feed the
                 // call-site argument type-check a spurious mismatch.
                 let fnptr_proto = self.pending.typedef_fn_proto.take();
-                let fnptr_param_types = self.pending.fn_ptr_param_types.take();
+                let mut fnptr_param_types = self.pending.fn_ptr_param_types.take();
                 // `fn_ptr_param_types` is the pointee signature of a
                 // fn-pointer typedef used as this declarator's type. It
                 // describes a fn-pointer OBJECT (`cb x;` -- a callback
@@ -744,8 +744,14 @@ impl Compiler {
                 // parameter list, installed below; a following `(` marks
                 // it, so the return type's pointee params must not stand
                 // in as the function's own.
-                if self.lex.tk != '(' {
-                    if let Some(types) = fnptr_param_types {
+                // A bare function-type declarator (`extern typeof(f) f;`)
+                // declares a function, so its list belongs to the function
+                // path below and installing it here would overwrite the prior
+                // signature that path compares against. A typedef alias of a
+                // function type has no function path and keeps this install.
+                let carrier_names_object = !bare_function_type || is_typedef;
+                if self.lex.tk != '(' && carrier_names_object {
+                    if let Some(types) = fnptr_param_types.take() {
                         self.symbols[id_idx].params = types;
                         self.symbols[id_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
                     } else if let Some((proto_fixed, true)) = fnptr_proto {
@@ -865,24 +871,12 @@ impl Compiler {
                     if typedef_fpi > 0 {
                         self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
                     }
+                    // The `typedef RET NAME(args)` / `typedef RET (*NAME)(args)`
+                    // spellings parse their own list; an alias of an existing
+                    // function type took the carrier install above.
                     if let Some(pp) = typedef_params {
                         self.symbols[id_idx].params = pp.types;
                         self.symbols[id_idx].is_variadic = pp.is_variadic;
-                    } else if let Some((proto_fixed, proto_variadic)) =
-                        self.pending.typedef_fn_proto.take()
-                    {
-                        // `typedef RET (*NAME)(args)`: the declarator
-                        // captured the pointee signature's prototype.
-                        // Record the parameter types (so a fn-pointer
-                        // variable declared through the typedef narrows
-                        // each argument to its declared type) and the
-                        // variadic-ness.
-                        self.symbols[id_idx].params = self
-                            .pending
-                            .fn_ptr_param_types
-                            .take()
-                            .unwrap_or_else(|| alloc::vec![0i64; proto_fixed]);
-                        self.symbols[id_idx].is_variadic = proto_variadic;
                     }
                     self.accept_declarator_separator()?;
                     continue;
@@ -897,19 +891,15 @@ impl Compiler {
                 // than colliding as a duplicate global.
                 if bare_function_type && preconsumed_params.is_none() && self.lex.tk != '(' {
                     ty -= Ty::Ptr as i64;
-                    let types = self.pending.fn_ptr_param_types.take().unwrap_or_default();
-                    let is_variadic = self
-                        .pending
-                        .typedef_fn_proto
-                        .take()
-                        .map(|(_, variadic)| variadic)
-                        .unwrap_or(false);
+                    // From the capture above: `pending` is already drained.
+                    let types = fnptr_param_types.unwrap_or_default();
+                    let is_variadic = matches!(fnptr_proto, Some((_, true)));
                     preconsumed_params = Some(super::function::ParsedParams {
                         indices: alloc::vec::Vec::new(),
                         types,
                         is_variadic,
-                        // A typedef-carried prototype; the empty-list
-                        // spelling does not reach here.
+                        // A function-type specifier supplies a parameter type
+                        // list; the empty-list spelling does not reach here.
                         is_prototyped: true,
                     });
                 }
@@ -1074,6 +1064,19 @@ impl Compiler {
                     // Stash the signature on the function symbol so
                     // call sites can type-check arguments later. For
                     // both prototypes and bodied definitions.
+                    //
+                    // C99 6.7.5.3p14: an empty list outside a definition
+                    // supplies no parameter information, so the composite type
+                    // (6.2.7p4) keeps the prior list. In a definition the same
+                    // spelling does specify "no parameters".
+                    let is_defining_declarator = self.lex.tk != ';' && self.lex.tk != ',';
+                    let keeps_prior_list = !params.is_prototyped
+                        && !is_defining_declarator
+                        && !prior_params.is_empty();
+                    if keeps_prior_list {
+                        params.types = prior_params.clone();
+                        params.is_variadic = prior_is_variadic;
+                    }
                     self.symbols[id_idx].params = params.types.clone();
                     self.symbols[id_idx].is_variadic = params.is_variadic;
                     // C11 6.7.4: `_Noreturn` on any declaration of the

@@ -2820,6 +2820,38 @@ fn ssa_func_named(src: &str, name: &str) -> crate::c5::ir::FunctionSsa {
         .unwrap_or_else(|| panic!("function `{name}` not found"))
 }
 
+/// A by-value aggregate argument is the address of the caller's copy
+/// while the callee's parameter list is in scope; with no list the walker
+/// falls back to loading the object's single eightbyte into a machine
+/// word. A redeclaration through the function's own type keeps the list
+/// (C99 6.2.7p4), so the site stays in address form.
+#[test]
+fn redeclared_callee_keeps_aggregate_argument_in_address_form() {
+    use crate::c5::ir::Inst;
+    let f = ssa_func_named(
+        "typedef struct { unsigned val; } wrap;\n\
+         unsigned take(wrap w);\n\
+         unsigned take(wrap w) { return w.val; }\n\
+         extern typeof(take) take;\n\
+         unsigned caller(wrap w) { return take(w); }\n",
+        "caller",
+    );
+    let args = f
+        .insts
+        .iter()
+        .find_map(|i| match i {
+            Inst::Call { args, .. } => Some(args.clone()),
+            _ => None,
+        })
+        .expect("a call in `caller`");
+    assert_eq!(args.len(), 1, "one argument: {args:?}");
+    let operand = &f.insts[args[0] as usize];
+    assert!(
+        matches!(operand, Inst::LocalAddr(_)),
+        "aggregate argument must be the copy's address, got {operand:?}"
+    );
+}
+
 /// C99 6.3.1.4: `(float)n` converts the integer directly to single
 /// precision. The walker emits a single `FpCast(IntToFp)` whose result
 /// is f32-marked -- no `IntToFp`-to-double followed by an `F64ToF32`

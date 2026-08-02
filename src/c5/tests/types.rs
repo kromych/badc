@@ -164,6 +164,42 @@ fn warn_call_arity_mismatch() {
     );
 }
 
+#[test]
+fn redeclaration_without_parameters_keeps_the_prototype() {
+    // C99 6.2.7p4: the composite type keeps the parameter type list a
+    // prior declaration or definition established, so a call past it is
+    // still checked after a redeclaration through the function's own
+    // type or through the empty-list spelling.
+    let p = compile_fixture("redecl_composite_arity_warning.c");
+    for name in ["take_wrap", "add2"] {
+        assert!(
+            p.warnings
+                .iter()
+                .any(|w| w.contains("too many arguments") && w.contains(name)),
+            "expected a too-many warning for `{name}`, got: {:?}",
+            p.warnings
+        );
+    }
+}
+
+#[test]
+fn unprototyped_declaration_supplies_no_parameters() {
+    // C99 6.7.5.3p14: an empty list in a non-defining declarator supplies
+    // no parameter information, and a redeclaration through that type
+    // does not invent any -- calls stay unchecked.
+    let p = compile_str(
+        "extern unsigned f();\n\
+         extern typeof(f) f;\n\
+         unsigned use(void) { return f(1u, 2u, 3u); }\n\
+         int main(void) { return 0; }\n",
+    );
+    assert!(
+        !p.warnings.iter().any(|w| w.contains("arguments")),
+        "unprototyped call must not be arity-checked, got: {:?}",
+        p.warnings
+    );
+}
+
 /// C99 6.2.4 + 6.2.2: block-scope locals, function parameters,
 /// and `static` file-scope functions that are never referenced
 /// are dead. The compiler emits a `<file>:<line>: warning:

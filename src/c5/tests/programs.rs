@@ -1582,6 +1582,20 @@ fn function_type_typedef_declaration() {
 }
 
 #[test]
+fn redecl_composite_keeps_prototype() {
+    // C99 6.2.7p4: a redeclaration supplying no parameter information of
+    // its own keeps the list a prior declaration or definition set, so
+    // by-value aggregate arguments stay in address form.
+    assert_eq!(run_fixture("redecl_composite_keeps_prototype.c"), 0);
+}
+
+#[test]
+fn redecl_composite_arity_warning() {
+    // The same composite keeps call-site argument checking alive.
+    assert_eq!(run_fixture("redecl_composite_arity_warning.c"), 0);
+}
+
+#[test]
 fn float_increment_decrement() {
     // `++` / `--` on a real floating type add / subtract 1 (C99 6.5.3.1 /
     // 6.5.2.4), prefix yielding the new value and postfix the prior.

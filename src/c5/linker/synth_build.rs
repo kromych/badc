@@ -189,10 +189,10 @@ fn synth_program_and_build(
     // byte offset (identity on the merged path -- merged.text already
     // holds the final native bytes).
     //
-    // For each function the writer also drops a synthetic
-    // `.Lc5_prologue_end_<name>` STB_LOCAL anchor that the linker
-    // surfaces via `MergedNative::prologue_ends`. The synth path
-    // records it in `func_prologue_native` (keyed by `ent_pc`) so
+    // For each function the writer also records a post-prologue anchor
+    // in its `NT_BADC_PROLOGUE_END` note, which the linker surfaces via
+    // `MergedNative::prologue_ends`. The synth path copies it into
+    // `func_prologue_native` (keyed by `ent_pc`) so
     // `dwarf::prologue_size_for` returns the true byte count and
     // the FDE's `DW_CFA_advance_loc` lands at the post-prologue
     // boundary.

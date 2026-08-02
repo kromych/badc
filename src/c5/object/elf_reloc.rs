@@ -142,6 +142,13 @@ const NT_BADC_MACHO_TLV_DESC_SYM: u32 = 9;
 // The linker patches each imm32 with the variable's TPOFF once the
 // units' TLS blocks are merged.
 const NT_BADC_ELF_TPOFF: u32 = 10;
+// Post-prologue anchors. desc is a sequence of (u64 entry_offset, u64
+// post_prologue_offset) pairs, both byte offsets into this unit's
+// `.text`, one per function whose SSA emit recorded a prologue extent.
+// The linker rebases them by the unit's text base and exposes them as
+// `MergedNative::prologue_ends`, which the merged-image DWARF frame
+// writer needs to place the post-prologue CFA rule.
+const NT_BADC_PROLOGUE_END: u32 = 11;
 /// Output section for `const`-qualified file-scope storage the
 /// declaration did not place by name.
 const RODATA_SECTION: &str = ".rodata";
@@ -205,14 +212,6 @@ const SHN_UNDEF: u16 = 0;
 /// convention (`SHN_ABS`, `SHN_COMMON`, ...), not a section header.
 const SHN_LORESERVE: u16 = 0xff00;
 const SHN_ABS: u16 = 0xfff1;
-
-/// Name prefix for the synthetic STB_LOCAL STT_NOTYPE symbols
-/// the writer emits at each function's post-prologue native byte
-/// offset. The linker's merge pass keys on this prefix to collect
-/// the resolved offsets into `MergedNative::prologue_ends`; the
-/// suffix is the source function name. Kept in sync with
-/// `link.rs::PROLOGUE_END_PREFIX`.
-pub(super) const PROLOGUE_END_PREFIX: &str = ".Lc5_prologue_end_";
 
 const ELF64_EHDR_SIZE: usize = 64;
 const ELF64_SHDR_SIZE: usize = 64;
@@ -1378,20 +1377,16 @@ pub(super) fn write_relocatable(
     let mut local_func_idxs: Vec<usize> = Vec::new();
     let mut global_func_idxs: Vec<usize> = Vec::new();
     let mut func_strs: Vec<String> = Vec::with_capacity(build.func_ent_pcs.len());
-    // Synthetic STB_LOCAL STT_NOTYPE symbols anchored at each
-    // function's post-prologue native byte offset. The linker's
-    // merge pass collects them by name prefix and exposes their
-    // resolved offsets through `MergedNative::prologue_ends`; the
-    // synth path then populates `pc_to_native[ent_pc + 2]` so
+    // Function index + post-prologue native byte offset, one entry per
+    // function whose SSA emit recorded a prologue extent. Written to
+    // `.note.badc` (NT_BADC_PROLOGUE_END) below: the linker's merge pass
+    // rebases the pairs into `MergedNative::prologue_ends`, and the synth
+    // path populates `pc_to_native[ent_pc + 2]` from them so
     // `dwarf::build_debug_frame` emits `DW_CFA_advance_loc
-    // <prologue_size>` before the post-prologue CFA rule. Without
-    // them, multi-TU FDEs install the CFA rule at byte 0 of the
-    // function (suboptimal for unwinds caught inside the prologue
-    // range). Format: `.Lc5_prologue_end_<funcname>` -- the
-    // leading `.L` matches the conventional compiler-local
-    // prefix `nm` / `objdump` filter out by default.
+    // <prologue_size>` before the post-prologue CFA rule. Without them,
+    // multi-TU FDEs install the CFA rule at byte 0 of the function
+    // (suboptimal for unwinds caught inside the prologue range).
     let mut prologue_end_entries: Vec<(usize, usize)> = Vec::new();
-    let mut prologue_end_names: Vec<String> = Vec::new();
     for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
         // FunctionSsa::name is the canonical source for the
         // symbol-table name: the walker copies it from
@@ -1406,15 +1401,12 @@ pub(super) fn write_relocatable(
             .filter(|s| !s.is_empty())
             .cloned()
             .unwrap_or_else(|| format!("fn_{ent_pc}"));
-        // Build the synthetic prologue_end entry for this
-        // function before consuming `name`. The post-prologue
-        // native byte offset is recorded in `func_prologue_native`
-        // keyed by `ent_pc`; skip when the SSA emit didn't record
-        // one (synthetic CRT trampolines without a standard
-        // prologue shape).
+        // The post-prologue native byte offset is recorded in
+        // `func_prologue_native` keyed by `ent_pc`; absent when the SSA
+        // emit did not record one (synthetic CRT trampolines without a
+        // standard prologue shape).
         if let Some(&post_native) = build.func_prologue_native.get(&ent_pc) {
             prologue_end_entries.push((i, post_native));
-            prologue_end_names.push(alloc::format!("{PROLOGUE_END_PREFIX}{name}"));
         }
         // Synthetic `__c5_sys_*` libc-address trampolines (one per
         // distinct `&libc_fn` taken in a `.data` function-pointer
@@ -1701,10 +1693,6 @@ pub(super) fn write_relocatable(
     for name in &extern_tls_names {
         all_names.push(*name);
     }
-    let prologue_end_names_start = all_names.len();
-    for s in &prologue_end_names {
-        all_names.push(s.as_str());
-    }
     let fn_alias_names_start = all_names.len();
     for a in &program.function_aliases {
         all_names.push(a.name.as_str());
@@ -1829,24 +1817,37 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
-    // Prologue_end synthetic locals (also STB_LOCAL, also
-    // pre-first_global). Each one's `st_value` is the native
-    // byte offset of the first post-prologue instruction; size
-    // stays zero (a marker, not a code region).
-    for (j, &(_i, post_native)) in prologue_end_entries.iter().enumerate() {
-        let (shndx, value) = text_place(post_native as u64);
-        symbols.push(Elf64Sym {
-            st_name: name_offs[prologue_end_names_start + j],
-            st_info: pack_sym_info(STB_LOCAL, STT_NOTYPE),
-            st_shndx: shndx,
-            st_value: value,
-            st_size: 0,
-            ..Default::default()
-        });
+    // Post-prologue anchors for the note record: (function entry,
+    // first post-prologue instruction), both `.text` byte offsets.
+    // A function carved into a named section is skipped -- the merge
+    // pass keys these on merged `.text` addresses.
+    let mut prologue_end_pairs: Vec<(u64, u64)> = Vec::new();
+    for &(i, post_native) in &prologue_end_entries {
+        let (lo, _) = func_extent(i)?;
+        let (fn_shndx, fn_off) = text_place(lo as u64);
+        let (post_shndx, post_off) = text_place(post_native as u64);
+        if fn_shndx == SHIDX_TEXT && post_shndx == SHIDX_TEXT {
+            prologue_end_pairs.push((fn_off, post_off));
+        }
     }
-    // Local inline-asm section labels, still inside the LOCAL block.
+    // Names a GOT-addressed reference reaches: the slot is per-symbol,
+    // so such a label keeps its own entry even when the reduction below
+    // would drop it.
+    let got_ref_names: alloc::collections::BTreeSet<&str> = build
+        .user_extern_data_refs
+        .iter()
+        .map(|r| r.symbol_name.as_str())
+        .filter(|n| got_addressed(n))
+        .collect();
+    // Local inline-asm section labels, still inside the LOCAL block. A
+    // `.L`-prefixed local is an assembler temporary: gas keeps it out of
+    // `.symtab`, and every reference to one reduces to its section plus
+    // an addend (`asm_label_secref`), so the entry has no reader.
     for (j, l) in asm_labels.iter().enumerate() {
         if l.global || l.weak {
+            continue;
+        }
+        if l.name.starts_with(".L") && l.st_type == STT_NOTYPE && !got_ref_names.contains(l.name) {
             continue;
         }
         asm_label_symidx.insert(l.name, symbols.len() as u32);
@@ -3168,6 +3169,7 @@ pub(super) fn write_relocatable(
         &build.macho_tlv_fixups,
         &defined_tls_globals,
         &build.elf_tpoff_fixups,
+        &prologue_end_pairs,
     );
     let note_off = round_up(out.len() as u64, 4);
     out.resize(note_off as usize, 0);
@@ -3453,16 +3455,19 @@ fn pack_sym_info(bind: u8, ty: u8) -> u8 {
     (bind << 4) | (ty & 0xf)
 }
 
-/// Build the `.note.badc` section body. Emits up to three records:
-///   NT_BADC_DYLIBS       -- NUL-separated dylib paths.
-///   NT_BADC_BINDING_MAP  -- per-import (u32 dylib_index, NUL
-///                           import name)+.
-///   NT_BADC_EXPORTS      -- NUL-separated `#pragma export` names.
+/// Build the `.note.badc` section body. The records are:
+///   NT_BADC_DYLIBS        -- NUL-separated dylib paths.
+///   NT_BADC_BINDING_MAP   -- per-import (u32 dylib_index, NUL
+///                            import name)+.
+///   NT_BADC_EXPORTS       -- NUL-separated `#pragma export` names.
+///   NT_BADC_PROLOGUE_END  -- (u64 entry, u64 post-prologue) `.text`
+///                            offset pairs.
 /// All records share the namesz="badc\0" namespace; the parser
 /// distinguishes by `type`. Each note is independently padded to
 /// the 4-byte ELF gABI boundary. The binding-map and exports
 /// records are omitted when empty so a TU with neither still
 /// round-trips through the older single-record shape.
+#[allow(clippy::too_many_arguments)]
 fn build_badc_note(
     imports: &super::ResolvedImports,
     exports: &[ExportedFunction],
@@ -3471,6 +3476,7 @@ fn build_badc_note(
     macho_tlv_fixups: &[super::MachoTlvFixup],
     tls_symbols: &[(&str, i64, u64)],
     elf_tpoff_fixups: &[super::ElfTpoffFixup],
+    prologue_ends: &[(u64, u64)],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let name = b"badc\0";
@@ -3649,6 +3655,23 @@ fn build_badc_note(
         out.extend_from_slice(&(name.len() as u32).to_le_bytes());
         out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_ELF_TPOFF.to_le_bytes());
+        out.extend_from_slice(name);
+        crate::c5::layout::pad_to_align(&mut out, 4);
+        out.extend_from_slice(&desc);
+        crate::c5::layout::pad_to_align(&mut out, 4);
+    }
+
+    // Record 11: post-prologue anchors -- (entry_offset,
+    // post_prologue_offset) `.text` byte-offset pairs.
+    if !prologue_ends.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for (entry, post) in prologue_ends {
+            desc.extend_from_slice(&entry.to_le_bytes());
+            desc.extend_from_slice(&post.to_le_bytes());
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_PROLOGUE_END.to_le_bytes());
         out.extend_from_slice(name);
         crate::c5::layout::pad_to_align(&mut out, 4);
         out.extend_from_slice(&desc);

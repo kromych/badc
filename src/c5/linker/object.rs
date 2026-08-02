@@ -591,6 +591,11 @@ pub struct NativeObject {
     /// The final-image writer binds the local data symbol to the
     /// host's data object with an `R_*_COPY` relocation.
     pub copy_relocs: Vec<(String, String)>,
+    /// Post-prologue anchors (`NT_BADC_PROLOGUE_END`), each
+    /// `(entry_offset, post_prologue_offset)` in this unit's `.text`.
+    /// The merge pass rebases them into `MergedNative::prologue_ends`,
+    /// where the merged-image frame writer reads the prologue extent.
+    pub prologue_ends: Vec<(u64, u64)>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -1122,6 +1127,8 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     //                                     values, one per variable.
     //   type=6 NT_BADC_MACHO_TLV_FIXUP -- (u64 adrp_offset, u64
     //                                     descriptor_index) pairs.
+    //   type=11 NT_BADC_PROLOGUE_END -- (u64 entry_offset, u64
+    //                                   post_prologue_offset) `.text` pairs.
     // Records under namesz != "badc\0" are skipped silently so
     // future vendor extensions can coexist.
     let mut dylibs: Vec<String> = Vec::new();
@@ -1134,6 +1141,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut tls_symbols: Vec<(String, u64, u64)> = Vec::new();
     let mut macho_tlv_descriptor_syms: Vec<(usize, String)> = Vec::new();
     let mut elf_tpoff_fixups: Vec<(u64, ElfTpoffTarget)> = Vec::new();
+    let mut prologue_ends: Vec<(u64, u64)> = Vec::new();
     if let Some(i) = dylibs_section_idx {
         let body = section_slice(bytes, &shdrs[i])?;
         let mut cur = 0usize;
@@ -1286,6 +1294,15 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                             elf_tpoff_fixups.push((text_off, target));
                         }
                     }
+                    11 => {
+                        let mut c = cur;
+                        while c + 16 <= desc_end {
+                            let entry = u64::from_le_bytes(body[c..c + 8].try_into().unwrap());
+                            let post = u64::from_le_bytes(body[c + 8..c + 16].try_into().unwrap());
+                            prologue_ends.push((entry, post));
+                            c += 16;
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -1356,6 +1373,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         elf_tpoff_fixups,
         macho_tlv_fixups,
         copy_relocs,
+        prologue_ends,
         debug_info,
         debug_abbrev,
         debug_line,

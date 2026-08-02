@@ -422,6 +422,11 @@ struct Shape {
     ptr_args: bool,
     by_value_args: bool,
     loops: bool,
+    /// Filler statements appended to roughly half the helpers. A callee
+    /// past the inliner's body cap keeps its call sites, and only a
+    /// surviving call carries a `ret_slot_local`; a program built purely
+    /// from inlinable helpers never produces one.
+    bulk: usize,
     /// Register-pressure caps applied to the badc legs. `0` means the
     /// full register file.
     max_gpr: usize,
@@ -446,6 +451,7 @@ impl Shape {
             ptr_args: r.odds(55),
             by_value_args: r.odds(80),
             loops: r.odds(40),
+            bulk: if r.odds(75) { r.range(12, 24) } else { 0 },
             max_gpr: 0,
             max_fpr: 0,
         }
@@ -818,6 +824,7 @@ fn gen_body(
     params: &[PKind],
     ret: Ret,
     stmt_budget: usize,
+    bulk: usize,
     top_level: bool,
 ) -> Body {
     let scalars = r.range(1, 3);
@@ -837,21 +844,32 @@ fn gen_body(
     };
     let mut visible: Vec<u16> = (0..objs.len() as u16).collect();
     let mut stmts = Vec::new();
+    // The promotion pass only runs on a function that absorbed a splice
+    // or an unrolled loop, so every body but the leaf helper itself
+    // starts with a call to it. Without that the -O leg never reaches
+    // the pass this harness exists to exercise.
+    if !ctx.helpers.is_empty() {
+        stmts.push(Stmt::CallScalar {
+            dst: acc,
+            callee: 0,
+            args: vec![Arg::Scalar(gen_expr(r, ctx, &objs, &visible, 2))],
+        });
+    }
     let n = if top_level {
         stmt_budget
     } else {
         stmt_budget.min(6).max(1)
     };
-    gen_stmts(
-        r,
-        ctx,
-        &mut objs,
-        &mut visible,
-        &mut stmts,
-        acc,
-        n,
-        false,
-    );
+    gen_stmts(r, ctx, &mut objs, &mut visible, &mut stmts, acc, n, false);
+    // Filler that pushes the body past the inliner's body cap. Every
+    // term reads live state, so the folder cannot collapse it back
+    // under the cap.
+    for _ in 0..bulk {
+        let e = gen_expr(r, ctx, &objs, &visible, 1);
+        stmts.push(Stmt::Mix {
+            expr: Expr::Bin(BinKind::Add, Box::new(Expr::Var(acc)), Box::new(e)),
+        });
+    }
     // A `Ret::Agg` body must define every leaf of its result even when
     // the random statements did not touch it; `rv` is `= {0}`, so this
     // only sharpens the value, it is not a definedness requirement.
@@ -874,11 +892,51 @@ fn gen_body(
     }
 }
 
+/// A scalar leaf helper with no aggregate local and one statement. It is
+/// the one shape that stays under the inliner's body cap, and every
+/// other body calls it: the promotion pass only runs on a function that
+/// absorbed a splice, so without a reliably inlinable callee the -O leg
+/// never reaches the pass this harness exists to exercise.
+fn leaf_helper(seed: u64) -> Helper {
+    let objs = vec![
+        Obj {
+            name: "p0".to_string(),
+            ty: None,
+            deref: false,
+            decl: Decl::Param,
+        },
+        Obj {
+            name: "acc".to_string(),
+            ty: None,
+            deref: false,
+            decl: Decl::ScalarVar,
+        },
+    ];
+    Helper {
+        ret: Ret::Scalar,
+        params: vec![PKind::Scalar],
+        body: Body {
+            objs,
+            stmts: vec![Stmt::Mix {
+                expr: Expr::Bin(
+                    BinKind::Mul,
+                    Box::new(Expr::Var(0)),
+                    Box::new(Expr::Const(0x9e37_79b9_7f4a_7c15)),
+                ),
+            }],
+            acc: 1,
+            acc_seed: seed,
+            ret_obj: None,
+        },
+    }
+}
+
 fn generate(shape: &Shape) -> Prog {
     let mut r = Rng::new(shape.seed);
     let types = gen_types(&mut r, shape);
     let mut helpers: Vec<Helper> = Vec::new();
-    for _ in 0..shape.n_helpers {
+    helpers.push(leaf_helper(r.next()));
+    for h in 1..shape.n_helpers + 1 {
         let mut params = Vec::new();
         let np = r.range(0, 3);
         for _ in 0..np {
@@ -902,14 +960,22 @@ fn generate(shape: &Shape) -> Prog {
             types: &types,
             helpers: &helpers,
         };
-        let body = gen_body(&mut r, &ctx, &params, ret, shape.stmts, false);
+        // Alternate: the even helpers are kept short enough to inline (a
+        // caller needs one spliced callee for the promotion pass to run
+        // on it at all), the odd ones are pushed past the body cap.
+        let (budget, bulk) = if h % 2 == 1 {
+            (shape.stmts, shape.bulk)
+        } else {
+            (shape.stmts.min(2), 0)
+        };
+        let body = gen_body(&mut r, &ctx, &params, ret, budget, bulk, false);
         helpers.push(Helper { ret, params, body });
     }
     let ctx = GenCtx {
         types: &types,
         helpers: &helpers,
     };
-    let main = gen_body(&mut r, &ctx, &[], Ret::Scalar, shape.stmts + 4, true);
+    let main = gen_body(&mut r, &ctx, &[], Ret::Scalar, shape.stmts + 4, 0, true);
     Prog {
         types,
         helpers,
@@ -1128,7 +1194,7 @@ impl Obj {
 }
 
 fn render_body(c: &Ctx, b: &Body, ret: Ret, out: &mut String) {
-    let _ = writeln!(out, "    int i;");
+    let _ = writeln!(out, "    int i = 0;");
     let _ = writeln!(out, "    unsigned long long acc = {:#x}ull;", b.acc_seed);
     for o in &b.objs {
         match o.decl {
@@ -1652,9 +1718,10 @@ fn check(shape: &Shape, checks: Checks) -> Option<Divergence> {
 /// its own.
 fn reduce(shape: &Shape, checks: Checks) -> Shape {
     let mut best = *shape;
-    let ints: [fn(&mut Shape) -> &mut usize; 4] = [
+    let ints: [fn(&mut Shape) -> &mut usize; 5] = [
         |s| &mut s.n_helpers,
         |s| &mut s.stmts,
+        |s| &mut s.bulk,
         |s| &mut s.max_fields,
         |s| &mut s.n_types,
     ];
@@ -1855,6 +1922,18 @@ fn count_ret_temps(p: &Prog) -> usize {
             .sum()
     }
     walk(&p.main.stmts) + p.helpers.iter().map(|h| walk(&h.body.stmts)).sum::<usize>()
+}
+
+/// Prints the program a reported seed generates, for feeding to the
+/// compiler by hand:
+/// `BADC_FUZZ_FRAME_SEED=<seed> cargo test --lib frame_slot_print -- --ignored --nocapture`
+#[test]
+#[ignore = "prints a program instead of asserting"]
+fn frame_slot_print() {
+    let shape = Shape::from_seed(seed_base());
+    let prog = generate(&shape);
+    println!("/* {shape:?} model_acc = {:#x} */", model_acc(&prog));
+    println!("{}", render_standalone(&prog));
 }
 
 /// A seed must reproduce byte-for-byte, on any host: the failure report

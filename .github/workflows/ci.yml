@@ -1613,16 +1613,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-24.04-arm, label: ubuntu-arm64, arch: aarch64, floor: 3700 }
-          # x86_64 measured at 2847 units, 0 fallbacks, 0 undefined refs, both
-          # boots reaching the marker; the floor sits just under that count.
-          - { os: ubuntu-24.04,     label: ubuntu-x64,   arch: x86_64,  floor: 2800 }
+          # Measured on the pinned sweep release at defconfig: 4434 (aarch64)
+          # and 2921 (x86_64) units, 0 fallbacks, 0 undefined refs, every boot
+          # reaching the marker. Each floor sits just under its count, so a
+          # unit silently dropping out of the build fails the gate.
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64, arch: aarch64, floor: 4400 }
+          - { os: ubuntu-24.04,     label: ubuntu-x64,   arch: x86_64,  floor: 2900 }
     runs-on: ${{ matrix.os }}
     # Measured on four 3.2 GHz aarch64 cores: fetch + configure 44 s, clean
     # defconfig build 20 min (4177 units, 2153 CPU-s), both boots 15 s. Scaled
     # by this runner's measured compile throughput that is 15-25 min of build.
     # x86_64 measured on twelve 3.2 GHz cores: clean defconfig build 382 s
     # (2847 units), both boots 25 s; on a four-core runner that is 15-20 min.
+    # The sweep release since bumped to 4434 / 2921 units, within these caps.
     # The caps are hang backstops just above that, not slack; tighten them once
     # green runs have shown the real spread.
     timeout-minutes: 50
@@ -1667,10 +1670,10 @@ jobs:
       - name: kernel setup (fetch the pinned release, verify sha256, configure)
         run: python demos/linux/setup.py --arch ${{ matrix.arch }} --cache "$RUNNER_TEMP/lk"
       - name: switch the tree to defconfig
-        # setup.py installs the sweep's minimal config; the gate builds the
-        # architecture's own defconfig instead. The tree path carries the
-        # pinned version, so it is globbed rather than spelled out -- matching
-        # directories only, since the downloaded tarball shares the prefix.
+        # setup.py already configures the sweep release with its own defconfig;
+        # this re-runs it so the gate does not depend on that default. The tree
+        # path carries the pinned version, so it is globbed rather than spelled
+        # out -- matching directories only, since the tarball shares the prefix.
         run: |
           tree=$(find "$RUNNER_TEMP/lk" -maxdepth 1 -type d -name 'linux-*' | head -1)
           test -n "$tree" || { echo "no kernel tree under $RUNNER_TEMP/lk"; exit 1; }

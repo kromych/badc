@@ -157,7 +157,8 @@ Disassembly of section .text:
                	mov	x0, #0x1e               // =30
                	sub	x8, x29, #0x28
                	bl	<addr>
-               	ldur	x0, [x29, #-0x18]
+               	sub	x0, x29, #0x28
+               	ldr	x0, [x0, #0x10]
                	cmp	x0, #0x20
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

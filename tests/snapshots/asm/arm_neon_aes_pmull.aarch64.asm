@@ -430,7 +430,6 @@ Disassembly of section .text:
                	mov	x17, #0xff              // =255
                	and	x0, x6, x17
                	b	<addr>
-               	b	<addr>
 
 <shift_rows>:
                	mov	x2, x0
@@ -494,7 +493,6 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	ret
-               	b	<addr>
 
 <main>:
                	stp	x20, x21, [sp, #-0x1e0]!
@@ -1375,4 +1373,3 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x1e0
                	ret
-               	b	<addr>

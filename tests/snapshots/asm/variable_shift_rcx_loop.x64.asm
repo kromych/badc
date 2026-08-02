@@ -39,4 +39,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>

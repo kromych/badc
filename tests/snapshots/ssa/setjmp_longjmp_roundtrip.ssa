@@ -129,10 +129,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v42  Imm(0)                                           -> x6
     v43  CallExt { binding_idx=1, args=[v4, v42], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
-  block 15  start_pc=0
-    terminator Jmp(b9)
-  block 16  start_pc=0
-    terminator Jmp(b12)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

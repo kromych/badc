@@ -1010,36 +1010,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=14
     v316 BinopI { op=shl, lhs=v315, rhs_imm=32 }          -> x1
     v317 Extend { value=v315, kind=I32 }                  -> x1
     terminator Return(v315)   (exit_acc=v315)
-  block 82  start_pc=0
-    terminator Jmp(b22)
-  block 83  start_pc=0
-    terminator Jmp(b26)
-  block 84  start_pc=0
-    terminator Jmp(b31)
-  block 85  start_pc=0
-    terminator Jmp(b38)
-  block 86  start_pc=0
-    terminator Jmp(b36)
-  block 87  start_pc=0
-    terminator Jmp(b45)
-  block 88  start_pc=0
-    terminator Jmp(b43)
-  block 89  start_pc=0
-    terminator Jmp(b53)
-  block 90  start_pc=0
-    terminator Jmp(b51)
-  block 91  start_pc=0
-    terminator Jmp(b63)
-  block 92  start_pc=0
-    terminator Jmp(b61)
-  block 93  start_pc=0
-    terminator Jmp(b59)
-  block 94  start_pc=0
-    terminator Jmp(b73)
-  block 95  start_pc=0
-    terminator Jmp(b71)
-  block 96  start_pc=0
-    terminator Jmp(b69)
 sizeof_pointer_to_array_subscript.c:83: warning: unused function `check_local`
 static void check_local(void) {
 ; --- SSA dump (ok=true) ent_pc=0 ---

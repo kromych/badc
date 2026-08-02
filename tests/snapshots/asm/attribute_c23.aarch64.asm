@@ -48,5 +48,3 @@ Disassembly of section .text:
 
 <die>:
                	b	<addr>
-               	b	<addr>
-               	b	<addr>

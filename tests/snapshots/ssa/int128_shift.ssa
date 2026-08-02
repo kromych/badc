@@ -1209,8 +1209,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v119 BinopI { op=shl, lhs=v118, rhs_imm=32 }          -> x1
     v120 Extend { value=v118, kind=I32 }                  -> x1
     terminator Return(v118)   (exit_acc=v118)
-  block 152  start_pc=0
-    terminator Jmp(b28)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

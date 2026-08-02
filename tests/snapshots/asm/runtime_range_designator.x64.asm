@@ -125,7 +125,6 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
 
 <check_resume_and_gap>:
                	leaq	<rip>, %rax
@@ -542,7 +541,6 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

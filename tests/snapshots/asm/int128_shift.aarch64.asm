@@ -377,4 +377,3 @@ Disassembly of section .text:
                	ret
                	sxtw	x0, w3
                	ret
-               	b	<addr>

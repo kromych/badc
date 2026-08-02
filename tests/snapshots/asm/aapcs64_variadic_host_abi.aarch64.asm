@@ -282,7 +282,6 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0x50
                	add	sp, sp, #0xc0
                	ret
-               	b	<addr>
 
 <icopy>:
                	sub	sp, sp, #0xc0

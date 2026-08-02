@@ -66,4 +66,3 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>

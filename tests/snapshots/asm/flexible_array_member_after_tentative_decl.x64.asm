@@ -51,4 +51,3 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %eax
                	retq
-               	jmp	<addr>

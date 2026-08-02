@@ -44,7 +44,6 @@ Disassembly of section .text:
                	b.hi	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	b	<addr>
 
 <classify_s>:
                	sxtw	x0, w0

@@ -40,5 +40,3 @@ Disassembly of section .text:
 
 <die>:
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>

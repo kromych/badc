@@ -66,12 +66,6 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
   block 13  start_pc=0
     v10  Imm(42)                                          -> x0
     terminator Return(v10)   (exit_acc=v10)
-  block 14  start_pc=0
-    terminator Jmp(b4)
-  block 15  start_pc=0
-    terminator Jmp(b7)
-  block 16  start_pc=0
-    terminator Jmp(b10)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

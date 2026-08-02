@@ -68,7 +68,6 @@ Disassembly of section .text:
                	jl	<addr>
                	movslq	%ecx, %rax
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

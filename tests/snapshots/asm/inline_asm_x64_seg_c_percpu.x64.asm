@@ -145,10 +145,7 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%ah, 0x48(%rbp)
                	movl	0x40, %eax
                	movq	%gs:<rip>, %rdx

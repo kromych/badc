@@ -35,4 +35,3 @@ Disassembly of section .text:
                	jl	<addr>
                	movslq	%eax, %rax
                	retq
-               	jmp	<addr>

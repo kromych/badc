@@ -90,4 +90,3 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %eax
                	retq
-               	jmp	<addr>

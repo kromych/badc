@@ -129,5 +129,3 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x30
                	ret
-               	b	<addr>
-               	b	<addr>

@@ -92,8 +92,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v49  BinopI { op=shl, lhs=v48, rhs_imm=32 }           -> x1
     v50  Extend { value=v48, kind=I32 }                   -> x1
     terminator Jmp(b14)   (exit_acc=v48)
-  block 19  start_pc=0
-    terminator Jmp(b12)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

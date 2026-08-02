@@ -133,8 +133,6 @@ fn ent_pc=2 n_params=1 variadic=true locals=4
     v17  Intrinsic { kind=6, args=[v16] }                 -> x0
     v18  LoadLocal { off=-4, kind=F64 }                   -> d0
     terminator Return(v18)   (exit_acc=v18)
-  block 7  start_pc=0
-    terminator Jmp(b4)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=icopy
 fn ent_pc=3 n_params=1 variadic=true locals=6

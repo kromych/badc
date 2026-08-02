@@ -55,4 +55,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>
-               	jmp	<addr>

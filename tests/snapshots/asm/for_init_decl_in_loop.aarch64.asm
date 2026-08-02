@@ -85,7 +85,6 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sxtw	x0, w1
                	ret
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

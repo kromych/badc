@@ -215,4 +215,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	jmp	<addr>

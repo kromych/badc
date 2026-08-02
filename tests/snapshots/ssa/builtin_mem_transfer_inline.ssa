@@ -869,22 +869,6 @@ fn ent_pc=7 n_params=0 variadic=false locals=141
     terminator Jmp(b10)
   block 83  start_pc=0
     terminator Jmp(b6)
-  block 84  start_pc=0
-    terminator Jmp(b20)
-  block 85  start_pc=0
-    terminator Jmp(b24)
-  block 86  start_pc=0
-    terminator Jmp(b30)
-  block 87  start_pc=0
-    terminator Jmp(b36)
-  block 88  start_pc=0
-    terminator Jmp(b44)
-  block 89  start_pc=0
-    terminator Jmp(b52)
-  block 90  start_pc=0
-    terminator Jmp(b60)
-  block 91  start_pc=0
-    terminator Jmp(b64)
 info: auto-including <string.h> for undeclared `memmove`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

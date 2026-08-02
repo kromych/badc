@@ -31,8 +31,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
     v10  Extend { value=v8, kind=I32 }                    -> x1
     terminator Return(v8)   (exit_acc=v8)
-  block 4  start_pc=0
-    terminator Jmp(b3)   (exit_acc=v20)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

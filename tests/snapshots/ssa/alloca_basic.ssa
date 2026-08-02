@@ -36,8 +36,6 @@ fn ent_pc=6 n_params=0 variadic=false locals=5
   block 5  start_pc=0
     v21  Imm(1)                                           -> x0
     terminator Return(v21)   (exit_acc=v21)
-  block 6  start_pc=0
-    terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=dynamic
 fn ent_pc=7 n_params=1 variadic=false locals=4
@@ -284,8 +282,6 @@ fn ent_pc=10 n_params=1 variadic=false locals=5
   block 7  start_pc=0
     v30  Imm(-1)                                          -> x0
     terminator Return(v30)   (exit_acc=v30)
-  block 8  start_pc=0
-    terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=main
 fn ent_pc=11 n_params=0 variadic=false locals=0

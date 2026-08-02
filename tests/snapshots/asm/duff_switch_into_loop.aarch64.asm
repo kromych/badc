@@ -80,13 +80,13 @@ Disassembly of section .text:
                	add	x17, x17, x16
                	br	x17
                	<unknown>
+               	udf	#0x48
                	udf	#0x4c
                	udf	#0x50
                	udf	#0x54
                	udf	#0x58
                	udf	#0x5c
                	udf	#0x60
-               	udf	#0x64
                	add	x0, x3, #0x1
                	add	x1, x4, #0x1
                	ldrb	w4, [x4]
@@ -96,7 +96,6 @@ Disassembly of section .text:
                	sxtw	x0, w2
                	cmp	x0, #0x0
                	b.gt	<addr>
-               	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>
@@ -152,4 +151,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>

@@ -40,8 +40,6 @@ Disassembly of section .text:
                	jg	<addr>
                	movl	$0x1, %eax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
 
 <count>:
                	movslq	%edi, %rdi

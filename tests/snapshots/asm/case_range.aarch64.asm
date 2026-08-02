@@ -41,8 +41,6 @@ Disassembly of section .text:
                	b.gt	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	b	<addr>
-               	b	<addr>
 
 <count>:
                	mov	x1, x0

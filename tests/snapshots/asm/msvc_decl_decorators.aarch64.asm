@@ -17,8 +17,6 @@ Disassembly of section .text:
 
 <halt>:
                	b	<addr>
-               	b	<addr>
-               	b	<addr>
 
 <main>:
                	str	x19, [sp, #-0x20]!

@@ -901,66 +901,6 @@ fn ent_pc=6 n_params=0 variadic=false locals=17
     v291 LoadIndexed { base=v3, index=v288, scale=4, kind=I32 } -> x1
     v292 Imm(0)                                           -> x2
     terminator Jmp(b15)   (exit_acc=v291)
-  block 129  start_pc=0
-    terminator Jmp(b6)
-  block 130  start_pc=0
-    terminator Jmp(b5)
-  block 131  start_pc=0
-    terminator Jmp(b8)
-  block 132  start_pc=0
-    terminator Jmp(b7)
-  block 133  start_pc=0
-    terminator Jmp(b9)
-  block 134  start_pc=0
-    terminator Jmp(b27)
-  block 135  start_pc=0
-    terminator Jmp(b26)
-  block 136  start_pc=0
-    terminator Jmp(b29)
-  block 137  start_pc=0
-    terminator Jmp(b28)
-  block 138  start_pc=0
-    terminator Jmp(b30)
-  block 139  start_pc=0
-    terminator Jmp(b48)
-  block 140  start_pc=0
-    terminator Jmp(b47)
-  block 141  start_pc=0
-    terminator Jmp(b50)
-  block 142  start_pc=0
-    terminator Jmp(b49)
-  block 143  start_pc=0
-    terminator Jmp(b51)
-  block 144  start_pc=0
-    terminator Jmp(b100)
-  block 145  start_pc=0
-    terminator Jmp(b99)
-  block 146  start_pc=0
-    terminator Jmp(b103)
-  block 147  start_pc=0
-    terminator Jmp(b102)
-  block 148  start_pc=0
-    terminator Jmp(b105)
-  block 149  start_pc=0
-    terminator Jmp(b69)
-  block 150  start_pc=0
-    terminator Jmp(b68)
-  block 151  start_pc=0
-    terminator Jmp(b71)
-  block 152  start_pc=0
-    terminator Jmp(b70)
-  block 153  start_pc=0
-    terminator Jmp(b72)
-  block 154  start_pc=0
-    terminator Jmp(b84)
-  block 155  start_pc=0
-    terminator Jmp(b83)
-  block 156  start_pc=0
-    terminator Jmp(b86)
-  block 157  start_pc=0
-    terminator Jmp(b85)
-  block 158  start_pc=0
-    terminator Jmp(b87)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

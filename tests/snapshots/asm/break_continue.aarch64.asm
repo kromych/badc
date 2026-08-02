@@ -34,4 +34,3 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sxtw	x0, w0
                	ret
-               	b	<addr>

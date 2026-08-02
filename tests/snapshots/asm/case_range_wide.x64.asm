@@ -41,7 +41,6 @@ Disassembly of section .text:
                	ja	<addr>
                	movl	$0x1, %eax
                	retq
-               	jmp	<addr>
 
 <classify_s>:
                	movslq	%edi, %rdi

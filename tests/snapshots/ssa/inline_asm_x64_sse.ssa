@@ -617,24 +617,6 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     terminator Jmp(b37)
   block 92  start_pc=0
     terminator Jmp(b32)
-  block 93  start_pc=0
-    terminator Jmp(b24)
-  block 94  start_pc=0
-    terminator Jmp(b27)
-  block 95  start_pc=0
-    terminator Jmp(b30)
-  block 96  start_pc=0
-    terminator Jmp(b35)
-  block 97  start_pc=0
-    terminator Jmp(b40)
-  block 98  start_pc=0
-    terminator Jmp(b45)
-  block 99  start_pc=0
-    terminator Jmp(b54)
-  block 100  start_pc=0
-    terminator Jmp(b63)
-  block 101  start_pc=0
-    terminator Jmp(b72)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

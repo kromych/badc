@@ -12,8 +12,6 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
   block 1  start_pc=0
     v7   Imm(12)                                          -> x0
     terminator Return(v7)   (exit_acc=v7)
-  block 2  start_pc=0
-    terminator Jmp(b1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=pick_live
 fn ent_pc=1 n_params=1 variadic=false locals=0

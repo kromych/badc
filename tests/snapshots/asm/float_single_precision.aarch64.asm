@@ -227,4 +227,3 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	b	<addr>
                	b	<addr>
-               	b	<addr>

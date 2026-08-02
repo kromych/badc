@@ -80,4 +80,3 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	sxtw	x0, w0
                	b	<addr>
-               	b	<addr>

@@ -56,7 +56,6 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x60
                	ret
-               	b	<addr>
 
 <dynamic>:
                	str	x19, [sp, #-0x40]!
@@ -291,7 +290,6 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x60
                	ret
-               	b	<addr>
 
 <main>:
                	str	x20, [sp, #-0x30]!

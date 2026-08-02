@@ -13,7 +13,6 @@ Disassembly of section .text:
 <pick_folded>:
                	movl	$0xc, %eax
                	retq
-               	jmp	<addr>
 
 <pick_live>:
                	movslq	%edi, %rdi

@@ -42,7 +42,3 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>
-               	b	<addr>

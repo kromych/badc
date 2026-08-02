@@ -1850,7 +1850,7 @@ fn budget(cheap: usize, deep_default: usize) -> usize {
 
 /// Programs per reference batch. One compile and one process launch per
 /// batch, so this is the unit that amortises both.
-const REF_BATCH: usize = 48;
+const REF_BATCH: usize = 64;
 
 fn seed_at(base: u64, i: usize) -> u64 {
     Rng::new(base ^ (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)).next()
@@ -1889,7 +1889,7 @@ fn sweep(base: u64, count: usize, reference: bool, adjust: impl Fn(u64, Shape) -
 
 #[test]
 fn frame_slot_shapes() {
-    sweep(seed_base(), budget(48, 4000), false, |_, s| s);
+    sweep(seed_base(), budget(64, 4000), false, |_, s| s);
 }
 
 /// The same shape space under register-pressure caps: the caps move
@@ -1898,7 +1898,7 @@ fn frame_slot_shapes() {
 #[test]
 fn frame_slot_shapes_under_pressure() {
     const CAPS: [(usize, usize); 4] = [(2, 2), (3, 2), (6, 4), (8, 8)];
-    sweep(seed_base() ^ 0x1111, budget(48, 4000), false, |seed, s| {
+    sweep(seed_base() ^ 0x1111, budget(64, 4000), false, |seed, s| {
         let (g, f) = CAPS[(seed >> 7) as usize % CAPS.len()];
         s.with_pressure(g, f)
     });

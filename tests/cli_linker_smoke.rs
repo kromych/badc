@@ -3564,6 +3564,49 @@ fn unknown_asm_section_flag_is_diagnosed() {
     );
 }
 
+/// An absolute 32-bit reference resolves to a fixed address, which a
+/// position-independent image cannot promise. The `-c` object carries
+/// the relocation (its shape is locked in the linker tests); linking it
+/// into an executable names the constraint rather than reporting a
+/// missing patcher. GNU ld and clang reject the same object with
+/// "relocation R_X86_64_32S ... can not be used when making a PIE
+/// object".
+#[test]
+fn absolute_text_reloc_is_rejected_for_a_pie() {
+    let dir = tempdir("abs-text-reloc-pie");
+    let src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("c")
+        .join("file_scope_asm_sym_mem.c");
+    run(
+        Command::new(badc())
+            .args(["-c", "--target=linux-x64", "-o"])
+            .arg(dir.join("t.o"))
+            .arg(&src)
+            .current_dir(&dir),
+        "compile to an object",
+    );
+    let out = Command::new(badc())
+        .args(["--target=linux-x64", "-o"])
+        .arg(dir.join("prog"))
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        !out.status.success(),
+        "expected the PIE link to be rejected"
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("R_X86_64_32S")
+            && err.contains("per_slot_base")
+            && err.contains("position-independent"),
+        "diagnostic should name the relocation, the symbol and the constraint: {err}",
+    );
+}
+
 // Gated on Linux: the read-only data page only exists on the native ELF
 // link path, and the test exec's the produced binary.
 //
@@ -3624,6 +3667,57 @@ fn const_label_address_table_storage_is_writable() {
             out.status
         );
     }
+}
+
+// A pc-relative record in a pushed data section whose addend puts the
+// target below the symbol it is measured from (`(sym - 8)(%rip)`). The
+// merged data-byte offset then falls outside the image, and `.rodata` /
+// `.data` / `.bss` map to non-contiguous runtime regions, so the writer
+// has to resolve the anchor and apply the difference to the address.
+// The program reads back the committed disp32 fields.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn data_pcrel_target_below_its_anchor_symbol() {
+    let dir = tempdir("data-pcrel-below-anchor");
+    let src = write_source(
+        &dir,
+        "t.c",
+        "long counter[2] = {42, 7};\n\
+         extern const unsigned char tmpl;\n\
+         __asm__(\".pushsection .rodata\\n\"\n\
+         \t\".globl tmpl\\n\"\n\
+         \t\"tmpl:\\n\"\n\
+         \t\"leaq (counter - 8)(%rip), %rdx\\n\"\n\
+         \t\"movq counter(%rip), %rax\\n\"\n\
+         \t\".popsection\\n\");\n\
+         static long disp32(const unsigned char *p) {\n\
+         \tunsigned int v = (unsigned int)p[0] | ((unsigned int)p[1] << 8) |\n\
+         \t\t((unsigned int)p[2] << 16) | ((unsigned int)p[3] << 24);\n\
+         \treturn (long)(int)v; }\n\
+         int main(void) {\n\
+         \tconst unsigned char *t = &tmpl;\n\
+         \tif ((const char *)(t + 7) + disp32(t + 3) != (const char *)counter - 8)\n\
+         \t\treturn 1;\n\
+         \tif ((const char *)(t + 14) + disp32(t + 10) != (const char *)counter)\n\
+         \t\treturn 2;\n\
+         \treturn 42; }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir),
+        "build data-pcrel below-anchor program",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(42),
+        "committed disp32 does not reach the relocation target (status {})",
+        out.status
+    );
 }
 
 // A `dlopen`'d module resolves the host executable's symbols through

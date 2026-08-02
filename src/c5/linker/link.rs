@@ -39,8 +39,8 @@ use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
     R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC,
     R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12,
-    R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_X86_64_32, R_X86_64_64, R_X86_64_GOTPCREL, R_X86_64_PC32,
-    R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32,
+    R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_GOTPCREL,
+    R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32,
     aarch64_ldst_lo12_scale,
 };
 
@@ -316,6 +316,10 @@ pub struct DataPcRel {
     pub slot_offset: u64,
     /// `S + A` of the relocation in the merged image.
     pub target: MergedTarget,
+    /// `S` alone. A negative addend can put `target` outside the
+    /// merged section, which has no offset-to-address mapping of its
+    /// own; the writers map this instead and apply the difference.
+    pub anchor: MergedTarget,
     /// Slot width in bytes: 4 or 8.
     pub width: u8,
 }
@@ -1317,7 +1321,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 _ => None,
             };
             if let Some(width) = pcrel_width {
-                let target = match sym.section {
+                let (section, value) = match sym.section {
                     NativeSymSection::Undef | NativeSymSection::Common => {
                         let d = defined.get(sym.name.as_str()).ok_or_else(|| {
                             link_err(&format!(
@@ -1325,32 +1329,18 @@ pub fn link_native_objects_with_shared_libs<'a>(
                                 sym.name,
                             ))
                         })?;
-                        merged_target(d.section, d.value as i64, reloc.addend, data.len())?
+                        (d.section, d.value as i64)
                     }
-                    NativeSymSection::Text => merged_target(
-                        sym.section,
-                        text_bases[i] as i64 + sym.value as i64,
-                        reloc.addend,
-                        data.len(),
-                    )?,
-                    NativeSymSection::RoData => merged_target(
-                        sym.section,
-                        rodata_bases[i] as i64 + sym.value as i64,
-                        reloc.addend,
-                        data.len(),
-                    )?,
-                    NativeSymSection::Data => merged_target(
-                        sym.section,
-                        data_bases[i] as i64 + sym.value as i64,
-                        reloc.addend,
-                        data.len(),
-                    )?,
-                    NativeSymSection::Bss => merged_target(
-                        sym.section,
-                        bss_bases[i] as i64 + sym.value as i64,
-                        reloc.addend,
-                        data.len(),
-                    )?,
+                    NativeSymSection::Text => {
+                        (sym.section, text_bases[i] as i64 + sym.value as i64)
+                    }
+                    NativeSymSection::RoData => {
+                        (sym.section, rodata_bases[i] as i64 + sym.value as i64)
+                    }
+                    NativeSymSection::Data => {
+                        (sym.section, data_bases[i] as i64 + sym.value as i64)
+                    }
+                    NativeSymSection::Bss => (sym.section, bss_bases[i] as i64 + sym.value as i64),
                     other => {
                         return Err(err(&format!(
                             "pc-relative data slot targets {other:?} symbol `{}`",
@@ -1360,7 +1350,8 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 };
                 data_pcrel_relocs.push(DataPcRel {
                     slot_offset,
-                    target,
+                    target: merged_target(section, value, reloc.addend, data.len())?,
+                    anchor: merged_target(section, value, 0, data.len())?,
                     width,
                 });
                 continue;
@@ -2424,6 +2415,22 @@ fn park_section_ref(
     sym_name: &str,
 ) -> Result<(), C5Error> {
     if !parked_reloc_supported(machine, reloc.rtype) {
+        // An absolute reference has no link-time value in the
+        // position-independent image the ELF writer emits; the GNU and
+        // LLVM linkers reject the same input. Name the constraint so it
+        // reads as a property of the reference, not a missing patcher.
+        // TODO: a fixed-base image can resolve these, but this screen
+        // runs in the merge pass, which carries no output kind.
+        if matches!(machine, NativeMachine::X86_64)
+            && matches!(reloc.rtype, R_X86_64_64 | R_X86_64_32 | R_X86_64_32S)
+        {
+            return Err(link_err(&format!(
+                "{} against symbol `{sym_name}` at text offset {patch_offset:#x} \
+                 cannot be used in a position-independent executable: the reference \
+                 needs an absolute address, which no load address supplies",
+                reloc_desc(machine, reloc.rtype),
+            )));
+        }
         return Err(link_err(&format!(
             "unsupported {} against symbol `{sym_name}` at text offset {patch_offset:#x}",
             reloc_desc(machine, reloc.rtype),

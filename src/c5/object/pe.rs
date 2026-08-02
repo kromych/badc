@@ -1249,7 +1249,11 @@ pub(super) fn write(
         // the recorded width, so ASLR needs no `.reloc` entry.
         for r in &build.data_pcrel_relocs {
             let target = if r.target_in_data {
-                data_off_to_rva(r.target_offset as u32) as i64
+                // `.data` and its zero-fill tail are separated by the TLS
+                // blob, so an addend that moves the target out of the
+                // anchor's object is applied to the RVA, not the offset.
+                data_off_to_rva(r.target_anchor as u32) as i64
+                    + (r.target_offset as i64 - r.target_anchor as i64)
             } else {
                 (text_rva + text_prologue_len) as i64 + r.target_offset as i64
             };

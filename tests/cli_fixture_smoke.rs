@@ -1,77 +1,55 @@
-//! gh #70 -- CLI standalone smoke test.
+//! CLI standalone smoke test.
 //!
-//! The lib-side fixture tests (`src/c5/tests/native.rs` etc.) all
-//! prepend `with_prelude()` (`src/c5/tests/mod.rs:74`) before
-//! compiling. That hides whether each fixture compiles when
-//! invoked through the badc binary, where the user gets no auto-
-//! prelude. Before gh #69 landed, 45 of the 123 fixtures failed
-//! standalone with "no `#pragma binding(<dylib>::exit, ...)` is
-//! in scope" because their source didn't `#include <stdlib.h>`.
+//! The lib-side fixture tests (`src/c5/tests/native.rs` and its
+//! siblings) prepend `with_prelude()` (`src/c5/tests/mod.rs`) before
+//! compiling, which hides whether a fixture builds through the badc
+//! binary, where the user gets no auto-prelude and every header the
+//! source needs must be in it.
 //!
-//! This test runs the actual badc binary against every fixture
-//! for every supported Linux target and asserts that compilation
-//! succeeds. Programs that intentionally crash at runtime
-//! (`oob_*`, `double_free.c`, ...) are excluded -- the suite is
-//! a *compile-time* smoke check, not a runtime one.
+//! This runs the badc binary against every fixture for every supported
+//! Linux target and asserts the build succeeds. It is a compile-and-
+//! link check, not a runtime one: a fixture that runs into its own trap
+//! is still swept, because nothing here executes the result.
 
 use std::path::PathBuf;
 use std::process::Command;
 
-/// Fixtures that exercise the runtime safety net (the VM aborts
-/// with -1 on the violation; the native binary smashes memory or
-/// hits SIGSEGV instead). They compile fine -- the divergence is
-/// at execution time. Skip them rather than treat their compile
-/// as a regression target.
+/// Fixtures the sweep cannot build for *every* target in
+/// [`SMOKE_TARGETS`]. An exclusion that applies to one target only
+/// belongs in [`TARGET_SPECIFIC_ASM`], which keeps the other target
+/// covered. Each entry names the diagnostic it stands for; when a
+/// fixture is excluded for a different reason on each target, both
+/// are named.
 const COMPILE_SKIPLIST: &[&str] = &[
-    // Pointer-tracking safety-net fixtures.
-    "double_free.c",
-    "use_after_free.c",
-    "forge_code_pointer.c",
-    "negative_size_memset.c",
-    "code_as_data.c",
-    "memset_oob.c",
-    "memcpy_oob_dst.c",
-    "memcpy_oob_src.c",
-    "oob_read.c",
-    // mprotect-blocks-* fixtures live under their own runtime
-    // tests; their compile path is exercised through the
-    // standard fixture pipeline.
-    //
-    // `_Thread_local`-bearing fixtures. The Linux native-link
-    // path (compile -> ET_REL -> link_native_objects -> write_executable_elf64)
-    // doesn't carry TLS storage through ET_REL yet, so the
-    // codegen's relocatable writer refuses these with a clear
-    // link error pointing at the in-memory compile + link path
-    // (TODO: thread `.tdata` / `.tbss` plus per-format TLS
-    // metadata through the synth pipeline).
-    "thread_local_basic.c",
-    "thread_local_initializer.c",
-    "thread_local_per_thread.c",
-    "deferred_jit_thread_local.c",
     // VLA fixtures that assert a clean rejection diagnostic rather
     // than compiling; the constructs are unsupported by design (C99
-    // 6.7.6.2 corners left as TODO).
+    // 6.7.6.2 corners left as TODO). The diagnostics are locked in
+    // `src/c5/tests/vla.rs`.
     "vla_multidim_rejected.c",
     "vla_file_scope_rejected.c",
     "vla_initializer_rejected.c",
-    // An `i`-class asm operand fed through an always_inline helper
-    // resolves only under -O (gcc parity); the -O run lives in
+    // x86-64 asm on both counts: aarch64 rejects `%c1(%%rip)`, and on
+    // x86-64 the `i`-class operand fed through an always_inline helper
+    // resolves only once the fold runs, so `-O0` reports it as not a
+    // constant or address (gcc parity). The -O run lives in
     // native_elf_x64.
     "inline_asm_x64_riprel_param.c",
-    // Absolute symbol-displacement section relocations assemble only
-    // on the `-c` object path (a single-file image folds only
-    // PC-relative section relocs); locked by a linker test.
+    // x86-64 asm: aarch64 rejects the `sym(,%reg,8)` operand. On
+    // x86-64 the absolute `R_X86_64_32S` displacement has no link-time
+    // value in the position-independent image badc emits -- GNU ld and
+    // clang reject the same object with "relocation R_X86_64_32S ...
+    // can not be used when making a PIE object". The object-path
+    // relocation shape is locked by a linker test.
     "file_scope_asm_sym_mem.c",
-    // PC-relative symbol relocations from a non-executable pushed
-    // section assemble only on the `-c` object path (the single-file
-    // image folds data-side relocs as absolute); locked by a linker
-    // test.
-    "file_scope_asm_sym_riprel.c",
-    // Each calls a declared-but-undefined function from a statically
-    // dead branch, so the link succeeds only once the fold deletes the
-    // call -- an -O capability. gcc likewise fails to link these at -O0
-    // and links them at -O2; the -O runs live in
-    // `dead_branch_calls_are_eliminated_under_optimize`.
+];
+
+/// Each calls a declared-but-undefined function from a statically dead
+/// branch, so the link succeeds only once the fold deletes the call --
+/// an -O capability. gcc likewise fails to link these at -O0 and links
+/// them at -O2. Excluded from the -O0 sweep below and built at -O by
+/// `dead_branch_calls_are_eliminated_under_optimize`, which is the
+/// assertion; one list drives both so neither can drift.
+const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
     "dead_arm_short_circuit_undefined.c",
     "always_inline_indirect_call_guard.c",
     "dead_arm_config_predicate_undefined.c",
@@ -153,6 +131,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_a64_at_sys.c", "linux-x64"),         // aarch64 `at` / generic `sys`
     ("file_scope_asm_local_labels.c", "linux-aarch64"), // x86-64 div/ret fastop fragments
     ("file_scope_asm_local_label_branch.c", "linux-aarch64"), // x86-64 lock cmpxchg + jcc to a section label
+    ("file_scope_asm_sym_riprel.c", "linux-aarch64"), // x86-64 `sym(%rip)` displacement expressions
     ("inline_asm_x64_align_above_section.c", "linux-aarch64"), // x86-64 alignment above the section default
     ("inline_asm_x64_mmx_fpu.c", "linux-aarch64"),             // x86-64 MMX movq + fwait
     ("inline_asm_x64_bug_table_org.c", "linux-aarch64"),       // x86-64 ud2 bug-table entry
@@ -173,23 +152,43 @@ fn fixtures_dir() -> PathBuf {
         .join("c")
 }
 
-/// An entry whose fixture is gone stops excluding anything without
-/// failing, so a fixture and its registration can both be lost
-/// unnoticed. The converse is normal: the sweep below discovers
-/// unregistered fixtures from the directory. The backend tables carry
-/// the same check in `src/c5/tests/fixture_tables.rs`.
+/// An entry that excludes nothing fails nothing, so it survives the
+/// condition it was written for. This rejects the three shapes that
+/// go stale silently: an entry naming a fixture that is gone, a
+/// duplicate, and a `TARGET_SPECIFIC_ASM` entry the all-target
+/// `COMPILE_SKIPLIST` already short-circuits. The converse is normal:
+/// the sweep below discovers unregistered fixtures from the directory.
+/// The backend tables carry the existence check in
+/// `src/c5/tests/fixture_tables.rs`.
 #[test]
 fn every_table_entry_names_a_fixture() {
     let dir = fixtures_dir();
     let mut bad: Vec<String> = Vec::new();
     let mut checked = 0usize;
-    for name in COMPILE_SKIPLIST {
+    for (i, name) in COMPILE_SKIPLIST.iter().enumerate() {
         checked += 1;
         if !dir.join(name).exists() {
             bad.push(format!("COMPILE_SKIPLIST: {name}"));
         }
+        if COMPILE_SKIPLIST[..i].contains(name) {
+            bad.push(format!("COMPILE_SKIPLIST: {name} listed twice"));
+        }
     }
-    for (name, target) in TARGET_SPECIFIC_ASM {
+    for (i, name) in DEAD_BRANCH_NEEDS_OPTIMIZE.iter().enumerate() {
+        checked += 1;
+        if !dir.join(name).exists() {
+            bad.push(format!("DEAD_BRANCH_NEEDS_OPTIMIZE: {name}"));
+        }
+        if DEAD_BRANCH_NEEDS_OPTIMIZE[..i].contains(name) {
+            bad.push(format!("DEAD_BRANCH_NEEDS_OPTIMIZE: {name} listed twice"));
+        }
+        if COMPILE_SKIPLIST.contains(name) {
+            bad.push(format!(
+                "DEAD_BRANCH_NEEDS_OPTIMIZE: {name} is also in COMPILE_SKIPLIST"
+            ));
+        }
+    }
+    for (i, (name, target)) in TARGET_SPECIFIC_ASM.iter().enumerate() {
         checked += 1;
         if !dir.join(name).exists() {
             bad.push(format!("TARGET_SPECIFIC_ASM: {name}"));
@@ -197,6 +196,17 @@ fn every_table_entry_names_a_fixture() {
         if !SMOKE_TARGETS.contains(target) {
             bad.push(format!(
                 "TARGET_SPECIFIC_ASM: {name} names unswept target {target}"
+            ));
+        }
+        if TARGET_SPECIFIC_ASM[..i].contains(&(name, target)) {
+            bad.push(format!(
+                "TARGET_SPECIFIC_ASM: {name} listed twice for {target}"
+            ));
+        }
+        if COMPILE_SKIPLIST.contains(name) {
+            bad.push(format!(
+                "TARGET_SPECIFIC_ASM: {name} is inert -- COMPILE_SKIPLIST already \
+                 excludes it from every target"
             ));
         }
     }
@@ -233,7 +243,7 @@ fn every_fixture_compiles_standalone_for_linux() {
     let mut attempts = 0usize;
     for fixture in &entries {
         let name = fixture.file_name().unwrap().to_str().unwrap();
-        if COMPILE_SKIPLIST.contains(&name) {
+        if COMPILE_SKIPLIST.contains(&name) || DEAD_BRANCH_NEEDS_OPTIMIZE.contains(&name) {
             continue;
         }
         for target in SMOKE_TARGETS.iter().copied() {
@@ -315,13 +325,13 @@ fn quoted_include_resolves_relative_to_including_file() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// The fixtures skiplisted above call a declared-but-undefined
-// function from a branch that is statically dead once the enclosing
-// helper inlines and its guard folds. Linking is the assertion: a
-// surviving call is an undefined reference. Both cross targets are
-// built so the fold is exercised independently of the host, and the
-// host-target build is executed to confirm the surviving code still
-// computes the right answers.
+// Each [`DEAD_BRANCH_NEEDS_OPTIMIZE`] fixture calls a declared-but-
+// undefined function from a branch that is statically dead once the
+// enclosing helper inlines and its guard folds. Linking is the
+// assertion: a surviving call is an undefined reference. Both cross
+// targets are built so the fold is exercised independently of the host,
+// and the host-target build is executed to confirm the surviving code
+// still computes the right answers.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn dead_branch_calls_are_eliminated_under_optimize() {
@@ -329,26 +339,9 @@ fn dead_branch_calls_are_eliminated_under_optimize() {
     let dir = std::env::temp_dir().join(format!("badc-deadbr-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("create temp dir");
-    let mut root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    root.push("tests");
-    root.push("fixtures");
-    root.push("c");
+    let root = fixtures_dir();
 
-    for name in [
-        "dead_arm_short_circuit_undefined.c",
-        "always_inline_indirect_call_guard.c",
-        "dead_arm_config_predicate_undefined.c",
-        "select_operand_guard_folds.c",
-        "const_scalar_load_folds.c",
-        "unroll_const_trip_index_literal.c",
-        "inline_zero_frame_callee_past_gate.c",
-        "ipa_const_param_guard.c",
-        "addr_null_compare_inline_param.c",
-        "addr_compare_same_function_inline.c",
-        "addr_fold_pruned_arm_dce.c",
-        "const_struct_array_inline_accessor.c",
-        "local_template_byte_probe.c",
-    ] {
+    for name in DEAD_BRANCH_NEEDS_OPTIMIZE.iter().copied() {
         let src = root.join(name);
         let stem = name.trim_end_matches(".c");
         for target in ["linux-aarch64", "linux-x64"] {

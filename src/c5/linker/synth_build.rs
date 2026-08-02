@@ -398,9 +398,11 @@ fn synth_program_and_build(
                     MergedTarget::Text(off) => (off as u64, false),
                     MergedTarget::Data(off) => (off as u64, true),
                 };
+                let (MergedTarget::Text(anchor) | MergedTarget::Data(anchor)) = r.anchor;
                 crate::c5::codegen::DataPcRelReloc {
                     slot_data_offset: r.slot_offset,
                     target_offset,
+                    target_anchor: anchor as u64,
                     target_in_data,
                     width: r.width,
                 }

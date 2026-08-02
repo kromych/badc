@@ -1852,6 +1852,13 @@ pub(crate) struct DataPcRelReloc {
     /// (writers map it like any data offset, zero-fill tail
     /// included).
     pub target_offset: u64,
+    /// Offset of the symbol `target_offset` is measured from, before
+    /// the relocation addend. An addend can place the target outside
+    /// the data image (`sym - 8`), and the data-byte space maps to
+    /// non-contiguous runtime regions, so writers attribute the region
+    /// from the anchor and apply `target_offset - target_anchor` to the
+    /// address it maps to. Equals `target_offset` for a zero addend.
+    pub target_anchor: u64,
     pub target_in_data: bool,
     /// Slot width in bytes: 4 or 8.
     pub width: u8,

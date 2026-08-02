@@ -11223,4 +11223,3 @@ fn absolute_asm_label_immediate_is_refused_in_a_single_file_image() {
     };
     emit_native_with_options(&program, target, reloc).expect("the object path carries the reloc");
 }
-

@@ -58,8 +58,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x3, %edi
-               	movl	$0x4, %esi
                	callq	<addr>
+               	addq	$0x4, %rax
+               	addq	$0x3, %rax
+               	addq	$0x4, %rax
                	movslq	%eax, %rax
                	popq	%rbp
                	retq

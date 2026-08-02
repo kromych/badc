@@ -71,9 +71,44 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	bl	<addr>
-               	sxtw	x0, w0
-               	ldp	x29, x30, [sp], #0x10
+               	str	x20, [sp, #-0x90]!
+               	str	x19, [sp, #0x10]
+               	stp	x29, x30, [sp, #0x80]
+               	add	x29, sp, #0x80
+               	sub	x0, x29, #0x10
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	str	x10, [sp, #-0x10]!
+               	ldr	x10, [x1]
+               	str	x10, [x0]
+               	ldr	x10, [x1, #0x8]
+               	str	x10, [x0, #0x8]
+               	ldr	x10, [sp], #0x10
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	sub	x1, x29, #0x10
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	mov	x20, #0x1               // =1
+               	mov	x3, #0x64               // =100
+               	mov	x9, x0
+               	mov	x0, x1
+               	mov	x1, x2
+               	mov	x2, x20
+               	blr	x9
+               	sub	x0, x29, #0x10
+               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x8]
+               	sub	x1, x29, #0x10
+               	sub	x2, x29, #0x40
+               	mov	x9, x0
+               	mov	x0, x1
+               	mov	x1, x2
+               	mov	x2, x20
+               	blr	x9
+               	ldursw	x0, [x29, #-0x40]
+               	ldp	x29, x30, [sp, #0x80]
+               	ldr	x19, [sp, #0x10]
+               	ldr	x20, [sp], #0x90
                	ret

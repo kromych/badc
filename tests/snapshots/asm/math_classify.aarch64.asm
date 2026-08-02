@@ -11,20 +11,6 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#0x1
 
-<signbit>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x0, x29, #0x8
-               	str	d0, [x0]
-               	sub	x0, x29, #0x8
-               	ldr	x0, [x0]
-               	lsr	x0, x0, #63
-               	sxtw	x0, w0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -443,7 +429,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	bl	<addr>
+               	sub	x0, x29, #0x8
+               	str	d0, [x0]
+               	sub	x0, x29, #0x8
+               	ldr	x0, [x0]
+               	lsr	x0, x0, #63
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0xf                // =15
@@ -451,8 +442,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d0, x0
-               	bl	<addr>
+               	sub	x1, x29, #0x8
+               	fmov	d16, x0
+               	str	d16, [x1]
+               	sub	x0, x29, #0x8
+               	ldr	x0, [x0]
+               	lsr	x0, x0, #63
+               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x10               // =16
                	add	sp, sp, #0x20

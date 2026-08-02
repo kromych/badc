@@ -10,20 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<signbit>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	movsd	%xmm0, (%rax,%riz)
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
-               	shrq	$0x3f, %rax
-               	movslq	%eax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -406,16 +392,26 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	callq	<addr>
+               	leaq	-0x8(%rbp), %rax
+               	movsd	%xmm0, (%rax,%riz)
+               	leaq	-0x8(%rbp), %rax
+               	movq	(%rax), %rax
+               	shrq	$0x3f, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0xf, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x3ff8000000000000, %rdi # imm = 0x3FF8000000000000
-               	movq	%rdi, %xmm0
-               	callq	<addr>
+               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
+               	leaq	-0x8(%rbp), %rcx
+               	movq	%rax, %xmm14
+               	movsd	%xmm14, (%rcx,%riz)
+               	leaq	-0x8(%rbp), %rax
+               	movq	(%rax), %rax
+               	shrq	$0x3f, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x10, %eax

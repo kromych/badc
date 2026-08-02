@@ -33,24 +33,28 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v3   Imm(0)                                           -> x0
     v4   LocalAddr(-1)                                    -> x0
     v5   Imm(2)                                           -> x0
-    v6   Imm(1)                                           -> x0
-    v7   Imm(0)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v7)
+    terminator Jmp(b1)
   block 1  start_pc=0
-    v9   Imm(1)                                           -> x0
-    v10  Imm(2)                                           -> x0
-    v11  Imm(3)                                           -> x0
-    v12  Imm(0)                                           -> x0
-    v13  Imm(0)                                           -> x0
-    v14  Imm(1)                                           -> x0
-    v15  Imm(2)                                           -> x0
-    v16  Imm(3)                                           -> x0
-    v17  Imm(3)                                           -> x0
-    v18  Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v18)
+    v20  Imm(1)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v20)
   block 2  start_pc=0
-    v20  Imm(0)                                           -> x0
-    terminator Return(v20)   (exit_acc=v20)
+    v6   Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v6)
+  block 3  start_pc=0
+    v8   Imm(1)                                           -> x0
+    v9   Imm(2)                                           -> x0
+    v10  Imm(3)                                           -> x0
+    v11  Imm(0)                                           -> x0
+    v12  Imm(0)                                           -> x0
+    v13  Imm(1)                                           -> x0
+    v14  Imm(2)                                           -> x0
+    v15  Imm(3)                                           -> x0
+    v16  Imm(3)                                           -> x0
+    v17  Imm(0)                                           -> x0
+    terminator Jmp(b4)   (exit_acc=v17)
+  block 4  start_pc=0
+    v19  Imm(0)                                           -> x0
+    terminator Return(v19)   (exit_acc=v19)
 redecl_composite_arity_warning.c:19: warning: too many arguments to `take_wrap` (expected 1, got at least 2)
     if (take_wrap(w, 1u, 2u) != 1u) return 1;
 redecl_composite_arity_warning.c:19: warning: too many arguments to `take_wrap` (expected 1, got at least 3)

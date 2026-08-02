@@ -10,30 +10,24 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<in_stmt_expr>:
-               	xorq	%rax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x30, %rsp
                	leaq	-0x18(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
                	popq	%rdx
-               	callq	<addr>
-               	movq	%rax, %rcx
                	leaq	-0x18(%rbp), %rax
-               	movslq	(%rax), %rdx
+               	movslq	(%rax), %rcx
                	leaq	-0x18(%rbp), %rax
                	movslq	0x4(%rax), %rax
-               	addq	%rdx, %rax
-               	subq	$0x3, %rax
                	addq	%rcx, %rax
+               	subq	$0x3, %rax
+               	addq	$0x0, %rax
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq

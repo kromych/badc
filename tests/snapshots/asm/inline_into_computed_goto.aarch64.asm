@@ -39,27 +39,23 @@ Disassembly of section .text:
                	ldrsw	x0, [x2, x0, lsl #2]
                	ldr	x0, [x1, x0, lsl #3]
                	br	x0
-               	ldur	x4, [x29, #-0x28]
-               	ldur	x2, [x29, #0x20]
-               	ldur	x0, [x29, #0x10]
-               	ldursw	x1, [x29, #-0x20]
-               	add	x3, x1, #0x1
+               	ldur	x3, [x29, #-0x28]
+               	ldur	x1, [x29, #0x20]
+               	ldur	x2, [x29, #0x10]
+               	ldursw	x0, [x29, #-0x20]
+               	add	x4, x0, #0x1
+               	stur	w4, [x29, #-0x20]
+               	ldrsw	x0, [x2, x0, lsl #2]
+               	b	<addr>
+               	add	x0, x3, x0
+               	stur	x0, [x29, #-0x28]
+               	sub	x1, x29, #0x18
+               	ldur	x2, [x29, #0x10]
+               	ldursw	x0, [x29, #-0x20]
+               	add	x3, x0, #0x1
                	stur	w3, [x29, #-0x20]
-               	ldrsw	x1, [x0, x1, lsl #2]
-               	ldr	x1, [x2, x1, lsl #3]
-               	mov	x17, #0xfffc            // =65532
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x1, x1, x17
-               	add	x1, x4, x1
-               	stur	x1, [x29, #-0x28]
-               	sub	x2, x29, #0x18
-               	sxtw	x1, w3
-               	add	x3, x1, #0x1
-               	stur	w3, [x29, #-0x20]
-               	ldrsw	x0, [x0, x1, lsl #2]
-               	ldr	x0, [x2, x0, lsl #3]
+               	ldrsw	x0, [x2, x0, lsl #2]
+               	ldr	x0, [x1, x0, lsl #3]
                	br	x0
                	ldur	x0, [x29, #-0x28]
                	add	x0, x0, x0
@@ -77,6 +73,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x20
                	ret
+               	ldr	x0, [x1, x0, lsl #3]
+               	mov	x17, #0xfffc            // =65532
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	and	x0, x0, x17
+               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

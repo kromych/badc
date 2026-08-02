@@ -260,7 +260,43 @@ installs, `/init` by default.
 `--qemu` selects the emulator; `--qemu-args` adds arguments to the boot. An
 emulator built out of tree has no data directory, so it needs `-nic none`:
 the default NIC would look for a boot ROM there and refuse to start without
-it.
+it. `--no-build` skips the build and boots the image already in the tree,
+which is how a boot is repeated without a twenty-minute rebuild.
+
+### KASLR displacements
+
+A kernel configured with `CONFIG_RANDOMIZE_BASE` applies its relocations
+against a displacement drawn at boot, and a defect in relocated output can
+present at one displacement and not at another -- a flexible-array
+initializer that emitted two relocations for one slot had the displacement
+applied twice, and showed up on some draws only. Boots at whatever the
+machine happens to draw catch that by luck, so the gate picks the
+displacements instead:
+
+* aarch64 -- the early boot code takes the displacement from
+  `/chosen/kaslr-seed` in the device tree, and `-M virt` honours a tree
+  passed with `-dtb`. The gate dumps the machine's own tree
+  (`-M virt,dumpdtb=`), writes the seed into it (`kaslr.py`, no external
+  device-tree tools), and boots against the result. The default plan is the
+  fixed seeds in `kaslr.py` plus one drawn for the run, so every run covers
+  the same displacements as the last one and one more besides. Every seed is
+  reported, and `--kaslr-seed <64-bit value>` replays a boot exactly.
+* x86_64 -- the boot path mixes RDRAND, the TSC and the i8254 counter with a
+  hash of `boot_params` (`arch/x86/lib/kaslr.c`). Nothing there takes a value
+  from the boot loader, the command line or the firmware, so a displacement
+  cannot be pinned. Those boots run unpinned and `--kaslr-seed` is rejected.
+
+Before the boots, one boot per distinct displacement runs with `rdinit=`
+naming nothing: the kernel panics and its panic notifier prints
+`Kernel Offset:`, which is the only report either architecture makes of the
+displacement it ran at. The gate fails if a configuration that randomizes the
+base produced no displaced boot, or if distinct seeds all produced one
+displacement -- either means it stopped covering relocated output.
+
+A tree with `# CONFIG_RANDOMIZE_BASE is not set` (both vendored minimal
+configs) boots at its link address, and the checks above stand down. A
+machine that supplies no `/chosen/kaslr-seed` (`-M virt,dtb-randomness=off`)
+degrades to unpinned boots with a line saying so.
 
 CI runs this against the pinned release configured with the architecture's
 own `defconfig`, and boots the result under the emulator the qemu lane

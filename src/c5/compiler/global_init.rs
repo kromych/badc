@@ -113,6 +113,7 @@ impl Compiler {
     /// emit a rebase / .reloc entry for the load slide).
     fn emit_data_addr_reloc(&mut self, var_offset: i64, target_idx: usize, target_offset: i64) {
         self.symbols[target_idx].was_referenced = true;
+        self.note_init_reloc(var_offset as usize);
         let t = &self.symbols[target_idx];
         let is_extern_data = t.is_extern_decl
             && t.linkage == crate::c5::symbol::Linkage::External
@@ -331,6 +332,7 @@ impl Compiler {
             self.next()?;
             let bytes = (ent_pc as u64).to_le_bytes();
             self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+            self.note_init_reloc(var_offset as usize);
             self.code_relocs.push(crate::c5::program::CodeReloc {
                 data_offset: var_offset as u64,
                 target_ent_pc: ent_pc as u64,
@@ -380,6 +382,7 @@ impl Compiler {
             let target_offset = self.symbols[target_idx].val;
             let bytes = (target_offset as u64).to_le_bytes();
             self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+            self.note_init_reloc(var_offset as usize);
             self.data_relocs.push(crate::c5::program::DataReloc {
                 data_offset: var_offset as u64,
                 target_offset: target_offset as u64,
@@ -428,6 +431,7 @@ impl Compiler {
             self.data.push(0);
             let bytes = (addr as u64).to_le_bytes();
             self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+            self.note_init_reloc(var_offset as usize);
             self.data_relocs.push(crate::c5::program::DataReloc {
                 data_offset: var_offset as u64,
                 target_offset: addr as u64,
@@ -509,6 +513,7 @@ impl Compiler {
                 let ent_pc = self.symbols[sym_idx].val;
                 self.data[var_offset as usize..var_offset as usize + 8]
                     .copy_from_slice(&(ent_pc as u64).to_le_bytes());
+                self.note_init_reloc(var_offset as usize);
                 self.code_relocs.push(crate::c5::program::CodeReloc {
                     data_offset: var_offset as u64,
                     target_ent_pc: ent_pc as u64,

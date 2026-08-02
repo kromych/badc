@@ -1571,6 +1571,11 @@ pub struct Compiler {
     /// symbol idx per emitted reloc -- so the parallel arrays
     /// don't drift out of sync.
     pub(super) data_reloc_sym_idx: alloc::vec::Vec<usize>,
+    /// One past the highest `Program::data` offset any recorded
+    /// initializer relocation covers. A write at or above it cannot
+    /// override a relocated slot, which keeps the C99 6.7.8p19 override
+    /// scan off the monotonically advancing common path.
+    pub(super) init_reloc_high: usize,
     /// Per-libc-symbol trampoline registry. When source code
     /// reaches for the *address* of a `Token::Sys` binding --
     /// either bare (`fp = lstat;`) or in a static initializer
@@ -1932,6 +1937,7 @@ impl Compiler {
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
             glo_imm_refs: alloc::vec::Vec::new(),
             data_reloc_sym_idx: alloc::vec::Vec::new(),
+            init_reloc_high: 0,
             next_compound_literal_id: 0,
             pending_block_static_syms: Vec::new(),
             next_block_static_id: 0,

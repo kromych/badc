@@ -4749,3 +4749,129 @@ fn address_taken_aggregate_state_fold_drops_unreachable_call() {
         );
     }
 }
+
+/// `(rela section, r_offset, symbol name, addend)` for every relocation
+/// the object carries.
+fn elf_relocations(
+    b: &[u8],
+) -> alloc::vec::Vec<(alloc::string::String, u64, alloc::string::String, i64)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let shstrndx = u16a(0x3e) as usize;
+    let sh = |i: usize| shoff + i * shentsize;
+    let name_at = |base: usize, n: usize| {
+        let s = base + n;
+        let e = s + b[s..].iter().position(|&c| c == 0).unwrap();
+        alloc::string::String::from_utf8_lossy(&b[s..e]).into_owned()
+    };
+    let shstr = u64a(sh(shstrndx) + 0x18) as usize;
+    let mut out = alloc::vec::Vec::new();
+    for i in 0..shnum {
+        let h = sh(i);
+        if u32a(h + 4) != 4 {
+            continue; // SHT_RELA
+        }
+        let symsh = sh(u32a(h + 0x28) as usize);
+        let symoff = u64a(symsh + 0x18) as usize;
+        let strbase = u64a(sh(u32a(symsh + 0x28) as usize) + 0x18) as usize;
+        let off = u64a(h + 0x18) as usize;
+        let size = u64a(h + 0x20) as usize;
+        let sec = name_at(shstr, u32a(h) as usize);
+        for e in (0..size / 24).map(|k| off + k * 24) {
+            let sym = (u64a(e + 8) >> 32) as usize;
+            out.push((
+                sec.clone(),
+                u64a(e),
+                name_at(strbase, u32a(symoff + sym * 24) as usize),
+                u64a(e + 16) as i64,
+            ));
+        }
+    }
+    out
+}
+
+/// C99 6.7.8p19: when an initializer list names one subobject twice, the
+/// later initializer overrides the earlier one. The overridden bytes are
+/// replaced, so the relocation the overridden initializer recorded for
+/// that slot has to be retired with them. Leaving it in place gives the
+/// slot two relocations, whose application order then decides the linked
+/// value, or -- when the override is a constant -- one relocation with no
+/// initializer behind it, writing an address into a slot the source sets
+/// to zero.
+///
+/// Locks each override shape the walker handles: a repeated member
+/// designator, a constant overriding a pointer, two union members sharing
+/// one slot, and a brace group replacing a subobject a nested designator
+/// already wrote.
+#[test]
+fn duplicate_initializer_retires_the_overridden_relocation() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "\
+        extern void f1(void); extern void f2(void); \
+        extern void f3(void); extern void f4(void); \
+        extern void g1(void); extern void g2(void); extern void g3(void); \
+        struct s { void (*p)(void); int x; }; \
+        struct outer { struct s in; int y; }; \
+        union u { void (*a)(void); void (*b)(void); }; \
+        const struct s member_override = { .p = f1, .p = g1 }; \
+        const struct s const_override = { .p = f2, .p = 0 }; \
+        const union u union_override = { .a = f3, .b = g2 }; \
+        const struct outer nested_override = { .in.p = f4, .in = { g3 } }; \
+        const void *keep(int i) { \
+            switch (i) { \
+            case 0: return &member_override; \
+            case 1: return &const_override; \
+            case 2: return &union_override; \
+            } \
+            return &nested_override; \
+        }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+
+        let relocs = elf_relocations(&obj);
+        let count = |n: &str| relocs.iter().filter(|(_, _, s, _)| s == n).count();
+        for overridden in ["f1", "f2", "f3", "f4"] {
+            assert_eq!(
+                count(overridden),
+                0,
+                "{target:?}: the overridden initializer's relocation to `{overridden}` \
+                 survives (relocations: {relocs:?})"
+            );
+        }
+        for kept in ["g1", "g2", "g3"] {
+            assert_eq!(
+                count(kept),
+                1,
+                "{target:?}: the surviving initializer needs exactly one relocation to \
+                 `{kept}` (relocations: {relocs:?})"
+            );
+        }
+        let mut slots: alloc::vec::Vec<(alloc::string::String, u64)> = relocs
+            .iter()
+            .map(|(sec, off, _, _)| (sec.clone(), *off))
+            .collect();
+        slots.sort();
+        let dups = slots.windows(2).filter(|w| w[0] == w[1]).count();
+        assert_eq!(
+            dups, 0,
+            "{target:?}: a data slot carries two relocations (relocations: {relocs:?})"
+        );
+    }
+}

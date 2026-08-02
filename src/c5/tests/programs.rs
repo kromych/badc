@@ -5803,3 +5803,190 @@ fn zero_length_array_member_marker() {
     // member; a `T v[0]` marker ahead of it is zero-storage.
     assert_eq!(run_fixture("zero_length_array_member_marker.c"), 0);
 }
+
+/// Compile `src` for `target` with no entry point. A negative-size array
+/// declaration is a compile error unless every constant in its condition
+/// matches, so a successful compile IS the assertion.
+#[cfg(test)]
+fn header_snippet_compiles(src: &str, target: crate::Target) -> bool {
+    use crate::{CompileOptions, Compiler};
+    let opts = CompileOptions::default().with_no_entry_point(true);
+    Compiler::with_options(src.to_string(), target, opts)
+        .compile()
+        .is_ok()
+}
+
+#[test]
+fn elf_header_publishes_the_abi_constant_set() {
+    use crate::Target;
+    // The bundled <elf.h> carries the generic ABI constants, the GNU OS
+    // extensions and the per-processor relocation tables that object
+    // readers switch on. Values follow the generic ELF ABI and the
+    // i386 / AMD64 / AArch64 / Arm processor supplements.
+    let src = "#include <elf.h>\n\
+        int ck[(SHN_LORESERVE==0xff00 && SHN_XINDEX==0xffff \
+             && SHN_HIRESERVE==0xffff && SHF_ALLOC==2 && SHF_EXECINSTR==4 \
+             && SHF_INFO_LINK==0x40 && SHF_TLS==0x400 \
+             && SHT_SYMTAB_SHNDX==18 && SHT_GROUP==17 && SHT_GNU_HASH==0x6ffffff6 \
+             && GRP_COMDAT==1 && STT_COMMON==5 && STT_GNU_IFUNC==10 \
+             && STT_SPARC_REGISTER==13 && STB_GNU_UNIQUE==10 \
+             && STV_HIDDEN==2 && STV_PROTECTED==3 \
+             && PT_GNU_EH_FRAME==0x6474e550 && PT_GNU_STACK==0x6474e551 \
+             && PF_X==1 && PF_W==2 && PF_R==4 \
+             && DT_INIT_ARRAY==25 && DT_VERSYM==0x6ffffff0 \
+             && EM_AARCH64==183 && EM_LOONGARCH==258 && ELFOSABI_GNU==3 \
+             && NT_GNU_BUILD_ID==3 && ELF64_ST_VISIBILITY(0x83)==3 \
+             && R_386_PC32==2 && R_386_GOTPC==10 \
+             && R_X86_64_PLT32==4 && R_X86_64_GOTPCREL==9 && R_X86_64_PC64==24 \
+             && R_AARCH64_ABS64==257 && R_AARCH64_CALL26==283 \
+             && R_ARM_ABS32==2 && R_RISCV_64==2)?1:-1];\n\
+        Elf64_Shdr sh; Elf64_Rela ra; Elf64_Sym sy;\n";
+    assert!(
+        header_snippet_compiles(src, Target::LinuxX64),
+        "x86-64 <elf.h>"
+    );
+    assert!(
+        header_snippet_compiles(src, Target::LinuxAarch64),
+        "aarch64 <elf.h>"
+    );
+    // A wrong value must fail, proving the assertion actually bites.
+    assert!(
+        !header_snippet_compiles(
+            "#include <elf.h>\nint ck[(SHF_ALLOC==0)?1:-1];\n",
+            Target::LinuxX64
+        ),
+        "the negative-size assertion must reject a wrong value"
+    );
+}
+
+#[test]
+fn sys_types_declares_time_t() {
+    use crate::Target;
+    // POSIX-2017 requires <sys/types.h> to define `time_t`; system
+    // headers layered over it spell it in declarations without
+    // including <time.h>. Either include order gives one 8-byte type.
+    let alone = "#include <sys/types.h>\n\
+                 int ck[(sizeof(time_t)==8 && sizeof(clock_t)==8)?1:-1];\n\
+                 time_t stamp(time_t *p) { return *p; }\n";
+    let after_time = "#include <time.h>\n#include <sys/types.h>\n\
+                      int ck[(sizeof(time_t)==8)?1:-1];\n";
+    let before_time = "#include <sys/types.h>\n#include <time.h>\n\
+                       int ck[(sizeof(time_t)==8)?1:-1];\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        assert!(
+            header_snippet_compiles(alone, target),
+            "alone on {target:?}"
+        );
+        assert!(
+            header_snippet_compiles(after_time, target),
+            "<time.h> first on {target:?}"
+        );
+        assert!(
+            header_snippet_compiles(before_time, target),
+            "<sys/types.h> first on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn posix_line_input_and_string_declarations() {
+    use crate::Target;
+    // POSIX.1-2008 `getline` / `getdelim` / `dprintf`, the XSI and GNU
+    // `strerror_r`, and the BSD/GNU `strcasestr` / `bcmp` / `bcopy`.
+    // Declarations only; the symbols come from the target C library.
+    let src = "#include <stdio.h>\n#include <string.h>\n\
+        long rd(FILE *f, char **p, size_t *n) { return getline(p, n, f); }\n\
+        long rdd(FILE *f, char **p, size_t *n) { return getdelim(p, n, ':', f); }\n\
+        int say(int fd) { return dprintf(fd, \"%d\\n\", 1); }\n\
+        char *find(const char *h, const char *n) { return strcasestr(h, n); }\n\
+        int cmp(const void *a, const void *b) { return bcmp(a, b, 4); }\n\
+        void cpy(const void *a, void *b) { bcopy(a, b, 4); }\n";
+    // Two incompatible return types share the name `strerror_r`: the XSI
+    // form returns int, the GNU one (under _GNU_SOURCE) the message.
+    let xsi = "#include <string.h>\nint e(char *b) { return strerror_r(2, b, 8); }\n";
+    let gnu = "#define _GNU_SOURCE\n#include <string.h>\n\
+               char *e(char *b) { return strerror_r(2, b, 8); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        assert!(
+            header_snippet_compiles(src, target),
+            "declarations on {target:?}"
+        );
+        assert!(
+            header_snippet_compiles(xsi, target),
+            "XSI strerror_r on {target:?}"
+        );
+    }
+    assert!(
+        header_snippet_compiles(gnu, Target::LinuxX64),
+        "GNU strerror_r on linux-x64"
+    );
+}
+
+#[test]
+fn cdefs_confines_darwin_decorations_to_darwin() {
+    use crate::Target;
+    // `__used` and friends come from Darwin's <sys/cdefs.h>. Defining
+    // them elsewhere rewrites identifiers in system headers that spell
+    // them as ordinary names -- a C library's <regex.h> declares a
+    // struct member `__used`.
+    let member = "#include <sys/cdefs.h>\n\
+                  struct b { unsigned long __used; unsigned long __unused; };\n\
+                  unsigned long get(struct b *p) { return p->__used + p->__unused; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::WindowsX64] {
+        assert!(
+            header_snippet_compiles(member, target),
+            "`__used` must stay an ordinary identifier on {target:?}"
+        );
+    }
+    // On Darwin the decoration is part of the platform header surface.
+    let decorated = "#include <sys/cdefs.h>\nstatic int x __used;\n";
+    assert!(
+        header_snippet_compiles(decorated, Target::MacOSAarch64),
+        "macOS keeps __used defined"
+    );
+}
+
+#[test]
+fn struct_member_keeps_its_own_name_space() {
+    // C99 6.2.3: members live in a name space separate from ordinary
+    // identifiers. A member declarator reusing an object's name must
+    // leave that object's declaration -- here a two-dimensional array's
+    // shape -- untouched, or the later subscript loses its stride.
+    assert_eq!(
+        run_str(
+            "static const short nxt[][3] = { {1,2,3}, {4,5,6} };\n\
+             struct info { int verify; int nxt; };\n\
+             int main(void) { struct info i; i.nxt = 6;\n\
+                 if (sizeof nxt / sizeof nxt[0] != 2) return 1;\n\
+                 return nxt[1][2] * 6 + i.nxt; }"
+        ),
+        42
+    );
+}
+
+#[test]
+fn integer_constant_added_to_an_address_constant() {
+    // C99 6.6p9: an address constant may have an integer constant
+    // expression added to it in either order. A leading integer term --
+    // including a cast or a `sizeof` of an anonymous bitfield struct,
+    // the shape a compile-time type assertion expands to -- must still
+    // leave a relocation in the slot.
+    assert_eq!(
+        run_str(
+            "struct opts { int a; int b; };\n\
+             static struct opts opts;\n\
+             struct row { void *value; };\n\
+             static struct row r[] = {\n\
+                 { .value = &opts.b + 0 },\n\
+                 { .value = 0 + &opts.b },\n\
+                 { .value = (int)(sizeof(struct { int : (-!!0); })) + &opts.b },\n\
+             };\n\
+             int main(void) {\n\
+                 if (r[0].value != &opts.b) return 1;\n\
+                 if (r[1].value != r[0].value) return 2;\n\
+                 if (r[2].value != r[0].value) return 3;\n\
+                 return 42; }"
+        ),
+        42
+    );
+}

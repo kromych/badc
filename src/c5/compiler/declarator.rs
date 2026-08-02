@@ -575,6 +575,12 @@ impl Compiler {
             )));
         }
         let idx = self.lex.curr_id_idx;
+        // First identifier of a member declarator: keep its symbol entry so
+        // the aggregate path can undo the writes below (C99 6.2.3).
+        if self.pending.in_member_declarator && self.pending.member_decl_save.is_none() {
+            self.pending.member_decl_save =
+                Some((idx, alloc::boxed::Box::new(self.symbols[idx].clone())));
+        }
         self.next()?;
 
         // A function-typed parameter `RET name(args)` (no parentheses

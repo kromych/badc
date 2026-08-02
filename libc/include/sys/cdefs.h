@@ -5,16 +5,23 @@
 #define __BEGIN_DECLS
 #define __END_DECLS
 #define __THROW
-#define __pure
 #define __const const
 #define __restrict restrict
+#define __restrict_arr
+#define __P(protos) protos
+
+/* Object-like decorations that only Darwin's <sys/cdefs.h> defines.
+** Defining them elsewhere rewrites identifiers in headers that spell
+** them as ordinary names -- glibc's <regex.h> declares a struct member
+** `__used` -- so they stay confined to the target that owns them. */
+#ifdef __APPLE__
+#define __pure
 #define __dead2
 #define __pure2
 #define __unused
 #define __used
 #define __deprecated
-#define __restrict_arr
-#define __P(protos) protos
+#endif
 #define __DARWIN_ALIAS(sym)
 #define __DARWIN_ALIAS_C(sym)
 #define __DARWIN_ALIAS_I(sym)

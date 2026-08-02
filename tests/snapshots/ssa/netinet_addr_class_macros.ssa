@@ -5,13 +5,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=17
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> x0
-    v2   ImmData(8)                                       -> x1
+    v2   ImmData(40)                                      -> x1
     v3   Mcpy { dst=v1, src=v2, size=16, align=8 }        -> x0
     v4   LocalAddr(-4)                                    -> x0
     v5   LocalAddr(-2)                                    -> x1
     v6   Mcpy { dst=v5, src=v4, size=16, align=1 }        -> x0
     v7   LocalAddr(-8)                                    -> x0
-    v8   ImmData(24)                                      -> x1
+    v8   ImmData(56)                                      -> x1
     v9   Mcpy { dst=v7, src=v8, size=16, align=8 }        -> x0
     v10  LocalAddr(-8)                                    -> x0
     v11  LocalAddr(-6)                                    -> x1
@@ -266,7 +266,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=17
     terminator Return(v189)   (exit_acc=v189)
   block 36  start_pc=0
     v190 LocalAddr(-10)                                   -> x0
-    v191 ImmData(56)                                      -> x1
+    v191 ImmData(88)                                      -> x1
     v192 Mcpy { dst=v190, src=v191, size=16, align=8 }    -> x0
     v193 LocalAddr(-10)                                   -> x0
     v194 Imm(0)                                           -> x0
@@ -276,7 +276,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=17
     terminator Jmp(b37)   (exit_acc=v196)
   block 37  start_pc=0
     v198 LocalAddr(-12)                                   -> x0
-    v199 ImmData(72)                                      -> x1
+    v199 ImmData(104)                                     -> x1
     v200 Mcpy { dst=v198, src=v199, size=16, align=8 }    -> x0
     v201 LocalAddr(-12)                                   -> x0
     v202 Imm(4)                                           -> x1
@@ -294,7 +294,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=17
     terminator Jmp(b39)   (exit_acc=v208)
   block 39  start_pc=0
     v212 LocalAddr(-14)                                   -> x0
-    v213 ImmData(88)                                      -> x1
+    v213 ImmData(120)                                     -> x1
     v214 Mcpy { dst=v212, src=v213, size=16, align=8 }    -> x0
     v215 LocalAddr(-14)                                   -> x0
     v216 Imm(8)                                           -> x1
@@ -312,7 +312,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=17
     terminator Jmp(b41)   (exit_acc=v222)
   block 41  start_pc=0
     v226 LocalAddr(-16)                                   -> x0
-    v227 ImmData(104)                                     -> x1
+    v227 ImmData(136)                                     -> x1
     v228 Mcpy { dst=v226, src=v227, size=16, align=8 }    -> x0
     v229 LocalAddr(-16)                                   -> x0
     v230 Imm(12)                                          -> x1

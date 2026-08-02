@@ -4,7 +4,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmExtCode(binding=8)                            -> x3
+    v1   ImmExtCode(binding=13)                           -> x3
     v2   Imm(0)                                           -> x0
     v3   ImmData(8)                                       -> x7
     v4   ImmData(12)                                      -> x6

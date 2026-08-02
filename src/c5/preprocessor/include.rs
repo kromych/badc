@@ -204,12 +204,31 @@ impl Preprocessor {
             .is_some_and(|m| self.is_defined_name(m))
     }
 
+    /// The compiler's own copy of `name`: the body from an on-disk
+    /// header root if one carries it, else the in-binary registry.
+    /// The key is always `name`, so a header reached both directly and
+    /// through another bundled header is one file to `#pragma once`.
+    fn own_header(&self, name: &str) -> Option<(String, String)> {
+        #[cfg(feature = "std")]
+        for root in &self.own_header_roots {
+            let candidate = if root.ends_with('/') || root.ends_with('\\') {
+                alloc::format!("{root}{name}")
+            } else {
+                alloc::format!("{root}/{name}")
+            };
+            if let Ok(body) = std::fs::read_to_string(&candidate) {
+                return Some((body, name.to_string()));
+            }
+        }
+        embedded_header(name).map(|b| (b.to_string(), name.to_string()))
+    }
+
     /// Look `name` up and return its body plus the path it resolved
     /// to. `source_dir` is `Some` only for a quoted include; when set
     /// it is searched first (C99 6.10.2p2). Then the configured search
-    /// paths (`-I` plus built-in defaults), then the embedded
-    /// registry. The resolved path is the filesystem candidate that
-    /// matched, or `name` for an embedded header.
+    /// paths (`-I` plus built-in defaults), then the compiler's own
+    /// header set. The resolved path is the filesystem candidate that
+    /// matched, or `name` for a header from the own set.
     pub(super) fn find_include(
         &self,
         name: &str,
@@ -253,9 +272,25 @@ impl Preprocessor {
             // here. The quoted source-directory step above still precedes it
             // per C99 6.10.2p2. Ordinary headers keep `-I`-shadows-embedded.
             if crate::c5::headers::compiler_owned_header(name)
-                && let Some(body) = embedded_header(name)
+                && let Some(found) = self.own_header(name)
             {
-                return Some((body.to_string(), name.to_string()));
+                return Some(found);
+            }
+            // One bundled header including another resolves within the
+            // bundled set. The compiler's headers form a closed set
+            // written against each other; a `-I` directory carrying the
+            // same name -- an OS source tree supplies its own
+            // `linux/...` uapi headers, which `<sys/mman.h>` reaches for
+            // -- would otherwise be spliced into the middle of a
+            // standard header. A header the user includes directly keeps
+            // `-I`-shadows-bundled.
+            if self
+                .include_stack
+                .last()
+                .is_some_and(|f| embedded_header(f).is_some())
+                && let Some(found) = self.own_header(name)
+            {
+                return Some(found);
             }
             for path in &self.search_paths {
                 let candidate = join(path);
@@ -265,8 +300,8 @@ impl Preprocessor {
             }
         }
         let _ = source_dir;
-        if let Some(body) = embedded_header(name) {
-            return Some((body.to_string(), name.to_string()));
+        if let Some(found) = self.own_header(name) {
+            return Some(found);
         }
         // A header the embedded set lacks (a third-party `zlib.h`,
         // `libfdt.h`) falls back to the host system directories, probed
@@ -358,7 +393,7 @@ impl Preprocessor {
             }
         }
         let _ = current_file;
-        embedded_header(name).map(|s| (s.to_string(), name.to_string()))
+        self.own_header(name)
     }
 }
 

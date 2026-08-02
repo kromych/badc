@@ -211,14 +211,17 @@ pub(crate) struct Preprocessor {
     include_stack: Vec<String>,
     /// Filesystem search paths for `#include`. Probed in order
     /// before falling back to the bundled in-binary headers, so
-    /// a user can `cp $(badc --dump-headers) ./include/...` and
-    /// override one without rebuilding badc. Plumbed in from the
-    /// CLI's `-I path` flag and any built-in defaults
-    /// (`./include`, `./libc/include`). Filesystem reads are
+    /// an on-disk copy of a bundled header overrides it without
+    /// rebuilding badc. Plumbed in from the CLI's `-I path` flag
+    /// and the driver's overlays (the source tree's
+    /// `libc/include`, `$BADC_HOME/include`). Filesystem reads are
     /// gated behind `cfg(feature = "std")`; the no_std build
     /// keeps the field but never reads from it (the embedded
     /// headers are always available).
     search_paths: Vec<String>,
+    /// On-disk copies of the compiler's own header set, probed by name
+    /// ahead of the in-binary bodies. See `add_own_header_root`.
+    own_header_roots: Vec<String>,
     /// Directories probed for `#include "..."` only (the gcc `-iquote`
     /// scope), after the including file's directory and before
     /// `search_paths`. An angle include never reads them.
@@ -654,6 +657,7 @@ impl Preprocessor {
             include_guards: HashMap::new(),
             include_stack: Vec::new(),
             search_paths: Vec::new(),
+            own_header_roots: Vec::new(),
             quote_search_paths: Vec::new(),
             system_fallback_paths: Vec::new(),
             force_includes: Vec::new(),
@@ -767,6 +771,17 @@ impl Preprocessor {
     pub fn add_search_path(&mut self, path: &str) {
         if !self.search_paths.iter().any(|p| p == path) {
             self.search_paths.push(path.to_string());
+        }
+    }
+
+    /// Append an on-disk copy of the compiler's own header set (the
+    /// source tree's `libc/include`, `$BADC_HOME/include`). A bundled
+    /// name found there replaces the in-binary body, keeping one
+    /// identity per header name so `#pragma once` and the include
+    /// guards see a single file however the include was reached.
+    pub fn add_own_header_root(&mut self, path: &str) {
+        if !self.own_header_roots.iter().any(|p| p == path) {
+            self.own_header_roots.push(path.to_string());
         }
     }
 

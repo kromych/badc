@@ -331,6 +331,53 @@ mod tests {
         }
     }
 
+    /// The bundled `<elf.h>` publishes the same relocation tables to
+    /// user code that these constants drive the object writers with. One
+    /// numbering, two consumers: a value that disagrees would make a
+    /// program badc compiles read its own relocations under the wrong
+    /// name.
+    #[test]
+    fn bundled_elf_header_agrees_with_the_abi_tables() {
+        use alloc::string::ToString;
+        let header = crate::c5::headers::embedded_headers()
+            .iter()
+            .find(|(name, _)| *name == "elf.h")
+            .expect("elf.h is part of the embedded set")
+            .1;
+        let mut checked = 0;
+        for line in header.lines() {
+            let rest = match line.strip_prefix("#define R_") {
+                Some(r) => r,
+                None => continue,
+            };
+            let mut it = rest.split_whitespace();
+            let (name, value) = match (it.next(), it.next()) {
+                (Some(n), Some(v)) => ("R_".to_string() + n, v),
+                _ => continue,
+            };
+            let table = if name.starts_with("R_X86_64_") {
+                X86_64_RELOC_NAMES
+            } else if name.starts_with("R_AARCH64_") {
+                AARCH64_RELOC_NAMES
+            } else {
+                continue;
+            };
+            let Some(&(expected, _)) = table.iter().find(|(_, n)| *n == name) else {
+                continue;
+            };
+            let got: u32 = value.parse().expect("decimal relocation number");
+            assert_eq!(
+                got, expected,
+                "<elf.h> {name} is {got}, ABI table says {expected}"
+            );
+            checked += 1;
+        }
+        assert!(
+            checked >= 100,
+            "expected the header to publish the relocation tables, matched {checked}"
+        );
+    }
+
     #[test]
     fn unassigned_numbers_describe_themselves() {
         assert_eq!(aarch64_reloc_desc(287), "R_AARCH64_MOVW_PREL_G0 (287)");

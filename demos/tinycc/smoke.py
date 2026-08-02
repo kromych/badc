@@ -258,10 +258,10 @@ def compile_one(
     for d in cpp_defs:
         cmd.extend(["-D", d])
     cmd.extend(["-c", str(src), "-o", str(out)])
-    # Pin cwd to the repo root so badc's auto-add of `./include`
-    # picks up the bundled c5 headers under `./libc/include`
-    # instead of tinycc's vendored `demos/tinycc/include/` (which
-    # uses gcc-only `__builtin_va_list` and friends).
+    # `<stdio.h>` and friends must resolve to c5's bundled headers,
+    # not tinycc's vendored `demos/tinycc/include/` (which uses
+    # gcc-only `__builtin_va_list`): only `demos/tinycc` itself is
+    # on the -I path, and badc adds no working-directory overlay.
     proc = subprocess.run(
         cmd, capture_output=True, text=True, check=False, cwd=str(REPO_ROOT)
     )
@@ -379,8 +379,7 @@ def main() -> int:
         for d in cpp_defs:
             cmd.extend(["-D", d])
         cmd.extend(["-o", str(out_path), *src_files])
-        # Same cwd reasoning as compile_one: keep badc's `./include`
-        # auto-add pointing at c5's bundled headers, not tinycc's.
+        # Same header reasoning as compile_one.
         proc = subprocess.run(
             cmd, capture_output=True, text=True, check=False, cwd=str(REPO_ROOT)
         )

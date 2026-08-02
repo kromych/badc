@@ -97,7 +97,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=133
     v83  Imm(126)                                         -> x6
     v84  Imm(2250562863104)                               -> x0
     v85  Imm(524)                                         -> x2
-    v86  CallExt { binding_idx=58, args=[v82, v83, v85], fp_arg_mask=0x0 } -> x0
+    v86  CallExt { binding_idx=66, args=[v82, v83, v85], fp_arg_mask=0x0 } -> x0
     v87  LocalAddr(-132)                                  -> x0
     v88  LocalAddr(-66)                                   -> x1
     v89  Mcpy { dst=v87, src=v88, size=524, align=4 }     -> x0

@@ -568,8 +568,12 @@ impl Compiler {
                 // `pending.attr_packed`; a base-type or type-level packed
                 // must not carry over to the field's own placement.
                 self.pending.attr_packed = false;
-                let (id_idx, mut field_ty, mut field_array_size) =
-                    self.parse_declarator(field_base)?;
+                let saved_member_ctx = self.pending.in_member_declarator;
+                self.pending.in_member_declarator = true;
+                self.pending.member_decl_save = None;
+                let declared = self.parse_declarator(field_base);
+                self.pending.in_member_declarator = saved_member_ctx;
+                let (id_idx, mut field_ty, mut field_array_size) = declared?;
                 // A member may carry a trailing attribute
                 // (`int x __attribute__((aligned(16)));`,
                 // `int x __attribute__((deprecated));`). Member-level
@@ -829,6 +833,11 @@ impl Compiler {
 
                 let field_inner_array_size = self.symbols[id_idx].inner_array_size;
                 let field_array_dims = core::mem::take(&mut self.symbols[id_idx].array_dims);
+                // The member's shape is now in the field record; hand the
+                // ordinary-namespace symbol back to whatever declared it.
+                if let Some((idx, saved)) = self.pending.member_decl_save.take() {
+                    self.symbols[idx] = *saved;
+                }
                 self.structs[struct_id].fields.push(StructField {
                     name: field_name,
                     offset: field_offset,

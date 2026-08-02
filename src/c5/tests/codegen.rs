@@ -5530,3 +5530,32 @@ fn hardening_absent_leaves_the_object_unchanged() {
         );
     }
 }
+
+#[test]
+fn x64_inline_asm_ret_is_left_verbatim() {
+    // The mitigations apply to compiler-generated transfers. A `ret`
+    // written in inline asm is the author's instruction and stays a bare
+    // `ret`, while the same function's epilogue still takes the thunk.
+    // gcc likewise rewrites neither the text nor the operands of an asm
+    // statement.
+    const SRC: &str = "int f(int x) { __asm__ volatile(\"ret\"); return x + 1; }\n";
+    let obj = emit_hardened(
+        SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            function_return_thunk: true,
+            sls_return: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    assert!(
+        elf_text(&obj).contains(&0xC3),
+        "the asm-supplied `ret` survives untouched"
+    );
+    assert!(
+        x64_branch_relocs(&obj)
+            .iter()
+            .any(|(_, n, _)| n == "__x86_return_thunk"),
+        "the epilogue still takes the thunk"
+    );
+}

@@ -2885,6 +2885,11 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
+    // A by-value aggregate argument in value form (the callee's declared
+    // parameter list not in scope) must bind an address to the spliced
+    // body's parameter cell. Native-only: the SSA interpreter's own call
+    // path does not model the value form.
+    ("struct_arg_value_form_inline.c", 0),
     ("post_inline_dead_data_repack.c", 0),
     ("post_inline_import_survives_repack.c", 0),
     ("overaligned_data_placement.c", 0),

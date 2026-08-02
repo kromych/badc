@@ -414,8 +414,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     // Dominator-tree children, so the walk visits each block once with
     // its dominators' facts in scope.
     let mut children: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); n];
-    for b in 1..n {
-        let d = idom[b];
+    for (b, &d) in idom.iter().enumerate().take(n).skip(1) {
         if d != BlockId::MAX && (d as usize) != b {
             children[d as usize].push(b as BlockId);
         }

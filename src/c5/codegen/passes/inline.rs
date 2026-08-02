@@ -1260,19 +1260,19 @@ fn splice_arg_addresses(
         return Some(args.to_vec());
     }
     let mut out = args.to_vec();
-    for i in 0..out.len() {
+    for (i, slot) in out.iter_mut().enumerate() {
         if !value_form(i) {
             continue;
         }
         // The value form is the walker's whole-eightbyte load off the
         // aggregate's address; any other shape leaves nothing to recover.
-        match insts.get(out[i] as usize) {
+        match insts.get(*slot as usize) {
             Some(Inst::Load {
                 addr,
                 disp: 0,
                 kind: LoadKind::I64,
                 volatile: false,
-            }) => out[i] = *addr,
+            }) => *slot = *addr,
             _ => return None,
         }
         // The operand must not also reach a scalar read of the same

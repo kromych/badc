@@ -26,16 +26,10 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %eax
                	retq
-               	cmpq	$0x63, %rdi
-               	je	<addr>
                	jmp	<addr>
-               	cmpq	$0x62, %rdi
-               	je	<addr>
                	jmp	<addr>
                	cmpq	$0x61, %rdi
                	jl	<addr>
-               	cmpq	$0x61, %rdi
-               	je	<addr>
                	jmp	<addr>
                	cmpq	$0x42, %rdi
                	jne	<addr>
@@ -47,20 +41,14 @@ Disassembly of section .text:
                	jl	<addr>
                	cmpq	$0x41, %rdi
                	jl	<addr>
-               	cmpq	$0x41, %rdi
-               	je	<addr>
                	jmp	<addr>
                	cmpq	$0x33, %rdi
                	jne	<addr>
                	movl	$0x3, %eax
                	retq
-               	cmpq	$0x32, %rdi
-               	je	<addr>
                	jmp	<addr>
                	cmpq	$0x31, %rdi
                	jl	<addr>
-               	cmpq	$0x31, %rdi
-               	je	<addr>
                	jmp	<addr>
                	cmpq	$0x30, %rdi
                	je	<addr>

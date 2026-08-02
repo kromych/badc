@@ -40,8 +40,6 @@ Disassembly of section .text:
                	retq
                	movl	$0x12c, %eax            # imm = 0x12C
                	jmp	<addr>
-               	cmpq	$0x1, %rdi
-               	jne	<addr>
                	movl	$0xc8, %eax
                	jmp	<addr>
                	testq	%rdi, %rdi

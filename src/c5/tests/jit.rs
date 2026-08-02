@@ -142,6 +142,159 @@ fn struct_returning_always_inline_folds_parameter_guards() {
 }
 
 #[test]
+fn always_inline_callee_passing_an_aggregate_by_value_is_spliced() {
+    // A body that hands a structure to another function by value is
+    // still inlinable: the argument address is one more value operand
+    // and the callee's aggregate layout re-interns into the caller. The
+    // request here is mandatory, and honouring it is what folds the
+    // per-site guards on the constant `sr` -- the undefined `bug` would
+    // otherwise fail the JIT load. Both aggregates must arrive at `sink`
+    // intact: the 16-byte one rides argument registers, the 40-byte one
+    // the outgoing stack area.
+    let src = "
+        extern void bug(void);
+        struct resx { unsigned long lo, hi; };
+        struct wide { unsigned long w[5]; };
+        struct ctx { unsigned long v[4]; };
+        static unsigned long seen_lo, seen_hi, seen_w;
+        void sink(struct ctx *c, int sr, struct resx r, struct wide w);
+        void sink(struct ctx *c, int sr, struct resx r, struct wide w) {
+            c->v[sr] = r.lo + r.hi + (unsigned long) sr;
+            seen_lo = r.lo;
+            seen_hi = r.hi;
+            seen_w = w.w[0] + w.w[1] + w.w[2] + w.w[3] + w.w[4];
+        }
+        static __attribute__((always_inline))
+        void set_masks(struct ctx *c, int sr, struct resx r, struct wide w) {
+            if (!__builtin_constant_p(sr)) bug();
+            if (sr < 0 || sr >= 4) bug();
+            sink(c, sr, r, w);
+        }
+        int main(void) {
+            struct ctx c = {{0, 0, 0, 0}};
+            struct resx r = {10ul, 20ul};
+            struct wide w = {{1ul, 2ul, 3ul, 4ul, 5ul}};
+            set_masks(&c, 0, r, w);
+            set_masks(&c, 1, r, w);
+            set_masks(&c, 2, r, w);
+            set_masks(&c, 3, r, w);
+            if (seen_lo != 10ul || seen_hi != 20ul || seen_w != 15ul) return 1;
+            for (int i = 0; i < 4; i++)
+                if (c.v[i] != 30ul + (unsigned long) i) return 2;
+            return 9;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-agg-arg-inline"]), 9);
+}
+
+#[test]
+fn a_dominating_condition_decides_the_comparison_it_implies() {
+    // Three shapes whose answer follows from the condition guarding the
+    // block rather than from any immediate: a loop guard settling the
+    // sign of the induction variable (the query a widely used min()/max()
+    // macro set puts to `__builtin_constant_p`), a masked switch operand
+    // whose value set the labels cover, and an enumerated state the loop
+    // condition excludes. The undefined `bug` fails the JIT load if any
+    // guarded arm survives.
+    let src = "
+        extern void bug(void);
+        #define statically_true(x) (__builtin_constant_p(x) && (x))
+        #define is_signed_type(type) (((type)(-1)) < (type)1)
+        #define __is_nonneg(ux) statically_true((long long)(ux) >= 0)
+        #define __sign_use(ux) (is_signed_type(typeof(ux)) ? \
+            (2 + __is_nonneg(ux)) : (1 + 2 * (sizeof(ux) < 4)))
+        #define __types_ok(ux, uy) (__sign_use(ux) & __sign_use(uy))
+        #define MIN(x, y) ({                    \
+            __auto_type ux = (x);               \
+            __auto_type uy = (y);               \
+            if (!__types_ok(ux, uy)) bug();     \
+            ux < uy ? ux : uy;                  \
+        })
+        static unsigned long chunks;
+        static void drain(int len) {
+            while (len > 0) {
+                unsigned int n = MIN(len, 4096UL);
+                chunks += n;
+                len -= n;
+            }
+        }
+        static int masked(unsigned int flags) {
+            switch (flags & 3u) {
+            case 0: return 10;
+            case 1: return 20;
+            case 2: return 30;
+            case 3: return 40;
+            default: bug(); return 0;
+            }
+        }
+        static int stage(int v) {
+            if (v > 4) {
+                if (v <= 4) bug();
+                if (v < 0) bug();
+                return 1;
+            }
+            if (v > 4) bug();
+            return 0;
+        }
+        int main(void) {
+            drain(10000);
+            if (chunks != 10000ul) return 1;
+            if (masked(0u) != 10 || masked(5u) != 20) return 2;
+            if (masked(6u) != 30 || masked(7u) != 40) return 3;
+            if (stage(9) != 1 || stage(4) != 0) return 4;
+            return 7;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-implied-cmp"]), 7);
+}
+
+#[test]
+fn a_taken_branch_says_its_condition_is_nonzero_not_one() {
+    // A branch tests its condition against zero, so the taken edge says
+    // only that the value is not zero. Reading it as 1 would decide the
+    // comparisons below wrongly -- a masked flag word arrives holding
+    // the mask, and a subtraction arrives holding whatever it computed.
+    let src = "
+        static int sink;
+        static volatile unsigned int in_u;
+        static volatile int in_a, in_b;
+        int flags(void);
+        int flags(void) {
+            unsigned int m = in_u & 0x24u;
+            if (m) {
+                if (m == 1u) sink |= 1;
+                if (m > 0x24u) sink |= 2;
+                return (int) m;
+            }
+            return 0;
+        }
+        int spread(void);
+        int spread(void) {
+            int d = in_a - in_b;
+            if (d) {
+                if (d == 1) sink |= 4;
+                if (d < -100 || d > 100) return 99;
+                return d;
+            }
+            return 0;
+        }
+        int main(void) {
+            in_u = 0xffu; if (flags() != 0x24) return 1;
+            in_u = 0x20u; if (flags() != 0x20) return 2;
+            in_u = 0x04u; if (flags() != 4) return 3;
+            in_u = 0x08u; if (flags() != 0) return 4;
+            in_a = 10; in_b = 3;   if (spread() != 7) return 5;
+            in_a = 3;  in_b = 10;  if (spread() != -7) return 6;
+            in_a = 5;  in_b = 5;   if (spread() != 0) return 7;
+            in_a = 500; in_b = 1;  if (spread() != 99) return 8;
+            if (sink != 0) return 9;
+            return 6;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-nonzero-cond"]), 6);
+}
+
+#[test]
 fn select_of_two_constants_folds_its_guard() {
     // A value produced by a runtime `?:` between two constants keeps a
     // guard on it live unless the guard is evaluated per incoming: the

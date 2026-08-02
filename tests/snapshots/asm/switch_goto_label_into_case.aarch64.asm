@@ -30,13 +30,9 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ret
                	b	<addr>
-               	cmp	x0, #0x3
-               	b.eq	<addr>
                	b	<addr>
                	cmp	x0, #0x2
                	b.lt	<addr>
-               	cmp	x0, #0x2
-               	b.ne	<addr>
                	mov	x0, #0x14               // =20
                	ret
                	cmp	x0, #0x1

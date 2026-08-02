@@ -1324,6 +1324,16 @@ fn dispatch_callext<H: Host>(
             mem.copy_within(dst, src, n)?;
             Ok(dst as i64)
         }
+        // `void *memmove(void *dst, const void *src, size_t n)`
+        // (C99 7.21.2.2): as memcpy, but defined when the objects
+        // overlap. `copy_within` already moves.
+        "memmove" => {
+            let (dst, src, n) = libc_three_arg(name, args)?;
+            mem.check_data_access(src, n, AccessKind::Read)?;
+            mem.check_data_access(dst, n, AccessKind::Write)?;
+            mem.copy_within(dst, src, n)?;
+            Ok(dst as i64)
+        }
         // `void *memset(void *dst, int val, size_t n)`. C99
         // 7.21.6.1 narrows `val` to `unsigned char` before
         // writing.

@@ -1409,10 +1409,9 @@ fn expand_gas_statements(
             }
             ".rept" => {
                 let table = &*equ;
-                let n = eval_asm_expr_with_labels(rest, &|t| table.get(t).copied())
-                    .ok_or_else(|| {
-                        alloc::format!("inline asm: `.rept` count `{rest}` is not constant")
-                    })?;
+                let n = eval_asm_expr_with_labels(rest, &|t| table.get(t).copied()).ok_or_else(
+                    || alloc::format!("inline asm: `.rept` count `{rest}` is not constant"),
+                )?;
                 let (body, next) = collect_gas_repeat_body(stmts, i)?;
                 i = next;
                 for _ in 0..n.max(0) {
@@ -2482,9 +2481,7 @@ fn parse_section_item(
                 .split_once(',')
                 .map(|(n, t)| (n.trim(), t.trim()))
                 .filter(|(n, t)| is_asm_symbol_name(n) && !t.is_empty())
-                .ok_or_else(|| {
-                    alloc::format!("inline asm: `{tok} {rest}` is not `name, value`")
-                })?;
+                .ok_or_else(|| alloc::format!("inline asm: `{tok} {rest}` is not `name, value`"))?;
             let name = alloc::string::String::from(name);
             if is_asm_symbol_name(value) {
                 return Ok(AsmSectionItem::SymSet {
@@ -6143,7 +6140,13 @@ mod asm_section_tests {
         let out = rept("swpb w0, w1, [x2]\n.rept 3\nnop\n.endr\n").unwrap();
         assert_eq!(out.matches("nop").count(), 3, "{out}");
         assert!(out.contains("swpb"));
-        assert_eq!(rept(".rept 0\nnop\n.endr\n").unwrap().matches("nop").count(), 0);
+        assert_eq!(
+            rept(".rept 0\nnop\n.endr\n")
+                .unwrap()
+                .matches("nop")
+                .count(),
+            0
+        );
         assert_eq!(
             rept(".rept 2\n.rept 3\nnop\n.endr\n.endr\n")
                 .unwrap()

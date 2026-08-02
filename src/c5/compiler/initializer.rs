@@ -155,6 +155,7 @@ impl Compiler {
         match reloc {
             InitElemReloc::None | InitElemReloc::Float64Bits => {}
             InitElemReloc::Data(src_sym) => {
+                self.note_init_reloc(here);
                 // A target defined in another unit (`extern T x;` with no
                 // definition here) resolves by name at link time, not
                 // against this unit's `.data`. The scalar `T *p = &x;`
@@ -193,6 +194,7 @@ impl Compiler {
                 self.data_reloc_sym_idx.push(src_sym.unwrap_or(usize::MAX));
             }
             InitElemReloc::Code(sym_idx) => {
+                self.note_init_reloc(here);
                 self.code_relocs.push(crate::c5::program::CodeReloc {
                     data_offset: here as u64,
                     target_ent_pc: value as u64,
@@ -200,6 +202,13 @@ impl Compiler {
                 self.code_reloc_sym_idx.push(sym_idx);
             }
         }
+    }
+
+    /// Record that a relocation now covers the 8-byte data slot at `off`,
+    /// maintaining the bound a byte write consults before scanning for a
+    /// relocation to retire.
+    pub(super) fn note_init_reloc(&mut self, off: usize) {
+        self.init_reloc_high = self.init_reloc_high.max(off + 8);
     }
 
     /// Drop any initializer relocation already recorded in the byte range
@@ -231,7 +240,9 @@ impl Compiler {
             let mut it = keep.iter();
             self.data_reloc_sym_idx.retain(|_| *it.next().unwrap());
         }
-        self.extern_data_relocs.retain(|r| !hit(r.data_offset));
+        if self.extern_data_relocs.iter().any(|r| hit(r.data_offset)) {
+            self.extern_data_relocs.retain(|r| !hit(r.data_offset));
+        }
     }
 
     /// C99 6.4.2.2 predefined identifier `__func__` (with the GCC
@@ -313,6 +324,12 @@ impl Compiler {
     /// `self.data` at byte offset `here`. Caller has already
     /// grown `self.data` to at least `here + n_bytes`.
     fn write_init_bytes(&mut self, here: usize, value: i128, n_bytes: usize) {
+        // C99 6.7.8p19: a later initializer for a subobject overrides the
+        // earlier one. The bytes are about to be replaced, so the relocation
+        // an overridden initializer recorded for them is stale and goes too.
+        if here < self.init_reloc_high {
+            self.clear_init_relocs_in(here, here + n_bytes);
+        }
         // `value` carries at most 16 significant bytes; zero a wider
         // destination's tail rather than wrapping the shift count.
         for i in 0..n_bytes {
@@ -3483,6 +3500,7 @@ impl Compiler {
             // char rows) string literals.
             let elem_size = self.size_of_type(field.ty);
             let region = elem_size * field.array_size as usize;
+            self.clear_init_relocs_in(field_base, field_base + region);
             for b in &mut self.data[field_base..field_base + region] {
                 *b = 0;
             }

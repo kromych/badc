@@ -6,8 +6,13 @@
 // splice has to bind an address in both forms; binding the word makes
 // every member read dereference the payload.
 //
-// `extern typeof(f) f;` after the definition is the redeclaration that
-// drops the parameter list, so the calls below take the value form.
+// `extern typeof(f) f;` after the definition once erased the parameter
+// list and put these calls in the value form. The composite type (C99
+// 6.2.7p4) keeps the list, so the sites below are the address form and
+// pin that: a redeclaration through a function-type specifier must not
+// change the lowering of a call to the redeclared function. The
+// value-form recovery in the splice stays as the guard for a callee
+// whose parameter list the unit never supplies.
 
 typedef struct { unsigned val; } kuid_t;
 typedef struct { unsigned char a, b, c; } triple;

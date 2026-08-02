@@ -265,7 +265,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=57
     v146 StoreLocal { off=-15, value=v145, kind=I32 }     -> -
     v147 Extend { value=v136, kind=I32 }                  -> x7
     v148 LocalAddr(-15)                                   -> x6
-    v149 CallExt { binding_idx=282, args=[v147, v148, v145], fp_arg_mask=0x0 } -> x0
+    v149 CallExt { binding_idx=286, args=[v147, v148, v145], fp_arg_mask=0x0 } -> x0
     v150 Imm(0)                                           -> x0
     v151 LoadLocal { off=-2, kind=I32 }                   -> x0
     v152 ImmData(64)                                      -> x0

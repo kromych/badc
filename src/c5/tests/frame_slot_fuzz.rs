@@ -645,11 +645,11 @@ fn gen_args(
             PKind::Scalar => args.push(Arg::Scalar(gen_expr(r, ctx, objs, visible, 2))),
             PKind::ByVal(t) => {
                 let cands = objs_of_type(objs, visible, *t);
-                args.push(Arg::ByVal(*r.pick(&cands.get(..)?)));
+                args.push(Arg::ByVal(*r.pick(cands.get(..)?)));
             }
             PKind::Ptr(t) => {
                 let cands = objs_of_type(objs, visible, *t);
-                args.push(Arg::Ptr(*r.pick(&cands.get(..)?)));
+                args.push(Arg::Ptr(*r.pick(cands.get(..)?)));
             }
         }
     }
@@ -667,7 +667,6 @@ fn gen_stmts(
     objs: &mut Vec<Obj>,
     visible: &mut Vec<u16>,
     stmts: &mut Vec<Stmt>,
-    acc: u16,
     n: usize,
     nested: bool,
 ) {
@@ -758,13 +757,8 @@ fn gen_stmts(
                         .map(move |(k, l)| (i, k as u16, l.sc))
                 })
                 .collect();
-            let writable: Vec<(u16, u16, Scalar)> = fp
-                .iter()
-                .copied()
-                .filter(|(i, _, _)| visible.contains(i))
-                .collect();
-            if !writable.is_empty() && fp.len() >= 2 {
-                let (dst, dleaf, sc) = *r.pick(&writable);
+            if fp.len() >= 2 {
+                let (dst, dleaf, sc) = *r.pick(&fp);
                 let same: Vec<(u16, u16, Scalar)> =
                     fp.iter().copied().filter(|(_, _, s)| *s == sc).collect();
                 if same.len() >= 2 {
@@ -805,7 +799,7 @@ fn gen_stmts(
             let mut body = Vec::new();
             let mut inner = visible.clone();
             let inner_n = r.range(1, 3);
-            gen_stmts(r, ctx, objs, &mut inner, &mut body, acc, inner_n, true);
+            gen_stmts(r, ctx, objs, &mut inner, &mut body, inner_n, true);
             if !body.is_empty() {
                 stmts.push(Stmt::Loop { count, body });
                 continue;
@@ -815,7 +809,6 @@ fn gen_stmts(
             expr: gen_expr(r, ctx, objs, visible, 3),
         });
     }
-    let _ = acc;
 }
 
 fn gen_body(
@@ -858,9 +851,9 @@ fn gen_body(
     let n = if top_level {
         stmt_budget
     } else {
-        stmt_budget.min(6).max(1)
+        stmt_budget.clamp(1, 6)
     };
-    gen_stmts(r, ctx, &mut objs, &mut visible, &mut stmts, acc, n, false);
+    gen_stmts(r, ctx, &mut objs, &mut visible, &mut stmts, n, false);
     // Filler that pushes the body past the inliner's body cap. Every
     // term reads live state, so the folder cannot collapse it back
     // under the cap.
@@ -1359,23 +1352,23 @@ impl Machine<'_> {
         self.arena[slot][leaf] = v;
     }
 
-    fn eval(&self, b: &Body, f: &Frame, e: &Expr) -> u64 {
+    fn eval(&self, f: &Frame, e: &Expr) -> u64 {
         match e {
             Expr::Const(k) => *k,
             Expr::Var(i) => f.sc[*i as usize],
             Expr::Leaf(o, l) => self.arena[f.agg[*o as usize]][*l as usize],
-            Expr::Bin(op, a, c) => op.apply(self.eval(b, f, a), self.eval(b, f, c)),
+            Expr::Bin(op, a, c) => op.apply(self.eval(f, a), self.eval(f, c)),
             Expr::Shift(left, a, n) => {
-                let v = self.eval(b, f, a);
+                let v = self.eval(f, a);
                 if *left { v << *n } else { v >> *n }
             }
         }
     }
 
-    fn arg_vals(&self, b: &Body, f: &Frame, args: &[Arg]) -> Vec<ArgVal> {
+    fn arg_vals(&self, f: &Frame, args: &[Arg]) -> Vec<ArgVal> {
         args.iter()
             .map(|a| match a {
-                Arg::Scalar(e) => ArgVal::Sc(self.eval(b, f, e)),
+                Arg::Scalar(e) => ArgVal::Sc(self.eval(f, e)),
                 Arg::ByVal(o) => ArgVal::Agg(self.arena[f.agg[*o as usize]].clone()),
                 Arg::Ptr(o) => ArgVal::Ptr(f.agg[*o as usize]),
             })
@@ -1388,7 +1381,7 @@ impl Machine<'_> {
                 Stmt::SetLeaf { obj, leaf, expr } => {
                     let t = b.objs[*obj as usize].ty.unwrap();
                     let sc = self.prog.types[t].leaves[*leaf as usize].sc;
-                    let v = self.eval(b, f, expr);
+                    let v = self.eval(f, expr);
                     self.store(f.agg[*obj as usize], *leaf as usize, sc, v);
                 }
                 Stmt::FpAdd {
@@ -1414,7 +1407,7 @@ impl Machine<'_> {
                 }
                 Stmt::CallAggDecl { obj, callee, args }
                 | Stmt::CallAggAssign { obj, callee, args } => {
-                    let vals = self.arg_vals(b, f, args);
+                    let vals = self.arg_vals(f, args);
                     match self.call(*callee as usize, vals) {
                         RetVal::Agg(v) => self.arena[f.agg[*obj as usize]] = v,
                         _ => unreachable!("aggregate call form on a non-aggregate return"),
@@ -1426,25 +1419,25 @@ impl Machine<'_> {
                     args,
                     leaf,
                 } => {
-                    let vals = self.arg_vals(b, f, args);
+                    let vals = self.arg_vals(f, args);
                     match self.call(*callee as usize, vals) {
                         RetVal::Agg(v) => f.sc[*dst as usize] = v[*leaf as usize],
                         _ => unreachable!("member read of a non-aggregate return"),
                     }
                 }
                 Stmt::CallScalar { dst, callee, args } => {
-                    let vals = self.arg_vals(b, f, args);
+                    let vals = self.arg_vals(f, args);
                     match self.call(*callee as usize, vals) {
                         RetVal::Sc(v) => f.sc[*dst as usize] = v,
                         _ => unreachable!("scalar call form on a non-scalar return"),
                     }
                 }
                 Stmt::CallVoid { callee, args } => {
-                    let vals = self.arg_vals(b, f, args);
+                    let vals = self.arg_vals(f, args);
                     self.call(*callee as usize, vals);
                 }
                 Stmt::Mix { expr } => {
-                    let v = self.eval(b, f, expr);
+                    let v = self.eval(f, expr);
                     f.sc[b.acc as usize] = f.sc[b.acc as usize].wrapping_mul(0x100000001b3) ^ v;
                 }
                 Stmt::Loop { count, body } => {

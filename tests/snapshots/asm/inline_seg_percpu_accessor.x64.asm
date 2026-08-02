@@ -16,19 +16,19 @@ Disassembly of section .text:
                	retq
 
 <pcpu_read32>:
-               	leaq	(%rdi,%rsi), %rax
+               	leaq	0x10(%rdi), %rax
                	movl	%gs:(%rax), %eax
                	movl	%eax, %eax
                	retq
 
 <pcpu_read16>:
-               	leaq	(%rdi,%rsi), %rax
+               	leaq	0x18(%rsi), %rax
                	movzwq	%gs:(%rax), %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	retq
 
 <pcpu_read8>:
-               	leaq	(%rdi,%rsi), %rax
+               	leaq	0x17(%rdi), %rax
                	movzbq	%gs:(%rax), %rax
                	andq	$0xff, %rax
                	retq
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	retq
 
 <pcpu_inc32>:
-               	leaq	(%rdi,%rsi), %rax
+               	leaq	0x28(%rdi), %rax
                	movl	%gs:(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, %gs:(%rax)
@@ -187,6 +187,28 @@ Disassembly of section .text:
                	cmpq	$0x99, %rax
                	je	<addr>
                	movl	$0x7, %eax
+               	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
+               	movq	0x10(%rsp), %r13
+               	movq	0x18(%rsp), %r14
+               	addq	$0x80, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	<rip>, %r13
+               	movq	(%r13), %rdi
+               	leaq	<rip>, %r12
+               	movq	(%r12), %rsi
+               	callq	<addr>
+               	movq	(%r12), %rdi
+               	movl	$0x17, %esi
+               	callq	<addr>
+               	movq	(%r13), %rdi
+               	movq	(%r12), %rsi
+               	callq	<addr>
+               	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
+               	cmpq	%r11, %rax
+               	je	<addr>
+               	movl	$0xd, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13

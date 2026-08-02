@@ -26,9 +26,16 @@
 //! the object through a pointer this pass does not track, and declines
 //! it. `Block::exit_acc` is not such a use: it names the block's last
 //! defined value for liveness, and every rewrite here leaves that id
-//! defining something. Storage written outside the instruction tape (a
-//! by-value aggregate parameter's prologue copy, the indirect-result
-//! address) and over-aligned objects are never candidates.
+//! defining something.
+//!
+//! The object's storage must also be named by nothing but those address
+//! expressions. A slot the emit or the callee ABI writes without an
+//! instruction operand -- a by-value aggregate parameter's prologue
+//! copy, the indirect-result address, an alloca base, the caller-side
+//! temporary an aggregate return materialises into -- has no store in
+//! the tape to redirect, and a slot a direct `LoadLocal` / `StoreLocal`
+//! names is read or written under a second name that the redirect would
+//! not follow. Both, and over-aligned objects, are excluded up front.
 //!
 //! A field takes the object's own cell when every field starts on a
 //! distinct 8-byte boundary -- what a fully unrolled constant-index
@@ -448,26 +455,56 @@ fn candidate_objects(func: &FunctionSsa) -> Option<BTreeMap<i64, i64>> {
         if func.over_aligned.iter().any(|&(s, _)| s == base) {
             continue;
         }
-        // Storage the prologue fills outside the instruction tape: a
-        // by-value aggregate parameter's body copy and the caller's
-        // indirect-result address. The incoming bytes have no store in
-        // the tape, so a promoted field slot would read undefined.
-        let occupied = |s: i64| s != 0 && s >= base && s < base + cells;
-        if func.param_local_slots.iter().copied().any(occupied)
-            || occupied(func.indirect_result_slot)
-        {
-            continue;
-        }
         cells_of
             .entry(base)
             .and_modify(|c| *c = (*c).min(cells))
             .or_insert(cells);
     }
     if cells_of.is_empty() {
+        return None;
+    }
+    let pinned = pinned_slots(func);
+    cells_of.retain(|&base, &mut cells| pinned.range(base..base + cells).next().is_none());
+    if cells_of.is_empty() {
         None
     } else {
         Some(cells_of)
     }
+}
+
+/// Frame slots whose contents this pass cannot redirect, because
+/// something other than the base-address expressions it rewrites reaches
+/// the same storage: the emit and the callee ABI write some of it
+/// without naming an instruction operand, and a direct slot access reads
+/// or writes it under a second name. Redirecting only the address-based
+/// accesses would leave the two views disagreeing -- or, for storage
+/// with no store in the tape at all, promote an undefined value.
+///
+/// The set mirrors what `ssa::slot_coalesce` reserves and renumbers, the
+/// one enumeration of every way a frame slot is named.
+fn pinned_slots(func: &FunctionSsa) -> BTreeSet<i64> {
+    let mut pinned: BTreeSet<i64> = BTreeSet::new();
+    let mut add = |s: i64| {
+        if s < 0 {
+            pinned.insert(s);
+        }
+    };
+    add(func.indirect_result_slot);
+    for &s in &func.param_local_slots {
+        add(s);
+    }
+    for inst in &func.insts {
+        match inst {
+            Inst::AllocaInit(off) | Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
+                add(*off)
+            }
+            Inst::Call { ret_slot_local, .. }
+            | Inst::CallIndirect { ret_slot_local, .. }
+            | Inst::CallExt { ret_slot_local, .. } => add(*ret_slot_local),
+            _ => {}
+        }
+    }
+    pinned
 }
 
 /// Replace each `Mcpy` named in `splits` with the per-field load / store
@@ -1058,6 +1095,61 @@ mod tests {
         let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
         assert!(split.is_empty(), "parameter storage must not split");
+        assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
+    }
+
+    /// The caller-side temporary a callee's aggregate return
+    /// materialises into is filled through the host ABI, named only by
+    /// the call's `ret_slot_local`. Redirecting its member loads to
+    /// field slots would leave them reading storage nothing wrote.
+    #[test]
+    fn aggregate_return_temp_not_split() {
+        let insts = alloc::vec![
+            Inst::Call {
+                target_pc: 7,
+                args: Vec::new(),
+                fixed_args: 0,
+                fp_return: false,
+                fp_arg_mask: 0,
+                arg_aggs: Vec::new(),
+                ret_agg: Some(0),
+                ret_slot_local: -2,
+            }, // v0
+            Inst::LocalAddr(-2), // v1
+            load(1),             // v2
+            Inst::LocalAddr(-2), // v3
+            add_imm(3, 8),       // v4
+            load(4),             // v5
+        ];
+        let mut f = func(insts, Terminator::Return(5), alloc::vec![(-2, 2)]);
+        let before = alloc::format!("{:?}", f.insts);
+        let split = split_objects(&mut f, 64);
+        assert!(split.is_empty(), "an aggregate-return temp must not split");
+        assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
+    }
+
+    /// A cell the tape also names directly is read and written under a
+    /// second name the redirect would not follow.
+    #[test]
+    fn cell_with_a_direct_slot_access_not_split() {
+        let insts = alloc::vec![
+            Inst::Imm(5), // v0
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I64,
+                volatile: false
+            }, // v1  a[1] through the slot
+            Inst::LocalAddr(-2), // v2
+            store(2, 0),  // v3  a[0] through the address
+            Inst::LocalAddr(-2), // v4
+            add_imm(4, 8), // v5
+            load(5),      // v6  a[1] through the address
+        ];
+        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 2)]);
+        let before = alloc::format!("{:?}", f.insts);
+        let split = split_objects(&mut f, 64);
+        assert!(split.is_empty(), "a directly named cell must not split");
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
     }
 

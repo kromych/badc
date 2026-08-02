@@ -642,16 +642,27 @@ fn run() {
     // include search path must not depend on where badc is invoked from.
     // An explicit -I still shadows a bundled name, as in every other
     // compiler; only a bundled header's own includes stay inside the set.
+    // An explicitly set $BADC_HOME is a deliberate choice and outranks the
+    // source tree; the implicit ~/.badc does not, so a stale `--install`
+    // there cannot shadow the tree a developer is editing.
+    let home_include = badc_home()
+        .map(|h| h.join("include"))
+        .filter(|d| d.is_dir());
     let mut own_header_roots: Vec<String> = Vec::new();
-    for dir in source_tree_include().into_iter().chain(
-        badc_home()
-            .map(|h| h.join("include"))
-            .filter(|d| d.is_dir()),
-    ) {
-        let s = dir.to_string_lossy().into_owned();
-        if !own_header_roots.contains(&s) {
-            own_header_roots.push(s);
+    let mut add = |d: Option<PathBuf>| {
+        if let Some(d) = d {
+            let s = d.to_string_lossy().into_owned();
+            if !own_header_roots.contains(&s) {
+                own_header_roots.push(s);
+            }
         }
+    };
+    if std::env::var_os("BADC_HOME").is_some() {
+        add(home_include);
+        add(source_tree_include());
+    } else {
+        add(source_tree_include());
+        add(home_include);
     }
     // `~/.badc/lib` joins the `-l` archive search, after explicit -L.
     if let Some(home) = badc_home() {

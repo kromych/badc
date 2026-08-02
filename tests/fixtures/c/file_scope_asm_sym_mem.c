@@ -8,7 +8,7 @@ unsigned long per_slot_base[8];
 struct slot_state {
     char pad[16];
     unsigned char busy;
-} slot_state;
+} slot_state[2];
 
 __asm__(".pushsection .text, \"ax\"\n"
         ".globl slot_is_busy\n\t"
@@ -25,13 +25,13 @@ __asm__(".pushsection .text, \"ax\"\n"
 extern unsigned long slot_is_busy(long slot);
 
 int main(void) {
-    /* slot 3's base is offset -16 from slot_state, so the asm's
-     * `16+slot_state(%rax)` lands on `busy`. */
-    per_slot_base[3] = (unsigned long)&slot_state - 16;
-    slot_state.busy = 0;
+    /* The table holds byte offsets from `slot_state`, so the asm's
+     * `16+slot_state(%rax)` reads element 1's `busy`. */
+    per_slot_base[3] = sizeof(struct slot_state);
+    slot_state[1].busy = 0;
     if (slot_is_busy(3) != 0)
         return 1;
-    slot_state.busy = 1;
+    slot_state[1].busy = 1;
     if (slot_is_busy(3) != 1)
         return 2;
     return 42;

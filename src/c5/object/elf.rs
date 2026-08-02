@@ -2668,7 +2668,11 @@ pub(super) fn write(
     // the slots sit past `ro_len`.
     for r in &build.data_pcrel_relocs {
         let target = if r.target_in_data {
-            data_off_to_vaddr(r.target_offset)
+            // `.rodata` / `.data` / `.bss` occupy separate runtime
+            // regions, so an addend that moves the target out of the
+            // anchor's object is applied to the address, not the offset.
+            data_off_to_vaddr(r.target_anchor)
+                .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor))
         } else {
             code_vmaddr + stub_len + r.target_offset
         };

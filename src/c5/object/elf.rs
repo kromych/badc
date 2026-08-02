@@ -50,6 +50,10 @@ use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::program::Program;
+use super::elf_reloc_types::{
+    R_AARCH64_COPY, R_AARCH64_GLOB_DAT, R_AARCH64_RELATIVE, R_X86_64_COPY, R_X86_64_GLOB_DAT,
+    R_X86_64_RELATIVE,
+};
 use super::{Abi, Build, Machine};
 use super::{aarch64, dwarf, x86_64};
 use crate::c5::layout::{round_up, write_struct};
@@ -139,21 +143,6 @@ const STT_FUNC: u8 = 2;
 /// data symbols a COPY relocation binds to the host's object.
 const STT_OBJECT: u8 = 1;
 const SHN_UNDEF: u16 = 0;
-
-// Relocation types we emit.
-const R_AARCH64_GLOB_DAT: u64 = 1025;
-const R_X86_64_GLOB_DAT: u64 = 6;
-// `R_*_RELATIVE`: the loader writes `load_bias + r_addend` into the slot.
-// Used in a shared object for an internal absolute pointer (a function /
-// data pointer baked into static data) so it tracks the runtime load base.
-const R_AARCH64_RELATIVE: u64 = 1027;
-const R_X86_64_RELATIVE: u64 = 8;
-// `R_*_COPY`: the loader copies the named symbol's object from the
-// defining shared library into the slot at `r_offset` and binds the
-// symbol to that slot. Used for a data import (`extern char **environ`)
-// so the program and libc share one storage cell.
-const R_AARCH64_COPY: u64 = 1024;
-const R_X86_64_COPY: u64 = 5;
 
 /// `PT_LOAD` segment alignment. The loader mmaps each segment at
 /// `p_vaddr` rounded down to the runtime page size, so `p_align` must
@@ -492,16 +481,19 @@ fn e_machine(machine: Machine) -> u16 {
 /// address into the GOT slot. Different value on each arch.
 fn r_glob_dat(machine: Machine) -> u64 {
     match machine {
-        Machine::Aarch64 => R_AARCH64_GLOB_DAT,
-        Machine::X86_64 => R_X86_64_GLOB_DAT,
+        Machine::Aarch64 => R_AARCH64_GLOB_DAT.into(),
+        Machine::X86_64 => R_X86_64_GLOB_DAT.into(),
     }
 }
 
-/// `R_*_RELATIVE` relocation type. Different value on each arch.
+/// `R_*_RELATIVE` relocation type: the loader writes
+/// `load_bias + r_addend` into the slot. Used in a shared object for
+/// an internal absolute pointer (a function / data pointer baked into
+/// static data) so it tracks the runtime load base.
 fn r_relative(machine: Machine) -> u64 {
     match machine {
-        Machine::Aarch64 => R_AARCH64_RELATIVE,
-        Machine::X86_64 => R_X86_64_RELATIVE,
+        Machine::Aarch64 => R_AARCH64_RELATIVE.into(),
+        Machine::X86_64 => R_X86_64_RELATIVE.into(),
     }
 }
 
@@ -2496,12 +2488,15 @@ pub(super) fn write(
             );
         }
     }
-    // COPY relocations for data imports. The dynsym index of copy target
-    // `i` is `1 + n_imports + n_exports + i` (sentinel, imports, exports,
+    // COPY relocations for data imports: the loader copies the named
+    // symbol's object from the defining shared library into the slot at
+    // `r_offset` and binds the symbol to that slot, so the program and
+    // libc share one storage cell. The dynsym index of copy target `i`
+    // is `1 + n_imports + n_exports + i` (sentinel, imports, exports,
     // then the copy group). `r_offset` is the target's runtime address.
-    let r_copy = match machine {
-        Machine::Aarch64 => R_AARCH64_COPY,
-        Machine::X86_64 => R_X86_64_COPY,
+    let r_copy: u64 = match machine {
+        Machine::Aarch64 => R_AARCH64_COPY.into(),
+        Machine::X86_64 => R_X86_64_COPY.into(),
     };
     let copy_dynsym_base = (1 + n_imports + elf_exports.len()) as u64;
     for (i, &addr) in copy_addrs.iter().enumerate() {

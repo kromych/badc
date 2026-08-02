@@ -25,34 +25,24 @@ use crate::c5::error::C5Error;
 
 use super::object::{
     ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection, SharedLibrary,
+    reloc_desc,
 };
 use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
-
-/// AArch64 reloc-type constants. Kept in step with the writer
-/// and the reader; a future common module lifts them out of
-/// each individual file.
-const R_X86_64_PC32: u32 = 2;
-const R_X86_64_PLT32: u32 = 4;
-const R_X86_64_GOTPCREL: u32 = 9;
-// Relaxable variant of GOTPCREL marking a `REX mov reg, [rip+disp32]`
-// GOT load (psABI B.2); emitted by c5's writer and other toolchains.
-const R_X86_64_REX_GOTPCRELX: u32 = 42;
-const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
-const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
-const R_AARCH64_CALL26: u32 = 283;
 // A tail-call `b <sym>` reaches its target the same way `bl` does --
-// a 26-bit PC-relative branch immediate -- so JUMP26 shares CALL26's
-// patch, PLT eligibility, and undefined-weak handling. Emitted by
-// other toolchains' objects; c5's own codegen uses CALL26 for calls.
-const R_AARCH64_JUMP26: u32 = 282;
-const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
-const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
-const R_X86_64_TPOFF32: u32 = 23;
-const R_X86_64_PC64: u32 = 24;
-const R_AARCH64_PREL32: u32 = 261;
-const R_AARCH64_PREL64: u32 = 260;
-const R_AARCH64_TLSLE_ADD_TPREL_HI12: u32 = 549;
-const R_AARCH64_TLSLE_ADD_TPREL_LO12_NC: u32 = 551;
+// a 26-bit PC-relative branch immediate -- so `R_AARCH64_JUMP26` shares
+// CALL26's patch, PLT eligibility, and undefined-weak handling. Emitted
+// by other toolchains' objects; c5's own codegen uses CALL26 for calls.
+// `R_X86_64_REX_GOTPCRELX` is the relaxable variant of GOTPCREL marking
+// a `REX mov reg, [rip+disp32]` GOT load (psABI B.2); emitted by c5's
+// writer and other toolchains.
+use crate::c5::object::elf_reloc_types::{
+    R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
+    R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC,
+    R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12,
+    R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_X86_64_32, R_X86_64_64, R_X86_64_GOTPCREL, R_X86_64_PC32,
+    R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32,
+    aarch64_ldst_lo12_scale,
+};
 
 /// A relocation whose site reads a GOT slot: the value it wants is the
 /// symbol's address, taken from storage the loader fills, not a
@@ -1033,6 +1023,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         patch_offset,
                         reloc,
                         target,
+                        &sym.name,
                     )?;
                 }
                 NativeSymSection::Undef => {
@@ -1062,6 +1053,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                             patch_offset,
                             reloc,
                             target,
+                            &sym.name,
                         )?;
                     } else if !sym.name.is_empty() {
                         // STB_GLOBAL UNDEF that doesn't resolve
@@ -1186,6 +1178,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         patch_offset,
                         reloc,
                         target,
+                        &sym.name,
                     )?;
                 }
                 NativeSymSection::Tls => {
@@ -1906,9 +1899,10 @@ fn resolve_debug_reloc(
         (NativeMachine::X86_64, R_X86_64_64) | (NativeMachine::Aarch64, R_AARCH64_ABS64) => 8u8,
         (NativeMachine::X86_64, R_X86_64_32) | (NativeMachine::Aarch64, R_AARCH64_ABS32) => 4u8,
         _ => {
-            return Err(err(&format!(
-                "link_native_objects: unsupported DWARF reloc type {} for {:?}",
-                reloc.rtype, machine,
+            return Err(link_err(&format!(
+                "unsupported {} in debug info against symbol `{}`",
+                reloc_desc(machine, reloc.rtype),
+                sym.name,
             )));
         }
     };
@@ -1947,11 +1941,6 @@ fn resolve_debug_reloc(
     }
     Ok(())
 }
-
-const R_X86_64_64: u32 = 1;
-const R_X86_64_32: u32 = 10;
-const R_AARCH64_ABS64: u32 = 257;
-const R_AARCH64_ABS32: u32 = 258;
 
 /// Per-import PLT trampoline metadata returned by
 /// [`emit_x86_64_plt`]. Each entry pairs the trampoline's byte
@@ -2030,10 +2019,11 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
             continue;
         }
         if reloc.rtype != R_X86_64_PLT32 && reloc.rtype != R_X86_64_PC32 {
-            return Err(err(&format!(
-                "emit_x86_64_plt: pending reloc at text[{:#x}] has rtype {} \
-                 (only PLT32/PC32 supported on x86_64)",
-                reloc.text_offset, reloc.rtype,
+            return Err(link_err(&format!(
+                "unsupported {} against import `{}`: an imported symbol is reachable \
+                 only through a PLT-eligible relocation",
+                reloc_desc(merged.machine, reloc.rtype),
+                import_name(merged, reloc.import_index),
             )));
         }
         if let alloc::collections::btree_map::Entry::Vacant(e) =
@@ -2167,10 +2157,11 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
             && reloc.rtype != R_AARCH64_ADR_PREL_PG_HI21
             && reloc.rtype != R_AARCH64_ADD_ABS_LO12_NC
         {
-            return Err(err(&format!(
-                "emit_aarch64_plt: pending reloc at text[{:#x}] has rtype {} \
-                 (only CALL26 / JUMP26 / ADR_PREL_PG_HI21 / ADD_ABS_LO12_NC supported on aarch64)",
-                reloc.text_offset, reloc.rtype,
+            return Err(link_err(&format!(
+                "unsupported {} against import `{}`: an imported symbol is reachable \
+                 only through a PLT-eligible relocation",
+                reloc_desc(merged.machine, reloc.rtype),
+                import_name(merged, reloc.import_index),
             )));
         }
         if let alloc::collections::btree_map::Entry::Vacant(e) =
@@ -2266,6 +2257,15 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
 
 // ---- Reloc application ----
 
+/// Import name behind a [`PendingImportReloc::import_index`], for
+/// diagnostics. Parked section references carry no import.
+pub(crate) fn import_name(merged: &MergedNative, import_index: usize) -> &str {
+    merged
+        .imports
+        .get(import_index)
+        .map_or("<section reference>", |s| s.as_str())
+}
+
 /// Resolve a reference to an unresolved STB_WEAK UNDEF symbol to
 /// address 0 (ELF behavior for a weak reference nothing on the link
 /// line satisfies). A branch becomes a no-op, matching the GNU
@@ -2282,7 +2282,7 @@ fn resolve_weak_undef_to_zero(
     name: &str,
 ) -> Result<(), C5Error> {
     let unsupported = |what: &str| {
-        err(&format!(
+        link_err(&format!(
             "unresolved weak reference to `{name}`: cannot resolve {what} to address 0",
         ))
     };
@@ -2325,7 +2325,7 @@ fn resolve_weak_undef_to_zero(
         | (NativeMachine::X86_64, R_X86_64_REX_GOTPCRELX) => {
             patch_offset >= 3 && wu::x86_64_got_load_to_zero(text, patch_offset - 3)
         }
-        _ => return Err(unsupported(&format!("reloc type {}", reloc.rtype))),
+        _ => return Err(unsupported(&reloc_desc(machine, reloc.rtype))),
     };
     if ok {
         Ok(())
@@ -2340,6 +2340,7 @@ fn apply_reloc(
     patch_offset: usize,
     reloc: &NativeReloc,
     target: i64,
+    sym_name: &str,
 ) -> Result<(), C5Error> {
     // `patch_offset` derives from the object's r_offset, which is
     // untrusted input. Every patch below writes a 4-byte instruction
@@ -2367,9 +2368,11 @@ fn apply_reloc(
         (NativeMachine::Aarch64, R_AARCH64_ADD_ABS_LO12_NC) => {
             patch_aarch64_add_lo12(text, patch_offset, target)
         }
-        _ => Err(err(&format!(
-            "apply_reloc: machine {:?} reloc type {} (0x{:x}) not implemented",
-            machine, reloc.rtype, reloc.rtype,
+        // An object carrying a relocation form this linker has no
+        // patcher for is an unsupported input, not a broken invariant.
+        _ => Err(link_err(&format!(
+            "unsupported {} against symbol `{sym_name}` at text offset 0x{patch_offset:x}",
+            reloc_desc(machine, reloc.rtype),
         ))),
     }
 }
@@ -2423,22 +2426,45 @@ fn patch_aarch64_add_lo12(text: &mut [u8], offset: usize, target: i64) -> Result
         .map_err(|e| err(&e.describe(&format!("ADD_ABS_LO12_NC at 0x{offset:x}"))))
 }
 
+/// The `adrp` + low-12 pair materializes an address from the target
+/// section's runtime vmaddr, which only the final-image writer knows,
+/// so both halves park instead of patching in place. The low-12 half
+/// is either an `add` immediate or one of the scaled load/store forms.
 fn is_aarch64_text_pageref(machine: NativeMachine, rtype: u32) -> bool {
     matches!(machine, NativeMachine::Aarch64)
-        && matches!(
+        && (matches!(
             rtype,
             R_AARCH64_ADR_PREL_PG_HI21 | R_AARCH64_ADD_ABS_LO12_NC
-        )
+        ) || aarch64_ldst_lo12_scale(rtype).is_some())
+}
+
+/// Relocation forms the parked-reference path can materialize once
+/// the final-image writer commits each section's runtime address.
+/// Screening them here, where the referencing symbol is still in
+/// hand, keeps the diagnostic specific; the writers' own fallbacks
+/// then only fire when a badc invariant broke.
+fn parked_reloc_supported(machine: NativeMachine, rtype: u32) -> bool {
+    match machine {
+        NativeMachine::Aarch64 => is_aarch64_text_pageref(machine, rtype),
+        NativeMachine::X86_64 => matches!(rtype, R_X86_64_PC32 | R_X86_64_PLT32),
+    }
 }
 
 fn park_section_ref(
-    _machine: NativeMachine,
+    machine: NativeMachine,
     pending: &mut Vec<PendingImportReloc>,
     patch_offset: usize,
     reloc: &NativeReloc,
     target_offset: i64,
     target_section: NativeSymSection,
-) {
+    sym_name: &str,
+) -> Result<(), C5Error> {
+    if !parked_reloc_supported(machine, reloc.rtype) {
+        return Err(link_err(&format!(
+            "unsupported {} against symbol `{sym_name}` at text offset {patch_offset:#x}",
+            reloc_desc(machine, reloc.rtype),
+        )));
+    }
     // The reference resolves once the final-image writer
     // knows the runtime vmaddr of the target's section. Park
     // it in the `pending_imports` queue with a sentinel
@@ -2454,6 +2480,7 @@ fn park_section_ref(
         target_section,
         slot_load: false,
     });
+    Ok(())
 }
 
 fn park_data_ref(
@@ -2462,7 +2489,8 @@ fn park_data_ref(
     patch_offset: usize,
     reloc: &NativeReloc,
     target_offset: i64,
-) {
+    sym_name: &str,
+) -> Result<(), C5Error> {
     park_section_ref(
         machine,
         pending,
@@ -2470,7 +2498,8 @@ fn park_data_ref(
         reloc,
         target_offset,
         NativeSymSection::Data,
-    );
+        sym_name,
+    )
 }
 
 /// Apply or park a `.rela.text` entry that [`merged_target`] resolved.
@@ -2479,6 +2508,7 @@ fn park_data_ref(
 /// form, whose two halves the writer patches together); a data target
 /// depends on the final-image writer's `.text`-to-`.data` gap, so it
 /// is parked with the offset in the reloc's addend.
+#[allow(clippy::too_many_arguments)]
 fn resolve_merged_target(
     machine: NativeMachine,
     text: &mut [u8],
@@ -2486,6 +2516,7 @@ fn resolve_merged_target(
     patch_offset: usize,
     reloc: &NativeReloc,
     target: MergedTarget,
+    sym_name: &str,
 ) -> Result<(), C5Error> {
     match target {
         MergedTarget::Text(off) => {
@@ -2497,13 +2528,14 @@ fn resolve_merged_target(
                     reloc,
                     off,
                     NativeSymSection::Text,
-                );
+                    sym_name,
+                )?;
             } else {
-                apply_reloc(machine, text, patch_offset, reloc, off)?;
+                apply_reloc(machine, text, patch_offset, reloc, off, sym_name)?;
             }
         }
         MergedTarget::Data(off) => {
-            park_data_ref(machine, pending, patch_offset, reloc, off);
+            park_data_ref(machine, pending, patch_offset, reloc, off, sym_name)?;
         }
     }
     Ok(())
@@ -2848,7 +2880,7 @@ mod tests {
             rtype: R_AARCH64_JUMP26,
             addend: 0,
         };
-        apply_reloc(NativeMachine::Aarch64, &mut text, 0, &reloc, 0x20)
+        apply_reloc(NativeMachine::Aarch64, &mut text, 0, &reloc, 0x20, "target")
             .expect("JUMP26 must be an implemented relocation");
         let instr = u32::from_le_bytes(text[0..4].try_into().unwrap());
         assert_eq!(

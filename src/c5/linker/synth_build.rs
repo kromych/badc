@@ -40,6 +40,11 @@ use crate::c5::codegen::{
     OutputKind, ResolvedDylib, ResolvedImport, ResolvedImports, Target,
 };
 use crate::c5::error::C5Error;
+use crate::c5::object::elf_reloc_types::{
+    R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
+    R_AARCH64_CALL26, R_AARCH64_LD64_GOT_LO12_NC, R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PLT32,
+    R_X86_64_REX_GOTPCRELX, aarch64_ldst_lo12_scale,
+};
 use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
@@ -698,6 +703,7 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
         match merged.machine {
             NativeMachine::Aarch64 => {
                 project_aarch64_pending(
+                    merged,
                     reloc,
                     &mut got_fixups,
                     &mut data_fixups,
@@ -705,7 +711,13 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
                 )?;
             }
             NativeMachine::X86_64 => {
-                project_x86_64_pending(reloc, &mut got_fixups, &mut data_fixups, &mut func_fixups)?;
+                project_x86_64_pending(
+                    merged,
+                    reloc,
+                    &mut got_fixups,
+                    &mut data_fixups,
+                    &mut func_fixups,
+                )?;
             }
         }
     }
@@ -717,41 +729,25 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
     })
 }
 
-// Reloc kind constants. Match the values link.rs uses (it keeps its
-// own private copies); duplicated here so the synthesizer doesn't
-// reach across the module boundary for a private constant.
-const R_X86_64_PC32: u32 = 2;
-const R_X86_64_PLT32: u32 = 4;
-const R_X86_64_GOTPCREL: u32 = 9;
-const R_X86_64_REX_GOTPCRELX: u32 = 42;
-const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
-const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
-const R_AARCH64_CALL26: u32 = 283;
-const R_AARCH64_LDST8_ABS_LO12_NC: u32 = 284;
-const R_AARCH64_LDST16_ABS_LO12_NC: u32 = 285;
-const R_AARCH64_LDST32_ABS_LO12_NC: u32 = 286;
-const R_AARCH64_LDST64_ABS_LO12_NC: u32 = 287;
-const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
-const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
-
 fn project_aarch64_pending(
+    merged: &MergedNative,
     reloc: &super::link::PendingImportReloc,
     got_fixups: &mut Vec<GotFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
 ) -> Result<(), C5Error> {
+    if aarch64_ldst_lo12_scale(reloc.rtype).is_some()
+        || matches!(
+            reloc.rtype,
+            R_AARCH64_ADD_ABS_LO12_NC | R_AARCH64_LD64_GOT_LO12_NC
+        )
+    {
+        // The matching ADRP entry owns the fixup; the writer's pair patch
+        // writes both halves -- the `add` or the scaled load/store low-12 --
+        // from one DataFixup / FuncFixup / GotFixup record.
+        return Ok(());
+    }
     match reloc.rtype {
-        R_AARCH64_ADD_ABS_LO12_NC
-        | R_AARCH64_LDST8_ABS_LO12_NC
-        | R_AARCH64_LDST16_ABS_LO12_NC
-        | R_AARCH64_LDST32_ABS_LO12_NC
-        | R_AARCH64_LDST64_ABS_LO12_NC
-        | R_AARCH64_LD64_GOT_LO12_NC => {
-            // The matching ADRP entry owns the fixup; patch_adrp_add writes
-            // both halves -- the `add` or the scaled load/store low-12 -- from
-            // one DataFixup / FuncFixup / GotFixup record.
-            Ok(())
-        }
         R_AARCH64_CALL26 => Err(synth_err(
             "synthesizer: R_AARCH64_CALL26 still pending after PLT pass \
              -- emit_aarch64_plt should have drained it",
@@ -797,13 +793,29 @@ fn project_aarch64_pending(
             });
             Ok(())
         }
-        other => Err(synth_err(&alloc::format!(
-            "synthesizer: aarch64 rtype {other} not supported"
-        ))),
+        rtype => Err(unsupported_reloc(merged, reloc, rtype)),
     }
 }
 
+/// An input object carrying a relocation form no writer can
+/// materialize is a link error naming the type and the symbol, not an
+/// internal error: badc's invariants are intact, the object is simply
+/// outside the supported set.
+fn unsupported_reloc(
+    merged: &MergedNative,
+    reloc: &super::link::PendingImportReloc,
+    rtype: u32,
+) -> C5Error {
+    C5Error::Compile(crate::c5::error::fmt_link_err(&alloc::format!(
+        "unsupported {} against `{}` at text offset {:#x}",
+        super::object::reloc_desc(merged.machine, rtype),
+        super::link::import_name(merged, reloc.import_index),
+        reloc.text_offset,
+    )))
+}
+
 fn project_x86_64_pending(
+    merged: &MergedNative,
     reloc: &super::link::PendingImportReloc,
     got_fixups: &mut Vec<GotFixup>,
     data_fixups: &mut Vec<DataFixup>,
@@ -822,11 +834,7 @@ fn project_x86_64_pending(
     let instr_back_off = match reloc.rtype {
         R_X86_64_PC32 | R_X86_64_GOTPCREL | R_X86_64_REX_GOTPCRELX => 3,
         R_X86_64_PLT32 => 1,
-        other => {
-            return Err(synth_err(&alloc::format!(
-                "synthesizer: x86_64 rtype {other} not supported"
-            )));
-        }
+        other => return Err(unsupported_reloc(merged, reloc, other)),
     };
     let instr_offset = (reloc.text_offset as usize)
         .checked_sub(instr_back_off)

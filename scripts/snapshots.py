@@ -104,6 +104,16 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         ),
         r"\1<lo12>",
     ),
+    # aarch64 ADRP / LDR slot load: `adrp x0, <page>` then
+    # `ldr x0, [x0, #0xd0]`. Same argument as the `add` form -- the
+    # offset is the low 12 bits of the address the ADRP names, so it
+    # shifts with any earlier reflow and carries no codegen signal.
+    (
+        re.compile(
+            r"(adrp\s+(\w+),\s+<page>\n\s*ldr\s+\2,\s+\[\2,\s+)#0x[0-9a-fA-F]+(\])"
+        ),
+        r"\1<lo12>\3",
+    ),
     # The x86_64 runtime entry stub passes the image-base-relative offset
     # of `__c5_entry` to the startup helper through `movl $off, %esi`,
     # right after `movq %rsp, %rdi`. That offset is a whole-image layout

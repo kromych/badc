@@ -60,7 +60,7 @@ Disassembly of section .text:
                	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax       # <addr>
+               	movq	<rip>, %rax
                	leaq	<rip>, %rdi
                	callq	*%rax
                	cmpq	$0xb, %rax

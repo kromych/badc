@@ -17,9 +17,9 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
-               	leaq	<rip>, %rax       # <addr>
-               	leaq	<rip>, %rbx       # <addr>
-               	leaq	<rip>, %r12       # <addr>
+               	movq	<rip>, %rax
+               	movq	<rip>, %rbx
+               	movq	<rip>, %r12
                	xorq	%r13, %r13
                	movq	%r13, %xmm0
                	callq	*%rax

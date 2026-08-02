@@ -6844,10 +6844,9 @@ fn inline_asm_pushsection_lands_in_relocatable_object() {
 #[test]
 fn asm_section_align_fill_byte() {
     // GNU as `.balign n, fill` / `.p2align e, fill` pad with the given fill
-    // byte. In an executable section the padding must carry that byte, not
-    // zero: the compiler once parsed the whole operand as the alignment and
-    // rejected `n, 0x90`. Distinct fills (0x90, 0xcc) confirm the byte is
-    // applied literally rather than hardcoded.
+    // byte, except that a code-section fill equal to the one-byte NOP selects
+    // the NOP-sequence path instead of repeating the byte. Both operands are
+    // exercised: 0x90 takes the NOP run, 0xcc is applied literally.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
         int f(void) {\n\
@@ -6876,12 +6875,18 @@ fn asm_section_align_fill_byte() {
         .expect(".exec_align_probe section missing");
     assert_eq!(sec.2 & 0x4, 0x4, "SHF_EXECINSTR expected");
     let body = &sec.3;
-    // 0x11 | pad to 16 with 0x90 | 0x22 | pad to 32 with 0xcc | 0x33.
+    // 0x11 | pad to 16 with NOPs | 0x22 | pad to 32 with 0xcc | 0x33. The
+    // 15-byte NOP gap opens after a data directive, so it leads with the
+    // one-byte NOP; the remaining fourteen are a 3-byte plus an 11-byte NOP.
     assert_eq!(body.len(), 33, "section size: {body:02x?}");
     assert_eq!(body[0], 0x11);
-    assert!(
-        body[1..16].iter().all(|&b| b == 0x90),
-        "exec .balign fill must be 0x90: {body:02x?}"
+    assert_eq!(
+        body[1..16],
+        [
+            0x90, 0x0f, 0x1f, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00,
+            0x00
+        ],
+        "exec .balign 0x90 fill must take the NOP run: {body:02x?}"
     );
     assert_eq!(body[16], 0x22);
     assert!(
@@ -11086,3 +11091,86 @@ fn runtime_initialized_const_storage_stays_writable() {
         assert_eq!(objs["ro"].0, ".rodata", "{target:?}: plain const placement");
     }
 }
+
+/// A label an inline-asm template defines is a definition of the unit,
+/// whatever the section's access rights are, so a C reference binds to
+/// it. The object path leaves the placement to the linker; a single-file
+/// image has no link step and places the section itself. The two must
+/// accept the same unit and produce an image carrying the payload --
+/// that agreement is the property, not any particular layout.
+#[test]
+fn pushed_asm_section_labels_bind_the_same_on_both_emit_paths() {
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    let src = super::load_fixture("file_scope_asm_section_placement.c");
+    // The three payload words the fixture reads back, in the order the
+    // template defines them: read-only, writable, executable.
+    let payloads: [u32; 3] = [0x1111_2222, 0x3333_4444, 0x5555_6666];
+    // A PE image's entry stub calls into the startup runtime, so only the
+    // object path can produce one from a lone TU.
+    for target in [
+        Target::MacOSAarch64,
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsAarch64,
+        Target::WindowsX64,
+    ] {
+        let single_file = !matches!(target, Target::WindowsAarch64 | Target::WindowsX64);
+        let program = crate::c5::Compiler::with_options(
+            src.clone(),
+            target,
+            crate::c5::compiler::CompileOptions::default(),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("{target:?}: compile: {e}"));
+        let mut images: Vec<(&str, Vec<u8>)> = Vec::new();
+        if single_file {
+            images.push((
+                "single-file image",
+                emit_native_with_options(&program, target, NativeOptions::default())
+                    .unwrap_or_else(|e| panic!("{target:?}: single-file image: {e}")),
+            ));
+        }
+        images.push((
+            "object path",
+            super::link_executable_with_runtime(&program, target, NativeOptions::default())
+                .unwrap_or_else(|e| panic!("{target:?}: object path: {e}")),
+        ));
+        for (i, w) in payloads.iter().enumerate() {
+            let pat = w.to_le_bytes();
+            for (path, bytes) in &images {
+                assert!(
+                    bytes.windows(4).any(|c| c == pat),
+                    "{target:?}: {path} dropped pushed-section payload {i} ({w:#x})",
+                );
+            }
+        }
+    }
+}
+
+/// A single-file image resolves an inline-asm reference at emit time, so
+/// a form that only a load-time relocation can express is refused rather
+/// than left holding the encoder's placeholder. The object path carries
+/// the same form as a relocation and links.
+#[test]
+fn absolute_asm_label_immediate_is_refused_in_a_single_file_image() {
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src =
+        "int main(void) { asm volatile(\"pushq $1f\\n\\taddq $8, %rsp\\n1:\\n\"); return 0; }";
+    let target = Target::LinuxX64;
+    let program = crate::c5::Compiler::with_target(String::from(src), target)
+        .compile()
+        .expect("compile");
+    let err = emit_native_with_options(&program, target, NativeOptions::default())
+        .expect_err("a position-independent image cannot carry a link-time absolute")
+        .to_string();
+    assert!(
+        err.contains("load-time relocation") && err.contains("`-c`"),
+        "expected a diagnostic naming the object path, got: {err}"
+    );
+    let reloc = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    emit_native_with_options(&program, target, reloc).expect("the object path carries the reloc");
+}
+

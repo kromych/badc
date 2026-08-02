@@ -1041,6 +1041,12 @@ pub(crate) struct AsmSection {
     pub labels: alloc::vec::Vec<AsmSectionLabel>,
     /// Largest `.balign` seen; the object writer aligns the section.
     pub align: u32,
+    /// Whether the section's last byte-emitting item was an instruction.
+    /// x86 alignment padding depends on it (see
+    /// [`push_x86_exec_align_fill`]); the state carries across the blocks
+    /// that merge into one section. A fresh section starts at the
+    /// assembler's section-start boundary.
+    pub after_insn: bool,
 }
 
 /// Offset marking a `.globl` seen before its label definition.
@@ -1078,17 +1084,25 @@ pub(crate) struct AsmSectionLabel {
 /// leave the appended bytes / relocs / labels in a pre-existing section.
 pub(crate) struct AsmSectionsSnapshot {
     len: usize,
-    per_section: alloc::vec::Vec<(usize, usize, usize, u32)>,
+    per_section: alloc::vec::Vec<(usize, usize, usize, u32, bool)>,
 }
 
 /// Record the sink's outer length and each existing section's bytes,
-/// relocs, labels, and alignment.
+/// relocs, labels, alignment, and instruction-boundary state.
 pub(crate) fn snapshot_asm_sections(sink: &[AsmSection]) -> AsmSectionsSnapshot {
     AsmSectionsSnapshot {
         len: sink.len(),
         per_section: sink
             .iter()
-            .map(|s| (s.bytes.len(), s.relocs.len(), s.labels.len(), s.align))
+            .map(|s| {
+                (
+                    s.bytes.len(),
+                    s.relocs.len(),
+                    s.labels.len(),
+                    s.align,
+                    s.after_insn,
+                )
+            })
             .collect(),
     }
 }
@@ -1100,11 +1114,12 @@ pub(crate) fn restore_asm_sections(
     snap: &AsmSectionsSnapshot,
 ) {
     sink.truncate(snap.len);
-    for (s, &(bytes, relocs, labels, align)) in sink.iter_mut().zip(&snap.per_section) {
+    for (s, &(bytes, relocs, labels, align, after_insn)) in sink.iter_mut().zip(&snap.per_section) {
         s.bytes.truncate(bytes);
         s.relocs.truncate(relocs);
         s.labels.truncate(labels);
         s.align = align;
+        s.after_insn = after_insn;
     }
 }
 
@@ -1121,7 +1136,7 @@ pub(crate) fn resolve_asm_goto_relocs(
         let start = snap
             .per_section
             .get(i)
-            .map_or(0, |&(_, relocs, _, _)| relocs);
+            .map_or(0, |&(_, relocs, _, _, _)| relocs);
         for r in s.relocs.iter_mut().skip(start) {
             if let AsmSectionTarget::TextBlock(bid) = r.target {
                 r.target = AsmSectionTarget::Text(block_off(bid));
@@ -1144,7 +1159,7 @@ pub(crate) fn resolve_asm_deferred_relocs(
         let start = snap
             .per_section
             .get(i)
-            .map_or(0, |&(_, relocs, _, _)| relocs);
+            .map_or(0, |&(_, relocs, _, _, _)| relocs);
         for r in s.relocs.iter_mut().skip(start) {
             if let AsmSectionTarget::DeferredText { region, off } = r.target {
                 r.target = AsmSectionTarget::Text(region_base(region) + off as usize);
@@ -3400,7 +3415,24 @@ const X86_NOPS: [&[u8]; 11] = [
 
 /// Fill an x86-64 executable alignment gap with multi-byte NOPs, as GNU as
 /// does: the sub-maximal remainder first, then maximal-length NOPs.
-pub(crate) fn push_x86_exec_align_fill(out: &mut alloc::vec::Vec<u8>, gap: usize) {
+///
+/// `after_insn` reports whether the byte before the gap came from an
+/// instruction. When it did not -- the gap opens after a data directive,
+/// which the assembler cannot assume ends on an instruction boundary --
+/// GNU as leads with the one-byte NOP and fills the rest by the same
+/// scheme. An alignment directive's own fill does not establish a
+/// boundary, so consecutive alignments after data each take the leading
+/// byte.
+pub(crate) fn push_x86_exec_align_fill(
+    out: &mut alloc::vec::Vec<u8>,
+    gap: usize,
+    after_insn: bool,
+) {
+    let mut gap = gap;
+    if !after_insn && gap > 0 {
+        out.extend_from_slice(X86_NOPS[0]);
+        gap -= 1;
+    }
     let rem = gap % X86_NOPS.len();
     if rem > 0 {
         out.extend_from_slice(X86_NOPS[rem - 1]);
@@ -3409,6 +3441,11 @@ pub(crate) fn push_x86_exec_align_fill(out: &mut alloc::vec::Vec<u8>, gap: usize
         out.extend_from_slice(X86_NOPS[X86_NOPS.len() - 1]);
     }
 }
+
+/// GNU as routes a code-section alignment whose explicit fill byte is the
+/// one-byte NOP through the NOP-sequence path rather than repeating the
+/// byte, so `.balign n, 0x90` pads like a fill-less `.balign n`.
+pub(crate) const X86_NOP_OPCODE: u8 = 0x90;
 
 /// Measure the section-relative offset of every label the blocks define,
 /// before the field values (or the main stream) are laid out. Each item's
@@ -3586,6 +3623,7 @@ pub(crate) fn materialize_asm_sections(
                     relocs: alloc::vec::Vec::new(),
                     labels: alloc::vec::Vec::new(),
                     align: 1,
+                    after_insn: true,
                 });
                 sink.len() - 1
             }
@@ -3620,8 +3658,9 @@ pub(crate) fn materialize_asm_sections(
                     // neither the bytes nor the section's own alignment.
                     if max.is_none_or(|m| gap <= m as usize) {
                         sec.align = sec.align.max(*n);
-                        if fill.is_none() && b.flags.contains('x') && !align_is_p2 {
-                            push_x86_exec_align_fill(&mut sec.bytes, gap);
+                        let nop_fill = matches!(fill, None | Some(X86_NOP_OPCODE));
+                        if nop_fill && b.flags.contains('x') && !align_is_p2 {
+                            push_x86_exec_align_fill(&mut sec.bytes, gap, sec.after_insn);
                         } else {
                             let (pat, plen) =
                                 align_fill_pattern(*fill, b.flags.contains('x'), align_is_p2);
@@ -4048,6 +4087,17 @@ pub(crate) fn materialize_asm_sections(
                          assembled for this target"
                     ));
                 }
+            }
+            // Alignment padding follows the instruction boundary the last
+            // byte-emitting item left; the padding itself sets none.
+            match item {
+                AsmSectionItem::CodeBytes { .. } => sec.after_insn = true,
+                AsmSectionItem::Data { .. }
+                | AsmSectionItem::Fill { .. }
+                | AsmSectionItem::Bytes(_)
+                | AsmSectionItem::Org(_)
+                | AsmSectionItem::OrgLabel { .. } => sec.after_insn = false,
+                _ => {}
             }
         }
     }
@@ -5110,8 +5160,8 @@ mod asm_section_tests {
     fn align_fill_and_max_skip() {
         // `.balign`/`.p2align`/`.align` fill: an executable section defaults to
         // the target NOP, a data section to zero, and an explicit fill byte
-        // wins for either. A max skip drops the alignment when the gap is
-        // larger. Matches GNU as byte-for-byte for data and non-NOP code fills.
+        // other than the one-byte NOP wins for either. A max skip drops the
+        // alignment when the gap is larger. Matches GNU as byte-for-byte.
         let mat = |text: &str, aarch64: bool| -> alloc::vec::Vec<u8> {
             let (_code, blocks) = extract_asm_sections(text, aarch64).unwrap().unwrap();
             let mut sink = alloc::vec::Vec::new();
@@ -5132,9 +5182,10 @@ mod asm_section_tests {
             false,
         );
         assert_eq!(exec.len(), 9);
-        // x86 executable default fill is the GNU as multi-byte NOP run:
-        // a 7-byte gap takes the single 7-byte NOP.
-        assert_eq!(exec[1..8], [0x0f, 0x1f, 0x80, 0x00, 0x00, 0x00, 0x00]);
+        // x86 executable default fill is the GNU as multi-byte NOP run. The
+        // gap opens after a data directive, so it leads with the one-byte NOP
+        // and the remaining six take the 6-byte NOP.
+        assert_eq!(exec[1..8], [0x90, 0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00]);
         let data = mat(
             ".pushsection .t,\"aw\"\n.byte 1\n.balign 8\n.byte 2\n.popsection\n",
             false,
@@ -5158,6 +5209,193 @@ mod asm_section_tests {
             false,
         );
         assert_eq!(skip.len(), 2);
+    }
+
+    /// GNU as 2.46 output for an x86-64 executable-section alignment gap
+    /// of 1..=24 bytes: the fill after a data directive and the fill after
+    /// an instruction, as `(gap, data_fill, insn_fill)`. Measured by
+    /// assembling `.fill n, 1, 0xcc` / `n` one-byte NOPs followed by
+    /// `.balign 64` and reading back the padding.
+    const GAS_ALIGN_FILL: &[(usize, &[u8], &[u8])] = &[
+        (1, &[0x90], &[0x90]),
+        (2, &[0x90, 0x90], &[0x66, 0x90]),
+        (3, &[0x90, 0x66, 0x90], &[0x0f, 0x1f, 0x00]),
+        (4, &[0x90, 0x0f, 0x1f, 0x00], &[0x0f, 0x1f, 0x40, 0x00]),
+        (
+            5,
+            &[0x90, 0x0f, 0x1f, 0x40, 0x00],
+            &[0x0f, 0x1f, 0x44, 0x00, 0x00],
+        ),
+        (
+            6,
+            &[0x90, 0x0f, 0x1f, 0x44, 0x00, 0x00],
+            &[0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00],
+        ),
+        (
+            7,
+            &[0x90, 0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00],
+            &[0x0f, 0x1f, 0x80, 0x00, 0x00, 0x00, 0x00],
+        ),
+        (
+            8,
+            &[0x90, 0x0f, 0x1f, 0x80, 0x00, 0x00, 0x00, 0x00],
+            &[0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00],
+        ),
+        (
+            9,
+            &[0x90, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00],
+            &[0x66, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00],
+        ),
+        (
+            10,
+            &[0x90, 0x66, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00],
+            &[0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00],
+        ),
+        (
+            11,
+            &[
+                0x90, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+            &[
+                0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+        ),
+        (
+            12,
+            &[
+                0x90, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+            &[
+                0x90, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+        ),
+        (
+            13,
+            &[
+                0x90, 0x90, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+            &[
+                0x66, 0x90, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+        ),
+        (
+            14,
+            &[
+                0x90, 0x66, 0x90, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+            &[
+                0x0f, 0x1f, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+        ),
+        (
+            15,
+            &[
+                0x90, 0x0f, 0x1f, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00,
+                0x00,
+            ],
+            &[
+                0x0f, 0x1f, 0x40, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00,
+                0x00,
+            ],
+        ),
+        (
+            16,
+            &[
+                0x90, 0x0f, 0x1f, 0x40, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00,
+                0x00, 0x00,
+            ],
+            &[
+                0x0f, 0x1f, 0x44, 0x00, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00,
+                0x00, 0x00,
+            ],
+        ),
+        (
+            17,
+            &[
+                0x90, 0x0f, 0x1f, 0x44, 0x00, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00,
+                0x00, 0x00, 0x00,
+            ],
+            &[
+                0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00,
+                0x00, 0x00, 0x00,
+            ],
+        ),
+        (
+            18,
+            &[
+                0x90, 0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00,
+                0x00, 0x00, 0x00, 0x00,
+            ],
+            &[
+                0x0f, 0x1f, 0x80, 0x00, 0x00, 0x00, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00,
+                0x00, 0x00, 0x00, 0x00,
+            ],
+        ),
+        (
+            22,
+            &[
+                0x90, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x66, 0x2e,
+                0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+            &[
+                0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x66, 0x2e,
+                0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+        ),
+        (
+            23,
+            &[
+                0x90, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x66,
+                0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+            &[
+                0x90, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x66,
+                0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+        ),
+        (
+            24,
+            &[
+                0x90, 0x90, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66,
+                0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+            &[
+                0x66, 0x90, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66,
+                0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+        ),
+    ];
+
+    #[test]
+    fn x86_exec_align_fill_matches_gnu_as() {
+        for &(gap, data_fill, insn_fill) in GAS_ALIGN_FILL {
+            for (after_insn, want) in [(false, data_fill), (true, insn_fill)] {
+                let mut got = alloc::vec::Vec::new();
+                push_x86_exec_align_fill(&mut got, gap, after_insn);
+                assert_eq!(
+                    got, want,
+                    "gap {gap}, after_insn {after_insn}: fill differs from GNU as"
+                );
+            }
+        }
+        // Past the table the tail is maximal NOPs, so a gap and the gap
+        // eleven bytes larger differ by exactly one more of them.
+        for gap in 1..=63usize {
+            for after_insn in [false, true] {
+                let mut small = alloc::vec::Vec::new();
+                push_x86_exec_align_fill(&mut small, gap, after_insn);
+                let mut large = alloc::vec::Vec::new();
+                push_x86_exec_align_fill(&mut large, gap + X86_NOPS.len(), after_insn);
+                assert_eq!(small.len(), gap);
+                assert_eq!(large.len(), gap + X86_NOPS.len());
+                assert_eq!(
+                    &large[..gap],
+                    &small[..],
+                    "gap {gap}: prefix must be stable"
+                );
+                assert_eq!(&large[gap..], X86_NOPS[X86_NOPS.len() - 1]);
+            }
+        }
     }
 
     #[test]

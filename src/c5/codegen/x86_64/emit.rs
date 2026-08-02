@@ -7371,6 +7371,10 @@ fn emit_inline_asm(
             return false;
         }
     };
+    // Whether the last byte the stream took came from an instruction; the
+    // template opens right after the function's compiled code, so it does.
+    // Alignment padding depends on it (see `push_x86_exec_align_fill`).
+    let mut after_insn = true;
     // Encode each template instruction with its operands resolved to the
     // assigned registers, explicit registers, and immediates.
     for insn in &insns {
@@ -7380,8 +7384,11 @@ fn emit_inline_asm(
             continue;
         }
         // A raw-byte piece emits its literal bytes with no operand resolution.
+        // Both spellings a piece can take -- a hex-byte run and a `.byte`
+        // family directive -- are data as far as alignment is concerned.
         if insn.mnemonic == super::asm::Mnemonic::RawBytes {
             code.extend_from_slice(&insn.bytes);
+            after_insn = false;
             continue;
         }
         // `.skip count, fill`: pad with `count` fill bytes. `count` resolves
@@ -7430,19 +7437,24 @@ fn emit_inline_asm(
             for _ in 0..count {
                 code.extend_from_slice(unit);
             }
+            after_insn = false;
             continue;
         }
         // `.align` / `.p2align` / `.balign`: pad `code` (the unit's whole
         // text stream, so its length is a section offset) to the boundary, as
         // GNU as does section-relative. A boundary above the section default
         // raises the section alignment, so the padding holds absolutely; the
-        // default fill is the GNU as multi-byte NOP sequence.
+        // default fill is the GNU as multi-byte NOP sequence, which an
+        // explicit one-byte-NOP fill also selects. The padding leaves no
+        // instruction boundary of its own.
         if let super::asm::Mnemonic::Align { n, fill, max } = insn.mnemonic {
             *text_align = (*text_align).max(n as usize);
             let gap = super::ssa::emit_common::align_gap(code.len() as i64, n as i64, max) as usize;
             match fill {
-                Some(b) => code.resize(code.len() + gap, b),
-                None => super::ssa::emit_common::push_x86_exec_align_fill(code, gap),
+                Some(b) if b != super::ssa::emit_common::X86_NOP_OPCODE => {
+                    code.resize(code.len() + gap, b)
+                }
+                _ => super::ssa::emit_common::push_x86_exec_align_fill(code, gap, after_insn),
             }
             continue;
         }
@@ -7463,6 +7475,7 @@ fn emit_inline_asm(
                 };
                 code.extend_from_slice(&(v as u64).to_le_bytes()[..w as usize]);
             }
+            after_insn = false;
             continue;
         }
         // `%P` / `%c` naming a link-time address (not a compile-time
@@ -7509,6 +7522,7 @@ fn emit_inline_asm(
                     return fail("inline asm: `%c`/`%P` address operand outside lea/call/jmp");
                 }
             }
+            after_insn = true;
             continue;
         }
         // A jmp / jcc to a local label: emit the rel32 form now and record the
@@ -7526,6 +7540,7 @@ fn emit_inline_asm(
                 None => super::encode::emit_jmp_rel32(code, 0),
             }
             label_fixups.push((code.len() - 4, num, forward));
+            after_insn = true;
             continue;
         }
         // A `$LABEL` operand (`pushq $1f`, `movq $1f, %rax`) is the label's
@@ -7582,6 +7597,7 @@ fn emit_inline_asm(
                 }
             }
             label_fixups.push((code.len() - 4, num, forward));
+            after_insn = true;
             continue;
         }
         // A jmp / jcc to an `asm goto` label (`%lK`): emit the rel32
@@ -7610,6 +7626,7 @@ fn emit_inline_asm(
                 None => LocalBranchKind::Jmp,
             };
             goto_sites.push((site, kind, k as usize));
+            after_insn = true;
             continue;
         }
         // A direct `call` / `jmp` to a symbol: resolve the name to its entry
@@ -7653,6 +7670,7 @@ fn emit_inline_asm(
             }
             code.push(if is_call { 0xE8 } else { 0xE9 });
             code.extend_from_slice(&[0u8; 4]);
+            after_insn = true;
             continue;
         }
         // A `jcc` to a bare symbol resolves against a section label; only
@@ -8039,6 +8057,7 @@ fn emit_inline_asm(
                 }
             }
         }
+        after_insn = true;
     }
     // Patch each label reference now that every definition's offset is
     // known. A forward `Nf` takes the nearest matching definition after the

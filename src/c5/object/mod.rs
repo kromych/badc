@@ -154,23 +154,75 @@ fn route_single_tu_data_imports(build: &mut Build, target: Target) {
     build.user_extern_data_refs = remaining;
 }
 
-/// Place the executable inline-asm sections a single-TU final image
-/// references into its text stream. The relocatable path emits every
-/// section for a real link to place; a final image has no link step, so
-/// an `"x"` section defining a label the C code calls is appended to
-/// the text, its relocations resolved, and its labels returned so the
-/// call sites bind to them -- what the linker does for the object
-/// path's undefined symbols. Unreferenced sections keep the established
-/// final-image behavior (assembled and dropped).
+/// Where a label an inline-asm template defines ended up in a single-TU
+/// final image: a byte offset within `Build::text` or within the data
+/// image (`Build::data` plus its zero-fill tail).
 #[cfg(feature = "native-emit")]
-fn fold_exec_asm_sections(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AsmLabelPlacement {
+    Text(usize),
+    Data(usize),
+}
+
+#[cfg(feature = "native-emit")]
+impl AsmLabelPlacement {
+    fn plus(self, delta: usize) -> Self {
+        match self {
+            Self::Text(o) => Self::Text(o + delta),
+            Self::Data(o) => Self::Data(o + delta),
+        }
+    }
+}
+
+/// Place the inline-asm sections a single-TU final image references into
+/// its text stream, and bind the image's references to every label the
+/// templates define. The relocatable path emits each section for a real
+/// link to place; a final image has no link step, so a referenced
+/// section is appended to the text, its relocations resolved, and its
+/// labels returned so the referring sites bind to them -- what the
+/// linker does for the object path's undefined symbols.
+///
+/// Placement is by section flags, matching the ELF rule that maps a
+/// section into a segment by its access rights. `SHF_WRITE` selects the
+/// data image; every other section goes to the text stream, whose region
+/// is readable as well as executable, so a code section's instructions
+/// and a read-only section's payload are both valid at their label
+/// addresses. Unreferenced sections keep the established final-image
+/// behavior (assembled and dropped).
+///
+/// TODO: give the final-image writers real named-section placement, so
+/// the payload lands under its own access rights instead of the
+/// enclosing region's and a reference needing a load-time relocation
+/// stops being a diagnostic here.
+#[cfg(feature = "native-emit")]
+fn fold_asm_sections(
     build: &mut Build,
     target: Target,
-) -> Result<alloc::collections::BTreeMap<String, usize>, C5Error> {
+) -> Result<alloc::collections::BTreeMap<String, AsmLabelPlacement>, C5Error> {
     use crate::c5::codegen::ssa::emit_common::{AsmSectionTarget, align_fill_pattern};
-    let mut label_at: alloc::collections::BTreeMap<String, usize> =
-        alloc::collections::BTreeMap::new();
-    if build.output_kind == OutputKind::Relocatable || build.asm_sections.is_empty() {
+    if build.output_kind == OutputKind::Relocatable {
+        return Ok(alloc::collections::BTreeMap::new());
+    }
+    // A named label the template defined in the main stream is already
+    // placed; it binds a same-name C reference exactly as the object
+    // path's local `.text` symbol does.
+    let mut label_at: alloc::collections::BTreeMap<String, AsmLabelPlacement> = build
+        .asm_text_labels
+        .iter()
+        .map(|l| (l.name.clone(), AsmLabelPlacement::Text(l.text_offset)))
+        .collect();
+    let err = |m: alloc::string::String| C5Error::Compile(crate::c5::error::fmt_link_err(&m));
+    // A `$LABEL` address immediate needs the link-time address of a text
+    // byte. The image is position-independent, so no emit-time value is
+    // correct; refuse rather than leave the encoder's placeholder.
+    if let Some(r) = build.asm_text_abs_refs.first() {
+        return Err(err(alloc::format!(
+            "inline asm: a `$label` address immediate (text offset {}) needs a load-time \
+             relocation and cannot be resolved in a single-file image; compile with `-c` and link",
+            r.field_offset,
+        )));
+    }
+    if build.asm_sections.is_empty() {
         return Ok(label_at);
     }
     // Names the image needs: the C code's extern call sites and address-of
@@ -187,33 +239,68 @@ fn fold_exec_asm_sections(
                 .map(|r| r.symbol_name.clone()),
         )
         .collect();
+    // A main-stream branch into a pushed section names it by index, not by
+    // symbol, so seed the fold set with those sections directly.
+    let mut wanted: alloc::collections::BTreeSet<usize> = build
+        .asm_section_text_refs
+        .iter()
+        .map(|r| r.section_index)
+        .collect();
     let is_a64 = matches!(
         target,
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
     );
-    let err = |m: alloc::string::String| C5Error::Compile(crate::c5::error::fmt_link_err(&m));
     let mut folded: Vec<usize> = Vec::new();
-    let mut bases: Vec<Option<usize>> = alloc::vec![None; build.asm_sections.len()];
+    let mut bases: Vec<Option<AsmLabelPlacement>> = alloc::vec![None; build.asm_sections.len()];
     loop {
         let mut grew = false;
         for (i, s) in build.asm_sections.iter().enumerate() {
             if bases[i].is_some()
-                || !s.flags.contains('x')
-                || !s.labels.iter().any(|l| needed.contains(&l.name))
+                || !(wanted.contains(&i) || s.labels.iter().any(|l| needed.contains(&l.name)))
             {
                 continue;
             }
-            let align = s.align.max(1) as usize;
-            let (pat, plen) = align_fill_pattern(None, true, is_a64);
-            while !build.text.len().is_multiple_of(align) {
-                build.text.push(pat[build.text.len() % plen]);
-            }
-            let base = build.text.len();
-            build.text.extend_from_slice(&s.bytes);
+            let base = if s.flags.contains('w') {
+                // The data image ends where the zero-fill range begins, so
+                // its tail is the only writable byte range left to grow.
+                // Materialize the zero-fill so appending cannot move a bss
+                // object; the payload needs file backing regardless.
+                if !s.relocs.is_empty() {
+                    return Err(err(alloc::format!(
+                        "inline-asm section `{}`: a writable section's relocations need a \
+                         load-time relocation and cannot be resolved in a single-file image; \
+                         compile with `-c` and link",
+                        s.name
+                    )));
+                }
+                if build.bss_size > 0 {
+                    let zeros = build.data.len() + build.bss_size as usize;
+                    build.data.resize(zeros, 0);
+                    build.bss_size = 0;
+                }
+                let align = s.align.max(1) as usize;
+                build.data_align = build.data_align.max(align);
+                while !build.data.len().is_multiple_of(align) {
+                    build.data.push(0);
+                }
+                let at = build.data.len();
+                build.data.extend_from_slice(&s.bytes);
+                AsmLabelPlacement::Data(at)
+            } else {
+                let align = s.align.max(1) as usize;
+                let (pat, plen) = align_fill_pattern(None, true, is_a64);
+                while !build.text.len().is_multiple_of(align) {
+                    build.text.push(pat[build.text.len() % plen]);
+                }
+                let at = build.text.len();
+                build.text.extend_from_slice(&s.bytes);
+                AsmLabelPlacement::Text(at)
+            };
             bases[i] = Some(base);
             folded.push(i);
+            wanted.remove(&i);
             for l in &s.labels {
-                label_at.insert(l.name.clone(), base + l.offset as usize);
+                label_at.insert(l.name.clone(), base.plus(l.offset as usize));
             }
             for r in &s.relocs {
                 if let AsmSectionTarget::Symbol(name) = &r.target {
@@ -233,14 +320,21 @@ fn fold_exec_asm_sections(
     };
     for &i in &folded {
         let s = &build.asm_sections[i];
-        let base = bases[i].expect("folded section has a base");
+        // Only a text placement reaches here: a writable section carrying
+        // relocations was refused above.
+        let AsmLabelPlacement::Text(base) = bases[i].expect("folded section has a base") else {
+            continue;
+        };
         for r in &s.relocs {
             let at = base + r.offset as usize;
             let target_off = match &r.target {
                 AsmSectionTarget::Text(off) => *off,
                 AsmSectionTarget::Symbol(name) => match label_at
                     .get(name.as_str())
-                    .copied()
+                    .and_then(|p| match p {
+                        AsmLabelPlacement::Text(o) => Some(*o),
+                        AsmLabelPlacement::Data(_) => None,
+                    })
                     .or_else(|| func_off(name))
                 {
                     Some(o) => o,
@@ -272,6 +366,26 @@ fn fold_exec_asm_sections(
             build.text[at..at + 4].copy_from_slice(&(val as i32).to_le_bytes());
         }
     }
+    // Main-stream references to a label placed in one of those sections.
+    // A PC-relative field whose target also landed in the text stream
+    // folds to a constant; anything else needs a load-time relocation.
+    for r in core::mem::take(&mut build.asm_section_text_refs) {
+        let s = &build.asm_sections[r.section_index];
+        let text_base = match (r.absolute, bases[r.section_index]) {
+            (false, Some(AsmLabelPlacement::Text(b))) => b,
+            _ => {
+                return Err(err(alloc::format!(
+                    "inline-asm section `{}`: this reference to a section label needs a \
+                     load-time relocation and cannot be resolved in a single-file image; \
+                     compile with `-c` and link",
+                    s.name
+                )));
+            }
+        };
+        let at = r.instr_offset;
+        let val = (text_base + r.section_offset as usize) as i64 + r.addend - at as i64;
+        build.text[at..at + 4].copy_from_slice(&(val as i32).to_le_bytes());
+    }
     // The folded sections are placed; remove them so no writer emits a copy.
     let mut keep = bases.iter().map(|b| b.is_none());
     build.asm_sections.retain(|_| keep.next().unwrap());
@@ -294,7 +408,7 @@ fn resolve_single_tu_extern_refs(
     program: &Program,
     build: &mut Build,
     target: Target,
-    asm_labels: &alloc::collections::BTreeMap<String, usize>,
+    asm_labels: &alloc::collections::BTreeMap<String, AsmLabelPlacement>,
 ) -> Result<(), C5Error> {
     if build.output_kind == OutputKind::Relocatable
         || (build.user_extern_data_refs.is_empty() && build.user_extern_call_sites.is_empty())
@@ -355,14 +469,27 @@ fn resolve_single_tu_extern_refs(
             kept_data.push(r);
             continue;
         }
-        // A label defined in a folded executable asm section: the reference
-        // takes the same address-load patch a function address takes, as the
-        // linker binds the object path's reference against the label.
-        if let Some(&target_off) = asm_labels.get(r.symbol_name.as_str()) {
-            build.func_fixups.push(crate::c5::codegen::FuncFixup {
-                adrp_offset: r.instr_offset,
-                target_native_offset: target_off,
-            });
+        // A label an inline-asm template defines: the reference takes the
+        // address-load patch of the region the label landed in, as the
+        // linker binds the object path's reference against the label. The
+        // `direct_pcrel` addend folded the 4-byte end skew; a fixup targets
+        // the effective byte, so restore it.
+        if let Some(&placement) = asm_labels.get(r.symbol_name.as_str()) {
+            let delta = r.direct_pcrel.map_or(0, |a| a + 4);
+            match placement {
+                AsmLabelPlacement::Text(off) => {
+                    build.func_fixups.push(crate::c5::codegen::FuncFixup {
+                        adrp_offset: r.instr_offset,
+                        target_native_offset: (off as i64 + delta) as usize,
+                    })
+                }
+                AsmLabelPlacement::Data(off) => {
+                    build.data_fixups.push(crate::c5::codegen::DataFixup {
+                        adrp_offset: r.instr_offset,
+                        data_offset: (off as i64 + delta) as u64,
+                    })
+                }
+            }
             continue;
         }
         // A data object this unit defines (weak included): the reference
@@ -396,10 +523,12 @@ fn resolve_single_tu_extern_refs(
     build.user_extern_data_refs = kept_data;
 
     for site in core::mem::take(&mut build.user_extern_call_sites) {
-        // A callee defined as a label in a folded executable asm section:
-        // bind the call directly, as the linker binds the object path's
-        // undefined symbol against the section's label.
-        if let Some(&target_off) = asm_labels.get(site.symbol_name.as_str()) {
+        // A callee defined as a label in the text stream (the main stream
+        // or a folded asm section): bind the call directly, as the linker
+        // binds the object path's undefined symbol against the label.
+        if let Some(&AsmLabelPlacement::Text(target_off)) =
+            asm_labels.get(site.symbol_name.as_str())
+        {
             let at = site.instr_offset;
             match machine {
                 // `call`/`jmp` rel32: the displacement field is at +1.
@@ -459,7 +588,7 @@ pub fn emit_native_with_options_named(
     let program = &compacted;
     build.bss_size = bss_size;
     route_single_tu_data_imports(&mut build, target);
-    let asm_labels = fold_exec_asm_sections(&mut build, target)?;
+    let asm_labels = fold_asm_sections(&mut build, target)?;
     resolve_single_tu_extern_refs(program, &mut build, target, &asm_labels)?;
     if options.output_kind == OutputKind::SharedLibrary {
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);

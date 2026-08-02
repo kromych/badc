@@ -67,6 +67,7 @@ Disassembly of section .text:
                	nop
                	js	<addr>
                	addb	%al, (%rax)
+               	nop
                	nopl	(%rax)
                	orb	%al, (%rax)
                	addb	%al, (%rax)

@@ -119,6 +119,7 @@ def stream(prefix: str, cmd: list[str]) -> int:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        errors="replace",
         bufsize=1,
     )
     assert proc.stdout is not None
@@ -183,6 +184,7 @@ def sync_windows(box: Box, github_token: str) -> int:
         ],
         capture_output=True,
         text=True,
+        errors="replace",
     )
     if tar.returncode != 0:
         sys.stdout.write(f"[{box.short}] tar failed: {tar.stderr}\n")
@@ -197,6 +199,7 @@ def sync_windows(box: Box, github_token: str) -> int:
         ["ssh", box.host, 'cmd /c "mkdir C:\\tmp 2>NUL & exit /b 0"'],
         capture_output=True,
         text=True,
+        errors="replace",
     )
     if mkdir.returncode != 0:
         sys.stdout.write(f"[{box.short}] mkdir C:\\tmp failed: {mkdir.stderr}\n")
@@ -205,6 +208,7 @@ def sync_windows(box: Box, github_token: str) -> int:
         ["scp", str(archive), f"{box.host}:C:/tmp/badc-tree.tar.gz"],
         capture_output=True,
         text=True,
+        errors="replace",
     )
     if scp.returncode != 0:
         sys.stdout.write(f"[{box.short}] scp failed: {scp.stderr}\n")

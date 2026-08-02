@@ -1609,6 +1609,12 @@ pub struct Compiler {
     /// `Compiler::default()` on every fresh compile.
     next_compound_literal_id: usize,
 
+    /// `(data offset, symbol index)` of every staged-literal symbol,
+    /// ascending by offset. `truncate_data` retires the suffix whose
+    /// storage it reclaims: those offsets go back to unrelated objects,
+    /// and the data-object model identifies an object by its start.
+    staged_literal_syms: Vec<(i64, usize)>,
+
     /// Symbol indices of block-scope statics' emission records pushed
     /// while the current function body parses. Function close stamps
     /// each record's `owner_ent_pc` (mirrors `pending_block_locals`).
@@ -1942,6 +1948,7 @@ impl Compiler {
             data_reloc_sym_idx: alloc::vec::Vec::new(),
             init_reloc_high: 0,
             next_compound_literal_id: 0,
+            staged_literal_syms: Vec::new(),
             pending_block_static_syms: Vec::new(),
             next_block_static_id: 0,
             retry_state: None,
@@ -2315,6 +2322,11 @@ impl Compiler {
             for i in 0..self.symbols.len() {
                 let s = &self.symbols[i];
                 if s.class != Token::Glo as i64 || !s.defined_here || s.is_alias {
+                    continue;
+                }
+                // A staged literal recorded its own reserved extent; its
+                // `type_` describes one element.
+                if s.is_compound_literal {
                     continue;
                 }
                 let elem = self.size_of_type(s.type_) as i64;

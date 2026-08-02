@@ -1655,7 +1655,8 @@ impl Compiler {
                 self.next()?;
             }
             self.data.push(0);
-            let sym = self.intern_compound_literal_symbol(off, Ty::Char as i64);
+            let len = self.data.len() as i64 - off;
+            let sym = self.intern_compound_literal_symbol(off, Ty::Char as i64, len);
             return Ok(ConstDesig {
                 value: off,
                 ty: Ty::Char as i64,

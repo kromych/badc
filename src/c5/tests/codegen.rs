@@ -4189,6 +4189,130 @@ fn staged_aggregate_template_is_eight_aligned() {
     );
 }
 
+/// A speculative initializer parse may stage a C99 6.5.2.5 compound
+/// literal and then be rolled back. The data segment is truncated, so
+/// those offsets go back to later objects; the synthetic symbol
+/// anchoring the literal has to go with them. The data-object model
+/// identifies an object by its start offset -- static DCE intervals,
+/// the section carve, and the object symbol table all read it -- so a
+/// symbol left behind claims storage another object owns.
+#[test]
+fn rolled_back_compound_literal_leaves_no_symbol_behind() {
+    use crate::{CompileOptions, Compiler, Target};
+
+    // The scalar's initializer folds to an integer, so the address path
+    // stages both literals and then restores its checkpoint; the table
+    // that follows is allocated over the reclaimed bytes.
+    const SRC: &str = "struct s { int a; int b; };\n\
+         struct e { const char *n; const struct s *p; };\n\
+         static const long delta =\n\
+         (long)&((struct s){ 1, 2 }).b - (long)&((struct s){ 1, 2 }).a;\n\
+         static const struct e tab[] = {\n\
+         { \"a\", &(struct s){ .a = 1 } },\n\
+         { \"b\", &(struct s){ .a = 2 } },\n\
+         };\n\
+         const struct e *get(void) { return tab; }\n\
+         long get_delta(void) { return delta; }\n";
+    let prog = Compiler::with_options(
+        SRC.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+
+    // Every defined data object starts at an offset of its own: one
+    // symbol per anchor, and no compound literal on top of a named
+    // object's storage.
+    let defined: alloc::vec::Vec<(i64, &str)> = prog
+        .symbols
+        .iter()
+        .filter(|s| {
+            s.class == crate::c5::token::Token::Glo as i64
+                && s.defined_here
+                && !s.is_alias
+                && !s.is_thread_local
+                && (0..prog.data.len() as i64).contains(&s.val)
+        })
+        .map(|s| (s.val, s.name.as_str()))
+        .collect();
+    let mut anchors: alloc::vec::Vec<i64> = defined.iter().map(|&(v, _)| v).collect();
+    anchors.sort_unstable();
+    anchors.dedup();
+    assert_eq!(
+        anchors.len(),
+        defined.len(),
+        "two data objects anchor one offset: {defined:?}"
+    );
+    assert!(
+        prog.symbols
+            .iter()
+            .filter(|s| s.is_compound_literal)
+            .all(|s| (0..prog.data.len() as i64).contains(&s.val)),
+        "a compound-literal symbol anchors reclaimed storage"
+    );
+    // Every pointer member of the table keeps its relocation: two
+    // strings and two literal addresses.
+    let tab = prog
+        .symbols
+        .iter()
+        .find(|s| s.name == "tab")
+        .expect("tab defined");
+    let slots = prog
+        .data_relocs
+        .iter()
+        .filter(|r| {
+            let off = r.data_offset as i64;
+            off >= tab.val && off < tab.val + 32
+        })
+        .count();
+    assert_eq!(slots, 4, "a table pointer slot lost its relocation");
+}
+
+/// C99 6.5.2.5p3: a compound literal is an unnamed object with storage of
+/// its own. An empty element list (`(T[]){ }`, accepted as an extension)
+/// still needs a slot -- without one its symbol anchors the next
+/// definition's start, and the data-object model identifies an object by
+/// that start.
+#[test]
+fn empty_array_compound_literal_owns_its_storage() {
+    use crate::{CompileOptions, Compiler, Target};
+
+    const SRC: &str = "struct list { const int *p; unsigned char n; };\n\
+         struct desc { const struct list *l; int v; };\n\
+         static const struct list empty = { .p = (const int[]){ }, .n = 0 };\n\
+         static const struct desc table[] = { { &empty, 1 } };\n\
+         const struct desc *get(void) { return table; }\n";
+    let prog = Compiler::with_options(
+        SRC.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+
+    let anchor = |name: &str| -> i64 {
+        prog.symbols
+            .iter()
+            .find(|s| s.name == name)
+            .unwrap_or_else(|| panic!("{name} defined"))
+            .val
+    };
+    let literal = prog
+        .symbols
+        .iter()
+        .find(|s| s.is_compound_literal)
+        .expect("compound literal symbol")
+        .val;
+    for named in ["empty", "table"] {
+        assert_ne!(
+            literal,
+            anchor(named),
+            "the empty array literal shares `{named}`'s storage"
+        );
+    }
+}
+
 /// Every function's name is looked for in the inline-asm templates, to
 /// decide which bodies escape the call graph. The search reads the
 /// distinct identifier runs rather than the templates themselves, which

@@ -2474,6 +2474,78 @@ fn weak_hidden_undef_addressof_is_pc_relative_direct() {
 }
 
 #[test]
+fn pragma_gcc_visibility_extent_sets_symbol_visibility() {
+    // `#pragma GCC visibility push(hidden)` supplies the visibility for the
+    // declarations in its extent, as an explicit `visibility` attribute does
+    // per declaration. A build that compiles position-independent code into
+    // an image linked at fixed addresses relies on it: a hidden name is not
+    // preemptible, so the reference is a direct RIP-relative access
+    // (R_X86_64_PC32) that stays position-independent, while a preemptible
+    // name goes through the GOT, whose relaxation the linker may resolve to
+    // an absolute immediate. Locks the three verdicts: inside the extent,
+    // an explicit attribute overriding it, and after the matching pop.
+    use crate::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_PC32: u32 = 2;
+    const R_X86_64_REX_GOTPCRELX: u32 = 42;
+    const STV_DEFAULT: u8 = 0;
+    const STV_HIDDEN: u8 = 2;
+    let src = "#pragma GCC visibility push(hidden)\n\
+               extern unsigned long in_extent;\n\
+               extern unsigned long stated_default __attribute__((visibility(\"default\")));\n\
+               void inside(unsigned long v) { in_extent = v; stated_default = v; }\n\
+               #pragma GCC visibility pop\n\
+               extern unsigned long after_pop;\n\
+               void outside(unsigned long v) { after_pop = v; }\n";
+    let copts = CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(String::from(src), Target::LinuxX64, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    // Definitions in the extent carry the visibility too.
+    for (name, vis) in [
+        ("in_extent", STV_HIDDEN),
+        ("stated_default", STV_DEFAULT),
+        ("after_pop", STV_DEFAULT),
+        ("inside", STV_HIDDEN),
+        ("outside", STV_DEFAULT),
+    ] {
+        assert_eq!(
+            elf_symbol_st_other(&bytes, name),
+            vis,
+            "st_other of `{name}`"
+        );
+    }
+    for (name, rtype) in [
+        ("in_extent", R_X86_64_PC32),
+        ("stated_default", R_X86_64_REX_GOTPCRELX),
+        ("after_pop", R_X86_64_REX_GOTPCRELX),
+    ] {
+        let sym_idx = obj
+            .symbols
+            .iter()
+            .position(|s| s.name == name)
+            .unwrap_or_else(|| panic!("`{name}` in .symtab"));
+        let types: alloc::vec::Vec<u32> = obj
+            .text_relocs
+            .iter()
+            .filter(|r| r.sym_idx == sym_idx)
+            .map(|r| r.rtype)
+            .collect();
+        assert_eq!(types, [rtype], "relocation kinds against `{name}`");
+    }
+}
+
+#[test]
 fn file_scope_asm_assembles_instructions_in_rodata() {
     // A file-scope asm whose `.pushsection .rodata` holds a trampoline body:
     // GNU as assembles instructions into any section, the flags only setting

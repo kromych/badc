@@ -350,7 +350,7 @@ impl Compiler {
             self.pending.attr_cleanup = None;
             self.pending.attr_weak = false;
             self.pending.attr_used = false;
-            self.pending.attr_hidden = false;
+            self.pending.attr_visibility = None;
             self.pending.attr_section = None;
             self.pending.attr_alias = None;
             self.pending.saw_register_storage = false;
@@ -2871,7 +2871,13 @@ impl Compiler {
         if self.pending_is_gnu_inline {
             self.symbols[id_idx].is_gnu_inline = true;
         }
-        if self.pending.attr_hidden {
+        // An explicit `visibility` attribute states the answer; without one
+        // the enclosing `#pragma GCC visibility` extent supplies it.
+        let hidden = self
+            .pending
+            .attr_visibility
+            .unwrap_or_else(|| self.lex.visibility_hidden());
+        if hidden {
             self.symbols[id_idx].is_hidden = true;
         }
         if let Some(sec) = self.pending.attr_section.take() {

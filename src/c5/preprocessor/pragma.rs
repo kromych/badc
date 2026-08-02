@@ -74,9 +74,9 @@ impl Preprocessor {
 
     /// Apply a single destringized `_Pragma` operand through the same
     /// dispatch as the `#pragma` directive (see the `Directive::Pragma`
-    /// arm in `process_named`). `pack(...)` is emitted as an inline
-    /// `#pragma pack` directive on its own line so the lexer folds it
-    /// into the pack stack at this source position.
+    /// arm in `process_named`). The position-sensitive pragmas are
+    /// re-emitted as inline `#pragma` directives on their own line so the
+    /// lexer folds them in at this source position.
     pub(super) fn dispatch_pragma_operator(
         &mut self,
         args: &str,
@@ -89,7 +89,7 @@ impl Preprocessor {
                 self.pragma_once_files.insert(filename.to_string());
             }
             PragmaDirective::Other => {
-                if pragma_is_pack(args) {
+                if pragma_is_pack(args) || pragma_is_visibility(args) {
                     out.push_str("\n#pragma ");
                     out.push_str(args.trim());
                     out.push('\n');
@@ -880,4 +880,20 @@ pub(super) fn pragma_is_pack(args: &str) -> bool {
     // Anything else (`packfoo`, `pack_extra`) is a different
     // pragma the preprocessor still wants to silently swallow.
     rest.trim_start().starts_with('(')
+}
+
+/// True when `args` is the head of a `GCC visibility` pragma. Its extent
+/// is a source range, so like `pack` the line goes through to the lexer
+/// rather than being consumed here.
+pub(super) fn pragma_is_visibility(args: &str) -> bool {
+    let Some(rest) = args.trim_start().strip_prefix("GCC") else {
+        return false;
+    };
+    let Some(rest) = rest.trim_start().strip_prefix("visibility") else {
+        return false;
+    };
+    // A following `push` / `pop` must be a separate token, so anything
+    // that continues the identifier (`visibility_mode`) is a different
+    // pragma.
+    !rest.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
 }

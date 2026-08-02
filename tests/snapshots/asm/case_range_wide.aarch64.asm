@@ -33,10 +33,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x64               // =100
                	ret
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	cmp	x0, x17
-               	b.hi	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	cmp	x0, #0x9

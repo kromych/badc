@@ -17,23 +17,16 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	jb	<addr>
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	movq	%rax, %rcx
                	cmpq	%r11, %rax
                	jb	<addr>
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x3e7, %eax            # imm = 0x3E7
-               	retq
                	movl	$0x64, %eax
                	retq
-               	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
-               	cmpq	%r11, %rax
-               	jne	<addr>
                	movl	$0xc8, %eax
                	retq
                	cmpq	$0x5, %rax
-               	jne	<addr>
+               	je	<addr>
+               	movl	$0x3e7, %eax            # imm = 0x3E7
+               	retq
                	movl	$0x5, %eax
                	retq
 
@@ -42,11 +35,7 @@ Disassembly of section .text:
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	cmpq	$-0x1, %rax
                	jb	<addr>
-               	cmpq	$-0x1, %rax
-               	je	<addr>
                	movl	$0x3e7, %eax            # imm = 0x3E7
-               	retq
-               	movl	$0x64, %eax
                	retq
                	cmpq	$0x7, %rax
                	jne	<addr>
@@ -58,11 +47,7 @@ Disassembly of section .text:
                	andq	$0xff, %rax
                	cmpq	$-0x1, %rax
                	jb	<addr>
-               	cmpq	$-0x1, %rax
-               	je	<addr>
                	movl	$0x3e7, %eax            # imm = 0x3E7
-               	retq
-               	movl	$0x64, %eax
                	retq
                	cmpq	$0x3, %rax
                	jne	<addr>

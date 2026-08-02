@@ -34,8 +34,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v13  Imm(100)                                         -> x0
     terminator Return(v13)   (exit_acc=v13)
   block 9  start_pc=0
-    v9   BinopI { op=ule, lhs=v3, rhs_imm=4294967295 }    -> x1
-    terminator Bz { cond=v9, target=b3, fall=b10 }   (exit_acc=v9)
+    v9   Imm(1)                                           -> x0
+    terminator Jmp(b10)   (exit_acc=v9)
   block 10  start_pc=0
     v16  Imm(3)                                           -> x0
     terminator Return(v16)   (exit_acc=v16)

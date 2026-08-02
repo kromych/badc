@@ -17,14 +17,12 @@ Disassembly of section .text:
                	b.lo	<addr>
                	cmp	x0, #0xff
                	b.lo	<addr>
-               	cmp	x0, #0xff
-               	b.eq	<addr>
-               	mov	x0, #0x0                // =0
-               	ret
                	mov	x0, #0x2                // =2
                	ret
                	cmp	x0, #0x80
-               	b.ne	<addr>
+               	b.eq	<addr>
+               	mov	x0, #0x0                // =0
+               	ret
                	mov	x0, #0x1                // =1
                	ret
                	cmp	x0, #0x28

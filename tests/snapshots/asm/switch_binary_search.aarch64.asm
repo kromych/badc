@@ -47,8 +47,6 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cmp	x0, #0x0
                	b.lt	<addr>
-               	cmp	x0, #0x0
-               	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	mov	x17, #0xfffd            // =65533
@@ -81,23 +79,15 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	cmp	x0, x17
                	b.lo	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0x0                // =0
-               	ret
                	mov	x0, #0x5                // =5
                	ret
                	mov	x17, #0x80000000        // =2147483648
                	cmp	x0, x17
-               	b.ne	<addr>
+               	b.eq	<addr>
+               	mov	x0, #0x0                // =0
+               	ret
                	mov	x0, #0x4                // =4
                	ret
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x7fff, lsl #16
-               	cmp	x0, x17
-               	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	cmp	x0, #0x5

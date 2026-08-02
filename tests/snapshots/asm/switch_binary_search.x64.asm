@@ -42,8 +42,6 @@ Disassembly of section .text:
                	jl	<addr>
                	testq	%rdi, %rdi
                	jl	<addr>
-               	testq	%rdi, %rdi
-               	jne	<addr>
                	movl	$0x3, %eax
                	retq
                	cmpq	$-0x3, %rdi
@@ -67,20 +65,15 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	cmpq	%r11, %rax
                	jb	<addr>
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	xorq	%rax, %rax
-               	retq
                	movl	$0x5, %eax
                	retq
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	cmpq	%r11, %rax
-               	jne	<addr>
+               	je	<addr>
+               	xorq	%rax, %rax
+               	retq
                	movl	$0x4, %eax
                	retq
-               	cmpq	$0x7fffffff, %rax       # imm = 0x7FFFFFFF
-               	jne	<addr>
                	movl	$0x3, %eax
                	retq
                	cmpq	$0x5, %rax

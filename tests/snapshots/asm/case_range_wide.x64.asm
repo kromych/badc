@@ -32,10 +32,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x64, %eax
                	retq
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	movq	%rax, %rcx
-               	cmpq	%r11, %rax
-               	ja	<addr>
                	movl	$0x3, %eax
                	retq
                	cmpq	$0x9, %rax

@@ -2318,7 +2318,10 @@ fn inline_caller(
     let agg_maps: BTreeMap<usize, Vec<u32>> = called
         .into_iter()
         .map(|pc| {
-            let descs = callees.get(&pc).map(|c| c.agg_descs.clone()).unwrap_or_default();
+            let descs = callees
+                .get(&pc)
+                .map(|c| c.agg_descs.clone())
+                .unwrap_or_default();
             (pc, merge_agg_descs(&mut caller.agg_descs, &descs))
         })
         .collect();
@@ -2397,8 +2400,10 @@ fn inline_caller(
                 let inlined =
                     inlined.filter(|(c, ..)| c.blocks.len() == 1 && !needs_reloc_splice(c));
                 if let Some((callee, call_args, ret_slot, callee_pc)) = inlined {
-                    let agg_map: &[u32] =
-                        agg_maps.get(&callee_pc).map(|m| m.as_slice()).unwrap_or(&[]);
+                    let agg_map: &[u32] = agg_maps
+                        .get(&callee_pc)
+                        .map(|m| m.as_slice())
+                        .unwrap_or(&[]);
                     any_change = true;
                     let remapped_args: Vec<ValueId> =
                         call_args.iter().map(|&a| map_v(a, &remap)).collect();

@@ -143,7 +143,10 @@ fn extend_range(kind: LoadKind) -> Option<Range> {
     Some(match kind {
         LoadKind::I64 => return None,
         LoadKind::U8 => Range { lo: 0, hi: 0xff },
-        LoadKind::I8 => Range { lo: -0x80, hi: 0x7f },
+        LoadKind::I8 => Range {
+            lo: -0x80,
+            hi: 0x7f,
+        },
         LoadKind::U16 => Range { lo: 0, hi: 0xffff },
         LoadKind::I16 => Range {
             lo: -0x8000,

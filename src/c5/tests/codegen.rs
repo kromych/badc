@@ -4929,8 +4929,11 @@ fn elf_relocations(
 ///
 /// Locks each override shape the walker handles: a repeated member
 /// designator, a constant overriding a pointer, two union members sharing
-/// one slot, and a brace group replacing a subobject a nested designator
-/// already wrote.
+/// one slot, a brace group replacing a subobject a nested designator
+/// already wrote, and an override of an element that held the address of
+/// a compound literal -- that one appends the literal and writes the
+/// pointer back into the slot below it, so the write offset retreats
+/// below every slot the literal just recorded.
 #[test]
 fn duplicate_initializer_retires_the_overridden_relocation() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -4945,11 +4948,20 @@ fn duplicate_initializer_retires_the_overridden_relocation() {
         const struct s const_override = { .p = f2, .p = 0 }; \
         const union u union_override = { .a = f3, .b = g2 }; \
         const struct outer nested_override = { .in.p = f4, .in = { g3 } }; \
+        typedef struct E E; \
+        struct V { int type; union { const char *s; E *d; } u; }; \
+        struct E { const char *k; struct V v; }; \
+        extern E ext_e; \
+        const struct V literal_override = \
+            { .type = 1, \
+              .u.d = ((E[]) { { \"a\", { 2, { .s = \"x\" } } }, { 0 } }), \
+              .u.d = &ext_e }; \
         const void *keep(int i) { \
             switch (i) { \
             case 0: return &member_override; \
             case 1: return &const_override; \
             case 2: return &union_override; \
+            case 3: return &literal_override; \
             } \
             return &nested_override; \
         }";
@@ -4979,7 +4991,7 @@ fn duplicate_initializer_retires_the_overridden_relocation() {
                  survives (relocations: {relocs:?})"
             );
         }
-        for kept in ["g1", "g2", "g3"] {
+        for kept in ["g1", "g2", "g3", "ext_e"] {
             assert_eq!(
                 count(kept),
                 1,

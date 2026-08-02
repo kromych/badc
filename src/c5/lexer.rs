@@ -43,6 +43,17 @@ enum PackDirective {
     Pop,
 }
 
+/// One parsed `#pragma GCC visibility` directive, folded into
+/// [`Lexer::visibility_stack`] by [`Lexer::apply_visibility_directive`].
+#[derive(Debug, Clone, Copy)]
+enum VisibilityDirective {
+    /// `push(<vis>)` -- the payload is whether `<vis>` is non-preemptible
+    /// (`hidden` / `internal`).
+    Push(bool),
+    /// `pop` -- drop one frame (no-op at the bottom).
+    Pop,
+}
+
 /// Decode one UTF-8 code point from the front of `bytes`, returning
 /// `(code_point, byte_length)`. A malformed lead or truncated sequence
 /// falls back to the single byte interpreted as Latin-1, so the lexer
@@ -200,6 +211,29 @@ fn parse_pragma_pack_line(body: &[u8]) -> Option<PackDirective> {
     inner.parse::<usize>().ok().map(PackDirective::Set)
 }
 
+/// Parse a single `#`-prefix-stripped line as `pragma GCC visibility
+/// push(<vis>)` or `pragma GCC visibility pop`, returning `None` for any
+/// other shape so the caller falls back to skipping the line. The pragma
+/// supplies the ELF visibility for declarations in its extent, which the
+/// declaration paths sample the same way struct layout samples the pack
+/// stack.
+fn parse_pragma_visibility_line(body: &[u8]) -> Option<VisibilityDirective> {
+    let s = core::str::from_utf8(body).ok()?.trim();
+    let rest = s.strip_prefix("pragma")?.trim_start();
+    let rest = rest.strip_prefix("GCC")?.trim_start();
+    let rest = rest.strip_prefix("visibility")?.trim_start();
+    if rest.starts_with("pop") {
+        return Some(VisibilityDirective::Pop);
+    }
+    let rest = rest.strip_prefix("push")?.trim_start();
+    let after_open = rest.strip_prefix('(')?;
+    let close = after_open.find(')')?;
+    let vis = after_open[..close].trim();
+    Some(VisibilityDirective::Push(
+        vis == "hidden" || vis == "internal",
+    ))
+}
+
 /// Snapshot of the lexer's positional state plus every attribute
 /// `next()` produces for the current token. See [`Lexer::snapshot`] /
 /// [`Lexer::restore`].
@@ -324,6 +358,12 @@ pub(crate) struct Lexer {
     /// dependent within the source and can't be batched up the way
     /// `#pragma binding(...)` is).
     pack_stack: Vec<usize>,
+    /// Stack of `#pragma GCC visibility push(...)` frames; the top holds
+    /// whether the visibility currently in effect is non-preemptible.
+    /// Scanned inline like `pack_stack`, and read by the declaration
+    /// paths as the default for a declaration that carries no explicit
+    /// `visibility` attribute.
+    visibility_stack: Vec<bool>,
 }
 
 /// Side index for `Vec<Symbol>` so identifier lookup stops being O(N).
@@ -441,7 +481,16 @@ impl Lexer {
             // upper bound here too. Real `#pragma pack(N)` updates
             // happen via `apply_pack_directive`.
             pack_stack: vec![DEFAULT_PACK],
+            visibility_stack: vec![false],
         }
+    }
+
+    /// Whether the visibility in effect at the current source position is
+    /// non-preemptible, i.e. inside a `#pragma GCC visibility
+    /// push(hidden)` (or `internal`) extent. Default visibility outside
+    /// any such extent.
+    pub fn visibility_hidden(&self) -> bool {
+        *self.visibility_stack.last().unwrap_or(&false)
     }
 
     /// Active `#pragma pack(N)` value at the current source
@@ -779,6 +828,19 @@ impl Lexer {
                 // user error in real cpp; we silently ignore here.
                 if self.pack_stack.len() > 1 {
                     self.pack_stack.pop();
+                }
+            }
+        }
+    }
+
+    fn apply_visibility_directive(&mut self, dir: VisibilityDirective) {
+        match dir {
+            VisibilityDirective::Push(hidden) => self.visibility_stack.push(hidden),
+            VisibilityDirective::Pop => {
+                // Keep the bottom frame so `visibility_hidden()` always
+                // has an answer; popping past it is a user error.
+                if self.visibility_stack.len() > 1 {
+                    self.visibility_stack.pop();
                 }
             }
         }
@@ -1194,12 +1256,12 @@ impl Lexer {
                 //     attribute later tokens to the right
                 //     `(file, line)` pair. The body parses to
                 //     `LineMarker` and the lexer updates state.
-                //   * `#pragma pack(...)` -- the preprocessor passes
-                //     pack pragmas through verbatim (they're
-                //     source-position-dependent, unlike the binding
-                //     / dylib / export pragmas the preprocessor
-                //     batches). Parse the args and fold into
-                //     `pack_stack`.
+                //   * `#pragma pack(...)` and `#pragma GCC visibility
+                //     ...` -- the preprocessor passes these through
+                //     verbatim (they're source-position-dependent,
+                //     unlike the binding / dylib / export pragmas the
+                //     preprocessor batches). Parse the args and fold
+                //     into `pack_stack` / `visibility_stack`.
                 //   * Any other `#` line -- (shebangs,
                 //     unrecognised pragmas, stray `#`s the
                 //     preprocessor didn't consume). Skip to EOL.
@@ -1219,6 +1281,8 @@ impl Lexer {
                     }
                 } else if let Some(dir) = parse_pragma_pack_line(body) {
                     self.apply_pack_directive(dir);
+                } else if let Some(dir) = parse_pragma_visibility_line(body) {
+                    self.apply_visibility_directive(dir);
                 }
                 self.pos = line_end;
             } else if c.is_ascii_alphabetic() || c == '_' {

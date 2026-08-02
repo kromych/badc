@@ -43,6 +43,8 @@
 //!   dylib" form so reordering directives cannot rebind a function to
 //!   the wrong dylib.
 //! * `#pragma pack(push|pop|N)` -- struct field alignment.
+//! * `#pragma GCC visibility push(vis)` / `pop` -- ELF visibility for the
+//!   declarations in the pragma's extent.
 //! * `#pragma intrinsic("name")` -- mark a name (e.g. `alloca`) as a
 //!   compiler intrinsic.
 
@@ -976,7 +978,8 @@ impl Preprocessor {
                                     self.pragma_once_files.insert(filename.to_string());
                                 }
                                 PragmaDirective::Other => {
-                                    // `#pragma pack(...)` is source-position-
+                                    // `#pragma pack(...)` and `#pragma GCC
+                                    // visibility ...` are source-position-
                                     // sensitive: a struct definition that
                                     // follows a `pack(1)` directive packs at
                                     // 1, but a struct AFTER a subsequent
@@ -988,8 +991,8 @@ impl Preprocessor {
                                     // through verbatim so the lexer
                                     // reaches it inline; the lexer's `#`
                                     // handler folds the directive into
-                                    // its `pack_stack`.
-                                    if pragma_is_pack(args) {
+                                    // its `pack_stack` / `visibility_stack`.
+                                    if pragma_is_pack(args) || pragma_is_visibility(args) {
                                         out.push('#');
                                         out.push_str(directive);
                                         out.push('\n');
@@ -1478,5 +1481,5 @@ use directive::{
     format_line_marker, parse_directive,
 };
 use expand::JoinScan;
-use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack};
+use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack, pragma_is_visibility};
 use text::{is_ident, strip_c_comments, unfold_line_continuations};

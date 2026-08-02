@@ -240,8 +240,7 @@ it.
 
 CI runs this against the pinned release configured with the architecture's
 own `defconfig`, and boots the result under the emulator the qemu lane
-compiles and links with badc. The lane is aarch64; the x86_64 image builds
-and links but hangs in early init, so its matrix entry is commented out.
+compiles and links with badc. Both architectures are gated.
 
 ## Scope
 

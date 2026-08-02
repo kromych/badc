@@ -1166,11 +1166,12 @@ impl Compiler {
                             // |"default")`: `hidden` and `internal` make the
                             // symbol non-preemptible (STV_HIDDEN); the other
                             // two keep the default preemptible addressing.
+                            // Stated either way, the attribute overrides an
+                            // enclosing `#pragma GCC visibility` extent.
                             self.next()?; // `(`
                             let vis = self.parse_attribute_string_operand("visibility")?;
-                            if vis == "hidden" || vis == "internal" {
-                                self.pending.attr_hidden = true;
-                            }
+                            self.pending.attr_visibility =
+                                Some(vis == "hidden" || vis == "internal");
                             if self.lex.tk != ')' {
                                 return Err(
                                     self.compile_err("`)` expected after `visibility` operand")

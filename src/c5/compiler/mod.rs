@@ -867,10 +867,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// A consumed `__attribute__((used))`: keep the definition in the
     /// object even when nothing in the unit references it.
     pub attr_used: bool,
-    /// A consumed `__attribute__((visibility("hidden")))` (or `"internal"`):
-    /// the declared symbol is not preemptible, marked STV_HIDDEN and
-    /// addressed PC-relative directly rather than through the GOT.
-    pub attr_hidden: bool,
+    /// A consumed `__attribute__((visibility(...)))`: `Some(true)` for
+    /// `"hidden"` / `"internal"` -- the declared symbol is not preemptible,
+    /// marked STV_HIDDEN and addressed PC-relative directly rather than
+    /// through the GOT -- and `Some(false)` for the preemptible spellings.
+    /// `None` leaves the choice to the `#pragma GCC visibility` extent the
+    /// declaration sits in.
+    pub attr_visibility: Option<bool>,
     /// A consumed `__attribute__((section("name")))`: the named object
     /// section the declared symbol's bytes go to.
     pub attr_section: Option<alloc::string::String>,
@@ -899,7 +902,7 @@ pub(super) struct DeclSpecifiers {
     base_is_const: bool,
     attr_used: bool,
     attr_weak: bool,
-    attr_hidden: bool,
+    attr_visibility: Option<bool>,
     attr_section: Option<alloc::string::String>,
     attr_cleanup: Option<usize>,
     attr_align: i64,
@@ -916,7 +919,7 @@ impl Pending {
             base_is_const: core::mem::take(&mut self.base_is_const),
             attr_used: core::mem::take(&mut self.attr_used),
             attr_weak: core::mem::take(&mut self.attr_weak),
-            attr_hidden: core::mem::take(&mut self.attr_hidden),
+            attr_visibility: self.attr_visibility.take(),
             attr_section: self.attr_section.take(),
             attr_cleanup: self.attr_cleanup.take(),
             attr_align: core::mem::take(&mut self.attr_align),
@@ -930,7 +933,7 @@ impl Pending {
         self.base_is_const = s.base_is_const;
         self.attr_used = s.attr_used;
         self.attr_weak = s.attr_weak;
-        self.attr_hidden = s.attr_hidden;
+        self.attr_visibility = s.attr_visibility;
         self.attr_section = s.attr_section;
         self.attr_cleanup = s.attr_cleanup;
         self.attr_align = s.attr_align;
@@ -1002,7 +1005,7 @@ impl Default for Pending {
             attr_cleanup: None,
             attr_weak: false,
             attr_used: false,
-            attr_hidden: false,
+            attr_visibility: None,
             attr_section: None,
             attr_alias: None,
             saw_register_storage: false,

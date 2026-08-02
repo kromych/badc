@@ -58,19 +58,17 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	xorq	%rcx, %rcx
                	movl	%ecx, -0x8(%rbp)
-               	movslq	(%rax), %rcx
-               	leaq	<rip>, %rax
+               	movslq	(%rax), %rax
+               	leaq	<rip>, %rcx
                	xorq	%rdx, %rdx
-               	movl	%edx, (%rax)
+               	movl	%edx, (%rcx)
                	movl	$0x2bc, %edi            # imm = 0x2BC
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rsi
-               	movslq	(%rsi), %rax
-               	leaq	0x1(%rax), %r8
+               	movslq	(%rsi), %rcx
+               	leaq	0x1(%rcx), %r8
                	movl	%r8d, (%rsi)
-               	movl	%edi, (%rdx,%rax,4)
-               	movslq	%ecx, %rax
-               	movslq	%eax, %rax
+               	movl	%edi, (%rdx,%rcx,4)
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

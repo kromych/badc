@@ -120,8 +120,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	%eax, %eax
                	andq	$0xff, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq

@@ -29,7 +29,6 @@ Disassembly of section .text:
                	add	x1, x1, x0
                	lsl	x5, x0, #1
                	add	x3, x3, x5
-               	sxth	x2, w2
                	add	x2, x2, x0
                	sxth	x2, w2
                	mov	x17, #0xff              // =255
@@ -41,7 +40,6 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	sxtw	x1, w1
                	add	x1, x1, x3
-               	sxth	x2, w2
                	add	x1, x1, x2
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
@@ -52,8 +50,7 @@ Disassembly of section .text:
                	asr	x1, x0, #1
                	lsl	x1, x1, #4
                	add	x1, x0, x1
-               	sxtw	x2, w1
-               	sxtw	x1, w2
+               	sxtw	x1, w1
                	add	x0, x1, x0
                	ret
 

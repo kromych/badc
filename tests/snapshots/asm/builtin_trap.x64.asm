@@ -17,10 +17,8 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	movl	%eax, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
-               	movslq	%eax, %rcx
                	testq	%rax, %rax
                	jl	<addr>
-               	movslq	%ecx, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -30,10 +28,8 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movl	%eax, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
-               	movslq	%eax, %rcx
                	testq	%rax, %rax
                	jl	<addr>
-               	movslq	%ecx, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax

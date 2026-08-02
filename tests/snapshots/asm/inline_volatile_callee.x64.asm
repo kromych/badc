@@ -70,8 +70,7 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	%rbx, %rax
                	subq	$0x7, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
                	popq	%rbp

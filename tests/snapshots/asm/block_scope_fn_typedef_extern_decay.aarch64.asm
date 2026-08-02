@@ -14,8 +14,7 @@ Disassembly of section .text:
 <scale>:
                	lsl	x0, x0, #1
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -28,8 +27,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0x29
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

@@ -12,15 +12,13 @@ Disassembly of section .text:
 
 <add>:
                	leaq	(%rdi,%rsi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <sub>:
                	movq	%rdi, %rax
                	subq	%rsi, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -57,8 +55,7 @@ Disassembly of section .text:
                	movl	$0x6, %esi
                	movq	%rbx, %rax
                	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0xb, %rax
                	je	<addr>
                	movl	$0x3, %eax
@@ -70,8 +67,7 @@ Disassembly of section .text:
                	movl	$0x14, %edi
                	movl	$0x8, %esi
                	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0xc, %rax
                	je	<addr>
                	movl	$0x4, %eax

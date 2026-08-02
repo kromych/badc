@@ -70,9 +70,7 @@ Disassembly of section .text:
                	movq	0x70(%rsp), %rcx
                	shlq	$0x2, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13

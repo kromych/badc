@@ -12,20 +12,17 @@ Disassembly of section .text:
 
 <add_two>:
                	leaq	0x2(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <times_three>:
                	leaq	(%rdi,%rdi,2), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <minus_seven>:
                	leaq	-0x7(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -38,8 +35,7 @@ Disassembly of section .text:
                	leaq	(%rbx), %rax
                	movq	(%rax), %rax
                	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0xc, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -50,8 +46,7 @@ Disassembly of section .text:
                	movl	$0x5, %edi
                	movq	0x8(%rbx), %rax
                	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0xf, %rax
                	je	<addr>
                	movl	$0x2, %eax
@@ -62,8 +57,7 @@ Disassembly of section .text:
                	movl	$0x64, %edi
                	movq	0x10(%rbx), %rax
                	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x5d, %rax
                	je	<addr>
                	movl	$0x3, %eax

@@ -29,10 +29,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v19  Extend { value=v17, kind=I32 }                   -> x1
     v20  BinopI { op=sub, lhs=v17, rhs_imm=42 }           -> x0
     v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x1
-    v22  Extend { value=v20, kind=I32 }                   -> x1
-    v23  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x0
-    v24  Extend { value=v22, kind=I32 }                   -> x0
-    terminator Return(v24)   (exit_acc=v24)
+    v22  Extend { value=v20, kind=I32 }                   -> x0
+    v23  BinopI { op=shl, lhs=v22, rhs_imm=32 }           -> x1
+    v24  Extend { value=v22, kind=I32 }                   -> x1
+    terminator Return(v22)   (exit_acc=v22)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=boot
 fn ent_pc=1 n_params=0 variadic=false locals=0

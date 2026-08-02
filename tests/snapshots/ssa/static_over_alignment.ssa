@@ -73,7 +73,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v44  Imm(0)                                           -> x0
     terminator Jmp(b14)   (exit_acc=v44)
   block 14  start_pc=0
-    v51  Phi { incoming=[b13:v44, b18:v50], kind=I64 }    -> x0
+    v51  Phi { incoming=[b13:v44, b18:v48], kind=I64 }    -> x0
     terminator Jmp(b15)   (exit_acc=v51)
   block 15  start_pc=0
     v37  BinopI { op=ne, lhs=v51, rhs_imm=7 }             -> x0
@@ -88,10 +88,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v45  ImmData(4224)                                    -> x0
     v46  Load { addr=v45, disp=0, kind=I64 }              -> x0
     v47  BinopI { op=shl, lhs=v46, rhs_imm=32 }           -> x1
-    v48  Extend { value=v46, kind=I32 }                   -> x1
-    v49  BinopI { op=shl, lhs=v46, rhs_imm=32 }           -> x0
-    v50  Extend { value=v48, kind=I32 }                   -> x0
-    terminator Jmp(b14)   (exit_acc=v50)
+    v48  Extend { value=v46, kind=I32 }                   -> x0
+    v49  BinopI { op=shl, lhs=v48, rhs_imm=32 }           -> x1
+    v50  Extend { value=v48, kind=I32 }                   -> x1
+    terminator Jmp(b14)   (exit_acc=v48)
   block 19  start_pc=0
     terminator Jmp(b12)
 ; --- SSA dump (ok=true) ent_pc=0 ---

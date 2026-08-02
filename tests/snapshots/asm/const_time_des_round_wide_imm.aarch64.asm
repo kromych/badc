@@ -690,8 +690,7 @@ Disassembly of section .text:
                	eor	x0, x1, x0
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

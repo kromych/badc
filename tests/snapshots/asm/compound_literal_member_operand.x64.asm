@@ -99,8 +99,7 @@ Disassembly of section .text:
                	movb	%al, 0x3(%rcx)
                	popq	%rax
                	decq	%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	popq	%r11

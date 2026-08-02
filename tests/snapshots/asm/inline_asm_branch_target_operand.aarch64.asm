@@ -215,8 +215,7 @@ Disassembly of section .text:
                	add	sp, sp, #0xa0
                	ldursw	x1, [x29, #-0x10]
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0xf
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

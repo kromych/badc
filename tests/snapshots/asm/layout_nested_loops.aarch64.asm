@@ -39,5 +39,4 @@ Disassembly of section .text:
                	cmp	x5, #0x6
                	b.lt	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	ret

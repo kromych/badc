@@ -37,9 +37,9 @@ fn ent_pc=0 n_params=1 variadic=true locals=3
     v23  LocalAddr(-3)                                    -> x0
     v24  Intrinsic { kind=6, args=[v23] }                 -> x0
     v25  Extend { value=v8, kind=I32 }                    -> x0
-    v26  BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
-    v27  Extend { value=v25, kind=I32 }                   -> x0
-    terminator Return(v27)   (exit_acc=v27)
+    v26  BinopI { op=shl, lhs=v25, rhs_imm=32 }           -> x1
+    v27  Extend { value=v25, kind=I32 }                   -> x1
+    terminator Return(v25)   (exit_acc=v25)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=sum_twice
 fn ent_pc=1 n_params=1 variadic=true locals=6
@@ -109,10 +109,10 @@ fn ent_pc=1 n_params=1 variadic=true locals=6
     v45  Intrinsic { kind=6, args=[v44] }                 -> x1
     v46  LocalAddr(-6)                                    -> x1
     v47  Intrinsic { kind=6, args=[v46] }                 -> x1
-    v48  Extend { value=v29, kind=I32 }                   -> x1
-    v49  BinopI { op=shl, lhs=v29, rhs_imm=32 }           -> x0
-    v50  Extend { value=v48, kind=I32 }                   -> x0
-    terminator Return(v50)   (exit_acc=v50)
+    v48  Extend { value=v29, kind=I32 }                   -> x0
+    v49  BinopI { op=shl, lhs=v48, rhs_imm=32 }           -> x1
+    v50  Extend { value=v48, kind=I32 }                   -> x1
+    terminator Return(v48)   (exit_acc=v48)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=mixed
 fn ent_pc=2 n_params=1 variadic=true locals=4
@@ -232,17 +232,17 @@ fn ent_pc=4 n_params=1 variadic=true locals=3
     terminator Bnz { cond=v21, target=b2, fall=b5 }   (exit_acc=v21)
   block 5  start_pc=0
     v32  Extend { value=v19, kind=I32 }                   -> x0
-    v33  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x1
-    v34  Extend { value=v32, kind=I32 }                   -> x0
-    terminator Jmp(b6)   (exit_acc=v34)
+    v33  BinopI { op=shl, lhs=v32, rhs_imm=32 }           -> x1
+    v34  Extend { value=v32, kind=I32 }                   -> x2
+    terminator Jmp(b6)   (exit_acc=v32)
   block 6  start_pc=0
     v6   Imm(0)                                           -> x1
     v7   LocalAddr(-3)                                    -> x1
     v8   Intrinsic { kind=6, args=[v7] }                  -> x1
     v9   Extend { value=v34, kind=I32 }                   -> x1
-    v10  BinopI { op=shl, lhs=v34, rhs_imm=32 }           -> x0
-    v11  Extend { value=v9, kind=I32 }                    -> x0
-    terminator Return(v11)   (exit_acc=v11)
+    v10  BinopI { op=shl, lhs=v32, rhs_imm=32 }           -> x2
+    v11  Extend { value=v9, kind=I32 }                    -> x1
+    terminator Return(v32)   (exit_acc=v32)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=macro_sum
 fn ent_pc=5 n_params=1 variadic=true locals=3
@@ -282,9 +282,9 @@ fn ent_pc=5 n_params=1 variadic=true locals=3
     v23  LocalAddr(-3)                                    -> x0
     v24  Intrinsic { kind=6, args=[v23] }                 -> x0
     v25  Extend { value=v8, kind=I32 }                    -> x0
-    v26  BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
-    v27  Extend { value=v25, kind=I32 }                   -> x0
-    terminator Return(v27)   (exit_acc=v27)
+    v26  BinopI { op=shl, lhs=v25, rhs_imm=32 }           -> x1
+    v27  Extend { value=v25, kind=I32 }                   -> x1
+    terminator Return(v25)   (exit_acc=v25)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=5

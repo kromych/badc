@@ -23,13 +23,12 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movslq	0x4(%rax), %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rsi
+               	movslq	%eax, %rax
                	leaq	-0x8(%rbp), %rdx
                	movabsq	$-0x1, %rcx
                	movl	%ecx, (%rdx)
                	leaq	-0x8(%rbp), %rdx
                	movl	%ecx, 0x4(%rdx)
-               	movslq	%esi, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	popq	%r11

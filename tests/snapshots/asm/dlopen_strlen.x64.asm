@@ -23,7 +23,6 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	<rip>, %rdi
                	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq

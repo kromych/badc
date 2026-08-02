@@ -17,8 +17,7 @@ Disassembly of section .text:
                	jl	<addr>
                	cmpq	$0x2, %rdi
                	je	<addr>
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
                	movabsq	$-0x1, %rax
                	jmp	<addr>

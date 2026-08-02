@@ -17,8 +17,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	lsl	x0, x0, #1
                	add	x0, x0, #0x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
                	sxtw	x0, w0
                	ret
 
@@ -28,8 +26,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	lsl	x0, x0, #1
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
                	sxtw	x0, w0
                	ret
 
@@ -39,8 +35,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	lsl	x0, x0, #1
                	add	x0, x0, #0x2
-               	sxtw	x1, w0
-               	sxtw	x0, w1
                	sxtw	x0, w0
                	ret
 
@@ -50,8 +44,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	lsl	x0, x0, #1
                	add	x0, x0, #0x3
-               	sxtw	x1, w0
-               	sxtw	x0, w1
                	sxtw	x0, w0
                	ret
 

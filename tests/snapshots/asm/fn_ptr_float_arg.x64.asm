@@ -21,15 +21,13 @@ Disassembly of section .text:
 <mix>:
                	cvttss2si	%xmm0, %rax
                	addq	%rdi, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <cb_impl>:
                	cvttss2si	%xmm0, %rax
                	addq	%rdi, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -68,8 +66,7 @@ Disassembly of section .text:
                	movl	$0xa, %edi
                	movq	%rsi, %xmm0
                	callq	*%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0xc, %rax
                	je	<addr>
                	movl	$0x3, %eax

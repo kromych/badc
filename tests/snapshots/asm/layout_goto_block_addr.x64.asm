@@ -79,8 +79,7 @@ Disassembly of section .text:
                	movl	$0x4, %edi
                	callq	<addr>
                	addq	%rbx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
                	popq	%rbp

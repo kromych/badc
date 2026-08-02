@@ -141,8 +141,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	leaq	0x14(%rbx), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -289,19 +288,17 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	xorq	%rax, %rax
                	callq	<addr>
-               	movslq	%eax, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movslq	%eax, %rcx
+               	movq	%rax, %rcx
                	movslq	%ecx, %rax
+               	testq	%rax, %rax
+               	je	<addr>
                	popq	%rbp
                	retq
                	callq	<addr>
-               	movslq	%eax, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movslq	%eax, %rcx
+               	movq	%rax, %rcx
                	movslq	%ecx, %rax
+               	testq	%rax, %rax
+               	je	<addr>
                	popq	%rbp
                	retq
                	xorq	%rdi, %rdi

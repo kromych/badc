@@ -17,22 +17,18 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	leaq	0x1(%rcx), %rsi
-               	movl	%esi, (%rax)
-               	movslq	%ecx, %rax
-               	movslq	%eax, %rax
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rax
+               	leaq	0x1(%rax), %rsi
+               	movl	%esi, (%rcx)
                	cmpq	$0x11d7, %rax           # imm = 0x11D7
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	leaq	0x1(%rcx), %rsi
-               	movl	%esi, (%rax)
-               	movslq	%ecx, %rax
-               	movslq	%eax, %rax
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rax
+               	leaq	0x1(%rax), %rsi
+               	movl	%esi, (%rcx)
                	cmpq	$0x11d8, %rax           # imm = 0x11D8
                	je	<addr>
                	movl	$0x3, %eax

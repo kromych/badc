@@ -92,7 +92,6 @@ Disassembly of section .text:
                	cmp	x0, x2
                	b.lo	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	cmp	x0, #0x7
                	b.eq	<addr>
                	adrp	x3, <page>
@@ -116,7 +115,6 @@ Disassembly of section .text:
                	cmp	x0, x2
                	b.lo	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	mov	x1, x0
                	mov	x0, x3
                	bl	<addr>

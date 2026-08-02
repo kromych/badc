@@ -106,10 +106,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=3
     v20  Imm(0)                                           -> x1
     v21  BinopI { op=and, lhs=v19, rhs_imm=4294967295 }   -> x0
     v22  BinopI { op=shl, lhs=v21, rhs_imm=32 }           -> x1
-    v23  Extend { value=v21, kind=I32 }                   -> x1
-    v24  BinopI { op=shl, lhs=v21, rhs_imm=32 }           -> x0
-    v25  Extend { value=v23, kind=I32 }                   -> x0
-    terminator Return(v25)   (exit_acc=v25)
+    v23  Extend { value=v21, kind=I32 }                   -> x0
+    v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x1
+    v25  Extend { value=v23, kind=I32 }                   -> x1
+    terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

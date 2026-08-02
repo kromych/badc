@@ -89,7 +89,6 @@ Disassembly of section .text:
                	cmpq	%rdx, %rax
                	jb	<addr>
                	movslq	%ecx, %rax
-               	movslq	%eax, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
                	leaq	<rip>, %rsi
@@ -110,7 +109,6 @@ Disassembly of section .text:
                	cmpq	%rdx, %rax
                	jb	<addr>
                	movslq	%ecx, %rax
-               	movslq	%eax, %rax
                	movq	%rsi, %rdi
                	movq	%rax, %rsi
                	movb	$0x0, %al

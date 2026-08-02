@@ -135,8 +135,7 @@ Disassembly of section .text:
                	movzbq	-0x8(%rbp), %rax
                	imulq	$0x64, %rax, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq

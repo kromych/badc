@@ -13,21 +13,18 @@ Disassembly of section .text:
 
 <add_two>:
                	add	x0, x0, #0x2
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <times_three>:
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <minus_seven>:
                	sub	x0, x0, #0x7
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -43,8 +40,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0xc
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -57,8 +53,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0xf
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -71,8 +66,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0x5d
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

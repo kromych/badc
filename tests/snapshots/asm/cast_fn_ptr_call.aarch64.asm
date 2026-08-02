@@ -13,14 +13,12 @@ Disassembly of section .text:
 
 <add_one>:
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <mul_two>:
                	lsl	x0, x0, #1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:

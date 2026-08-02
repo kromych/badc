@@ -158,12 +158,12 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
     v148 Extend { value=v146, kind=I32 }                  -> x2
     v149 Binop { op=add, lhs=v143, rhs=v146 }             -> x0
     v150 BinopI { op=shl, lhs=v149, rhs_imm=32 }          -> x1
-    v151 Extend { value=v149, kind=I32 }                  -> x1
-    v152 BinopI { op=shl, lhs=v149, rhs_imm=32 }          -> x2
+    v151 Extend { value=v149, kind=I32 }                  -> x0
+    v152 BinopI { op=shl, lhs=v151, rhs_imm=32 }          -> x1
     v153 Extend { value=v151, kind=I32 }                  -> x1
-    v154 BinopI { op=shl, lhs=v149, rhs_imm=32 }          -> x0
-    v155 Extend { value=v153, kind=I32 }                  -> x0
-    terminator Return(v155)   (exit_acc=v155)
+    v154 BinopI { op=shl, lhs=v151, rhs_imm=32 }          -> x2
+    v155 Extend { value=v153, kind=I32 }                  -> x1
+    terminator Return(v151)   (exit_acc=v151)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=2

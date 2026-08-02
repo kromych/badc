@@ -9,10 +9,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v3   LoadLocal { off=2, kind=I32 }                    -> x0
     v4   BinopI { op=add, lhs=v1, rhs_imm=100 }           -> x0
     v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x1
-    v6   Extend { value=v4, kind=I32 }                    -> x1
-    v7   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x0
-    v8   Extend { value=v6, kind=I32 }                    -> x0
-    terminator Return(v8)   (exit_acc=v8)
+    v6   Extend { value=v4, kind=I32 }                    -> x0
+    v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x1
+    v8   Extend { value=v6, kind=I32 }                    -> x1
+    terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=check
 fn ent_pc=1 n_params=0 variadic=false locals=1
@@ -571,16 +571,16 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v182 Imm(16)                                          -> x0
     terminator Return(v182)   (exit_acc=v182)
   block 52  start_pc=0
-    v183 Call { target_pc=1, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v184 Imm(0)                                           -> x1
-    v185 Extend { value=v183, kind=I32 }                  -> x1
-    v186 BinopI { op=ne, lhs=v185, rhs_imm=0 }            -> x1
+    v183 Call { target_pc=1, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v184 Imm(0)                                           -> x0
+    v185 Extend { value=v183, kind=I32 }                  -> x0
+    v186 BinopI { op=ne, lhs=v185, rhs_imm=0 }            -> x2
     terminator Bz { cond=v186, target=b54, fall=b53 }   (exit_acc=v186)
   block 53  start_pc=0
     v187 Extend { value=v183, kind=I32 }                  -> x1
-    v188 BinopI { op=shl, lhs=v183, rhs_imm=32 }          -> x0
-    v189 Extend { value=v187, kind=I32 }                  -> x0
-    terminator Return(v189)   (exit_acc=v189)
+    v188 BinopI { op=shl, lhs=v185, rhs_imm=32 }          -> x2
+    v189 Extend { value=v187, kind=I32 }                  -> x1
+    terminator Return(v185)   (exit_acc=v185)
   block 54  start_pc=0
     v190 Imm(0)                                           -> x0
     terminator Return(v190)   (exit_acc=v190)

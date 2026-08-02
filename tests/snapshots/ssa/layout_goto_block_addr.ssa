@@ -122,10 +122,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v58  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v58)
   block 2  start_pc=0
-    v59  Extend { value=v51, kind=I32 }                   -> x1
-    v60  BinopI { op=shl, lhs=v51, rhs_imm=32 }           -> x0
-    v61  Extend { value=v59, kind=I32 }                   -> x0
-    terminator Return(v61)   (exit_acc=v61)
+    v59  Extend { value=v51, kind=I32 }                   -> x0
+    v60  BinopI { op=shl, lhs=v59, rhs_imm=32 }           -> x1
+    v61  Extend { value=v59, kind=I32 }                   -> x1
+    terminator Return(v59)   (exit_acc=v59)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

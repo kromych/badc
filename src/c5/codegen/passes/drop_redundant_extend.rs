@@ -1,5 +1,5 @@
 //! Drop a redundant `Inst::Extend { value, kind }` by redirecting its
-//! consumers to `value`. An extend is redundant in two cases:
+//! consumers to `value`. An extend is redundant in three cases:
 //!
 //!   1. `value` is a narrow integer load whose own extension already
 //!      covers the extend: a signed load (`I8`/`I16`/`I32`) no wider than
@@ -17,7 +17,17 @@
 //!      per-op renormalization left over from a chain of low-word
 //!      integer arithmetic.
 //!
-//! A third case works across blocks: two `Extend`s of the same SSA
+//!   3. `value` is itself an `Extend` no wider than this one. The inner
+//!      result already holds its sign bit in every position at and above
+//!      its width, so re-extending from an equal or greater width
+//!      reproduces it bit for bit -- the covering argument of (1) with a
+//!      signed load replaced by a signed extend. Unlike (2) this holds in
+//!      all 64 bits, so it applies wherever the value is consumed; such
+//!      an extend is in turn transparent to the case-(2) analysis, which
+//!      would otherwise judge the operand against a consumer set the
+//!      collapse widens.
+//!
+//! A fourth case works across blocks: two `Extend`s of the same SSA
 //! value with the same `kind` compute the same result, so an occurrence
 //! at a position dominated by another redirects to the dominating one
 //! (`dedup_dominated_extends`). Extends of a value round-tripped
@@ -69,6 +79,15 @@ fn observe(hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId) {
 /// 6.5.2.2p4-converted value; the return boundary stays conservative, so a value
 /// feeding the return keeps its canonicalization).
 pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
+    compute_high_observed_through(func, &[])
+}
+
+/// `compute_high_observed`, with the extends flagged in `collapsing`
+/// treated as transparent rather than as a barrier. Such an extend is
+/// about to be replaced by its operand in all 64 bits, so it hands its
+/// own consumers' observation down: without that, the operand's low-word
+/// rule could fire against a consumer set the collapse is going to widen.
+fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec<bool> {
     let n = func.insts.len();
     let mut hi = alloc::vec![false; n];
     let mut work: Vec<ValueId> = Vec::new();
@@ -236,6 +255,9 @@ pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
                 for v in ops {
                     observe(&mut hi, &mut work, v);
                 }
+            }
+            Inst::Extend { value, .. } if collapsing.get(r as usize).copied().unwrap_or(false) => {
+                observe(&mut hi, &mut work, *value)
             }
             _ => {}
         }
@@ -652,11 +674,32 @@ fn run_one(func: &mut FunctionSsa) {
     // unsigned load zero-extends, so a strictly-wider sign-extend lands its
     // sign bit in the zero region and is likewise a no-op. This covers the
     // `int`-return sign-extend of a char/short load left by the callee-
-    // narrowing convention. Or (2) it is an i32 sign-extend whose upper bits no
-    // consumer reads, so every consumer sees the same low 32 bits in the
-    // operand. Both redirect the extend's consumers to the operand; `resolve`
-    // walks redirect chains.
-    let high = compute_high_observed(func);
+    // narrowing convention. Or (3) its operand is an Extend no wider than
+    // it: the inner result holds its sign bit in every position at and
+    // above its own width, so re-extending from an equal or greater width
+    // reproduces it bit for bit. Or (2) it is an i32 sign-extend whose
+    // upper bits no consumer reads, so every consumer sees the same low 32
+    // bits in the operand. All three redirect the extend's consumers to the
+    // operand; `resolve` walks redirect chains.
+    //
+    // (1) and (3) hold in all 64 bits, (2) only in the low word, so a
+    // chain must never run one of the former into the latter. Case (3) is
+    // decided first, structurally, and its extends enter the high-bit
+    // analysis as transparent: an operand whose collapsing consumers read
+    // the upper half then fails (2) instead of being redirected under it.
+    let mut collapsing = alloc::vec![false; n];
+    for (idx, inst) in func.insts.iter().enumerate() {
+        let Inst::Extend { value, kind } = inst else {
+            continue;
+        };
+        let Some(Inst::Extend { kind: inner, .. }) = func.insts.get(*value as usize) else {
+            continue;
+        };
+        collapsing[idx] = narrow_kind_bits(*inner)
+            .zip(narrow_kind_bits(*kind))
+            .is_some_and(|(ibits, ebits)| ibits <= ebits);
+    }
+    let high = compute_high_observed_through(func, &collapsing);
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];
     for (idx, inst) in func.insts.iter().enumerate() {
         let Inst::Extend { value, kind } = inst else {
@@ -671,7 +714,7 @@ fn run_one(func: &mut FunctionSsa) {
                     lbits < ebits
                 }
             });
-        if load_covers || (*kind == LoadKind::I32 && !high[idx]) {
+        if load_covers || collapsing[idx] || (*kind == LoadKind::I32 && !high[idx]) {
             redirect[idx] = Some(*value);
         }
     }
@@ -1413,6 +1456,85 @@ mod tests {
         assert!(
             matches!(f.insts[4], Inst::BinopI { lhs: 3, .. }),
             "signed compare must keep reading the sign-extended value",
+        );
+    }
+
+    /// v0 Imm; v1 Add(v0,v0); v2 Extend(v1,inner); v3 Extend(v2,outer);
+    /// Return(v3). The return reads all 64 bits, so only the covering
+    /// widths may collapse.
+    fn stacked_extends(inner: LoadKind, outer: LoadKind) -> FunctionSsa {
+        fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs: 0,
+                },
+                Inst::Extend {
+                    value: 1,
+                    kind: inner,
+                },
+                Inst::Extend {
+                    value: 2,
+                    kind: outer,
+                },
+            ],
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..4,
+                terminator: Terminator::Return(3),
+                exit_acc: 3,
+            }],
+        )
+    }
+
+    #[test]
+    fn extend_of_no_wider_extend_collapses() {
+        for (inner, outer) in [
+            (LoadKind::I32, LoadKind::I32),
+            (LoadKind::I8, LoadKind::I32),
+            (LoadKind::I16, LoadKind::I32),
+            (LoadKind::I8, LoadKind::I16),
+        ] {
+            let mut f = stacked_extends(inner, outer);
+            run_one(&mut f);
+            assert!(
+                matches!(f.blocks[0].terminator, Terminator::Return(2)),
+                "{inner:?} inside {outer:?} reproduces the inner bits; the \
+                 outer extend must drop",
+            );
+            assert_eq!(f.blocks[0].exit_acc, 2);
+        }
+    }
+
+    #[test]
+    fn extend_narrower_than_its_operand_is_kept() {
+        for (inner, outer) in [
+            (LoadKind::I32, LoadKind::I8),
+            (LoadKind::I32, LoadKind::I16),
+            (LoadKind::I16, LoadKind::I8),
+        ] {
+            let mut f = stacked_extends(inner, outer);
+            run_one(&mut f);
+            assert!(
+                matches!(f.blocks[0].terminator, Terminator::Return(3)),
+                "{outer:?} truncates below {inner:?}; the outer extend stays",
+            );
+        }
+    }
+
+    #[test]
+    fn collapsed_extend_forwards_its_high_use_to_the_operand() {
+        // The outer extend collapses onto the inner one, so the inner
+        // one inherits the return's read of the upper half and must not
+        // be dropped under the low-word rule -- the resolved chain would
+        // otherwise hand the return the un-normalized add.
+        let mut f = stacked_extends(LoadKind::I32, LoadKind::I32);
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(2)),
+            "the return must read the surviving extend, not the raw add",
         );
     }
 }

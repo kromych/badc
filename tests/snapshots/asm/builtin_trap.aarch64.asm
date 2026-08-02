@@ -18,10 +18,8 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	stur	w0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
-               	sxtw	x1, w0
                	cmp	x0, #0x0
                	b.lt	<addr>
-               	sxtw	x0, w1
                	cmp	x0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -31,10 +29,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
-               	sxtw	x1, w0
                	cmp	x0, #0x0
                	b.lt	<addr>
-               	sxtw	x0, w1
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

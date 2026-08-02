@@ -22,8 +22,6 @@ Disassembly of section .text:
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rax
-               	movslq	%eax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

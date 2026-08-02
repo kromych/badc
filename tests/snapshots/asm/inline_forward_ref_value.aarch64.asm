@@ -14,10 +14,9 @@ Disassembly of section .text:
 <compute>:
                	add	x1, x0, #0x1
                	sxtw	x2, w1
-               	sxtw	x2, w2
                	cbz	x0, <addr>
                	add	x1, x0, #0x64
-               	add	x3, x0, #0x1
+               	add	x4, x0, #0x1
                	cmp	x1, #0x0
                	b.ne	<addr>
                	mov	x0, #0xffff             // =65535
@@ -26,13 +25,12 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #48
                	ret
                	lsl	x1, x1, #1
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
                	add	x0, x1, #0x1
-               	str	w0, [x4]
-               	add	x0, x1, x3
-               	sxtw	x1, w2
-               	add	x0, x0, x1
+               	str	w0, [x5]
+               	add	x0, x1, x4
+               	add	x0, x0, x2
                	ret
                	mov	x0, #0xfffe             // =65534
                	movk	x0, #0xffff, lsl #16

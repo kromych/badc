@@ -16,8 +16,7 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	0x1(%rsi), %rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
                	leaq	-0x1(%rdx), %rax
                	movslq	%eax, %rax

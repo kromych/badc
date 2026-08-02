@@ -88,8 +88,7 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	0x27(%rcx), %rax
                	subq	$0x2, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
                	jmp	<addr>
                	jmp	<addr>

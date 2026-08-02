@@ -139,8 +139,7 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	add	x0, x20, #0x14
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x30
@@ -271,17 +270,15 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
                	bl	<addr>
-               	sxtw	x1, w0
-               	cbz	x1, <addr>
-               	sxtw	x1, w0
+               	mov	x1, x0
                	sxtw	x0, w1
+               	cbz	x0, <addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	sxtw	x1, w0
-               	cbz	x1, <addr>
-               	sxtw	x1, w0
+               	mov	x1, x0
                	sxtw	x0, w1
+               	cbz	x0, <addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0

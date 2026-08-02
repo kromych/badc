@@ -72,19 +72,19 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v50  Extend { value=v48, kind=I32 }                   -> x1
     v51  BinopI { op=add, lhs=v48, rhs_imm=3 }            -> x0
     v52  BinopI { op=shl, lhs=v51, rhs_imm=32 }           -> x1
-    v53  Extend { value=v51, kind=I32 }                   -> x1
-    v54  BinopI { op=shl, lhs=v51, rhs_imm=32 }           -> x2
+    v53  Extend { value=v51, kind=I32 }                   -> x0
+    v54  BinopI { op=shl, lhs=v53, rhs_imm=32 }           -> x1
     v55  Extend { value=v53, kind=I32 }                   -> x1
     v56  Imm(0)                                           -> x2
     v57  Extend { value=v55, kind=I32 }                   -> x2
-    v58  BinopI { op=ne, lhs=v57, rhs_imm=6 }             -> x2
+    v58  BinopI { op=ne, lhs=v53, rhs_imm=6 }             -> x2
     terminator Bz { cond=v58, target=b10, fall=b9 }   (exit_acc=v58)
   block 9  start_pc=0
     v59  Imm(6)                                           -> x0
     terminator Return(v59)   (exit_acc=v59)
   block 10  start_pc=0
     v60  Extend { value=v55, kind=I32 }                   -> x2
-    v61  BinopI { op=shl, lhs=v51, rhs_imm=1 }            -> x0
+    v61  BinopI { op=shl, lhs=v53, rhs_imm=1 }            -> x0
     v62  BinopI { op=shl, lhs=v61, rhs_imm=32 }           -> x2
     v63  Extend { value=v61, kind=I32 }                   -> x0
     v64  Imm(0)                                           -> x2

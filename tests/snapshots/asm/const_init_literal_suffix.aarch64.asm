@@ -177,8 +177,7 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	cmp	x1, #0x0
                	b.eq	<addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	mov	x0, x1
                	ret
                	mov	x0, #0x0                // =0
                	ret

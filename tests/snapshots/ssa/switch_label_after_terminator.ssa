@@ -29,10 +29,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v19  Extend { value=v18, kind=I32 }                   -> x1
     v20  BinopI { op=add, lhs=v18, rhs_imm=100 }          -> x0
     v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x1
-    v22  Extend { value=v20, kind=I32 }                   -> x1
-    v23  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x0
-    v24  Extend { value=v22, kind=I32 }                   -> x0
-    terminator Return(v24)   (exit_acc=v24)
+    v22  Extend { value=v20, kind=I32 }                   -> x0
+    v23  BinopI { op=shl, lhs=v22, rhs_imm=32 }           -> x1
+    v24  Extend { value=v22, kind=I32 }                   -> x1
+    terminator Return(v22)   (exit_acc=v22)
   block 6  start_pc=0
     v16  Imm(1)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v16)

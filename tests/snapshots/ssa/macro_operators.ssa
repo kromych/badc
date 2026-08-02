@@ -18,10 +18,10 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v12  LoadLocal { off=4, kind=I32 }                    -> x1
     v13  Binop { op=add, lhs=v9, rhs=v5 }                 -> x0
     v14  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x1
-    v15  Extend { value=v13, kind=I32 }                   -> x1
-    v16  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x0
-    v17  Extend { value=v15, kind=I32 }                   -> x0
-    terminator Return(v17)   (exit_acc=v17)
+    v15  Extend { value=v13, kind=I32 }                   -> x0
+    v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x1
+    v17  Extend { value=v15, kind=I32 }                   -> x1
+    terminator Return(v15)   (exit_acc=v15)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=1

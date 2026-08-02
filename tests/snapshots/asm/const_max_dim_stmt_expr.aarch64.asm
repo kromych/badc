@@ -32,8 +32,7 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	sub	x0, x0, #0x7
                	add	x0, x0, #0x0
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	sub	sp, x29, #0x90
                	ldp	x29, x30, [sp, #0x90]
                	ldr	x19, [sp], #0xa0

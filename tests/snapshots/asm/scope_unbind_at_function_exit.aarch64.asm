@@ -43,14 +43,12 @@ Disassembly of section .text:
 
 <use_n>:
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <use_n2>:
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -113,8 +111,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	sxtw	x1, w0
-               	sxtw	x0, w1
                	cmp	x0, #0x58
                	b.eq	<addr>
                	mov	x0, #0xf                // =15
@@ -126,8 +122,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1]
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0x6e
                	b.eq	<addr>
                	mov	x0, #0x10               // =16
@@ -139,8 +134,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1]
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0x79
                	b.eq	<addr>
                	mov	x0, #0x11               // =17

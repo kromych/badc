@@ -19,8 +19,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	imulq	$0x64, %rax, %rax
                	addq	%rdi, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <f2>:
@@ -31,8 +30,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	imulq	$0x64, %rcx, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <f3>:
@@ -42,8 +40,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	imulq	$0x64, %rcx, %rcx
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:

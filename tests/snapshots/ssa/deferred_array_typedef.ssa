@@ -157,11 +157,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     terminator Bnz { cond=v96, target=b21, fall=b24 }   (exit_acc=v96)
   block 24  start_pc=0
     v109 Extend { value=v94, kind=I32 }                   -> x0
-    v110 BinopI { op=shl, lhs=v94, rhs_imm=32 }           -> x1
-    v111 Extend { value=v109, kind=I32 }                  -> x0
-    terminator Jmp(b25)   (exit_acc=v111)
+    v110 BinopI { op=shl, lhs=v109, rhs_imm=32 }          -> x1
+    v111 Extend { value=v109, kind=I32 }                  -> x1
+    terminator Jmp(b25)   (exit_acc=v109)
   block 25  start_pc=0
-    v84  BinopI { op=ne, lhs=v111, rhs_imm=24 }           -> x0
+    v84  BinopI { op=ne, lhs=v109, rhs_imm=24 }           -> x0
     terminator Bz { cond=v84, target=b27, fall=b26 }   (exit_acc=v84)
   block 26  start_pc=0
     v85  Imm(8)                                           -> x0

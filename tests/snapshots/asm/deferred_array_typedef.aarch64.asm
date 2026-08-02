@@ -77,7 +77,6 @@ Disassembly of section .text:
                	cmp	x2, #0x3
                	b.lt	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	cmp	x0, #0x18
                	b.eq	<addr>
                	mov	x0, #0x8                // =8

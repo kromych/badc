@@ -31,8 +31,7 @@ Disassembly of section .text:
                	popq	%rax
                	imulq	$0x64, %rax, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:

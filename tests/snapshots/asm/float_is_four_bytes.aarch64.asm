@@ -234,7 +234,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	mov	x20, #0x10              // =16
                	sxtw	x0, w20
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x60]
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x70

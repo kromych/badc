@@ -199,10 +199,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v103 Extend { value=v94, kind=I32 }                   -> x0
     v104 BinopI { op=sub, lhs=v94, rhs_imm=111 }          -> x0
     v105 BinopI { op=shl, lhs=v104, rhs_imm=32 }          -> x1
-    v106 Extend { value=v104, kind=I32 }                  -> x1
-    v107 BinopI { op=shl, lhs=v104, rhs_imm=32 }          -> x0
-    v108 Extend { value=v106, kind=I32 }                  -> x0
-    terminator Return(v108)   (exit_acc=v108)
+    v106 Extend { value=v104, kind=I32 }                  -> x0
+    v107 BinopI { op=shl, lhs=v106, rhs_imm=32 }          -> x1
+    v108 Extend { value=v106, kind=I32 }                  -> x1
+    terminator Return(v106)   (exit_acc=v106)
   block 11  start_pc=0
     terminator Jmp(b3)
   block 12  start_pc=0

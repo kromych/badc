@@ -12,8 +12,7 @@ Disassembly of section .text:
 
 <adder>:
                	leaq	0x64(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:

@@ -22,8 +22,7 @@ Disassembly of section .text:
                	addq	$0x1e078, %rax          # imm = 0x1E078
                	addq	$0x28, %rax
                	addq	$0x5, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x1e361, %rax          # imm = 0x1E361
                	je	<addr>
                	movl	$0x1, %eax

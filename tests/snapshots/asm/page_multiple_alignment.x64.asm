@@ -14,40 +14,35 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	%rax, %rcx
                	andq	$0x3fff, %rcx           # imm = 0x3FFF
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	leaq	<rip>, %rcx
                	andq	$0x3fff, %rcx           # imm = 0x3FFF
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rcx
                	andq	$0x3fff, %rcx           # imm = 0x3FFF
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	leaq	<rip>, %rcx
                	andq	$0x3fff, %rcx           # imm = 0x3FFF
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	leaq	<rip>, %rcx
                	andq	$0x3fff, %rcx           # imm = 0x3FFF
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x5, %eax
@@ -55,8 +50,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	addq	$0x4000, %rcx           # imm = 0x4000
                	andq	$0x3fff, %rcx           # imm = 0x3FFF
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x6, %eax
@@ -64,8 +58,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	addq	$0x8000, %rcx           # imm = 0x8000
                	andq	$0x3fff, %rcx           # imm = 0x3FFF
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x7, %eax
@@ -73,8 +66,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	addq	$0xc000, %rcx           # imm = 0xC000
                	andq	$0x3fff, %rcx           # imm = 0x3FFF
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x8, %eax
@@ -82,24 +74,21 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	addq	$0x10000, %rcx          # imm = 0x10000
                	andq	$0x3fff, %rcx           # imm = 0x3FFF
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x9, %eax
                	retq
                	leaq	0x1(%rax), %rcx
                	andq	$0x3fff, %rcx           # imm = 0x3FFF
-               	movslq	%ecx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x14, %eax
                	retq
                	addq	$0x2000, %rax           # imm = 0x2000
                	andq	$0x3fff, %rax           # imm = 0x3FFF
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x15, %eax

@@ -26,8 +26,7 @@ Disassembly of section .text:
                	add	x0, x0, x17
                	add	x0, x0, #0x28
                	add	x0, x0, #0x5
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	mov	x17, #0xe361            // =58209
                	movk	x17, #0x1, lsl #16
                	cmp	x0, x17

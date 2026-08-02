@@ -15,29 +15,25 @@ Disassembly of section .text:
                	leaq	0x1(%rdi), %rcx
                	movq	%rdi, %rdx
                	shlq	%rdx
-               	addq	%rax, %rdx
+               	leaq	(%rax,%rdx), %r8
                	leaq	0x7(%rdi), %rax
-               	movswq	%ax, %rsi
+               	movswq	%ax, %rdx
                	movsbq	%dil, %rax
                	xorq	$0x7a, %rax
-               	movsbq	%al, %r8
+               	movsbq	%al, %rsi
                	leaq	0x1(%rdi), %rax
                	addq	%rax, %rcx
                	movq	%rax, %rdi
                	shlq	%rdi
-               	addq	%rdx, %rdi
-               	movswq	%si, %rdx
+               	addq	%r8, %rdi
                	addq	%rax, %rdx
                	movswq	%dx, %rdx
-               	movsbq	%r8b, %rsi
                	movsbq	%al, %rax
                	xorq	%rsi, %rax
                	movsbq	%al, %rax
                	movslq	%ecx, %rcx
                	addq	%rdi, %rcx
-               	movswq	%dx, %rdx
                	addq	%rdx, %rcx
-               	movsbq	%al, %rax
                	addq	%rcx, %rax
                	retq
 
@@ -46,8 +42,7 @@ Disassembly of section .text:
                	sarq	%rax
                	shlq	$0x4, %rax
                	addq	%rdi, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	%rdi, %rax
                	retq
 

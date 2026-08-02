@@ -106,10 +106,10 @@ fn ent_pc=7 n_params=1 variadic=false locals=4
     v34  BinopI { op=lt, lhs=v32, rhs_imm=10 }            -> x7
     terminator Bnz { cond=v34, target=b5, fall=b8 }   (exit_acc=v34)
   block 8  start_pc=0
-    v47  Extend { value=v30, kind=I32 }                   -> x1
-    v48  BinopI { op=shl, lhs=v30, rhs_imm=32 }           -> x0
-    v49  Extend { value=v47, kind=I32 }                   -> x0
-    terminator Return(v49)   (exit_acc=v49)
+    v47  Extend { value=v30, kind=I32 }                   -> x0
+    v48  BinopI { op=shl, lhs=v47, rhs_imm=32 }           -> x1
+    v49  Extend { value=v47, kind=I32 }                   -> x1
+    terminator Return(v47)   (exit_acc=v47)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=distinct
 fn ent_pc=8 n_params=0 variadic=false locals=8
@@ -228,9 +228,9 @@ fn ent_pc=9 n_params=1 variadic=false locals=4
     terminator Bnz { cond=v10, target=b1, fall=b4 }   (exit_acc=v10)
   block 4  start_pc=0
     v28  Extend { value=v7, kind=I32 }                    -> x0
-    v29  BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
-    v30  Extend { value=v28, kind=I32 }                   -> x0
-    terminator Return(v30)   (exit_acc=v30)
+    v29  BinopI { op=shl, lhs=v28, rhs_imm=32 }           -> x1
+    v30  Extend { value=v28, kind=I32 }                   -> x1
+    terminator Return(v28)   (exit_acc=v28)
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=inner_alloca_disturbs_outer
 fn ent_pc=10 n_params=1 variadic=false locals=5

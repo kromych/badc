@@ -49,8 +49,7 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	cmp	x1, #0x0
                	b.eq	<addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	mov	x0, x1
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -84,8 +83,7 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	cmp	x1, #0x0
                	b.eq	<addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	mov	x0, x1
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

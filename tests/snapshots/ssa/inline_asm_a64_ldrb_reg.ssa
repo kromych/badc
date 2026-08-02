@@ -12,9 +12,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v6   Load { addr=v3, disp=3, kind=U8 }                -> x0
     v7   Imm(0)                                           -> x1
     v8   Extend { value=v6, kind=I32 }                    -> x1
-    v9   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x0
-    v10  Extend { value=v8, kind=I32 }                    -> x0
-    terminator Return(v10)   (exit_acc=v10)
+    v9   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x2
+    v10  Extend { value=v8, kind=I32 }                    -> x1
+    terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

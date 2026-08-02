@@ -25,8 +25,7 @@ Disassembly of section .text:
                	mov	x17, #0xffff            // =65535
                	and	x1, x2, x17
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <probe_int>:
@@ -79,8 +78,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x8
                	ldrb	w1, [x1, #0x3]
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

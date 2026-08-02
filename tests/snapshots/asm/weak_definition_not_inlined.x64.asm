@@ -17,8 +17,7 @@ Disassembly of section .text:
 <weak_scale>:
                	movq	%rdi, %rax
                	shlq	%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -32,8 +31,7 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	%rbx, %rax
                	incq	%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
                	popq	%rbp

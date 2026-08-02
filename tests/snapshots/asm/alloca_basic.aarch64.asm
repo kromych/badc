@@ -93,8 +93,7 @@ Disassembly of section .text:
                	sxtw	x3, w1
                	cmp	x3, #0xa
                	b.lt	<addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	sub	sp, x29, #0x30
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp], #0x40
@@ -227,7 +226,6 @@ Disassembly of section .text:
                	cmp	x1, x4
                	b.lt	<addr>
                	sxtw	x0, w2
-               	sxtw	x0, w0
                	sub	sp, x29, #0x30
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp], #0x40

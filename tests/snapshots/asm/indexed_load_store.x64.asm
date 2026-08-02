@@ -95,7 +95,6 @@ Disassembly of section .text:
                	cmpq	$0x8, %rcx
                	jl	<addr>
                	movslq	%edx, %rax
-               	movslq	%eax, %rax
                	cmpq	$0xb7c, %rax            # imm = 0xB7C
                	jne	<addr>
                	xorq	%rax, %rax

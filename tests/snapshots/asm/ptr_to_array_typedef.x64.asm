@@ -97,8 +97,7 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	subq	$0x7, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq

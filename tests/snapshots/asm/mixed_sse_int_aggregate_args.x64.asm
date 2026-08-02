@@ -201,8 +201,7 @@ Disassembly of section .text:
                	movsd	0x8(%rdx,%riz), %xmm1
                	movq	(%rdx), %rdx
                	callq	<addr>
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq

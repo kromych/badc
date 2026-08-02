@@ -13,8 +13,7 @@ Disassembly of section .text:
 <add3>:
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <id>:

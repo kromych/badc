@@ -39,8 +39,7 @@ Disassembly of section .text:
                	mul	x1, x5, x17
                	add	x0, x0, x1
                	add	x0, x0, x3
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	mov	x17, #0xcd17            // =52503
                	movk	x17, #0x6b, lsl #16
                	cmp	x0, x17

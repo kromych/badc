@@ -60,7 +60,6 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	sxtw	x0, w20
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x40

@@ -47,9 +47,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v64  Extend { value=v62, kind=I32 }                   -> x1
     terminator Jmp(b6)   (exit_acc=v62)
   block 6  start_pc=0
-    v3   Imm(0)                                           -> x0
-    v4   Extend { value=v64, kind=I32 }                   -> x0
-    v5   BinopI { op=ne, lhs=v4, rhs_imm=21 }             -> x0
+    v3   Imm(0)                                           -> x2
+    v4   Extend { value=v64, kind=I32 }                   -> x1
+    v5   BinopI { op=ne, lhs=v62, rhs_imm=21 }            -> x0
     terminator Bz { cond=v5, target=b8, fall=b7 }   (exit_acc=v5)
   block 7  start_pc=0
     v6   Imm(1)                                           -> x0

@@ -22,15 +22,13 @@ Disassembly of section .text:
 <mix>:
                	fcvtzs	x1, s0
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <cb_impl>:
                	fcvtzs	x1, s0
                	add	x0, x0, x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -76,8 +74,7 @@ Disassembly of section .text:
                	fmov	d0, x1
                	mov	x0, x2
                	blr	x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0xc
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

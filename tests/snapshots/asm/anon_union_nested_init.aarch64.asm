@@ -163,10 +163,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	bl	<addr>
-               	sxtw	x1, w0
-               	cbz	x1, <addr>
-               	sxtw	x1, w0
+               	mov	x1, x0
                	sxtw	x0, w1
+               	cbz	x0, <addr>
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

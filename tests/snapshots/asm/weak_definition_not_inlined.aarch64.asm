@@ -17,8 +17,7 @@ Disassembly of section .text:
 
 <weak_scale>:
                	lsl	x0, x0, #1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -31,8 +30,7 @@ Disassembly of section .text:
                	bl	<addr>
                	add	x0, x20, x0
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

@@ -20,9 +20,9 @@ fn ent_pc=1 n_params=1 variadic=true locals=3
     v14  LocalAddr(-3)                                    -> x1
     v15  Intrinsic { kind=6, args=[v14] }                 -> x1
     v16  Extend { value=v7, kind=I32 }                    -> x1
-    v17  BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x0
-    v18  Extend { value=v16, kind=I32 }                   -> x0
-    terminator Return(v18)   (exit_acc=v18)
+    v17  BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x2
+    v18  Extend { value=v16, kind=I32 }                   -> x1
+    terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=53
@@ -355,10 +355,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=53
     v276 Imm(0)                                           -> x1
     v277 BinopI { op=mul, lhs=v274, rhs_imm=3 }           -> x0
     v278 BinopI { op=shl, lhs=v277, rhs_imm=32 }          -> x1
-    v279 Extend { value=v277, kind=I32 }                  -> x1
-    v280 BinopI { op=shl, lhs=v277, rhs_imm=32 }          -> x0
-    v281 Extend { value=v279, kind=I32 }                  -> x0
-    v282 BinopI { op=ne, lhs=v281, rhs_imm=3 }            -> x0
+    v279 Extend { value=v277, kind=I32 }                  -> x0
+    v280 BinopI { op=shl, lhs=v279, rhs_imm=32 }          -> x1
+    v281 Extend { value=v279, kind=I32 }                  -> x1
+    v282 BinopI { op=ne, lhs=v279, rhs_imm=3 }            -> x0
     v283 Imm(0)                                           -> x1
     terminator Bnz { cond=v282, target=b81, fall=b25 }   (exit_acc=v282)
   block 25  start_pc=0
@@ -378,10 +378,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=53
     v297 Imm(0)                                           -> x1
     v298 BinopI { op=mul, lhs=v295, rhs_imm=3 }           -> x0
     v299 BinopI { op=shl, lhs=v298, rhs_imm=32 }          -> x1
-    v300 Extend { value=v298, kind=I32 }                  -> x1
-    v301 BinopI { op=shl, lhs=v298, rhs_imm=32 }          -> x0
-    v302 Extend { value=v300, kind=I32 }                  -> x0
-    v303 BinopI { op=ne, lhs=v302, rhs_imm=0 }            -> x0
+    v300 Extend { value=v298, kind=I32 }                  -> x0
+    v301 BinopI { op=shl, lhs=v300, rhs_imm=32 }          -> x1
+    v302 Extend { value=v300, kind=I32 }                  -> x1
+    v303 BinopI { op=ne, lhs=v300, rhs_imm=0 }            -> x0
     v304 Imm(0)                                           -> x1
     terminator Jmp(b26)   (exit_acc=v303)
   block 26  start_pc=0

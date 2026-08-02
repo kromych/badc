@@ -24,10 +24,9 @@ Disassembly of section .text:
                	ldrsw	x0, [x0]
                	add	x0, x0, #0x7
                	sub	x0, x0, #0x2a
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
-               	udf	#0x0
+		...
 
 <boot>:
                	mov	x0, #0x7                // =7

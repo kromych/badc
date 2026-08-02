@@ -37,8 +37,7 @@ Disassembly of section .text:
                	cmpq	$0x3, %rbx
                	jl	<addr>
                	andq	$0x7f, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r13

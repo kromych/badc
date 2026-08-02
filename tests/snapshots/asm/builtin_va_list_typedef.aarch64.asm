@@ -82,7 +82,6 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp], #0x40
                	add	sp, sp, #0xc0
@@ -199,8 +198,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x1, x29, #0x20
                	sub	x1, x29, #0x40
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x19, [sp], #0x60
                	add	sp, sp, #0xc0
@@ -417,10 +415,7 @@ Disassembly of section .text:
                	cmp	x2, x3
                	b.lt	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	sub	x1, x29, #0x20
-               	sxtw	x1, w0
-               	sxtw	x0, w1
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp], #0x40
                	add	sp, sp, #0xc0
@@ -497,7 +492,6 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp], #0x40
                	add	sp, sp, #0xc0

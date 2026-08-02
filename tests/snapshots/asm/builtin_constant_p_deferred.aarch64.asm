@@ -23,14 +23,12 @@ Disassembly of section .text:
                	mov	x1, #0x12               // =18
                	ldursw	x1, [x29, #-0x8]
                	add	x1, x1, x1
-               	sxtw	x2, w1
-               	sxtw	x1, w2
+               	sxtw	x1, w1
                	sxtw	x1, w1
                	cmp	x1, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x400              // =1024
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

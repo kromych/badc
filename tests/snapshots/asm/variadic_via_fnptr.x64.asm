@@ -82,8 +82,7 @@ Disassembly of section .text:
                	imulq	$0xa, %rdx, %rcx
                	addq	%rcx, %rax
                	addq	%rsi, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq

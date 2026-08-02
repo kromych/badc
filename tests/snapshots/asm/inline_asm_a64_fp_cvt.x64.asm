@@ -15,6 +15,5 @@ Disassembly of section .text:
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	cvttsd2si	%xmm0, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq

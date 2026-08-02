@@ -49,13 +49,12 @@ Disassembly of section .text:
                	str	w4, [x0, x2, lsl #2]
                	str	w3, [x0, x7, lsl #2]
                	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <quicksort>:
                	stp	x20, x21, [sp, #-0x30]!
-               	str	x22, [sp, #0x10]
+               	stp	x22, x23, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	mov	x20, x0
@@ -92,8 +91,7 @@ Disassembly of section .text:
                	str	w3, [x20, x1, lsl #2]
                	str	w2, [x20, x6, lsl #2]
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
-               	sxtw	x21, w1
+               	sxtw	x21, w0
                	sub	x2, x21, #0x1
                	mov	x0, x20
                	mov	x1, x8
@@ -104,7 +102,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x20]
-               	ldr	x22, [sp, #0x10]
+               	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
 

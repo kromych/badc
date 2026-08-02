@@ -33,7 +33,6 @@ Disassembly of section .text:
                	cmp	x7, x3
                	b.lt	<addr>
                	sxtw	x0, w5
-               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -56,6 +55,4 @@ Disassembly of section .text:
                	cmp	x6, #0x7
                	b.lt	<addr>
                	sxtw	x0, w4
-               	sxtw	x0, w0
-               	sxtw	x0, w0
                	ret

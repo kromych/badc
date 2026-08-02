@@ -480,22 +480,19 @@ Disassembly of section .text:
                	mov	x0, #0xd                // =13
                	bl	<addr>
                	cbz	x0, <addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x11               // =17
                	bl	<addr>
                	cbz	x0, <addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1d               // =29
                	bl	<addr>
                	cbz	x0, <addr>
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0

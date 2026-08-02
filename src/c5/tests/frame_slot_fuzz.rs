@@ -7,22 +7,27 @@
 //! return materialises into (a call's `ret_slot_local`) all hold bytes
 //! that no store in the owning function's instruction sequence names. A
 //! pass that concludes "nothing writes this slot" from the tape alone is
-//! wrong about all three, and the resulting wrong code survives every
-//! pass-level unit test.
+//! wrong about all three, and such wrong code survives every pass-level
+//! unit test.
 //!
 //! Programs are generated from a seeded shape and evaluated four ways: an
-//! exact model of the generated program, badc at -O0, badc at -O, and a
-//! reference C compiler. Any disagreement is reported with the seed, the
-//! reduced shape, and the reduced source.
+//! exact model of the program, badc at -O0, badc at -O, and a reference C
+//! compiler. Any disagreement is reported with the seed, the reduced
+//! shape, and the reduced source.
 //!
-//! Every generated program has exactly one defined answer; the
-//! construction rules that guarantee that are listed on [`Scalar`],
-//! [`gen_expr`], and [`Body`].
+//! Every generated program has exactly one defined answer. Integer
+//! arithmetic is unsigned throughout (C99 6.2.5p9), there is no division
+//! or variable shift, every object is `= {0}` at its declaration or the
+//! whole result of a call that fills every field, no expression contains
+//! more than one call or any assignment, every loop has a constant trip
+//! count over its own counter, the call graph is a DAG, and a float
+//! field only ever holds a small non-negative integer. See [`Scalar`],
+//! [`Expr`], and [`Body`].
 //!
-//! Budget: a bare `cargo test` runs a fixed cheap sweep. `BADC_FUZZ_FRAME=1`
+//! A bare `cargo test` runs a fixed cheap sweep. `BADC_FUZZ_FRAME=1`
 //! selects the deep sweep; `BADC_FUZZ_FRAME_ITERS` and
 //! `BADC_FUZZ_FRAME_SEED` override the count and the seed base, and
-//! `BADC_FUZZ_FRAME_REF=1` puts the reference compiler on every program.
+//! `BADC_FUZZ_FRAME_TRACE=1` prints each index and seed before its run.
 
 #![cfg(any(
     all(
@@ -73,11 +78,9 @@ impl Rng {
 
 // --------------------------------------------------------------- types
 
-/// Leaf scalar type of a generated aggregate.
-///
-/// Integer leaves are all unsigned: C99 6.2.5p9 makes their arithmetic
-/// and every narrowing conversion wrap, so no expression the generator
-/// builds can overflow. Float leaves hold a small non-negative integer
+/// Leaf scalar type of a generated aggregate. Integer leaves are all
+/// unsigned, so C99 6.2.5p9 makes their arithmetic and every narrowing
+/// conversion wrap. Float leaves hold a small non-negative integer
 /// (`domain`), which every conversion in and out reproduces exactly and
 /// which no `FLT_EVAL_METHOD` can perturb.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -811,6 +814,19 @@ fn gen_stmts(
     }
 }
 
+/// Two leaves of `ty` that share an eightbyte, else the first two, else
+/// `None`.
+fn paired_leaves(ty: &AggTy) -> Option<(u16, u16)> {
+    for a in 0..ty.leaves.len() {
+        for b in a + 1..ty.leaves.len() {
+            if ty.leaves[a].offset / 8 == ty.leaves[b].offset / 8 {
+                return Some((a as u16, b as u16));
+            }
+        }
+    }
+    (ty.leaves.len() >= 2).then_some((0, 1))
+}
+
 fn gen_body(
     r: &mut Rng,
     ctx: &GenCtx,
@@ -863,6 +879,27 @@ fn gen_body(
             expr: Expr::Bin(BinKind::Add, Box::new(Expr::Var(acc)), Box::new(e)),
         });
     }
+    // Read a field pair out of every object the tape never stores to (a
+    // by-value parameter's prologue copy, an aggregate return's
+    // caller-side temporary). Two fields inside one eightbyte force a
+    // field-splitting promotion off the object's own cells and onto
+    // fresh slots, where storage nothing wrote becomes observable.
+    let pairs: Vec<(u16, u16, u16)> = objs
+        .iter()
+        .enumerate()
+        .filter(|(_, o)| !o.deref && matches!(o.decl, Decl::Param | Decl::CallTemp))
+        .filter_map(|(i, o)| o.ty.map(|t| (i as u16, t)))
+        .filter_map(|(i, t)| paired_leaves(&ctx.types[t]).map(|(a, b)| (i, a, b)))
+        .collect();
+    for (obj, a, b) in pairs {
+        stmts.push(Stmt::Mix {
+            expr: Expr::Bin(
+                BinKind::Xor,
+                Box::new(Expr::Leaf(obj, a)),
+                Box::new(Expr::Leaf(obj, b)),
+            ),
+        });
+    }
     // A `Ret::Agg` body must define every leaf of its result even when
     // the random statements did not touch it; `rv` is `= {0}`, so this
     // only sharpens the value, it is not a definedness requirement.
@@ -885,11 +922,10 @@ fn gen_body(
     }
 }
 
-/// A scalar leaf helper with no aggregate local and one statement. It is
-/// the one shape that stays under the inliner's body cap, and every
-/// other body calls it: the promotion pass only runs on a function that
-/// absorbed a splice, so without a reliably inlinable callee the -O leg
-/// never reaches the pass this harness exists to exercise.
+/// A scalar leaf helper: no aggregate local, one statement, the one
+/// shape reliably under the inliner's body cap. Every other body calls
+/// it, because the promotion pass only runs on a function that absorbed
+/// a splice.
 fn leaf_helper(seed: u64) -> Helper {
     let objs = vec![
         Obj {
@@ -1543,7 +1579,26 @@ struct Divergence {
     values: Vec<(String, String)>,
 }
 
+/// Wall-clock allowance for one badc leg. A generated program runs in
+/// microseconds; anything near this is a defect, not load.
+const LEG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Run one leg on its own thread and give up after [`LEG_TIMEOUT`]. Wrong
+/// code can turn a bounded loop unbounded and an in-process JIT cannot
+/// be interrupted, so reporting the timeout keeps the sweep diagnosable
+/// instead of hanging the test runner. The abandoned thread spins until
+/// the process exits, by which point the run is already failing.
 fn jit_value(src: &str, optimize: bool, gpr: usize, fpr: usize) -> Result<i32, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let owned = src.to_string();
+    std::thread::spawn(move || {
+        let _ = tx.send(jit_value_inner(&owned, optimize, gpr, fpr));
+    });
+    rx.recv_timeout(LEG_TIMEOUT)
+        .unwrap_or_else(|_| Err(format!("did not terminate within {LEG_TIMEOUT:?}")))
+}
+
+fn jit_value_inner(src: &str, optimize: bool, gpr: usize, fpr: usize) -> Result<i32, String> {
     let program = Compiler::new(src.to_string())
         .compile()
         .map_err(|e| format!("compile: {e}"))?;
@@ -1812,8 +1867,12 @@ fn sweep(base: u64, count: usize, reference: bool, adjust: impl Fn(u64, Shape) -
         }
         batch.clear();
     };
+    let trace = std::env::var_os("BADC_FUZZ_FRAME_TRACE").is_some();
     for i in 0..count {
         let seed = seed_at(base, i);
+        if trace {
+            eprintln!("frame-slot program {i} seed {seed:#018x}");
+        }
         let case = make_case(&adjust(seed, Shape::from_seed(seed)));
         if let Some(d) = badc_check(&case) {
             panic!("program {i} of {count}\n{}", report(d, checks));

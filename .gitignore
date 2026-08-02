@@ -123,6 +123,7 @@ demos/tinycc/*
 demos/quickjs/*
 !demos/quickjs/setup.py
 !demos/quickjs/smoke.py
+!demos/quickjs/bench.py
 !demos/quickjs/repl_stub.c
 !demos/quickjs/README.md
 # lua -- Lua 5.5.0 interpreter + the upstream test suite.

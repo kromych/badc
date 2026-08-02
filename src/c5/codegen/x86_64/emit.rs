@@ -1711,6 +1711,14 @@ pub(crate) fn emit_function(
     let mut uw = if func.is_naked {
         super::FnUnwind::default()
     } else {
+        // Indirect-branch tracking: a function entry is reachable by an
+        // indirect call, so it opens with `endbr64` ahead of the
+        // prologue. `snapshot` still names the function's first byte, so
+        // the unwind offsets `emit_prologue` records stay relative to it.
+        // A naked function is excluded -- its body is the whole function.
+        if abi.hardening.cf_protection_branch {
+            super::encode::emit_endbr64(code);
+        }
         emit_prologue(code, func, alloc, frame, abi, snapshot)
     };
     uw.begin = snapshot as u32;
@@ -1861,6 +1869,16 @@ pub(crate) fn emit_function(
     // per-section state rather than a length (see [`restore_asm_sections`]).
     let body_asm_sections = super::ssa::emit_common::snapshot_asm_sections(asm_sections);
 
+    // Blocks an indirect branch can enter: switch-table successors and
+    // the blocks whose address `&&label` took. Each opens with `endbr64`
+    // under indirect-branch tracking, recorded before the block loop so
+    // the pad lands at the offset every branch fixup resolves to.
+    let endbr_targets = if abi.hardening.cf_protection_branch {
+        super::indirect_branch_target_blocks(func)
+    } else {
+        alloc::collections::BTreeSet::new()
+    };
+
     'emit: loop {
         // Re-collected each relaxation pass; resolved after the loop.
         block_addr_fixups.clear();
@@ -1874,6 +1892,9 @@ pub(crate) fn emit_function(
                 pc_to_native,
                 code.len(),
             );
+            if endbr_targets.contains(&(block_idx as super::super::ir::BlockId)) {
+                super::encode::emit_endbr64(code);
+            }
             // Tail-call opportunity: when the block's last instruction is
             // a direct `Inst::Call` whose result is the same block's
             // `Terminator::Return` value, lower the call as `marshal_args;

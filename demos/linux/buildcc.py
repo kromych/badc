@@ -46,7 +46,8 @@ DROP_ARG = {"-o", "-MF", "-MQ", "-MT", "--param", "-Xassembler", "-Xlinker"}
 # implements and rejects the rest, so a spelling it does not cover fails the
 # unit instead of building it unprotected.
 HARDENING_EXACT = {"-mindirect-branch-register", "-mindirect-branch-cs-prefix"}
-HARDENING_PREFIX = ("-mindirect-branch=", "-mfunction-return=", "-mharden-sls=")
+HARDENING_PREFIX = ("-mindirect-branch=", "-mfunction-return=", "-mharden-sls=",
+                    "-fcf-protection=")
 
 # Return-address signing has no badc spelling: badc emits no
 # pointer-authentication prologue/epilogue pair, so `-mbranch-protection`

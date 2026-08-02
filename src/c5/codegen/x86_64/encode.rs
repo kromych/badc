@@ -1344,6 +1344,13 @@ pub(crate) fn emit_jmp_r(code: &mut Vec<u8>, target: Reg) {
     emit_byte(code, modrm(0b11, 4, target.lo()));
 }
 
+/// `ENDBR64`. The only instruction an indirect branch may land on when
+/// CET indirect-branch tracking is active; emitted under
+/// `-fcf-protection=branch`. Decodes as a NOP on parts without CET.
+pub(crate) fn emit_endbr64(code: &mut Vec<u8>) {
+    emit_bytes(code, &[0xF3, 0x0F, 0x1E, 0xFA]);
+}
+
 /// `INT3`. Placed after an unconditional transfer under
 /// `-mharden-sls=`, so the bytes that follow are not an architectural
 /// successor the processor can speculate into.

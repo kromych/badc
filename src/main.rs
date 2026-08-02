@@ -575,6 +575,23 @@ fn run() {
                     }
                 }
             }
+            // `-fcf-protection=<kind>`: x86 control-flow enforcement.
+            // `branch` is indirect-branch tracking, the `endbr64` landing
+            // pads. `return` and `full` add the shadow stack, which needs
+            // a return path badc does not emit.
+            s if s.starts_with("-fcf-protection=") => {
+                match &s["-fcf-protection=".len()..] {
+                    "none" => hardening.cf_protection_branch = false,
+                    "branch" => hardening.cf_protection_branch = true,
+                    other => {
+                        eprint_diagnostic(format!(
+                            "badc: error: unsupported argument `{other}` to `-fcf-protection=` \
+                             (supported: none, branch)"
+                        ));
+                        std::process::exit(1);
+                    }
+                }
+            }
             // A `+`-joined AArch64 feature list. Return-address signing
             // (`pac-ret`, and `standard` which implies it) needs the
             // pointer-authentication prologue/epilogue pair badc does not

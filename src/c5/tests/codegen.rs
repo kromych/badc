@@ -5559,3 +5559,58 @@ fn x64_inline_asm_ret_is_left_verbatim() {
         "the epilogue still takes the thunk"
     );
 }
+
+#[test]
+fn x64_cf_protection_branch_lands_endbr_at_entries_and_indirect_targets() {
+    // `-fcf-protection=branch`: `endbr64` (F3 0F 1E FA) opens every
+    // function, since an entry is reachable by an indirect call, and
+    // every block an indirect branch can enter (switch-table
+    // successors, computed-goto labels). It is the only instruction CET
+    // indirect-branch tracking permits such a transfer to land on.
+    const ENDBR: [u8; 4] = [0xF3, 0x0F, 0x1E, 0xFA];
+    let count = |o: &[u8]| {
+        elf_text(o)
+            .windows(4)
+            .filter(|w| *w == ENDBR)
+            .count()
+    };
+    let plain = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening::NONE,
+    );
+    let hardened = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            cf_protection_branch: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    assert_eq!(count(&plain), 0, "no landing pad without the flag");
+    // Three function entries plus the switch and computed-goto targets.
+    assert!(
+        count(&hardened) >= 3 + 3,
+        "entries and indirect targets both padded, got {}",
+        count(&hardened)
+    );
+    // The first bytes of the unit are a function entry.
+    assert_eq!(elf_text(&hardened)[..4], ENDBR);
+}
+
+#[test]
+fn x64_cf_protection_skips_a_naked_body() {
+    // Same admission rule as the return thunk and the aarch64 pad: a
+    // naked function's body is the entire function.
+    const SRC: &str = "__attribute__((naked)) void n(void) { __asm__ volatile(\"ret\"); }\n";
+    let obj = emit_hardened(
+        SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            cf_protection_branch: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    // The body is the one-byte `ret` the asm supplied and nothing else.
+    assert_eq!(elf_text(&obj), [0xC3], "no pad ahead of a naked body");
+}

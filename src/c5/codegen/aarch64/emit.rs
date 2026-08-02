@@ -986,7 +986,7 @@ pub(crate) fn emit_function(
     // its head, recorded before the block loop so the pad lands at the
     // offset every branch fixup resolves to.
     let bti_targets = if abi.hardening.bti {
-        indirect_branch_target_blocks(func)
+        super::super::indirect_branch_target_blocks(func)
     } else {
         alloc::collections::BTreeSet::new()
     };
@@ -1893,21 +1893,6 @@ fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<Reg>) {
             emit_stack_probe(code);
         }
     }
-}
-
-/// Blocks this function can enter through a `BR`: every successor of a
-/// `Terminator::JumpTable` and every block whose address was taken by
-/// `&&label`. A `Terminator::AsmGoto` label is excluded -- the inline-asm
-/// lowering reaches it with a direct branch, which sets no BTYPE.
-fn indirect_branch_target_blocks(func: &FunctionSsa) -> alloc::collections::BTreeSet<BlockId> {
-    let mut out: alloc::collections::BTreeSet<BlockId> =
-        func.computed_goto_targets.iter().copied().collect();
-    for block in &func.blocks {
-        if let Terminator::JumpTable { table, .. } = block.terminator {
-            out.extend(func.jump_tables[table as usize].iter().copied());
-        }
-    }
-    out
 }
 
 /// Emit the function prologue.

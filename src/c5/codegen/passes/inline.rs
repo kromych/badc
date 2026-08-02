@@ -755,26 +755,26 @@ fn is_inline_candidate(
                     return false;
                 }
             }
-            // A non-leaf same-unit call is admitted only in the scalar/void
-            // shape: no by-value aggregate arguments and no aggregate
-            // return, so the splice reproduces it by copying the Call and
-            // remapping its arguments -- no caller frame slot is needed for
-            // marshaling (`rewrite_callee_inst`). `target_pc` names a
-            // same-unit function and stays valid in the caller. This lets a
-            // dispatcher whose only non-purity is per-case leaf calls inline;
-            // a constant-argument switch it wraps then folds after the
+            // A non-leaf same-unit call is admitted when it returns no
+            // aggregate: the splice reproduces it by copying the Call,
+            // remapping its arguments and re-interning the layouts its
+            // `arg_aggs` name (`rewrite_callee_inst`). `target_pc` names a
+            // same-unit function and stays valid in the caller. An
+            // aggregate return stays rejected -- it delivers into a caller
+            // frame slot (`ret_slot_local`) the splice does not allocate.
+            // A by-value aggregate argument needs no such slot: its address
+            // is one more value operand, and the per-arch call plan lays
+            // the bytes into the outgoing argument area. This lets a
+            // dispatcher whose only non-purity is per-case calls inline; a
+            // constant-argument switch it wraps then folds after the
             // splice, dropping an otherwise-live unreachable default.
-            Inst::Call {
-                arg_aggs, ret_agg, ..
-            } if arg_aggs.is_empty() && ret_agg.is_none() => {}
+            Inst::Call { ret_agg, .. } if ret_agg.is_none() => {}
             // A call through a function pointer in the same shape. The
             // target is one more value operand for the splice to remap;
             // because its callee is not known statically it cannot be
             // ruled out of a call cycle, so the frame-region choice below
             // gives such a body a fresh region per site.
-            Inst::CallIndirect {
-                arg_aggs, ret_agg, ..
-            } if arg_aggs.is_empty() && ret_agg.is_none() => {}
+            Inst::CallIndirect { ret_agg, .. } if ret_agg.is_none() => {}
             // A phi merging values across the callee's own blocks. The
             // multi-block splice translates its incoming values through
             // `callee_remap` and shifts its predecessor block ids into the
@@ -1183,7 +1183,12 @@ pub(super) fn remap_inst_operands(inst: &mut Inst, remap: &[ValueId]) {
 /// resolves to the matching call-site argument; every other operand
 /// runs through `callee_remap`. `args` is already in the caller's
 /// remapped space.
-fn rewrite_callee_inst(inst: &Inst, args: &[ValueId], callee_remap: &[ValueId]) -> Option<Inst> {
+fn rewrite_callee_inst(
+    inst: &Inst,
+    args: &[ValueId],
+    callee_remap: &[ValueId],
+    agg_map: &[u32],
+) -> Option<Inst> {
     match inst {
         Inst::ParamRef { idx, .. } => {
             let i = *idx as usize;
@@ -1208,9 +1213,38 @@ fn rewrite_callee_inst(inst: &Inst, args: &[ValueId], callee_remap: &[ValueId]) 
             // ids also need shifting).
             let mut copy = inst.clone();
             remap_inst_operands(&mut copy, callee_remap);
+            remap_inst_agg_descs(&mut copy, agg_map);
             Some(copy)
         }
     }
+}
+
+/// Rewrite a spliced call's aggregate-layout indices from the callee's
+/// `agg_descs` table into the caller's. `agg_descs` is per-function, so
+/// a copied instruction that names a callee layout would otherwise
+/// index whatever sits at that position in the caller.
+fn remap_inst_agg_descs(inst: &mut Inst, agg_map: &[u32]) {
+    let arg_aggs = match inst {
+        Inst::Call { arg_aggs, .. }
+        | Inst::CallIndirect { arg_aggs, .. }
+        | Inst::CallExt { arg_aggs, .. } => arg_aggs,
+        _ => return,
+    };
+    for a in arg_aggs.iter_mut().flatten() {
+        *a = agg_map[*a as usize];
+    }
+}
+
+/// Append the callee's aggregate layouts to the caller's table and
+/// return the callee-index -> caller-index map [`remap_inst_agg_descs`]
+/// rewrites through.
+fn merge_agg_descs(
+    caller: &mut Vec<crate::c5::ir::AggDesc>,
+    callee: &[crate::c5::ir::AggDesc],
+) -> Vec<u32> {
+    let base = caller.len() as u32;
+    caller.extend(callee.iter().cloned());
+    (0..callee.len() as u32).map(|i| base + i).collect()
 }
 
 /// Rewrite block terminators through the caller's value remap.
@@ -1420,6 +1454,7 @@ fn splice_multi_block(
     };
 
     let mut original = core::mem::take(caller);
+    let agg_map = merge_agg_descs(&mut original.agg_descs, &callee.agg_descs);
     let splice_block = original.blocks[splice_block_idx].clone();
     // Spilled parameter cells that need materialization -- the cell's
     // address is taken, an access is volatile, or an access whose value the
@@ -1948,7 +1983,8 @@ fn splice_multi_block(
                     }
                     _ => {}
                 }
-                if let Some(translated) = rewrite_callee_inst(cinst, &remapped_args, &callee_remap)
+                if let Some(translated) =
+                    rewrite_callee_inst(cinst, &remapped_args, &callee_remap, &agg_map)
                 {
                     let new_id = new_insts.len() as u32;
                     callee_remap[ce_pc as usize] = new_id;
@@ -2156,14 +2192,8 @@ fn splice_multi_block(
         extern_tls_refs: tls_refs,
         f32_values: new_f32,
         param_fp_mask: original.param_fp_mask,
-        // The caller's own `agg_descs` carry through unchanged. A
-        // spliced callee may carry agg_descs -- register-class parameter
-        // and return shapes (see the eligibility guard) -- but no spliced
-        // instruction references a callee-side index: a struct-parameter
-        // slot's `LocalAddr` redirects to the caller argument, the return
-        // copy is plain loads and stores, and the filter admits no callee
-        // `Call` with aggregate metadata. Do not merge the callee's
-        // agg_descs.
+        // The caller's own layouts, plus the callee's (merged above so a
+        // spliced call's `arg_aggs` can name them).
         agg_descs: original.agg_descs,
         param_aggs: original.param_aggs,
 
@@ -2274,6 +2304,24 @@ fn inline_caller(
     }) {
         return;
     }
+    // A spliced call's `arg_aggs` names its own function's layouts, so
+    // each candidate's table merges into the caller's once -- before the
+    // fixpoint walk below, which re-emits the body every pass.
+    let called: BTreeSet<usize> = caller
+        .insts
+        .iter()
+        .filter_map(|i| match i {
+            Inst::Call { target_pc, .. } if callees.get(target_pc).is_some() => Some(*target_pc),
+            _ => None,
+        })
+        .collect();
+    let agg_maps: BTreeMap<usize, Vec<u32>> = called
+        .into_iter()
+        .map(|pc| {
+            let descs = callees.get(&pc).map(|c| c.agg_descs.clone()).unwrap_or_default();
+            (pc, merge_agg_descs(&mut caller.agg_descs, &descs))
+        })
+        .collect();
     let mut new_insts: Vec<Inst> = Vec::with_capacity(caller.insts.len());
     let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(caller.inst_src.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(caller.insts.len());
@@ -2337,7 +2385,7 @@ fn inline_caller(
                         // NO_VALUE. Leave such a call un-inlined so the IR
                         // stays well-formed.
                         .filter(|c| args.len() >= c.n_params)
-                        .map(|c| (*c, args, *ret_slot_local)),
+                        .map(|c| (*c, args, *ret_slot_local, *target_pc)),
                     _ => None,
                 };
                 // Multi-block callees, and single-block callees whose asm /
@@ -2348,7 +2396,9 @@ fn inline_caller(
                 // runs once over the whole function.
                 let inlined =
                     inlined.filter(|(c, ..)| c.blocks.len() == 1 && !needs_reloc_splice(c));
-                if let Some((callee, call_args, ret_slot)) = inlined {
+                if let Some((callee, call_args, ret_slot, callee_pc)) = inlined {
+                    let agg_map: &[u32] =
+                        agg_maps.get(&callee_pc).map(|m| m.as_slice()).unwrap_or(&[]);
                     any_change = true;
                     let remapped_args: Vec<ValueId> =
                         call_args.iter().map(|&a| map_v(a, &remap)).collect();
@@ -2457,7 +2507,7 @@ fn inline_caller(
                             _ => {}
                         }
                         if let Some(translated) =
-                            rewrite_callee_inst(cinst, &remapped_args, &callee_remap)
+                            rewrite_callee_inst(cinst, &remapped_args, &callee_remap, agg_map)
                         {
                             let new_id = new_insts.len() as u32;
                             callee_remap[ce_pc as usize] = new_id;

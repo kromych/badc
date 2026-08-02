@@ -200,17 +200,20 @@ fn always_inline_callee_returning_a_large_struct_is_spliced() {
     // gets a caller-provided destination -- the hidden out-pointer
     // argument (System V AMD64 MEMORY class, Win64 over the by-value
     // size) or the indirect-result register (AAPCS64 above 16 bytes).
-    // Both are mandatory-request shapes the splice has to reproduce, and
-    // honouring the request is what turns the returned fields into
-    // constants: the undefined `bug` in the arms they decide would
-    // otherwise fail the JIT load.
+    // Both are mandatory-request shapes the splice has to reproduce.
     //
     // `mk_state` also reaches its result through another function, which
     // has to see the redirected destination, and `wrap` returns the
     // result of a second by-address callee -- the nested shape whose
     // whole-object copy the splice drops.
+    //
+    // The guards call a defined `bug` rather than an undefined one so the
+    // values are checked at whatever register budget is in effect: which
+    // of them fold is the scalar-promotion budget's business (see the
+    // linker test), while the value each field carries is not.
     let src = "
-        extern void bug(void);
+        static int bug_calls;
+        static void bug(void) { bug_calls++; }
         struct state { void *base; void *table; unsigned long span;
                        unsigned long off; unsigned int level;
                        unsigned short idx; unsigned char kind; };
@@ -232,9 +235,10 @@ fn always_inline_callee_returning_a_large_struct_is_spliced() {
             if (a.table != 0 || a.off != 0ul || a.idx != 0) bug();
             struct state b = wrap(&sink);
             if (b.level != 0u) bug();
-            if (b.base != (void *) &sink) return 1;
+            if (b.base != (void *) &sink) bug();
             sink = a.span + b.span + a.level + a.kind;
-            return sink == 4096ul + 4096ul + 3ul + 7ul ? 6 : 2;
+            if (sink != 4096ul + 4096ul + 3ul + 7ul) bug();
+            return bug_calls == 0 ? 6 : 2;
         }
     ";
     assert_eq!(jit_exit_native_optimized(src, &["jit-sret-inline"]), 6);

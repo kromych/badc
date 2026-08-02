@@ -61,26 +61,35 @@ pub(crate) fn run(func: &mut FunctionSsa, usable_gpr: usize) -> Vec<i64> {
     if !func.computed_goto_targets.is_empty() {
         return Vec::new();
     }
-    let split = split_objects(func, usable_gpr);
-    if split.is_empty() {
-        return Vec::new();
-    }
-    // The split produced address-free field slots; the mem2reg re-run
-    // promotes them (a full pruned-SSA rebuild, confined to this
-    // function by the gate at the call site).
-    let promoted: BTreeSet<i64> = crate::c5::codegen::ssa::mem2reg::run(func)
-        .into_iter()
-        .collect();
-    // Report an object as promoted only when every field slot was
-    // lifted; a partially promoted object keeps a live frame location
-    // the debug info must still point at.
+    // Splitting is iterated: expanding one object's block initializer
+    // consumes the copy that made its source object ineligible (a copy
+    // reads the source through a pointer this pass does not model), so
+    // the source becomes splittable on the next round. A round that
+    // splits no object this run has not already split adds nothing, and
+    // the function's object count is finite, so the iteration terminates.
     let mut fully: Vec<i64> = Vec::new();
-    for (base, slots) in split {
-        if slots.iter().all(|s| promoted.contains(s)) {
-            fully.push(base);
+    let mut seen: BTreeSet<i64> = BTreeSet::new();
+    loop {
+        let split = split_objects(func, usable_gpr);
+        if split.is_empty() || split.iter().all(|(base, _)| seen.contains(base)) {
+            return fully;
+        }
+        seen.extend(split.iter().map(|(base, _)| *base));
+        // The split produced address-free field slots; the mem2reg re-run
+        // promotes them (a full pruned-SSA rebuild, confined to this
+        // function by the gate at the call site).
+        let promoted: BTreeSet<i64> = crate::c5::codegen::ssa::mem2reg::run(func)
+            .into_iter()
+            .collect();
+        // Report an object as promoted only when every field slot was
+        // lifted; a partially promoted object keeps a live frame location
+        // the debug info must still point at.
+        for (base, slots) in split {
+            if slots.iter().all(|s| promoted.contains(s)) {
+                fully.push(base);
+            }
         }
     }
-    fully
 }
 
 /// A constant-offset scalar access to an object, resolved to the byte

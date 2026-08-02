@@ -219,11 +219,8 @@ pub struct MergedNative {
     pub debug_info_text_relocs: Vec<DebugTextReloc>,
     pub debug_line_text_relocs: Vec<DebugTextReloc>,
     /// Post-prologue byte offset in [`Self::text`], keyed by the
-    /// function's merged entry offset (name-keying would collapse
-    /// same-named statics across units onto one anchor). Sourced
-    /// from the writer's synthetic
-    /// `.Lc5_prologue_end_<funcname>` STB_LOCAL STT_NOTYPE symbols
-    /// (see `elf_reloc::PROLOGUE_END_PREFIX`), rebased by the
+    /// function's merged entry offset. Sourced from each unit's
+    /// `NT_BADC_PROLOGUE_END` note record, rebased by the
     /// per-unit text base. The synth path consults this to
     /// populate `Build::func_prologue_native` so
     /// `dwarf::build_debug_frame` emits
@@ -742,51 +739,25 @@ pub fn link_native_objects_with_shared_libs<'a>(
         defined.entry(name).or_insert(merged);
     }
 
-    // Pass 2.1 -- collect synthetic prologue-end anchors. The
-    // per-`.o` writer (`elf_reloc.rs`) emits one
-    // STB_LOCAL STT_NOTYPE symbol per function at the post-
-    // prologue native byte offset, named with the
-    // `PROLOGUE_END_PREFIX` prefix; rebase its value by the
-    // unit's text base and key it on the *same unit's* function
-    // entry offset. Name-keying would hand a later unit's
-    // same-named static the first unit's anchor, describing a
-    // framed function as frameless in the Win-x64 .pdata / DWARF
-    // CFA output.
+    // Pass 2.1 -- collect the prologue-end anchors. Each unit's
+    // `NT_BADC_PROLOGUE_END` note carries (function entry,
+    // post-prologue) `.text` offset pairs; rebasing both by that
+    // unit's text base keys each anchor on the entry it belongs to.
+    // Two units' same-named statics therefore keep separate anchors,
+    // where a name-keyed lookup would describe one as frameless in
+    // the Win-x64 .pdata / DWARF CFA output.
     let mut prologue_ends: HashMap<u64, u64> = HashMap::new();
     for (i, obj) in objs.iter().enumerate() {
-        // STT_FUNC = 2. One pass builds the unit's function index so the
-        // anchor pass is a lookup rather than a scan per anchor.
-        let mut text_funcs: HashMap<&str, u64> = HashMap::new();
-        for sym in &obj.symbols {
-            if sym.kind == 2
-                && !sym.name.is_empty()
-                && matches!(sym.section, NativeSymSection::Text)
-            {
-                text_funcs.entry(sym.name.as_str()).or_insert(sym.value);
-            }
-        }
-        for sym in &obj.symbols {
-            if !matches!(sym.section, NativeSymSection::Text) {
-                continue;
-            }
-            let Some(fn_name) = sym.name.strip_prefix(PROLOGUE_END_PREFIX) else {
-                continue;
-            };
-            let Some(&fn_value) = text_funcs.get(fn_name) else {
-                continue;
-            };
-            prologue_ends.insert(
-                text_bases[i] as u64 + fn_value,
-                text_bases[i] as u64 + sym.value,
-            );
+        let base = text_bases[i] as u64;
+        for &(entry, post) in &obj.prologue_ends {
+            prologue_ends.insert(base + entry, base + post);
         }
     }
 
     // Pass 2.2 -- defined static functions. `STT_FUNC` `STB_LOCAL`
     // Text symbols, rebased by the unit text base. Kept as a flat list
     // (not a name-keyed map) so two units' same-named statics both
-    // survive. The `STT_FUNC` filter excludes the synthetic
-    // prologue-end `STT_NOTYPE` anchors collected above.
+    // survive.
     let mut local_funcs: Vec<(String, u64)> = Vec::new();
     for (i, obj) in objs.iter().enumerate() {
         for sym in &obj.symbols {
@@ -1839,13 +1810,6 @@ pub fn link_native_objects_with_shared_libs<'a>(
         },
     })
 }
-
-/// Name prefix the per-`.o` writer (`elf_reloc.rs`) gives the
-/// synthetic STB_LOCAL STT_NOTYPE symbol that anchors each
-/// function's post-prologue native byte offset. The suffix is
-/// the source function name. Kept in sync with
-/// `elf_reloc::PROLOGUE_END_PREFIX`.
-pub(super) const PROLOGUE_END_PREFIX: &str = ".Lc5_prologue_end_";
 
 /// One text-targeting DWARF reloc that survives the link pass.
 /// The placeholder at `byte_offset` inside its parent DWARF
@@ -3118,6 +3082,7 @@ mod tests {
             macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
+            prologue_ends: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -3205,6 +3170,7 @@ mod tests {
             macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
+            prologue_ends: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -3286,6 +3252,7 @@ mod tests {
             macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
+            prologue_ends: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -3338,6 +3305,7 @@ mod tests {
             macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
+            prologue_ends: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -3402,6 +3370,7 @@ mod tests {
                 macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
                 elf_tpoff_fixups: alloc::vec::Vec::new(),
                 copy_relocs: alloc::vec::Vec::new(),
+                prologue_ends: alloc::vec::Vec::new(),
                 debug_info: alloc::vec::Vec::new(),
                 debug_abbrev: alloc::vec::Vec::new(),
                 debug_line: alloc::vec::Vec::new(),
@@ -3573,6 +3542,7 @@ mod tests {
             macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
+            prologue_ends: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -3652,6 +3622,7 @@ mod tests {
             macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
+            prologue_ends: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),

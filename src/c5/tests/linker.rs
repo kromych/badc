@@ -4514,6 +4514,54 @@ fn same_named_statics_keep_their_own_prologue_anchor() {
 }
 
 #[test]
+fn assembler_local_labels_stay_out_of_the_symbol_table() {
+    // gas keeps a `.L`-prefixed label out of `.symtab`: it is an assembler
+    // temporary, and every reference to one reduces to its section plus an
+    // addend. An object that carries them exports them to whatever reads the
+    // table -- a downstream `objcopy --prefix-symbols` renames them into the
+    // final image. The post-prologue anchors the linker needs ride the
+    // `.note.badc` record instead, so nothing is lost by dropping them.
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    let src = "\
+        __asm__(\".pushsection .altinstructions,\\\"a\\\"\\n\
+                 .Lalt_entry:\\n\\t.long 0\\n\\t.popsection\\n\");\n\
+        static int helper(int x) { int buf[8]; buf[0] = x; return buf[0] + 1; }\n\
+        int leaf(int x) { return x; }\n\
+        int call(int x) { return helper(x) + leaf(x); }\n";
+    for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
+        let bytes = reloc_tu(src, target, false);
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let leaked: alloc::vec::Vec<&str> = obj
+            .symbols
+            .iter()
+            .map(|s| s.name.as_str())
+            .filter(|n| n.starts_with(".L"))
+            .collect();
+        assert!(leaked.is_empty(), "{target:?} symtab carries {leaked:?}");
+        assert!(
+            !bytes.windows(18).any(|w| w == b".Lc5_prologue_end_"),
+            "{target:?} object still spells the anchor name"
+        );
+        // The anchors reach the linker through the note, keyed on the
+        // function entry each belongs to.
+        assert!(
+            obj.prologue_ends.len() >= 3,
+            "{target:?} note carries {} anchors, expected one per function",
+            obj.prologue_ends.len()
+        );
+        for &(entry, post) in &obj.prologue_ends {
+            assert!(post > entry, "{target:?}: anchor 0x{post:x} <= 0x{entry:x}");
+        }
+        let merged = link_native_objects(&[obj]).expect("link");
+        let entry = merged.defined.get("call").expect("call is defined").value;
+        assert!(
+            merged.prologue_ends.contains_key(&entry),
+            "{target:?}: no merged anchor for `call` at 0x{entry:x}"
+        );
+    }
+}
+
+#[test]
 fn unrouted_weak_undef_resolves_to_zero() {
     // ELF behavior: a weak reference nothing on the link line
     // satisfies resolves to address 0 -- not a required import
@@ -4570,6 +4618,7 @@ fn unrouted_weak_undef_resolves_to_zero() {
             macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
+            prologue_ends: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),

@@ -1234,6 +1234,14 @@ fn local_aggregate_runtime_init() {
 }
 
 #[test]
+fn member_name_space_keeps_object_shape() {
+    // C99 6.2.3: a member name shares nothing with the ordinary identifier
+    // of the same spelling, so declaring the member must leave the object's
+    // recorded array dimensions intact.
+    assert_eq!(run_fixture("member_name_space_keeps_object_shape.c"), 0);
+}
+
+#[test]
 fn aggregate_init_struct_member_copy() {
     // C99 6.7.8p13: a struct member of an automatic aggregate initialized
     // by a non-constant struct expression (subscript, deref, by-value

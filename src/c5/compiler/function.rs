@@ -46,6 +46,10 @@ impl Compiler {
         let mut args = Vec::new();
         let mut types = Vec::new();
         let mut is_variadic = false;
+        // Parameters bind through their own shadow slots; an enclosing
+        // member declarator's guard covers only that member's identifier.
+        let saved_guard = self.pending.guard_symbol_shape;
+        self.pending.guard_symbol_shape = false;
         // An empty list declares no prototype; `(void)` declares one with
         // no parameters.
         let is_prototyped = self.lex.tk != ')';
@@ -289,6 +293,7 @@ impl Compiler {
         // (a function / function pointer, which cannot be an array), so clear
         // it before the enclosing declarator binds.
         self.pending.typedef_base_array_size = 0;
+        self.pending.guard_symbol_shape = saved_guard;
         Ok(ParsedParams {
             indices: args,
             types,

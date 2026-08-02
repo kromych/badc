@@ -575,6 +575,16 @@ pub(in crate::c5::compiler) struct Pending {
     /// that is `> 0` here, distinct from the typedef's own element type
     /// being a pointer (`typedef T *A[N]; A x;` still folds).
     pub declarator_leading_ptr_count: i64,
+    /// Armed while a struct/union member declarator is parsed. C99 6.2.3
+    /// puts member names in their own name space, so the declarator must
+    /// not disturb an ordinary identifier that happens to share the name.
+    /// The per-symbol array shape is the one thing a declarator writes
+    /// through the shared symbol entry; while this is set, the first such
+    /// overwrite records the displaced values in `saved_symbol_shape`.
+    pub guard_symbol_shape: bool,
+    /// `(symbol, inner_array_size, array_dims)` displaced by a guarded
+    /// declarator, restored once the member's shape has been consumed.
+    pub saved_symbol_shape: Option<(usize, i64, alloc::vec::Vec<i64>)>,
     /// Whether a `const` follows the declarator's outermost `*`
     /// (`T *const p`, `T *const a[]`). That qualifier applies to the
     /// declared object itself, unlike a `const` in the specifiers of a
@@ -961,6 +971,8 @@ impl Default for Pending {
             typedef_base_array_size: 0,
             typedef_base_array_dims: alloc::vec::Vec::new(),
             declarator_leading_ptr_count: 0,
+            guard_symbol_shape: false,
+            saved_symbol_shape: None,
             declarator_outer_const: false,
             vla_allowed: false,
             vla_dim_expr: None,

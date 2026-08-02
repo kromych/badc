@@ -134,6 +134,11 @@ impl Compiler {
         self.pending.typedef_base_array_size = 0;
         let saved_typedef_base_array_dims =
             core::mem::take(&mut self.pending.typedef_base_array_dims);
+        // This body may sit inside an enclosing member declarator, whose
+        // guard its own members must neither consume nor disarm.
+        let saved_guard = self.pending.guard_symbol_shape;
+        let saved_shape = self.pending.saved_symbol_shape.take();
+        self.pending.guard_symbol_shape = false;
 
         let mut offset = 0usize;
         // Running max field alignment for the aggregate. Each
@@ -568,6 +573,11 @@ impl Compiler {
                 // `pending.attr_packed`; a base-type or type-level packed
                 // must not carry over to the field's own placement.
                 self.pending.attr_packed = false;
+                // C99 6.2.3: the member name lives in its own name space, so
+                // the shared symbol entry's array shape must survive this
+                // declarator. Restored once the field record has taken it.
+                self.pending.guard_symbol_shape = true;
+                self.pending.saved_symbol_shape = None;
                 let (id_idx, mut field_ty, mut field_array_size) =
                     self.parse_declarator(field_base)?;
                 // A member may carry a trailing attribute
@@ -829,6 +839,11 @@ impl Compiler {
 
                 let field_inner_array_size = self.symbols[id_idx].inner_array_size;
                 let field_array_dims = core::mem::take(&mut self.symbols[id_idx].array_dims);
+                self.pending.guard_symbol_shape = false;
+                if let Some((idx, inner, dims)) = self.pending.saved_symbol_shape.take() {
+                    self.symbols[idx].inner_array_size = inner;
+                    self.symbols[idx].array_dims = dims;
+                }
                 self.structs[struct_id].fields.push(StructField {
                     name: field_name,
                     offset: field_offset,
@@ -863,6 +878,8 @@ impl Compiler {
         self.next()?; // consume `}`
         self.pending.typedef_base_array_size = saved_typedef_base_array_size;
         self.pending.typedef_base_array_dims = saved_typedef_base_array_dims;
+        self.pending.guard_symbol_shape = saved_guard;
+        self.pending.saved_symbol_shape = saved_shape;
 
         // Struct alignment tops out at `MAX_STATIC_ALIGN` -- the widest the
         // data section and static-object placement honor. `#pragma pack(N)`

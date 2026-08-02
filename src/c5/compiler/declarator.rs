@@ -234,6 +234,18 @@ impl Compiler {
         self.with_nesting("declarator", |c| c.parse_declarator_inner(base))
     }
 
+    /// Record the array shape a guarded declarator is about to displace, so
+    /// the caller can put the ordinary-identifier binding back (C99 6.2.3).
+    /// Only the first displacement per declarator is kept: that one holds
+    /// the state from before the member declaration began.
+    pub(super) fn note_symbol_shape(&mut self, idx: usize) {
+        if self.pending.guard_symbol_shape && self.pending.saved_symbol_shape.is_none() {
+            let sym = &self.symbols[idx];
+            self.pending.saved_symbol_shape =
+                Some((idx, sym.inner_array_size, sym.array_dims.clone()));
+        }
+    }
+
     fn parse_declarator_inner(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
         // Taken once so it scopes to this parameter's own declarator, not
         // any nested one (a function-pointer parameter's prototype).
@@ -552,6 +564,7 @@ impl Compiler {
                     let mut dims = alloc::vec::Vec::with_capacity(pointee_dims.len() + 1);
                     dims.push(0);
                     dims.extend(pointee_dims);
+                    self.note_symbol_shape(idx);
                     self.symbols[idx].array_dims = dims;
                 }
             }
@@ -791,6 +804,7 @@ impl Compiler {
                 // scopes: each new binding starts fresh, so any
                 // per-symbol shape metadata must be cleared when the
                 // binding's scope begins.
+                self.note_symbol_shape(idx);
                 self.symbols[idx].inner_array_size = inner_dim;
                 self.symbols[idx].array_dims = if full_dims.len() >= 2 {
                     full_dims
@@ -805,6 +819,7 @@ impl Compiler {
             // binding of the same name. A pointer over an array
             // typedef needs no symbol-side shape: the leading-`*`
             // epilogue already folded the array layer into the type.
+            self.note_symbol_shape(idx);
             self.symbols[idx].inner_array_size = 0;
             self.symbols[idx].array_dims = alloc::vec::Vec::new();
         }

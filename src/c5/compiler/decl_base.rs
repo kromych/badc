@@ -1432,6 +1432,7 @@ impl Compiler {
     pub(super) fn apply_typedef_array_dims(&mut self, idx: usize) {
         if self.pending.typedef_base_array_dims.len() >= 2 {
             let dims = self.pending.typedef_base_array_dims.clone();
+            self.note_symbol_shape(idx);
             self.symbols[idx].inner_array_size = dims[1];
             self.symbols[idx].array_dims = dims;
         }

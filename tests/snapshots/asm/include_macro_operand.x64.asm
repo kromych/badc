@@ -24,7 +24,7 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
+               	movzbq	%al, %rax
                	xorq	%rax, %rax
                	popq	%rbp
                	retq

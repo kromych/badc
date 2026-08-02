@@ -20,24 +20,16 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v3   LoadLocal { off=2, kind=I32 }                    -> x1
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=2 ---
-; name=ret_wrong_struct
-fn ent_pc=2 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
-    terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=ret_null
-fn ent_pc=3 n_params=0 variadic=false locals=0
+fn ent_pc=2 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=4 ---
+; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=ret_ok
-fn ent_pc=4 n_params=1 variadic=false locals=0
+fn ent_pc=3 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -47,20 +39,18 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v4   BinopI { op=shl, lhs=v1, rhs_imm=32 }            -> x0
     v5   Extend { value=v1, kind=I32 }                    -> x0
     terminator Return(v5)   (exit_acc=v5)
-; --- SSA dump (ok=true) ent_pc=5 ---
+; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
-fn ent_pc=5 n_params=0 variadic=false locals=0
+fn ent_pc=4 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     terminator Return(v1)   (exit_acc=v1)
-type_warning_return.c:17: warning: pointer assigned to integer in return (declared=int, returned=int*)
+type_warning_return.c:12: warning: pointer assigned to integer in return (declared=int, returned=int*)
     return g;
-type_warning_return.c:21: warning: integer assigned to pointer in return (declared=int*, returned=int)
+type_warning_return.c:16: warning: integer assigned to pointer in return (declared=int*, returned=int)
     return x;
-type_warning_return.c:25: warning: incompatible struct types in return (declared=struct A, returned=struct B)
-    return b;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

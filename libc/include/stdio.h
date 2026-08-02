@@ -511,7 +511,7 @@ void setbuf(FILE *stream, char *buf);
 void setbuffer(FILE *stream, char *buf, int size);
 #endif
 int puts(char *s);
-int perror(char *s);
+void perror(char *s);
 // C99 7.19.9.2 / 7.19.9.4: fseek takes a long offset, ftell returns long.
 // An `int` offset/return truncates positions past 2GB.
 int fseek(FILE *stream, long offset, int whence);
@@ -527,11 +527,11 @@ long long _ftelli64(FILE *stream);
 #endif
 int fgetpos(FILE *stream, fpos_t *pos);
 int fsetpos(FILE *stream, const fpos_t *pos);
-int rewind(FILE *stream);
+void rewind(FILE *stream);
 int fflush(FILE *stream);
 int feof(FILE *stream);
 int ferror(FILE *stream);
-int clearerr(FILE *stream);
+void clearerr(FILE *stream);
 int setvbuf(FILE *stream, char *buf, int mode, int size);
 int remove(char *path);
 int rename(char *old_path, char *new_path);

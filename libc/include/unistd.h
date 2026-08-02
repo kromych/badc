@@ -453,7 +453,7 @@ int setuid(int uid);
 // `_exit` skips the libc atexit / fflush chain. Programs use it
 // after a failed exec in the child branch of fork+exec to avoid
 // running the parent's exit handlers a second time.
-_Noreturn int _exit(int status);
+_Noreturn void _exit(int status);
 int fchmod(int fd, int mode);
 int fchown(int fd, int uid, int gid);
 int utimes(char *path, char *times);
@@ -553,7 +553,7 @@ extern char *optarg;
 extern int optind;
 extern int opterr;
 extern int optopt;
-int sync();
+void sync();
 int confstr(int name, char *buf, int len);
 
 #define LOCK_SH 1

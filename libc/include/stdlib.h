@@ -273,7 +273,7 @@ extern char *_sys_errlist[];
 char *malloc(int size);
 char *calloc(int n, int size);
 char *realloc(char *ptr, int size);
-int free(char *ptr);
+void free(char *ptr);
 // Aligned allocation. Alignment/size are size_t (unsigned long on the LP64
 // POSIX targets). posix_memalign stores the block through memptr and returns
 // 0 or an errno value; memalign is a glibc extension.
@@ -357,8 +357,8 @@ static inline lldiv_t lldiv(long long n, long long d) {
 // C99 7.20.4: abort / exit / _Exit do not return to the caller.
 // `_Noreturn` lets the reachability analysis treat a call as not
 // reaching its continuation.
-_Noreturn int abort();
-_Noreturn int exit(int status);
+_Noreturn void abort();
+_Noreturn void exit(int status);
 int system(char *cmd);
 char *getenv(char *name);
 #ifdef _WIN32
@@ -380,10 +380,10 @@ int putenv(char *string);
 // and `size_t` come from <stddef.h>.
 unsigned long mbstowcs(wchar_t *dest, const char *src, unsigned long n);
 unsigned long wcstombs(char *dest, const wchar_t *src, unsigned long n);
-int qsort(char *base, int n, int size, int *cmp);
+void qsort(char *base, int n, int size, int *cmp);
 char *bsearch(char *key, char *base, int n, int size, int *cmp);
 int rand();
-int srand(int seed);
+void srand(int seed);
 #ifdef __linux__
 // See the binding-block comment above. `__cxa_atexit` takes a
 // 1-arg handler signature `void (*)(void *)`; c5 callees with
@@ -416,7 +416,7 @@ int mkstemps(char *templ, int suffixlen);
 char *mkdtemp(char *templ);
 char *mktemp(char *templ);
 int random();
-int srandom(int seed);
+void srandom(int seed);
 // SVID 48-bit linear-congruential PRNG family. drand48 returns a double
 // in [0.0, 1.0); lrand48 a non-negative long; mrand48 a signed long.
 double drand48(void);

@@ -123,7 +123,7 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
+               	movzbq	%al, %rax
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>

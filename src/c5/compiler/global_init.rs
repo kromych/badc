@@ -581,14 +581,21 @@ impl Compiler {
 
         // Type-check: warn (don't error) if the constant doesn't match
         // the declared type. Only pointer-vs-int mismatches are
-        // diagnosed here, matching the assignment path.
+        // diagnosed here, matching the assignment path. `init_ty` is
+        // synthesized from the folded constant rather than carried from
+        // the initializer expression, so it is too coarse to raise a
+        // 6.7.8p11 constraint error on; the aggregate initializer path
+        // checks element types against real ones.
         let init_ty = if value == 0 { 0 } else { Ty::Int as i64 };
-        if let Some(reason) = Self::type_warning(&self.structs, var_ty, init_ty, value == 0) {
+        if let Some(m) = Self::type_warning(&self.structs, var_ty, init_ty, value == 0) {
             let var_s = super::types::format_type(var_ty, &self.structs);
             let init_s = super::types::format_type(init_ty, &self.structs);
             self.warn_at(
                 line,
-                format!("{reason} in global initializer (var={var_s}, value={init_s})"),
+                format!(
+                    "{} in global initializer (var={var_s}, value={init_s})",
+                    m.reason
+                ),
             );
         }
         Ok(())

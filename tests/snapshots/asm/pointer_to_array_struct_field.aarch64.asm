@@ -127,7 +127,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, x4
                	bl	<addr>
-               	sxtw	x0, w0
+               	uxtb	w0, w0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>

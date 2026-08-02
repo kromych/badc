@@ -146,22 +146,37 @@ def sync_linux(box: Box, github_token: str) -> int:
     return stream(box.short, cmd)
 
 
+# Each step's output is captured to a file rather than piped through
+# `tail`: a green step is worth three lines, but a red one has to arrive
+# whole. Truncating uniformly discarded exactly the part that names the
+# failure -- cargo prints `failures:`, the test name and `test result:
+# FAILED` before the final `error:` line, so a tail of the merged stream
+# kept the error and dropped what it referred to.
+FAIL_TAIL_LINES = 120
+
+STEP_FN = (
+    "step() { "
+    'log=$(mktemp); if "$@" > "$log" 2>&1; then tail -3 "$log"; rm -f "$log"; '
+    'else rc=$?; echo "--- lane step FAILED (rc=$rc): $*"; '
+    f'tail -{FAIL_TAIL_LINES} "$log"; rm -f "$log"; exit $rc; fi; '
+    "}"
+)
+
+
 def remote_run_linux(box: Box, github_token: str) -> int:
-    # `set -o pipefail` so a failing build / test / demo propagates its
-    # exit status through the `| tail` truncation; without it the pipe
-    # exits with tail's status (0) and a red lane reports green.
-    inner = (
-        f"set -o pipefail && "
-        f"cd {box.remote_path} && "
-        f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
-        f"cargo build --release --locked --features full 2>&1 | tail -3 && "
-        f"cargo test --release --lib --features full 2>&1 | tail -3 && "
+    steps = [
+        "step cargo build --release --locked --features full",
+        "step cargo test --release --lib --features full",
         # CI additionally runs the suite under register-pressure caps
         # (BADC_MAX_GPR / BADC_MAX_FPR over several N); N=2 is the value
         # that has caught spill-interaction bugs the default banks hide.
-        f"BADC_MAX_GPR=2 BADC_MAX_FPR=2 "
-        f'cargo test --release --lib --features "codegen_test full" 2>&1 | tail -3 && '
-        + " && ".join(f"python3 {d} 2>&1 | tail -2" for d in GATING_DEMOS)
+        "step env BADC_MAX_GPR=2 BADC_MAX_FPR=2 "
+        'cargo test --release --lib --features "codegen_test full"',
+    ] + [f"step python3 {d}" for d in GATING_DEMOS]
+    inner = (
+        f"cd {box.remote_path} && "
+        f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
+        f"{STEP_FN}; " + " && ".join(steps)
     )
     return stream(box.short, ["ssh", box.host, inner])
 

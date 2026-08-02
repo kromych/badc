@@ -57,16 +57,22 @@ SRC = PY_DIR / ".cache" / f"Python-{VERSION}"
 BASELINE_FAILURES = 0
 
 # Test-suite slice to run once the interpreter is up. Every module here was
-# verified to pass on the badc-built interpreter on linux-x64 and
-# linux-aarch64. The second group is chosen to complement `build.py`'s
-# slices rather than repeat them: compression and hashing (zlib, lzma, the
-# HACL hashes), the file and temporary-file paths, and the pure-Python
-# library corners those two do not reach.
+# verified to pass on the badc-built interpreter on linux-x64,
+# linux-aarch64 and macos-aarch64. The second group is chosen to complement
+# `build.py`'s slices rather than repeat them: compression and hashing
+# (zlib, lzma, the HACL hashes), the file and temporary-file paths, and the
+# pure-Python library corners those two do not reach.
 #
 # The last group (`test_pickle` onwards) covers the `dlopen`'d extension
 # modules that bind the interpreter's data globals -- `_pickle`, `_ssl`,
 # `pyexpat` and `_elementtree` all resolve `_PyByteArray_empty_string`
 # or `_Py_HashSecret`, both zero-initialized.
+#
+# `test_generators` needs the process to start with SIGINT at its default
+# disposition: one case raises SIGINT and expects `KeyboardInterrupt` in a
+# generator. A shell that starts this script as a background job sets
+# SIGINT to SIG_IGN, and the case then fails for the reference interpreter
+# too.
 #
 # Deliberately absent, each with a tracked cause:
 #   test_coroutines (macOS)-- an async comprehension faults in the

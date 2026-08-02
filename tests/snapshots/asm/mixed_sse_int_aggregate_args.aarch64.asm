@@ -152,14 +152,23 @@ Disassembly of section .text:
                	mov	x1, #0x4012000000000000 // =4616752568008179712
                	fmov	d16, x1
                	str	d16, [x0, #0x8]
-               	mov	x0, #0x4                // =4
-               	sub	x1, x29, #0x10
+               	mov	x1, #0x4                // =4
+               	sub	x0, x29, #0x10
                	sub	x2, x29, #0x20
-               	sub	x3, x29, #0x30
-               	mov	x4, #0x3ff4000000000000 // =4608308318706860032
-               	fmov	d0, x4
+               	sub	x4, x29, #0x30
+               	mov	x3, #0x3ff4000000000000 // =4608308318706860032
+               	fmov	d0, x3
+               	ldr	d1, [x4]
+               	ldr	d2, [x4, #0x8]
+               	mov	x3, x2
+               	mov	x2, x1
+               	ldr	x1, [x0, #0x8]
+               	ldr	x0, [x0]
+               	ldr	x4, [x3, #0x8]
+               	ldr	x3, [x3]
                	bl	<addr>
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	sxtw	x0, w1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

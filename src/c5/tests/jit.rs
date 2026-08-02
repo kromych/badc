@@ -148,9 +148,15 @@ fn always_inline_callee_passing_an_aggregate_by_value_is_spliced() {
     // and the callee's aggregate layout re-interns into the caller. The
     // request here is mandatory, and honouring it is what folds the
     // per-site guards on the constant `sr` -- the undefined `bug` would
-    // otherwise fail the JIT load. Both aggregates must arrive at `sink`
-    // intact: the 16-byte one rides argument registers, the 40-byte one
-    // the outgoing stack area.
+    // otherwise fail the JIT load.
+    //
+    // The nested call takes both a register-class aggregate and one the
+    // System V AMD64 classification puts in memory, which the caller
+    // copies to its outgoing argument area. Only the callee's own
+    // parameters have to pass by value in registers for the splice to
+    // redirect their frame copies; what a nested call marshals is the
+    // per-arch call plan's business, out of line or inlined alike. Both
+    // must arrive at `sink` intact.
     let src = "
         extern void bug(void);
         struct resx { unsigned long lo, hi; };
@@ -165,19 +171,20 @@ fn always_inline_callee_passing_an_aggregate_by_value_is_spliced() {
             seen_w = w.w[0] + w.w[1] + w.w[2] + w.w[3] + w.w[4];
         }
         static __attribute__((always_inline))
-        void set_masks(struct ctx *c, int sr, struct resx r, struct wide w) {
+        void set_masks(struct ctx *c, int sr, struct resx r,
+                       const struct wide *wp) {
             if (!__builtin_constant_p(sr)) bug();
             if (sr < 0 || sr >= 4) bug();
-            sink(c, sr, r, w);
+            sink(c, sr, r, *wp);
         }
         int main(void) {
             struct ctx c = {{0, 0, 0, 0}};
             struct resx r = {10ul, 20ul};
             struct wide w = {{1ul, 2ul, 3ul, 4ul, 5ul}};
-            set_masks(&c, 0, r, w);
-            set_masks(&c, 1, r, w);
-            set_masks(&c, 2, r, w);
-            set_masks(&c, 3, r, w);
+            set_masks(&c, 0, r, &w);
+            set_masks(&c, 1, r, &w);
+            set_masks(&c, 2, r, &w);
+            set_masks(&c, 3, r, &w);
             if (seen_lo != 10ul || seen_hi != 20ul || seen_w != 15ul) return 1;
             for (int i = 0; i < 4; i++)
                 if (c.v[i] != 30ul + (unsigned long) i) return 2;

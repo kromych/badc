@@ -70,4 +70,4 @@ int getpwnam_r(char *name, struct passwd *pwd, char *buf, unsigned long buflen,
                struct passwd **result);
 struct passwd *getpwent();
 void setpwent();
-int endpwent();
+void endpwent();

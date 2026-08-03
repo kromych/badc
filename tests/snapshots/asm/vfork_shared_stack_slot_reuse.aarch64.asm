@@ -491,5 +491,5 @@ Disassembly of section .text:
                	bl	<addr>
                	add	sp, sp, #0x60
                	bl	<addr>
-               	sxtw	x0, w0
+               	uxtb	w0, w0
                	brk	#0x1

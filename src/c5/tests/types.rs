@@ -63,11 +63,6 @@ fn warn_return_type_mismatch() {
         "expected int-returned-as-ptr warning, got: {:?}",
         p.warnings
     );
-    assert!(
-        has("incompatible struct types in return"),
-        "expected incompatible-struct return warning, got: {:?}",
-        p.warnings
-    );
     // The NULL idiom and a matching return stay silent.
     assert!(
         !has("ret_null") && !has("ret_ok"),
@@ -363,6 +358,211 @@ fn cast_to_struct_pointer_compiles_and_runs() {
     assert!(
         p.warnings.is_empty(),
         "cast should silence the malloc-returns-char* warning, got: {:?}",
+        p.warnings
+    );
+}
+
+/// Compile `src` with the standard prelude and return the diagnostic
+/// text, asserting the compile failed. C99 5.1.1.3 requires a
+/// constraint violation to be diagnosed; badc rejects outright rather
+/// than recording on `Program::warnings`.
+fn constraint_error(src: &str) -> String {
+    use crate::Compiler;
+    let err = Compiler::new(super::with_prelude(src))
+        .compile()
+        .expect_err("expected a constraint violation to be rejected");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("error:"),
+        "diagnostic must be an error, got: {msg}"
+    );
+    msg
+}
+
+#[test]
+fn return_with_value_in_void_function_is_an_error() {
+    // C99 6.8.6.4p1: a return statement with an expression shall not
+    // appear in a function whose return type is void.
+    let msg = constraint_error("void f(void) { return 1; }\nint main(void){return 0;}");
+    assert!(
+        msg.contains("`return` with a value of type `int` in a function returning `void`"),
+        "got: {msg}"
+    );
+    // The operand's type is named so the reader sees what was returned.
+    let msg =
+        constraint_error("static int *g;\nvoid f(void) { return g; }\nint main(void){return 0;}");
+    assert!(msg.contains("in a function returning `void`"), "got: {msg}");
+}
+
+#[test]
+fn return_of_a_void_expression_stays_accepted() {
+    // The void-typed operand is the established exception: gcc and clang
+    // accept `return f();` and `return (void)x;` in a void function
+    // outside -pedantic-errors, and real code relies on it.
+    let p = compile_str(
+        "void g(void) {}\n\
+         void f(void) { return g(); }\n\
+         void h(int x) { return (void)x; }\n\
+         int main(void) { f(); h(1); return 0; }",
+    );
+    assert!(
+        !p.warnings
+            .iter()
+            .any(|w| w.contains("`return` with a value")),
+        "a void-typed return operand must stay silent, got: {:?}",
+        p.warnings
+    );
+    // A bare `return;` is unaffected.
+    compile_str("void f(void) { return; }\nint main(void){return 0;}");
+}
+
+#[test]
+fn void_returning_callees_are_typed_void() {
+    // The 6.8.6.4p1 check keys off the operand's type, so anything the
+    // standard declares `void` must carry the void tag: otherwise
+    // `return free(p);` -- valid C that gcc and clang accept -- would be
+    // rejected. Covers the intrinsics and the bundled declarations.
+    let p = compile_str(
+        "void a(void *p) { return free(p); }\n\
+         void b(void) { return abort(); }\n\
+         void c(void) { return exit(0); }\n\
+         void d(int n) { return srand(n); }\n\
+         void e(char *b) { return qsort(b, 0, 0, 0); }\n\
+         void f(void) { return perror(\"x\"); }\n\
+         void g(void) { return __builtin_unreachable(); }\n\
+         void h(void) { return __builtin_trap(); }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(
+        !p.warnings.iter().any(|w| w.contains("error:")),
+        "got: {:?}",
+        p.warnings
+    );
+    // Indirect calls, statement expressions and the comma operator keep
+    // the void tag through to the return.
+    compile_str(
+        "typedef void (*vfn)(void);\nvoid g(void);\n\
+         void a(vfn p) { return p(); }\n\
+         void b(void) { return ({ g(); }); }\n\
+         void c(void) { return (g(), g()); }\n\
+         void d(int x) { return x ? g() : g(); }\n\
+         int main(void) { return 0; }",
+    );
+}
+
+#[test]
+fn struct_object_type_mismatch_is_an_error_in_every_assignment_context() {
+    // C99 6.5.16.1p1 lists no conversion involving a structure or union
+    // object, so a mismatch is a constraint violation wherever the
+    // as-if-by-assignment rule applies: argument passing (6.5.2.2p2),
+    // simple assignment, initialization (6.7.8p11) and return
+    // (6.8.6.4p3).
+    const DECLS: &str = "struct S { int a; };\nstruct T { int b; };\n";
+    const MAIN: &str = "\nint main(void){return 0;}";
+
+    // 6.5.2.2p2 -- a pointer where the parameter has struct type.
+    let msg = constraint_error(&format!(
+        "{DECLS}void f(struct S s);\nvoid c(void) {{ struct S s; f(&s); }}{MAIN}"
+    ));
+    assert!(
+        msg.contains("incompatible struct types in argument 1 of `f`")
+            && msg.contains("param=struct S")
+            && msg.contains("arg=struct S*"),
+        "got: {msg}"
+    );
+
+    // 6.5.2.2p2 -- an unrelated struct, and a struct for a scalar param.
+    for (src, needle) in [
+        (
+            format!("{DECLS}void f(struct S s);\nvoid c(void) {{ struct T t; f(t); }}{MAIN}"),
+            "arg=struct T",
+        ),
+        (
+            format!("{DECLS}void f(int x);\nvoid c(void) {{ struct S s; f(s); }}{MAIN}"),
+            "param=int",
+        ),
+    ] {
+        let msg = constraint_error(&src);
+        assert!(
+            msg.contains("incompatible struct types in argument 1") && msg.contains(needle),
+            "got: {msg}"
+        );
+    }
+
+    // 6.5.16.1p1 -- simple assignment.
+    let msg = constraint_error(&format!(
+        "{DECLS}void c(void) {{ struct S s; int i; i = s; }}{MAIN}"
+    ));
+    assert!(
+        msg.contains("incompatible struct types in assignment")
+            && msg.contains("lhs=int")
+            && msg.contains("rhs=struct S"),
+        "got: {msg}"
+    );
+
+    // 6.7.8p11 -- initialization, in both directions.
+    let msg = constraint_error(&format!(
+        "{DECLS}void c(void) {{ int i = 0; struct S s = i; (void)s; }}{MAIN}"
+    ));
+    assert!(
+        msg.contains("incompatible struct types in initializer")
+            && msg.contains("declared=struct S")
+            && msg.contains("init=int"),
+        "got: {msg}"
+    );
+    let msg = constraint_error(&format!(
+        "{DECLS}void c(void) {{ struct S s; int i = s; (void)i; }}{MAIN}"
+    ));
+    assert!(
+        msg.contains("declared=int") && msg.contains("init=struct S"),
+        "got: {msg}"
+    );
+
+    // 6.8.6.4p3 -- return, converted as if by assignment.
+    let msg = constraint_error(&format!(
+        "{DECLS}struct S f(struct T t) {{ return t; }}{MAIN}"
+    ));
+    assert!(
+        msg.contains("incompatible struct types in return")
+            && msg.contains("declared=struct S")
+            && msg.contains("returned=struct T"),
+        "got: {msg}"
+    );
+}
+
+#[test]
+fn well_typed_aggregates_are_untouched_by_the_constraint_check() {
+    // Only mismatches with no conversion are rejected. Matching
+    // aggregates, by-value round trips through calls, unions, vectors
+    // and decayed arrays must keep compiling silently.
+    let p = compile_str(
+        "struct S { int a; };\nunion U { int i; float f; };\n\
+         struct S id(struct S s) { return s; }\n\
+         union U idu(union U u) { return u; }\n\
+         void arr(int *p) { (void)p; }\n\
+         int main(void) { struct S a; struct S b = id(a); union U u; u = idu(u); \
+         int v[4]; int m[2][3]; arr(v); arr(m[0]); (void)b; return 0; }",
+    );
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+}
+
+#[test]
+fn union_target_does_not_raise_the_object_mismatch_constraint() {
+    // A union parameter may carry GCC's `transparent_union`, under which
+    // it accepts any member type directly. That attribute is not modelled,
+    // so a union target keeps warning severity instead of rejecting a
+    // call real code makes.
+    let p = compile_str(
+        "struct page;\nstruct folio;\n\
+         typedef union { struct page **pages; struct folio **folios; } \
+         arg_t __attribute__((__transparent_union__));\n\
+         void release(arg_t a, int nr);\n\
+         void f(struct page **p, struct folio **q) { release(p, 1); release(q, 1); }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(
+        !p.warnings.iter().any(|w| w.contains("error:")),
+        "a union parameter must not be rejected, got: {:?}",
         p.warnings
     );
 }

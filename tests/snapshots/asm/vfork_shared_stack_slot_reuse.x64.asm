@@ -452,5 +452,5 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
+               	movzbq	%al, %rax
                	ud2

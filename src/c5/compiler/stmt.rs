@@ -28,7 +28,7 @@ use super::super::error::C5Error;
 use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
 use super::locals::DeclScope;
-use super::types::{is_struct_ty, is_struct_value_ty, struct_ptr_depth};
+use super::types::{is_struct_ty, is_struct_value_ty, is_void_ty, struct_ptr_depth};
 
 /// The outer binding a nested block saved before rebinding a name, restored
 /// at the block's exit. A block nests arbitrarily, so unlike the single
@@ -3096,11 +3096,24 @@ impl Compiler {
             let mut return_value: Option<super::super::ast::ExprId> = None;
             if self.lex.tk != ';' {
                 if returns_void {
-                    // `return <expr>;` in a void function: C allows a
-                    // void-typed expression (gcc/clang accept it); c5 has
-                    // no void type tag, so evaluate it for side effects
-                    // and return no value.
                     self.parse_full_expr()?;
+                    // C99 6.8.6.4p1: a return statement with an expression
+                    // shall not appear in a function whose return type is
+                    // void. A void-typed operand is the established
+                    // exception -- gcc and clang accept `return f();` and
+                    // `return (void)x;` outside -pedantic-errors -- and is
+                    // evaluated for its side effects with no value
+                    // returned.
+                    if !is_void_ty(self.ty) {
+                        let got = super::types::format_type(self.ty, &self.structs);
+                        return Err(self.compile_err_at(
+                            line,
+                            format!(
+                                "`return` with a value of type `{got}` in a function \
+                                 returning `void`"
+                            ),
+                        ));
+                    }
                     return_value = self.ast_acc;
                 } else if returns_struct {
                     // Push the hidden out-pointer (loaded from
@@ -3126,14 +3139,15 @@ impl Compiler {
                     // if by assignment. Diagnose a return of an
                     // incompatible struct type, matching the assignment
                     // path.
-                    if let Some(reason) = Self::type_warning(&self.structs, ret_ty, self.ty, false)
-                    {
+                    if let Some(m) = Self::type_warning(&self.structs, ret_ty, self.ty, false) {
                         let want = super::types::format_type(ret_ty, &self.structs);
                         let got = super::types::format_type(self.ty, &self.structs);
-                        self.warn_at(
-                            line,
-                            format!("{reason} in return (declared={want}, returned={got})"),
-                        );
+                        let text =
+                            format!("{} in return (declared={want}, returned={got})", m.reason);
+                        if m.no_conversion {
+                            return Err(self.compile_err_at(line, text));
+                        }
+                        self.warn_at(line, text);
                     }
                     self.mark_emit_other();
                     // Mirror the rhs expression into the walker's
@@ -3153,7 +3167,7 @@ impl Compiler {
                     // rewrites `self.ty`.
                     let rhs_is_zero = self.last_emit_is_zero();
                     let rhs_is_untyped = self.last_emit_was_indirect_call();
-                    if let Some(reason) = Self::type_warning_with_flags(
+                    if let Some(m) = Self::type_warning_with_flags(
                         &self.structs,
                         ret_ty,
                         self.ty,
@@ -3162,10 +3176,12 @@ impl Compiler {
                     ) {
                         let want = super::types::format_type(ret_ty, &self.structs);
                         let got = super::types::format_type(self.ty, &self.structs);
-                        self.warn_at(
-                            line,
-                            format!("{reason} in return (declared={want}, returned={got})"),
-                        );
+                        let text =
+                            format!("{} in return (declared={want}, returned={got})", m.reason);
+                        if m.no_conversion {
+                            return Err(self.compile_err_at(line, text));
+                        }
+                        self.warn_at(line, text);
                     }
                     // Reuse `convert_assign_rhs` so an `int`-typed
                     // `return` from a `double`-returning function lifts

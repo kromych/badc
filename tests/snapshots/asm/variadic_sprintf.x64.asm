@@ -52,7 +52,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
+               	movzbq	%al, %rax
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp

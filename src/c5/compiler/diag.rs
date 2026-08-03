@@ -19,6 +19,25 @@ use super::types::{
     strip_unsigned, struct_ptr_depth,
 };
 
+/// A target-vs-source type mismatch reported by
+/// [`Compiler::type_warning_with_flags`]. `no_conversion` marks the
+/// mismatches C99 defines no conversion for: those are constraint
+/// violations the call site rejects, the rest stay warnings.
+#[derive(Clone, Copy)]
+pub(super) struct TypeMismatch {
+    pub reason: &'static str,
+    pub no_conversion: bool,
+}
+
+impl TypeMismatch {
+    fn warn(reason: &'static str) -> Option<Self> {
+        Some(Self {
+            reason,
+            no_conversion: false,
+        })
+    }
+}
+
 impl Compiler {
     /// C99 6.9.1p12: reaching the closing brace of a value-returning
     /// function without executing a `return value;` leaves the value
@@ -424,7 +443,7 @@ impl Compiler {
         declared: i64,
         actual: i64,
         actual_is_zero_literal: bool,
-    ) -> Option<&'static str> {
+    ) -> Option<TypeMismatch> {
         Self::type_warning_with_flags(structs, declared, actual, actual_is_zero_literal, false)
     }
 
@@ -440,7 +459,7 @@ impl Compiler {
         actual: i64,
         actual_is_zero_literal: bool,
         actual_is_untyped_call: bool,
-    ) -> Option<&'static str> {
+    ) -> Option<TypeMismatch> {
         // C99 6.5.16.1p1: the target may add qualifiers; volatility
         // never affects assignment compatibility.
         let declared = declared & !VOLATILE_MASK;
@@ -518,6 +537,11 @@ impl Compiler {
                     .get(super::types::struct_id_of(ty))
                     .is_some_and(|s| s.name == "__int128")
         };
+        // Both sides 128-bit: the tags differ only in signedness, which is
+        // an integer conversion, so this is not a mismatch at all.
+        if is_int128(declared) && is_int128(actual) {
+            return None;
+        }
         if is_int128(declared) != is_int128(actual) && !(decl_is_struct && act_is_struct) {
             return None;
         }
@@ -530,7 +554,23 @@ impl Compiler {
             if (decl_is_ptr && actual_is_zero_literal) || (act_is_ptr && declared == 0) {
                 return None;
             }
-            return Some("incompatible struct types");
+            // C99 6.5.16.1p1 offers no conversion involving a structure or
+            // union *object*: that is a constraint violation, while the
+            // pointer-shaped mismatches do convert and stay warnings. Two
+            // aggregate spellings are excluded because the mismatch would
+            // not be the source's fault: a value-form array reflects a
+            // missed 6.3.2.1p3 decay, and a union target may carry
+            // `transparent_union`, under which it accepts any member type.
+            let def_of = |ty: i64| structs.get(super::types::struct_id_of(ty));
+            let is_array_agg = |ty: i64| def_of(ty).is_some_and(|s| s.is_array);
+            let object_mismatch = (is_struct_value_ty(declared) || is_struct_value_ty(actual))
+                && !is_array_agg(declared)
+                && !is_array_agg(actual)
+                && !def_of(declared).is_some_and(|s| s.is_union);
+            return Some(TypeMismatch {
+                reason: "incompatible struct types",
+                no_conversion: object_mismatch,
+            });
         }
 
         match (decl_is_ptr, act_is_ptr) {
@@ -539,8 +579,8 @@ impl Compiler {
             // Pointer <-> literal 0: NULL idiom.
             (true, false) if actual_is_zero_literal => None,
             // Pointer <-> non-zero integer: warn.
-            (true, false) => Some("integer assigned to pointer"),
-            (false, true) => Some("pointer assigned to integer"),
+            (true, false) => TypeMismatch::warn("integer assigned to pointer"),
+            (false, true) => TypeMismatch::warn("pointer assigned to integer"),
             // Both numeric (char vs int) -- c convention, silent.
             (false, false) => None,
         }

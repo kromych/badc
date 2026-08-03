@@ -4098,6 +4098,7 @@ impl Compiler {
     /// On entry `tk` is positioned just past the `=`; on exit it
     /// is at the comma or semicolon following the initializer.
     pub(super) fn emit_local_init_store(&mut self, local_val: i64, ty: i64) -> Result<(), C5Error> {
+        let init_line = self.lex.line;
         self.emit_lea(local_val);
         self.ast_psh();
         // C99 6.7.8p11: a scalar initializer is a single expression,
@@ -4118,6 +4119,25 @@ impl Compiler {
                 ));
             }
             self.next()?; // consume `}`
+        }
+        // C99 6.7.8p11: a scalar object's initializer must have a type
+        // assignment-compatible with it. Only the mismatches with no
+        // conversion are diagnosed; the pointer/integer ones this site
+        // has always passed silently stay silent.
+        if let Some(m) = Self::type_warning_with_flags(
+            &self.structs,
+            ty,
+            self.ty,
+            self.last_emit_is_zero(),
+            self.last_emit_was_indirect_call(),
+        ) && m.no_conversion
+        {
+            let want = super::types::format_type(ty, &self.structs);
+            let got = super::types::format_type(self.ty, &self.structs);
+            return Err(self.compile_err_at(
+                init_line,
+                format!("{} in initializer (declared={want}, init={got})", m.reason),
+            ));
         }
         // C99 6.5.16.1p2: the RHS of an assignment is converted
         // to the unqualified LHS type. For a float / double

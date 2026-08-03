@@ -1328,12 +1328,17 @@ impl Compiler {
                     // value, but the parser threads them through
                     // as int so a statement-context call
                     // typechecks.
-                    if intrinsic_id == setjmp_id
+                    if intrinsic_id == trap_id {
+                        // `__builtin_trap` and `__builtin_unreachable` are
+                        // declared `void`, so `return __builtin_unreachable();`
+                        // in a void function is the 6.8.6.4p1 void-operand
+                        // form rather than a returned value.
+                        self.ty = super::types::void_ty();
+                    } else if intrinsic_id == setjmp_id
                         || intrinsic_id == longjmp_id
                         || intrinsic_id == va_start_id
                         || intrinsic_id == va_end_id
                         || intrinsic_id == va_copy_id
-                        || intrinsic_id == trap_id
                     {
                         self.ty = Ty::Int as i64;
                     } else if intrinsic_id == va_arg_id {
@@ -1514,7 +1519,7 @@ impl Compiler {
                             let arg_ty = self.ty;
                             let zero = self.last_emit_is_zero();
                             let untyped = self.last_emit_was_indirect_call();
-                            if let Some(reason) = Self::type_warning_with_flags(
+                            if let Some(m) = Self::type_warning_with_flags(
                                 &self.structs,
                                 want,
                                 self.ty,
@@ -1524,14 +1529,22 @@ impl Compiler {
                                 let got = self.ty;
                                 let want_s = format_type(want, &self.structs);
                                 let got_s = format_type(got, &self.structs);
-                                self.warn_at(
-                                arg_line,
-                                format!(
-                                    "{reason} in argument {} of `{}` (param={want_s}, arg={got_s})",
+                                let text = format!(
+                                    "{} in argument {} of `{}` (param={want_s}, arg={got_s})",
+                                    m.reason,
                                     nargs + 1,
                                     fn_name_for_warn,
-                                ),
-                            );
+                                );
+                                // A Token::Sys prototype approximates the
+                                // platform libc (`char *` for `void *`, `int`
+                                // for `size_t`) and accepts a by-value struct
+                                // through the ABI packing path, so only a
+                                // declared prototype is authoritative enough
+                                // to raise the 6.5.2.2p2 constraint.
+                                if m.no_conversion && !is_sys_call {
+                                    return Err(self.compile_err_at(arg_line, text));
+                                }
+                                self.warn_at(arg_line, text);
                             }
                             // C99 6.5.2.2p7: declared-parameter call
                             // arguments undergo the same assignment
@@ -3238,7 +3251,7 @@ impl Compiler {
                     self.expr(Token::Assign as i64)?;
                     let rhs_is_zero = self.last_emit_is_zero();
                     let rhs_is_untyped = self.last_emit_was_indirect_call();
-                    if let Some(reason) = Self::type_warning_with_flags(
+                    if let Some(m) = Self::type_warning_with_flags(
                         &self.structs,
                         t,
                         self.ty,
@@ -3247,10 +3260,11 @@ impl Compiler {
                     ) {
                         let lhs_s = format_type(t, &self.structs);
                         let rhs_s = format_type(self.ty, &self.structs);
-                        self.warn_at(
-                            line,
-                            format!("{reason} in assignment (lhs={lhs_s}, rhs={rhs_s})"),
-                        );
+                        let text = format!("{} in assignment (lhs={lhs_s}, rhs={rhs_s})", m.reason);
+                        if m.no_conversion {
+                            return Err(self.compile_err_at(line, text));
+                        }
+                        self.warn_at(line, text);
                     }
                     // C99 6.5.16.1p2 assignment conversion: when
                     // the lvalue is float / double and the rvalue

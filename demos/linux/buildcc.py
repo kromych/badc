@@ -31,10 +31,55 @@ import sys
 
 # Flag policy identical to sweep.py: keep the preprocessor surface, fold
 # -isystem/-idirafter into -I, honor the recorded optimization level, drop
-# the rest (warnings, -g/-std, the gcc code-model/hardening set).
+# the rest (warnings, -g/-std, the gcc code-model set).
 KEEP_ARG = {"-I", "-include", "-iquote"}
 FOLD_TO_I = {"-isystem", "-idirafter"}
 DROP_ARG = {"-o", "-MF", "-MQ", "-MT", "--param", "-Xassembler", "-Xlinker"}
+
+# Speculative-execution mitigations. These change what the built object
+# guarantees, not just how it is built, so they are forwarded rather than
+# dropped: a mitigation flag that the compiler never sees produces an
+# unmitigated object that still links and boots, which is indistinguishable
+# from a mitigated one without disassembling it.
+#
+# Valued forms are matched by prefix; badc accepts the argument set it
+# implements and rejects the rest, so a spelling it does not cover fails the
+# unit instead of building it unprotected.
+HARDENING_EXACT = {"-mindirect-branch-register", "-mindirect-branch-cs-prefix"}
+HARDENING_PREFIX = ("-mindirect-branch=", "-mfunction-return=", "-mharden-sls=",
+                    "-fcf-protection=")
+
+# Return-address signing has no badc spelling: badc emits no
+# pointer-authentication prologue/epilogue pair, so `-mbranch-protection`
+# specs naming `pac-ret` (directly or through `standard`) are reported and
+# withheld rather than forwarded, which would fail every unit, or dropped,
+# which would hide the gap. `bti` and `none` are forwarded.
+BRANCH_PROT_PREFIX = "-mbranch-protection="
+BRANCH_PROT_IMPLEMENTED = {"none", "bti"}
+_reported_unimplemented: set[str] = set()
+
+
+def hardening_arg(a: str) -> str | None:
+    """The badc spelling of a mitigation flag, or None to withhold it.
+
+    Withholding is announced once per distinct flag on stderr so a build log
+    records which mitigation the objects do not carry.
+    """
+    if a in HARDENING_EXACT or a.startswith(HARDENING_PREFIX):
+        return a
+    if a.startswith(BRANCH_PROT_PREFIX):
+        spec = a[len(BRANCH_PROT_PREFIX):]
+        if all(f in BRANCH_PROT_IMPLEMENTED for f in spec.split("+")):
+            return a
+        if a not in _reported_unimplemented:
+            _reported_unimplemented.add(a)
+            print(
+                f"badc: note: `{a}` has no badc spelling; objects built by badc "
+                "carry no return-address signing",
+                file=sys.stderr,
+            )
+        return None
+    return None
 
 
 def rewrite(argv: list[str]) -> list[str]:
@@ -84,6 +129,9 @@ def rewrite(argv: list[str]) -> list[str]:
             # default absolute form stays: its relocations name the branch
             # targets, which the ORC pass requires.
             out.append(a)
+            i += 1
+        elif (mitigation := hardening_arg(a)) is not None:
+            out.append(mitigation)
             i += 1
         elif a.startswith("-"):
             i += 1

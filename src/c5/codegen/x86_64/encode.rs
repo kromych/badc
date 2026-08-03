@@ -1344,6 +1344,49 @@ pub(crate) fn emit_jmp_r(code: &mut Vec<u8>, target: Reg) {
     emit_byte(code, modrm(0b11, 4, target.lo()));
 }
 
+/// `ENDBR64`. The only instruction an indirect branch may land on when
+/// CET indirect-branch tracking is active; emitted under
+/// `-fcf-protection=branch`. Decodes as a NOP on parts without CET.
+pub(crate) fn emit_endbr64(code: &mut Vec<u8>) {
+    emit_bytes(code, &[0xF3, 0x0F, 0x1E, 0xFA]);
+}
+
+/// `INT3`. Placed after an unconditional transfer under
+/// `-mharden-sls=`, so the bytes that follow are not an architectural
+/// successor the processor can speculate into.
+pub(crate) fn emit_int3(code: &mut Vec<u8>) {
+    emit_byte(code, 0xCC);
+}
+
+/// Symbol the return thunk carries under `-mfunction-return=thunk-extern`.
+pub(crate) const RETURN_THUNK_SYMBOL: &str = "__x86_return_thunk";
+
+/// Symbol of the indirect-branch thunk for `target` under
+/// `-mindirect-branch=thunk-extern`. One thunk per general register,
+/// named after the 64-bit register whose value it branches to; `rsp`
+/// has no thunk because no indirect branch targets it.
+pub(crate) fn indirect_thunk_symbol(target: Reg) -> &'static str {
+    const NAMES: [&str; 16] = [
+        "__x86_indirect_thunk_rax",
+        "__x86_indirect_thunk_rcx",
+        "__x86_indirect_thunk_rdx",
+        "__x86_indirect_thunk_rbx",
+        "__x86_indirect_thunk_rsp",
+        "__x86_indirect_thunk_rbp",
+        "__x86_indirect_thunk_rsi",
+        "__x86_indirect_thunk_rdi",
+        "__x86_indirect_thunk_r8",
+        "__x86_indirect_thunk_r9",
+        "__x86_indirect_thunk_r10",
+        "__x86_indirect_thunk_r11",
+        "__x86_indirect_thunk_r12",
+        "__x86_indirect_thunk_r13",
+        "__x86_indirect_thunk_r14",
+        "__x86_indirect_thunk_r15",
+    ];
+    NAMES[(target.0 & 0xf) as usize]
+}
+
 /// `CALL qword ptr [rip + disp32]` -- PC-relative indirect call
 /// through a memory operand. Encoding: `FF /2` with ModR/M
 /// `mod=00 reg=2 r/m=101` (the RIP-relative addressing form,
@@ -2218,6 +2261,7 @@ pub(crate) fn lower(
                 native.strict_align,
                 &mut rodata,
                 native.output_kind == super::OutputKind::Relocatable && !native.pic,
+                native.hardening,
             )
         };
         #[cfg(feature = "std")]

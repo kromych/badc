@@ -295,6 +295,7 @@ fn run() {
     let mut mno_fp_regs = false;
     let mut mstrict_align = false;
     let mut fpic = false;
+    let mut hardening = badc::Hardening::NONE;
     // `--export-all` exports every non-static function in the dynamic
     // symbol table / export trie of native output, so a runtime
     // `dlopen` consumer can `dlsym` it without a source-level `#pragma
@@ -514,6 +515,102 @@ fn run() {
             // see `NativeOptions::strict_align`.
             "-mstrict-align" => mstrict_align = true,
             "-mno-strict-align" => mstrict_align = false,
+            // Speculative-execution mitigations, in gcc's spellings. An
+            // argument that is not implemented is rejected rather than
+            // ignored: a hardening flag that compiles but does nothing
+            // leaves the caller believing the output is mitigated.
+            // The `thunk` / `thunk-inline` kinds want a compiler-generated
+            // thunk body, which badc does not produce.
+            s if s.starts_with("-mindirect-branch=") => {
+                match &s["-mindirect-branch=".len()..] {
+                    "keep" => hardening.indirect_branch_thunk = false,
+                    "thunk-extern" => hardening.indirect_branch_thunk = true,
+                    other => {
+                        eprint_diagnostic(format!(
+                            "badc: error: unsupported argument `{other}` to `-mindirect-branch=` \
+                             (supported: keep, thunk-extern)"
+                        ));
+                        std::process::exit(1);
+                    }
+                }
+            }
+            s if s.starts_with("-mfunction-return=") => {
+                match &s["-mfunction-return=".len()..] {
+                    "keep" => hardening.function_return_thunk = false,
+                    "thunk-extern" => hardening.function_return_thunk = true,
+                    other => {
+                        eprint_diagnostic(format!(
+                            "badc: error: unsupported argument `{other}` to `-mfunction-return=` \
+                             (supported: keep, thunk-extern)"
+                        ));
+                        std::process::exit(1);
+                    }
+                }
+            }
+            // Already unconditional: every compiler-generated indirect
+            // branch takes its target from a register. The CS prefix is
+            // gcc's for the generated-thunk kinds only, none for
+            // `thunk-extern`.
+            "-mindirect-branch-register" | "-mindirect-branch-cs-prefix" => {}
+            s if s.starts_with("-mharden-sls=") => {
+                for kind in s["-mharden-sls=".len()..].split(',') {
+                    match kind {
+                        "none" => {
+                            hardening.sls_return = false;
+                            hardening.sls_indirect_jmp = false;
+                        }
+                        "return" => hardening.sls_return = true,
+                        "indirect-jmp" => hardening.sls_indirect_jmp = true,
+                        "all" => {
+                            hardening.sls_return = true;
+                            hardening.sls_indirect_jmp = true;
+                        }
+                        other => {
+                            eprint_diagnostic(format!(
+                                "badc: error: unsupported argument `{other}` to `-mharden-sls=` \
+                                 (supported: none, return, indirect-jmp, all)"
+                            ));
+                            std::process::exit(1);
+                        }
+                    }
+                }
+            }
+            // `-fcf-protection=<kind>`: x86 control-flow enforcement.
+            // `branch` is indirect-branch tracking, the `endbr64` landing
+            // pads. `return` and `full` add the shadow stack, which needs
+            // a return path badc does not emit.
+            s if s.starts_with("-fcf-protection=") => {
+                match &s["-fcf-protection=".len()..] {
+                    "none" => hardening.cf_protection_branch = false,
+                    "branch" => hardening.cf_protection_branch = true,
+                    other => {
+                        eprint_diagnostic(format!(
+                            "badc: error: unsupported argument `{other}` to `-fcf-protection=` \
+                             (supported: none, branch)"
+                        ));
+                        std::process::exit(1);
+                    }
+                }
+            }
+            // A `+`-joined AArch64 feature list. Return-address signing
+            // (`pac-ret`, and `standard` which implies it) needs the
+            // pointer-authentication prologue/epilogue pair badc does not
+            // emit, so it is rejected rather than reduced to `bti`.
+            s if s.starts_with("-mbranch-protection=") => {
+                for feature in s["-mbranch-protection=".len()..].split('+') {
+                    match feature {
+                        "none" => hardening.bti = false,
+                        "bti" => hardening.bti = true,
+                        other => {
+                            eprint_diagnostic(format!(
+                                "badc: error: unsupported feature `{other}` in \
+                                 `-mbranch-protection=` (supported: none, bti)"
+                            ));
+                            std::process::exit(1);
+                        }
+                    }
+                }
+            }
             // Position-independent relocatable output: no absolute
             // relocation reaches the object, so a consumer that
             // relocates it wholesale at load (or forbids absolute
@@ -1078,6 +1175,7 @@ fn run() {
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.pic = fpic;
+        reloc_opts.hardening = hardening;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -1645,6 +1743,7 @@ fn run() {
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.pic = fpic;
+        reloc_opts.hardening = hardening;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -1768,6 +1867,7 @@ fn run() {
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.pic = fpic;
+        reloc_opts.hardening = hardening;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }

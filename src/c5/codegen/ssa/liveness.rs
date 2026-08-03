@@ -3,11 +3,12 @@
 //! Liveness is the standard backward dataflow over the control-flow
 //! graph, with phi semantics modelled on the edges: a phi operand is
 //! a use at the end of the corresponding predecessor (live-out of that
-//! predecessor), and a phi result is a definition at its block head.
-//! This is the lazy-copy view of out-of-SSA -- the predecessor-exit
-//! move that materialises a phi operand executes on the edge, so the
-//! operand is live up to that edge and the result from the join
-//! onward.
+//! predecessor), and every phi result of a block is a definition at
+//! that block's head -- one program point shared by all of them, since
+//! one parallel copy per edge writes them together. This is the
+//! lazy-copy view of out-of-SSA: the predecessor-exit move that
+//! materialises a phi operand executes on the edge, so the operand is
+//! live up to that edge and the result from the join onward.
 //!
 //! The interference query answers whether two SSA values are live at
 //! the same program point. With one definition per value, two ranges
@@ -331,6 +332,15 @@ impl Liveness {
             return false;
         }
         let b = self.block_of[y as usize];
+        // Two phis of one block are defined at the same point, so they
+        // always overlap. Tested before the index comparison below, which
+        // would read the later-indexed phi as defined afterwards.
+        if self.block_of[x as usize] == b
+            && matches!(func.insts[x as usize], Inst::Phi { .. })
+            && matches!(func.insts[y as usize], Inst::Phi { .. })
+        {
+            return true;
+        }
         // A value defined later in the same block is not yet live at
         // `y`'s definition.
         if self.block_of[x as usize] == b && x > y {
@@ -473,7 +483,15 @@ impl Liveness {
                 }
                 _ => {}
             }
-            for idx in (blk.inst_range.start..blk.inst_range.end).rev() {
+            // The block's phi results occupy the leading run of its
+            // range and are handled after the sweep, together.
+            let mut phi_end = blk.inst_range.start;
+            while phi_end < blk.inst_range.end
+                && matches!(func.insts[phi_end as usize], Inst::Phi { .. })
+            {
+                phi_end += 1;
+            }
+            for idx in (phi_end..blk.inst_range.end).rev() {
                 let inst = &func.insts[idx as usize];
                 if super::reg_alloc::produces_value(inst) {
                     let di = node_of[idx as usize];
@@ -490,6 +508,21 @@ impl Liveness {
                             live.insert(op, node_of);
                         }
                     });
+                }
+            }
+            // One parallel copy per incoming edge writes every phi of the
+            // block, so each interferes with every value live at entry and
+            // with every other phi -- a dead phi included, since the copy
+            // writes it too.
+            for idx in blk.inst_range.start..phi_end {
+                live.insert(idx, node_of);
+            }
+            for idx in blk.inst_range.start..phi_end {
+                let di = node_of[idx as usize];
+                for &nd in &live.nodes {
+                    if nd != di {
+                        pairs.push(((di.min(nd) as u64) << 32) | di.max(nd) as u64);
+                    }
                 }
             }
         }
@@ -976,6 +1009,71 @@ mod tests {
         for v in 0..4 as ValueId {
             assert_eq!(g.degree(v), row(v).len(), "degree counts a row once");
         }
+    }
+
+    /// One parallel copy per incoming edge writes every phi of a block,
+    /// so the phis interfere pairwise however the block orders them and
+    /// whether or not each is itself read. Without the edge the colourer
+    /// can place a dead phi on a live one and the copy destroys it.
+    #[test]
+    fn phis_of_one_block_always_interfere() {
+        // b0: v0=Imm(0); v1=Imm(7); Jmp b1
+        // b1: v2=Phi[b0:v0, b1:v4]   (live: the counter)
+        //     v3=Phi[b0:v1, b1:v1]   (dead: nothing reads it)
+        //     v4=BinopI add v2,1; Bnz v4 -> b1 else b2
+        // b2: Return v2
+        let insts = alloc::vec![
+            Inst::Imm(0),
+            Inst::Imm(7),
+            Inst::Phi {
+                incoming: alloc::vec![(0, 0), (1, 4)],
+                kind: LoadKind::I64,
+            },
+            Inst::Phi {
+                incoming: alloc::vec![(0, 1), (1, 1)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 2,
+                rhs_imm: 1,
+            },
+        ];
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: Terminator::Jmp(1),
+                exit_acc: 1,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 2..5,
+                terminator: Terminator::Bnz {
+                    cond: 4,
+                    target: 1,
+                    fall_through: 2,
+                },
+                exit_acc: 4,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 5..5,
+                terminator: Terminator::Return(2),
+                exit_acc: 2,
+            },
+        ];
+        let func = func_with(insts, blocks);
+        let live = Liveness::compute(&func);
+        let g = live.interference(&func, &identity(func.insts.len()));
+        assert!(
+            g.neighbors(3).contains(&2) && g.neighbors(2).contains(&3),
+            "the dead phi v3 must interfere with the live phi v2 of the same block",
+        );
+        assert!(
+            live.interfere(&func, 2, 3) && live.interfere(&func, 3, 2),
+            "the per-pair query must agree with the graph",
+        );
     }
 
     #[test]

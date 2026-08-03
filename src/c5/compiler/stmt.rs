@@ -674,7 +674,12 @@ impl Compiler {
         Ok(())
     }
 
-    fn parse_block_stmt(&mut self) -> Result<super::super::ast::StmtId, C5Error> {
+    /// Parse a `{ ... }` block. Returns the block statement and the index,
+    /// within its items, of the last item the source wrote -- what a
+    /// statement expression takes its value from. The scope-exit
+    /// statements this appends (`cleanup` destructor calls, the VLA stack
+    /// restore) follow that item, so the block's last item is not it.
+    fn parse_block_stmt(&mut self) -> Result<(super::super::ast::StmtId, Option<usize>), C5Error> {
         self.next()?;
         self.cleanup_scopes.push(alloc::vec::Vec::new());
         // C99 6.2.1: a block introduces a new scope for struct,
@@ -768,6 +773,9 @@ impl Compiler {
                 top_level_ids.push(item_id);
             }
         }
+        // Everything pushed from here on is a scope exit the parser
+        // synthesizes, not something the source wrote.
+        let mut value_item = top_level_ids.len().checked_sub(1);
         // Fall-through exit: run this block's `__attribute__((cleanup))`
         // functions in reverse declaration order, before any VLA arena
         // reclaim below (a cleanup may read VLA storage). When the block
@@ -808,6 +816,7 @@ impl Compiler {
             bracketed.extend_from_slice(&top_level_ids);
             bracketed.push(exit);
             top_level_ids = bracketed;
+            value_item = value_item.map(|i| i + 1);
         }
         // Wrap the collected top-level stmt ids into a
         // `Stmt::Compound`. Only this Compound references the
@@ -869,14 +878,15 @@ impl Compiler {
         // outer scope already holds.
         self.tag_scopes.pop();
         self.local_label_scopes.pop();
-        Ok(block_id)
+        Ok((block_id, value_item))
     }
 
     /// Parse the body of a GCC statement expression `({ ... })`. On
     /// entry the leading `(` has been consumed and the lexer is at
     /// `{`; `parse_block_stmt` handles the C99 6.2.1 block scope.
-    /// The value type is that of the last expression-statement
-    /// (`Ty::Int` fallback for an empty or non-expression tail);
+    /// The value and its type come from the last expression-statement
+    /// the block's source wrote (`Ty::Int` fallback for an empty or
+    /// non-expression tail), which the block reports as `value_item`;
     /// records the node as the current expression accumulator.
     pub(super) fn parse_stmt_expr_body(&mut self) -> Result<(), C5Error> {
         let arena_before = self.ast.stmts.len();
@@ -894,9 +904,9 @@ impl Compiler {
         // specifier carriers, which the block's own declarations reset
         // or consume, and restore them for the enclosing parse.
         let specifiers = self.pending.take_decl_specifiers();
-        let block = self.parse_block_stmt();
+        let parsed = self.parse_block_stmt();
         self.pending.restore_decl_specifiers(specifiers);
-        let block = block?;
+        let (block, value_item) = parsed?;
         self.ast_vstack.truncate(vstack_depth);
         let arena_after = self.ast.stmts.len();
         // The block's statements are sub-statements of this
@@ -905,26 +915,36 @@ impl Compiler {
         self.stmt_expr_arena_ranges
             .push((arena_before, arena_after));
         self.consume(b')', "`)` expected to close statement expression")?;
-        let ty = self.stmt_expr_result_ty(block);
+        let value_item = value_item.map_or(super::super::ast::NO_VALUE_ITEM, |i| i as u32);
+        let ty = self.stmt_expr_result_ty(block, value_item);
         let pos = self.ast_src_pos();
-        let id = self
-            .ast
-            .push_expr(super::super::ast::Expr::StmtExpr { block, ty }, pos);
+        let id = self.ast.push_expr(
+            super::super::ast::Expr::StmtExpr {
+                block,
+                ty,
+                value_item,
+            },
+            pos,
+        );
         self.ast_acc = Some(id);
         self.ty = ty;
         Ok(())
     }
 
-    /// The value type of a statement expression: the type of its
-    /// final expression-statement, labels stripped, or `Ty::Int`
-    /// when the trailing block-item is not an expression statement.
-    fn stmt_expr_result_ty(&self, block: super::super::ast::StmtId) -> i64 {
+    /// The value type of a statement expression: the type of the block
+    /// item at `value_item`, labels stripped, or `Ty::Int` when that
+    /// item is not an expression statement.
+    fn stmt_expr_result_ty(&self, block: super::super::ast::StmtId, value_item: u32) -> i64 {
         use super::super::ast::{BlockItem, Stmt};
+        if value_item == super::super::ast::NO_VALUE_ITEM {
+            return super::super::token::Ty::Int as i64;
+        }
         let mut last = match self.ast.stmt(block) {
             // A single-item block yields the bare statement (see
             // `ast_wrap_block_items`); a multi-item block yields a
-            // `Stmt::Compound` whose last item carries the value.
-            Stmt::Compound(items) => match items.last() {
+            // `Stmt::Compound` whose item at `value_item` carries the
+            // value.
+            Stmt::Compound(items) => match items.get(value_item as usize) {
                 Some(BlockItem::Stmt(s)) => *s,
                 _ => return super::super::token::Ty::Int as i64,
             },

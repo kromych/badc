@@ -6,6 +6,44 @@
 //! [`every_registered_fixture_exists`] validates all of them on every
 //! host. `tests/cli_fixture_smoke.rs` is a separate crate and cannot
 //! import these; it checks its own two tables the same way.
+//!
+//! An expected value is derived, never guessed: every registration
+//! added from the compile-only sweep was first run under `cc` (Apple
+//! clang) on macOS/arm64 and `gcc` on linux/aarch64 and linux/x86_64,
+//! at `-O0` and `-O2`, twice each. A fixture that does not resolve to
+//! one value across those runs is excluded here with its reason rather
+//! than pinned to whatever the current host happens to produce:
+//!
+//!   * `syscall_ptr_table.c` -- writes a fixed path under `/tmp` and
+//!     its result depends on what an earlier run left there (the
+//!     reference compiler returns 0 then 1); it also calls variadic
+//!     `open` / `fcntl` through non-variadic prototypes, undefined per
+//!     C99 6.5.2.2p9.
+//!   * `computed_include_pp_number.c` -- its computed `#include`
+//!     resolves against the fixture's own directory, which these
+//!     runners cannot offer: they pass the source as a string with no
+//!     path. `tests/cli_fixture_smoke.rs` compiles and runs it as a
+//!     file.
+//!   * `getopt_unistd_globals.c` -- the exit code encodes each libc's
+//!     unspecified startup value for `optopt` (0 on the BSD-derived
+//!     libc, `'?'` on glibc), so no single value fits. TODO: on ELF,
+//!     `emit_native_with_options` also faults on a store to a
+//!     `#pragma binding(data ..)` import and reads one back wrong,
+//!     where the object-then-link path is correct.
+//!   * `inline_asm_section_label.c` -- a label defined inside a
+//!     file-scope `asm` section resolves only once the objects are
+//!     merged; direct lowering and the JIT loader both report the
+//!     symbol the template names as undefined. It is registered in
+//!     `NATIVE_PE_X64_FIXTURES`, which links, and run by the CLI list
+//!     in `tests/cli_fixture_smoke.rs`.
+//!   * `aarch64_hwcap_auxv.c` -- `<sys/auxv.h>` and the `HWCAP_*`
+//!     macros are Linux-only: the macOS-hosted tables reject the
+//!     compile, and on Windows every check sits behind `__linux__` /
+//!     `__aarch64__`, leaving a row that asserts nothing.
+//!
+//! TODO: `NATIVE_PE_ARM64_FIXTURES` takes none of them -- it runs only
+//! on a windows/aarch64 runner or linux/aarch64 under WINE, neither of
+//! which was available to validate against.
 
 /// Native-runnable subset of the fixture suite. Each entry is the
 /// fixture's filename plus the exit code it yields under the VM
@@ -911,6 +949,54 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("switch_const_index_jump_table_fold.c", 0),
     ("computed_goto_label_only_target.c", 0),
     ("zero_length_array_member_marker.c", 0),
+    // Registered from the compile-only sweep; see the module comment.
+    ("alloca_basic.c", 0),
+    ("asm_memory_barrier_forwarding.c", 0),
+    ("binary_integer_literal.c", 0),
+    ("call_arg_int_to_double_conversion.c", 0),
+    ("call_indirect_target_scratch_collision.c", 0),
+    ("clock_monotonic_advances.c", 0),
+    ("compound_literal_file_scope.c", 0),
+    ("compound_literal_nested_subexpr.c", 0),
+    ("const_float_init_int_cast.c", 0),
+    ("const_float_init_int_lead.c", 0),
+    ("deferred_outer_2d_array_stride.c", 0),
+    ("file_scope_asm_incbin.c", 0),
+    ("file_scope_asm_weak_set.c", 0),
+    ("float_arith_in_static_init.c", 0),
+    ("forward_fn_ptr_in_static_init.c", 0),
+    ("function_type_typedef.c", 0),
+    ("include_macro_operand.c", 0),
+    ("inline_asm_a64_hvc_inout.c", 0),
+    ("inline_recursive_frame_bound.c", 0),
+    ("inline_volatile_callee.c", 0),
+    ("int_to_float_assign_conversion.c", 0),
+    ("large_struct_copy.c", 0),
+    ("local_array_runtime_init.c", 0),
+    ("negative_float_in_array_init.c", 0),
+    ("netinet_addr_class_macros.c", 0),
+    ("object_macro_to_fn_macro_rescan.c", 0),
+    ("pointer_to_array_struct_field.c", 0),
+    ("predefined_macros_are_defined.c", 0),
+    ("preinc_narrow_lvalue_wraps.c", 0),
+    ("setlocale_decimal_point.c", 0),
+    ("sizeof_deref_array_clears_decay.c", 0),
+    ("sizeof_function_call_truncation.c", 0),
+    ("sizeof_pointer_to_array_subscript.c", 0),
+    ("static_assert_and_warning.c", 0),
+    ("stdint_min_macros_type_and_value.c", 0),
+    ("stdio_fgetpos_roundtrip.c", 0),
+    ("symbol_inner_array_size_no_leak.c", 0),
+    ("tail_call_args_from_spill.c", 0),
+    ("three_dim_array_indexing.c", 0),
+    ("two_d_array_param_indexing.c", 0),
+    ("two_d_float_array_partial_init.c", 0),
+    ("two_d_stride_no_leak_across_exprs.c", 0),
+    ("unary_plus_preserves_float.c", 0),
+    ("volatile_local_mem2reg.c", 0),
+    ("volatile_read_pair.c", 0),
+    ("volatile_store_reload.c", 0),
+    ("zero_sign_extension_32bit.c", 0),
 ];
 
 /// Same shape as `super::native::NATIVE_FIXTURES`. The two tables
@@ -1461,13 +1547,6 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("for_init_multiple_declarators.c", 0),
     ("compound_literal_member_operand.c", 0),
     ("signal_nsig.c", 0),
-    // thread_local_initializer.c works in isolation but fails when
-    // the test prelude pulls in <stdio.h>'s static lazy-resolver
-    // state. The TLS template offset assignment interacts with
-    // the static-locals + Glo bookkeeping in a way that shifts
-    // the loader's per-thread view; tracked separately, doesn't
-    // block this lane.
-    // ("thread_local_initializer.c", 0),
     // Per-thread isolation: spawn a pthread, mutate TLS in the
     // child, join, verify main's view is untouched. Fails in any
     // accidental "TLS lowered as a regular global" regression.
@@ -1520,6 +1599,56 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("switch_const_index_jump_table_fold.c", 0),
     ("computed_goto_label_only_target.c", 0),
     ("zero_length_array_member_marker.c", 0),
+    // Registered from the compile-only sweep; see the module comment.
+    ("aarch64_hwcap_auxv.c", 0),
+    ("alloca_basic.c", 0),
+    ("asm_memory_barrier_forwarding.c", 0),
+    ("binary_integer_literal.c", 0),
+    ("call_arg_int_to_double_conversion.c", 0),
+    ("call_indirect_target_scratch_collision.c", 0),
+    ("clock_monotonic_advances.c", 0),
+    ("compound_literal_file_scope.c", 0),
+    ("compound_literal_nested_subexpr.c", 0),
+    ("const_float_init_int_cast.c", 0),
+    ("const_float_init_int_lead.c", 0),
+    ("deferred_outer_2d_array_stride.c", 0),
+    ("file_scope_asm_incbin.c", 0),
+    ("file_scope_asm_weak_set.c", 0),
+    ("float_arith_in_static_init.c", 0),
+    ("forward_fn_ptr_in_static_init.c", 0),
+    ("function_type_typedef.c", 0),
+    ("include_macro_operand.c", 0),
+    ("inline_asm_a64_hvc_inout.c", 0),
+    ("inline_recursive_frame_bound.c", 0),
+    ("inline_volatile_callee.c", 0),
+    ("int_to_float_assign_conversion.c", 0),
+    ("large_struct_copy.c", 0),
+    ("local_array_runtime_init.c", 0),
+    ("negative_float_in_array_init.c", 0),
+    ("netinet_addr_class_macros.c", 0),
+    ("object_macro_to_fn_macro_rescan.c", 0),
+    ("pointer_to_array_struct_field.c", 0),
+    ("predefined_macros_are_defined.c", 0),
+    ("preinc_narrow_lvalue_wraps.c", 0),
+    ("setlocale_decimal_point.c", 0),
+    ("sizeof_deref_array_clears_decay.c", 0),
+    ("sizeof_function_call_truncation.c", 0),
+    ("sizeof_pointer_to_array_subscript.c", 0),
+    ("static_assert_and_warning.c", 0),
+    ("stdint_min_macros_type_and_value.c", 0),
+    ("stdio_fgetpos_roundtrip.c", 0),
+    ("symbol_inner_array_size_no_leak.c", 0),
+    ("tail_call_args_from_spill.c", 0),
+    ("three_dim_array_indexing.c", 0),
+    ("two_d_array_param_indexing.c", 0),
+    ("two_d_float_array_partial_init.c", 0),
+    ("two_d_stride_no_leak_across_exprs.c", 0),
+    ("unary_plus_preserves_float.c", 0),
+    ("volatile_local_mem2reg.c", 0),
+    ("volatile_read_pair.c", 0),
+    ("volatile_store_reload.c", 0),
+    ("zero_sign_extension_32bit.c", 0),
+    ("thread_local_initializer.c", 0),
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
@@ -2041,9 +2170,6 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("for_init_multiple_declarators.c", 0),
     ("compound_literal_member_operand.c", 0),
     ("signal_nsig.c", 0),
-    // See native_elf.rs for the prelude / TLS layout interaction
-    // that disables thread_local_initializer on Linux ELF.
-    // ("thread_local_initializer.c", 0),
     // Per-thread isolation via pthread_create.
     ("thread_local_per_thread.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)`. SysV pulls FP
@@ -2098,6 +2224,56 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("switch_const_index_jump_table_fold.c", 0),
     ("computed_goto_label_only_target.c", 0),
     ("zero_length_array_member_marker.c", 0),
+    // Registered from the compile-only sweep; see the module comment.
+    ("aarch64_hwcap_auxv.c", 0),
+    ("alloca_basic.c", 0),
+    ("asm_memory_barrier_forwarding.c", 0),
+    ("binary_integer_literal.c", 0),
+    ("call_arg_int_to_double_conversion.c", 0),
+    ("call_indirect_target_scratch_collision.c", 0),
+    ("clock_monotonic_advances.c", 0),
+    ("compound_literal_file_scope.c", 0),
+    ("compound_literal_nested_subexpr.c", 0),
+    ("const_float_init_int_cast.c", 0),
+    ("const_float_init_int_lead.c", 0),
+    ("deferred_outer_2d_array_stride.c", 0),
+    ("file_scope_asm_incbin.c", 0),
+    ("file_scope_asm_weak_set.c", 0),
+    ("float_arith_in_static_init.c", 0),
+    ("forward_fn_ptr_in_static_init.c", 0),
+    ("function_type_typedef.c", 0),
+    ("include_macro_operand.c", 0),
+    ("inline_asm_a64_hvc_inout.c", 0),
+    ("inline_recursive_frame_bound.c", 0),
+    ("inline_volatile_callee.c", 0),
+    ("int_to_float_assign_conversion.c", 0),
+    ("large_struct_copy.c", 0),
+    ("local_array_runtime_init.c", 0),
+    ("negative_float_in_array_init.c", 0),
+    ("netinet_addr_class_macros.c", 0),
+    ("object_macro_to_fn_macro_rescan.c", 0),
+    ("pointer_to_array_struct_field.c", 0),
+    ("predefined_macros_are_defined.c", 0),
+    ("preinc_narrow_lvalue_wraps.c", 0),
+    ("setlocale_decimal_point.c", 0),
+    ("sizeof_deref_array_clears_decay.c", 0),
+    ("sizeof_function_call_truncation.c", 0),
+    ("sizeof_pointer_to_array_subscript.c", 0),
+    ("static_assert_and_warning.c", 0),
+    ("stdint_min_macros_type_and_value.c", 0),
+    ("stdio_fgetpos_roundtrip.c", 0),
+    ("symbol_inner_array_size_no_leak.c", 0),
+    ("tail_call_args_from_spill.c", 0),
+    ("three_dim_array_indexing.c", 0),
+    ("two_d_array_param_indexing.c", 0),
+    ("two_d_float_array_partial_init.c", 0),
+    ("two_d_stride_no_leak_across_exprs.c", 0),
+    ("unary_plus_preserves_float.c", 0),
+    ("volatile_local_mem2reg.c", 0),
+    ("volatile_read_pair.c", 0),
+    ("volatile_store_reload.c", 0),
+    ("zero_sign_extension_32bit.c", 0),
+    ("thread_local_initializer.c", 0),
 ];
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on
@@ -2508,6 +2684,57 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("switch_const_index_jump_table_fold.c", 0),
     ("computed_goto_label_only_target.c", 0),
     ("zero_length_array_member_marker.c", 0),
+    // Registered from the compile-only sweep; see the module comment.
+    // `clock_monotonic_advances.c`, `getopt_unistd_globals.c` and
+    // `syscall_ptr_table.c` have no Win32 binding for the entry
+    // point they call; `sizeof_pointer_to_array_subscript.c` and
+    // `zero_sign_extension_32bit.c` assert 64-bit `long`, which
+    // LLP64 does not provide.
+    ("alloca_basic.c", 0),
+    ("asm_memory_barrier_forwarding.c", 0),
+    ("binary_integer_literal.c", 0),
+    ("call_arg_int_to_double_conversion.c", 0),
+    ("call_indirect_target_scratch_collision.c", 0),
+    ("compound_literal_file_scope.c", 0),
+    ("compound_literal_nested_subexpr.c", 0),
+    ("const_float_init_int_cast.c", 0),
+    ("const_float_init_int_lead.c", 0),
+    ("deferred_outer_2d_array_stride.c", 0),
+    ("file_scope_asm_incbin.c", 0),
+    ("file_scope_asm_weak_set.c", 0),
+    ("float_arith_in_static_init.c", 0),
+    ("forward_fn_ptr_in_static_init.c", 0),
+    ("function_type_typedef.c", 0),
+    ("include_macro_operand.c", 0),
+    ("inline_asm_a64_hvc_inout.c", 0),
+    ("inline_asm_section_label.c", 42),
+    ("inline_recursive_frame_bound.c", 0),
+    ("inline_volatile_callee.c", 0),
+    ("int_to_float_assign_conversion.c", 0),
+    ("large_struct_copy.c", 0),
+    ("local_array_runtime_init.c", 0),
+    ("negative_float_in_array_init.c", 0),
+    ("netinet_addr_class_macros.c", 0),
+    ("object_macro_to_fn_macro_rescan.c", 0),
+    ("pointer_to_array_struct_field.c", 0),
+    ("predefined_macros_are_defined.c", 0),
+    ("preinc_narrow_lvalue_wraps.c", 0),
+    ("setlocale_decimal_point.c", 0),
+    ("sizeof_deref_array_clears_decay.c", 0),
+    ("sizeof_function_call_truncation.c", 0),
+    ("static_assert_and_warning.c", 0),
+    ("stdint_min_macros_type_and_value.c", 0),
+    ("stdio_fgetpos_roundtrip.c", 0),
+    ("symbol_inner_array_size_no_leak.c", 0),
+    ("tail_call_args_from_spill.c", 0),
+    ("three_dim_array_indexing.c", 0),
+    ("two_d_array_param_indexing.c", 0),
+    ("two_d_float_array_partial_init.c", 0),
+    ("two_d_stride_no_leak_across_exprs.c", 0),
+    ("unary_plus_preserves_float.c", 0),
+    ("volatile_local_mem2reg.c", 0),
+    ("volatile_read_pair.c", 0),
+    ("volatile_store_reload.c", 0),
 ];
 
 /// Same fixture set as `native_pe_x64`, since the Windows-flavored
@@ -3547,6 +3774,57 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("switch_const_index_jump_table_fold.c", 0),
     ("computed_goto_label_only_target.c", 0),
     ("zero_length_array_member_marker.c", 0),
+    // Registered from the compile-only sweep; see the module comment.
+    // `setlocale_decimal_point.c` is absent by design: the JIT runs
+    // fixtures inside the test process, so its `setlocale(LC_ALL, ..)`
+    // outlives the run and the second pass over this table then
+    // reads the changed decimal point at startup.
+    ("alloca_basic.c", 0),
+    ("asm_memory_barrier_forwarding.c", 0),
+    ("binary_integer_literal.c", 0),
+    ("call_arg_int_to_double_conversion.c", 0),
+    ("call_indirect_target_scratch_collision.c", 0),
+    ("clock_monotonic_advances.c", 0),
+    ("compound_literal_file_scope.c", 0),
+    ("compound_literal_nested_subexpr.c", 0),
+    ("const_float_init_int_cast.c", 0),
+    ("const_float_init_int_lead.c", 0),
+    ("deferred_outer_2d_array_stride.c", 0),
+    ("file_scope_asm_incbin.c", 0),
+    ("file_scope_asm_weak_set.c", 0),
+    ("float_arith_in_static_init.c", 0),
+    ("forward_fn_ptr_in_static_init.c", 0),
+    ("function_type_typedef.c", 0),
+    ("include_macro_operand.c", 0),
+    ("inline_asm_a64_hvc_inout.c", 0),
+    ("inline_recursive_frame_bound.c", 0),
+    ("inline_volatile_callee.c", 0),
+    ("int_to_float_assign_conversion.c", 0),
+    ("large_struct_copy.c", 0),
+    ("local_array_runtime_init.c", 0),
+    ("negative_float_in_array_init.c", 0),
+    ("netinet_addr_class_macros.c", 0),
+    ("object_macro_to_fn_macro_rescan.c", 0),
+    ("pointer_to_array_struct_field.c", 0),
+    ("predefined_macros_are_defined.c", 0),
+    ("preinc_narrow_lvalue_wraps.c", 0),
+    ("sizeof_deref_array_clears_decay.c", 0),
+    ("sizeof_function_call_truncation.c", 0),
+    ("sizeof_pointer_to_array_subscript.c", 0),
+    ("static_assert_and_warning.c", 0),
+    ("stdint_min_macros_type_and_value.c", 0),
+    ("stdio_fgetpos_roundtrip.c", 0),
+    ("symbol_inner_array_size_no_leak.c", 0),
+    ("tail_call_args_from_spill.c", 0),
+    ("three_dim_array_indexing.c", 0),
+    ("two_d_array_param_indexing.c", 0),
+    ("two_d_float_array_partial_init.c", 0),
+    ("two_d_stride_no_leak_across_exprs.c", 0),
+    ("unary_plus_preserves_float.c", 0),
+    ("volatile_local_mem2reg.c", 0),
+    ("volatile_read_pair.c", 0),
+    ("volatile_store_reload.c", 0),
+    ("zero_sign_extension_32bit.c", 0),
 ];
 
 /// Every table above, named so a failure points at the stale entry's table.
@@ -3583,6 +3861,49 @@ fn every_registered_fixture_exists() {
         "{} of {} fixture registrations name a file absent from tests/fixtures/c:\n  {}",
         missing.len(),
         checked,
+        missing.join("\n  ")
+    );
+}
+
+/// Names in a row commented out of a table above. A disabled row is
+/// invisible to [`every_registered_fixture_exists`] -- the compiler
+/// never sees it -- so the fixture it names can be renamed or deleted
+/// while the row stays behind describing a file that no longer exists.
+fn disabled_registrations(source: &str) -> Vec<(usize, String)> {
+    let mut found = Vec::new();
+    for (i, line) in source.lines().enumerate() {
+        let Some(rest) = line.trim_start().strip_prefix("//") else {
+            continue;
+        };
+        let Some(rest) = rest.trim_start().strip_prefix("(\"") else {
+            continue;
+        };
+        let Some(name) = rest.split('"').next() else {
+            continue;
+        };
+        if name.ends_with(".c") {
+            found.push((i + 1, name.to_string()));
+        }
+    }
+    found
+}
+
+/// Hold every disabled row to the same existence rule as a live one, so
+/// a row parked for a known interaction cannot rot into one that names
+/// nothing. Zero disabled rows is a valid state.
+#[test]
+fn every_disabled_registration_names_a_fixture() {
+    let rows = disabled_registrations(include_str!("fixture_tables.rs"));
+    let missing: Vec<String> = rows
+        .iter()
+        .filter(|(_, name)| !super::fixture_path(name).exists())
+        .map(|(line, name)| format!("line {line}: {name}"))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "{} of {} disabled registrations name a file absent from tests/fixtures/c:\n  {}",
+        missing.len(),
+        rows.len(),
         missing.join("\n  ")
     );
 }

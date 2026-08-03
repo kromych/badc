@@ -7,9 +7,12 @@
 //! source needs must be in it.
 //!
 //! This runs the badc binary against every fixture for every supported
-//! Linux target and asserts the build succeeds. It is a compile-and-
-//! link check, not a runtime one: a fixture that runs into its own trap
-//! is still swept, because nothing here executes the result.
+//! Linux target and asserts the build succeeds. The sweep itself is a
+//! compile-and-link check: a fixture that runs into its own trap is
+//! still swept, because the sweep does not execute the result.
+//! [`LINKED_IMAGE_RUN_FIXTURES`] then executes a subset on a host whose
+//! triple matches one of [`SMOKE_TARGETS`], which is the only coverage
+//! any fixture gets through the CLI's object-then-link writer.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -210,6 +213,37 @@ fn every_table_entry_names_a_fixture() {
             ));
         }
     }
+    for (i, (name, _)) in LINKED_IMAGE_RUN_FIXTURES.iter().enumerate() {
+        checked += 1;
+        if !dir.join(name).exists() {
+            bad.push(format!("LINKED_IMAGE_RUN_FIXTURES: {name}"));
+        }
+        if LINKED_IMAGE_RUN_FIXTURES[..i]
+            .iter()
+            .any(|(n, _)| n == name)
+        {
+            bad.push(format!("LINKED_IMAGE_RUN_FIXTURES: {name} listed twice"));
+        }
+        // A fixture the sweep never builds cannot be run either.
+        if COMPILE_SKIPLIST.contains(name) || DEAD_BRANCH_NEEDS_OPTIMIZE.contains(name) {
+            bad.push(format!(
+                "LINKED_IMAGE_RUN_FIXTURES: {name} is excluded from the sweep"
+            ));
+        }
+        if let Some(target) = host_smoke_target()
+            && TARGET_SPECIFIC_ASM.contains(&(name, target))
+        {
+            bad.push(format!(
+                "LINKED_IMAGE_RUN_FIXTURES: {name} does not build for {target}"
+            ));
+        }
+    }
+    for (line, name) in disabled_entries(include_str!("cli_fixture_smoke.rs")) {
+        checked += 1;
+        if !dir.join(&name).exists() {
+            bad.push(format!("disabled entry at line {line}: {name}"));
+        }
+    }
     assert!(
         bad.is_empty(),
         "{} of {} table entries are stale ({} holds the fixtures):\n  {}",
@@ -218,6 +252,30 @@ fn every_table_entry_names_a_fixture() {
         dir.display(),
         bad.join("\n  ")
     );
+}
+
+/// Fixture names in rows commented out of the tables above, in either
+/// shape they take: a bare `"name.c",` or a `("name.c", ..)` tuple. The
+/// compiler never sees a disabled row, so without this scan the fixture
+/// it names can be renamed or deleted and the row rots in place.
+fn disabled_entries(source: &str) -> Vec<(usize, String)> {
+    let mut found = Vec::new();
+    for (i, line) in source.lines().enumerate() {
+        let Some(rest) = line.trim_start().strip_prefix("//") else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let Some(rest) = rest.strip_prefix("(\"").or_else(|| rest.strip_prefix('"')) else {
+            continue;
+        };
+        let Some(name) = rest.split('"').next() else {
+            continue;
+        };
+        if name.ends_with(".c") {
+            found.push((i + 1, name.to_string()));
+        }
+    }
+    found
 }
 
 #[test]
@@ -282,6 +340,143 @@ fn every_fixture_compiles_standalone_for_linux() {
             failures.join("\n  ")
         );
     }
+}
+
+/// Fixtures the sweep above additionally *runs*, with the exit code each
+/// must produce.
+///
+/// The backend parity tables in `src/c5/tests/fixture_tables.rs` drive
+/// `emit_native_with_options`, which lays out and writes one image in a
+/// single pass. The CLI emits `ET_REL`, merges the objects and the
+/// runtime with `link_native_objects`, runs the per-arch PLT pass, and
+/// writes through `write_native_image_from_merged_ex`, so section
+/// addresses, symbol values and relocation targets are decided by
+/// different code. Only the two PE tables and the hand-written sources
+/// in `cli_linker_smoke.rs` reached the second path before this list.
+///
+/// A defect there surfaces as a wrong section address, symbol value or
+/// relocation, so the subset takes the shortest fixture that reads one
+/// of those back at run time, per class: data relocations (including
+/// one-past-the-end), static initializers holding a function or
+/// libc-symbol address, over-aligned and page-aligned sections, named
+/// sections and labels from file-scope `asm`, weak binding and aliases,
+/// tentative definitions in `.bss`, `PT_TLS` built from merged `.tdata`
+/// / `.tbss`, jump and computed-goto tables read as relocated label
+/// differences, aggregates moved through the merged libc PLT, and
+/// string-literal and flexible-array payloads in `.rodata`. Volume adds
+/// nothing once a class is covered.
+///
+/// Values are these programs' own exit codes, checked here rather than
+/// copied from another table, so a wrong one fails instead of drifting.
+const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
+    ("data_reloc_one_past_end.c", 10),
+    ("static_init_cast_funcptr.c", 0),
+    ("static_init_paren_relocation.c", 0),
+    ("sys_addr_in_static_init.c", 42),
+    ("variadic_libc_fnptr_static_init.c", 0),
+    ("forward_fn_ptr_in_static_init.c", 0),
+    ("overaligned_data_placement.c", 0),
+    ("overaligned_type_placement.c", 0),
+    ("page_multiple_alignment.c", 0),
+    ("file_scope_asm_decls.c", 0),
+    ("file_scope_asm_label_binding.c", 42),
+    ("file_scope_asm_section_placement.c", 42),
+    ("file_scope_asm_rept_type_size.c", 42),
+    ("file_scope_asm_incbin.c", 0),
+    ("file_scope_asm_weak_set.c", 0),
+    ("inline_asm_section_label.c", 42),
+    ("attribute_weak_alias.c", 0),
+    ("weak_definition_not_inlined.c", 42),
+    ("weak_extern_data_address.c", 0),
+    ("tentative_array_definition.c", 0),
+    ("tentative_deferred_array_grows.c", 0),
+    ("thread_local_basic.c", 0),
+    ("thread_local_gnu.c", 0),
+    ("thread_local_initializer.c", 0),
+    ("thread_local_per_thread.c", 0),
+    ("switch_jump_table_dense.c", 0),
+    ("switch_jump_table_sparse_kept.c", 0),
+    ("computed_goto_static_table.c", 0),
+    ("indirect_struct_return.c", 0),
+    ("hfa_struct_return.c", 0),
+    ("large_struct_copy.c", 0),
+    ("array_compound_literal_static_init.c", 0),
+    ("flex_array_member_static_init.c", 0),
+    ("packed_bitfield_repack.c", 0),
+    ("wide_string_literal_alignment.c", 0),
+    ("computed_include_pp_number.c", 0),
+];
+
+/// The sweep's target for this host, or `None` when the host cannot
+/// execute either of [`SMOKE_TARGETS`].
+fn host_smoke_target() -> Option<&'static str> {
+    if !cfg!(target_os = "linux") {
+        return None;
+    }
+    match std::env::consts::ARCH {
+        "x86_64" => Some("linux-x64"),
+        "aarch64" => Some("linux-aarch64"),
+        _ => None,
+    }
+}
+
+/// Run [`LINKED_IMAGE_RUN_FIXTURES`] as the CLI builds them, at `-O0`
+/// and at `-O`. Both levels matter: the merge sees a different set of
+/// sections and symbols once the optimizer has folded and dropped code.
+#[test]
+fn linked_image_fixtures_run_on_the_native_target() {
+    let Some(target) = host_smoke_target() else {
+        return;
+    };
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = fixtures_dir();
+    // Per-process directory: this test writes and then executes each
+    // image, so a concurrent run must not share the output paths.
+    let tmp_root = std::env::temp_dir().join(format!("badc-cli-run-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&tmp_root);
+
+    let mut failures: Vec<String> = Vec::new();
+    for (name, expected) in LINKED_IMAGE_RUN_FIXTURES {
+        for (tag, flags) in [("-O0", &[][..]), ("-O", &["-O"][..])] {
+            let stem = name.trim_end_matches(".c");
+            let out = tmp_root.join(format!("{stem}{tag}"));
+            let built = Command::new(badc)
+                .arg(format!("--target={target}"))
+                .args(flags)
+                .arg("-o")
+                .arg(&out)
+                .arg(dir.join(name))
+                .output()
+                .expect("run badc");
+            if !built.status.success() {
+                let stderr = String::from_utf8_lossy(&built.stderr);
+                failures.push(format!(
+                    "{name} {tag}: build failed -- {}",
+                    stderr.lines().next().unwrap_or("(no stderr)").trim()
+                ));
+                continue;
+            }
+            match Command::new(&out).output() {
+                Ok(o) => match o.status.code() {
+                    Some(code) if code == *expected => {}
+                    Some(code) => failures.push(format!(
+                        "{name} {tag}: expected exit {expected}, got {code}"
+                    )),
+                    None => failures.push(format!("{name} {tag}: killed by a signal")),
+                },
+                Err(e) => failures.push(format!("{name} {tag}: spawn failed: {e}")),
+            }
+        }
+    }
+
+    let _ = std::fs::remove_dir_all(&tmp_root);
+    assert!(
+        failures.is_empty(),
+        "{} of {} linked-image runs failed on {target}:\n  {}",
+        failures.len(),
+        LINKED_IMAGE_RUN_FIXTURES.len() * 2,
+        failures.join("\n  ")
+    );
 }
 
 // A quoted `#include "header"` resolves against the directory of the

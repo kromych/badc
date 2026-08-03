@@ -264,6 +264,10 @@ pub struct CompileOptions {
     /// build). A third-party header the embedded set lacks (`zlib.h`)
     /// resolves here without shadowing a standard header.
     pub system_include_paths: Vec<String>,
+    /// On-disk copies of the compiler's own header set (the source
+    /// tree's `libc/include`, `$BADC_HOME/include`). A bundled name
+    /// found there replaces the in-binary body.
+    pub own_header_roots: Vec<String>,
     /// `-include FILE` -- headers force-included before the source.
     pub force_includes: Vec<String>,
     /// Filename string used in compiler diagnostics
@@ -361,6 +365,11 @@ impl CompileOptions {
     /// headers).
     pub fn with_system_include_paths(mut self, paths: Vec<String>) -> Self {
         self.system_include_paths = paths;
+        self
+    }
+    /// Replace the on-disk overlay roots of the compiler's own headers.
+    pub fn with_own_header_roots(mut self, paths: Vec<String>) -> Self {
+        self.own_header_roots = paths;
         self
     }
     /// Replace the `-include FILE` force-include list.
@@ -655,6 +664,14 @@ pub(in crate::c5::compiler) struct Pending {
     /// a callback type nested in another prototype -- must not trip the
     /// duplicate-parameter check).
     pub parsing_fn_ptr_proto: bool,
+    /// Set while parsing a struct/union member's declarator, carrying the
+    /// member identifier's pre-declarator symbol entry. C99 6.2.3 puts
+    /// members in their own name space, but the declarator parser writes
+    /// the shared symbol slot (class, type, array shape); the aggregate
+    /// path restores this snapshot so an object of the same name keeps its
+    /// own declaration.
+    pub member_decl_save: Option<(usize, alloc::boxed::Box<crate::c5::symbol::Symbol>)>,
+    pub in_member_declarator: bool,
     /// Set by `parse_function_params` immediately before the per-parameter
     /// `parse_declarator` call and taken (cleared) at the top of that call,
     /// so it applies only to the parameter's own declarator and not to any
@@ -973,6 +990,8 @@ impl Default for Pending {
             indirect_callee_fn_ptr_depth: 0,
             last_fn_ptr_cast: None,
             parsing_fn_ptr_proto: false,
+            member_decl_save: None,
+            in_member_declarator: false,
             param_decl_context: false,
             last_array_decay_size: 0,
             last_array_decay_dims: alloc::vec::Vec::new(),
@@ -1715,6 +1734,9 @@ impl Compiler {
         }
         for path in &opts.system_include_paths {
             pp.add_system_fallback_path(path);
+        }
+        for path in &opts.own_header_roots {
+            pp.add_own_header_root(path);
         }
         // The GCC `__builtin_*` library thunks, which gcc and clang give
         // every unit with no `#include`. The header is only `#define`s of

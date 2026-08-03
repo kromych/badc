@@ -94,9 +94,9 @@ Compile knobs:
                            default predefine.
   -I path                  Add a header search path, probed before
                            the bundled headers on #include.
-                           Repeatable. `./include` and
-                           `./libc/include` are auto-added when
-                           present, so a local copy of a bundled
+                           Repeatable. A badc built from its own
+                           source tree also searches that tree's
+                           `libc/include`, so an edited bundled
                            header overrides the embedded one.
   -iquote path             Add a search path for #include \"...\" only,
                            probed after the including file's directory
@@ -634,30 +634,43 @@ fn run() {
         }
     }
 
-    // Auto-add common header overlays so a developer iterating on
-    // the bundled headers can edit `./include/...` (or
-    // `./libc/include/...` from the repo root) and have the
-    // change take effect without rebuilding badc. User-supplied
-    // -I paths still win because they were pushed earlier in the
-    // search order.
-    for default in ["./include", "./libc/include"] {
-        if std::path::Path::new(default).is_dir() && !include_paths.iter().any(|p| p == default) {
-            include_paths.push(default.to_string());
+    // On-disk copies of the bundled headers, consulted by name in place
+    // of the in-binary body: the source tree this badc was built from,
+    // then the `badc --install` overlay under ~/.badc (or $BADC_HOME).
+    // Editing either takes effect without rebuilding badc. Anchored on
+    // the executable and on $HOME, never on the working directory: the
+    // include search path must not depend on where badc is invoked from.
+    // An explicit -I still shadows a bundled name, as in every other
+    // compiler; only a bundled header's own includes stay inside the set.
+    // An explicitly set $BADC_HOME is a deliberate choice and outranks the
+    // source tree; the implicit ~/.badc does not, so a stale `--install`
+    // there cannot shadow the tree a developer is editing.
+    let home_include = badc_home()
+        .map(|h| h.join("include"))
+        .filter(|d| d.is_dir());
+    let mut own_header_roots: Vec<String> = Vec::new();
+    let mut add = |d: Option<PathBuf>| {
+        if let Some(d) = d {
+            let s = d.to_string_lossy().into_owned();
+            if !own_header_roots.contains(&s) {
+                own_header_roots.push(s);
+            }
         }
+    };
+    if std::env::var_os("BADC_HOME").is_some() {
+        add(home_include);
+        add(source_tree_include());
+    } else {
+        add(source_tree_include());
+        add(home_include);
     }
-    // The `badc --install` overlay under ~/.badc (or $BADC_HOME) sits
-    // between the repo-local overlays and the embedded headers: a user
-    // without the source tree edits ~/.badc/include/<h> to override a
-    // bundled header, and ~/.badc/lib joins the `-l` archive search.
-    // Appended last so explicit -I / -L and the repo-local dirs win.
+    // `~/.badc/lib` joins the `-l` archive search, after explicit -L.
     if let Some(home) = badc_home() {
-        for (sub, paths) in [("include", &mut include_paths), ("lib", &mut library_paths)] {
-            let dir = home.join(sub);
-            if dir.is_dir() {
-                let s = dir.to_string_lossy().into_owned();
-                if !paths.contains(&s) {
-                    paths.push(s);
-                }
+        let dir = home.join("lib");
+        if dir.is_dir() {
+            let s = dir.to_string_lossy().into_owned();
+            if !library_paths.contains(&s) {
+                library_paths.push(s);
             }
         }
     }
@@ -928,6 +941,7 @@ fn run() {
             .with_include_paths(include_paths.clone())
             .with_quote_include_paths(quote_include_paths.clone())
             .with_system_include_paths(system_include_paths.clone())
+            .with_own_header_roots(own_header_roots.clone())
             .with_force_includes(force_includes.clone())
             .with_source_label(src_path.clone())
             .with_show_includes(show_includes)
@@ -1016,6 +1030,7 @@ fn run() {
                 .with_include_paths(include_paths.clone())
                 .with_quote_include_paths(quote_include_paths.clone())
                 .with_system_include_paths(system_include_paths.clone())
+                .with_own_header_roots(own_header_roots.clone())
                 .with_force_includes(force_includes.clone())
                 .with_source_label(label.clone());
             match Compiler::preprocess(contents, target, opts) {
@@ -1103,6 +1118,7 @@ fn run() {
             include_paths: &include_paths,
             quote_include_paths: &quote_include_paths,
             system_include_paths: &system_include_paths,
+            own_header_roots: &own_header_roots,
             force_includes: &force_includes,
             stdin_src: stdin_src.as_deref(),
         };
@@ -1127,6 +1143,7 @@ fn run() {
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
                 .with_system_include_paths(system_include_paths.clone())
+                .with_own_header_roots(own_header_roots.clone())
                 .with_force_includes(force_includes.clone())
                 .with_source_label(label.to_string())
                 .with_no_entry_point(true);
@@ -1654,6 +1671,7 @@ fn run() {
             include_paths: &include_paths,
             quote_include_paths: &quote_include_paths,
             system_include_paths: &system_include_paths,
+            own_header_roots: &own_header_roots,
             force_includes: &force_includes,
             stdin_src: None,
         };
@@ -1776,6 +1794,7 @@ fn run() {
             include_paths: &include_paths,
             quote_include_paths: &quote_include_paths,
             system_include_paths: &system_include_paths,
+            own_header_roots: &own_header_roots,
             force_includes: &force_includes,
             stdin_src: None,
         };
@@ -2099,6 +2118,7 @@ struct CompileCfg<'a> {
     include_paths: &'a [String],
     quote_include_paths: &'a [String],
     system_include_paths: &'a [String],
+    own_header_roots: &'a [String],
     force_includes: &'a [String],
     /// Pre-read stdin bytes for a `-` source; `None` when no input is
     /// stdin. Keeps a worker off the process stdin stream.
@@ -2253,6 +2273,7 @@ fn compile_native_tu(
         .with_include_paths(cfg.include_paths.to_vec())
         .with_quote_include_paths(cfg.quote_include_paths.to_vec())
         .with_system_include_paths(cfg.system_include_paths.to_vec())
+        .with_own_header_roots(cfg.own_header_roots.to_vec())
         .with_force_includes(cfg.force_includes.to_vec())
         .with_source_label(src_path.to_string())
         .with_show_includes(cfg.show_includes)
@@ -2335,6 +2356,7 @@ fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Result<Vec<u8>
         .with_include_paths(cfg.include_paths.to_vec())
         .with_quote_include_paths(cfg.quote_include_paths.to_vec())
         .with_system_include_paths(cfg.system_include_paths.to_vec())
+        .with_own_header_roots(cfg.own_header_roots.to_vec())
         .with_force_includes(cfg.force_includes.to_vec())
         .with_source_label(src_path.to_string())
         .with_show_includes(cfg.show_includes)
@@ -2778,6 +2800,23 @@ fn badc_home() -> Option<PathBuf> {
     }
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     Some(PathBuf::from(home).join(".badc"))
+}
+
+/// `libc/include` of the source tree this badc was built from, found by
+/// walking up from the executable to the crate root (`target/<profile>/`
+/// or `target/<triple>/<profile>/`). `None` for an installed binary,
+/// which has no source tree.
+fn source_tree_include() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let mut dir = exe.parent()?;
+    for _ in 0..4 {
+        let inc = dir.join("libc").join("include");
+        if dir.join("Cargo.toml").is_file() && inc.is_dir() {
+            return Some(inc);
+        }
+        dir = dir.parent()?;
+    }
+    None
 }
 
 /// Write every embedded header under `dir/include` and every embedded

@@ -1,7 +1,12 @@
-// elf.h -- standard ELF object-format types and constants (subset).
+// elf.h -- ELF object-format types and constants.
+//
 // The typedef and struct layouts are fixed by the ELF specification;
 // system headers layered over this file (gelf.h, libelf.h, link.h)
-// reference them by name.
+// reference them by name. The constants are the generic ABI set plus
+// the GNU OS extensions, and the relocation tables of the i386, AMD64
+// and AArch64 processor supplements. The relocation numbering is the
+// same the compiler's own object writers use; a test cross-checks the
+// two so a divergence cannot go unnoticed.
 
 #pragma once
 
@@ -322,6 +327,7 @@ typedef struct {
 #define EI_VERSION 6
 #define EI_OSABI   7
 #define EI_ABIVERSION 8
+#define EI_PAD     9
 #define ELFMAG0    0x7f
 #define ELFMAG1    'E'
 #define ELFMAG2    'L'
@@ -331,88 +337,1511 @@ typedef struct {
 #define ELFCLASSNONE 0
 #define ELFCLASS32   1
 #define ELFCLASS64   2
+#define ELFCLASSNUM  3
 #define ELFDATANONE  0
 #define ELFDATA2LSB  1
 #define ELFDATA2MSB  2
+#define ELFDATANUM   3
 #define EV_NONE    0
 #define EV_CURRENT 1
+#define EV_NUM     2
+
+// OS ABI identification (`e_ident[EI_OSABI]`).
+#define ELFOSABI_NONE       0
+#define ELFOSABI_SYSV       0
+#define ELFOSABI_HPUX       1
+#define ELFOSABI_NETBSD     2
+#define ELFOSABI_GNU        3
+#define ELFOSABI_SOLARIS    6
+#define ELFOSABI_AIX        7
+#define ELFOSABI_IRIX       8
+#define ELFOSABI_FREEBSD    9
+#define ELFOSABI_TRU64      10
+#define ELFOSABI_MODESTO    11
+#define ELFOSABI_OPENBSD    12
+#define ELFOSABI_ARM_AEABI  64
+#define ELFOSABI_ARM        97
+#define ELFOSABI_STANDALONE 255
+#define ELFOSABI_LINUX      ELFOSABI_GNU
 
 // Object file types (`e_type`).
-#define ET_NONE 0
-#define ET_REL  1
-#define ET_EXEC 2
-#define ET_DYN  3
-#define ET_CORE 4
+#define ET_NONE   0
+#define ET_REL    1
+#define ET_EXEC   2
+#define ET_DYN    3
+#define ET_CORE   4
+#define ET_NUM    5
+#define ET_LOOS   0xfe00
+#define ET_HIOS   0xfeff
+#define ET_LOPROC 0xff00
+#define ET_HIPROC 0xffff
 
-// ELF machine architecture identifiers (the `e_machine` field of an ELF
-// header). Only the values reached for by the bundled demos are listed.
-#define EM_386     3
-#define EM_ARM     40
-#define EM_X86_64  62
-#define EM_AARCH64 183
-#define EM_RISCV   243
+// Machine architecture identifiers (`e_machine`).
+#define EM_NONE          0
+#define EM_M32           1
+#define EM_SPARC         2
+#define EM_386           3
+#define EM_68K           4
+#define EM_88K           5
+#define EM_IAMCU         6
+#define EM_860           7
+#define EM_MIPS          8
+#define EM_S370          9
+#define EM_MIPS_RS3_LE   10
+#define EM_PARISC        15
+#define EM_VPP500        17
+#define EM_SPARC32PLUS   18
+#define EM_960           19
+#define EM_PPC           20
+#define EM_PPC64         21
+#define EM_S390          22
+#define EM_SPU           23
+#define EM_V800          36
+#define EM_FR20          37
+#define EM_RH32          38
+#define EM_RCE           39
+#define EM_ARM           40
+#define EM_FAKE_ALPHA    41
+#define EM_SH            42
+#define EM_SPARCV9       43
+#define EM_TRICORE       44
+#define EM_ARC           45
+#define EM_H8_300        46
+#define EM_H8_300H       47
+#define EM_H8S           48
+#define EM_H8_500        49
+#define EM_IA_64         50
+#define EM_MIPS_X        51
+#define EM_COLDFIRE      52
+#define EM_68HC12        53
+#define EM_MMA           54
+#define EM_PCP           55
+#define EM_NCPU          56
+#define EM_NDR1          57
+#define EM_STARCORE      58
+#define EM_ME16          59
+#define EM_ST100         60
+#define EM_TINYJ         61
+#define EM_X86_64        62
+#define EM_PDSP          63
+#define EM_PDP10         64
+#define EM_PDP11         65
+#define EM_FX66          66
+#define EM_ST9PLUS       67
+#define EM_ST7           68
+#define EM_68HC16        69
+#define EM_68HC11        70
+#define EM_68HC08        71
+#define EM_68HC05        72
+#define EM_SVX           73
+#define EM_ST19          74
+#define EM_VAX           75
+#define EM_CRIS          76
+#define EM_JAVELIN       77
+#define EM_FIREPATH      78
+#define EM_ZSP           79
+#define EM_MMIX          80
+#define EM_HUANY         81
+#define EM_PRISM         82
+#define EM_AVR           83
+#define EM_FR30          84
+#define EM_D10V          85
+#define EM_D30V          86
+#define EM_V850          87
+#define EM_M32R          88
+#define EM_MN10300       89
+#define EM_MN10200       90
+#define EM_PJ            91
+#define EM_OPENRISC      92
+#define EM_ARC_COMPACT   93
+#define EM_XTENSA        94
+#define EM_VIDEOCORE     95
+#define EM_TMM_GPP       96
+#define EM_NS32K         97
+#define EM_TPC           98
+#define EM_SNP1K         99
+#define EM_ST200         100
+#define EM_IP2K          101
+#define EM_MAX           102
+#define EM_CR            103
+#define EM_F2MC16        104
+#define EM_MSP430        105
+#define EM_BLACKFIN      106
+#define EM_SE_C33        107
+#define EM_SEP           108
+#define EM_ARCA          109
+#define EM_UNICORE       110
+#define EM_EXCESS        111
+#define EM_DXP           112
+#define EM_ALTERA_NIOS2  113
+#define EM_CRX           114
+#define EM_XGATE         115
+#define EM_C166          116
+#define EM_M16C          117
+#define EM_DSPIC30F      118
+#define EM_CE            119
+#define EM_M32C          120
+#define EM_TSK3000       131
+#define EM_RS08          132
+#define EM_SHARC         133
+#define EM_ECOG2         134
+#define EM_SCORE7        135
+#define EM_DSP24         136
+#define EM_VIDEOCORE3    137
+#define EM_LATTICEMICO32 138
+#define EM_SE_C17        139
+#define EM_TI_C6000      140
+#define EM_TI_C2000      141
+#define EM_TI_C5500      142
+#define EM_TI_ARP32      143
+#define EM_TI_PRU        144
+#define EM_MMDSP_PLUS    160
+#define EM_CYPRESS_M8C   161
+#define EM_R32C          162
+#define EM_TRIMEDIA      163
+#define EM_QDSP6         164
+#define EM_8051          165
+#define EM_STXP7X        166
+#define EM_NDS32         167
+#define EM_ECOG1X        168
+#define EM_MAXQ30        169
+#define EM_XIMO16        170
+#define EM_MANIK         171
+#define EM_CRAYNV2       172
+#define EM_RX            173
+#define EM_METAG         174
+#define EM_MCST_ELBRUS   175
+#define EM_ECOG16        176
+#define EM_CR16          177
+#define EM_ETPU          178
+#define EM_SLE9X         179
+#define EM_L10M          180
+#define EM_K10M          181
+#define EM_AARCH64       183
+#define EM_AVR32         185
+#define EM_STM8          186
+#define EM_TILE64        187
+#define EM_TILEPRO       188
+#define EM_MICROBLAZE    189
+#define EM_CUDA          190
+#define EM_TILEGX        191
+#define EM_CLOUDSHIELD   192
+#define EM_COREA_1ST     193
+#define EM_COREA_2ND     194
+#define EM_ARCV2         195
+#define EM_OPEN8         196
+#define EM_RL78          197
+#define EM_VIDEOCORE5    198
+#define EM_78KOR         199
+#define EM_56800EX       200
+#define EM_BA1           201
+#define EM_BA2           202
+#define EM_XCORE         203
+#define EM_MCHP_PIC      204
+#define EM_INTELGT       205
+#define EM_KM32          210
+#define EM_KMX32         211
+#define EM_EMX16         212
+#define EM_EMX8          213
+#define EM_KVARC         214
+#define EM_CDP           215
+#define EM_COGE          216
+#define EM_COOL          217
+#define EM_NORC          218
+#define EM_CSR_KALIMBA   219
+#define EM_Z80           220
+#define EM_VISIUM        221
+#define EM_FT32          222
+#define EM_MOXIE         223
+#define EM_AMDGPU        224
+#define EM_RISCV         243
+#define EM_BPF           247
+#define EM_CSKY          252
+#define EM_LOONGARCH     258
+#define EM_NUM           259
+#define EM_ALPHA         0x9026
+#define EM_ARC_A5        EM_ARC_COMPACT
 
-// Special section indices.
-#define SHN_UNDEF     0
-#define SHN_LORESERVE 0xff00
-#define SHN_ABS       0xfff1
-#define SHN_COMMON    0xfff2
-#define SHN_XINDEX    0xffff
+// Special section indices (`st_shndx`, `e_shstrndx`).
+#define SHN_UNDEF              0
+#define SHN_BEFORE             0xff00
+#define SHN_LOPROC             0xff00
+#define SHN_LORESERVE          0xff00
+#define SHN_MIPS_ACOMMON       0xff00
+#define SHN_PARISC_ANSI_COMMON 0xff00
+#define SHN_AFTER              0xff01
+#define SHN_MIPS_TEXT          0xff01
+#define SHN_PARISC_HUGE_COMMON 0xff01
+#define SHN_MIPS_DATA          0xff02
+#define SHN_MIPS_SCOMMON       0xff03
+#define SHN_MIPS_SUNDEFINED    0xff04
+#define SHN_HIPROC             0xff1f
+#define SHN_LOOS               0xff20
+#define SHN_HIOS               0xff3f
+#define SHN_ABS                0xfff1
+#define SHN_COMMON             0xfff2
+#define SHN_HIRESERVE          0xffff
+#define SHN_XINDEX             0xffff
 
 // Section types (`sh_type`).
-#define SHT_NULL     0
-#define SHT_PROGBITS 1
-#define SHT_SYMTAB   2
-#define SHT_STRTAB   3
-#define SHT_RELA     4
-#define SHT_HASH     5
-#define SHT_DYNAMIC  6
-#define SHT_NOTE     7
-#define SHT_NOBITS   8
-#define SHT_REL      9
-#define SHT_DYNSYM   11
+#define SHT_NULL               0
+#define SHT_PROGBITS           1
+#define SHT_SYMTAB             2
+#define SHT_STRTAB             3
+#define SHT_RELA               4
+#define SHT_HASH               5
+#define SHT_DYNAMIC            6
+#define SHT_NOTE               7
+#define SHT_NOBITS             8
+#define SHT_REL                9
+#define SHT_SHLIB              10
+#define SHT_DYNSYM             11
+#define SHT_INIT_ARRAY         14
+#define SHT_FINI_ARRAY         15
+#define SHT_PREINIT_ARRAY      16
+#define SHT_GROUP              17
+#define SHT_SYMTAB_SHNDX       18
+#define SHT_RELR               19
+#define SHT_NUM                20
+#define SHT_LOOS               0x60000000
+#define SHT_GNU_ATTRIBUTES     0x6ffffff5
+#define SHT_GNU_HASH           0x6ffffff6
+#define SHT_GNU_LIBLIST        0x6ffffff7
+#define SHT_CHECKSUM           0x6ffffff8
+#define SHT_LOSUNW             0x6ffffffa
+#define SHT_SUNW_move          0x6ffffffa
+#define SHT_SUNW_COMDAT        0x6ffffffb
+#define SHT_SUNW_syminfo       0x6ffffffc
+#define SHT_GNU_verdef         0x6ffffffd
+#define SHT_GNU_verneed        0x6ffffffe
+#define SHT_GNU_versym         0x6fffffff
+#define SHT_HIOS               0x6fffffff
+#define SHT_HISUNW             0x6fffffff
+#define SHT_LOPROC             0x70000000
+#define SHT_MIPS_LIBLIST       0x70000000
+#define SHT_PARISC_EXT         0x70000000
+#define SHT_ALPHA_DEBUG        0x70000001
+#define SHT_MIPS_MSYM          0x70000001
+#define SHT_PARISC_UNWIND      0x70000001
+#define SHT_X86_64_UNWIND      0x70000001
+#define SHT_ALPHA_REGINFO      0x70000002
+#define SHT_MIPS_CONFLICT      0x70000002
+#define SHT_PARISC_DOC         0x70000002
+#define SHT_MIPS_GPTAB         0x70000003
+#define SHT_MIPS_UCODE         0x70000004
+#define SHT_MIPS_DEBUG         0x70000005
+#define SHT_MIPS_REGINFO       0x70000006
+#define SHT_MIPS_PACKAGE       0x70000007
+#define SHT_MIPS_PACKSYM       0x70000008
+#define SHT_MIPS_RELD          0x70000009
+#define SHT_MIPS_IFACE         0x7000000b
+#define SHT_MIPS_CONTENT       0x7000000c
+#define SHT_MIPS_OPTIONS       0x7000000d
+#define SHT_MIPS_SHDR          0x70000010
+#define SHT_MIPS_FDESC         0x70000011
+#define SHT_MIPS_EXTSYM        0x70000012
+#define SHT_MIPS_DENSE         0x70000013
+#define SHT_MIPS_PDESC         0x70000014
+#define SHT_MIPS_LOCSYM        0x70000015
+#define SHT_MIPS_AUXSYM        0x70000016
+#define SHT_MIPS_OPTSYM        0x70000017
+#define SHT_MIPS_LOCSTR        0x70000018
+#define SHT_MIPS_LINE          0x70000019
+#define SHT_MIPS_RFDESC        0x7000001a
+#define SHT_MIPS_DELTASYM      0x7000001b
+#define SHT_MIPS_DELTAINST     0x7000001c
+#define SHT_MIPS_DELTACLASS    0x7000001d
+#define SHT_MIPS_DWARF         0x7000001e
+#define SHT_MIPS_DELTADECL     0x7000001f
+#define SHT_MIPS_SYMBOL_LIB    0x70000020
+#define SHT_MIPS_EVENTS        0x70000021
+#define SHT_MIPS_TRANSLATE     0x70000022
+#define SHT_MIPS_PIXIE         0x70000023
+#define SHT_MIPS_XLATE         0x70000024
+#define SHT_MIPS_XLATE_DEBUG   0x70000025
+#define SHT_MIPS_WHIRL         0x70000026
+#define SHT_MIPS_EH_REGION     0x70000027
+#define SHT_MIPS_XLATE_OLD     0x70000028
+#define SHT_MIPS_PDR_EXCEPTION 0x70000029
+#define SHT_MIPS_ABIFLAGS      0x7000002a
+#define SHT_MIPS_XHASH         0x7000002b
+#define SHT_HIPROC             0x7fffffff
+#define SHT_LOUSER             0x80000000
+#define SHT_HIUSER             0x8fffffff
+#define SHT_ARC_ATTRIBUTES     (SHT_LOPROC + 1)
+#define SHT_ARM_ATTRIBUTES     (SHT_LOPROC + 3)
+#define SHT_ARM_EXIDX          (SHT_LOPROC + 1)
+#define SHT_ARM_PREEMPTMAP     (SHT_LOPROC + 2)
+#define SHT_CSKY_ATTRIBUTES    (SHT_LOPROC + 1)
+#define SHT_IA_64_EXT          (SHT_LOPROC + 0)
+#define SHT_IA_64_UNWIND       (SHT_LOPROC + 1)
+#define SHT_RISCV_ATTRIBUTES   (SHT_LOPROC + 3)
 
-// Section compression (`sh_flags` SHF_COMPRESSED + `ch_type` values).
-// Headers layered over <elf.h> key their own compat fallbacks on
-// ELFCOMPRESS_ZLIB being defined alongside the Chdr types above.
-#define SHF_COMPRESSED      (1 << 11)
-#define ELFCOMPRESS_ZLIB    1
-#define ELFCOMPRESS_ZSTD    2
-#define ELFCOMPRESS_LOOS    0x60000000
-#define ELFCOMPRESS_HIOS    0x6fffffff
-#define ELFCOMPRESS_LOPROC  0x70000000
-#define ELFCOMPRESS_HIPROC  0x7fffffff
+// Section flags (`sh_flags`).
+#define SHF_MIPS_NODUPE      0x01000000
+#define SHF_MIPS_NAMES       0x02000000
+#define SHF_MIPS_LOCAL       0x04000000
+#define SHF_MIPS_NOSTRIP     0x08000000
+#define SHF_MASKOS           0x0ff00000
+#define SHF_ALPHA_GPREL      0x10000000
+#define SHF_ARM_ENTRYSECT    0x10000000
+#define SHF_IA_64_SHORT      0x10000000
+#define SHF_MIPS_GPREL       0x10000000
+#define SHF_IA_64_NORECOV    0x20000000
+#define SHF_MIPS_MERGE       0x20000000
+#define SHF_PARISC_SHORT     0x20000000
+#define SHF_MIPS_ADDR        0x40000000
+#define SHF_PARISC_HUGE      0x40000000
+#define SHF_ARM_COMDEF       0x80000000
+#define SHF_MIPS_STRINGS     0x80000000
+#define SHF_PARISC_SBP       0x80000000
+#define SHF_MASKPROC         0xf0000000
+#define SHF_ALLOC            (1 << 1)
+#define SHF_COMPRESSED       (1 << 11)
+#define SHF_EXCLUDE          (1U << 31)
+#define SHF_EXECINSTR        (1 << 2)
+#define SHF_GNU_RETAIN       (1 << 21)
+#define SHF_GROUP            (1 << 9)
+#define SHF_INFO_LINK        (1 << 6)
+#define SHF_LINK_ORDER       (1 << 7)
+#define SHF_MERGE            (1 << 4)
+#define SHF_ORDERED          (1 << 30)
+#define SHF_OS_NONCONFORMING (1 << 8)
+#define SHF_STRINGS          (1 << 5)
+#define SHF_TLS              (1 << 10)
+#define SHF_WRITE            (1 << 0)
 
-// Symbol binding / type accessors.
+// Section group flags (the first word of an `SHT_GROUP` section).
+#define GRP_COMDAT 0x1
+
+// `ch_type` values of a compressed section's Chdr. Headers layered over
+// <elf.h> key their own compat fallbacks on ELFCOMPRESS_ZLIB being
+// defined alongside the Chdr types above.
+#define ELFCOMPRESS_ZLIB   1
+#define ELFCOMPRESS_ZSTD   2
+#define ELFCOMPRESS_LOOS   0x60000000
+#define ELFCOMPRESS_HIOS   0x6fffffff
+#define ELFCOMPRESS_LOPROC 0x70000000
+#define ELFCOMPRESS_HIPROC 0x7fffffff
+
+// Symbol binding / type / visibility accessors over `st_info` and
+// `st_other`.
 #define ELF32_ST_BIND(val)        (((unsigned char)(val)) >> 4)
 #define ELF32_ST_TYPE(val)        ((val) & 0xf)
 #define ELF32_ST_INFO(bind, type) (((bind) << 4) + ((type) & 0xf))
 #define ELF64_ST_BIND(val)        ELF32_ST_BIND(val)
 #define ELF64_ST_TYPE(val)        ELF32_ST_TYPE(val)
 #define ELF64_ST_INFO(bind, type) ELF32_ST_INFO(bind, type)
-#define STB_LOCAL  0
-#define STB_GLOBAL 1
-#define STB_WEAK   2
-#define STT_NOTYPE 0
-#define STT_OBJECT 1
-#define STT_FUNC   2
-#define STT_SECTION 3
-#define STT_FILE   4
-#define STT_TLS    6
+#define ELF32_ST_VISIBILITY(o)    ((o) & 0x03)
+#define ELF64_ST_VISIBILITY(o)    ELF32_ST_VISIBILITY(o)
+
+// Symbol bindings (`ELF*_ST_BIND`).
+#define STB_LOCAL             0
+#define STB_GLOBAL            1
+#define STB_WEAK              2
+#define STB_NUM               3
+#define STB_GNU_UNIQUE        10
+#define STB_LOOS              10
+#define STB_HIOS              12
+#define STB_LOPROC            13
+#define STB_MIPS_SPLIT_COMMON 13
+#define STB_HIPROC            15
+
+// Symbol types (`ELF*_ST_TYPE`).
+#define STT_NOTYPE           0
+#define STT_OBJECT           1
+#define STT_FUNC             2
+#define STT_SECTION          3
+#define STT_FILE             4
+#define STT_COMMON           5
+#define STT_TLS              6
+#define STT_NUM              7
+#define STT_GNU_IFUNC        10
+#define STT_LOOS             10
+#define STT_HIOS             12
+#define STT_LOPROC           13
+#define STT_PARISC_MILLICODE 13
+#define STT_SPARC_REGISTER   13
+#define STT_HIPROC           15
+#define STT_ARM_16BIT        STT_HIPROC
+#define STT_ARM_TFUNC        STT_LOPROC
+#define STT_HP_OPAQUE        (STT_LOOS + 0x1)
+#define STT_HP_STUB          (STT_LOOS + 0x2)
+
+// Symbol visibility (`ELF*_ST_VISIBILITY`).
+#define STV_DEFAULT   0
+#define STV_INTERNAL  1
+#define STV_HIDDEN    2
+#define STV_PROTECTED 3
+
+// Processor-specific `st_other` values.
+#define STO_MIPS_DEFAULT         0x0
+#define STO_MIPS_INTERNAL        0x1
+#define STO_MIPS_HIDDEN          0x2
+#define STO_MIPS_PROTECTED       0x3
+#define STO_PPC64_LOCAL_BIT      5
+#define STO_MIPS_PLT             0x8
+#define STO_AARCH64_VARIANT_PCS  0x80
+#define STO_ALPHA_NOPV           0x80
+#define STO_RISCV_VARIANT_CC     0x80
+#define STO_ALPHA_STD_GPLOAD     0x88
+#define STO_MIPS_SC_ALIGN_UNUSED 0xff
+#define STO_PPC64_LOCAL_MASK     (7 << STO_PPC64_LOCAL_BIT)
+
+// Syminfo entry flags and reserved `si_boundto` values.
+#define SYMINFO_NONE          0
+#define SYMINFO_CURRENT       1
+#define SYMINFO_FLG_DIRECT    0x0001
+#define SYMINFO_FLG_PASSTHRU  0x0002
+#define SYMINFO_NUM           2
+#define SYMINFO_FLG_COPY      0x0004
+#define SYMINFO_FLG_LAZYLOAD  0x0008
+#define SYMINFO_BT_LOWRESERVE 0xff00
+#define SYMINFO_BT_PARENT     0xfffe
+#define SYMINFO_BT_SELF       0xffff
+
+// Version definition / requirement records.
+#define VER_DEF_NONE      0
+#define VER_NDX_LOCAL     0
+#define VER_NEED_NONE     0
+#define VER_DEF_CURRENT   1
+#define VER_FLG_BASE      0x1
+#define VER_NDX_GLOBAL    1
+#define VER_NEED_CURRENT  1
+#define VER_DEF_NUM       2
+#define VER_FLG_WEAK      0x2
+#define VER_NEED_NUM      2
+#define VER_NDX_LORESERVE 0xff00
+#define VER_NDX_ELIMINATE 0xff01
 
 // Program header types (`p_type`).
-#define PT_NULL    0
-#define PT_LOAD    1
-#define PT_DYNAMIC 2
-#define PT_INTERP  3
-#define PT_NOTE    4
-#define PT_PHDR    6
-#define PT_TLS     7
+#define PT_NULL               0
+#define PT_LOAD               1
+#define PT_DYNAMIC            2
+#define PT_INTERP             3
+#define PT_NOTE               4
+#define PT_SHLIB              5
+#define PT_PHDR               6
+#define PT_TLS                7
+#define PT_NUM                8
+#define PT_LOOS               0x60000000
+#define PT_GNU_EH_FRAME       0x6474e550
+#define PT_GNU_STACK          0x6474e551
+#define PT_GNU_RELRO          0x6474e552
+#define PT_GNU_PROPERTY       0x6474e553
+#define PT_GNU_SFRAME         0x6474e554
+#define PT_LOSUNW             0x6ffffffa
+#define PT_SUNWBSS            0x6ffffffa
+#define PT_SUNWSTACK          0x6ffffffb
+#define PT_HIOS               0x6fffffff
+#define PT_HISUNW             0x6fffffff
+#define PT_LOPROC             0x70000000
+#define PT_MIPS_REGINFO       0x70000000
+#define PT_PARISC_ARCHEXT     0x70000000
+#define PT_MIPS_RTPROC        0x70000001
+#define PT_PARISC_UNWIND      0x70000001
+#define PT_MIPS_OPTIONS       0x70000002
+#define PT_MIPS_ABIFLAGS      0x70000003
+#define PT_HIPROC             0x7fffffff
+#define PT_AARCH64_MEMTAG_MTE (PT_LOPROC + 2)
+#define PT_ARM_EXIDX          (PT_LOPROC + 1)
+#define PT_HP_CORE_COMM       (PT_LOOS + 0x4)
+#define PT_HP_CORE_KERNEL     (PT_LOOS + 0x3)
+#define PT_HP_CORE_LOADABLE   (PT_LOOS + 0x6)
+#define PT_HP_CORE_MMF        (PT_LOOS + 0x9)
+#define PT_HP_CORE_NONE       (PT_LOOS + 0x1)
+#define PT_HP_CORE_PROC       (PT_LOOS + 0x5)
+#define PT_HP_CORE_SHM        (PT_LOOS + 0x8)
+#define PT_HP_CORE_STACK      (PT_LOOS + 0x7)
+#define PT_HP_CORE_VERSION    (PT_LOOS + 0x2)
+#define PT_HP_FASTBIND        (PT_LOOS + 0x11)
+#define PT_HP_HSL_ANNOT       (PT_LOOS + 0x13)
+#define PT_HP_OPT_ANNOT       (PT_LOOS + 0x12)
+#define PT_HP_PARALLEL        (PT_LOOS + 0x10)
+#define PT_HP_STACK           (PT_LOOS + 0x14)
+#define PT_HP_TLS             (PT_LOOS + 0x0)
+#define PT_IA_64_ARCHEXT      (PT_LOPROC + 0)
+#define PT_IA_64_HP_HSL_ANOT  (PT_LOOS + 0x13)
+#define PT_IA_64_HP_OPT_ANOT  (PT_LOOS + 0x12)
+#define PT_IA_64_HP_STACK     (PT_LOOS + 0x14)
+#define PT_IA_64_UNWIND       (PT_LOPROC + 1)
+#define PT_RISCV_ATTRIBUTES   (PT_LOPROC + 3)
 
-// Relocation info accessors.
+// Segment permission flags (`p_flags`).
+#define PF_HP_PAGE_SIZE   0x00100000
+#define PF_HP_FAR_SHARED  0x00200000
+#define PF_HP_NEAR_SHARED 0x00400000
+#define PF_HP_CODE        0x01000000
+#define PF_HP_MODIFY      0x02000000
+#define PF_HP_LAZYSWAP    0x04000000
+#define PF_HP_SBP         0x08000000
+#define PF_PARISC_SBP     0x08000000
+#define PF_MASKOS         0x0ff00000
+#define PF_ARM_SB         0x10000000
+#define PF_MIPS_LOCAL     0x10000000
+#define PF_ARM_PI         0x20000000
+#define PF_ARM_ABS        0x40000000
+#define PF_IA_64_NORECOV  0x80000000
+#define PF_MASKPROC       0xf0000000
+#define PF_R              (1 << 2)
+#define PF_W              (1 << 1)
+#define PF_X              (1 << 0)
+
+// Dynamic section tags (`d_tag`).
+#define DT_NULL                       0
+#define DT_ALPHA_NUM                  1
+#define DT_IA_64_NUM                  1
+#define DT_NEEDED                     1
+#define DT_PLTRELSZ                   2
+#define DT_PPC_NUM                    2
+#define DT_SPARC_NUM                  2
+#define DT_EXTRANUM                   3
+#define DT_PLTGOT                     3
+#define DT_HASH                       4
+#define DT_PPC64_NUM                  4
+#define DT_X86_64_NUM                 4
+#define DT_STRTAB                     5
+#define DT_AARCH64_NUM                6
+#define DT_SYMTAB                     6
+#define DT_RELA                       7
+#define DT_RELASZ                     8
+#define DT_RELAENT                    9
+#define DT_STRSZ                      10
+#define DT_ADDRNUM                    11
+#define DT_SYMENT                     11
+#define DT_INIT                       12
+#define DT_VALNUM                     12
+#define DT_FINI                       13
+#define DT_SONAME                     14
+#define DT_RPATH                      15
+#define DT_SYMBOLIC                   16
+#define DT_VERSIONTAGNUM              16
+#define DT_REL                        17
+#define DT_RELSZ                      18
+#define DT_RELENT                     19
+#define DT_PLTREL                     20
+#define DT_DEBUG                      21
+#define DT_TEXTREL                    22
+#define DT_JMPREL                     23
+#define DT_BIND_NOW                   24
+#define DT_INIT_ARRAY                 25
+#define DT_FINI_ARRAY                 26
+#define DT_INIT_ARRAYSZ               27
+#define DT_FINI_ARRAYSZ               28
+#define DT_RUNPATH                    29
+#define DT_FLAGS                      30
+#define DT_ENCODING                   32
+#define DT_PREINIT_ARRAY              32
+#define DT_PREINIT_ARRAYSZ            33
+#define DT_SYMTAB_SHNDX               34
+#define DT_RELRSZ                     35
+#define DT_RELR                       36
+#define DT_RELRENT                    37
+#define DT_NUM                        38
+#define DT_MIPS_NUM                   0x37
+#define DT_LOOS                       0x6000000d
+#define DT_HIOS                       0x6ffff000
+#define DT_VALRNGLO                   0x6ffffd00
+#define DT_GNU_PRELINKED              0x6ffffdf5
+#define DT_GNU_CONFLICTSZ             0x6ffffdf6
+#define DT_GNU_LIBLISTSZ              0x6ffffdf7
+#define DT_CHECKSUM                   0x6ffffdf8
+#define DT_PLTPADSZ                   0x6ffffdf9
+#define DT_MOVEENT                    0x6ffffdfa
+#define DT_MOVESZ                     0x6ffffdfb
+#define DT_FEATURE_1                  0x6ffffdfc
+#define DT_POSFLAG_1                  0x6ffffdfd
+#define DT_SYMINSZ                    0x6ffffdfe
+#define DT_SYMINENT                   0x6ffffdff
+#define DT_VALRNGHI                   0x6ffffdff
+#define DT_ADDRRNGLO                  0x6ffffe00
+#define DT_GNU_HASH                   0x6ffffef5
+#define DT_TLSDESC_PLT                0x6ffffef6
+#define DT_TLSDESC_GOT                0x6ffffef7
+#define DT_GNU_CONFLICT               0x6ffffef8
+#define DT_GNU_LIBLIST                0x6ffffef9
+#define DT_CONFIG                     0x6ffffefa
+#define DT_DEPAUDIT                   0x6ffffefb
+#define DT_AUDIT                      0x6ffffefc
+#define DT_PLTPAD                     0x6ffffefd
+#define DT_MOVETAB                    0x6ffffefe
+#define DT_ADDRRNGHI                  0x6ffffeff
+#define DT_SYMINFO                    0x6ffffeff
+#define DT_VERSYM                     0x6ffffff0
+#define DT_RELACOUNT                  0x6ffffff9
+#define DT_RELCOUNT                   0x6ffffffa
+#define DT_FLAGS_1                    0x6ffffffb
+#define DT_VERDEF                     0x6ffffffc
+#define DT_VERDEFNUM                  0x6ffffffd
+#define DT_VERNEED                    0x6ffffffe
+#define DT_VERNEEDNUM                 0x6fffffff
+#define DT_LOPROC                     0x70000000
+#define DT_MIPS_RLD_VERSION           0x70000001
+#define DT_SPARC_REGISTER             0x70000001
+#define DT_MIPS_TIME_STAMP            0x70000002
+#define DT_NIOS2_GP                   0x70000002
+#define DT_MIPS_ICHECKSUM             0x70000003
+#define DT_MIPS_IVERSION              0x70000004
+#define DT_MIPS_FLAGS                 0x70000005
+#define DT_MIPS_BASE_ADDRESS          0x70000006
+#define DT_MIPS_MSYM                  0x70000007
+#define DT_MIPS_CONFLICT              0x70000008
+#define DT_MIPS_LIBLIST               0x70000009
+#define DT_MIPS_LOCAL_GOTNO           0x7000000a
+#define DT_MIPS_CONFLICTNO            0x7000000b
+#define DT_MIPS_LIBLISTNO             0x70000010
+#define DT_MIPS_SYMTABNO              0x70000011
+#define DT_MIPS_UNREFEXTNO            0x70000012
+#define DT_MIPS_GOTSYM                0x70000013
+#define DT_MIPS_HIPAGENO              0x70000014
+#define DT_MIPS_RLD_MAP               0x70000016
+#define DT_MIPS_DELTA_CLASS           0x70000017
+#define DT_MIPS_DELTA_CLASS_NO        0x70000018
+#define DT_MIPS_DELTA_INSTANCE        0x70000019
+#define DT_MIPS_DELTA_INSTANCE_NO     0x7000001a
+#define DT_MIPS_DELTA_RELOC           0x7000001b
+#define DT_MIPS_DELTA_RELOC_NO        0x7000001c
+#define DT_MIPS_DELTA_SYM             0x7000001d
+#define DT_MIPS_DELTA_SYM_NO          0x7000001e
+#define DT_MIPS_DELTA_CLASSSYM        0x70000020
+#define DT_MIPS_DELTA_CLASSSYM_NO     0x70000021
+#define DT_MIPS_CXX_FLAGS             0x70000022
+#define DT_MIPS_PIXIE_INIT            0x70000023
+#define DT_MIPS_SYMBOL_LIB            0x70000024
+#define DT_MIPS_LOCALPAGE_GOTIDX      0x70000025
+#define DT_MIPS_LOCAL_GOTIDX          0x70000026
+#define DT_MIPS_HIDDEN_GOTIDX         0x70000027
+#define DT_MIPS_PROTECTED_GOTIDX      0x70000028
+#define DT_MIPS_OPTIONS               0x70000029
+#define DT_MIPS_INTERFACE             0x7000002a
+#define DT_MIPS_DYNSTR_ALIGN          0x7000002b
+#define DT_MIPS_INTERFACE_SIZE        0x7000002c
+#define DT_MIPS_RLD_TEXT_RESOLVE_ADDR 0x7000002d
+#define DT_MIPS_PERF_SUFFIX           0x7000002e
+#define DT_MIPS_COMPACT_SIZE          0x7000002f
+#define DT_MIPS_GP_VALUE              0x70000030
+#define DT_MIPS_AUX_DYNAMIC           0x70000031
+#define DT_MIPS_PLTGOT                0x70000032
+#define DT_MIPS_RWPLT                 0x70000034
+#define DT_MIPS_RLD_MAP_REL           0x70000035
+#define DT_MIPS_XHASH                 0x70000036
+#define DT_AUXILIARY                  0x7ffffffd
+#define DT_FILTER                     0x7fffffff
+#define DT_HIPROC                     0x7fffffff
+#define DT_AARCH64_BTI_PLT            (DT_LOPROC + 1)
+#define DT_AARCH64_PAC_PLT            (DT_LOPROC + 3)
+#define DT_AARCH64_VARIANT_PCS        (DT_LOPROC + 5)
+#define DT_ALPHA_PLTRO                (DT_LOPROC + 0)
+#define DT_IA_64_PLT_RESERVE          (DT_LOPROC + 0)
+#define DT_PPC64_GLINK                (DT_LOPROC + 0)
+#define DT_PPC64_OPD                  (DT_LOPROC + 1)
+#define DT_PPC64_OPDSZ                (DT_LOPROC + 2)
+#define DT_PPC64_OPT                  (DT_LOPROC + 3)
+#define DT_PPC_GOT                    (DT_LOPROC + 0)
+#define DT_PPC_OPT                    (DT_LOPROC + 1)
+#define DT_PROCNUM                    DT_MIPS_NUM
+#define DT_RISCV_VARIANT_CC           (DT_LOPROC + 1)
+#define DT_X86_64_PLT                 (DT_LOPROC + 0)
+#define DT_X86_64_PLTENT              (DT_LOPROC + 3)
+#define DT_X86_64_PLTSZ               (DT_LOPROC + 1)
+
+// DT_FLAGS / DT_FLAGS_1 / DT_FEATURE_1 / DT_POSFLAG_1 bits.
+#define DF_1_NOW        0x00000001
+#define DF_ORIGIN       0x00000001
+#define DF_P1_LAZYLOAD  0x00000001
+#define DF_1_GLOBAL     0x00000002
+#define DF_P1_GROUPPERM 0x00000002
+#define DF_SYMBOLIC     0x00000002
+#define DF_1_GROUP      0x00000004
+#define DF_TEXTREL      0x00000004
+#define DF_1_NODELETE   0x00000008
+#define DF_BIND_NOW     0x00000008
+#define DF_1_LOADFLTR   0x00000010
+#define DF_STATIC_TLS   0x00000010
+#define DF_1_INITFIRST  0x00000020
+#define DF_1_NOOPEN     0x00000040
+#define DF_1_ORIGIN     0x00000080
+#define DF_1_DIRECT     0x00000100
+#define DF_1_TRANS      0x00000200
+#define DF_1_INTERPOSE  0x00000400
+#define DF_1_NODEFLIB   0x00000800
+#define DF_1_NODUMP     0x00001000
+#define DF_1_CONFALT    0x00002000
+#define DF_1_ENDFILTEE  0x00004000
+#define DF_1_DISPRELDNE 0x00008000
+#define DF_1_DISPRELPND 0x00010000
+#define DF_1_NODIRECT   0x00020000
+#define DF_1_IGNMULDEF  0x00040000
+#define DF_1_NOKSYMS    0x00080000
+#define DF_1_NOHDR      0x00100000
+#define DF_1_EDITED     0x00200000
+#define DF_1_NORELOC    0x00400000
+#define DF_1_SYMINTPOSE 0x00800000
+#define DF_1_GLOBAUDIT  0x01000000
+#define DF_1_SINGLETON  0x02000000
+#define DF_1_STUB       0x04000000
+#define DF_1_PIE        0x08000000
+#define DF_1_KMOD       0x10000000
+#define DF_1_WEAKFILTER 0x20000000
+#define DF_1_NOCOMMON   0x40000000
+
+// Note types (`n_type`), by note owner.
+#define NT_GNU_ABI_TAG            1
+#define NT_PRSTATUS               1
+#define NT_VERSION                1
+#define NT_FPREGSET               2
+#define NT_GNU_HWCAP              2
+#define NT_PRFPREG                2
+#define NT_GNU_BUILD_ID           3
+#define NT_PRPSINFO               3
+#define NT_GNU_GOLD_VERSION       4
+#define NT_PRXREG                 4
+#define NT_TASKSTRUCT             4
+#define NT_GNU_PROPERTY_TYPE_0    5
+#define NT_PLATFORM               5
+#define NT_AUXV                   6
+#define NT_GWINDOWS               7
+#define NT_ASRS                   8
+#define NT_PSTATUS                10
+#define NT_PSINFO                 13
+#define NT_PRCRED                 14
+#define NT_UTSNAME                15
+#define NT_LWPSTATUS              16
+#define NT_LWPSINFO               17
+#define NT_PRFPXREG               20
+#define NT_PPC_VMX                0x100
+#define NT_PPC_SPE                0x101
+#define NT_PPC_VSX                0x102
+#define NT_PPC_TAR                0x103
+#define NT_PPC_PPR                0x104
+#define NT_PPC_DSCR               0x105
+#define NT_PPC_EBB                0x106
+#define NT_PPC_PMU                0x107
+#define NT_PPC_TM_CGPR            0x108
+#define NT_PPC_TM_CFPR            0x109
+#define NT_PPC_TM_CVMX            0x10a
+#define NT_PPC_TM_CVSX            0x10b
+#define NT_PPC_TM_SPR             0x10c
+#define NT_PPC_TM_CTAR            0x10d
+#define NT_PPC_TM_CPPR            0x10e
+#define NT_PPC_TM_CDSCR           0x10f
+#define NT_PPC_PKEY               0x110
+#define NT_PPC_DEXCR              0x111
+#define NT_PPC_HASHKEYR           0x112
+#define NT_386_TLS                0x200
+#define NT_386_IOPERM             0x201
+#define NT_X86_XSTATE             0x202
+#define NT_X86_SHSTK              0x204
+#define NT_X86_XSAVE_LAYOUT       0x205
+#define NT_S390_HIGH_GPRS         0x300
+#define NT_S390_TIMER             0x301
+#define NT_S390_TODCMP            0x302
+#define NT_S390_TODPREG           0x303
+#define NT_S390_CTRS              0x304
+#define NT_S390_PREFIX            0x305
+#define NT_S390_LAST_BREAK        0x306
+#define NT_S390_SYSTEM_CALL       0x307
+#define NT_S390_TDB               0x308
+#define NT_S390_VXRS_LOW          0x309
+#define NT_S390_VXRS_HIGH         0x30a
+#define NT_S390_GS_CB             0x30b
+#define NT_S390_GS_BC             0x30c
+#define NT_S390_RI_CB             0x30d
+#define NT_S390_PV_CPU_DATA       0x30e
+#define NT_ARM_VFP                0x400
+#define NT_ARM_TLS                0x401
+#define NT_ARM_HW_BREAK           0x402
+#define NT_ARM_HW_WATCH           0x403
+#define NT_ARM_SYSTEM_CALL        0x404
+#define NT_ARM_SVE                0x405
+#define NT_ARM_PAC_MASK           0x406
+#define NT_ARM_PACA_KEYS          0x407
+#define NT_ARM_PACG_KEYS          0x408
+#define NT_ARM_TAGGED_ADDR_CTRL   0x409
+#define NT_ARM_PAC_ENABLED_KEYS   0x40a
+#define NT_ARM_SSVE               0x40b
+#define NT_ARM_ZA                 0x40c
+#define NT_ARM_ZT                 0x40d
+#define NT_ARM_FPMR               0x40e
+#define NT_ARM_POE                0x40f
+#define NT_ARM_GCS                0x410
+#define NT_VMCOREDD               0x700
+#define NT_MIPS_DSP               0x800
+#define NT_MIPS_FP_MODE           0x801
+#define NT_MIPS_MSA               0x802
+#define NT_RISCV_CSR              0x900
+#define NT_RISCV_VECTOR           0x901
+#define NT_RISCV_TAGGED_ADDR_CTRL 0x902
+#define NT_LOONGARCH_CPUCFG       0xa00
+#define NT_LOONGARCH_CSR          0xa01
+#define NT_LOONGARCH_LSX          0xa02
+#define NT_LOONGARCH_LASX         0xa03
+#define NT_LOONGARCH_LBT          0xa04
+#define NT_LOONGARCH_HW_BREAK     0xa05
+#define NT_LOONGARCH_HW_WATCH     0xa06
+#define NT_FDO_DLOPEN_METADATA    0x407c0c0a
+#define NT_FILE                   0x46494c45
+#define NT_PRXFPREG               0x46e62b7f
+#define NT_SIGINFO                0x53494749
+#define NT_FDO_PACKAGING_METADATA 0xcafe1a7e
+
+// Relocation info accessors over `r_info`.
 #define ELF32_R_SYM(val)        ((val) >> 8)
 #define ELF32_R_TYPE(val)       ((val) & 0xff)
 #define ELF32_R_INFO(sym, type) (((sym) << 8) + ((type) & 0xff))
 #define ELF64_R_SYM(i)          ((i) >> 32)
 #define ELF64_R_TYPE(i)         ((i) & 0xffffffff)
 #define ELF64_R_INFO(sym, type) ((((Elf64_Xword)(sym)) << 32) + (type))
+
+// Relocation types, i386 psABI.
+#define R_386_NONE          0
+#define R_386_32            1
+#define R_386_PC32          2
+#define R_386_GOT32         3
+#define R_386_PLT32         4
+#define R_386_COPY          5
+#define R_386_GLOB_DAT      6
+#define R_386_JMP_SLOT      7
+#define R_386_RELATIVE      8
+#define R_386_GOTOFF        9
+#define R_386_GOTPC         10
+#define R_386_32PLT         11
+#define R_386_TLS_TPOFF     14
+#define R_386_TLS_IE        15
+#define R_386_TLS_GOTIE     16
+#define R_386_TLS_LE        17
+#define R_386_TLS_GD        18
+#define R_386_TLS_LDM       19
+#define R_386_16            20
+#define R_386_PC16          21
+#define R_386_8             22
+#define R_386_PC8           23
+#define R_386_TLS_GD_32     24
+#define R_386_TLS_GD_PUSH   25
+#define R_386_TLS_GD_CALL   26
+#define R_386_TLS_GD_POP    27
+#define R_386_TLS_LDM_32    28
+#define R_386_TLS_LDM_PUSH  29
+#define R_386_TLS_LDM_CALL  30
+#define R_386_TLS_LDM_POP   31
+#define R_386_TLS_LDO_32    32
+#define R_386_TLS_IE_32     33
+#define R_386_TLS_LE_32     34
+#define R_386_TLS_DTPMOD32  35
+#define R_386_TLS_DTPOFF32  36
+#define R_386_TLS_TPOFF32   37
+#define R_386_SIZE32        38
+#define R_386_TLS_GOTDESC   39
+#define R_386_TLS_DESC_CALL 40
+#define R_386_TLS_DESC      41
+#define R_386_IRELATIVE     42
+#define R_386_GOT32X        43
+#define R_386_NUM           44
+
+// Relocation types, AMD64 psABI.
+#define R_X86_64_NONE            0
+#define R_X86_64_64              1
+#define R_X86_64_PC32            2
+#define R_X86_64_GOT32           3
+#define R_X86_64_PLT32           4
+#define R_X86_64_COPY            5
+#define R_X86_64_GLOB_DAT        6
+#define R_X86_64_JUMP_SLOT       7
+#define R_X86_64_RELATIVE        8
+#define R_X86_64_GOTPCREL        9
+#define R_X86_64_32              10
+#define R_X86_64_32S             11
+#define R_X86_64_16              12
+#define R_X86_64_PC16            13
+#define R_X86_64_8               14
+#define R_X86_64_PC8             15
+#define R_X86_64_DTPMOD64        16
+#define R_X86_64_DTPOFF64        17
+#define R_X86_64_TPOFF64         18
+#define R_X86_64_TLSGD           19
+#define R_X86_64_TLSLD           20
+#define R_X86_64_DTPOFF32        21
+#define R_X86_64_GOTTPOFF        22
+#define R_X86_64_TPOFF32         23
+#define R_X86_64_PC64            24
+#define R_X86_64_GOTOFF64        25
+#define R_X86_64_GOTPC32         26
+#define R_X86_64_GOT64           27
+#define R_X86_64_GOTPCREL64      28
+#define R_X86_64_GOTPC64         29
+#define R_X86_64_GOTPLT64        30
+#define R_X86_64_PLTOFF64        31
+#define R_X86_64_SIZE32          32
+#define R_X86_64_SIZE64          33
+#define R_X86_64_GOTPC32_TLSDESC 34
+#define R_X86_64_TLSDESC_CALL    35
+#define R_X86_64_TLSDESC         36
+#define R_X86_64_IRELATIVE       37
+#define R_X86_64_RELATIVE64      38
+#define R_X86_64_GOTPCRELX       41
+#define R_X86_64_REX_GOTPCRELX   42
+#define R_X86_64_NUM             43
+
+// Relocation types, ELF for the Arm 64-bit Architecture.
+#define R_AARCH64_NONE                         0
+#define R_AARCH64_ABS64                        257
+#define R_AARCH64_ABS32                        258
+#define R_AARCH64_ABS16                        259
+#define R_AARCH64_PREL64                       260
+#define R_AARCH64_PREL32                       261
+#define R_AARCH64_PREL16                       262
+#define R_AARCH64_MOVW_UABS_G0                 263
+#define R_AARCH64_MOVW_UABS_G0_NC              264
+#define R_AARCH64_MOVW_UABS_G1                 265
+#define R_AARCH64_MOVW_UABS_G1_NC              266
+#define R_AARCH64_MOVW_UABS_G2                 267
+#define R_AARCH64_MOVW_UABS_G2_NC              268
+#define R_AARCH64_MOVW_UABS_G3                 269
+#define R_AARCH64_MOVW_SABS_G0                 270
+#define R_AARCH64_MOVW_SABS_G1                 271
+#define R_AARCH64_MOVW_SABS_G2                 272
+#define R_AARCH64_LD_PREL_LO19                 273
+#define R_AARCH64_ADR_PREL_LO21                274
+#define R_AARCH64_ADR_PREL_PG_HI21             275
+#define R_AARCH64_ADR_PREL_PG_HI21_NC          276
+#define R_AARCH64_ADD_ABS_LO12_NC              277
+#define R_AARCH64_LDST8_ABS_LO12_NC            278
+#define R_AARCH64_TSTBR14                      279
+#define R_AARCH64_CONDBR19                     280
+#define R_AARCH64_JUMP26                       282
+#define R_AARCH64_CALL26                       283
+#define R_AARCH64_LDST16_ABS_LO12_NC           284
+#define R_AARCH64_LDST32_ABS_LO12_NC           285
+#define R_AARCH64_LDST64_ABS_LO12_NC           286
+#define R_AARCH64_MOVW_PREL_G0                 287
+#define R_AARCH64_MOVW_PREL_G0_NC              288
+#define R_AARCH64_MOVW_PREL_G1                 289
+#define R_AARCH64_MOVW_PREL_G1_NC              290
+#define R_AARCH64_MOVW_PREL_G2                 291
+#define R_AARCH64_MOVW_PREL_G2_NC              292
+#define R_AARCH64_MOVW_PREL_G3                 293
+#define R_AARCH64_LDST128_ABS_LO12_NC          299
+#define R_AARCH64_MOVW_GOTOFF_G0               300
+#define R_AARCH64_MOVW_GOTOFF_G0_NC            301
+#define R_AARCH64_MOVW_GOTOFF_G1               302
+#define R_AARCH64_MOVW_GOTOFF_G1_NC            303
+#define R_AARCH64_MOVW_GOTOFF_G2               304
+#define R_AARCH64_MOVW_GOTOFF_G2_NC            305
+#define R_AARCH64_MOVW_GOTOFF_G3               306
+#define R_AARCH64_GOTREL64                     307
+#define R_AARCH64_GOTREL32                     308
+#define R_AARCH64_GOT_LD_PREL19                309
+#define R_AARCH64_LD64_GOTOFF_LO15             310
+#define R_AARCH64_ADR_GOT_PAGE                 311
+#define R_AARCH64_LD64_GOT_LO12_NC             312
+#define R_AARCH64_LD64_GOTPAGE_LO15            313
+#define R_AARCH64_TLSGD_ADR_PREL21             512
+#define R_AARCH64_TLSGD_ADR_PAGE21             513
+#define R_AARCH64_TLSGD_ADD_LO12_NC            514
+#define R_AARCH64_TLSGD_MOVW_G1                515
+#define R_AARCH64_TLSGD_MOVW_G0_NC             516
+#define R_AARCH64_TLSLD_ADR_PREL21             517
+#define R_AARCH64_TLSLD_ADR_PAGE21             518
+#define R_AARCH64_TLSLD_ADD_LO12_NC            519
+#define R_AARCH64_TLSLD_MOVW_G1                520
+#define R_AARCH64_TLSLD_MOVW_G0_NC             521
+#define R_AARCH64_TLSLD_LD_PREL19              522
+#define R_AARCH64_TLSLD_MOVW_DTPREL_G2         523
+#define R_AARCH64_TLSLD_MOVW_DTPREL_G1         524
+#define R_AARCH64_TLSLD_MOVW_DTPREL_G1_NC      525
+#define R_AARCH64_TLSLD_MOVW_DTPREL_G0         526
+#define R_AARCH64_TLSLD_MOVW_DTPREL_G0_NC      527
+#define R_AARCH64_TLSLD_ADD_DTPREL_HI12        528
+#define R_AARCH64_TLSLD_ADD_DTPREL_LO12        529
+#define R_AARCH64_TLSLD_ADD_DTPREL_LO12_NC     530
+#define R_AARCH64_TLSLD_LDST8_DTPREL_LO12      531
+#define R_AARCH64_TLSLD_LDST8_DTPREL_LO12_NC   532
+#define R_AARCH64_TLSLD_LDST16_DTPREL_LO12     533
+#define R_AARCH64_TLSLD_LDST16_DTPREL_LO12_NC  534
+#define R_AARCH64_TLSLD_LDST32_DTPREL_LO12     535
+#define R_AARCH64_TLSLD_LDST32_DTPREL_LO12_NC  536
+#define R_AARCH64_TLSLD_LDST64_DTPREL_LO12     537
+#define R_AARCH64_TLSLD_LDST64_DTPREL_LO12_NC  538
+#define R_AARCH64_TLSIE_MOVW_GOTTPREL_G1       539
+#define R_AARCH64_TLSIE_MOVW_GOTTPREL_G0_NC    540
+#define R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21    541
+#define R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC  542
+#define R_AARCH64_TLSIE_LD_GOTTPREL_PREL19     543
+#define R_AARCH64_TLSLE_MOVW_TPREL_G2          544
+#define R_AARCH64_TLSLE_MOVW_TPREL_G1          545
+#define R_AARCH64_TLSLE_MOVW_TPREL_G1_NC       546
+#define R_AARCH64_TLSLE_MOVW_TPREL_G0          547
+#define R_AARCH64_TLSLE_MOVW_TPREL_G0_NC       548
+#define R_AARCH64_TLSLE_ADD_TPREL_HI12         549
+#define R_AARCH64_TLSLE_ADD_TPREL_LO12         550
+#define R_AARCH64_TLSLE_ADD_TPREL_LO12_NC      551
+#define R_AARCH64_TLSLE_LDST8_TPREL_LO12       552
+#define R_AARCH64_TLSLE_LDST8_TPREL_LO12_NC    553
+#define R_AARCH64_TLSLE_LDST16_TPREL_LO12      554
+#define R_AARCH64_TLSLE_LDST16_TPREL_LO12_NC   555
+#define R_AARCH64_TLSLE_LDST32_TPREL_LO12      556
+#define R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC   557
+#define R_AARCH64_TLSLE_LDST64_TPREL_LO12      558
+#define R_AARCH64_TLSLE_LDST64_TPREL_LO12_NC   559
+#define R_AARCH64_TLSDESC_LD_PREL19            560
+#define R_AARCH64_TLSDESC_ADR_PREL21           561
+#define R_AARCH64_TLSDESC_ADR_PAGE21           562
+#define R_AARCH64_TLSDESC_LD64_LO12            563
+#define R_AARCH64_TLSDESC_ADD_LO12             564
+#define R_AARCH64_TLSDESC_OFF_G1               565
+#define R_AARCH64_TLSDESC_OFF_G0_NC            566
+#define R_AARCH64_TLSDESC_LDR                  567
+#define R_AARCH64_TLSDESC_ADD                  568
+#define R_AARCH64_TLSDESC_CALL                 569
+#define R_AARCH64_TLSLE_LDST128_TPREL_LO12     570
+#define R_AARCH64_TLSLE_LDST128_TPREL_LO12_NC  571
+#define R_AARCH64_TLSLD_LDST128_DTPREL_LO12    572
+#define R_AARCH64_TLSLD_LDST128_DTPREL_LO12_NC 573
+#define R_AARCH64_COPY                         1024
+#define R_AARCH64_GLOB_DAT                     1025
+#define R_AARCH64_JUMP_SLOT                    1026
+#define R_AARCH64_RELATIVE                     1027
+#define R_AARCH64_TLS_DTPMOD                   1028
+#define R_AARCH64_TLS_DTPREL                   1029
+#define R_AARCH64_TLS_TPREL                    1030
+#define R_AARCH64_TLSDESC                      1031
+#define R_AARCH64_IRELATIVE                    1032
+
+// Relocation types, ELF for the Arm Architecture (32-bit).
+#define R_ARM_NONE              0
+#define R_ARM_PC24              1
+#define R_ARM_ABS32             2
+#define R_ARM_REL32             3
+#define R_ARM_PC13              4
+#define R_ARM_ABS16             5
+#define R_ARM_ABS12             6
+#define R_ARM_THM_ABS5          7
+#define R_ARM_ABS8              8
+#define R_ARM_SBREL32           9
+#define R_ARM_THM_PC22          10
+#define R_ARM_THM_PC8           11
+#define R_ARM_AMP_VCALL9        12
+#define R_ARM_SWI24             13
+#define R_ARM_TLS_DESC          13
+#define R_ARM_THM_SWI8          14
+#define R_ARM_XPC25             15
+#define R_ARM_THM_XPC22         16
+#define R_ARM_TLS_DTPMOD32      17
+#define R_ARM_TLS_DTPOFF32      18
+#define R_ARM_TLS_TPOFF32       19
+#define R_ARM_COPY              20
+#define R_ARM_GLOB_DAT          21
+#define R_ARM_JUMP_SLOT         22
+#define R_ARM_RELATIVE          23
+#define R_ARM_GOTOFF            24
+#define R_ARM_GOTPC             25
+#define R_ARM_GOT32             26
+#define R_ARM_PLT32             27
+#define R_ARM_CALL              28
+#define R_ARM_JUMP24            29
+#define R_ARM_THM_JUMP24        30
+#define R_ARM_BASE_ABS          31
+#define R_ARM_ALU_PCREL_7_0     32
+#define R_ARM_ALU_PCREL_15_8    33
+#define R_ARM_ALU_PCREL_23_15   34
+#define R_ARM_LDR_SBREL_11_0    35
+#define R_ARM_ALU_SBREL_19_12   36
+#define R_ARM_ALU_SBREL_27_20   37
+#define R_ARM_TARGET1           38
+#define R_ARM_SBREL31           39
+#define R_ARM_V4BX              40
+#define R_ARM_TARGET2           41
+#define R_ARM_PREL31            42
+#define R_ARM_MOVW_ABS_NC       43
+#define R_ARM_MOVT_ABS          44
+#define R_ARM_MOVW_PREL_NC      45
+#define R_ARM_MOVT_PREL         46
+#define R_ARM_THM_MOVW_ABS_NC   47
+#define R_ARM_THM_MOVT_ABS      48
+#define R_ARM_THM_MOVW_PREL_NC  49
+#define R_ARM_THM_MOVT_PREL     50
+#define R_ARM_THM_JUMP19        51
+#define R_ARM_THM_JUMP6         52
+#define R_ARM_THM_ALU_PREL_11_0 53
+#define R_ARM_THM_PC12          54
+#define R_ARM_ABS32_NOI         55
+#define R_ARM_REL32_NOI         56
+#define R_ARM_ALU_PC_G0_NC      57
+#define R_ARM_ALU_PC_G0         58
+#define R_ARM_ALU_PC_G1_NC      59
+#define R_ARM_ALU_PC_G1         60
+#define R_ARM_ALU_PC_G2         61
+#define R_ARM_LDR_PC_G1         62
+#define R_ARM_LDR_PC_G2         63
+#define R_ARM_LDRS_PC_G0        64
+#define R_ARM_LDRS_PC_G1        65
+#define R_ARM_LDRS_PC_G2        66
+#define R_ARM_LDC_PC_G0         67
+#define R_ARM_LDC_PC_G1         68
+#define R_ARM_LDC_PC_G2         69
+#define R_ARM_ALU_SB_G0_NC      70
+#define R_ARM_ALU_SB_G0         71
+#define R_ARM_ALU_SB_G1_NC      72
+#define R_ARM_ALU_SB_G1         73
+#define R_ARM_ALU_SB_G2         74
+#define R_ARM_LDR_SB_G0         75
+#define R_ARM_LDR_SB_G1         76
+#define R_ARM_LDR_SB_G2         77
+#define R_ARM_LDRS_SB_G0        78
+#define R_ARM_LDRS_SB_G1        79
+#define R_ARM_LDRS_SB_G2        80
+#define R_ARM_LDC_SB_G0         81
+#define R_ARM_LDC_SB_G1         82
+#define R_ARM_LDC_SB_G2         83
+#define R_ARM_MOVW_BREL_NC      84
+#define R_ARM_MOVT_BREL         85
+#define R_ARM_MOVW_BREL         86
+#define R_ARM_THM_MOVW_BREL_NC  87
+#define R_ARM_THM_MOVT_BREL     88
+#define R_ARM_THM_MOVW_BREL     89
+#define R_ARM_TLS_GOTDESC       90
+#define R_ARM_TLS_CALL          91
+#define R_ARM_TLS_DESCSEQ       92
+#define R_ARM_THM_TLS_CALL      93
+#define R_ARM_PLT32_ABS         94
+#define R_ARM_GOT_ABS           95
+#define R_ARM_GOT_PREL          96
+#define R_ARM_GOT_BREL12        97
+#define R_ARM_GOTOFF12          98
+#define R_ARM_GOTRELAX          99
+#define R_ARM_GNU_VTENTRY       100
+#define R_ARM_GNU_VTINHERIT     101
+#define R_ARM_THM_PC11          102
+#define R_ARM_THM_PC9           103
+#define R_ARM_TLS_GD32          104
+#define R_ARM_TLS_LDM32         105
+#define R_ARM_TLS_LDO32         106
+#define R_ARM_TLS_IE32          107
+#define R_ARM_TLS_LE32          108
+#define R_ARM_TLS_LDO12         109
+#define R_ARM_TLS_LE12          110
+#define R_ARM_TLS_IE12GP        111
+#define R_ARM_ME_TOO            128
+#define R_ARM_THM_TLS_DESCSEQ   129
+#define R_ARM_THM_TLS_DESCSEQ16 129
+#define R_ARM_THM_TLS_DESCSEQ32 130
+#define R_ARM_THM_GOT_BREL12    131
+#define R_ARM_IRELATIVE         160
+#define R_ARM_RXPC25            249
+#define R_ARM_RSBREL32          250
+#define R_ARM_THM_RPC22         251
+#define R_ARM_RREL32            252
+#define R_ARM_RABS22            253
+#define R_ARM_RPC24             254
+#define R_ARM_RBASE             255
+#define R_ARM_NUM               256
+
+// Relocation types, MIPS psABI.
+#define R_MIPS_NONE            0
+#define R_MIPS_16              1
+#define R_MIPS_32              2
+#define R_MIPS_REL32           3
+#define R_MIPS_26              4
+#define R_MIPS_HI16            5
+#define R_MIPS_LO16            6
+#define R_MIPS_GPREL16         7
+#define R_MIPS_LITERAL         8
+#define R_MIPS_GOT16           9
+#define R_MIPS_PC16            10
+#define R_MIPS_CALL16          11
+#define R_MIPS_GPREL32         12
+#define R_MIPS_SHIFT5          16
+#define R_MIPS_SHIFT6          17
+#define R_MIPS_64              18
+#define R_MIPS_GOT_DISP        19
+#define R_MIPS_GOT_PAGE        20
+#define R_MIPS_GOT_OFST        21
+#define R_MIPS_GOT_HI16        22
+#define R_MIPS_GOT_LO16        23
+#define R_MIPS_SUB             24
+#define R_MIPS_INSERT_A        25
+#define R_MIPS_INSERT_B        26
+#define R_MIPS_DELETE          27
+#define R_MIPS_HIGHER          28
+#define R_MIPS_HIGHEST         29
+#define R_MIPS_CALL_HI16       30
+#define R_MIPS_CALL_LO16       31
+#define R_MIPS_SCN_DISP        32
+#define R_MIPS_REL16           33
+#define R_MIPS_ADD_IMMEDIATE   34
+#define R_MIPS_PJUMP           35
+#define R_MIPS_RELGOT          36
+#define R_MIPS_JALR            37
+#define R_MIPS_TLS_DTPMOD32    38
+#define R_MIPS_TLS_DTPREL32    39
+#define R_MIPS_TLS_DTPMOD64    40
+#define R_MIPS_TLS_DTPREL64    41
+#define R_MIPS_TLS_GD          42
+#define R_MIPS_TLS_LDM         43
+#define R_MIPS_TLS_DTPREL_HI16 44
+#define R_MIPS_TLS_DTPREL_LO16 45
+#define R_MIPS_TLS_GOTTPREL    46
+#define R_MIPS_TLS_TPREL32     47
+#define R_MIPS_TLS_TPREL64     48
+#define R_MIPS_TLS_TPREL_HI16  49
+#define R_MIPS_TLS_TPREL_LO16  50
+#define R_MIPS_GLOB_DAT        51
+#define R_MIPS_PC21_S2         60
+#define R_MIPS_PC26_S2         61
+#define R_MIPS_PC18_S3         62
+#define R_MIPS_PC19_S2         63
+#define R_MIPS_PCHI16          64
+#define R_MIPS_PCLO16          65
+#define R_MIPS_COPY            126
+#define R_MIPS_JUMP_SLOT       127
+#define R_MIPS_RELATIVE        128
+#define R_MIPS_PC32            248
+#define R_MIPS_EH              249
+#define R_MIPS_GNU_REL16_S2    250
+#define R_MIPS_GNU_VTINHERIT   253
+#define R_MIPS_GNU_VTENTRY     254
+#define R_MIPS_NUM             255
+
+// Relocation types, s390 psABI.
+#define R_390_NONE        0
+#define R_390_8           1
+#define R_390_12          2
+#define R_390_16          3
+#define R_390_32          4
+#define R_390_PC32        5
+#define R_390_GOT12       6
+#define R_390_GOT32       7
+#define R_390_PLT32       8
+#define R_390_COPY        9
+#define R_390_GLOB_DAT    10
+#define R_390_JMP_SLOT    11
+#define R_390_RELATIVE    12
+#define R_390_GOTOFF32    13
+#define R_390_GOTPC       14
+#define R_390_GOT16       15
+#define R_390_PC16        16
+#define R_390_PC16DBL     17
+#define R_390_PLT16DBL    18
+#define R_390_PC32DBL     19
+#define R_390_PLT32DBL    20
+#define R_390_GOTPCDBL    21
+#define R_390_64          22
+#define R_390_PC64        23
+#define R_390_GOT64       24
+#define R_390_PLT64       25
+#define R_390_GOTENT      26
+#define R_390_GOTOFF16    27
+#define R_390_GOTOFF64    28
+#define R_390_GOTPLT12    29
+#define R_390_GOTPLT16    30
+#define R_390_GOTPLT32    31
+#define R_390_GOTPLT64    32
+#define R_390_GOTPLTENT   33
+#define R_390_PLTOFF16    34
+#define R_390_PLTOFF32    35
+#define R_390_PLTOFF64    36
+#define R_390_TLS_LOAD    37
+#define R_390_TLS_GDCALL  38
+#define R_390_TLS_LDCALL  39
+#define R_390_TLS_GD32    40
+#define R_390_TLS_GD64    41
+#define R_390_TLS_GOTIE12 42
+#define R_390_TLS_GOTIE32 43
+#define R_390_TLS_GOTIE64 44
+#define R_390_TLS_LDM32   45
+#define R_390_TLS_LDM64   46
+#define R_390_TLS_IE32    47
+#define R_390_TLS_IE64    48
+#define R_390_TLS_IEENT   49
+#define R_390_TLS_LE32    50
+#define R_390_TLS_LE64    51
+#define R_390_TLS_LDO32   52
+#define R_390_TLS_LDO64   53
+#define R_390_TLS_DTPMOD  54
+#define R_390_TLS_DTPOFF  55
+#define R_390_TLS_TPOFF   56
+#define R_390_20          57
+#define R_390_GOT20       58
+#define R_390_GOTPLT20    59
+#define R_390_TLS_GOTIE20 60
+#define R_390_IRELATIVE   61
+#define R_390_NUM         62
+
+// Relocation types, RISC-V psABI.
+#define R_RISCV_NONE              0
+#define R_RISCV_32                1
+#define R_RISCV_64                2
+#define R_RISCV_RELATIVE          3
+#define R_RISCV_COPY              4
+#define R_RISCV_JUMP_SLOT         5
+#define R_RISCV_TLS_DTPMOD32      6
+#define R_RISCV_TLS_DTPMOD64      7
+#define R_RISCV_TLS_DTPREL32      8
+#define R_RISCV_TLS_DTPREL64      9
+#define R_RISCV_TLS_TPREL32       10
+#define R_RISCV_TLS_TPREL64       11
+#define R_RISCV_TLSDESC           12
+#define R_RISCV_BRANCH            16
+#define R_RISCV_JAL               17
+#define R_RISCV_CALL              18
+#define R_RISCV_CALL_PLT          19
+#define R_RISCV_GOT_HI20          20
+#define R_RISCV_TLS_GOT_HI20      21
+#define R_RISCV_TLS_GD_HI20       22
+#define R_RISCV_PCREL_HI20        23
+#define R_RISCV_PCREL_LO12_I      24
+#define R_RISCV_PCREL_LO12_S      25
+#define R_RISCV_HI20              26
+#define R_RISCV_LO12_I            27
+#define R_RISCV_LO12_S            28
+#define R_RISCV_TPREL_HI20        29
+#define R_RISCV_TPREL_LO12_I      30
+#define R_RISCV_TPREL_LO12_S      31
+#define R_RISCV_TPREL_ADD         32
+#define R_RISCV_ADD8              33
+#define R_RISCV_ADD16             34
+#define R_RISCV_ADD32             35
+#define R_RISCV_ADD64             36
+#define R_RISCV_SUB8              37
+#define R_RISCV_SUB16             38
+#define R_RISCV_SUB32             39
+#define R_RISCV_SUB64             40
+#define R_RISCV_GOT32_PCREL       41
+#define R_RISCV_ALIGN             43
+#define R_RISCV_RVC_BRANCH        44
+#define R_RISCV_RVC_JUMP          45
+#define R_RISCV_RELAX             51
+#define R_RISCV_SUB6              52
+#define R_RISCV_SET6              53
+#define R_RISCV_SET8              54
+#define R_RISCV_SET16             55
+#define R_RISCV_SET32             56
+#define R_RISCV_32_PCREL          57
+#define R_RISCV_IRELATIVE         58
+#define R_RISCV_PLT32             59
+#define R_RISCV_SET_ULEB128       60
+#define R_RISCV_SUB_ULEB128       61
+#define R_RISCV_TLSDESC_HI20      62
+#define R_RISCV_TLSDESC_LOAD_LO12 63
+#define R_RISCV_TLSDESC_ADD_LO12  64
+#define R_RISCV_TLSDESC_CALL      65
+#define R_RISCV_NUM               66
+
+// Relocation types, LoongArch psABI.
+#define R_LARCH_NONE                       0
+#define R_LARCH_32                         1
+#define R_LARCH_64                         2
+#define R_LARCH_RELATIVE                   3
+#define R_LARCH_COPY                       4
+#define R_LARCH_JUMP_SLOT                  5
+#define R_LARCH_TLS_DTPMOD32               6
+#define R_LARCH_TLS_DTPMOD64               7
+#define R_LARCH_TLS_DTPREL32               8
+#define R_LARCH_TLS_DTPREL64               9
+#define R_LARCH_TLS_TPREL32                10
+#define R_LARCH_TLS_TPREL64                11
+#define R_LARCH_IRELATIVE                  12
+#define R_LARCH_TLS_DESC32                 13
+#define R_LARCH_TLS_DESC64                 14
+#define R_LARCH_MARK_LA                    20
+#define R_LARCH_MARK_PCREL                 21
+#define R_LARCH_SOP_PUSH_PCREL             22
+#define R_LARCH_SOP_PUSH_ABSOLUTE          23
+#define R_LARCH_SOP_PUSH_DUP               24
+#define R_LARCH_SOP_PUSH_GPREL             25
+#define R_LARCH_SOP_PUSH_TLS_TPREL         26
+#define R_LARCH_SOP_PUSH_TLS_GOT           27
+#define R_LARCH_SOP_PUSH_TLS_GD            28
+#define R_LARCH_SOP_PUSH_PLT_PCREL         29
+#define R_LARCH_SOP_ASSERT                 30
+#define R_LARCH_SOP_NOT                    31
+#define R_LARCH_SOP_SUB                    32
+#define R_LARCH_SOP_SL                     33
+#define R_LARCH_SOP_SR                     34
+#define R_LARCH_SOP_ADD                    35
+#define R_LARCH_SOP_AND                    36
+#define R_LARCH_SOP_IF_ELSE                37
+#define R_LARCH_SOP_POP_32_S_10_5          38
+#define R_LARCH_SOP_POP_32_U_10_12         39
+#define R_LARCH_SOP_POP_32_S_10_12         40
+#define R_LARCH_SOP_POP_32_S_10_16         41
+#define R_LARCH_SOP_POP_32_S_10_16_S2      42
+#define R_LARCH_SOP_POP_32_S_5_20          43
+#define R_LARCH_SOP_POP_32_S_0_5_10_16_S2  44
+#define R_LARCH_SOP_POP_32_S_0_10_10_16_S2 45
+#define R_LARCH_SOP_POP_32_U               46
+#define R_LARCH_ADD8                       47
+#define R_LARCH_ADD16                      48
+#define R_LARCH_ADD24                      49
+#define R_LARCH_ADD32                      50
+#define R_LARCH_ADD64                      51
+#define R_LARCH_SUB8                       52
+#define R_LARCH_SUB16                      53
+#define R_LARCH_SUB24                      54
+#define R_LARCH_SUB32                      55
+#define R_LARCH_SUB64                      56
+#define R_LARCH_GNU_VTINHERIT              57
+#define R_LARCH_GNU_VTENTRY                58
+#define R_LARCH_B16                        64
+#define R_LARCH_B21                        65
+#define R_LARCH_B26                        66
+#define R_LARCH_ABS_HI20                   67
+#define R_LARCH_ABS_LO12                   68
+#define R_LARCH_ABS64_LO20                 69
+#define R_LARCH_ABS64_HI12                 70
+#define R_LARCH_PCALA_HI20                 71
+#define R_LARCH_PCALA_LO12                 72
+#define R_LARCH_PCALA64_LO20               73
+#define R_LARCH_PCALA64_HI12               74
+#define R_LARCH_GOT_PC_HI20                75
+#define R_LARCH_GOT_PC_LO12                76
+#define R_LARCH_GOT64_PC_LO20              77
+#define R_LARCH_GOT64_PC_HI12              78
+#define R_LARCH_GOT_HI20                   79
+#define R_LARCH_GOT_LO12                   80
+#define R_LARCH_GOT64_LO20                 81
+#define R_LARCH_GOT64_HI12                 82
+#define R_LARCH_TLS_LE_HI20                83
+#define R_LARCH_TLS_LE_LO12                84
+#define R_LARCH_TLS_LE64_LO20              85
+#define R_LARCH_TLS_LE64_HI12              86
+#define R_LARCH_TLS_IE_PC_HI20             87
+#define R_LARCH_TLS_IE_PC_LO12             88
+#define R_LARCH_TLS_IE64_PC_LO20           89
+#define R_LARCH_TLS_IE64_PC_HI12           90
+#define R_LARCH_TLS_IE_HI20                91
+#define R_LARCH_TLS_IE_LO12                92
+#define R_LARCH_TLS_IE64_LO20              93
+#define R_LARCH_TLS_IE64_HI12              94
+#define R_LARCH_TLS_LD_PC_HI20             95
+#define R_LARCH_TLS_LD_HI20                96
+#define R_LARCH_TLS_GD_PC_HI20             97
+#define R_LARCH_TLS_GD_HI20                98
+#define R_LARCH_32_PCREL                   99
+#define R_LARCH_RELAX                      100
+#define R_LARCH_DELETE                     101
+#define R_LARCH_ALIGN                      102
+#define R_LARCH_PCREL20_S2                 103
+#define R_LARCH_CFA                        104
+#define R_LARCH_ADD6                       105
+#define R_LARCH_SUB6                       106
+#define R_LARCH_ADD_ULEB128                107
+#define R_LARCH_SUB_ULEB128                108
+#define R_LARCH_64_PCREL                   109
+#define R_LARCH_CALL36                     110
+#define R_LARCH_TLS_DESC_PC_HI20           111
+#define R_LARCH_TLS_DESC_PC_LO12           112
+#define R_LARCH_TLS_DESC64_PC_LO20         113
+#define R_LARCH_TLS_DESC64_PC_HI12         114
+#define R_LARCH_TLS_DESC_HI20              115
+#define R_LARCH_TLS_DESC_LO12              116
+#define R_LARCH_TLS_DESC64_LO20            117
+#define R_LARCH_TLS_DESC64_HI12            118
+#define R_LARCH_TLS_DESC_LD                119
+#define R_LARCH_TLS_DESC_CALL              120
+#define R_LARCH_TLS_LE_HI20_R              121
+#define R_LARCH_TLS_LE_ADD_R               122
+#define R_LARCH_TLS_LE_LO12_R              123
+#define R_LARCH_TLS_LD_PCREL20_S2          124
+#define R_LARCH_TLS_GD_PCREL20_S2          125
+#define R_LARCH_TLS_DESC_PCREL20_S2        126

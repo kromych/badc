@@ -1387,10 +1387,7 @@ impl Compiler {
                     self.restore_lex(snap);
                     return match self.parse_const_expr_cond_val()? {
                         ConstVal::Float(f) => Ok((f.to_bits() as i128, InitElemReloc::Float64Bits)),
-                        v => Ok((
-                            self.require_integer_const(v)?.as_i128(),
-                            InitElemReloc::None,
-                        )),
+                        v => self.init_scalar_of(v),
                     };
                 }
                 // Optional function-pointer abstract declarator
@@ -1538,8 +1535,7 @@ impl Compiler {
             // initializer can use `((char *)"...")` and
             // `&((T *)0)->field` shapes inside arithmetic.
             self.restore_lex(snap);
-            let v = self.parse_constant_i128()?;
-            return Ok((v, InitElemReloc::None));
+            return self.parse_constant_init_scalar();
         }
         if self.lex.tk == '"' {
             let addr = self.lex.ival;
@@ -1572,8 +1568,7 @@ impl Compiler {
                 || self.lex.tk == ':';
             if !complete {
                 self.restore_init_checkpoint(cp);
-                let v = self.parse_constant_i128()?;
-                return Ok((v, InitElemReloc::None));
+                return self.parse_constant_init_scalar();
             }
             let reloc = match a.sym {
                 Some(idx) if a.sym_code => InitElemReloc::Code(idx),
@@ -1752,9 +1747,37 @@ impl Compiler {
                 self.symbols[idx].name
             )));
         }
-        // Fall back to integer literal (with optional unary `-`).
-        let v = self.parse_constant_i128()?;
-        Ok((v, InitElemReloc::None))
+        // Fall back to the shared constant evaluator.
+        self.parse_constant_init_scalar()
+    }
+
+    /// A scalar initializer element folded by the shared constant
+    /// evaluator. C99 6.6p9 admits an integer constant expression added
+    /// to an address constant in either order, so `N + &obj` reaches
+    /// here with the integer leading and only the evaluator can tell the
+    /// two apart.
+    fn parse_constant_init_scalar(&mut self) -> Result<(i128, InitElemReloc), C5Error> {
+        let v = self.parse_const_expr_cond_val()?;
+        self.init_scalar_of(v)
+    }
+
+    /// A folded constant as an initializer element: a symbol-relative
+    /// address carries its relocation, anything else is a plain value.
+    fn init_scalar_of(&self, v: ConstVal) -> Result<(i128, InitElemReloc), C5Error> {
+        if let ConstVal::Addr(a) = v
+            && let Some(idx) = a.sym
+        {
+            let reloc = if a.sym_code {
+                InitElemReloc::Code(idx)
+            } else {
+                InitElemReloc::Data(Some(idx))
+            };
+            return Ok((a.value as i128, reloc));
+        }
+        Ok((
+            self.require_integer_const(v)?.as_i128(),
+            InitElemReloc::None,
+        ))
     }
 
     /// C99 6.5.2.5 array-typed compound literal in a static initializer:

@@ -701,6 +701,101 @@ fn installed_overlay_overrides_embedded() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// The include search path must not depend on the working directory: a
+// build system that runs the compiler from a project root whose
+// `./include` holds that project's own headers would otherwise have them
+// shadow the standard ones.
+#[test]
+fn working_directory_include_is_not_searched() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-cwdinc-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("include")).expect("create ./include");
+    std::fs::write(
+        dir.join("include/stdio.h"),
+        "#error \"working-directory ./include was searched\"\n",
+    )
+    .expect("write decoy header");
+    std::fs::write(
+        dir.join("m.c"),
+        "#include <stdio.h>\nint main(void){ return puts(\"\") < 0; }\n",
+    )
+    .expect("write source");
+    let run = |extra: &[&str], out: &str| {
+        let mut cmd = Command::new(badc);
+        cmd.arg("-q").arg("-c");
+        for a in extra {
+            cmd.arg(a);
+        }
+        cmd.arg("m.c").arg("-o").arg(out).current_dir(&dir);
+        cmd.output().expect("run badc")
+    };
+    let built = run(&[], "m.o");
+    assert!(
+        built.status.success(),
+        "a ./include in the working directory must not shadow <stdio.h>: {}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    // The same header reached explicitly through -I still wins, as in
+    // every other compiler.
+    assert!(
+        !run(&["-I", "include"], "m2.o").status.success(),
+        "an explicit -I include must still shadow the bundled header"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// A badc built from its own source tree searches that tree's
+// `libc/include`, so editing a bundled header takes effect without a
+// rebuild. The anchor is the executable, not the working directory.
+#[test]
+fn source_tree_headers_override_the_embedded_set() {
+    let badc = std::path::Path::new(env!("CARGO_BIN_EXE_badc"));
+    // Locate the tree the same way the driver does.
+    let mut root = badc.parent();
+    while let Some(d) = root {
+        if d.join("Cargo.toml").is_file() && d.join("libc/include").is_dir() {
+            break;
+        }
+        root = d.parent();
+    }
+    let Some(root) = root else {
+        return; // an installed binary has no source tree
+    };
+    let overlay = root.join("libc/include/stdalign.h");
+    let original = std::fs::read(&overlay).expect("read bundled header");
+    let mut patched = original.clone();
+    patched.extend_from_slice(b"\n#define BADC_SOURCE_TREE_OVERLAY 1\n");
+    std::fs::write(&overlay, &patched).expect("patch bundled header");
+
+    let dir = std::env::temp_dir().join(format!("badc-srctree-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create scratch");
+    std::fs::write(
+        dir.join("m.c"),
+        "#include <stdalign.h>\n#ifndef BADC_SOURCE_TREE_OVERLAY\n\
+         #error \"source-tree libc/include was not searched\"\n#endif\n\
+         int main(void){ return 0; }\n",
+    )
+    .expect("write source");
+    let built = Command::new(badc)
+        .arg("-q")
+        .arg("-c")
+        .arg("m.c")
+        .arg("-o")
+        .arg("m.o")
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    std::fs::write(&overlay, &original).expect("restore bundled header");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        built.status.success(),
+        "the source tree's libc/include must be searched from any cwd: {}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+}
+
 // An unrecognised dash-prefixed option must be rejected with a clear
 // "unknown option" diagnostic, not silently reinterpreted as a source
 // file (which produces a misleading `cannot read` error or, worse,

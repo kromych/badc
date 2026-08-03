@@ -521,32 +521,28 @@ fn run() {
             // leaves the caller believing the output is mitigated.
             // The `thunk` / `thunk-inline` kinds want a compiler-generated
             // thunk body, which badc does not produce.
-            s if s.starts_with("-mindirect-branch=") => {
-                match &s["-mindirect-branch=".len()..] {
-                    "keep" => hardening.indirect_branch_thunk = false,
-                    "thunk-extern" => hardening.indirect_branch_thunk = true,
-                    other => {
-                        eprint_diagnostic(format!(
-                            "badc: error: unsupported argument `{other}` to `-mindirect-branch=` \
+            s if s.starts_with("-mindirect-branch=") => match &s["-mindirect-branch=".len()..] {
+                "keep" => hardening.indirect_branch_thunk = false,
+                "thunk-extern" => hardening.indirect_branch_thunk = true,
+                other => {
+                    eprint_diagnostic(format!(
+                        "badc: error: unsupported argument `{other}` to `-mindirect-branch=` \
                              (supported: keep, thunk-extern)"
-                        ));
-                        std::process::exit(1);
-                    }
+                    ));
+                    std::process::exit(1);
                 }
-            }
-            s if s.starts_with("-mfunction-return=") => {
-                match &s["-mfunction-return=".len()..] {
-                    "keep" => hardening.function_return_thunk = false,
-                    "thunk-extern" => hardening.function_return_thunk = true,
-                    other => {
-                        eprint_diagnostic(format!(
-                            "badc: error: unsupported argument `{other}` to `-mfunction-return=` \
+            },
+            s if s.starts_with("-mfunction-return=") => match &s["-mfunction-return=".len()..] {
+                "keep" => hardening.function_return_thunk = false,
+                "thunk-extern" => hardening.function_return_thunk = true,
+                other => {
+                    eprint_diagnostic(format!(
+                        "badc: error: unsupported argument `{other}` to `-mfunction-return=` \
                              (supported: keep, thunk-extern)"
-                        ));
-                        std::process::exit(1);
-                    }
+                    ));
+                    std::process::exit(1);
                 }
-            }
+            },
             // Already unconditional: every compiler-generated indirect
             // branch takes its target from a register. The CS prefix is
             // gcc's for the generated-thunk kinds only, none for
@@ -579,19 +575,17 @@ fn run() {
             // `branch` is indirect-branch tracking, the `endbr64` landing
             // pads. `return` and `full` add the shadow stack, which needs
             // a return path badc does not emit.
-            s if s.starts_with("-fcf-protection=") => {
-                match &s["-fcf-protection=".len()..] {
-                    "none" => hardening.cf_protection_branch = false,
-                    "branch" => hardening.cf_protection_branch = true,
-                    other => {
-                        eprint_diagnostic(format!(
-                            "badc: error: unsupported argument `{other}` to `-fcf-protection=` \
+            s if s.starts_with("-fcf-protection=") => match &s["-fcf-protection=".len()..] {
+                "none" => hardening.cf_protection_branch = false,
+                "branch" => hardening.cf_protection_branch = true,
+                other => {
+                    eprint_diagnostic(format!(
+                        "badc: error: unsupported argument `{other}` to `-fcf-protection=` \
                              (supported: none, branch)"
-                        ));
-                        std::process::exit(1);
-                    }
+                    ));
+                    std::process::exit(1);
                 }
-            }
+            },
             // A `+`-joined AArch64 feature list. Return-address signing
             // (`pac-ret`, and `standard` which implies it) needs the
             // pointer-authentication prologue/epilogue pair badc does not

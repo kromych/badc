@@ -2801,7 +2801,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
-                },
+            },
             Target::LinuxAarch64 => Abi {
                 arch: Arch::Aarch64,
                 int_arg_regs: AARCH64_INT_ARGS,
@@ -2813,7 +2813,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
-                },
+            },
             Target::LinuxX64 => Abi {
                 arch: Arch::X86_64,
                 int_arg_regs: SYSV_INT_ARGS,
@@ -2825,7 +2825,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
-                },
+            },
             Target::WindowsX64 => Abi {
                 arch: Arch::X86_64,
                 int_arg_regs: WIN64_INT_ARGS,
@@ -2837,7 +2837,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
-                },
+            },
             Target::WindowsAarch64 => Abi {
                 arch: Arch::Aarch64,
                 int_arg_regs: AARCH64_INT_ARGS,
@@ -2849,7 +2849,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
-                },
+            },
         }
     }
 

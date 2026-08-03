@@ -5354,7 +5354,8 @@ fn x64_harden_sls_traps_after_ret_and_indirect_jmp() {
           a: return 1;\n\
           b: return 2;\n\
         }\n";
-    let text = |src: &str, h: crate::Hardening| elf_text(&emit_hardened(src, crate::Target::LinuxX64, h));
+    let text =
+        |src: &str, h: crate::Hardening| elf_text(&emit_hardened(src, crate::Target::LinuxX64, h));
 
     let sls_return = crate::Hardening {
         sls_return: true,
@@ -5568,12 +5569,7 @@ fn x64_cf_protection_branch_lands_endbr_at_entries_and_indirect_targets() {
     // successors, computed-goto labels). It is the only instruction CET
     // indirect-branch tracking permits such a transfer to land on.
     const ENDBR: [u8; 4] = [0xF3, 0x0F, 0x1E, 0xFA];
-    let count = |o: &[u8]| {
-        elf_text(o)
-            .windows(4)
-            .filter(|w| *w == ENDBR)
-            .count()
-    };
+    let count = |o: &[u8]| elf_text(o).windows(4).filter(|w| *w == ENDBR).count();
     let plain = emit_hardened(
         HARDENING_SRC,
         crate::Target::LinuxX64,

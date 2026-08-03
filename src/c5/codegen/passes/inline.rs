@@ -539,7 +539,12 @@ fn is_inline_candidate(
     // the incoming argument. The splice reproduces that copy into the
     // relocated cell, which needs the cell to sit inside the callee's own
     // local range the splice relocates.
-    for (i, _) in func.param_aggs.iter().enumerate().filter(|(_, a)| a.is_some()) {
+    for (i, _) in func
+        .param_aggs
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| a.is_some())
+    {
         let s = func.param_local_slots.get(i).copied().unwrap_or(0);
         if s != 0 && !(s < 0 && -s <= func.locals) {
             say(format_args!(
@@ -1673,9 +1678,9 @@ fn splice_multi_block(
     // never names is unobservable and takes no copy.
     let names_slot = |s: i64| {
         callee.insts.iter().any(|i| match i {
-            Inst::LocalAddr(o) | Inst::LoadLocal { off: o, .. } | Inst::StoreLocal { off: o, .. } => {
-                *o == s
-            }
+            Inst::LocalAddr(o)
+            | Inst::LoadLocal { off: o, .. }
+            | Inst::StoreLocal { off: o, .. } => *o == s,
             _ => false,
         })
     };
@@ -2047,7 +2052,10 @@ fn splice_multi_block(
         // as of the call, so the body must not read the caller's object --
         // which a write through another pointer into it would change.
         for &(slot, i, desc) in &param_slot_copy {
-            let src = call_args.get(i).map(|&a| map_v(a, &remap)).unwrap_or(NO_VALUE);
+            let src = call_args
+                .get(i)
+                .map(|&a| map_v(a, &remap))
+                .unwrap_or(NO_VALUE);
             let d = &callee.agg_descs[desc as usize];
             let dst = new_insts.len() as u32;
             new_insts.push(Inst::LocalAddr(slot - region_base));

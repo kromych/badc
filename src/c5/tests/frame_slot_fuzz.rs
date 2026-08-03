@@ -1173,9 +1173,7 @@ fn render_stmt(c: &Ctx, b: &Body, s: &Stmt, ind: usize, out: &mut String) {
             let _ = write!(
                 out,
                 "{:ind$}{} = (unsigned long long)({}h{callee}",
-                "",
-                b.objs[*dst as usize].name,
-                c.pfx
+                "", b.objs[*dst as usize].name, c.pfx
             );
             render_args(c, b, args, out);
             let _ = writeln!(out, "{});", c.p.types[t].leaves[*leaf as usize].path);
@@ -1184,9 +1182,7 @@ fn render_stmt(c: &Ctx, b: &Body, s: &Stmt, ind: usize, out: &mut String) {
             let _ = write!(
                 out,
                 "{:ind$}{} = {}h{callee}",
-                "",
-                b.objs[*dst as usize].name,
-                c.pfx
+                "", b.objs[*dst as usize].name, c.pfx
             );
             render_args(c, b, args, out);
             out.push_str(";\n");
@@ -1621,12 +1617,7 @@ fn badc_check(case: &Case) -> Option<Divergence> {
     let mut values = vec![("model".to_string(), format!("{want}"))];
     let mut bad = false;
     for (label, optimize) in [("badc -O0", false), ("badc -O", true)] {
-        match jit_value(
-            &case.src,
-            optimize,
-            case.shape.max_gpr,
-            case.shape.max_fpr,
-        ) {
+        match jit_value(&case.src, optimize, case.shape.max_gpr, case.shape.max_fpr) {
             Ok(v) => {
                 values.push((label.to_string(), format!("{v}")));
                 bad |= v != want;
@@ -1911,7 +1902,12 @@ fn frame_slot_shapes_vs_reference() {
     if reference_cc().is_none() {
         return;
     }
-    sweep(seed_base() ^ 0x2222, budget(REF_BATCH, 2000), true, |_, s| s);
+    sweep(
+        seed_base() ^ 0x2222,
+        budget(REF_BATCH, 2000),
+        true,
+        |_, s| s,
+    );
 }
 
 /// The generator must keep producing the shapes this harness exists for.

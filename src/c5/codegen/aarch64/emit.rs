@@ -9624,8 +9624,9 @@ mod tests {
 
     /// The SIMD forms the crypto and CRC units need encode to the words GNU as
     /// emits: the bit-select group, shift-and-insert by immediate across every
-    /// arrangement, the SHA1 / SHA512 updates, and register-pair load/store in
-    /// the s / d / q views with all three addressing modes.
+    /// arrangement, the SHA1 / SHA512 updates, register-pair load/store in the
+    /// s / d / q views with all three addressing modes, and the `mov` aliases
+    /// of the element insert / duplicate / extract forms.
     #[test]
     fn file_scope_a64_simd_match_gnu_as() {
         use super::super::ssa::emit_common::{
@@ -9669,6 +9670,17 @@ mod tests {
                     sli v3.2d, v17.2d, #63\n\
                     sri v1.2s, v2.2s, #12\n\
                     sri v1.4h, v2.4h, #5\n\
+                    mov d19, v0.d[1]\n\
+                    mov s3, v7.s[2]\n\
+                    mov v17.d[1], v19.d[0]\n\
+                    mov v2.h[2], v5.h[0]\n\
+                    mov v2.b[15], v5.b[3]\n\
+                    mov v2.s[1], v5.s[3]\n\
+                    ins v17.d[1], v19.d[0]\n\
+                    dup d19, v0.d[1]\n\
+                    mov v3.d[0], x5\n\
+                    mov x5, v3.d[1]\n\
+                    mov w5, v3.s[2]\n\
                     .popsection\n";
         let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
         encode_a64_file_asm_section_code(&mut blocks).unwrap();
@@ -9683,7 +9695,7 @@ mod tests {
             &mut sink,
         )
         .unwrap();
-        let want_words: [u32; 37] = [
+        let want_words: [u32; 48] = [
             0x6e631c41, // bsl v1.16b, v2.16b, v3.16b
             0x6ea31c41, // bit v1.16b, v2.16b, v3.16b
             0x6ef61ce2, // bif v2.16b, v7.16b, v22.16b
@@ -9721,10 +9733,74 @@ mod tests {
             0x6f7f5623, // sli v3.2d, v17.2d, #63
             0x2f344441, // sri v1.2s, v2.2s, #12
             0x2f1b4441, // sri v1.4h, v2.4h, #5
+            0x5e180413, // mov d19, v0.d[1]
+            0x5e1404e3, // mov s3, v7.s[2]
+            0x6e180671, // mov v17.d[1], v19.d[0]
+            0x6e0a04a2, // mov v2.h[2], v5.h[0]
+            0x6e1f1ca2, // mov v2.b[15], v5.b[3]
+            0x6e0c64a2, // mov v2.s[1], v5.s[3]
+            0x6e180671, // ins v17.d[1], v19.d[0]
+            0x5e180413, // dup d19, v0.d[1]
+            0x4e081ca3, // mov v3.d[0], x5
+            0x4e183c65, // mov x5, v3.d[1]
+            0x0e143c65, // mov w5, v3.s[2]
         ];
         let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
         let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
         assert_eq!(sec.bytes, bytes);
+    }
+
+    /// A relocation specifier may carry GNU as's optional `#` and a constant
+    /// addend. Byte- and relocation-identical to `as`: `add x1, x2, #:lo12:sym`
+    /// is 0x91000041 with ADD_ABS_LO12_NC, and the addend rides the relocation
+    /// rather than the immediate field.
+    #[test]
+    fn file_scope_a64_hash_lo12_matches_gnu_as() {
+        use super::super::ssa::emit_common::{
+            AsmRelocKind, AsmSectionTarget, extract_file_scope_asm_sections,
+            materialize_asm_sections,
+        };
+        let text = ".pushsection .t,\"ax\"\n\
+                    add x1, x2, #:lo12:sym\n\
+                    add x1, x2, :lo12:sym\n\
+                    add sp, x0, #:lo12:sym2 + 4096\n\
+                    ldr x4, [x3, #:lo12:sym]\n.popsection\n";
+        let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
+        encode_a64_file_asm_section_code(&mut blocks).unwrap();
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            true,
+            &mut sink,
+        )
+        .unwrap();
+        let want_words: [u32; 4] = [0x91000041, 0x91000041, 0x9100001f, 0xf9400064];
+        let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
+        let kinds: Vec<(u32, AsmRelocKind, &str, i64)> = sec
+            .relocs
+            .iter()
+            .map(|r| {
+                let AsmSectionTarget::Symbol(n) = &r.target else {
+                    panic!("symbol target expected, got {:?}", r.target)
+                };
+                (r.offset, r.kind, n.as_str(), r.addend)
+            })
+            .collect();
+        assert_eq!(
+            kinds,
+            vec![
+                (0, AsmRelocKind::A64AddLo12, "sym", 0),
+                (4, AsmRelocKind::A64AddLo12, "sym", 0),
+                (8, AsmRelocKind::A64AddLo12, "sym2", 4096),
+                (12, AsmRelocKind::A64LdstLo12(8), "sym", 0),
+            ]
+        );
     }
 
     /// The memory copy / set family (FEAT_MOPS) encodes to the words GNU as

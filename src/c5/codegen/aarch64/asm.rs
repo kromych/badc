@@ -763,7 +763,12 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     {
         return parse_mem(inner, true);
     }
-    if let Some(rest) = tok.strip_prefix('#') {
+    // GNU as makes the `#` optional on an immediate, including one written as a
+    // relocation specifier (`#:lo12:sym`), so a `:`-led remainder falls through
+    // to the specifier handling below.
+    if let Some(rest) = tok.strip_prefix('#')
+        && !rest.starts_with(':')
+    {
         if let Some(v) = parse_int(rest) {
             return Ok(AsmOpndA64::Imm(v));
         }

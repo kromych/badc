@@ -750,10 +750,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // SIMD `dup Vd.T, Rn`: broadcast a GP register into every lane. The imm5
     // field carries the element size as a one-hot bit. Valid targets are
     // 8b/16b/4h/8h/2s/4s/2d; the single-lane .1d is not a broadcast target.
-    if mnemonic == "dup" {
-        let [Opnd::VecReg { num: rd, size, q }, Opnd::Reg { num: rn, .. }] = *ops else {
-            return Err(String::from("inline asm: bad dup operands"));
-        };
+    // The element form `dup Bd|Hd|Sd|Dd, Vn.T[i]` is handled with its `mov`
+    // spelling below, so a non-GP source falls through rather than erroring.
+    if mnemonic == "dup"
+        && let [Opnd::VecReg { num: rd, size, q }, Opnd::Reg { num: rn, .. }] = *ops
+    {
         if size > 3 || (size == 3 && !q) {
             return Err(String::from(
                 "inline asm: bad dup arrangement (8b/16b/4h/8h/2s/4s/2d)",
@@ -1580,7 +1581,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // element (X for d, W otherwise), Q following; smov's Q follows the chosen
     // destination, which must be wider than the element.
     if let Some((base, signed)) = match mnemonic {
-        "umov" => Some((0x0E00_3C00u32, false)),
+        "umov" | "mov" => Some((0x0E00_3C00u32, false)),
         "smov" => Some((0x0E00_2C00, true)),
         _ => None,
     } && let [
@@ -1606,6 +1607,60 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         let imm5 = ((index as u32) << (size + 1)) | (1u32 << size);
         let q = if is64 { 1u32 << 30 } else { 0 };
         return Ok(base | q | (imm5 << 16) | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SIMD element to SIMD element: `ins Vd.T[i], Vn.T[j]` (also spelled
+    // `mov`). imm5 carries the destination element size and lane, imm4 the
+    // source lane scaled by the element size. Byte-identical to GNU as:
+    // `mov v2.s[1], v5.s[3]` is 0x6E0C64A2.
+    if let "ins" | "mov" = mnemonic
+        && let [
+            Opnd::VecElem {
+                num: rd,
+                size,
+                index,
+            },
+            Opnd::VecElem {
+                num: rn,
+                size: s1,
+                index: index2,
+            },
+        ] = *ops
+    {
+        if size != s1 {
+            return Err(String::from("inline asm: ins element sizes differ"));
+        }
+        let imm5 = ((index as u32) << (size + 1)) | (1u32 << size);
+        let imm4 = (index2 as u32) << size;
+        return Ok(0x6E00_0400 | (imm5 << 16) | (imm4 << 11) | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SIMD element to scalar: `mov Bd|Hd|Sd|Dd, Vn.T[i]`, the `dup` element
+    // alias. imm5 carries the element size and lane; the destination view must
+    // name the same element size. Byte-identical to GNU as: `mov d19, v0.d[1]`
+    // is 0x5E180413.
+    if let "mov" | "dup" = mnemonic
+        && let [dst, src] = ops
+        && let Opnd::VecElem {
+            num: rn,
+            size,
+            index,
+        } = *src
+        && let Some(dsize) = match *dst {
+            Opnd::VScalar { size: s, .. } => Some(s),
+            Opnd::VReg { is_d, .. } => Some(if is_d { 3 } else { 2 }),
+            _ => None,
+        }
+    {
+        let rd = match *dst {
+            Opnd::VScalar { num, .. } | Opnd::VReg { num, .. } => num,
+            _ => unreachable!("guarded by the size match"),
+        };
+        if dsize != size {
+            return Err(String::from(
+                "inline asm: scalar destination must name the source element size",
+            ));
+        }
+        let imm5 = ((index as u32) << (size + 1)) | (1u32 << size);
+        return Ok(0x5E00_0400 | (imm5 << 16) | ((rn as u32) << 5) | (rd as u32));
     }
     // GP register to SIMD element: `ins Vd.T[i], Rn` (also spelled `mov`). The
     // vector register is 128-bit so Q is fixed; imm5 carries element size and

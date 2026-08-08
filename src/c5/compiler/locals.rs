@@ -2321,10 +2321,14 @@ impl Compiler {
     /// struct copies yet.
     fn glo_value_read_is_runtime(&self, idx: usize) -> bool {
         let s = &self.symbols[idx];
-        if s.class != Token::Glo as i64 || s.array_size > 0 {
+        if s.class != Token::Glo as i64 || s.array_size != 0 || s.is_zero_len_array {
             return false;
         }
-        !(is_struct_value_ty(s.type_))
+        // A non-array global read by value -- scalar load or whole-struct
+        // member copy -- happens at runtime for automatic storage; the
+        // constant grammar only admits addresses and folded const
+        // scalars.
+        true
     }
 
     /// Whether an identifier value in an automatic-storage initializer
@@ -2340,7 +2344,9 @@ impl Compiler {
         if prev_was_amp && (s.class == Token::Glo as i64 || s.class == Token::Fun as i64) {
             return true;
         }
-        if s.class == Token::Fun as i64 || (s.class == Token::Glo as i64 && s.array_size != 0) {
+        if s.class == Token::Fun as i64
+            || (s.class == Token::Glo as i64 && (s.array_size != 0 || s.is_zero_len_array))
+        {
             return true;
         }
         self.glo_value_read_is_runtime(self.lex.curr_id_idx)

@@ -10307,6 +10307,44 @@ int main(void) { return 0; }
 }
 
 #[test]
+fn inline_asm_string_directives_follow_gas() {
+    // `.ascii`/`.asciz`/`.string` take a comma-separated operand list;
+    // adjacent literals concatenate as in C; escapes cover the C set
+    // plus octal and `\x`. The kernel's EXPORT_SYMBOL emits its
+    // namespace as `.ascii ns "\0"` where `ns` is a (possibly empty)
+    // literal -- first-to-last-quote parsing turned the empty form into
+    // the 3 bytes `" "` and poisoned every export's namespace.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"asm(".section \"strs\",\"a\"\n"
+    "\t.asciz \"GPL\"\n"
+    "\t.ascii \"\" \"\\0\"\n"
+    "\t.asciz \"\"\n"
+    "\t.ascii \"KVM\" \"\\0\"\n"
+    "\t.asciz \"a\", \"b\"\n"
+    "\t.ascii \"\\101\\x42\"\n"
+    "\t.string \"s\"\n"
+    ".previous\n");
+int main(void) { return 0; }
+"#;
+    // gas emits: GPL\0, \0, \0, KVM\0, a\0b\0, AB, s\0.
+    const WANT: &[u8] = b"GPL\0\0\0KVM\0a\0b\0ABs\0";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == "strs")
+            .unwrap_or_else(|| panic!("{target:?}: strs section missing"));
+        assert_eq!(sec.3, WANT, "{target:?}: string directive bytes");
+    }
+}
+
+#[test]
 fn inline_asm_section_label_is_relocation_target() {
     // A data reference to a label defined in the same named section
     // resolves to that definition, not to an undefined import. The

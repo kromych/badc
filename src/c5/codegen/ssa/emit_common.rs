@@ -2393,6 +2393,66 @@ pub(crate) fn parse_align_operands(rest: &str) -> Option<(i64, Option<u8>, Optio
     Some((spec, fill, max))
 }
 
+/// Scan one GNU as string literal from `s` (opening quote already
+/// consumed), appending its bytes to `out`. Escapes follow gas: the C
+/// single-character set, 1-3 octal digits, `\x` with any run of hex
+/// digits (low byte kept), and identity for the rest. Returns the text
+/// after the closing quote, or `None` when the literal never closes.
+fn scan_asm_string_literal<'a>(s: &'a str, out: &mut alloc::vec::Vec<u8>) -> Option<&'a str> {
+    let b = s.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'"' => return Some(&s[i + 1..]),
+            b'\\' => {
+                i += 1;
+                let c = *b.get(i)?;
+                i += 1;
+                match c {
+                    b'b' => out.push(0x08),
+                    b'f' => out.push(0x0c),
+                    b'n' => out.push(b'\n'),
+                    b'r' => out.push(b'\r'),
+                    b't' => out.push(b'\t'),
+                    b'v' => out.push(0x0b),
+                    b'0'..=b'7' => {
+                        let mut v = (c - b'0') as u32;
+                        for _ in 0..2 {
+                            match b.get(i) {
+                                Some(&d @ b'0'..=b'7') => {
+                                    v = v * 8 + (d - b'0') as u32;
+                                    i += 1;
+                                }
+                                _ => break,
+                            }
+                        }
+                        out.push(v as u8);
+                    }
+                    b'x' | b'X' => {
+                        let mut v = 0u32;
+                        let mut any = false;
+                        while let Some(d) = b.get(i).and_then(|&d| (d as char).to_digit(16)) {
+                            v = (v << 4) | d;
+                            any = true;
+                            i += 1;
+                        }
+                        if !any {
+                            return None;
+                        }
+                        out.push(v as u8);
+                    }
+                    other => out.push(other),
+                }
+            }
+            c => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    None
+}
+
 /// Parse one directive inside a named section. A non-directive token is an
 /// instruction kept as text for the arch backend to encode.
 fn parse_section_item(
@@ -2478,31 +2538,38 @@ fn parse_section_item(
         // repeats a multi-byte unit.
         ".skip" | ".space" | ".zero" | ".fill" => parse_fill_directive(tok, rest),
         ".ascii" | ".asciz" | ".string" => {
-            let s = rest
-                .strip_prefix('"')
-                .and_then(|r| r.strip_suffix('"'))
-                .ok_or_else(|| {
-                    alloc::format!("inline asm: string literal expected after `{tok}`")
-                })?;
+            // A comma-separated list of string operands; adjacent literals
+            // within one operand concatenate as in C (the kernel's
+            // EXPORT_SYMBOL relies on `.ascii ns "\0"`). `.asciz` /
+            // `.string` terminate each operand with a NUL.
             let mut bytes: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
-            let mut it = s.bytes();
-            while let Some(b) = it.next() {
-                // The template already went through C string parsing; only
-                // the simple escapes survive here.
-                if b == b'\\' {
-                    match it.next() {
-                        Some(b'n') => bytes.push(b'\n'),
-                        Some(b't') => bytes.push(b'\t'),
-                        Some(b'0') => bytes.push(0),
-                        Some(c) => bytes.push(c),
-                        None => break,
-                    }
-                } else {
-                    bytes.push(b);
+            let mut cur = rest.trim_start();
+            loop {
+                let mut any = false;
+                while let Some(r) = cur.strip_prefix('"') {
+                    let r = scan_asm_string_literal(r, &mut bytes).ok_or_else(|| {
+                        alloc::format!("inline asm: unterminated string after `{tok}`")
+                    })?;
+                    any = true;
+                    cur = r.trim_start();
+                }
+                if !any {
+                    return Err(alloc::format!(
+                        "inline asm: string literal expected after `{tok}`, got `{rest}`"
+                    ));
+                }
+                if tok != ".ascii" {
+                    bytes.push(0);
+                }
+                match cur.strip_prefix(',') {
+                    Some(r) => cur = r.trim_start(),
+                    None => break,
                 }
             }
-            if tok != ".ascii" {
-                bytes.push(0);
+            if !cur.is_empty() {
+                return Err(alloc::format!(
+                    "inline asm: junk after `{tok}` operands: `{cur}`"
+                ));
             }
             Ok(AsmSectionItem::Bytes(bytes))
         }

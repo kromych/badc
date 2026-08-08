@@ -65,6 +65,11 @@ pub(super) enum InitElemReloc {
     /// resolved ent_pc and patch both the data bytes and
     /// the matching `Program::code_relocs` entry.
     Code(usize),
+    /// Value is a `&&label` block address (GCC labels as values) in the
+    /// function being parsed; needs a `LabelReloc`. The payload is the
+    /// label id, which the walker resolves to a basic block and native
+    /// emit to a text offset.
+    Label(crate::c5::ast::LabelId),
     /// Value is an IEEE-754 f64 bit pattern produced by a float
     /// literal or a constant-folded float arithmetic expression.
     /// The writer narrows to f32 when the element type is
@@ -139,6 +144,17 @@ pub(super) struct InitCheckpoint {
     code_relocs: usize,
     code_reloc_sym_idx: usize,
     extern_data_relocs: usize,
+    pending_label_relocs: usize,
+}
+
+/// A `&&label` element staged while parsing a function body: the data
+/// slot at `data_offset` holds the address of `label`'s code location
+/// plus `addend`. Moved onto the finished function so the walk can
+/// resolve the label to a basic block.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PendingLabelReloc {
+    pub data_offset: u64,
+    pub label: crate::c5::ast::LabelId,
 }
 
 impl Compiler {
@@ -151,6 +167,8 @@ impl Compiler {
     ///   * `Code(sym)`   -- function ent_pc, push a CodeReloc
     ///                      and stash the symbol index for the
     ///                      post-body fixup pass.
+    ///   * `Label(id)`   -- `&&label`, stage a pending label reloc the
+    ///                      function's walk resolves to a basic block.
     fn push_init_reloc(&mut self, here: usize, value: i64, reloc: InitElemReloc) {
         match reloc {
             InitElemReloc::None | InitElemReloc::Float64Bits => {}
@@ -200,6 +218,13 @@ impl Compiler {
                     target_ent_pc: value as u64,
                 });
                 self.code_reloc_sym_idx.push(sym_idx);
+            }
+            InitElemReloc::Label(label) => {
+                self.note_init_reloc(here);
+                self.pending_label_relocs.push(PendingLabelReloc {
+                    data_offset: here as u64,
+                    label,
+                });
             }
         }
     }
@@ -261,6 +286,9 @@ impl Compiler {
         }
         if self.extern_data_relocs.iter().any(|r| hit(r.data_offset)) {
             self.extern_data_relocs.retain(|r| !hit(r.data_offset));
+        }
+        if self.pending_label_relocs.iter().any(|r| hit(r.data_offset)) {
+            self.pending_label_relocs.retain(|r| !hit(r.data_offset));
         }
     }
 
@@ -1600,12 +1628,7 @@ impl Compiler {
                 self.restore_init_checkpoint(cp);
                 return self.parse_constant_init_scalar();
             }
-            let reloc = match a.sym {
-                Some(idx) if a.sym_code => InitElemReloc::Code(idx),
-                Some(idx) => InitElemReloc::Data(Some(idx)),
-                None => InitElemReloc::None,
-            };
-            return Ok((a.value as i128, reloc));
+            return Ok((a.value as i128, Self::init_elem_reloc_of(a)));
         }
         if self.lex.tk == Token::Id {
             let idx = self.lex.curr_id_idx;
@@ -1800,18 +1823,24 @@ impl Compiler {
         self.init_scalar_of(v)
     }
 
+    /// The relocation an address constant's root calls for.
+    fn init_elem_reloc_of(a: super::const_expr::ConstAddr) -> InitElemReloc {
+        use super::const_expr::ConstRoot;
+        match a.root {
+            ConstRoot::None => InitElemReloc::None,
+            ConstRoot::Data(idx) => InitElemReloc::Data(Some(idx)),
+            ConstRoot::Code(idx) => InitElemReloc::Code(idx),
+            ConstRoot::Label(l) => InitElemReloc::Label(l),
+        }
+    }
+
     /// A folded constant as an initializer element: a symbol-relative
     /// address carries its relocation, anything else is a plain value.
     fn init_scalar_of(&self, v: ConstVal) -> Result<(i128, InitElemReloc), C5Error> {
         if let ConstVal::Addr(a) = v
-            && let Some(idx) = a.sym
+            && a.root.is_symbolic()
         {
-            let reloc = if a.sym_code {
-                InitElemReloc::Code(idx)
-            } else {
-                InitElemReloc::Data(Some(idx))
-            };
-            return Ok((a.value as i128, reloc));
+            return Ok((a.value as i128, Self::init_elem_reloc_of(a)));
         }
         Ok((
             self.require_integer_const(v)?.as_i128(),
@@ -2309,6 +2338,7 @@ impl Compiler {
             code_relocs: self.code_relocs.len(),
             code_reloc_sym_idx: self.code_reloc_sym_idx.len(),
             extern_data_relocs: self.extern_data_relocs.len(),
+            pending_label_relocs: self.pending_label_relocs.len(),
         }
     }
 
@@ -2333,6 +2363,12 @@ impl Compiler {
                 .skip(cp.extern_data_relocs)
                 .map(|r| r.data_offset),
         );
+        popped.extend(
+            self.pending_label_relocs
+                .iter()
+                .skip(cp.pending_label_relocs)
+                .map(|r| r.data_offset),
+        );
         for slot in popped {
             self.init_reloc_slots.remove(&slot);
         }
@@ -2343,6 +2379,7 @@ impl Compiler {
         self.code_relocs.truncate(cp.code_relocs);
         self.code_reloc_sym_idx.truncate(cp.code_reloc_sym_idx);
         self.extern_data_relocs.truncate(cp.extern_data_relocs);
+        self.pending_label_relocs.truncate(cp.pending_label_relocs);
     }
 
     pub(super) fn collect_struct_initializer(

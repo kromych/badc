@@ -11417,13 +11417,13 @@ fn relocated_const_storage_follows_the_pic_model() {
 
 #[test]
 #[cfg(feature = "native-emit")]
-fn runtime_initialized_const_storage_stays_writable() {
-    // A `&&label` element is not a link-time constant, so the declaration
-    // fills the storage with stores and the data image stays zeroed. The
-    // program writes the object during execution however it is qualified,
-    // so no `const` spelling may put it on a read-only page -- and its
-    // trailing once-guard byte sits past the symbol's extent, so a carve
-    // would separate the two.
+fn label_addr_table_is_relocated_read_only_data() {
+    // A `&&label` element is a link-time constant: the data image carries
+    // one `R_*_64` per entry against the label's code location, so a
+    // `const` table is genuine read-only data and no store initializes it.
+    // The section-attributed spelling -- the kernel's BPF dispatch table
+    // -- keeps its relocations in the named section, which a
+    // guard-and-stores scheme could not express.
     const SHF_WRITE: u64 = 0x1;
     let src = "\
         int a(void) { static const void *const t[2] = {&&L0, &&L1};\n\
@@ -11432,35 +11432,151 @@ fn runtime_initialized_const_storage_stays_writable() {
           goto *t[0]; M0: return 1; M1: return 2; }\n\
         int c(void) { static const long t[2] = {(long)&&N0, (long)&&N1};\n\
           goto *(void *)t[0]; N0: return 1; N1: return 2; }\n\
+        int j(int k) {\n\
+          static const void *const t[4]\n\
+            __attribute__((section(\".test.jump\"))) = {&&J0, &&J1, &&J2, &&J3};\n\
+          goto *t[k]; J0: return 10; J1: return 11; J2: return 12; J3: return 13; }\n\
         static const int ro[2] = {7, 8};\n\
         int d(void) { return ro[1]; }\n";
     for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
         let bytes = reloc_tu(src, target, false);
         let sections = elf_sections(&bytes);
         let objs = elf_data_objects(&bytes);
-        for (name, (sec, _, _, _)) in &objs {
+        let abs64: u64 = match target {
+            crate::c5::Target::LinuxX64 => 1,
+            _ => 257,
+        };
+        let sec_of = |name: &str| {
+            sections
+                .iter()
+                .find(|(n, _, _, _)| n == name)
+                .unwrap_or_else(|| panic!("{target:?}: section `{name}` missing"))
+        };
+        let text_sym = elf_section_symbol_index(&bytes, ".text")
+            .unwrap_or_else(|| panic!("{target:?}: no .text section symbol"));
+        // Every entry of every table carries an abs64 relocation against
+        // `.text`, and every table is zero in the image.
+        let mut relocated_entries = 0usize;
+        for (name, (sec, _, val, size)) in &objs {
             if !name.starts_with("t.") {
                 continue;
             }
-            let flags = sections
-                .iter()
-                .find(|(n, _, _, _)| n == sec)
-                .expect("section")
-                .2;
-            assert_ne!(
+            let flags = sec_of(sec).2;
+            assert_eq!(
                 flags & SHF_WRITE,
                 0,
-                "{target:?}: `{name}` is filled by stores, so `{sec}` must be writable"
+                "{target:?}: `{name}` holds only link-time constants, so `{sec}` \
+                 must not be writable"
             );
+            let rela = sec_of(&alloc::format!(".rela{sec}")).3.clone();
+            let hits = rela
+                .chunks_exact(24)
+                .filter(|e| {
+                    let r_offset = u64::from_le_bytes(e[0..8].try_into().unwrap());
+                    let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+                    r_offset >= *val
+                        && r_offset < val + size
+                        && r_info & 0xFFFF_FFFF == abs64
+                        && (r_info >> 32) as usize == text_sym
+                })
+                .count();
+            assert_eq!(
+                hits,
+                (size / 8) as usize,
+                "{target:?}: `{name}` needs one .text relocation per entry"
+            );
+            relocated_entries += hits;
         }
         assert_eq!(
             objs.keys().filter(|k| k.starts_with("t.")).count(),
-            3,
+            4,
             "{target:?}: one table per function"
         );
+        assert_eq!(relocated_entries, 10, "{target:?}: 2 + 2 + 2 + 4 entries");
+        // The section-attributed table lands in its own section with its
+        // own relocation list -- nothing addresses past the section end.
+        let jump = sec_of(".test.jump");
+        assert_eq!(jump.3.len(), 32, "{target:?}: four 8-byte entries");
+        assert!(
+            jump.3.iter().all(|&b| b == 0),
+            "{target:?}: the entries' values come from relocations"
+        );
+        assert_eq!(
+            jump.2 & SHF_WRITE,
+            0,
+            "{target:?}: a const jump table needs no write permission"
+        );
+        assert_eq!(
+            sec_of(".rela.test.jump").3.len(),
+            4 * 24,
+            "{target:?}: one relocation per entry"
+        );
+        // One text-side reference per table: the dispatch load's address
+        // materialization. Filling a table with stores took a text
+        // reference per entry plus two for the once-guard, so the count
+        // is what tells the two schemes apart.
+        let text_refs = |sec: &str| {
+            let idx = elf_section_symbol_index(&bytes, sec)
+                .unwrap_or_else(|| panic!("{target:?}: no `{sec}` section symbol"));
+            sec_of(".rela.text")
+                .3
+                .chunks_exact(24)
+                .filter(|e| {
+                    let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+                    (r_info >> 32) as usize == idx
+                })
+                .count()
+        };
+        // x86_64 materializes an address with one `lea`, aarch64 with an
+        // `adrp` + `add` pair, so each site costs one or two rows.
+        let per_site = match target {
+            crate::c5::Target::LinuxX64 => 1,
+            _ => 2,
+        };
+        assert_eq!(
+            text_refs(".test.jump"),
+            per_site,
+            "{target:?}: the sectioned table takes one dispatch load and no stores"
+        );
+        assert_eq!(
+            text_refs(".rodata"),
+            4 * per_site,
+            "{target:?}: three tables plus `ro`, one address materialization each"
+        );
         // The relocation-free const object in the same unit still lands
-        // read-only, so the exclusion is per object rather than a retreat.
+        // read-only, so the placement rule is unchanged for it.
         assert_eq!(objs["ro"].0, ".rodata", "{target:?}: plain const placement");
+    }
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn runtime_initialized_const_storage_stays_writable() {
+    // A table mixing a label address with a value only the running program
+    // knows is still filled by stores at the declaration point, so no
+    // `const` spelling may put it on a read-only page -- and its trailing
+    // once-guard byte sits past the symbol's extent, so a carve would
+    // separate the two.
+    const SHF_WRITE: u64 = 0x1;
+    let src = "\
+        void *runtime_target(void);\n\
+        int a(int k) { static const void *const t[2] = {&&L0, (void *)runtime_target()};\n\
+          goto *t[k]; L0: return 1; }\n";
+    for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
+        let bytes = reloc_tu(src, target, false);
+        let sections = elf_sections(&bytes);
+        let objs = elf_data_objects(&bytes);
+        let (sec, _, _, _) = &objs["t.0"];
+        let flags = sections
+            .iter()
+            .find(|(n, _, _, _)| n == sec)
+            .expect("section")
+            .2;
+        assert_ne!(
+            flags & SHF_WRITE,
+            0,
+            "{target:?}: `t.0` is filled by stores, so `{sec}` must be writable"
+        );
     }
 }
 

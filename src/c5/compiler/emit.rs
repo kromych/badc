@@ -903,6 +903,14 @@ impl Compiler {
         self.ast_acc = None;
         self.ast_vstack.clear();
         self.ast_labels.clear();
+        self.pending_label_relocs.clear();
+        self.in_function_body = true;
+    }
+
+    /// True while a function body is being parsed, i.e. while labels
+    /// have a scope to resolve against.
+    pub(super) fn in_function_body(&self) -> bool {
+        self.in_function_body
     }
 
     /// Capture the just-finished function's AST + the metadata
@@ -954,7 +962,9 @@ impl Compiler {
             // not yet collected at this point).
             multi_cell_slots: alloc::vec::Vec::new(),
             over_aligned_slots: alloc::vec::Vec::new(),
+            label_data_slots: core::mem::take(&mut self.pending_label_relocs),
         };
+        self.in_function_body = false;
         self.pending_is_inline = false;
         self.pending_is_always_inline = false;
         self.pending_is_naked = false;
@@ -1635,6 +1645,25 @@ impl Compiler {
         self.ast_labels
             .push((alloc::string::String::from(name), id));
         id
+    }
+
+    /// Consume `&& identifier` (GCC labels as values) and intern the
+    /// label. The current token must be `&&`. The label may be defined
+    /// later in the function, so a forward reference is recorded for the
+    /// function-end check gcc and clang also apply.
+    pub(super) fn parse_label_addr_operand(
+        &mut self,
+    ) -> Result<super::super::ast::LabelId, C5Error> {
+        self.next()?; // consume `&&`
+        if self.lex.tk != Token::Id {
+            return Err(self.compile_err("label name expected after `&&`"));
+        }
+        let name = self.resolve_label_name(&self.symbols[self.lex.curr_id_idx].name.clone());
+        self.next()?;
+        if !self.labels.iter().any(|n| n == &name) {
+            self.unresolved_gotos.push(name.clone());
+        }
+        Ok(self.ast_label_by_name(&name))
     }
 
     /// Push a `Stmt::Return(value)` node into the per-function

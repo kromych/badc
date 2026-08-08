@@ -459,6 +459,27 @@ mod jit_impl {
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
             }
         }
+        // `&&label` initializer slots: the emit already resolved each
+        // label to a text offset, so only the code region's runtime
+        // address has to be added.
+        if !build.label_relocs.is_empty()
+            && let Some(region) = &mut data_region
+        {
+            let bytes = region.as_mut_slice(build.data.len());
+            for r in &build.label_relocs {
+                let absolute = code_vmaddr + r.text_offset;
+                let off = r.data_offset as usize;
+                if off + 8 > bytes.len() {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "JIT: label reloc offset {off:#x} past end of data region ({})",
+                            bytes.len()
+                        ),
+                    )));
+                }
+                bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+            }
+        }
         // Pointer-to-extern-data initializers (`int *p = &extern_g;`).
         // Resolve each symbol's runtime address through the same loader
         // handles the GOT uses and write it into the data slot. Unlike a

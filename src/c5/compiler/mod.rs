@@ -32,6 +32,7 @@ mod stmt;
 mod type_layout;
 #[cfg(test)]
 pub(crate) use emit::SCOPE_UNWIND;
+pub(crate) use initializer::PendingLabelReloc;
 pub(crate) use type_layout::{StructReturnAbi, host_abi_agg_desc, struct_return_abi};
 pub(crate) mod types;
 
@@ -1456,6 +1457,14 @@ pub struct Compiler {
     /// function pointers carry the small `CODE_BASE + ent_pc` bias
     /// and the indirect-call lowering recognises that range.
     code_relocs: Vec<crate::c5::program::CodeReloc>,
+    /// `&&label` initializer elements staged while parsing the current
+    /// function body; moved onto `FinishedFunction::label_data_slots` at
+    /// function close.
+    pending_label_relocs: Vec<PendingLabelReloc>,
+    /// Set while a function body is being parsed, so `&&label` resolves
+    /// against a label scope rather than lexing as the logical-AND
+    /// operator.
+    in_function_body: bool,
     /// Names from `#pragma export(<name>)` directives, in
     /// declaration order. Validated at the end of
     /// [`Self::run_compile`] -- each must resolve to a
@@ -2026,6 +2035,8 @@ impl Compiler {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            pending_label_relocs: Vec::new(),
+            in_function_body: false,
             pending_exports,
             init_funcs: Vec::new(),
             function_aliases: Vec::new(),

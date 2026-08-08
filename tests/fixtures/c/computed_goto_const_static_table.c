@@ -1,10 +1,8 @@
 // A `&&label` dispatch table declared `const` in each spelling that makes
 // the storage const-qualified: `const T *const []`, `T *const []`, and a
-// non-pointer element type. The elements are not link-time constants, so
-// the declaration fills the storage with stores at run time -- the object
-// must stay writable however it is qualified. Repeated calls also exercise
-// the once-guard byte, which sits past the array and has to travel with
-// it.
+// non-pointer element type. Every element is a link-time constant, so the
+// storage is read-only data whose entries come from relocations, and
+// repeated calls read the same table without re-initializing it.
 
 static int interp_ptr_const(const unsigned char *code) {
     static const void *const tbl[] = {&&op_add, &&op_sub, &&op_dup, &&op_halt};

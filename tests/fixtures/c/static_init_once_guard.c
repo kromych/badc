@@ -1,8 +1,9 @@
 // C99 6.2.4p3: an object with static storage duration is initialized
 // exactly once, before program startup semantics apply to its lifetime.
-// A static-local array whose initializer carries `&&label` elements is
-// filled by runtime stores at the declaration point; those stores must
-// not re-run on later calls, or they clobber user writes to the table.
+// A writable static-local array the program modifies must keep the
+// modification across re-entry: the declaration may not re-run its
+// initializer, whether the initial value comes from the data image or
+// from stores at the declaration point.
 
 static void *saved;
 

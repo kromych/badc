@@ -378,7 +378,8 @@ pub(super) fn write(
     // reloc.
     let reloc_section_present = !build.tls_data.is_empty()
         || !build.data_relocs.is_empty()
-        || !build.code_relocs.is_empty();
+        || !build.code_relocs.is_empty()
+        || !build.label_relocs.is_empty();
     // `.edata` is present whenever the image exports anything: a
     // `#pragma export` set (shared library or executable, matching the
     // ELF `.dynsym` behaviour) or an executable's `--export-all` /
@@ -595,6 +596,7 @@ pub(super) fn write(
             !build.tls_data.is_empty(),
             &build.data_relocs,
             &build.code_relocs,
+            &build.label_relocs,
         )
     } else {
         Vec::new()
@@ -1244,6 +1246,23 @@ pub(super) fn write(
             }
             data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
         }
+        // `&&label` initializers: the label's text offset is already
+        // resolved, so the preferred VA is the text base plus it. The
+        // `.reloc` block lists the slot for the ASLR slide.
+        for r in &build.label_relocs {
+            let preferred_va =
+                IMAGE_BASE + (text_rva + text_prologue_len + r.text_offset as u32) as u64;
+            let off = r.data_offset as usize;
+            if off + 8 > data_with_relocs.len() {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "PE: label reloc offset {off:#x} past end of .data ({})",
+                        data_with_relocs.len()
+                    ),
+                )));
+            }
+            data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+        }
         // Object-linked pc-relative slots in the data stream: each
         // holds `target - slot` as RVAs (the image base cancels) at
         // the recorded width, so ASLR needs no `.reloc` entry.
@@ -1533,6 +1552,7 @@ fn build_reloc_section(
     tls_present: bool,
     data_relocs: &[crate::c5::program::DataReloc],
     code_relocs: &[crate::c5::program::CodeReloc],
+    label_relocs: &[crate::c5::codegen::LabelReloc],
 ) -> Vec<u8> {
     // Bucket every relocation target by the 4 KiB page it
     // lives in. Per-page entries within a bucket get one
@@ -1561,6 +1581,13 @@ fn build_reloc_section(
     // the slide. The kind of pointer (data vs code) doesn't
     // matter to PE's `.reloc`, so we use the same DIR64 entry.
     for r in code_relocs {
+        let target_rva = data_rva + r.data_offset as u32;
+        let page = target_rva & !0xFFF;
+        by_page.entry(page).or_default().push(target_rva & 0xFFF);
+    }
+    // `&&label` initializers hold a code pointer in the data segment,
+    // so they take the same DIR64 entry.
+    for r in label_relocs {
         let target_rva = data_rva + r.data_offset as u32;
         let page = target_rva & !0xFFF;
         by_page.entry(page).or_default().push(target_rva & 0xFFF);

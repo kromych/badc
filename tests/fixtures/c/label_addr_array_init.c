@@ -1,10 +1,9 @@
-// A `&&label` element (GCC labels as values) in an array initializer is a
-// runtime value: the block address is not known until the function is
-// emitted, so the element is filled by a runtime store rather than a
-// constant. A label-address array indexed by a computed goto is the
-// dispatch-table form. Covers automatic and static storage (deferred and
-// known size, including the `const` dispatch-table shape). Asserted by
-// return code.
+// A `&&label` element (GCC labels as values) in an array initializer,
+// indexed by a computed goto: the dispatch-table form. An automatic array
+// takes stores at the declaration point; a static one is a link-time
+// constant filled by relocations. Covers both, at deferred and known
+// size, including the `const` dispatch-table shape. Asserted by return
+// code.
 
 static int run_auto(int n) {
     void *tbl[] = { &&L0, &&L1, &&L2 };

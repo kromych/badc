@@ -1496,6 +1496,9 @@ pub(crate) struct Build {
     /// `pc_to_native` and patches the slot to the runtime
     /// code address.
     pub code_relocs: Vec<crate::c5::program::CodeReloc>,
+    /// Data slots holding a `&&label` address, filled by native emit
+    /// once each owning function's block layout is final.
+    pub label_relocs: Vec<LabelReloc>,
     /// `#pragma export(<name>)`-declared functions. Mirror of
     /// [`Program::exports`]. Empty for executable output;
     /// populated for shared-library output, when the
@@ -1850,6 +1853,21 @@ pub(crate) struct RodataRel32 {
 pub(crate) struct RodataAbs64 {
     /// Slot position within `RodataBuild::bytes`.
     pub slot_offset: u64,
+    /// Target byte offset within `Build::text`.
+    pub text_offset: u64,
+}
+
+/// A data-image slot holding the address of a labelled code location
+/// (GCC `&&label` in a static initializer), resolved once the owning
+/// function's block layout is final. The relocatable writers emit one
+/// `R_*_64` against the `.text` section symbol with `addend =
+/// text_offset`, the same shape a function-pointer initializer takes;
+/// the final-image writers bake the address in and add a load-time
+/// rebase entry where the format needs one.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LabelReloc {
+    /// Byte offset in `Program::data` of the 8-byte slot.
+    pub data_offset: u64,
     /// Target byte offset within `Build::text`.
     pub text_offset: u64,
 }

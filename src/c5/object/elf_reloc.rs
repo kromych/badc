@@ -172,7 +172,10 @@ fn is_bss_family(name: &str) -> bool {
 /// Data-segment byte offsets that carry a relocated pointer slot.
 /// Storage overlapping one cannot be placed read-only: the loader has
 /// to write the resolved address into it.
-fn relocated_data_offsets(program: &Program) -> alloc::collections::BTreeSet<u64> {
+fn relocated_data_offsets(
+    program: &Program,
+    label_relocs: &[crate::c5::codegen::LabelReloc],
+) -> alloc::collections::BTreeSet<u64> {
     let mut out = alloc::collections::BTreeSet::new();
     for off in program
         .data_relocs
@@ -180,6 +183,7 @@ fn relocated_data_offsets(program: &Program) -> alloc::collections::BTreeSet<u64
         .map(|r| r.data_offset)
         .chain(program.code_relocs.iter().map(|r| r.data_offset))
         .chain(program.extern_data_relocs.iter().map(|r| r.data_offset))
+        .chain(label_relocs.iter().map(|r| r.data_offset))
     {
         out.insert(off);
     }
@@ -1061,7 +1065,7 @@ pub(super) fn write_relocatable(
         // program writes it during execution whatever its declared type
         // says, and its trailing once-guard byte sits past the symbol's
         // extent and would not travel with it.
-        let reloc_slots = relocated_data_offsets(program);
+        let reloc_slots = relocated_data_offsets(program, &build.label_relocs);
         let data_file_len = build.data.len() as u64;
         let mut named_objs: Vec<NamedDataObj> = Vec::new();
         for sym in &program.symbols {
@@ -2843,6 +2847,16 @@ pub(super) fn write_relocatable(
     // via `pc_to_native`) and the reloc points at the
     // `.text` section symbol -- or the named section's when the
     // carve moved the target function.
+    // Label-address initializers: the `R_*_64` shape of a
+    // function-pointer initializer with the label's own text offset as
+    // the addend.
+    for r in &build.label_relocs {
+        let (sym, addend) = match carve.map_text(r.text_offset) {
+            Some((te, new_off)) => (carve.sym_idx[te], new_off as i64),
+            None => (text_sym_idx, r.text_offset as i64),
+        };
+        push_data_row(&mut carve, &mut rela_data_bytes, r.data_offset, sym, addend);
+    }
     for r in &build.code_relocs {
         let ent_pc = r.target_ent_pc as usize;
         // Cross-TU target: emit against the named UNDEF
@@ -3177,7 +3191,7 @@ pub(super) fn write_relocatable(
     // slot before the bytes are copied out.
     let data_src = {
         let mut cleared = build.data.clone();
-        for off in relocated_data_offsets(program) {
+        for off in relocated_data_offsets(program, &build.label_relocs) {
             let off = off as usize;
             let Some(slot) = cleared.get_mut(off..off + 8) else {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -4246,6 +4260,7 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            label_relocs: Vec::new(),
             exports: Vec::new(),
             dynamic_exports: Vec::new(),
             output_kind: OutputKind::Relocatable,

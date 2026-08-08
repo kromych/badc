@@ -1840,7 +1840,7 @@ pub(super) fn write(
     // relocation so it tracks the runtime load base; an executable maps at
     // its link-time vmaddr, so the baked bytes are final and need none.
     let n_relative = if emit_dyn {
-        build.data_relocs.len() + build.code_relocs.len()
+        build.data_relocs.len() + build.code_relocs.len() + build.label_relocs.len()
     } else {
         0
     };
@@ -2625,6 +2625,18 @@ pub(super) fn write(
                 },
             );
         }
+        // `&&label` initializers: same shape, the target being a text
+        // offset the emit already resolved.
+        for r in &build.label_relocs {
+            write_struct(
+                &mut rela,
+                &Elf64Rela {
+                    r_offset: data_off_to_vaddr(r.data_offset),
+                    r_info: r_type,
+                    r_addend: (code_vmaddr + stub_len + r.text_offset) as i64,
+                },
+            );
+        }
     }
     // COPY relocations for data imports: the loader copies the named
     // symbol's object from the defining shared library into the slot at
@@ -2792,6 +2804,22 @@ pub(super) fn write(
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
                     "ELF: code reloc offset {off:#x} past end of .data ({})",
+                    data_with_relocs.len()
+                ),
+            )));
+        }
+        data_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+    }
+    // `&&label` initializers: the label's text offset is already
+    // resolved, so only the text vmaddr is added. Slides at load time
+    // through the matching `.rela.dyn` entry, like a function pointer.
+    for r in &build.label_relocs {
+        let absolute = code_vmaddr + stub_len + r.text_offset;
+        let off = reloc_slot_in_data(r.data_offset, ro_len, "label")?;
+        if off + 8 > data_with_relocs.len() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: label reloc offset {off:#x} past end of .data ({})",
                     data_with_relocs.len()
                 ),
             )));
@@ -3777,6 +3805,7 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            label_relocs: Vec::new(),
             exports: Vec::new(),
             dynamic_exports: Vec::new(),
             output_kind: super::super::OutputKind::Executable,

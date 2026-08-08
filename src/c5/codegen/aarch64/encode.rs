@@ -2026,6 +2026,7 @@ pub(crate) fn lower(
     // identifier resolves to the target's fixup like a compiler-emitted call.
     let mut asm_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
     let mut text_align: usize = 16;
+    let mut label_relocs: Vec<super::LabelReloc> = Vec::new();
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
@@ -2065,6 +2066,7 @@ pub(crate) fn lower(
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
                 text_align: &mut text_align,
+                label_relocs: &mut label_relocs,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2336,6 +2338,7 @@ pub(crate) fn lower(
         data_relocs: Vec::new(),
         extern_data_relocs: Vec::new(),
         code_relocs: Vec::new(),
+        label_relocs,
         exports: Vec::new(),
         dynamic_exports: Vec::new(),
         output_kind: super::OutputKind::Executable,

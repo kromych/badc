@@ -183,6 +183,7 @@ impl SsaBuilder {
             ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            label_data_relocs: Vec::new(),
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
@@ -504,6 +505,19 @@ impl SsaBuilder {
             self.func.computed_goto_targets.push(block);
         }
         self.push(Inst::BlockAddr(block))
+    }
+
+    /// Bind a static-initializer data slot to `block`'s code address
+    /// (GCC `&&label` in a static initializer). The block joins the
+    /// computed-goto target set: its address escapes into memory, so
+    /// every `goto *` may reach it and the block must stay live.
+    pub(crate) fn label_data_block(&mut self, data_offset: u64, block: BlockId) {
+        if !self.func.computed_goto_targets.contains(&block) {
+            self.func.computed_goto_targets.push(block);
+        }
+        self.func
+            .label_data_relocs
+            .push(crate::c5::ir::LabelDataReloc { data_offset, block });
     }
 
     /// Close the current block with `Terminator::GotoIndirect`

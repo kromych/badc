@@ -824,11 +824,14 @@ impl Compiler {
         }
         if self.lex.tk == Token::Assign {
             self.next()?;
-            // A `&&label` element (GCC labels as values) is a block address
-            // known only once the function is emitted, so a static array
-            // carrying one is left zero in the data image and filled by
-            // runtime stores at the declaration point.
-            if self.lex.tk == '{' && self.array_init_has_label_addr()? {
+            // A `&&label` element (GCC labels as values) is a link-time
+            // constant: the data image gets a label relocation, as it
+            // does for `&func`. Only a genuinely non-constant element
+            // alongside one still needs stores at the declaration point.
+            if self.lex.tk == '{'
+                && self.array_init_has_label_addr()?
+                && self.array_init_needs_runtime()?
+            {
                 return self.emit_static_array_init_runtime(loc_idx, ty, array_size);
             }
             if array_size == -1 {
@@ -1154,12 +1157,15 @@ impl Compiler {
         Ok(found)
     }
 
-    /// Fill a static-local array whose initializer contains a `&&label`
-    /// element with runtime stores at the declaration point. The data
-    /// image holds zeros; each element is parsed through the expression
-    /// grammar (so `&&label` yields a block-address node) and stored into
-    /// `arr[i]` via an `Expr::Assign` the walker lowers to a global
-    /// address store. A constant element is stored the same way.
+    /// Fill a static-local array whose initializer mixes a `&&label`
+    /// element with one whose value only the running program knows, using
+    /// runtime stores at the declaration point. The data image holds
+    /// zeros; each element is parsed through the expression grammar (so
+    /// `&&label` yields a block-address node) and stored into `arr[i]` via
+    /// an `Expr::Assign` the walker lowers to a global address store. A
+    /// constant element is stored the same way. An initializer whose
+    /// elements are all link-time constants goes through the data image
+    /// and its relocations instead.
     ///
     /// C99 6.2.4p3: static storage duration means one initialization for
     /// the whole program run, so the stores are wrapped in a hidden
@@ -1169,8 +1175,6 @@ impl Compiler {
     /// lowers to a single statement `guard ? 0 : (e0, ..., en, guard = 1)`
     /// because the enclosing declaration parse captures every pushed
     /// stmt id as a top-level block item.
-    /// TODO: the generic fix resolves `&&label` elements in the data
-    /// image via label relocations, removing the runtime stores.
     pub(super) fn emit_static_array_init_runtime(
         &mut self,
         loc_idx: usize,
@@ -2372,6 +2376,9 @@ impl Compiler {
         // Whether the previously scanned token was a unary/binary `&`
         // (see `init_id_needs_runtime` for the address rule).
         let mut prev_was_amp = false;
+        // Whether the previously scanned token was the `&&` of a label
+        // address, whose operand names a label rather than an object.
+        let mut prev_was_label_addr = false;
         // Tells binary `&&` from the `&&label` prefix.
         let mut scan = OperandScan::new();
         while depth > 0 && self.lex.tk != 0 {
@@ -2403,33 +2410,35 @@ impl Compiler {
                 }
                 saw_any = false;
                 prev_was_amp = false;
+                prev_was_label_addr = false;
                 scan = OperandScan::new();
                 self.next()?;
                 continue;
             } else if self.lex.tk == Token::Id {
                 saw_any = true;
-                if self.init_id_needs_runtime(prev_was_amp) {
-                    needs_runtime = true;
-                }
-                if self.lex.peek_after_whitespace(b'[') || self.lex.peek_after_whitespace(b'(') {
-                    needs_runtime = true;
+                if !prev_was_label_addr {
+                    if self.init_id_needs_runtime(prev_was_amp) {
+                        needs_runtime = true;
+                    }
+                    if self.lex.peek_after_whitespace(b'[') || self.lex.peek_after_whitespace(b'(')
+                    {
+                        needs_runtime = true;
+                    }
                 }
             } else if self.lex.tk == Token::Dot || self.lex.tk == Token::Arrow {
                 needs_runtime = true;
                 saw_any = true;
             } else if self.lex.tk == Token::Lan && !scan.ends_operand() {
-                // `&&label` (GCC labels as values): the block address is
-                // not known until the function is emitted, so the element
-                // is filled by a runtime store rather than a constant. The
-                // binary logical AND shares the spelling; only an operand
-                // can precede that one, and C99 6.6 admits it in a constant
-                // expression.
-                needs_runtime = true;
+                // `&&label` (GCC labels as values). The block address is a
+                // link-time constant, so the element does not force the
+                // runtime path. The binary logical AND shares the
+                // spelling; only an operand can precede that one.
                 saw_any = true;
             } else {
                 saw_any = true;
             }
             prev_was_amp = self.lex.tk == Token::AndOp;
+            prev_was_label_addr = self.lex.tk == Token::Lan && !scan.ends_operand();
             self.operand_scan_advance(&mut scan);
             self.next()?;
         }

@@ -1627,6 +1627,7 @@ pub(crate) fn emit_function(
     let asm_sections = &mut *cx.asm_sections;
     let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
     let text_align = &mut *cx.text_align;
+    let label_relocs = &mut *cx.label_relocs;
     let snapshot = code.len();
     let fixups_snapshot = fixups.len();
     let plt_call_fixups_snapshot = plt_call_fixups.len();
@@ -1996,6 +1997,7 @@ pub(crate) fn emit_function(
                         asm_sections: &mut *asm_sections,
                         asm_extern_call_sites: &mut *asm_extern_call_sites,
                         text_align: &mut *text_align,
+                        label_relocs: &mut *label_relocs,
                     };
                     let fcx = FnCtx {
                         func,
@@ -2355,6 +2357,16 @@ pub(crate) fn emit_function(
             }
         };
         code[*lea_start + 3..*lea_start + 7].copy_from_slice(&imm.to_le_bytes());
+    }
+
+    // Static-initializer slots holding one of this function's label
+    // addresses: record the block's now-final text offset for the
+    // object writers to relocate against.
+    for r in &func.label_data_relocs {
+        label_relocs.push(super::LabelReloc {
+            data_offset: r.data_offset,
+            text_offset: block_offsets[r.block as usize] as u64,
+        });
     }
 
     // Rewrite `asm goto` section fields (`.long %l0 - .`) to the label

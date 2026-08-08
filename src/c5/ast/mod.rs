@@ -737,6 +737,12 @@ pub(crate) struct FinishedFunction {
     /// packs these into `FunctionSsa::over_aligned` + `frame_align`. Empty when
     /// no automatic object needs stack realignment.
     pub over_aligned_slots: alloc::vec::Vec<(i64, i64, i64)>,
+    /// `&&label` elements of this function's static initializers, as
+    /// data slots awaiting a label address. The walk resolves each
+    /// label to its basic block and seeds
+    /// `FunctionSsa::label_data_relocs`. Empty for a function with no
+    /// label-address initializer.
+    pub label_data_slots: alloc::vec::Vec<crate::c5::compiler::PendingLabelReloc>,
     pub name: alloc::string::String,
 }
 
@@ -1147,8 +1153,12 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             alloca_top_slot: _,
             multi_cell_slots: _,
             over_aligned_slots: _,
+            label_data_slots,
             name: _,
         } = self;
+        for s in label_data_slots.iter_mut() {
+            crate::c5::layout::remap_self_u64(&mut s.data_offset, r);
+        }
         ast.remap_data_offsets(r);
     }
 }

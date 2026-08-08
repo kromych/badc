@@ -499,6 +499,15 @@ pub(crate) fn walk_function(
         let zero = b.imm(0);
         b.return_(zero);
     }
+    // `&&label` elements of this function's static initializers: bind
+    // each staged data slot to the label's block. `label_data_block`
+    // also records the block as address-taken, which keeps it reachable
+    // and its id remapped by the block-renumbering passes. Runs before
+    // the dead-block close so a block allocated here is closed too.
+    for r in &fun.label_data_slots {
+        let block = ctx.block_for_label(&mut b, r.label);
+        b.label_data_block(r.data_offset, block);
+    }
     // Pre-allocated branch / loop targets (after-If with both
     // arms terminating, dead post-Break tails, label blocks
     // that nothing ever reached) close with a synthetic

@@ -1401,32 +1401,56 @@ fn computed_goto() {
 
 #[test]
 fn label_addr_array_init() {
-    // A `&&label` element in an array initializer fills the slot with a
-    // runtime store (the block address is not a compile-time constant),
-    // indexed by a computed goto.
+    // A `&&label` element in an array initializer indexed by a computed
+    // goto, in automatic and static storage.
     assert_eq!(run_fixture("label_addr_array_init.c"), 0);
 }
 
 #[test]
+fn label_addr_table_relocation() {
+    // A static `&&label` table is filled by relocations, not by stores at
+    // the declaration point: plain, section-attributed, and range-
+    // designated spellings all dispatch correctly, including across
+    // calls and when the declaration's block is entered indirectly.
+    assert_eq!(run_fixture("label_addr_table_relocation.c"), 0);
+}
+
+#[test]
+fn label_address_arithmetic_is_rejected() {
+    // A label address is a link-time constant but has no integer value:
+    // only `goto *` gives it meaning. Arithmetic on one has to be a
+    // diagnostic, not a silent fold to its zero displacement.
+    let e = crate::Compiler::new(alloc::string::String::from(
+        "int f(void){ static const void *const t[1] = {&&L + 1};\n\
+         goto *t[0]; L: return 1; }",
+    ))
+    .compile()
+    .unwrap_err();
+    assert!(
+        alloc::format!("{e}").contains("label address is not an operand"),
+        "unexpected diagnostic: {e}"
+    );
+}
+
+#[test]
 fn static_init_once_guard() {
-    // C99 6.2.4p3: a static-local initialized by runtime stores
-    // (`&&label` elements) runs its initializer once; later calls
-    // must not clobber user writes to the table.
+    // C99 6.2.4p3: a static-local runs its initializer once; later
+    // calls must not clobber user writes to the table.
     assert_eq!(run_fixture("static_init_once_guard.c"), 0);
 }
 
 #[test]
 fn computed_goto_static_table() {
-    // A static `&&label` dispatch table across repeated calls: the
-    // once-guard skip path must leave correct label addresses.
+    // A static `&&label` dispatch table across repeated calls: every
+    // entry must still name its label on re-entry.
     assert_eq!(run_fixture("computed_goto_static_table.c"), 0);
 }
 
 #[test]
 fn computed_goto_const_static_table() {
-    // The same table in each `const` spelling. Its value comes from
-    // stores the declaration emits, so the storage is written at run
-    // time and must not be placed read-only.
+    // The same table in each `const` spelling. Every element is a
+    // link-time constant, so the storage is read-only data whose
+    // entries come from relocations.
     assert_eq!(run_fixture("computed_goto_const_static_table.c"), 0);
 }
 

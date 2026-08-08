@@ -533,6 +533,9 @@ fn synth_program_and_build(
         data_relocs,
         extern_data_relocs: Vec::new(),
         code_relocs,
+        // A synthesized link image resolves every label address at
+        // write time; no unresolved label slot survives into the Build.
+        label_relocs: Vec::new(),
         exports: exports.clone(),
         output_kind,
         shared_lib_name: if output_kind == OutputKind::SharedLibrary {

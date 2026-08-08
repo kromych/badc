@@ -179,6 +179,7 @@ static const char *const modules[] = { @MODULES@ };
 static void load_modules(void)
 {
     static char done[sizeof modules / sizeof modules[0]];
+    static int last_err[sizeof modules / sizeof modules[0]];
     unsigned n, i, pass, loaded = 0, progress;
 
     for (n = 0; modules[n]; n++)
@@ -211,15 +212,21 @@ static void load_modules(void)
                 done[i] = 1;
                 loaded++;
                 progress = 1;
-            } else if (pass == 3) {
-                printf("BADC-MODULE %%s errno=%%d %%s\n", modules[i], errno,
-                       strerror(errno));
+            } else {
+                last_err[i] = errno;
             }
             fflush(stdout);
         }
         if (!progress)
             break;
     }
+    /* One line per module that never loaded, with the errno of its last
+       attempt; printed after the passes so an early no-progress exit
+       cannot swallow it. */
+    for (i = 0; i < n; i++)
+        if (!done[i] && last_err[i])
+            printf("BADC-MODULE %%s errno=%%d %%s\n", modules[i], last_err[i],
+                   strerror(last_err[i]));
     printf("BADC-MODULE-DONE loaded=%%u of=%%u\n", loaded, n);
     fflush(stdout);
 

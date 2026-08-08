@@ -40,21 +40,56 @@
 
 extern crate alloc;
 
-/// Compiler identification reported by `--version`. `build.rs`
-/// captures the git commit / branch / remote at the time badc
-/// itself was built and exposes them via `cargo:rustc-env`, so
+// The one-line identification and the GNU dialect version it
+// embeds are macros so `concat!`, which takes literals only, can
+// build the consts below from a single spelling of each.
+macro_rules! gnu_compat_version {
+    () => {
+        "4.2.1"
+    };
+}
+macro_rules! version_line {
+    () => {
+        concat!(
+            "badc ",
+            env!("CARGO_PKG_VERSION"),
+            " (gcc-compatible, GNU C ",
+            gnu_compat_version!(),
+            ")"
+        )
+    };
+}
+
+/// GNU C dialect version claimed under `--gnu`: the preprocessor
+/// derives `__GNUC__` / `__GNUC_MINOR__` / `__GNUC_PATCHLEVEL__`
+/// and `__VERSION__` from it, and [`VERSION_LINE`] states it, so
+/// the claim cannot drift between the macros and the banner. See
+/// `Preprocessor::enable_gnu` for why the value stays at 4.2.1.
+pub const GNU_COMPAT_VERSION: &str = gnu_compat_version!();
+
+/// One-line compiler identification: name, release version, and
+/// the gcc-compatibility statement, in the family style of `gcc
+/// (GCC) 14.2.0` / `clang version 19.0.0`. This is the first line
+/// of `--version`, so consumers that keep `head -n1` of `$(CC)
+/// --version` (the Linux kernel's `CONFIG_CC_VERSION_TEXT`, which
+/// reaches the boot banner and `/proc/version`) record a complete
+/// identification.
+pub const VERSION_LINE: &str = version_line!();
+
+/// Compiler identification reported by `--version`:
+/// [`VERSION_LINE`] followed by the git commit / branch / remote
+/// captured by `build.rs` at the time badc itself was built, so
 /// the human invoking the tool can see exactly which checkout it
 /// came from.
 ///
-/// These bytes are NOT baked into emitted binaries: the commit /
-/// branch / remote vary with the build environment (a git
-/// checkout yields a hash; an exported tree yields `unknown`) and
-/// change on every commit, which would make the compiler's output
-/// depend on where badc was built. Output carries the
-/// reproducible [`OUTPUT_MARKER`] instead.
+/// The git tail is NOT baked into emitted binaries: the fields
+/// vary with the build environment (a git checkout yields a hash;
+/// an exported tree yields `unknown`) and change on every commit,
+/// which would make the compiler's output depend on where badc
+/// was built. Output carries the reproducible [`OUTPUT_MARKER`]
+/// instead.
 pub const BUILD_INFO: &str = concat!(
-    "BADC\n\tv",
-    env!("CARGO_PKG_VERSION"),
+    version_line!(),
     "\n\tcommit ",
     env!("BADC_GIT_COMMIT"),
     "\n\tbranch ",
@@ -63,20 +98,19 @@ pub const BUILD_INFO: &str = concat!(
     env!("BADC_GIT_REMOTE")
 );
 
-/// Compiler-identification marker appended to the code section of
-/// every emitted binary, so a `strings` scan of the produced
-/// Mach-O / ELF / PE reveals the badc version that wrote it.
+/// Compiler-identification marker carried by every emitted
+/// binary: appended to the code-section tail of final images so a
+/// `strings` scan reveals the producer, and stored as the
+/// `.comment` section of relocatable ELF objects, mirroring the
+/// version string gcc and clang place there.
 ///
-/// The marker carries the release version only -- never the git
-/// commit / branch / remote. The compiler's output must be
-/// reproducible: the same source, flags, and target must yield
-/// identical bytes regardless of where or from which checkout
-/// badc was built. Embedding volatile build-environment state
-/// (the git fields in [`BUILD_INFO`]) would break that, so the
-/// baked-in marker is pinned to `CARGO_PKG_VERSION`, which is
-/// stable for a given release. This mirrors the compiler-version
-/// string that gcc and clang place in `.comment` / `.ident`.
-pub const OUTPUT_MARKER: &str = concat!("BADC\n\tv", env!("CARGO_PKG_VERSION"));
+/// The marker is [`VERSION_LINE`] -- the release version only,
+/// never the git commit / branch / remote. The compiler's output
+/// must be reproducible: the same source, flags, and target must
+/// yield identical bytes regardless of where or from which
+/// checkout badc was built, and the git fields in [`BUILD_INFO`]
+/// vary with exactly that.
+pub const OUTPUT_MARKER: &str = version_line!();
 
 pub mod c5;
 
@@ -103,9 +137,9 @@ pub use c5::{
     ArchiveInclusion, LdsEmit, LdsObject, LdsOptions, LdsResult, LinkerScript, MergedNative,
     MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
     OrphanHandling, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
-    SharedLibrary, emit_aarch64_plt, emit_x86_64_plt, is_elf_object, is_ld_invocation, link_native_objects, run_ld,
-    link_native_objects_with_options, link_native_objects_with_shared_libs, link_with_script,
-    parse_lds_object, parse_linker_script, parse_native_elf, parse_shared_library, read_archive_at,
-    render_link_map, write_executable_elf64, write_native_image_from_merged,
-    write_native_image_from_merged_ex,
+    SharedLibrary, emit_aarch64_plt, emit_x86_64_plt, is_elf_object, is_ld_invocation,
+    link_native_objects, link_native_objects_with_options, link_native_objects_with_shared_libs,
+    link_with_script, parse_lds_object, parse_linker_script, parse_native_elf,
+    parse_shared_library, read_archive_at, render_link_map, run_ld, write_executable_elf64,
+    write_native_image_from_merged, write_native_image_from_merged_ex,
 };

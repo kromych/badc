@@ -208,9 +208,20 @@ pub fn run_ld(args: &[String]) -> i32 {
         }
     }
     if a.print_version {
-        // The "GNU" token keeps ld-version probes in build systems
-        // working; the feature surface is what run_ld implements.
-        println!("badc ld (GNU compatible) {}", crate::BUILD_INFO);
+        // One complete identification on the first line, as GNU ld
+        // prints ("GNU ld (GNU Binutils) 2.43"); the "GNU" token
+        // keeps ld-version probes in build systems working, while
+        // the feature surface is what run_ld implements. The git
+        // tail of BUILD_INFO follows on its own lines.
+        let git_tail = crate::BUILD_INFO
+            .split_once('\n')
+            .map(|(_, tail)| tail)
+            .unwrap_or("");
+        println!(
+            "badc ld (GNU compatible) {}\n{}",
+            env!("CARGO_PKG_VERSION"),
+            git_tail
+        );
         return 0;
     }
 

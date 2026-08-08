@@ -697,8 +697,9 @@ impl Preprocessor {
     /// `gcc`/`clang -std=c11` does, so portable code uses the standard
     /// path for the GNU-only features badc lacks.
     pub fn enable_gnu(&mut self, gnu89_inline: bool) {
-        // The claimed version stays at 4.2.1. The language features a 5.1
-        // claim implies are backed -- `__atomic_*` (4.7), `asm goto`
+        // The claimed version (`crate::GNU_COMPAT_VERSION`) stays at
+        // 4.2.1. The language features a 5.1 claim implies are backed --
+        // `__atomic_*` (4.7), `asm goto`
         // (4.5), `__builtin_types_compatible_p` including array type
         // names, designated-initializer ranges, `__builtin_*_overflow`
         // (5.1) -- but the version also gates the x86 intrinsic surface.
@@ -709,11 +710,11 @@ impl Preprocessor {
         // can claim without selecting paths it cannot compile. Raise it
         // once the intrinsics are lowered, not merely once a header
         // named `<x86intrin.h>` exists.
-        self.macros.insert("__GNUC__".to_string(), "4".to_string());
-        self.macros
-            .insert("__GNUC_MINOR__".to_string(), "2".to_string());
-        self.macros
-            .insert("__GNUC_PATCHLEVEL__".to_string(), "1".to_string());
+        let mut compat = crate::GNU_COMPAT_VERSION.split('.');
+        for name in ["__GNUC__", "__GNUC_MINOR__", "__GNUC_PATCHLEVEL__"] {
+            let component = compat.next().expect("GNU_COMPAT_VERSION is x.y.z");
+            self.macros.insert(name.to_string(), component.to_string());
+        }
         let inline_model_macro = if gnu89_inline {
             "__GNUC_GNU_INLINE__"
         } else {
@@ -721,8 +722,18 @@ impl Preprocessor {
         };
         self.macros
             .insert(inline_model_macro.to_string(), "1".to_string());
-        self.macros
-            .insert("__VERSION__".to_string(), "\"4.2.1\"".to_string());
+        // Dialect version first, then the real producer, as clang
+        // spells it ("4.2.1 Compatible Clang ..."), so code that
+        // embeds `__VERSION__` (`Py_GetCompiler`, sqlite's
+        // "compiled by") names badc rather than claiming to be gcc.
+        self.macros.insert(
+            "__VERSION__".to_string(),
+            alloc::format!(
+                "\"{} Compatible badc {}\"",
+                crate::GNU_COMPAT_VERSION,
+                env!("CARGO_PKG_VERSION")
+            ),
+        );
         // The `__sync_*` builtins lower for these widths, so the
         // capability macros a lock-free path tests are honest.
         for w in [1u32, 2, 4, 8] {

@@ -64,11 +64,11 @@ def ensure_badc(root: Path) -> Path:
 TARGETS = [("x64", "linux-x64"), ("aarch64", "linux-aarch64")]
 OBJDUMP_FLAGS = ["--disassemble", "--no-show-raw-insn", "--no-addresses"]
 
-# badc appends a `BADC\n\tv<version>...` marker to the tail of every
-# emitted `.text` section. The bytes after the marker bake in the
-# current git commit, so disassembling them would churn the snapshot
-# on every push. Truncate the objdump output at the marker.
-BUILD_INFO_MARKER = b"BADC\n\tv"
+# badc appends its version-line marker (`badc <version> ...`, see
+# OUTPUT_MARKER in src/lib.rs) to the tail of every emitted `.text`
+# section. Disassembled, those bytes would churn the snapshot on
+# every release bump. Truncate the objdump output at the marker.
+BUILD_INFO_MARKER = b"badc "
 
 # objdump's disassembly bakes in several forms of absolute addresses
 # that shift on any earlier-code reflow even when the local emit is

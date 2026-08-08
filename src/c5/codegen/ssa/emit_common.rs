@@ -2303,13 +2303,20 @@ fn subst_asm_operands(
     out
 }
 
-/// Split a macro invocation's arguments: GNU as separates them by commas
-/// or whitespace, with quoted runs and bracketed groups opaque. An argument
-/// that begins with `(` runs to the next comma, whitespace included
-/// (`nops (662b-661b) / 4` passes one expression).
+/// Split a macro invocation's arguments as GNU as scans them: commas
+/// separate; whitespace separates unless it borders an expression operator
+/// (`ldr_l x1, sym + 24` keeps `sym + 24` whole, `m 3 4` splits) or the
+/// argument began with `(` (`nops (662b-661b) / 4`). Quoted runs and
+/// bracketed groups are opaque.
 fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
-    let mut parts: alloc::vec::Vec<&str> = alloc::vec::Vec::new();
     let b = s.as_bytes();
+    let is_op = |c: u8| {
+        matches!(
+            c,
+            b'+' | b'-' | b'*' | b'/' | b'%' | b'|' | b'&' | b'^' | b'~' | b'<' | b'>' | b'='
+        )
+    };
+    let mut parts: alloc::vec::Vec<&str> = alloc::vec::Vec::new();
     let mut depth = 0i32;
     let mut quoted = false;
     let mut start = 0usize;
@@ -2335,7 +2342,12 @@ fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
                 false
             }
             b',' => depth == 0,
-            _ => depth == 0 && c.is_ascii_whitespace() && in_arg && !paren_led,
+            _ if depth == 0 && c.is_ascii_whitespace() && in_arg && !paren_led => {
+                let prev = b[..i].iter().rev().find(|c| !c.is_ascii_whitespace());
+                let next = b[i..].iter().find(|c| !c.is_ascii_whitespace());
+                !(prev.copied().is_some_and(is_op) || next.copied().is_some_and(is_op))
+            }
+            _ => false,
         };
         if split {
             let p = s[start..i].trim();

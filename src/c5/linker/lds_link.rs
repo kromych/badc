@@ -1231,9 +1231,9 @@ impl<'a> LdsLinker<'a> {
         for (gid, members) in &groups {
             let key = &group_key[*gid].0;
             let maps = if key.strings {
-                self.build_string_pool(members)
+                self.build_string_pool(members, key.align)
             } else {
-                self.build_fixed_pool(members, key.entsize)
+                self.build_fixed_pool(members, key.entsize, key.align)
             };
             let (pool_bytes, member_maps) = maps;
             let rep = *members
@@ -1254,8 +1254,13 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// Fixed-entsize merge: dedupe identical entries, first occurrence
-    /// wins the offset.
-    fn build_fixed_pool(&self, members: &[usize], entsize: u64) -> (Vec<u8>, PoolMemberMaps) {
+    /// wins the offset. Entries keep the group's alignment in the pool.
+    fn build_fixed_pool(
+        &self,
+        members: &[usize],
+        entsize: u64,
+        align: u64,
+    ) -> (Vec<u8>, PoolMemberMaps) {
         let mut pool: Vec<u8> = Vec::new();
         let mut interned: HashMap<Vec<u8>, u64> = HashMap::new();
         let mut maps: HashMap<usize, (Vec<u64>, Vec<u64>)> = HashMap::new();
@@ -1271,7 +1276,8 @@ impl<'a> LdsLinker<'a> {
                 let end = (pos + entsize as usize).min(data.len());
                 let entry = &data[pos..end];
                 let off = *interned.entry(entry.to_owned()).or_insert_with(|| {
-                    let at = pool.len() as u64;
+                    let at = align_up(pool.len() as u64, align);
+                    pool.resize(at as usize, 0);
                     pool.extend_from_slice(entry);
                     at
                 });
@@ -1291,7 +1297,11 @@ impl<'a> LdsLinker<'a> {
     /// diverges from the reference; plain identity dedup tracks it
     /// closely. Kept a distinct method so a full suffix pass can slot
     /// in when byte-identity across a fresh merge is required (TODO).
-    fn build_string_pool(&self, members: &[usize]) -> (Vec<u8>, PoolMemberMaps) {
+    fn build_string_pool(
+        &self,
+        members: &[usize],
+        align: u64,
+    ) -> (Vec<u8>, PoolMemberMaps) {
         let mut pool: Vec<u8> = Vec::new();
         let mut interned: HashMap<Vec<u8>, u64> = HashMap::new();
         let mut maps: HashMap<usize, (Vec<u64>, Vec<u64>)> = HashMap::new();
@@ -1311,7 +1321,8 @@ impl<'a> LdsLinker<'a> {
                     .unwrap_or(data.len());
                 let entry = &data[pos..end];
                 let off = *interned.entry(entry.to_owned()).or_insert_with(|| {
-                    let at = pool.len() as u64;
+                    let at = align_up(pool.len() as u64, align);
+                    pool.resize(at as usize, 0);
                     pool.extend_from_slice(entry);
                     at
                 });
@@ -2137,7 +2148,10 @@ impl<'a> LdsLinker<'a> {
         if let Some(&(oi, si)) = self.globals.get(name) {
             return self.resolve_sym_prevpass(oi, si, 0);
         }
-        self.script_now.get(name).map(|s| s.val.v)
+        self.script_now
+            .get(name)
+            .or_else(|| self.script_prev.get(name))
+            .map(|s| s.val.v)
     }
 
     /// True when an ABS64 site against this symbol names a load
@@ -2152,7 +2166,11 @@ impl<'a> LdsLinker<'a> {
                     if let Some(&(doi, dsi)) = self.globals.get(&sym.name) {
                         return self.reloc_is_relative(doi, dsi);
                     }
-                    if let Some(s) = self.script_now.get(&sym.name) {
+                    if let Some(s) = self
+                        .script_now
+                        .get(&sym.name)
+                        .or_else(|| self.script_prev.get(&sym.name))
+                    {
                         return matches!(s.val.att, Att::Out(_));
                     }
                 }
@@ -2167,8 +2185,19 @@ impl<'a> LdsLinker<'a> {
         match sym.shndx as u16 {
             SHN_ABS => Some(sym.value.wrapping_add(addend as u64)),
             SHN_UNDEF => {
-                let &(doi, dsi) = self.globals.get(&sym.name)?;
-                self.resolve_sym_prevpass(doi, dsi, addend)
+                if let Some(&(doi, dsi)) = self.globals.get(&sym.name) {
+                    return self.resolve_sym_prevpass(doi, dsi, addend);
+                }
+                // A reference the objects leave undefined can bind to
+                // a script-defined symbol; without this the dynamic
+                // fixup collection drops the slot entirely. During
+                // sizing the current pass's table is already swapped
+                // out, so fall back to the previous pass's values,
+                // which match at convergence.
+                self.script_now
+                    .get(&sym.name)
+                    .or_else(|| self.script_prev.get(&sym.name))
+                    .map(|s| s.val.v.wrapping_add(addend as u64))
             }
             _ => {
                 // Prev-pass placement offsets survive the reset; at
@@ -2178,8 +2207,19 @@ impl<'a> LdsLinker<'a> {
                 let p = self.placements[i];
                 match self.fates[i] {
                     SecFate::Placed { out } => {
+                        // In a merge pool a section symbol's addend picks
+                        // the entry, so the combined offset is remapped; a
+                        // named symbol anchors at its own entry and the
+                        // addend applies to the remapped address (matches
+                        // bfd -- an addend past the entry, e.g. one past a
+                        // string's NUL, must stay relative to that entry).
                         let off = if self.merge_of.contains_key(&i) {
-                            self.merge_remap(i, sym.value.wrapping_add(addend as u64))
+                            if sym.kind() == STT_SECTION {
+                                self.merge_remap(i, sym.value.wrapping_add(addend as u64))
+                            } else {
+                                self.merge_remap(i, sym.value)
+                                    .wrapping_add(addend as u64)
+                            }
                         } else {
                             sym.value.wrapping_add(addend as u64)
                         };
@@ -4351,6 +4391,59 @@ SECTIONS {
         assert_eq!(find_sym(&syms, "b_str"), ro.2 + 6);
     }
 
+    /// A named symbol into a merged string section anchors its relocs:
+    /// the addend applies to the remapped address, so an addend past
+    /// the string's NUL (gcc anchors one-past-end bounds this way)
+    /// stays with that string instead of resolving to a deduplicated
+    /// padding entry. A section symbol's addend selects the entry
+    /// through the remap. Pool entries keep the section's alignment.
+    #[test]
+    fn merge_string_addend_anchors_to_symbol_entry() {
+        let script = parse_linker_script(
+            "SECTIONS { . = 0x1000; .text : { *(.text*) } .rodata : { *(.rodata*) } .data : { *(.data*) } }",
+        )
+        .expect("parses");
+        // gcc's .rodata.str1.8 shape: 8-aligned strings, NUL padding.
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0u8; 4])
+            .sec(
+                ".rodata.str1.8",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE | SHF_STRINGS,
+                8,
+                b"io  \0\0\0\0mem \0\0\0\0",
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 24])
+            .entsize(1, 1)
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+            .sym("mem_str", STB_GLOBAL, STT_OBJECT, 1, 8, 5)
+            // Symtab: null(0), sections(1..=3), _start(4), mem_str(5).
+            // Slots: mem_str+1, mem_str+5 (one past the NUL), and the
+            // string's offset through the section symbol.
+            .reloc(2, 0, 5, rt::R_AARCH64_ABS64, 1)
+            .reloc(2, 8, 5, rt::R_AARCH64_ABS64, 5)
+            .reloc(2, 16, 2, rt::R_AARCH64_ABS64, 8)
+            .build(EM_AARCH64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let secs = readelf_sections(&res.image);
+        let ro = secs.iter().find(|s| s.0 == ".rodata").expect("rodata");
+        let data = secs.iter().find(|s| s.0 == ".data").expect("data");
+        let ro_off = section_file_off(&res.image, ro.2);
+        let bytes = &res.image[ro_off..ro_off + ro.3 as usize];
+        let mem = bytes
+            .windows(5)
+            .position(|w| w == b"mem \0")
+            .expect("pooled string") as u64;
+        assert_eq!((ro.2 + mem) % 8, 0, "pool keeps the entry alignment");
+        let d_off = section_file_off(&res.image, data.2);
+        let slot =
+            |k: usize| u64::from_le_bytes(res.image[d_off + k..d_off + k + 8].try_into().unwrap());
+        assert_eq!(slot(0), ro.2 + mem + 1);
+        assert_eq!(slot(8), ro.2 + mem + 5);
+        assert_eq!(slot(16), ro.2 + mem);
+    }
+
     const DYN_SCRIPT: &str = r#"
 ENTRY(_start)
 SECTIONS {
@@ -4423,5 +4516,48 @@ SECTIONS {
         assert_eq!(r_offset, data_addr + 9);
         assert_eq!(r_type, rt::R_AARCH64_RELATIVE);
         let _ = syms;
+    }
+
+    /// An ABS64 slot against a symbol only the script defines is a
+    /// load-address fixup like any other: it must reach the dynamic
+    /// tables (RELR here) and, since RELR stores the addend in place,
+    /// carry the link-time value even under
+    /// `--no-apply-dynamic-relocs`. The collection used to drop such
+    /// slots -- no fixup, zero in place.
+    #[test]
+    fn dyn_link_relocates_script_symbol_slots() {
+        let script = parse_linker_script(
+            "ENTRY(_start)\nSECTIONS {\n  . = 0;\n  .text : { *(.text*) }\n  .rodata : { table_start = .; *(.rodata*) }\n  .data : { *(.data*) }\n  .rela.dyn : { *(.rela .rela*) }\n  .relr.dyn : { *(.relr.dyn) }\n}",
+        )
+        .expect("parses");
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 8, &[0u8; 8])
+            .sec(".rodata", SHT_PROGBITS, SHF_ALLOC, 8, &[0u8; 8])
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .sym("table_start", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            // Symtab: null(0), sections(1..=3), _start(4), table_start(5).
+            .reloc(2, 0, 5, rt::R_AARCH64_ABS64, 0)
+            .build(EM_AARCH64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            pack_relative_relocs: true,
+            apply_dynamic_relocs: false,
+            max_page_size: 0x10000,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let secs = readelf_sections(&res.image);
+        let ro_addr = secs.iter().find(|s| s.0 == ".rodata").unwrap().2;
+        let data_addr = secs.iter().find(|s| s.0 == ".data").unwrap().2;
+        let relr = secs.iter().find(|s| s.0 == ".relr.dyn").expect("relr");
+        assert!(relr.3 >= 8, "script-symbol slot must reach RELR");
+        let relr_off = section_file_off(&res.image, relr.2);
+        let w0 = u64::from_le_bytes(res.image[relr_off..relr_off + 8].try_into().unwrap());
+        assert_eq!(w0, data_addr, "RELR relocates the slot");
+        let d_off = section_file_off(&res.image, data_addr);
+        let slot = u64::from_le_bytes(res.image[d_off..d_off + 8].try_into().unwrap());
+        assert_eq!(slot, ro_addr, "slot holds the link-time value in place");
     }
 }

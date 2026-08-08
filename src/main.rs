@@ -901,6 +901,18 @@ fn run() {
                      generated"
                 );
             }
+            // ld accepts the emulation joined (`-maarch64linux`) or
+            // separate (`-m aarch64linux`).
+            s @ ("-melf_x86_64" | "-maarch64linux" | "-maarch64elf") => {
+                let spec = if s == "-melf_x86_64" {
+                    "linux-x64"
+                } else {
+                    "linux-aarch64"
+                };
+                if target_spec.is_none() {
+                    target_spec = Some(spec.to_string());
+                }
+            }
             "-m" => match iter.next() {
                 Some(emu) => {
                     let spec = match emu.as_str() {

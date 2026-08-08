@@ -2734,11 +2734,20 @@ impl<'a> LdsLinker<'a> {
         let page = |v: u64| v & !0xfffu64;
         match r.rtype {
             rt::R_AARCH64_ABS64 => {
-                let dynamic = self.opts.emit == LdsEmit::Dyn && alloc;
-                if !dynamic || relr_set.contains(&p) || self.opts.apply_dynamic_relocs {
-                    if site + 8 <= buf.len() {
-                        buf[site..site + 8].copy_from_slice(&sa.to_le_bytes());
-                    }
+                // Write the value in place unless it is a load-address
+                // (slide-dependent) fixup deferred to the loader. A
+                // slide-invariant absolute constant is always written;
+                // an RELR-packed relative keeps its link-time value in
+                // place (the RELR format has no explicit addend);
+                // `--no-apply-dynamic-relocs` leaves only the RELA
+                // relative slots at zero for the kernel to fill.
+                let relative = self.opts.emit == LdsEmit::Dyn
+                    && alloc
+                    && self.reloc_is_relative(oi, r.sym as usize);
+                let deferred =
+                    relative && !relr_set.contains(&p) && !self.opts.apply_dynamic_relocs;
+                if !deferred && site + 8 <= buf.len() {
+                    buf[site..site + 8].copy_from_slice(&sa.to_le_bytes());
                 }
             }
             rt::R_AARCH64_ABS32 => {

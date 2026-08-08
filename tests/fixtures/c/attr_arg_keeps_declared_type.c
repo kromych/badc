@@ -46,7 +46,9 @@ int main(void) {
 
     struct A a;
     if (sizeof(a.p) != 2 * sizeof(long)) return 4;
-    if (sizeof(struct A) != 24) return 5;
+    // Offset of `p` is its alignment (sizeof(long), LP64 and LLP64
+    // alike), so the struct is three longs on either data model.
+    if (sizeof(struct A) != 3 * sizeof(long)) return 5;
 
     struct B b;
     if ((unsigned long)((char *)&b.d - (char *)&b) != sizeof(long)) return 6;

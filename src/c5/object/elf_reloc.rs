@@ -598,21 +598,19 @@ struct NamedDataObj {
 
 /// Carve the anonymous immutable spans -- string literals, `__func__`
 /// arrays, Mcpy templates -- out of the writable `.data` image into
-/// `.rodata`.
+/// `.rodata`. The named-object pass keys on symbols, and none of this
+/// data has one, so without this it stays writable.
 ///
-/// The named-object pass above keys on symbols, and none of this data
-/// has one, so without this it stays writable. Consumers test the
-/// address, not the declared type: the Linux kernel's `kfree_const`
-/// frees any pointer outside `[__start_rodata, __end_rodata)`, so a
-/// literal reaching it from `.data` is freed as though it were heap.
-/// C99 6.4.5p6 also makes writing through a literal undefined, which
-/// a read-only mapping is what enforces.
+/// C99 6.4.5p6 leaves writing through a literal undefined, and the
+/// read-only mapping is what enforces it. Consumers also classify by
+/// address rather than declared type: the Linux kernel's `kfree_const`
+/// frees any pointer outside `[__start_rodata, __end_rodata)`.
 ///
-/// A span already covered by a named object is that object's storage
-/// (a `const char[]` initialized from a literal) and is left to the
-/// carve above. Alignment is the span's existing residue rather than
-/// 1: an Mcpy template can need more than byte alignment, and the
-/// unified layout already placed each span at the alignment it needs.
+/// A span a named object already covers is that object's storage (a
+/// `const char[]` initialized from a literal) and stays with it, so
+/// writable storage a literal initializes remains writable. Alignment
+/// is the span's existing offset residue rather than 1, since an Mcpy
+/// template can need more than byte alignment.
 fn carve_anonymous_const_data(
     program: &crate::c5::program::Program,
     build: &crate::c5::codegen::Build,

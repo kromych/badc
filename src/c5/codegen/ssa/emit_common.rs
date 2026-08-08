@@ -1006,6 +1006,21 @@ pub(crate) enum AsmSectionItem {
     /// the end of each section, which is where GNU as flushes what `.ltorg`
     /// did not.
     LiteralPool(alloc::vec::Vec<AsmPoolEntry>),
+    /// A `.if` whose condition reads section labels and whose branches emit
+    /// no bytes, so the layout that values the condition cannot depend on the
+    /// outcome. Evaluated after layout; the first arm whose condition holds
+    /// raises its `.error`.
+    CondDiag(alloc::vec::Vec<AsmCondArm>),
+}
+
+/// One branch of a deferred conditional. `tok` is the `.if`-family directive
+/// that opened the branch, empty for `.else`; `error` is the diagnostic the
+/// branch raises, absent when it raises none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AsmCondArm {
+    pub tok: alloc::string::String,
+    pub cond: alloc::string::String,
+    pub error: Option<alloc::string::String>,
 }
 
 /// One AArch64 literal-pool entry. `label` is the synthetic symbol the
@@ -1775,7 +1790,8 @@ pub(crate) fn expand_asm_gas_macros(
         || text.contains(".equ")
         || text.contains(".set")
         || text.contains(".purgem")
-        || text.contains(".req"))
+        || text.contains(".req")
+        || text.contains(".if"))
     {
         return Ok(None);
     }
@@ -1850,6 +1866,22 @@ fn expand_gas_statements(
         // branch emits, so nesting stays balanced across dead branches.
         match tok {
             ".if" | ".ifeq" | ".ifne" | ".ifgt" | ".iflt" | ".ifge" | ".ifle" => {
+                // A condition over names only the layout can value, guarding
+                // branches that emit no bytes: copy the region through so the
+                // section layer values it once the labels are placed. GNU as
+                // reads the same difference at the `.if`, which it can only
+                // do while the two labels sit in one fixed-size run.
+                if emitting(&cond)
+                    && gas_cond_reads_symbols(rest, &st.equ)
+                    && let Some(next) = gas_cond_region_is_diagnostic_only(stmts, i)
+                {
+                    for s in &stmts[i - 1..next] {
+                        out.push_str(s);
+                        out.push('\n');
+                    }
+                    i = next;
+                    continue;
+                }
                 let taken = emitting(&cond) && gas_if_taken(tok, rest, &st.equ)?;
                 cond.push((taken, taken));
                 continue;
@@ -2114,6 +2146,12 @@ fn gas_if_taken(
 ) -> Result<bool, alloc::string::String> {
     let v = eval_asm_expr_with_labels(rest, &|t| equ.get(t).copied())
         .ok_or_else(|| alloc::format!("inline asm: non-constant `{tok}` condition `{rest}`"))?;
+    gas_if_relation(tok, v)
+}
+
+/// The relation to zero a `.if`-family directive applies to its condition's
+/// value.
+pub(crate) fn gas_if_relation(tok: &str, v: i64) -> Result<bool, alloc::string::String> {
     Ok(match tok {
         ".ifeq" => v == 0,
         ".ifne" | ".if" => v != 0,
@@ -2127,6 +2165,64 @@ fn gas_if_taken(
             ));
         }
     })
+}
+
+/// Whether a `.if` condition reads a name the expansion cannot value: a
+/// label, or a symbol defined elsewhere in the unit. Numeric literals,
+/// assignments the expansion has made, and the register text a `%`-prefixed
+/// name spells are all valued here.
+fn gas_cond_reads_symbols(
+    rest: &str,
+    equ: &alloc::collections::BTreeMap<alloc::string::String, i64>,
+) -> bool {
+    let b = rest.as_bytes();
+    let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
+    let mut i = 0usize;
+    while i < b.len() {
+        if !ident(b[i]) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < b.len() && ident(b[i]) {
+            i += 1;
+        }
+        let tok = &rest[start..i];
+        let register_text = start > 0 && b[start - 1] == b'%';
+        let numeric = tok.as_bytes()[0].is_ascii_digit()
+            && numeric_label_digits(tok).is_none_or(|d| d.len() == tok.len())
+            && parse_asm_number(tok).is_some();
+        if !register_text && !numeric && !equ.contains_key(tok) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Statement index just past the `.endif` of a conditional region whose
+/// branches emit no bytes, so its outcome cannot change the section layout
+/// and the condition may be valued after it. `from` is the statement after
+/// the `.if`. `None` when a branch emits, or when the region nests another
+/// conditional, whose liveness the outer condition would decide.
+fn gas_cond_region_is_diagnostic_only(
+    stmts: &[alloc::string::String],
+    from: usize,
+) -> Option<usize> {
+    for (n, s) in stmts.iter().enumerate().skip(from) {
+        let (labels, s) = split_leading_labels(s);
+        if !labels.is_empty() {
+            return None;
+        }
+        if s.is_empty() {
+            continue;
+        }
+        match split_first_token(s).0 {
+            ".endif" => return Some(n + 1),
+            ".error" | ".else" | ".elseif" => {}
+            _ => return None,
+        }
+    }
+    None
 }
 
 /// Whether a GNU as `.ifc` / `.ifnc` string-comparison takes its branch. The
@@ -2765,6 +2861,8 @@ fn extract_asm_sections_impl(
     // until `.endr` closes it into a `Rept` item.
     let mut rept_stack: alloc::vec::Vec<(alloc::string::String, alloc::vec::Vec<AsmSectionItem>)> =
         alloc::vec::Vec::new();
+    // Arms of an open deferred conditional; `None` outside one.
+    let mut cond_arms: Option<alloc::vec::Vec<AsmCondArm>> = None;
     for piece in split_asm_statements(text) {
         let piece = piece.trim();
         if piece.is_empty() {
@@ -2834,6 +2932,54 @@ fn extract_asm_sections_impl(
                         .push(item);
                 }
             }
+            continue;
+        }
+        // A conditional the expansion deferred: its condition reads section
+        // labels and its branches emit no bytes, so the arms accumulate into
+        // one item the layout values.
+        if let Some(arms) = &mut cond_arms {
+            match tok {
+                ".endif" => {
+                    let item = AsmSectionItem::CondDiag(core::mem::take(arms));
+                    cond_arms = None;
+                    match *stack.last().unwrap() {
+                        Some(idx) => blocks[idx].items.push(item),
+                        None => {
+                            return Err(alloc::string::String::from(
+                                "inline asm: `.if` outside a section",
+                            ));
+                        }
+                    }
+                }
+                ".else" | ".elseif" => arms.push(AsmCondArm {
+                    tok: alloc::string::String::from(if tok == ".else" { "" } else { ".if" }),
+                    cond: alloc::string::String::from(rest.trim()),
+                    error: None,
+                }),
+                ".error" => {
+                    let arm = arms.last_mut().expect("an arm is open");
+                    if arm.error.is_none() {
+                        arm.error =
+                            Some(alloc::string::String::from(rest.trim().trim_matches('"')));
+                    }
+                }
+                _ => {
+                    return Err(alloc::format!(
+                        "inline asm: `{tok}` inside a conditional over section labels would emit bytes"
+                    ));
+                }
+            }
+            continue;
+        }
+        if matches!(
+            tok,
+            ".if" | ".ifeq" | ".ifne" | ".ifgt" | ".iflt" | ".ifge" | ".ifle"
+        ) {
+            cond_arms = Some(alloc::vec![AsmCondArm {
+                tok: alloc::string::String::from(tok),
+                cond: alloc::string::String::from(rest.trim()),
+                error: None,
+            }]);
             continue;
         }
         if tok == ".rept" && (*stack.last().unwrap()).is_some() {
@@ -4722,6 +4868,7 @@ fn measure_round_inner(
                 | AsmSectionItem::Size { .. }
                 | AsmSectionItem::Weak(_)
                 | AsmSectionItem::Local(_)
+                | AsmSectionItem::CondDiag(_)
                 | AsmSectionItem::SymSet { .. } => {}
                 AsmSectionItem::SetExpr { name, expr } => {
                     sets.push((name.clone(), expr.clone(), key.clone(), at));
@@ -5144,6 +5291,49 @@ pub(crate) fn materialize_asm_sections(
                         section_index: sec_idx,
                         offset: at,
                     });
+                }
+                AsmSectionItem::CondDiag(arms) => {
+                    let key = section_key(b);
+                    let here = sec.bytes.len() as i64;
+                    let resolve = |t: &str| {
+                        section_expr_leaf(
+                            t,
+                            &key,
+                            here,
+                            &measured,
+                            sink_labels,
+                            &num_unique,
+                            label_off,
+                        )
+                    };
+                    for arm in arms {
+                        let taken = if arm.tok.is_empty() {
+                            true
+                        } else {
+                            let ctx = AsmExprCtx {
+                                resolve: &resolve,
+                                const_of,
+                                lax_div: false,
+                            };
+                            let v = eval_asm_value(&arm.cond, &ctx)
+                                .ok()
+                                .and_then(|v| v.to_abs())
+                                .ok_or_else(|| {
+                                    alloc::format!(
+                                        "inline asm: non-constant `{}` condition `{}`",
+                                        arm.tok,
+                                        arm.cond
+                                    )
+                                })?;
+                            gas_if_relation(&arm.tok, v)?
+                        };
+                        if taken {
+                            if let Some(msg) = &arm.error {
+                                return Err(alloc::format!("inline asm: `.error` {msg}"));
+                            }
+                            break;
+                        }
+                    }
                 }
                 AsmSectionItem::LiteralPool(entries) => {
                     let (offs, end) = literal_pool_layout(entries, sec.bytes.len() as i64);
@@ -6311,13 +6501,15 @@ fn val_relational(
         // the alternatives `.skip` padding `-((rlen-slen) > 0) * (rlen-slen)`
         // relies on the -1 to recover a positive count. The comparison is of
         // the difference against zero, so same-space terms cancel first. An
-        // equality whose difference keeps a symbolic base compares two
-        // distinct symbols, which GNU as reads as unequal
-        // (`.if \base == %rsp` with two register names).
+        // equality between two undefined symbols compares the symbols, which
+        // GNU as reads as unequal (`.if \base == %rsp` with two register
+        // names); a residual term that is a location in this unit is a
+        // distance the comparison cannot take before the layout gives it one.
         let d = v.combine(rhs, true)?;
+        let undefined = |t: &Option<AsmExprTerm>| t.as_ref().is_none_or(|t| t.space.is_none());
         let truth = match d.to_abs() {
             Some(d) => rel(d, 0),
-            None if equality => rel(1, 0),
+            None if equality && undefined(&d.pos) && undefined(&d.neg) => rel(1, 0),
             None => {
                 return Err(alloc::string::String::from(
                     "operand of `comparison` is not absolute",

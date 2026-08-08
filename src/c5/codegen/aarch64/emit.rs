@@ -10126,11 +10126,22 @@ mod tests {
 
     /// Materialize one file-scope asm text and return the named section.
     fn a64_file_asm_section(text: &str, name: &str) -> super::super::ssa::emit_common::AsmSection {
+        a64_file_asm_sink(text)
+            .iter()
+            .find(|s| s.name == name)
+            .expect("section emitted")
+            .clone()
+    }
+
+    /// Expand, extract, encode and materialize one file-scope asm text.
+    fn a64_file_asm_sink_result(text: &str) -> Result<AsmSectionSink, alloc::string::String> {
         use super::super::ssa::emit_common::{
-            extract_file_scope_asm_sections, materialize_asm_sections,
+            AsmComments, extract_file_scope_asm_sections, materialize_asm_sections,
+            prepare_file_asm_text,
         };
-        let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
-        encode_a64_file_asm_section_code(&mut blocks).unwrap();
+        let text = prepare_file_asm_text(text, AsmComments::A64)?;
+        let mut blocks = extract_file_scope_asm_sections(&text, true)?;
+        encode_a64_file_asm_section_code(&mut blocks)?;
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
@@ -10140,12 +10151,87 @@ mod tests {
             &|_| None,
             true,
             &mut sink,
-        )
-        .unwrap();
-        sink.iter()
-            .find(|s| s.name == name)
-            .expect("section emitted")
-            .clone()
+        )?;
+        Ok(sink)
+    }
+
+    fn a64_file_asm_sink(text: &str) -> AsmSectionSink {
+        a64_file_asm_sink_result(text).expect("materializes")
+    }
+
+    /// A `.if` over a label difference guarding a `.error` is valued after
+    /// layout: the branches emit no bytes, so the layout cannot depend on the
+    /// outcome. Bytes are GNU as's for the same input, which reads the same
+    /// difference at the `.if`. Covers both spellings the kernel vector
+    /// tables use -- numeric labels through macro parameters, and `\@`-unique
+    /// labels -- and an `.else` arm.
+    #[test]
+    fn file_scope_a64_deferred_if_matches_gnu_as() {
+        let text = ".macro check_preamble_length start, end\n\
+                    .if ((\\end-\\start) != (2 * 4))\n\
+                    .error \"vector preamble length mismatch\"\n\
+                    .endif\n.endm\n\
+                    .macro valid_vect target\n.align 4\n661:\nnop\n\
+                    stp x0, x1, [sp, #-16]!\n662:\nb \\target\n\
+                    check_preamble_length 661b, 662b\n.endm\n\
+                    .macro sized_vect\n.align 4\n.L__vect_start\\@:\n\
+                    mrs x0, esr_el2\nret\n.L__vect_end\\@:\n\
+                    .if ((.L__vect_end\\@ - .L__vect_start\\@) > 0x10)\n\
+                    .error \"vector larger than its entry\"\n.endif\n\
+                    .if ((.L__vect_end\\@ - .L__vect_start\\@) > 0x4)\n.else\n\
+                    .error \"vector shorter than one instruction\"\n.endif\n.endm\n\
+                    .text\n.globl v\nv:\nvalid_vect el1_sync\nvalid_vect el1_irq\n\
+                    sized_vect\nsized_vect\nel1_sync:\nel1_irq:\nret\n";
+        let want: Vec<u8> = [
+            0xd503201fu32, // nop
+            0xa9bf07e0,    // stp x0, x1, [sp, #-16]!
+            0x1400000c,    // b el1_sync
+            0xd503201f,    // .align 4 padding
+            0xd503201f,    // nop
+            0xa9bf07e0,    // stp x0, x1, [sp, #-16]!
+            0x14000008,    // b el1_irq
+            0xd503201f,    // .align 4 padding
+            0xd53c5200,    // mrs x0, esr_el2
+            0xd65f03c0,    // ret
+            0xd503201f,    // .align 4 padding
+            0xd503201f,
+            0xd53c5200, // mrs x0, esr_el2
+            0xd65f03c0, // ret
+            0xd65f03c0, // ret
+        ]
+        .iter()
+        .flat_map(|w| w.to_le_bytes())
+        .collect();
+        let sec = a64_file_asm_section(text, ".text");
+        assert_eq!(sec.bytes, want);
+        assert_eq!(sec.align, 16);
+    }
+
+    /// The same guard reports when the region it measures is the wrong size,
+    /// with the `.error`'s own message.
+    #[test]
+    fn file_scope_a64_deferred_if_reports_a_failed_guard() {
+        let text = ".macro check_preamble_length start, end\n\
+                    .if ((\\end-\\start) != (2 * 4))\n\
+                    .error \"vector preamble length mismatch\"\n\
+                    .endif\n.endm\n\
+                    .text\nv:\n661:\nnop\nnop\nnop\n662:\n\
+                    check_preamble_length 661b, 662b\n";
+        let err = a64_file_asm_sink_result(text).expect_err("guard reports");
+        assert!(
+            err.contains("`.error` vector preamble length mismatch"),
+            "{err}"
+        );
+    }
+
+    /// A deferred condition the layout still cannot value is reported rather
+    /// than guessed: a difference of labels in two sections is no distance.
+    #[test]
+    fn file_scope_a64_deferred_if_rejects_a_cross_section_difference() {
+        let text = ".text\na:\nnop\n.section .other,\"ax\",@progbits\nb:\nnop\n.text\n\
+                    .if ((b - a) != 4)\n.error \"mismatch\"\n.endif\n";
+        let err = a64_file_asm_sink_result(text).expect_err("condition is not constant");
+        assert!(err.contains("non-constant `.if` condition"), "{err}");
     }
 
     /// `ldr Rt, =value` deposits the value in the section's literal pool.

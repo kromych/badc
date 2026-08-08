@@ -52,12 +52,13 @@ pub use linker::read_archive_at;
 #[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]
 pub use linker::{
-    ArchiveInclusion, MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc,
-    NativeSymSection, NativeSymbol, PendingImportReloc, PltTrampoline, SectionContribution,
-    SectionMap, SharedLibrary, emit_aarch64_plt, emit_x86_64_plt, is_elf_object,
-    link_native_objects, link_native_objects_with_options, link_native_objects_with_shared_libs,
-    parse_native_elf, parse_shared_library, render_link_map, write_executable_elf64,
-    write_native_image_from_merged, write_native_image_from_merged_ex,
+    ArchiveInclusion, LdsEmit, LdsObject, LdsOptions, LdsResult, LinkerScript, MergedNative,
+    MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
+    OrphanHandling, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
+    SharedLibrary, emit_aarch64_plt, emit_x86_64_plt, is_elf_object, link_native_objects,
+    link_native_objects_with_options, link_native_objects_with_shared_libs, link_with_script,
+    parse_lds_object, parse_linker_script, parse_native_elf, parse_shared_library, render_link_map,
+    write_executable_elf64, write_native_image_from_merged, write_native_image_from_merged_ex,
 };
 #[cfg(feature = "full")]
 #[allow(unused_imports)]

@@ -39,25 +39,10 @@ Disassembly of section .text:
                	movl	%edi, 0x10(%rbp)
                	movq	%rsi, 0x20(%rbp)
                	movq	%rdx, 0x30(%rbp)
+               	xorq	%rax, %rax
+               	movl	%eax, -0x10(%rbp)
                	leaq	<rip>, %rax
-               	movsbq	0x18(%rax), %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	xorq	%rcx, %rcx
-               	movq	%rcx, -0x10(%rbp)
-               	jmp	<addr>
-               	leaq	<rip>, %rcx        # <addr>
-               	movq	%rcx, (%rax)
-               	leaq	<rip>, %rcx        # <addr>
-               	movq	%rcx, 0x8(%rax)
-               	leaq	<rip>, %rcx        # <addr>
-               	movq	%rcx, 0x10(%rax)
-               	movl	$0x1, %ecx
-               	movb	%cl, 0x18(%rax)
-               	movq	%rcx, -0x10(%rbp)
-               	xorq	%rcx, %rcx
-               	movl	%ecx, -0x10(%rbp)
-               	movslq	0x10(%rbp), %rcx
+               	movslq	%edi, %rcx
                	movl	$0x3, %edx
                	movq	%rdx, %r10
                	pushq	%rax
@@ -75,7 +60,14 @@ Disassembly of section .text:
                	leaq	-<rip>, %rax       # <addr>
                	jmp	<addr>
                	movl	%eax, -0x10(%rbp)
-               	jmp	<addr>
+               	movslq	-0x10(%rbp), %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	popq	%r11
+               	addq	$0x30, %rsp
+               	pushq	%r11
+               	retq
                	movl	0x20(%rbp), %ecx
                	movq	0x30(%rbp), %rsi
                	leaq	-<rip>, %rax       # <addr>
@@ -91,14 +83,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	(%rax,%rax,2), %rax
                	movl	%eax, -0x10(%rbp)
-               	movslq	-0x10(%rbp), %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x30, %rsp
-               	pushq	%r11
-               	retq
+               	jmp	<addr>
                	xorq	%rdx, %rdx
                	movl	%ecx, %edi
                	movq	%rbx, %rsi

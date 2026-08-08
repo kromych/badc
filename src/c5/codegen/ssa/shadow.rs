@@ -401,6 +401,14 @@ pub(crate) fn compute_live_sets(
                 code_edges[interval_of(off)].push(r.target_ent_pc as usize);
             }
         }
+        // A `&&label` slot names a code location inside its function, so
+        // it holds that function live exactly as a function pointer does.
+        for (off, ent_pc) in program.label_data_slots() {
+            let off = off as i64;
+            if (0..data_len).contains(&off) {
+                code_edges[interval_of(off)].push(ent_pc);
+            }
+        }
         // The target interval resolves via the anchor: a one-past-the-end
         // target coincides with the next object's start and would mark
         // the wrong object.
@@ -860,6 +868,7 @@ pub(crate) fn apply_data_liveness(
                 .iter()
                 .map(|r| r.data_offset as i64),
         )
+        .chain(program.label_data_slots().map(|(off, _)| off as i64))
     {
         if (0..data_len).contains(&off) {
             has_reloc_slot[interval_of(off)] = true;
@@ -1008,6 +1017,18 @@ pub(crate) fn apply_data_liveness(
                     *inst = crate::c5::ir::Inst::Imm(0);
                 }
             }
+            // A `&&label` slot rides its object: it follows the new base,
+            // or goes with the object when that did not survive.
+            f.label_data_relocs
+                .retain_mut(|r| match space.to_input(r.data_offset as i64) {
+                    Some(off)
+                        if (0..data_len).contains(&off) && new_base[interval_of(off)] >= 0 =>
+                    {
+                        r.data_offset = map(off) as u64;
+                        true
+                    }
+                    _ => false,
+                });
         }
     }
     (out, bss_size, DataMap::new(starts, new_base, &obj_lens))

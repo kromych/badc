@@ -1104,6 +1104,18 @@ pub(crate) struct AggDesc {
     pub fields: Vec<crate::c5::codegen::abi_classify::FlatField>,
 }
 
+/// A static-initializer data slot holding the address of a labelled
+/// code location in this function (GCC `&&label`). The label's address
+/// is a link-time constant, so the slot is filled by a relocation
+/// rather than by stores at the declaration point.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LabelDataReloc {
+    /// Byte offset in the program's data image of the 8-byte slot.
+    pub data_offset: u64,
+    /// Block whose code address the slot receives.
+    pub block: BlockId,
+}
+
 /// Per-function SSA program. Consumed by the allocator and the
 /// per-arch lowering.
 #[derive(Debug, Clone, Default)]
@@ -1286,6 +1298,14 @@ pub(crate) struct FunctionSsa {
     /// treat an indirect branch as a branch to all of these. Empty
     /// for functions with no computed goto.
     pub computed_goto_targets: Vec<BlockId>,
+    /// Static-initializer data slots holding a `&&label` address: the
+    /// slot at `data_offset` in the program's data image receives the
+    /// runtime code address of `block` plus `addend`. Native emit
+    /// resolves each once block layout is final; the VM writes the
+    /// tagged block index. Every listed block is also a computed-goto
+    /// target, so the CFG keeps it reachable and its id stable through
+    /// the block-remapping passes. Empty for the common case.
+    pub label_data_relocs: Vec<LabelDataReloc>,
     /// Target-block lists for the function's `Terminator::JumpTable`
     /// terminators, keyed by the terminator's `table` index. Entry
     /// `i` is the successor for a runtime index of `i`; blocks may
@@ -1489,6 +1509,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             ret_type_tag: _,
             indirect_result_slot: _,
             computed_goto_targets: _,
+            label_data_relocs,
             jump_tables: _,
             synthetic_base: _,
             multi_cell_slots: _,
@@ -1501,6 +1522,9 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
         } = self;
         for i in insts.iter_mut() {
             i.remap_data_offsets(r);
+        }
+        for l in label_data_relocs.iter_mut() {
+            crate::c5::layout::remap_self_u64(&mut l.data_offset, r);
         }
     }
 }

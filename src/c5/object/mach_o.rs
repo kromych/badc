@@ -1567,10 +1567,11 @@ fn tlv_bootstrap_ordinal(dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Result
 fn build_rebase_opcodes(
     data_relocs: &[crate::c5::program::DataReloc],
     code_relocs: &[crate::c5::program::CodeReloc],
+    label_relocs: &[crate::c5::codegen::LabelReloc],
     segment: u8,
     data_section_offset_in_segment: u64,
 ) -> Vec<u8> {
-    if data_relocs.is_empty() && code_relocs.is_empty() {
+    if data_relocs.is_empty() && code_relocs.is_empty() && label_relocs.is_empty() {
         return Vec::new();
     }
     let mut out = Vec::new();
@@ -1579,9 +1580,11 @@ fn build_rebase_opcodes(
     // pointer-typed rebase opcode -- dyld just adds the slide. Sort
     // the merged list by data_offset so a future contiguous-burst
     // pass can walk it cleanly.
-    let mut all: Vec<u64> = Vec::with_capacity(data_relocs.len() + code_relocs.len());
+    let mut all: Vec<u64> =
+        Vec::with_capacity(data_relocs.len() + code_relocs.len() + label_relocs.len());
     all.extend(data_relocs.iter().map(|r| r.data_offset));
     all.extend(code_relocs.iter().map(|r| r.data_offset));
+    all.extend(label_relocs.iter().map(|r| r.data_offset));
     all.sort();
     for &off in &all {
         let seg_off = data_section_offset_in_segment + off;
@@ -2033,6 +2036,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let rebase_ops = build_rebase_opcodes(
         &build.data_relocs,
         &build.code_relocs,
+        &build.label_relocs,
         SEG_INDEX_DATA,
         data_section_offset_in_segment,
     );
@@ -2637,6 +2641,22 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         }
         data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
     }
+    // `&&label` initializers: the label's text offset is already
+    // resolved, so the preferred VA is the text base plus that offset.
+    // dyld slides it through the same rebase stream.
+    for r in &build.label_relocs {
+        let preferred_va = code_vmaddr_base + r.text_offset;
+        let off = r.data_offset as usize;
+        if off + 8 > data_with_relocs.len() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "Mach-O: label reloc offset {off:#x} past end of __data ({})",
+                    data_with_relocs.len()
+                ),
+            )));
+        }
+        data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+    }
     out.extend_from_slice(&data_with_relocs);
     if tls_present {
         // __thread_vars: one 24-byte descriptor per TLS variable.
@@ -2835,6 +2855,7 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            label_relocs: Vec::new(),
             exports: Vec::new(),
             dynamic_exports: Vec::new(),
             output_kind: super::super::OutputKind::Executable,

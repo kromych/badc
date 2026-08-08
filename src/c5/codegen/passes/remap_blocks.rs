@@ -7,7 +7,8 @@
 //! input are unaffected. The complete block-id reference surface is
 //! the terminators' targets (`Jmp`, `Bz`, `Bnz`, `FallThrough`),
 //! `Phi::incoming` predecessor ids, `Inst::BlockAddr`,
-//! `FunctionSsa::computed_goto_targets`, and the
+//! `FunctionSsa::computed_goto_targets`,
+//! `FunctionSsa::label_data_relocs`, and the
 //! `FunctionSsa::jump_tables` target lists (`Terminator::JumpTable`
 //! itself carries only the table index).
 
@@ -95,6 +96,9 @@ pub(crate) fn remap_block_ids(func: &mut FunctionSsa, new_id: &[BlockId]) {
     }
     for t in func.computed_goto_targets.iter_mut() {
         *t = mapped(new_id, *t, "computed goto target");
+    }
+    for r in func.label_data_relocs.iter_mut() {
+        r.block = mapped(new_id, r.block, "label data relocation target");
     }
 }
 

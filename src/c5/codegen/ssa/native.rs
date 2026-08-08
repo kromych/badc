@@ -74,6 +74,7 @@ pub(crate) fn compile_function_to_bytes(
             let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
             let mut asm_sections = super::emit_common::AsmSectionSink::default();
             let mut asm_extern_call_sites = Vec::new();
+            let mut label_relocs = Vec::new();
             let mut text_align: usize = 16;
             let ok = {
                 let mut cx = super::emit_common::EmitCtx {
@@ -90,6 +91,7 @@ pub(crate) fn compile_function_to_bytes(
                     asm_sections: &mut asm_sections,
                     asm_extern_call_sites: &mut asm_extern_call_sites,
                     text_align: &mut text_align,
+                    label_relocs: &mut label_relocs,
                 };
                 super::aarch64::emit::emit_function(
                     func,
@@ -150,6 +152,7 @@ pub(crate) fn compile_function_to_bytes(
             let mut asm_text_abs_refs: Vec<super::AsmTextAbsRef> = Vec::new();
             let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
             let mut asm_extern_call_sites = Vec::new();
+            let mut label_relocs = Vec::new();
             let mut text_align: usize = 16;
             // The JIT single-function path builds no PE; the unwind
             // descriptor is discarded.
@@ -170,6 +173,7 @@ pub(crate) fn compile_function_to_bytes(
                     asm_sections: &mut asm_sections,
                     asm_extern_call_sites: &mut asm_extern_call_sites,
                     text_align: &mut text_align,
+                    label_relocs: &mut label_relocs,
                 };
                 super::x86_64::emit::emit_function(
                     func,

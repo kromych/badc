@@ -79,19 +79,61 @@ pub(super) enum ConstVal {
 /// 6.6p9 permits such address constants in a constant expression.
 ///
 /// When the designation is rooted at a named object -- `&global`, `&func`,
-/// or a designator chain on one -- `sym` carries the symbol index and
-/// `value` is the byte displacement from it; the address then needs a
-/// relocation, not a plain integer. `sym` is `None` for a purely
-/// integer-foldable address (the `&((T*)0)->field` offsetof form).
+/// or a designator chain on one -- `root` names it and `value` is the byte
+/// displacement from it; the address then needs a relocation, not a plain
+/// integer.
 #[derive(Copy, Clone)]
 struct ConstDesig {
     value: i64,
     ty: i64,
     is_lvalue: bool,
-    sym: Option<usize>,
-    /// For `sym`: a code symbol (function / libc stub -> code relocation)
-    /// rather than a data symbol.
-    sym_code: bool,
+    root: ConstRoot,
+}
+
+/// What the byte displacement in [`ConstDesig`] / [`ConstAddr`] is measured
+/// from, and hence which relocation a static initializer consuming the
+/// address emits.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(super) enum ConstRoot {
+    /// No symbol: a purely integer-foldable address (the
+    /// `&((T*)0)->field` offsetof form). Needs no relocation.
+    None,
+    /// Data symbol index.
+    Data(usize),
+    /// Code symbol index: a function or libc-bound stub.
+    Code(usize),
+    /// A `&&label` block address (GCC labels as values) in the function
+    /// being parsed. Its code location is fixed only once block layout
+    /// is final, so the initializer emits a relocation against it.
+    Label(super::super::ast::LabelId),
+}
+
+impl ConstRoot {
+    fn code_or_data(idx: usize, code: bool) -> Self {
+        if code {
+            ConstRoot::Code(idx)
+        } else {
+            ConstRoot::Data(idx)
+        }
+    }
+
+    /// True when the address relocates against something rather than
+    /// folding to a plain integer.
+    pub(super) fn is_symbolic(self) -> bool {
+        !matches!(self, ConstRoot::None)
+    }
+
+    fn is_label(self) -> bool {
+        matches!(self, ConstRoot::Label(_))
+    }
+
+    /// The symbol index, for the roots that name one.
+    pub(super) fn sym(self) -> Option<usize> {
+        match self {
+            ConstRoot::Data(i) | ConstRoot::Code(i) => Some(i),
+            _ => None,
+        }
+    }
 }
 
 /// The folded value of a constant `&` operand: a byte displacement plus, when
@@ -102,8 +144,7 @@ struct ConstDesig {
 #[derive(Copy, Clone, Debug)]
 pub(super) struct ConstAddr {
     pub value: i64,
-    pub sym: Option<usize>,
-    pub sym_code: bool,
+    pub root: ConstRoot,
     pub elem_size: i64,
 }
 
@@ -199,7 +240,7 @@ impl ConstVal {
             ConstVal::Float(v) => v != 0.0,
             // A symbol's address is never null; a sym-less address is
             // truthy iff its byte value is non-zero.
-            ConstVal::Addr(a) => a.sym.is_some() || a.value != 0,
+            ConstVal::Addr(a) => a.root.is_symbolic() || a.value != 0,
         }
     }
 }
@@ -228,6 +269,21 @@ impl Compiler {
             && let Some(v) = self.const_addr_binop(op, l, r)
         {
             return Ok(v);
+        }
+        // The integer fold below reads an address operand's byte
+        // displacement. That is a meaningful value for a data or function
+        // symbol, whose relocation the consumer still carries, but a label
+        // address has no integer value at all -- only `goto *` gives it
+        // meaning (GCC leaves anything else undefined). Reject rather than
+        // fold it to its displacement.
+        if [l, r]
+            .iter()
+            .filter_map(|v| v.addr())
+            .any(|a| a.root.is_label())
+        {
+            return Err(self.compile_err(
+                "a label address is not an operand of a constant arithmetic expression",
+            ));
         }
         let (a_ty, b_ty) = (l.int_ty(), r.int_ty());
         let ptr = is_pointer_ty(a_ty) || is_pointer_ty(b_ty);
@@ -337,10 +393,10 @@ impl Compiler {
     /// including the null pointer constant.
     fn const_addr_binop(&self, op: ConstBinOp, l: ConstVal, r: ConstVal) -> Option<ConstVal> {
         use ConstBinOp as B;
-        let same_sym = |a: &ConstAddr, b: &ConstAddr| a.sym == b.sym && a.sym_code == b.sym_code;
+        let same_sym = |a: &ConstAddr, b: &ConstAddr| a.root == b.root;
         // A sym-less address is a plain pointer value; a symbol address is
         // never equal to a compile-time integer.
-        let addr_eq_int = |a: ConstAddr, n: i128| a.sym.is_none() && a.value as i128 == n;
+        let addr_eq_int = |a: ConstAddr, n: i128| !a.root.is_symbolic() && a.value as i128 == n;
         match op {
             B::Eq | B::Ne => {
                 let eq = match (l.addr(), r.addr()) {
@@ -366,15 +422,17 @@ impl Compiler {
             }
             // C99 6.5.6: `p +- n` strides by the referenced type's size;
             // `p - q` over one object yields the element-subscript
-            // difference (byte difference / element size).
+            // difference (byte difference / element size). A label
+            // address designates no object, so there is no stride to
+            // apply and `&&L +- n` stays non-constant.
             B::Add => match (l.addr(), r.addr()) {
-                (Some(a), None) => Some(ConstVal::Addr(ConstAddr {
+                (Some(a), None) if !a.root.is_label() => Some(ConstVal::Addr(ConstAddr {
                     value: a
                         .value
                         .wrapping_add((r.as_i128() as i64).wrapping_mul(a.elem_size.max(1))),
                     ..a
                 })),
-                (None, Some(b)) => Some(ConstVal::Addr(ConstAddr {
+                (None, Some(b)) if !b.root.is_label() => Some(ConstVal::Addr(ConstAddr {
                     value: b
                         .value
                         .wrapping_add((l.as_i128() as i64).wrapping_mul(b.elem_size.max(1))),
@@ -387,7 +445,7 @@ impl Compiler {
                     val: ((a.value - b.value) / a.elem_size.max(1)) as i128,
                     ty: Ty::LongLong as i64,
                 }),
-                (Some(a), None) => Some(ConstVal::Addr(ConstAddr {
+                (Some(a), None) if !a.root.is_label() => Some(ConstVal::Addr(ConstAddr {
                     value: a
                         .value
                         .wrapping_sub((r.as_i128() as i64).wrapping_mul(a.elem_size.max(1))),
@@ -456,7 +514,7 @@ impl Compiler {
     /// already folded to an integer, so only a bare address reaches here.
     pub(super) fn require_integer_const(&self, v: ConstVal) -> Result<ConstVal, C5Error> {
         if let ConstVal::Addr(a) = v
-            && a.sym.is_some()
+            && a.root.is_symbolic()
         {
             return Err(self.compile_err(
                 "address of an object or function is not an integer constant expression",
@@ -1145,6 +1203,20 @@ impl Compiler {
             let v = self.parse_const_expr_unary_val()?;
             return Ok(self.const_unary_promoted(!v.as_i128(), v.int_ty()));
         }
+        if self.lex.tk == Token::Lan && self.in_function_body() {
+            // GCC labels as values: `&&label` is the address of a code
+            // location in the function being parsed -- a link-time
+            // constant, the same shape as `&func`, so a static
+            // initializer consuming it emits a relocation rather than
+            // stores. Outside a function body there is no label scope,
+            // so the token stays the logical-AND operator.
+            let label = self.parse_label_addr_operand()?;
+            return Ok(ConstVal::Addr(ConstAddr {
+                value: 0,
+                root: ConstRoot::Label(label),
+                elem_size: 1,
+            }));
+        }
         if self.lex.tk == Token::AndOp {
             // Address constant: full-width, no arithmetic conversion. A
             // symbol-relative address (`&global` / `&func`) yields a
@@ -1153,7 +1225,7 @@ impl Compiler {
             // reject it. The `&((T *)0)->field` offsetof form has no symbol
             // and is a plain integer.
             let a = self.parse_const_address_of()?;
-            if a.sym.is_some() {
+            if a.root.is_symbolic() {
                 return Ok(ConstVal::Addr(a));
             }
             return Ok(ConstVal::Int {
@@ -1525,8 +1597,7 @@ impl Compiler {
         }
         Ok(ConstAddr {
             value: d.value,
-            sym: d.sym,
-            sym_code: d.sym_code,
+            root: d.root,
             elem_size: (self.size_of_type(d.ty) as i64).max(1),
         })
     }
@@ -1559,8 +1630,7 @@ impl Compiler {
                     value: d.value + off,
                     ty: fty,
                     is_lvalue: true,
-                    sym: d.sym,
-                    sym_code: d.sym_code,
+                    root: d.root,
                 };
             } else if self.lex.tk == Token::Dot {
                 self.next()?;
@@ -1575,8 +1645,7 @@ impl Compiler {
                     value: d.value + off,
                     ty: fty,
                     is_lvalue: true,
-                    sym: d.sym,
-                    sym_code: d.sym_code,
+                    root: d.root,
                 };
             } else if self.lex.tk == Token::Brak {
                 self.next()?;
@@ -1594,8 +1663,7 @@ impl Compiler {
                         value: d.value + n * self.size_of_type(d.ty) as i64,
                         ty: d.ty,
                         is_lvalue: true,
-                        sym: d.sym,
-                        sym_code: d.sym_code,
+                        root: d.root,
                     };
                 } else {
                     // Pointer index `p[N]` == `*(p+N)`: an lvalue at
@@ -1605,8 +1673,7 @@ impl Compiler {
                         value: d.value + n * self.size_of_type(pointee) as i64,
                         ty: pointee,
                         is_lvalue: true,
-                        sym: d.sym,
-                        sym_code: d.sym_code,
+                        root: d.root,
                     };
                 }
             } else {
@@ -1631,8 +1698,7 @@ impl Compiler {
                 value: inner.value,
                 ty: inner.ty + Ty::Ptr as i64,
                 is_lvalue: false,
-                sym: inner.sym,
-                sym_code: inner.sym_code,
+                root: inner.root,
             });
         }
         if self.lex.tk == Token::MulOp {
@@ -1652,8 +1718,7 @@ impl Compiler {
                 value: inner.value,
                 ty: inner.ty - Ty::Ptr as i64,
                 is_lvalue: true,
-                sym: inner.sym,
-                sym_code: inner.sym_code,
+                root: inner.root,
             });
         }
         if self.lex.tk == '(' {
@@ -1678,8 +1743,7 @@ impl Compiler {
                         value: off,
                         ty,
                         is_lvalue: true,
-                        sym: Some(sym),
-                        sym_code: false,
+                        root: ConstRoot::Data(sym),
                     });
                 }
                 while self.lex.tk == Token::TypeQual {
@@ -1701,8 +1765,7 @@ impl Compiler {
                         value: off,
                         ty,
                         is_lvalue: true,
-                        sym: Some(sym),
-                        sym_code: false,
+                        root: ConstRoot::Data(sym),
                     });
                 }
                 let operand = self.parse_const_expr_unary_val()?;
@@ -1710,8 +1773,7 @@ impl Compiler {
                     value: operand.as_int(),
                     ty,
                     is_lvalue: false,
-                    sym: None,
-                    sym_code: false,
+                    root: ConstRoot::None,
                 });
             }
             // Parenthesized designation: parentheses are transparent.
@@ -1745,8 +1807,7 @@ impl Compiler {
                 value: off,
                 ty: Ty::Char as i64,
                 is_lvalue: true,
-                sym: Some(sym),
-                sym_code: false,
+                root: ConstRoot::Data(sym),
             });
         }
         // A named object -- a global, a function, or a libc-bound stub -- is an
@@ -1775,8 +1836,7 @@ impl Compiler {
                     value,
                     ty,
                     is_lvalue: true,
-                    sym: Some(idx),
-                    sym_code: is_code,
+                    root: ConstRoot::code_or_data(idx, is_code),
                 });
             }
         }
@@ -1787,8 +1847,7 @@ impl Compiler {
             value: v.as_int(),
             ty: v.int_ty(),
             is_lvalue: false,
-            sym: None,
-            sym_code: false,
+            root: ConstRoot::None,
         })
     }
 
@@ -1912,8 +1971,7 @@ impl Compiler {
                     }
                     return Ok(ConstVal::Addr(ConstAddr {
                         value: off,
-                        sym: Some(sym),
-                        sym_code: false,
+                        root: ConstRoot::Data(sym),
                         elem_size: (self.size_of_type(target_ty) as i64).max(1),
                     }));
                 }
@@ -1957,7 +2015,7 @@ impl Compiler {
                 // The cast retypes the address's arithmetic: a pointer
                 // target strides by its pointee, an integer target by bytes.
                 if let ConstVal::Addr(mut a) = v
-                    && a.sym.is_some()
+                    && a.root.is_symbolic()
                     && !is_floating_ty(target_ty)
                 {
                     let ptr_target = is_pointer_ty(target_ty)
@@ -1999,7 +2057,7 @@ impl Compiler {
             // compound literal folds by reading the staged element back.
             if self.lex.tk == Token::Brak
                 && let ConstVal::Addr(a) = v
-                && let Some(idx) = a.sym
+                && let Some(idx) = a.root.sym()
                 && self.symbols[idx].is_compound_literal
             {
                 self.next()?;
@@ -2156,8 +2214,7 @@ impl Compiler {
                     };
                     return Ok(ConstVal::Addr(ConstAddr {
                         value: self.symbols[idx].val,
-                        sym: Some(idx),
-                        sym_code: is_fn,
+                        root: ConstRoot::code_or_data(idx, is_fn),
                         elem_size,
                     }));
                 }

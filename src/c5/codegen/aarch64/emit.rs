@@ -749,6 +749,7 @@ pub(crate) fn emit_function(
     let asm_sections = &mut *cx.asm_sections;
     let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
     let text_align = &mut *cx.text_align;
+    let label_relocs = &mut *cx.label_relocs;
     let abi = {
         let mut a = target.abi();
         a.no_fp_varargs = no_fp_regs;
@@ -1115,6 +1116,7 @@ pub(crate) fn emit_function(
                     asm_sections: &mut *asm_sections,
                     asm_extern_call_sites: &mut *asm_extern_call_sites,
                     text_align: &mut *text_align,
+                    label_relocs: &mut *label_relocs,
                 };
                 let fcx = FnCtx {
                     func,
@@ -1523,6 +1525,15 @@ pub(crate) fn emit_function(
         }
         let word = enc_adr(*rd, rel as i32);
         code[*site..*site + 4].copy_from_slice(&word.to_le_bytes());
+    }
+    // Static-initializer slots holding one of this function's label
+    // addresses: record the block's now-final text offset for the
+    // object writers to relocate against.
+    for r in &func.label_data_relocs {
+        label_relocs.push(super::LabelReloc {
+            data_offset: r.data_offset,
+            text_offset: block_offsets[r.block as usize] as u64,
+        });
     }
     // Rewrite `asm goto` section fields (`.long %l0 - .`) to the label
     // block's now-final text offset. Scoped to this function's contribution
@@ -9696,6 +9707,7 @@ mod tests {
         let mut asm_sections = AsmSectionSink::default();
         let mut asm_extern_call_sites = Vec::new();
         let mut text_align: usize = 16;
+        let mut label_relocs = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -9711,6 +9723,7 @@ mod tests {
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
                 text_align: &mut text_align,
+                label_relocs: &mut label_relocs,
             };
             emit_function(
                 &func,
@@ -9873,6 +9886,7 @@ mod tests {
         let mut asm_sections = AsmSectionSink::default();
         let mut asm_extern_call_sites = Vec::new();
         let mut text_align: usize = 16;
+        let mut label_relocs = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -9888,6 +9902,7 @@ mod tests {
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
                 text_align: &mut text_align,
+                label_relocs: &mut label_relocs,
             };
             emit_function(
                 &func,
@@ -9949,6 +9964,7 @@ mod tests {
         let mut asm_sections = AsmSectionSink::default();
         let mut asm_extern_call_sites = Vec::new();
         let mut text_align: usize = 16;
+        let mut label_relocs = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -9964,6 +9980,7 @@ mod tests {
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
                 text_align: &mut text_align,
+                label_relocs: &mut label_relocs,
             };
             emit_function(
                 &func,

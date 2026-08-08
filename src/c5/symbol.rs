@@ -250,8 +250,9 @@ pub(crate) struct Symbol {
 
     /// True when the object's initial value comes from stores emitted at
     /// its declaration point rather than from the data image, which is
-    /// left zeroed (a static array with a `&&label` element). A pass
-    /// reading the image for the object's value must skip it.
+    /// left zeroed (a static array mixing a `&&label` element with one
+    /// that is not a link-time constant). A pass reading the image for
+    /// the object's value must skip it.
     pub runtime_initialized: bool,
 
     /// Number of derefs from this variable's *loaded value* down

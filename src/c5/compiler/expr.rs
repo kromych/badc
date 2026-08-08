@@ -2564,19 +2564,7 @@ impl Compiler {
             // local label as a `void *`. The label may be defined later
             // in the function (forward reference); `ast_label_by_name`
             // interns it and the walker resolves it to the block.
-            self.next()?; // consume `&&`
-            if self.lex.tk != Token::Id {
-                return Err(self.compile_err("label name expected after `&&`"));
-            }
-            let name = self.resolve_label_name(&self.symbols[self.lex.curr_id_idx].name.clone());
-            self.next()?;
-            // The label must still be defined somewhere in the function
-            // (gcc and clang both reject an address of an undefined
-            // label); record it for the function-end check.
-            if !self.labels.iter().any(|n| n == &name) {
-                self.unresolved_gotos.push(name.clone());
-            }
-            let label = self.ast_label_by_name(&name);
+            let label = self.parse_label_addr_operand()?;
             let pos = self.ast_src_pos();
             let id = self
                 .ast

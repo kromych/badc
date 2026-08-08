@@ -575,6 +575,13 @@ fn is_inline_candidate(
             return false;
         }
     }
+    // A static initializer holding one of the callee's label addresses
+    // names a single code location, so that label's block has to stay in
+    // the out-of-line body the data slot relocates against.
+    if !func.label_data_relocs.is_empty() {
+        say(format_args!("label address in static data"));
+        return false;
+    }
     // A single `Return` block rewrites to `Jmp(postfix)`; multiple route
     // through a synthetic join block whose phi merges the per-return
     // values into the call result. Both need the no-aggregate multi-block
@@ -2571,6 +2578,14 @@ fn splice_multi_block(
             .computed_goto_targets
             .iter()
             .map(|&b| shift_caller_bid(b))
+            .collect(),
+        label_data_relocs: original
+            .label_data_relocs
+            .iter()
+            .map(|r| crate::c5::ir::LabelDataReloc {
+                block: shift_caller_bid(r.block),
+                ..*r
+            })
             .collect(),
         // The filter rejects JumpTable / GotoIndirect callees; only an
         // asm-goto callee's rows join the caller's own (`merged_jump_tables`).

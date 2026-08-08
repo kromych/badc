@@ -405,6 +405,17 @@ pub struct Program {
     pub function_aliases: alloc::vec::Vec<FunctionAlias>,
 }
 
+impl Program {
+    /// Data slots holding a `&&label` address, each paired with the
+    /// `ent_pc` of the function the label lives in. The slot needs a
+    /// relocation and keeps that function reachable.
+    pub(crate) fn label_data_slots(&self) -> impl Iterator<Item = (u64, usize)> + '_ {
+        self.finished_functions
+            .iter()
+            .flat_map(|f| f.label_data_slots.iter().map(|s| (s.data_offset, f.ent_pc)))
+    }
+}
+
 /// A single local variable or formal parameter belonging to a
 /// specific c5-emitted function, captured for DWARF emission.
 /// The function is identified by `function_bc_pc` -- the

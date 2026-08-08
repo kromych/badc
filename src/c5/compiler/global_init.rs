@@ -509,13 +509,13 @@ impl Compiler {
         // the paths above; the rest falls through to the reject below, which
         // gcc / clang also apply to a sub-pointer-width slot.
         if let ConstVal::Addr(a) = cv
-            && let Some(sym_idx) = a.sym
+            && let Some(sym_idx) = a.root.sym()
             && a.value == self.symbols[sym_idx].val
             && !is_thread_local
             && !var_is_float
             && self.size_of_type(var_ty) == 8
         {
-            if a.sym_code {
+            if matches!(a.root, super::const_expr::ConstRoot::Code(_)) {
                 self.symbols[sym_idx].was_referenced = true;
                 let ent_pc = self.symbols[sym_idx].val;
                 self.data[var_offset as usize..var_offset as usize + 8]

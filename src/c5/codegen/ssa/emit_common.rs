@@ -35,6 +35,10 @@ pub(crate) struct EmitCtx<'a> {
     /// Alignment the text stream requires in the image, raised by an
     /// inline-asm alignment directive above the section default.
     pub(crate) text_align: &'a mut usize,
+    /// Static-initializer data slots holding a `&&label` address,
+    /// resolved to text offsets once the function's block layout is
+    /// final.
+    pub(crate) label_relocs: &'a mut alloc::vec::Vec<super::super::LabelReloc>,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV

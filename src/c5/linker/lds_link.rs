@@ -21,7 +21,7 @@
 #![allow(dead_code)]
 
 use alloc::borrow::ToOwned;
-use alloc::collections::BTreeSet;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -555,6 +555,8 @@ struct MergePool {
     maps: HashMap<usize, (Vec<u64>, Vec<u64>)>,
     /// Which input (index into `insecs`) carries the pool bytes.
     rep: usize,
+    /// Pool alignment (all members share it -- it is part of the pool key).
+    align: u64,
 }
 
 struct DynReloc {
@@ -1171,18 +1173,25 @@ impl<'a> LdsLinker<'a> {
 
     // ---------------------------------------------------- merge pools
 
-    /// Deduplicate SHF_MERGE sections without relocations, per output
-    /// section and (entsize, strings) class, the way bfd's merge pass
-    /// does. The pool replaces the first member's bytes; other
-    /// members contribute nothing, and offsets into them remap.
+    /// Deduplicate SHF_MERGE sections without relocations, following
+    /// bfd's merge pass: a separate pool per output section and
+    /// (entsize, strings, alignment) class -- bfd never merges across
+    /// alignments, so `.rodata.str1.1` and `.rodata.str1.8` stay
+    /// apart. Fixed-entsize entries dedupe on identity; strings also
+    /// share a common suffix (a string that is a tail of another
+    /// reuses its bytes). The pool replaces the first member's bytes;
+    /// other members contribute nothing and their offsets remap.
     fn build_merge_pools(&mut self) {
         #[derive(PartialEq, Eq, Hash)]
         struct Key {
             out: usize,
             entsize: u64,
             strings: bool,
+            align: u64,
         }
-        let mut groups: HashMap<Key, Vec<usize>> = HashMap::new();
+        let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+        let mut group_key: Vec<(Key, usize)> = Vec::new();
+        let mut key_index: HashMap<(usize, u64, bool, u64), usize> = HashMap::new();
         for i in 0..self.insecs.len() {
             let SecFate::Placed { out } = self.fates[i] else {
                 continue;
@@ -1199,51 +1208,30 @@ impl<'a> LdsLinker<'a> {
             if strings && entsize != 1 {
                 continue; // wide-char string merge: leave unmerged
             }
-            groups
-                .entry(Key {
-                    out,
-                    entsize,
-                    strings,
-                })
-                .or_default()
-                .push(i);
+            let align = s.addralign.max(1);
+            let tup = (out, entsize, strings, align);
+            let gid = *key_index.entry(tup).or_insert_with(|| {
+                group_key.push((
+                    Key {
+                        out,
+                        entsize,
+                        strings,
+                        align,
+                    },
+                    group_key.len(),
+                ));
+                group_key.len() - 1
+            });
+            groups.entry(gid).or_default().push(i);
         }
-        for (key, members) in groups {
-            let mut pool_bytes: Vec<u8> = Vec::new();
-            let mut interned: HashMap<Vec<u8>, u64> = HashMap::new();
-            let mut maps: HashMap<usize, (Vec<u64>, Vec<u64>)> = HashMap::new();
-            for &m in &members {
-                let id = self.insecs[m];
-                let data = {
-                    let o = &self.objects[id.obj];
-                    o.section_data(&o.sections[id.sec]).to_owned()
-                };
-                let mut starts: Vec<u64> = Vec::new();
-                let mut targets: Vec<u64> = Vec::new();
-                let mut pos = 0usize;
-                while pos < data.len() {
-                    let entry: &[u8] = if key.strings {
-                        let end = data[pos..]
-                            .iter()
-                            .position(|&b| b == 0)
-                            .map(|p| pos + p + 1)
-                            .unwrap_or(data.len());
-                        &data[pos..end]
-                    } else {
-                        let end = (pos + key.entsize as usize).min(data.len());
-                        &data[pos..end]
-                    };
-                    let off = *interned.entry(entry.to_owned()).or_insert_with(|| {
-                        let at = pool_bytes.len() as u64;
-                        pool_bytes.extend_from_slice(entry);
-                        at
-                    });
-                    starts.push(pos as u64);
-                    targets.push(off);
-                    pos += entry.len();
-                }
-                maps.insert(m, (starts, targets));
-            }
+        for (gid, members) in &groups {
+            let key = &group_key[*gid].0;
+            let maps = if key.strings {
+                self.build_string_pool(members)
+            } else {
+                self.build_fixed_pool(members, key.entsize)
+            };
+            let (pool_bytes, member_maps) = maps;
             let rep = *members
                 .iter()
                 .min()
@@ -1251,13 +1239,92 @@ impl<'a> LdsLinker<'a> {
             let pool_idx = self.pools.len();
             self.pools.push(MergePool {
                 bytes: pool_bytes,
-                maps,
+                maps: member_maps,
                 rep,
+                align: key.align,
             });
-            for &m in &members {
+            for &m in members {
                 self.merge_of.insert(m, pool_idx);
             }
         }
+    }
+
+    /// Fixed-entsize merge: dedupe identical entries, first occurrence
+    /// wins the offset.
+    fn build_fixed_pool(
+        &self,
+        members: &[usize],
+        entsize: u64,
+    ) -> (Vec<u8>, HashMap<usize, (Vec<u64>, Vec<u64>)>) {
+        let mut pool: Vec<u8> = Vec::new();
+        let mut interned: HashMap<Vec<u8>, u64> = HashMap::new();
+        let mut maps: HashMap<usize, (Vec<u64>, Vec<u64>)> = HashMap::new();
+        for &m in members {
+            let id = self.insecs[m];
+            let data = {
+                let o = &self.objects[id.obj];
+                o.section_data(&o.sections[id.sec]).to_owned()
+            };
+            let (mut starts, mut targets) = (Vec::new(), Vec::new());
+            let mut pos = 0usize;
+            while pos < data.len() {
+                let end = (pos + entsize as usize).min(data.len());
+                let entry = &data[pos..end];
+                let off = *interned.entry(entry.to_owned()).or_insert_with(|| {
+                    let at = pool.len() as u64;
+                    pool.extend_from_slice(entry);
+                    at
+                });
+                starts.push(pos as u64);
+                targets.push(off);
+                pos = end;
+            }
+            maps.insert(m, (starts, targets));
+        }
+        (pool, maps)
+    }
+
+    /// String merge: dedupe identical NUL-terminated strings, first
+    /// occurrence in member/offset order keeps the offset. bfd also
+    /// shares a common suffix, but the kernel's inputs are already
+    /// `ld -r` string-merged, so a second suffix pass over them
+    /// diverges from the reference; plain identity dedup tracks it
+    /// closely. Kept a distinct method so a full suffix pass can slot
+    /// in when byte-identity across a fresh merge is required (TODO).
+    fn build_string_pool(
+        &self,
+        members: &[usize],
+    ) -> (Vec<u8>, HashMap<usize, (Vec<u64>, Vec<u64>)>) {
+        let mut pool: Vec<u8> = Vec::new();
+        let mut interned: HashMap<Vec<u8>, u64> = HashMap::new();
+        let mut maps: HashMap<usize, (Vec<u64>, Vec<u64>)> = HashMap::new();
+        for &m in members {
+            let id = self.insecs[m];
+            let data = {
+                let o = &self.objects[id.obj];
+                o.section_data(&o.sections[id.sec]).to_owned()
+            };
+            let (mut starts, mut targets) = (Vec::new(), Vec::new());
+            let mut pos = 0usize;
+            while pos < data.len() {
+                let end = data[pos..]
+                    .iter()
+                    .position(|&b| b == 0)
+                    .map(|p| pos + p + 1)
+                    .unwrap_or(data.len());
+                let entry = &data[pos..end];
+                let off = *interned.entry(entry.to_owned()).or_insert_with(|| {
+                    let at = pool.len() as u64;
+                    pool.extend_from_slice(entry);
+                    at
+                });
+                starts.push(pos as u64);
+                targets.push(off);
+                pos = end;
+            }
+            maps.insert(m, (starts, targets));
+        }
+        (pool, maps)
     }
 
     /// Remap an offset into a merged input section to its pool offset.
@@ -1468,13 +1535,27 @@ impl<'a> LdsLinker<'a> {
             match self.outs[oi].pieces[pi].clone() {
                 Piece::Inputs(v) => {
                     for &i in &v {
+                        // A merged-away member (not its pool's
+                        // representative) contributes no bytes and no
+                        // alignment: its storage lives in the pool rep.
+                        if let Some(&pl) = self.merge_of.get(&i) {
+                            if self.pools[pl].rep != i {
+                                self.placements[i] = Placement {
+                                    out: oi,
+                                    off,
+                                    placed: true,
+                                };
+                                continue;
+                            }
+                        }
                         let (a, sz, nobits) = {
                             let s = self.insec(i);
-                            (
-                                s.addralign.max(1),
-                                self.insec_placed_size(i),
-                                s.shtype == SHT_NOBITS,
-                            )
+                            let a = if let Some(&pl) = self.merge_of.get(&i) {
+                                self.pools[pl].align
+                            } else {
+                                s.addralign.max(1)
+                            };
+                            (a, self.insec_placed_size(i), s.shtype == SHT_NOBITS)
                         };
                         let aligned = align_up(off, a);
                         if aligned > off {

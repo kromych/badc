@@ -444,6 +444,29 @@ fn fp_pair_reg(o: &Opnd) -> Option<(u8, u8)> {
 /// (assembly) order. `OptLsl` slots may be omitted by the caller (a missing
 /// trailing shift defaults to 0).
 pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
+    // The add/sub immediate field is unsigned, so GNU as encodes a negative
+    // immediate as the opposite operation on the negated value: `cmp x0, #-16`
+    // assembles as `cmn x0, #16`. The immediate is last, or last before an
+    // explicit `lsl`.
+    if let Some(opposite) = match mnemonic {
+        "add" => Some("sub"),
+        "sub" => Some("add"),
+        "adds" => Some("subs"),
+        "subs" => Some("adds"),
+        "cmp" => Some("cmn"),
+        "cmn" => Some("cmp"),
+        _ => None,
+    } && let Some(at) = ops
+        .iter()
+        .rposition(|o| !matches!(o, Opnd::Lsl(_)))
+        .filter(|&i| matches!(ops[i], Opnd::Imm(v) if v < 0))
+        && let Opnd::Imm(v) = ops[at]
+        && let Some(neg) = v.checked_neg()
+    {
+        let mut swapped = ops.to_vec();
+        swapped[at] = Opnd::Imm(neg);
+        return encode(opposite, &swapped);
+    }
     // A written `sp` is only ever a catalogue form's business: the bespoke
     // arms below all encode register 31 as the zero register, so routing an sp
     // operand past them would silently drop the stack pointer.
@@ -981,6 +1004,31 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // take their two sources as q registers. Byte-identical to GNU as:
     // `sha1su0 v0.4s, v1.4s, v2.4s` is 0x5E023020 and `sha512h q3, q6, v7.2d`
     // is 0xCE6780C3.
+    // Scalar SIMD forms on the 64-bit view: `add`/`sub Dd, Dn, Dm` and the
+    // SHA1 hash update `sha1h Sd, Sn`. Byte-identical to GNU as: `add d7, d7,
+    // d16` is 0x5EF084E7 and `sha1h s14, s12` is 0x5E28098E.
+    if let Some((base, is_d)) = match mnemonic {
+        "add" => Some((0x5EF0_8400u32, true)),
+        "sub" => Some((0x7EF0_8400, true)),
+        "sha1h" => Some((0x5E28_0800, false)),
+        _ => None,
+    } {
+        let fields = match *ops {
+            [
+                Opnd::VReg { num: rd, is_d: a },
+                Opnd::VReg { num: rn, is_d: b },
+            ] if !is_d && !a && !b => Some((rd, rn, 0)),
+            [
+                Opnd::VReg { num: rd, is_d: a },
+                Opnd::VReg { num: rn, is_d: b },
+                Opnd::VReg { num: rm, is_d: c },
+            ] if is_d && a && b && c => Some((rd, rn, rm)),
+            _ => None,
+        };
+        if let Some((rd, rn, rm)) = fields {
+            return Ok(base | ((rm as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
+        }
+    }
     if let Some((base, esize)) = match mnemonic {
         "sha1su0" => Some((0x5E00_3000u32, 2u8)),
         "sha1su1" => Some((0x5E28_1800, 2)),

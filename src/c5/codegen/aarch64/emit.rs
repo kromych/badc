@@ -9360,9 +9360,13 @@ pub(crate) fn encode_a64_file_asm_section_code(
                 }
                 let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
                 for o in &insn.operands {
-                    ops.push(conv(o)?);
+                    ops.push(
+                        conv(o).map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?,
+                    );
                 }
-                bytes.extend_from_slice(&table::encode(&insn.mnemonic, &ops)?.to_le_bytes());
+                let word = table::encode(&insn.mnemonic, &ops)
+                    .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
+                bytes.extend_from_slice(&word.to_le_bytes());
             }
             *item = AsmSectionItem::CodeBytes { bytes, relocs };
         }
@@ -9801,6 +9805,61 @@ mod tests {
                 (12, AsmRelocKind::A64LdstLo12(8), "sym", 0),
             ]
         );
+    }
+
+    /// The add/sub immediate field is unsigned, so GNU as encodes a negative
+    /// immediate as the opposite operation on the negated value, `lsl #12`
+    /// included. The scalar 64-bit `add` / `sub` and `sha1h` are covered here
+    /// too; all match `as` byte for byte.
+    #[test]
+    fn file_scope_a64_negative_addsub_imm_matches_gnu_as() {
+        use super::super::ssa::emit_common::{
+            extract_file_scope_asm_sections, materialize_asm_sections,
+        };
+        let text = ".pushsection .t,\"ax\"\n\
+                    cmp w4, #48 - (4 << 4)\n\
+                    cmp x0, #-16\n\
+                    cmn x0, #16\n\
+                    add x1, x2, #-16\n\
+                    sub x1, x2, #-16\n\
+                    adds x1, x2, #-16\n\
+                    subs x1, x2, #-16\n\
+                    cmp w4, #-4096\n\
+                    add x1, x2, #-4096\n\
+                    sha1h s14, s12\n\
+                    add d7, d7, d16\n\
+                    sub d7, d7, d16\n\
+                    .popsection\n";
+        let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
+        encode_a64_file_asm_section_code(&mut blocks).unwrap();
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            true,
+            &mut sink,
+        )
+        .unwrap();
+        let want_words: [u32; 12] = [
+            0x3100409f, // cmp w4, #48 - (4 << 4)
+            0xb100401f, // cmp x0, #-16
+            0xb100401f, // cmn x0, #16
+            0xd1004041, // add x1, x2, #-16
+            0x91004041, // sub x1, x2, #-16
+            0xf1004041, // adds x1, x2, #-16
+            0xb1004041, // subs x1, x2, #-16
+            0x3140049f, // cmp w4, #-4096
+            0xd1400441, // add x1, x2, #-4096
+            0x5e28098e, // sha1h s14, s12
+            0x5ef084e7, // add d7, d7, d16
+            0x7ef084e7, // sub d7, d7, d16
+        ];
+        let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
     }
 
     /// The memory copy / set family (FEAT_MOPS) encodes to the words GNU as

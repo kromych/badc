@@ -52,6 +52,8 @@ struct LdArgs {
     discard_locals: bool,
     strip_debug: bool,
     orphan_handling: Option<String>,
+    /// `-z noexecstack` / `-z execstack`.
+    gnu_stack: Option<bool>,
     print_version: bool,
 }
 
@@ -90,6 +92,7 @@ pub fn run_ld(args: &[String]) -> i32 {
         discard_locals: false,
         strip_debug: false,
         orphan_handling: None,
+        gnu_stack: None,
         print_version: false,
     };
     let mut it = args.iter().map(String::as_str);
@@ -147,6 +150,11 @@ pub fn run_ld(args: &[String]) -> i32 {
             // about a relocatable link.
             "-z" => match next_of(&mut it, "-z") {
                 Ok(kw) => {
+                    match kw.as_str() {
+                        "noexecstack" => a.gnu_stack = Some(false),
+                        "execstack" => a.gnu_stack = Some(true),
+                        _ => {}
+                    }
                     if let Some(code) = check_z_keyword(&kw) {
                         return code;
                     }
@@ -269,6 +277,7 @@ pub fn run_ld(args: &[String]) -> i32 {
         discard_locals: a.discard_locals,
         strip_debug: a.strip_debug,
         build_id_sha1: a.build_id == BuildId::Sha1,
+        gnu_stack: a.gnu_stack,
         expect_machine: machine,
     };
     let bytes = match link_relocatable(&objs, &opts) {

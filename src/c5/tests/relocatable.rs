@@ -208,6 +208,46 @@ fn glob_match_shapes() {
     assert!(glob_match("*", ".anything"));
     assert!(glob_match(".text", ".text"));
     assert!(!glob_match(".text", ".text.hot"));
+    // Character classes, as the kernel's module.lds spells them.
+    assert!(glob_match(".text.[0-9a-zA-Z_]*", ".text.unlikely"));
+    assert!(glob_match(".data.[0-9a-zA-Z_]*", ".data.once"));
+    assert!(!glob_match(".bss.[0-9a-zA-Z_]*", ".bss..L0"));
+    assert!(glob_match(".bss..L*", ".bss..L0"));
+    assert!(glob_match("a[!x]c", "abc"));
+    assert!(!glob_match("a[!x]c", "axc"));
+    assert!(glob_match(".rodata.[0-9a-zA-Z_]*", ".rodata.jump_tables"));
+}
+
+#[test]
+fn module_script_arch_tail_and_byte() {
+    // The kernel appends an arch SECTIONS block; `.plt`-style
+    // placeholders carry one literal byte the module loader resizes.
+    let text = "\
+        SECTIONS {\n\
+         .text 0 : { *(.text .text.[0-9a-zA-Z_]*) }\n\
+        }\n\
+        SECTIONS {\n\
+         .plt 0 : { BYTE(0) }\n\
+         .init.plt 0 : { BYTE(0) }\n\
+        }\n";
+    let script = parse_module_script(text).expect("parse");
+    assert_eq!(script.outsecs.len(), 3);
+    let a = compile_obj("int f(void) { return 3; }\n", "a.o");
+    let merged = merge(
+        &[a],
+        &RelinkOptions {
+            script: Some(script),
+            ..Default::default()
+        },
+    );
+    for name in [".plt", ".init.plt"] {
+        let s = merged
+            .sections
+            .iter()
+            .find(|s| s.name == name)
+            .unwrap_or_else(|| panic!("{name} kept"));
+        assert_eq!(s.size(), 1, "{name} carries the BYTE(0) placeholder");
+    }
 }
 
 #[test]

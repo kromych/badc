@@ -480,6 +480,8 @@ pub enum SecStmt {
     AlignDot(u64),
     /// `<name> = .;`
     DefineSym(String),
+    /// `BYTE(v)` -- one literal byte at the cursor.
+    Byte(u8),
 }
 
 #[derive(Debug, Clone)]
@@ -500,14 +502,43 @@ pub struct LdScript {
     pub outsecs: Vec<OutSecRule>,
 }
 
-/// Match `pat` against `name` with `*` (any run) and `?` (any one).
+/// Match `pat` against `name` with `*` (any run), `?` (any one), and
+/// `[...]` character classes with ranges (`[0-9a-zA-Z_]`, leading `!`
+/// or `^` negates).
 pub fn glob_match(pat: &str, name: &str) -> bool {
     let (p, n): (Vec<char>, Vec<char>) = (pat.chars().collect(), name.chars().collect());
+    fn class(p: &[char], d: char) -> Option<(bool, usize)> {
+        // `p` starts after `[`; returns (matched, chars consumed
+        // including `]`) or None when the class is unterminated.
+        let (neg, mut i) = match p.first() {
+            Some('!' | '^') => (true, 1),
+            _ => (false, 0),
+        };
+        let mut hit = false;
+        while i < p.len() && p[i] != ']' {
+            if i + 2 < p.len() && p[i + 1] == '-' && p[i + 2] != ']' {
+                if (p[i]..=p[i + 2]).contains(&d) {
+                    hit = true;
+                }
+                i += 3;
+            } else {
+                if p[i] == d {
+                    hit = true;
+                }
+                i += 1;
+            }
+        }
+        (i < p.len()).then_some((hit != neg, i + 1))
+    }
     fn m(p: &[char], n: &[char]) -> bool {
         match (p.first(), n.first()) {
             (None, None) => true,
             (Some('*'), _) => m(&p[1..], n) || (!n.is_empty() && m(p, &n[1..])),
             (Some('?'), Some(_)) => m(&p[1..], &n[1..]),
+            (Some('['), Some(&d)) => match class(&p[1..], d) {
+                Some((true, used)) => m(&p[1 + used..], &n[1..]),
+                _ => false,
+            },
             (Some(c), Some(d)) if c == d => m(&p[1..], &n[1..]),
             _ => false,
         }
@@ -562,12 +593,15 @@ pub fn parse_module_script(text: &str) -> Result<LdScript, C5Error> {
         *p += 1;
         Ok(())
     };
-    expect(&mut p, "SECTIONS")?;
-    expect(&mut p, "{")?;
-    while tok(p) != "}" {
-        if tok(p).is_empty() {
-            return Err(err("linker script: unterminated SECTIONS block"));
-        }
+    // A script may hold several SECTIONS blocks (the kernel appends
+    // an arch part to scripts/module.lds); rules accumulate.
+    while tok(p) == "SECTIONS" {
+        p += 1;
+        expect(&mut p, "{")?;
+        while tok(p) != "}" {
+            if tok(p).is_empty() {
+                return Err(err("linker script: unterminated SECTIONS block"));
+            }
         let name = tok(p).to_string();
         p += 1;
         // Optional address expression (module.lds uses a literal 0).
@@ -617,6 +651,16 @@ pub fn parse_module_script(text: &str) -> Result<LdScript, C5Error> {
                     stmts.push(parse_gather(&toks, &mut p)?);
                     expect(&mut p, ")")?;
                 }
+                "BYTE" => {
+                    p += 1;
+                    expect(&mut p, "(")?;
+                    let v: u8 = tok(p)
+                        .parse()
+                        .map_err(|_| err("linker script: BYTE wants an integer"))?;
+                    p += 1;
+                    expect(&mut p, ")")?;
+                    stmts.push(SecStmt::Byte(v));
+                }
                 "*" => stmts.push(parse_gather(&toks, &mut p)?),
                 t => {
                     let sym = t.to_string();
@@ -632,18 +676,28 @@ pub fn parse_module_script(text: &str) -> Result<LdScript, C5Error> {
                     stmts.push(SecStmt::DefineSym(sym));
                 }
             }
-        }
-        p += 1; // `}`
-        if name == "/DISCARD/" {
-            for s in stmts {
-                match s {
-                    SecStmt::Gather(g) => script.discard.extend(g.patterns),
-                    _ => return Err(err("linker script: /DISCARD/ takes input specs only")),
-                }
             }
-        } else {
-            script.outsecs.push(OutSecRule { name, align, stmts });
+            p += 1; // `}`
+            if name == "/DISCARD/" {
+                for s in stmts {
+                    match s {
+                        SecStmt::Gather(g) => script.discard.extend(g.patterns),
+                        _ => {
+                            return Err(err("linker script: /DISCARD/ takes input specs only"));
+                        }
+                    }
+                }
+            } else {
+                script.outsecs.push(OutSecRule { name, align, stmts });
+            }
         }
+        p += 1; // block `}`
+    }
+    if !tok(p).is_empty() {
+        return Err(err(&format!(
+            "linker script: unsupported construct `{}`",
+            tok(p)
+        )));
     }
     Ok(script)
 }
@@ -702,6 +756,10 @@ pub struct RelinkOptions {
     pub strip_debug: bool,
     /// `--build-id=sha1`: append a `.note.gnu.build-id` section.
     pub build_id_sha1: bool,
+    /// `-z noexecstack` (`Some(false)`) / `-z execstack`
+    /// (`Some(true)`): ensure a `.note.GNU-stack` marker section with
+    /// the requested execute flag, as GNU ld does.
+    pub gnu_stack: Option<bool>,
     /// Machine constraint from `-m <emulation>`.
     pub expect_machine: Option<u16>,
 }
@@ -1048,6 +1106,12 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
         for stmt in &rule.stmts {
             match stmt {
                 SecStmt::AlignDot(n) => out.align_cursor(*n),
+                SecStmt::Byte(v) => {
+                    if out.sh_type == 0 || out.sh_type == SHT_NOBITS {
+                        out.sh_type = SHT_PROGBITS;
+                    }
+                    out.bytes.push(*v);
+                }
                 SecStmt::DefineSym(name) => {
                     let at = out.cursor();
                     out.defined_syms.push((name.clone(), at));
@@ -1082,7 +1146,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                 }
             }
         }
-        if !out.contribs.is_empty() || !out.defined_syms.is_empty() {
+        if !out.contribs.is_empty() || !out.defined_syms.is_empty() || out.cursor() > 0 {
             if out.sh_type == 0 {
                 out.sh_type = SHT_PROGBITS;
             }
@@ -1113,12 +1177,39 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
             outsecs[idx].append(objs, oi, si);
         }
     }
+    if let Some(exec) = opts.gnu_stack {
+        const SHF_EXECINSTR: u64 = 0x4;
+        let flags = if exec { SHF_EXECINSTR } else { 0 };
+        match outsecs.iter_mut().find(|o| o.name == ".note.GNU-stack") {
+            Some(o) => o.flags = flags,
+            None => {
+                let mut out = OutSec::new(".note.GNU-stack", exec_fill);
+                out.sh_type = SHT_PROGBITS;
+                out.flags = flags;
+                outsecs.push(out);
+            }
+        }
+    }
     if let Some(p) = merge_property_notes(&prop_notes, objs.len(), prop_align) {
         let mut out = OutSec::new(&p.name, exec_fill);
         out.sh_type = p.sh_type;
         out.flags = p.flags;
         out.addralign = p.addralign;
         out.bytes = p.bytes;
+        outsecs.push(out);
+    }
+    if opts.build_id_sha1 {
+        // Note body: nhdr + "GNU\0" + 20-byte digest, patched over
+        // the final file bytes at write time.
+        let mut out = OutSec::new(".note.gnu.build-id", exec_fill);
+        out.sh_type = SHT_NOTE;
+        out.flags = 0x2; // SHF_ALLOC
+        out.addralign = 4;
+        out.bytes.extend_from_slice(&4u32.to_le_bytes());
+        out.bytes.extend_from_slice(&20u32.to_le_bytes());
+        out.bytes.extend_from_slice(&3u32.to_le_bytes()); // NT_GNU_BUILD_ID
+        out.bytes.extend_from_slice(b"GNU\0");
+        out.bytes.extend_from_slice(&[0u8; 20]);
         outsecs.push(out);
     }
     if outsecs.len() >= (SHN_LORESERVE as usize) - 8 {
@@ -1580,7 +1671,6 @@ fn write_et_rel(
         Sec(usize),
         Rela(usize),
         Group(usize),
-        BuildId,
         Symtab,
         Strtab,
         Shstrtab,
@@ -1606,9 +1696,6 @@ fn write_et_rel(
         if !out_relocs[i].is_empty() {
             ents.push(Ent::Rela(i));
         }
-    }
-    if build_id {
-        ents.push(Ent::BuildId);
     }
     let symtab_final = (ents.len() + 1) as u32;
     ents.push(Ent::Symtab);
@@ -1743,26 +1830,6 @@ fn write_et_rel(
                     0,
                 )
             }
-            Ent::BuildId => {
-                let mut b = Vec::new();
-                b.extend_from_slice(&4u32.to_le_bytes());
-                b.extend_from_slice(&20u32.to_le_bytes());
-                b.extend_from_slice(&3u32.to_le_bytes()); // NT_GNU_BUILD_ID
-                b.extend_from_slice(b"GNU\0");
-                b.extend_from_slice(&[0u8; 20]);
-                (
-                    ".note.gnu.build-id".to_string(),
-                    SHT_NOTE,
-                    0x2,
-                    4,
-                    0,
-                    0,
-                    0,
-                    4,
-                    b,
-                    0,
-                )
-            }
             Ent::Symtab => (
                 ".symtab".to_string(),
                 SHT_SYMTAB,
@@ -1812,7 +1879,10 @@ fn write_et_rel(
         } else {
             let at = (file.len() as u64).next_multiple_of(align);
             file.resize(at as usize, 0);
-            if matches!(e, Ent::BuildId) {
+            if build_id
+                && let Ent::Sec(i) = e
+                && outsecs[*i].name == ".note.gnu.build-id"
+            {
                 build_id_desc_off = Some(file.len() + 16);
             }
             file.extend_from_slice(&body);

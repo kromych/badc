@@ -237,6 +237,51 @@ absolute form whose relocations the ORC pass reads.
 Environment: `BADC` (required), `BADC_REAL_CC` (default `gcc`),
 `BADC_TARGET` (default `linux-x64`), `BADC_TIMEOUT` (default 300s).
 
+### Linking with badc (`ldshim.py`)
+
+`ldshim.py` is the same idea for `LD=`. Named as the kernel's linker, it
+routes each invocation from facts of the command line, not from a list of
+paths, and records every decision in `$BADC_LD_MANIFEST`:
+
+* An emulation badc has no backend for (`-m elf_i386`) goes to the real
+  linker. badc emits ELF64 x86-64 and aarch64 only, so `arch/x86/boot/setup.elf`,
+  `arch/x86/realmode/rm/realmode.elf` and the 32-bit vDSO are not links a
+  linker fix could take -- they need the i386 target as a whole.
+* A final link with no `-T`/`--script` goes to the real linker: badc has no
+  built-in default script, so a scriptless link has no layout to follow. The
+  only such call in a kernel build is `scripts/tools-support-relr.sh`.
+* A link asking for dynamic-linking metadata (`-soname`, `--hash-style`,
+  `--dynamic-linker`) goes to the real linker: the script-driven engine emits
+  relocation tables but no `.dynsym`/`.dynstr`/`.hash`/`.dynamic`, which the
+  vDSO images need and the kernel image does not. badc rejects those options
+  rather than ignoring them, so a direct `LD=badc` fails loudly instead of
+  producing an unusable vDSO.
+* Everything else is badc's and only badc's: the `-r` merges (`vmlinux.o`,
+  `arch/arm64/kvm/hyp/nvhe/*`), every `vmlinux` kallsyms pass, and the x86
+  boot decompressor. A badc failure is the shim's failure, as with the CC
+  shim.
+* Version and capability probes (`-v`/`--version` with no output file) are
+  answered by badc, so what the configuration records about the linker comes
+  from the linker that will do the linking. `$(call ld-option,...)` runs the
+  option past the linker with `-v`; badc rejects options it does not
+  implement, so kbuild drops them rather than passing options that would be
+  accepted and ignored.
+
+badc's `--version` prints `GNU ld (badc <version>) 2.30`, which
+`scripts/ld-version.sh` reads as a BFD-flavour linker at binutils 2.30 --
+the kernel's own floor, and deliberately no higher, so nothing gated on a
+newer linker is claimed. Two configuration symbols move as a result:
+`CONFIG_LD_VERSION` records 23000, and `CONFIG_ARM64_PTR_AUTH_KERNEL` turns
+off (`arch/arm64/Kconfig` gates it on `LD_VERSION >= 23301`). The latter
+costs nothing here: `buildcc.py` already withholds `-mbranch-protection=`
+specs naming `pac-ret`, because badc emits no pointer-authentication
+prologue. `CONFIG_DEBUG_INFO_COMPRESSED_{ZLIB,ZSTD}` also disappear, because
+badc rejects `--compress-debug-sections`.
+
+`BADC_LD_FALLBACK` names output paths to leave to the real linker, the
+bisect tool for a suspected bad link; each is recorded as `fallback`, so a
+build that used the list cannot be mistaken for a pure one.
+
 Objects must survive more than the link: with `CONFIG_OBJTOOL=y` kbuild
 runs objtool (`--orc`, jump-label and static-call rewriting) over every
 object, the vmlinux script asserts an empty `.got` (badc's GOTPCRELX
@@ -280,6 +325,14 @@ is logged, and only that symbol moves (the capability probes still go to the
 reference compiler). Each boot's `Linux version` banner -- the same text
 `/proc/version` serves -- must then contain `badc`, which pins the claim in
 the booted kernel, not just the configuration.
+
+`--linker badc` additionally makes every link badc's, through `ldshim.py`
+above; `--linker reference` (the default) leaves them all to `--real-ld` and
+is the contrast run. Under `--linker badc` the gate names each link the shim
+left to the real linker, and fails on a link badc could not make, a link that
+used `BADC_LD_FALLBACK`, or a run where badc made no link at all. The run's
+report records which linker it used, so a result cannot be read as the other
+one's.
 
 It fails on any unit badc cannot compile, any unit that fell back to the
 reference compiler, any undefined reference at link, any boot that does not

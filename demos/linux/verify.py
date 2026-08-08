@@ -25,6 +25,12 @@ then name badc.
     python3 demos/linux/verify.py --kernel-dir <writable tree> \
         --initramfs <image> --expect-units 1912
 
+`--linker badc` additionally makes every link badc's, through ldshim.py: the
+kallsyms passes, the final vmlinux, and the relocatable merges. The steps badc
+does not implement are recorded in the link manifest and named in the run's
+output, so a run cannot claim more than it did. `--linker reference` (the
+default) leaves every link to `--real-ld` and is the contrast run.
+
 The tree must already be configured (setup.py) and must be writable: the build
 runs in it. It is rebuilt from clean by default, because make skips units whose
 objects are already current and a gate that compiles nothing passes vacuously.
@@ -100,9 +106,10 @@ def die(m: str) -> "None":
     sys.exit(1)
 
 
-def read_manifest(path: Path) -> dict[str, list[str]]:
-    """Group the shim's per-unit lines by verdict."""
-    out: dict[str, list[str]] = {"badc": [], "fallback": [], "fail": []}
+def read_manifest(path: Path, verdicts: tuple[str, ...] = ("badc", "fallback", "fail")
+                  ) -> dict[str, list[str]]:
+    """Group a shim's per-invocation lines by verdict."""
+    out: dict[str, list[str]] = {v: [] for v in verdicts}
     if not path.exists():
         return out
     for line in path.read_text(errors="replace").splitlines():
@@ -122,7 +129,8 @@ def cc_version_text(tree: Path) -> str:
     return m.group(1) if m else ""
 
 
-def build(args, arch: dict, tree: Path, manifest: Path) -> tuple[int, float, Path]:
+def build(args, arch: dict, tree: Path, manifest: Path,
+          ld_manifest: Path) -> tuple[int, float, Path]:
     env = dict(os.environ)
     env.update(
         BADC=str(args.badc),
@@ -130,6 +138,8 @@ def build(args, arch: dict, tree: Path, manifest: Path) -> tuple[int, float, Pat
         BADC_TARGET=arch["target"],
         BADC_MANIFEST=str(manifest),
         BADC_TIMEOUT=str(args.timeout),
+        BADC_LD_REAL=args.real_ld,
+        BADC_LD_MANIFEST=str(ld_manifest),
     )
     if args.fallback:
         env["BADC_FALLBACK"] = str(Path(args.fallback).resolve())
@@ -138,12 +148,22 @@ def build(args, arch: dict, tree: Path, manifest: Path) -> tuple[int, float, Pat
     env.pop("BADC_WEAKEN", None)
 
     manifest.unlink(missing_ok=True)
+    ld_manifest.unlink(missing_ok=True)
+    # `LD=` selects the linker for every link the build makes: the
+    # shim (badc, with the delegations ldshim.py records) or the
+    # reference linker untouched. It is passed to the configuration
+    # step too, because Kconfig probes the linker -- what the tree
+    # records about linker capabilities has to come from the linker
+    # that will do the linking.
+    make_vars = [f"CC={LINUX_DIR / 'buildcc.py'}"]
+    if args.linker == "badc":
+        make_vars.append(f"LD={LINUX_DIR / 'ldshim.py'}")
     if args.clean:
         log("make clean")
         subprocess.run(["make", "clean"], cwd=tree, env=env,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    shim = LINUX_DIR / "buildcc.py"
+
     # Identification re-probe: the tree was configured by the reference
     # compiler, so its CONFIG_CC_VERSION_TEXT -- the boot banner's and
     # /proc/version's compiler line -- names that compiler. Re-running the
@@ -153,7 +173,7 @@ def build(args, arch: dict, tree: Path, manifest: Path) -> tuple[int, float, Pat
     # explicit step (rather than the syncconfig the build would trigger on
     # the mismatch) makes the change diffable here.
     before = cc_version_text(tree)
-    subprocess.run(["make", "olddefconfig", f"CC={shim}"], cwd=tree, env=env,
+    subprocess.run(["make", "olddefconfig", *make_vars], cwd=tree, env=env,
                    check=True, stdout=subprocess.DEVNULL)
     after = cc_version_text(tree)
     if before != after:
@@ -161,7 +181,7 @@ def build(args, arch: dict, tree: Path, manifest: Path) -> tuple[int, float, Pat
     if "badc" not in after:
         die(f"re-probed CC_VERSION_TEXT does not name badc: {after!r}")
 
-    cmd = ["make", f"-j{args.jobs}", f"CC={shim}", arch["make_target"]]
+    cmd = ["make", f"-j{args.jobs}", *make_vars, arch["make_target"]]
     log(f"{' '.join(cmd)} (in {tree})")
     build_log = Path(args.workdir) / f"build-{args.arch}.log"
     start = time.time()
@@ -282,6 +302,14 @@ def main() -> int:
     ap.add_argument("--badc", type=Path,
                     default=os.environ.get("BADC", REPO_ROOT / "target/release/badc"))
     ap.add_argument("--real-cc", default=os.environ.get("BADC_REAL_CC", "gcc"))
+    ap.add_argument("--linker", choices=("reference", "badc"),
+                    default=os.environ.get("BADC_LINKER", "reference"),
+                    help="who links: `badc` runs every link through "
+                         "ldshim.py, `reference` leaves them all to --real-ld "
+                         "(the contrast run). See README.md")
+    ap.add_argument("--real-ld", default=os.environ.get("BADC_LD_REAL", "ld"),
+                    help="linker for the steps badc does not implement, and "
+                         "for every step under --linker reference")
     ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--timeout", type=int, default=600, help="seconds per badc unit")
     ap.add_argument("--fallback", help="units to leave to the reference compiler; "
@@ -347,17 +375,36 @@ def main() -> int:
 
     failures = []
     units = {"badc": [], "fallback": [], "fail": []}
+    links = {"badc": [], "ld": [], "fallback": [], "fail": []}
     rc, secs, undef = 0, 0.0, 0
     if args.build:
         manifest = args.workdir / f"manifest-{args.arch}.txt"
-        rc, secs, build_log = build(args, arch, tree, manifest)
+        ld_manifest = args.workdir / f"ld-manifest-{args.arch}.txt"
+        rc, secs, build_log = build(args, arch, tree, manifest, ld_manifest)
         units = read_manifest(manifest)
+        links = read_manifest(ld_manifest,
+                              ("badc", "ld", "fallback", "fail"))
         text = build_log.read_text(errors="replace")
         undef = len(re.findall(r"undefined reference", text))
 
         log(f"make rc={rc} in {secs:.0f}s: badc={len(units['badc'])} "
             f"fallback={len(units['fallback'])} fail={len(units['fail'])} "
             f"undefined-refs={undef}")
+        if args.linker == "badc":
+            log(f"links: badc={len(links['badc'])} "
+                f"{args.real_ld}={len(links['ld'])} "
+                f"fallback={len(links['fallback'])} fail={len(links['fail'])}")
+            for line in links["ld"]:
+                log(f"link left to {args.real_ld}: {line}")
+            if links["fail"]:
+                named = ", ".join(l.split("\t")[0] for l in links["fail"][:5])
+                failures.append(f"links badc could not make: "
+                                f"{len(links['fail'])} ({named})")
+            if links["fallback"]:
+                failures.append(f"links that fell back to {args.real_ld}: "
+                                f"{len(links['fallback'])}")
+            if not links["badc"]:
+                failures.append("no link was made by badc")
 
         if rc != 0:
             failures.append(f"make exited {rc} (see {build_log})")
@@ -439,7 +486,10 @@ def main() -> int:
         args.report.write_text(json.dumps({
             "arch": args.arch, "make_rc": rc, "seconds": round(secs, 1),
             "qemu": shutil.which(args.qemu) if args.boot else None,
+            "linker": args.linker,
             "units": {k: len(v) for k, v in units.items()},
+            "links": {k: len(v) for k, v in links.items()},
+            "links_left_to_ld": links["ld"],
             "undefined_refs": undef, "boots": boots,
             "kaslr": {
                 "configured": kaslr_configured(tree),
@@ -461,7 +511,10 @@ def main() -> int:
               f"passed the kernel checks{where}" if boots else "; not booted")
     built = (f"{len(units['badc'])} units, 0 fallbacks, 0 undefined refs"
              if args.build else "not built")
-    log(f"PASS: {built}{booted}")
+    linked = (f", {len(links['badc'])} links by badc and "
+              f"{len(links['ld'])} left to {args.real_ld}"
+              if args.build and args.linker == "badc" else "")
+    log(f"PASS: {built}{linked}{booted}")
     return 0
 
 

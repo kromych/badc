@@ -1162,6 +1162,8 @@ fn run() {
     let mut archives: Vec<String> = Vec::new();
     // Parallel to `archives`: inside a `--whole-archive` span.
     let mut archives_whole: Vec<bool> = Vec::new();
+    // Objects and archives in command-line order for the script link.
+    let mut link_inputs: Vec<LinkInputCli> = Vec::new();
     let mut prog_args_start: usize = args.len();
     // Program argv is consumed only by --jit / --interp; every other
     // mode links or preprocesses its inputs and has no argv tail.
@@ -1177,10 +1179,18 @@ fn run() {
             .unwrap_or("");
         match ext {
             "c" | "" => sources.push(a.clone()),
-            "o" => objects.push(a.clone()),
+            "o" => {
+                objects.push(a.clone());
+                link_inputs.push(LinkInputCli::Object(a.clone()));
+            }
             "a" => {
+                let whole = wa_ranges.iter().any(|&(s, e)| s <= i && i < e);
                 archives.push(a.clone());
-                archives_whole.push(wa_ranges.iter().any(|&(s, e)| s <= i && i < e));
+                archives_whole.push(whole);
+                link_inputs.push(LinkInputCli::Archive {
+                    path: a.clone(),
+                    whole,
+                });
             }
             _ => {
                 // In --jit / --interp the first unrecognised entry marks
@@ -1222,9 +1232,7 @@ fn run() {
         }
         let opts = ScriptLinkCli {
             script_path: spath.clone(),
-            objects,
-            archives,
-            archives_whole,
+            inputs: link_inputs,
             output_path,
             map_path,
             print_map,
@@ -3062,11 +3070,16 @@ fn default_output_path(source: &str, target: Target, mode: Mode) -> PathBuf {
 /// Routes the info line through `eprint_diagnostic` so the
 /// severity word picks up the green TTY color.
 /// Inputs and options for a `-T/--script` link, gathered by the CLI.
+/// One link input in command-line position: placement follows the
+/// order files are loaded, so archives keep their place in the line.
+enum LinkInputCli {
+    Object(String),
+    Archive { path: String, whole: bool },
+}
+
 struct ScriptLinkCli {
     script_path: std::path::PathBuf,
-    objects: Vec<String>,
-    archives: Vec<String>,
-    archives_whole: Vec<bool>,
+    inputs: Vec<LinkInputCli>,
     output_path: Option<std::path::PathBuf>,
     map_path: Option<std::path::PathBuf>,
     print_map: bool,
@@ -3102,46 +3115,66 @@ fn run_script_link(cli: ScriptLinkCli) {
         Ok(s) => s,
         Err(e) => fail(format!("{e}")),
     };
-    let mut inputs: Vec<badc::LdsObject> = Vec::new();
-    for path in &cli.objects {
-        let bytes = match std::fs::read(path) {
-            Ok(b) => b,
-            Err(e) => fail(format!("error: cannot read {path}: {e}")),
-        };
-        match badc::parse_lds_object(path, bytes) {
-            Ok(o) => inputs.push(o),
-            Err(e) => fail(format!("{e}")),
-        }
+    // Load inputs in command-line order: input-section placement
+    // follows load order, so an archive's members belong at the
+    // archive's position. `--whole-archive` includes every member;
+    // other members are pulled while they define a still-undefined
+    // symbol, rescanning to a fixed point (group semantics), and land
+    // at their archive's slot in pull order.
+    enum Slot {
+        Ready(Vec<badc::LdsObject>),
+        Lazy {
+            members: Vec<Option<badc::LdsObject>>,
+            pulled: Vec<badc::LdsObject>,
+        },
     }
-    // Archive members: `--whole-archive` includes every member; the
-    // rest are pulled while they define a still-undefined symbol,
-    // rescanning to a fixed point (group semantics).
-    let mut lazy_members: Vec<badc::LdsObject> = Vec::new();
-    for (ai, path) in cli.archives.iter().enumerate() {
-        let whole = cli.archives_whole.get(ai).copied().unwrap_or(false);
-        let blob = match std::fs::read(path) {
-            Ok(b) => b,
-            Err(e) => fail(format!("error: cannot read {path}: {e}")),
-        };
-        let members = match badc::read_archive_at(&blob, Some(std::path::Path::new(path))) {
-            Ok(m) => m,
-            Err(e) => fail(format!("error: {path}: {e}")),
-        };
-        for m in members {
-            let label = format!("{path}({})", m.name);
-            match badc::parse_lds_object(&label, m.bytes) {
-                Ok(o) => {
-                    if whole {
-                        inputs.push(o);
-                    } else {
-                        lazy_members.push(o);
+    let mut slots: Vec<Slot> = Vec::new();
+    let mut have_lazy = false;
+    for input in &cli.inputs {
+        match input {
+            LinkInputCli::Object(path) => {
+                let bytes = match std::fs::read(path) {
+                    Ok(b) => b,
+                    Err(e) => fail(format!("error: cannot read {path}: {e}")),
+                };
+                match badc::parse_lds_object(path, bytes) {
+                    Ok(o) => slots.push(Slot::Ready(vec![o])),
+                    Err(e) => fail(format!("{e}")),
+                }
+            }
+            LinkInputCli::Archive { path, whole } => {
+                let blob = match std::fs::read(path) {
+                    Ok(b) => b,
+                    Err(e) => fail(format!("error: cannot read {path}: {e}")),
+                };
+                // Thin archive members resolve against the archive's
+                // directory.
+                let members =
+                    match badc::read_archive_at(&blob, std::path::Path::new(path).parent()) {
+                        Ok(m) => m,
+                        Err(e) => fail(format!("error: {path}: {e}")),
+                    };
+                let mut objs = Vec::new();
+                for m in members {
+                    let label = format!("{path}({})", m.name);
+                    match badc::parse_lds_object(&label, m.bytes) {
+                        Ok(o) => objs.push(o),
+                        Err(e) => fail(format!("{e}")),
                     }
                 }
-                Err(e) => fail(format!("{e}")),
+                if *whole {
+                    slots.push(Slot::Ready(objs));
+                } else {
+                    have_lazy = true;
+                    slots.push(Slot::Lazy {
+                        members: objs.into_iter().map(Some).collect(),
+                        pulled: Vec::new(),
+                    });
+                }
             }
         }
     }
-    if !lazy_members.is_empty() {
+    if have_lazy {
         let defined_names = |o: &badc::LdsObject| -> Vec<String> {
             o.symbols
                 .iter()
@@ -3168,26 +3201,41 @@ fn run_script_link(cli: ScriptLinkCli) {
                 }
             }
         };
-        for o in &inputs {
-            account(o, &mut defined, &mut undefined);
+        for slot in &slots {
+            if let Slot::Ready(objs) = slot {
+                for o in objs {
+                    account(o, &mut defined, &mut undefined);
+                }
+            }
         }
-        let mut slots: Vec<Option<badc::LdsObject>> = lazy_members.drain(..).map(Some).collect();
         loop {
             let mut progress = false;
             for slot in slots.iter_mut() {
-                let wanted = slot
-                    .as_ref()
-                    .is_some_and(|o| defined_names(o).iter().any(|n| undefined.contains(n)));
-                if wanted {
-                    let o = slot.take().expect("wanted slot is occupied");
-                    account(&o, &mut defined, &mut undefined);
-                    inputs.push(o);
-                    progress = true;
+                let Slot::Lazy { members, pulled } = slot else {
+                    continue;
+                };
+                for m in members.iter_mut() {
+                    let wanted = m
+                        .as_ref()
+                        .is_some_and(|o| defined_names(o).iter().any(|n| undefined.contains(n)));
+                    if wanted {
+                        let o = m.take().expect("wanted member is occupied");
+                        account(&o, &mut defined, &mut undefined);
+                        pulled.push(o);
+                        progress = true;
+                    }
                 }
             }
             if !progress {
                 break;
             }
+        }
+    }
+    let mut inputs: Vec<badc::LdsObject> = Vec::new();
+    for slot in slots {
+        match slot {
+            Slot::Ready(objs) => inputs.extend(objs),
+            Slot::Lazy { pulled, .. } => inputs.extend(pulled),
         }
     }
     if inputs.is_empty() {

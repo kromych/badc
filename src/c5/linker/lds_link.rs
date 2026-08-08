@@ -537,6 +537,11 @@ impl Val {
 struct ScriptSym {
     val: Val,
     hidden: bool,
+    /// Output section carrying the symbol in the symtab when the
+    /// value came from the location counter outside any output
+    /// section (ld's section_for_dot fixup); the value itself stays
+    /// absolute for expression purposes.
+    final_out: Option<usize>,
 }
 
 /// One input section's per-pass placement.
@@ -599,7 +604,20 @@ pub struct LdsLinker<'a> {
     script_prev: HashMap<String, ScriptSym>,
     dot: u64,
     cur_out: Option<usize>,
-    last_out: Option<usize>,
+    /// ld's dot-attachment state for assignments outside output
+    /// sections: the last allocated output section visited, whether a
+    /// top-level dot assignment makes following symbols prefer the
+    /// next section, the statement index being executed, whether the
+    /// `end` symbol was assigned yet, and per-output-section copies
+    /// of that flag at visit time.
+    dot_section: Option<usize>,
+    prefer_next: bool,
+    cur_stmt: usize,
+    found_end: bool,
+    after_end: Vec<bool>,
+    /// Set when an evaluation read the location counter outside any
+    /// output section (ld's rel_from_abs).
+    rel_from_abs: bool,
     lma_delta: u64,
     final_pass: bool,
     errors: Vec<String>,
@@ -611,6 +629,9 @@ pub struct LdsLinker<'a> {
     /// `objects`): index of the pseudo object.
     synth_obj: usize,
     dyn_relas: Vec<DynReloc>,
+    /// Reserved-but-never-written `.rela.dyn` slots (see
+    /// `count_reserved_none_slots`), computed once per link.
+    dyn_nones: Option<u64>,
     relr_addrs: Vec<u64>,
     /// GOT slots, keyed by referenced symbol name (a GOT reference to
     /// an undefined symbol still needs a slot).
@@ -710,7 +731,12 @@ impl<'a> LdsLinker<'a> {
             script_prev: HashMap::new(),
             dot: 0,
             cur_out: None,
-            last_out: None,
+            dot_section: None,
+            prefer_next: false,
+            cur_stmt: 0,
+            found_end: false,
+            after_end: Vec::new(),
+            rel_from_abs: false,
             lma_delta: 0,
             final_pass: false,
             errors: Vec::new(),
@@ -719,6 +745,7 @@ impl<'a> LdsLinker<'a> {
             referenced: HashSet::new(),
             synth_obj,
             dyn_relas: Vec::new(),
+            dyn_nones: None,
             relr_addrs: Vec::new(),
             got_slots: Vec::new(),
             got_map: HashMap::new(),
@@ -1178,23 +1205,21 @@ impl<'a> LdsLinker<'a> {
     // ---------------------------------------------------- merge pools
 
     /// Deduplicate SHF_MERGE sections without relocations, following
-    /// bfd's merge pass: a separate pool per output section and
-    /// (entsize, strings, alignment) class -- bfd never merges across
-    /// alignments, so `.rodata.str1.1` and `.rodata.str1.8` stay
-    /// apart. Fixed-entsize entries dedupe on identity; strings also
-    /// share a common suffix (a string that is a tail of another
-    /// reuses its bytes). The pool replaces the first member's bytes;
-    /// other members contribute nothing and their offsets remap.
+    /// bfd's merge pass (`bfd/merge.c`): a separate pool per output
+    /// section and (entsize, strings, alignment) class. A section
+    /// whose entsize/alignment relation fails bfd's sanity check, or
+    /// whose size is not an entsize multiple, stays unmerged. The
+    /// pool replaces the first member's bytes; other members
+    /// contribute nothing and their offsets remap.
     fn build_merge_pools(&mut self) {
         #[derive(PartialEq, Eq, Hash)]
         struct Key {
-            out: usize,
             entsize: u64,
             strings: bool,
             align: u64,
         }
         let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-        let mut group_key: Vec<(Key, usize)> = Vec::new();
+        let mut group_key: Vec<Key> = Vec::new();
         let mut key_index: HashMap<(usize, u64, bool, u64), usize> = HashMap::new();
         for i in 0..self.insecs.len() {
             let SecFate::Placed { out } = self.fates[i] else {
@@ -1206,36 +1231,37 @@ impl<'a> LdsLinker<'a> {
             }
             let strings = s.flags & SHF_STRINGS != 0;
             let entsize = s.entsize;
-            if entsize == 0 || (!strings && !s.size.is_multiple_of(entsize)) {
+            if s.size == 0
+                || s.size > u32::MAX as u64
+                || entsize == 0
+                || !s.size.is_multiple_of(entsize)
+            {
                 continue;
             }
-            if strings && entsize != 1 {
-                continue; // wide-char string merge: leave unmerged
-            }
             let align = s.addralign.max(1);
+            // bfd: an entsize below the alignment must be a power of
+            // two and marks strings; above it, an exact multiple.
+            if !align.is_power_of_two()
+                || (entsize < align && (!entsize.is_power_of_two() || !strings))
+                || (entsize > align && entsize % align != 0)
+            {
+                continue;
+            }
             let tup = (out, entsize, strings, align);
             let gid = *key_index.entry(tup).or_insert_with(|| {
-                group_key.push((
-                    Key {
-                        out,
-                        entsize,
-                        strings,
-                        align,
-                    },
-                    group_key.len(),
-                ));
+                group_key.push(Key {
+                    entsize,
+                    strings,
+                    align,
+                });
                 group_key.len() - 1
             });
             groups.entry(gid).or_default().push(i);
         }
         for (gid, members) in &groups {
-            let key = &group_key[*gid].0;
-            let maps = if key.strings {
-                self.build_string_pool(members, key.align)
-            } else {
-                self.build_fixed_pool(members, key.entsize, key.align)
-            };
-            let (pool_bytes, member_maps) = maps;
+            let key = &group_key[*gid];
+            let (pool_bytes, member_maps) =
+                self.build_pool(members, key.entsize, key.strings, key.align);
             let rep = *members
                 .iter()
                 .min()
@@ -1253,91 +1279,170 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
-    /// Fixed-entsize merge: dedupe identical entries, first occurrence
-    /// wins the offset. Entries keep the group's alignment in the pool.
-    fn build_fixed_pool(
+    /// Build one merge pool the way bfd does. Entries are recorded in
+    /// member/offset order and deduplicated on identity; an entry's
+    /// required alignment is the largest power of two dividing any
+    /// input offset it appears at (capped at the section alignment,
+    /// offset 0 counting as fully aligned). Strings additionally
+    /// share suffixes. Offsets are assigned in first-seen order with
+    /// per-entry alignment padding; the pool tail pads to the section
+    /// alignment when every member's size is a multiple of it.
+    fn build_pool(
         &self,
         members: &[usize],
         entsize: u64,
+        strings: bool,
         align: u64,
-    ) -> (Vec<u8>, PoolMemberMaps) {
-        let mut pool: Vec<u8> = Vec::new();
-        let mut interned: HashMap<Vec<u8>, u64> = HashMap::new();
-        let mut maps: HashMap<usize, (Vec<u64>, Vec<u64>)> = HashMap::new();
+    ) -> (Vec<u8>, HashMap<usize, (Vec<u64>, Vec<u64>)>) {
+        struct Entry {
+            /// Content including the terminator for strings.
+            bytes: Vec<u8>,
+            /// Required start alignment; 0 once suffix-merged.
+            align: u64,
+            index: u64,
+            suffix_of: usize,
+        }
+        let es = entsize as usize;
+        let mut entries: Vec<Entry> = Vec::new();
+        let mut interned: HashMap<Vec<u8>, usize> = HashMap::new();
+        let mut member_refs: Vec<(usize, Vec<u64>, Vec<usize>)> = Vec::new();
+        let mut pad_tail = true;
         for &m in members {
             let id = self.insecs[m];
             let data = {
                 let o = &self.objects[id.obj];
                 o.section_data(&o.sections[id.sec]).to_owned()
             };
-            let (mut starts, mut targets) = (Vec::new(), Vec::new());
+            pad_tail &= data.len() as u64 % align == 0;
+            let (mut starts, mut ids) = (Vec::new(), Vec::new());
             let mut pos = 0usize;
             while pos < data.len() {
-                let end = (pos + entsize as usize).min(data.len());
-                let entry = &data[pos..end];
-                let off = *interned.entry(entry.to_owned()).or_insert_with(|| {
-                    let at = align_up(pool.len() as u64, align);
-                    pool.resize(at as usize, 0);
-                    pool.extend_from_slice(entry);
-                    at
+                let len = if strings {
+                    // Entry runs through its all-zero terminator
+                    // unit; an unterminated tail gains a synthetic
+                    // one (bfd appends entsize zeros to the buffer).
+                    let mut k = pos;
+                    loop {
+                        if k >= data.len() {
+                            break data.len() - pos + es;
+                        }
+                        if data[k..data.len().min(k + es)].iter().all(|&b| b == 0) {
+                            break k + es - pos;
+                        }
+                        k += es;
+                    }
+                } else {
+                    es
+                };
+                let mut bytes = data[pos..data.len().min(pos + len)].to_vec();
+                bytes.resize(len, 0);
+                let eltalign = if pos == 0 {
+                    align
+                } else {
+                    (1u64 << pos.trailing_zeros()).min(align)
+                };
+                let eid = *interned.entry(bytes.clone()).or_insert_with(|| {
+                    entries.push(Entry {
+                        bytes,
+                        align: 0,
+                        index: 0,
+                        suffix_of: usize::MAX,
+                    });
+                    entries.len() - 1
                 });
+                entries[eid].align = entries[eid].align.max(eltalign);
                 starts.push(pos as u64);
-                targets.push(off);
-                pos = end;
+                ids.push(eid);
+                pos += len;
             }
-            maps.insert(m, (starts, targets));
+            member_refs.push((m, starts, ids));
         }
-        (pool, maps)
-    }
-
-    /// String merge: dedupe identical NUL-terminated strings, first
-    /// occurrence in member/offset order keeps the offset. bfd also
-    /// shares a common suffix, but the kernel's inputs are already
-    /// `ld -r` string-merged, so a second suffix pass over them
-    /// diverges from the reference; plain identity dedup tracks it
-    /// closely. Kept a distinct method so a full suffix pass can slot
-    /// in when byte-identity across a fresh merge is required (TODO).
-    fn build_string_pool(
-        &self,
-        members: &[usize],
-        align: u64,
-    ) -> (Vec<u8>, PoolMemberMaps) {
-        let mut pool: Vec<u8> = Vec::new();
-        let mut interned: HashMap<Vec<u8>, u64> = HashMap::new();
-        let mut maps: HashMap<usize, (Vec<u64>, Vec<u64>)> = HashMap::new();
-        for &m in members {
-            let id = self.insecs[m];
-            let data = {
-                let o = &self.objects[id.obj];
-                o.section_data(&o.sections[id.sec]).to_owned()
+        if strings && !entries.is_empty() {
+            // bfd merge_strings: sort by reversed content (lengths
+            // without the terminator) and merge each entry into an
+            // alignment-compatible neighbour it is a suffix of.
+            let content_len = |e: &Entry| e.bytes.len() - es;
+            let uniform = entries[1..]
+                .iter()
+                .all(|e| e.align == entries[0].align)
+                .then(|| entries[0].align)
+                .filter(|&a| a > entsize);
+            let revcmp = |a: &Entry, b: &Entry| -> core::cmp::Ordering {
+                let (la, lb) = (content_len(a), content_len(b));
+                if let Some(al) = uniform {
+                    let t = (la as u64 & (al - 1)).cmp(&(lb as u64 & (al - 1)));
+                    if t != core::cmp::Ordering::Equal {
+                        return t;
+                    }
+                }
+                let l = la.min(lb);
+                for k in 1..=l {
+                    let t = a.bytes[la - k].cmp(&b.bytes[lb - k]);
+                    if t != core::cmp::Ordering::Equal {
+                        return t;
+                    }
+                }
+                la.cmp(&lb)
             };
-            let (mut starts, mut targets) = (Vec::new(), Vec::new());
-            let mut pos = 0usize;
-            while pos < data.len() {
-                let end = data[pos..]
-                    .iter()
-                    .position(|&b| b == 0)
-                    .map(|p| pos + p + 1)
-                    .unwrap_or(data.len());
-                let entry = &data[pos..end];
-                let off = *interned.entry(entry.to_owned()).or_insert_with(|| {
-                    let at = align_up(pool.len() as u64, align);
-                    pool.resize(at as usize, 0);
-                    pool.extend_from_slice(entry);
-                    at
-                });
-                starts.push(pos as u64);
-                targets.push(off);
-                pos = end;
+            let mut order: Vec<usize> = (0..entries.len()).collect();
+            order.sort_by(|&x, &y| revcmp(&entries[x], &entries[y]));
+            let mut e = order[order.len() - 1];
+            for &cmp in order[..order.len() - 1].iter().rev() {
+                let (el, cl) = (entries[e].bytes.len(), entries[cmp].bytes.len());
+                if entries[e].align >= entries[cmp].align
+                    && el > cl
+                    && (el - cl) as u64 % entries[cmp].align == 0
+                    && entries[e].bytes[el - cl..] == entries[cmp].bytes[..]
+                {
+                    entries[cmp].suffix_of = e;
+                    entries[cmp].align = 0;
+                } else {
+                    e = cmp;
+                }
             }
+        }
+        let mut size = 0u64;
+        for e in entries.iter_mut() {
+            if e.align != 0 {
+                size = align_up(size, e.align);
+                e.index = size;
+                size += e.bytes.len() as u64;
+            }
+        }
+        for k in 0..entries.len() {
+            let t = entries[k].suffix_of;
+            if t != usize::MAX {
+                entries[k].index =
+                    entries[t].index + (entries[t].bytes.len() - entries[k].bytes.len()) as u64;
+            }
+        }
+        if pad_tail {
+            size = align_up(size, align);
+        }
+        let mut pool = vec![0u8; size as usize];
+        for e in &entries {
+            if e.align != 0 {
+                pool[e.index as usize..e.index as usize + e.bytes.len()]
+                    .copy_from_slice(&e.bytes);
+            }
+        }
+        let mut maps: HashMap<usize, (Vec<u64>, Vec<u64>)> = HashMap::new();
+        for (m, starts, ids) in member_refs {
+            let targets: Vec<u64> = ids.iter().map(|&eid| entries[eid].index).collect();
             maps.insert(m, (starts, targets));
         }
         (pool, maps)
     }
 
-    /// Remap an offset into a merged input section to its pool offset.
+    /// Remap an offset into a merged input section to its pool
+    /// offset: the covering entry's position plus the delta into it.
+    /// At or past the input's end the offset maps to the pool's end,
+    /// as bfd resolves end-of-section references.
     fn merge_remap(&self, insec: usize, off: u64) -> u64 {
         let pool = &self.pools[self.merge_of[&insec]];
+        if off >= self.insec(insec).size {
+            return pool.bytes.len() as u64;
+        }
         let (starts, targets) = &pool.maps[&insec];
         match starts.binary_search(&off) {
             Ok(k) => targets[k],
@@ -1429,7 +1534,11 @@ impl<'a> LdsLinker<'a> {
         }
         self.dot = 0;
         self.cur_out = None;
-        self.last_out = None;
+        self.dot_section = None;
+        self.prefer_next = false;
+        self.cur_stmt = 0;
+        self.found_end = false;
+        self.after_end = vec![false; self.outs.len()];
         self.lma_delta = 0;
         self.errors.clear();
         self.undefined.clear();
@@ -1452,10 +1561,25 @@ impl<'a> LdsLinker<'a> {
 
     fn exec_sections(&mut self) -> Result<(), C5Error> {
         for si in 0..self.stmts.len() {
+            self.cur_stmt = si;
             match self.stmts[si].clone() {
-                Stmt::Assign(a) => self.exec_assignment(&a, false),
+                Stmt::Assign(a) => {
+                    // ld: a top-level assignment to dot makes following
+                    // boundary symbols attach to the next section.
+                    if a.symbol == "." {
+                        self.prefer_next = true;
+                    }
+                    self.exec_assignment(&a, false)
+                }
                 Stmt::Assert(e, m) => self.exec_assert(&e, &m),
-                Stmt::Open(oi) => self.layout_out_section(oi),
+                Stmt::Open(oi) => {
+                    self.after_end[oi] = self.found_end;
+                    if self.outs[oi].alloc && !self.outs[oi].removed {
+                        self.dot_section = Some(oi);
+                        self.prefer_next = false;
+                    }
+                    self.layout_out_section(oi)
+                }
             }
         }
         Ok(())
@@ -1531,7 +1655,6 @@ impl<'a> LdsLinker<'a> {
         let saved_dot = self.dot;
         let start = if alloc { self.dot } else { addr };
         self.cur_out = Some(oi);
-        self.last_out = Some(oi);
         self.outs[oi].addr = start;
 
         let mut off: u64 = 0;
@@ -1742,7 +1865,11 @@ impl<'a> LdsLinker<'a> {
                 return;
             }
         }
+        if a.symbol.trim_start_matches('_') == "end" {
+            self.found_end = true;
+        }
         let cur = self.lookup(&a.symbol);
+        self.rel_from_abs = false;
         let rhs = self.eval(&a.value);
         let value = match a.op {
             AssignOp::Set => rhs,
@@ -1754,13 +1881,74 @@ impl<'a> LdsLinker<'a> {
                 }
             }
         };
+        let final_out = if value.att == Att::Abs && self.rel_from_abs {
+            self.section_for_dot()
+        } else {
+            None
+        };
         self.script_now.insert(
             a.symbol.clone(),
             ScriptSym {
                 val: value,
                 hidden: a.hidden,
+                final_out,
             },
         );
+    }
+
+    /// ld's section_for_dot: the symtab section for a symbol assigned
+    /// from the location counter outside any output section.
+    /// Assignments attach to the previous allocated section, except
+    /// that after a top-level dot assignment (or before any section)
+    /// they attach to the section following the statement; past the
+    /// `end` assignment the previous section wins again. The walks
+    /// skip removed and non-allocated sections.
+    fn section_for_dot(&self) -> Option<usize> {
+        let is_alloc = |oi: usize| {
+            self.outs[oi].alloc && !self.outs[oi].removed && self.outs[oi].flags & SHF_TLS == 0
+        };
+        let opens: Vec<usize> = self
+            .stmts
+            .iter()
+            .filter_map(|s| match s {
+                Stmt::Open(oi) => Some(*oi),
+                _ => None,
+            })
+            .collect();
+        if self.dot_section.is_none() || self.prefer_next {
+            let mut nxt = self
+                .stmts
+                .iter()
+                .skip(self.cur_stmt + 1)
+                .filter_map(|s| match s {
+                    Stmt::Open(oi) => Some(*oi),
+                    _ => None,
+                })
+                .peekable();
+            let mut os = nxt.next();
+            while let Some(o) = os {
+                if !self.after_end[o] && self.outs[o].removed {
+                    os = nxt.next();
+                } else {
+                    break;
+                }
+            }
+            if self.dot_section.is_none() || os.is_none_or(|o| !self.after_end[o]) {
+                // Walk backward from the found section (or the last
+                // one) to the nearest allocated section.
+                let start = match os {
+                    Some(o) => opens.iter().position(|&x| x == o)?,
+                    None => opens.len().checked_sub(1)?,
+                };
+                return opens[..=start].iter().rev().copied().find(|&o| is_alloc(o));
+            }
+        }
+        let s = self.dot_section?;
+        let pos = opens.iter().position(|&x| x == s)?;
+        if let Some(o) = opens[..=pos].iter().rev().copied().find(|&o| is_alloc(o)) {
+            return Some(o);
+        }
+        opens.iter().copied().find(|&o| is_alloc(o))
     }
 
     fn apply_assign_op(&self, base: u64, op: AssignOp, v: u64) -> u64 {
@@ -1794,11 +1982,17 @@ impl<'a> LdsLinker<'a> {
 
     fn lookup(&mut self, name: &str) -> Option<Val> {
         if name == "." {
-            let att = self
-                .cur_out
-                .or(self.last_out)
-                .map(Att::Out)
-                .unwrap_or(Att::Abs);
+            // Inside an output section dot is section-relative;
+            // outside it is absolute and marks the evaluation so a
+            // defined symbol can still pick up a symtab section
+            // through section_for_dot.
+            let att = match self.cur_out {
+                Some(o) => Att::Out(o),
+                None => {
+                    self.rel_from_abs = true;
+                    Att::Abs
+                }
+            };
             return Some(Val { v: self.dot, att });
         }
         if let Some(s) = self.script_now.get(name) {
@@ -1943,11 +2137,13 @@ impl<'a> LdsLinker<'a> {
             }
             Expr::AlignDot(a) => {
                 let a = self.eval_inner(a);
-                let att = self
-                    .cur_out
-                    .or(self.last_out)
-                    .map(Att::Out)
-                    .unwrap_or(Att::Abs);
+                let att = match self.cur_out {
+                    Some(o) => Att::Out(o),
+                    None => {
+                        self.rel_from_abs = true;
+                        Att::Abs
+                    }
+                };
                 Val {
                     v: align_up(self.dot, a.v),
                     att,
@@ -2071,8 +2267,17 @@ impl<'a> LdsLinker<'a> {
             self.got_map = map;
         }
         // Collect absolute-64 sites in allocated output sections; each
-        // becomes a RELATIVE entry, RELR-packed when 8-aligned.
-        let mut rel_addrs: Vec<(u64, i64)> = Vec::new();
+        // becomes a RELATIVE entry. bfd packs a site into RELR when
+        // its input offset is even and the input section's alignment
+        // is above one (the output address parity then follows);
+        // other sites keep RELA entries.
+        let mut rel_addrs: Vec<(u64, i64, bool)> = Vec::new();
+        let mut sym_relas: Vec<DynReloc> = Vec::new();
+        let abs64 = if self.machine == EM_AARCH64 {
+            rt::R_AARCH64_ABS64
+        } else {
+            rt::R_X86_64_64
+        };
         for i in 0..self.insecs.len() {
             let SecFate::Placed { out } = self.fates[i] else {
                 continue;
@@ -2086,34 +2291,57 @@ impl<'a> LdsLinker<'a> {
             }
             let id = self.insecs[i];
             let base = self.outs[out].addr + p.off;
+            let packable = self.objects[id.obj].sections[id.sec].addralign > 1;
             for r in &self.objects[id.obj].sections[id.sec].relocs {
-                if r.rtype != rt::R_AARCH64_ABS64 {
+                if r.rtype != abs64 {
                     continue;
                 }
                 // Only a load-address (section-relative) target needs a
-                // load-time RELATIVE fixup; an absolute constant does not.
+                // load-time RELATIVE fixup; an absolute constant does
+                // not. An unresolved default-visibility weak reference
+                // keeps a symbol-based entry, as bfd leaves its
+                // resolution to load time.
                 if !self.reloc_is_relative(id.obj, r.sym as usize) {
+                    if self.undefweak_dynamic(id.obj, r.sym as usize) {
+                        sym_relas.push(DynReloc {
+                            offset: base + r.offset,
+                            rtype: abs64,
+                            addend: r.addend,
+                        });
+                    }
                     continue;
                 }
                 let target = self.resolve_sym_prevpass(id.obj, r.sym as usize, r.addend);
                 let Some(target) = target else { continue };
-                rel_addrs.push((base + r.offset, target as i64));
+                rel_addrs.push((base + r.offset, target as i64, packable && r.offset % 2 == 0));
             }
         }
-        // GOT slots are RELATIVE targets too.
+        // GOT slots are RELATIVE targets too; a slot for an unresolved
+        // weak reference gets GLOB_DAT instead.
         let got_base = self.got_addr_prevpass();
         if let Some(got_base) = got_base {
             for (k, name) in self.got_slots.clone().iter().enumerate() {
+                let slot = got_base + 8 + k as u64 * 8;
                 if let Some(v) = self.resolve_name(name) {
-                    rel_addrs.push((got_base + 8 + k as u64 * 8, v as i64));
+                    rel_addrs.push((slot, v as i64, true));
+                } else {
+                    sym_relas.push(DynReloc {
+                        offset: slot,
+                        rtype: if self.machine == EM_AARCH64 {
+                            rt::R_AARCH64_GLOB_DAT
+                        } else {
+                            rt::R_X86_64_GLOB_DAT
+                        },
+                        addend: 0,
+                    });
                 }
             }
         }
-        rel_addrs.sort_by_key(|&(a, _)| a);
+        rel_addrs.sort_by_key(|&(a, _, _)| a);
         let mut relas: Vec<DynReloc> = Vec::new();
         let mut relr: Vec<u64> = Vec::new();
-        for (addr, addend) in rel_addrs {
-            if self.opts.pack_relative_relocs && addr % 8 == 0 {
+        for (addr, addend, packable) in rel_addrs {
+            if self.opts.pack_relative_relocs && packable {
                 relr.push(addr);
             } else {
                 relas.push(DynReloc {
@@ -2127,19 +2355,65 @@ impl<'a> LdsLinker<'a> {
                 });
             }
         }
+        relas.extend(sym_relas);
+        relas.sort_by_key(|d| d.offset);
         let relr_words = encode_relr(&relr);
         self.dyn_relas = relas;
         self.relr_addrs = relr;
         // Update synthetic section sizes.
+        let nones = match self.dyn_nones {
+            Some(n) => n,
+            None => {
+                let n = self.count_reserved_none_slots();
+                self.dyn_nones = Some(n);
+                n
+            }
+        };
         let synth = self.synth_obj;
         for sec in &mut self.objects[synth].sections {
             match sec.name.as_str() {
-                SYNTH_RELA => sec.size = self.dyn_relas.len() as u64 * 24,
+                SYNTH_RELA => sec.size = (nones + self.dyn_relas.len() as u64) * 24,
                 SYNTH_RELR => sec.size = relr_words.len() as u64 * 8,
                 SYNTH_GOT => sec.size = 8 + self.got_slots.len() as u64 * 8,
                 _ => {}
             }
         }
+    }
+
+    /// bfd sizes dynamic reloc sections at check_relocs time: every
+    /// 64-bit absolute reloc against a non-local symbol in an
+    /// allocated section reserves a slot, with no discard check on the
+    /// global-symbol path. A slot whose section the script discards is
+    /// never written (the section is not relocated) and never
+    /// reclaimed by RELR packing, so it survives as a zeroed
+    /// R_*_NONE entry. Reserve the same slots for size parity.
+    fn count_reserved_none_slots(&self) -> u64 {
+        let abs64 = if self.machine == EM_AARCH64 {
+            rt::R_AARCH64_ABS64
+        } else {
+            rt::R_X86_64_64
+        };
+        let mut n = 0u64;
+        for i in 0..self.insecs.len() {
+            if self.fates[i] != SecFate::Discarded {
+                continue;
+            }
+            let id = self.insecs[i];
+            let s = &self.objects[id.obj].sections[id.sec];
+            if s.flags & SHF_ALLOC == 0 {
+                continue;
+            }
+            for r in &s.relocs {
+                if r.rtype != abs64 {
+                    continue;
+                }
+                let sym = &self.objects[id.obj].symbols[r.sym as usize];
+                if sym.binding() != STB_LOCAL {
+                    n += 1;
+                }
+            }
+        }
+        n
     }
 
     /// Resolve a symbol name to a final value through the global table
@@ -2152,6 +2426,19 @@ impl<'a> LdsLinker<'a> {
             .get(name)
             .or_else(|| self.script_prev.get(name))
             .map(|s| s.val.v)
+    }
+
+    /// An undefined default-visibility weak reference that nothing in
+    /// the link satisfies. bfd exports it as a dynamic symbol and
+    /// keeps a symbol-based reloc for its sites and GOT slot.
+    fn undefweak_dynamic(&self, oi: usize, si: usize) -> bool {
+        let sym = &self.objects[oi].symbols[si];
+        sym.shndx as u16 == SHN_UNDEF
+            && sym.binding() == STB_WEAK
+            && sym.other & 0x3 == 0
+            && !sym.name.is_empty()
+            && !self.globals.contains_key(&sym.name)
+            && !self.script_now.contains_key(&sym.name)
     }
 
     /// True when an ABS64 site against this symbol names a load
@@ -2990,6 +3277,9 @@ impl<'a> LdsLinker<'a> {
             let mut bytes: Vec<u8> = Vec::new();
             match name.as_str() {
                 SYNTH_RELA => {
+                    // Reserved slots stay zeroed (R_*_NONE) ahead of
+                    // the live entries, as bfd leaves them.
+                    bytes.resize(self.dyn_nones.unwrap_or(0) as usize * 24, 0);
                     for d in &self.dyn_relas {
                         bytes.extend_from_slice(&d.offset.to_le_bytes());
                         bytes.extend_from_slice(&(d.rtype as u64).to_le_bytes());
@@ -3218,6 +3508,21 @@ impl<'a> LdsLinker<'a> {
                 }
             }
         }
+        // A symbol's visibility aggregates over every reference and
+        // definition; hidden or internal globals cannot be preempted
+        // and are emitted with local binding, as bfd forces them.
+        let mut forced_vis: HashMap<&str, u8> = HashMap::new();
+        for o in &self.objects {
+            for sym in &o.symbols {
+                let vis = sym.other & 0x3;
+                if sym.binding() == STB_LOCAL || sym.name.is_empty() || vis == 0 || vis == 3 {
+                    continue;
+                }
+                let e = forced_vis.entry(sym.name.as_str()).or_insert(vis);
+                // INTERNAL(1) constrains more than HIDDEN(2).
+                *e = (*e).min(vis);
+            }
+        }
         // Resolved global definitions, name order (the table order is
         // not part of the contract; nm sorts).
         let mut global_defs: Vec<(&String, (usize, usize))> =
@@ -3227,7 +3532,11 @@ impl<'a> LdsLinker<'a> {
             if self.script_now.contains_key(name) {
                 continue; // script assignment overrides
             }
-            if let Some(fs) = self.finalize_sym(obj_i, sym_i, out_shndx) {
+            if let Some(mut fs) = self.finalize_sym(obj_i, sym_i, out_shndx) {
+                if let Some(&vis) = forced_vis.get(name.as_str()) {
+                    fs.info = (STB_LOCAL << 4) | (fs.info & 0xf);
+                    fs.other = vis;
+                }
                 syms.push(fs);
             }
         }
@@ -3235,14 +3544,22 @@ impl<'a> LdsLinker<'a> {
         let mut script_syms: Vec<(&String, &ScriptSym)> = self.script_now.iter().collect();
         script_syms.sort_by(|a, b| a.0.cmp(b.0));
         for (name, s) in script_syms {
-            let shndx = match s.val.att {
-                Att::Abs => SHN_ABS,
-                Att::Out(oi) => out_shndx(oi),
+            let shndx = match (s.val.att, s.final_out) {
+                (Att::Out(oi), _) => out_shndx(oi),
+                (Att::Abs, Some(oi)) => out_shndx(oi),
+                (Att::Abs, None) => SHN_ABS,
             };
+            let vis = forced_vis.get(name.as_str()).copied().or_else(|| {
+                if s.hidden {
+                    Some(STV_HIDDEN)
+                } else {
+                    None
+                }
+            });
             syms.push(FinalSym {
                 name: name.clone(),
-                info: (STB_GLOBAL << 4) | STT_NOTYPE,
-                other: if s.hidden { STV_HIDDEN } else { STV_DEFAULT },
+                info: (if vis.is_some() { STB_LOCAL } else { STB_GLOBAL } << 4) | STT_NOTYPE,
+                other: vis.unwrap_or(STV_DEFAULT),
                 shndx,
                 value: s.val.v,
                 size: 0,

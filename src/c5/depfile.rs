@@ -141,9 +141,13 @@ pub fn render(targets: &[String], prereqs: &[String], phony: bool) -> String {
 /// `own_header_roots` at a checkout, which resolves the same headers to
 /// real files. Under `-nostdinc`, the case the kernel build exercises,
 /// every header comes from a `-I` directory and none of this applies.
+///
+/// Names repeat in the include stream and are emitted once. gcc repeats
+/// them; make stats each prerequisite either way, so the shorter list
+/// describes the same build.
 pub fn prerequisites(source: &str, records: &[IncludeRecord], system: bool) -> Vec<String> {
     let mut out = Vec::with_capacity(records.len() + 1);
-    out.push(source.to_string());
+    out.push(simplify(source).to_string());
     for r in records {
         if r.status == IncludeStatus::Missing {
             continue;
@@ -154,11 +158,27 @@ pub fn prerequisites(source: &str, records: &[IncludeRecord], system: bool) -> V
         let Some(path) = r.path.as_deref() else {
             continue;
         };
+        let path = simplify(path);
         if !out.iter().any(|p| p == path) {
             out.push(path.to_string());
         }
     }
     out
+}
+
+/// Drop the leading `./` a search-path spelling contributes, as gcc's
+/// path simplification does: `-I./include` would otherwise name every
+/// header it serves `./include/...`. make matches a prerequisite
+/// against target names textually, so a generated header reached that
+/// way would not match the rule that builds it. Only the leading `./`
+/// goes -- gcc keeps `..` components, and collapsing one would name a
+/// different file across a symlinked directory.
+fn simplify(path: &str) -> &str {
+    let mut p = path;
+    while let Some(rest) = p.strip_prefix("./") {
+        p = rest;
+    }
+    if p.is_empty() { path } else { p }
 }
 
 #[cfg(test)]
@@ -304,6 +324,30 @@ mod tests {
         assert_eq!(
             prerequisites("m.c", &records, false),
             strs(&["m.c", "inc/a.h"])
+        );
+    }
+
+    #[test]
+    fn a_leading_dot_slash_from_the_search_path_spelling_is_dropped() {
+        // `-I./include` resolves headers to `./include/...`; gcc names
+        // them without the prefix and so must badc, or a generated
+        // header would not match the rule that builds it.
+        let records = vec![
+            rec(
+                "linux/a.h",
+                Some("./include/linux/a.h"),
+                IncludeOrigin::User,
+            ),
+            // The same file reached without the prefix is not a second
+            // prerequisite.
+            rec("linux/a.h", Some("include/linux/a.h"), IncludeOrigin::User),
+            // `..` stays: collapsing it names a different file across a
+            // symlinked directory, and gcc keeps it too.
+            rec("vma.h", Some("kernel/../mm/vma.h"), IncludeOrigin::User),
+        ];
+        assert_eq!(
+            prerequisites("./m.c", &records, true),
+            strs(&["m.c", "include/linux/a.h", "kernel/../mm/vma.h"])
         );
     }
 

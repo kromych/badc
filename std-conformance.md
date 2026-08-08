@@ -196,10 +196,16 @@ is C99 plus the C11 features real code gates on this macro (`_Static_assert`,
 - `--interp` (SSA interpreter with pointer tracking), `--jit` (in-process),
   `--dump-ssa`.
 - `-H` / `--show-includes` -- gcc-`-H`-shape `#include` resolution trace.
-- A missing `#include` file or an unknown preprocessor directive is a
-  *warning*, not a fatal error, so legacy sources sprinkled with
-  documentation-only includes keep compiling. clang / gcc treat both as
-  fatal.
+- The gcc `-M` dependency-output family: `-M`, `-MM`, `-MD`, `-MMD`,
+  `-MF`, `-MT`, `-MQ`, `-MP`, and the `-Wp,-MD,<file>` / `-Wp,-MMD,<file>`
+  spellings. `-MM` / `-MMD` omit system headers, which here means the
+  compiler's own header set and the system fallback directories; a header
+  from `-I`, `-iquote` or the including file's directory is a user header.
+  A header served from the in-binary set has no filesystem path and is
+  omitted from the prerequisite list.
+- An unknown preprocessor directive is a *warning*, not a fatal error, so
+  legacy sources keep compiling; clang / gcc treat it as fatal. A missing
+  `#include` file is an error, as in clang / gcc.
 - `__BADC_VERSION__`, `__BADC_TARGET__`, `__BADC_WINDOWS__` predefines.
 - Extension: a `#if` / `#elif` controlling expression accepts string-literal
   operands to `==` / `!=` (e.g. `#if __BADC_TARGET__ == "macos-aarch64"`,

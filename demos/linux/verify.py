@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Pass/fail gate for the badc-compiled Linux kernel.
 
-Runs the hybrid build described in README.md ("Hybrid build") with an empty
-fallback list, so every kernel C unit goes through badc, then boots the result
-under qemu. Unlike sweep.py, which measures and ranks, this asserts: any unit
-badc cannot compile, any undefined reference at link, any boot that does not
-reach the marker, or any boot whose userspace could not read the kernel back
-fails the run.
+Runs the build described in README.md ("Hybrid build") with an empty fallback
+list, so every kernel C unit is badc's, then boots the result under qemu.
+Unlike sweep.py, which measures and ranks, this asserts: any unit badc cannot
+compile, any undefined reference at link, any boot that does not reach the
+marker, or any boot whose userspace could not read the kernel back fails the
+run. A unit badc cannot compile now stops make where it happens, so the build
+step fails too rather than only showing up in the manifest.
 
 A boot makes two claims and they are checked separately. Reaching userspace is
 the first marker; serving reads of /proc and /sys is the second, which the

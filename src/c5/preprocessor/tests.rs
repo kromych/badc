@@ -10,6 +10,14 @@ fn process(source: &str) -> String {
     pp.process(source).expect("preprocessor failed")
 }
 
+/// The gcc `-H` trace for what `pp` recorded.
+fn trace_lines(pp: &Preprocessor) -> Vec<String> {
+    pp.include_records
+        .iter()
+        .map(IncludeRecord::trace_line)
+        .collect()
+}
+
 fn process_err(source: &str) -> String {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     match pp.process(source) {
@@ -1243,16 +1251,16 @@ fn show_includes_records_resolution_trace() {
     // leading dots marking nesting depth. A missing header
     // emits a `! name (missing)` line in the same trace.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-    pp.set_show_includes(true);
+    pp.set_track_includes(true);
     let _ = pp
         .process("#include <not-a-real-header.h>\nint main() { return 0; }\n")
         .expect_err("missing include must fail");
+    let trace = trace_lines(&pp);
     assert!(
-        pp.include_trace
+        trace
             .iter()
             .any(|l| l.starts_with("!") && l.contains("not-a-real-header.h")),
-        "trace should mark missing header: {:?}",
-        pp.include_trace
+        "trace should mark missing header: {trace:?}"
     );
 }
 
@@ -2554,14 +2562,11 @@ fn repeat_inclusion_cost_is_independent_of_header_size() {
         let src = "#include <big.h>\n".repeat(n);
         let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         pp.add_search_path(&dir);
-        pp.set_show_includes(true);
+        pp.set_track_includes(true);
         pp.process(&src).unwrap();
-        let dropped = pp
-            .include_trace
-            .iter()
-            .filter(|l| l.ends_with("(cached)"))
-            .count();
-        (pp.include_trace.len() - dropped, dropped)
+        let trace = trace_lines(&pp);
+        let dropped = trace.iter().filter(|l| l.ends_with("(cached)")).count();
+        (trace.len() - dropped, dropped)
     };
     let small = once(4);
     let large = once(16);

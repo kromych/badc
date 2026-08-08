@@ -1,6 +1,7 @@
 mod ast;
 mod codegen;
 mod compiler;
+mod depfile;
 mod error;
 mod headers;
 mod host;
@@ -35,10 +36,12 @@ pub use {
         jit_run_with_options,
     },
     compiler::{CompileOptions, Compiler, StructDef, StructField},
+    depfile::{escape as dep_escape, prerequisites as dep_prerequisites, render as dep_render},
     error::C5Error,
     headers::embedded_headers,
     host::{Host, Overwrite},
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
+    preprocessor::{IncludeOrigin, IncludeRecord, IncludeStatus},
     program::{Program, VariableInfo},
     vm::{Trace, Vm},
 };

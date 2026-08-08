@@ -266,7 +266,10 @@ Flags (`--target=<spec>`, `--optimize` / `-O`, `--dump-ssa`,
 `--list-symbols`, `-H` / `--show-includes`, plus the VM-only
 `--track-pointers` / `--trace`) can appear anywhere before the
 source. `-D NAME[=VALUE]`, `-U NAME`, `-I path`, and `-include
-FILE` work the same way they do on gcc / clang. Source-driven
+FILE` work the same way they do on gcc / clang, as does the `-M`
+dependency-output family (`-M`, `-MM`, `-MD`, `-MMD`, `-MF`,
+`-MT`, `-MQ`, `-MP`, and the `-Wp,-M[M]D,<file>` spellings a
+kbuild-style build passes). Source-driven
 build flags ride on `#pragma`s -- see "Headers and bindings"
 below.
 
@@ -417,10 +420,11 @@ skip the loader's auto-attach to a console window. Non-PE
 targets keep the default and ignore the directive, so the
 same source builds for every OS.
 
-Unknown directives (and `#include`s that don't resolve through
-the search-path / embedded-header chain) emit a warning rather
-than failing the build; pass `-H` / `--show-includes` to see
-the gcc-`-H`-shape resolution trace on stderr.
+Unknown directives emit a warning rather than failing the build.
+An `#include` that resolves through neither the search paths nor
+the embedded headers is an error, as in gcc / clang; pass `-H` /
+`--show-includes` to see the gcc-`-H`-shape resolution trace on
+stderr.
 
 ### Reaching beyond the predefined set
 

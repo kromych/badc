@@ -3876,7 +3876,8 @@ fn map_file_reports_sections_and_archive_members() {
         "OUTPUT line missing:\n{map}"
     );
 
-    // The two-arg `-Map FILE` form and `-M` (stdout) coexist.
+    // The two-arg `-Map FILE` form and `--print-map` (stdout) coexist.
+    // `-M` is gcc's dependency-output flag, not the map.
     let map2 = dir.join("prog2.map");
     let out = run(
         Command::new(badc())
@@ -3888,16 +3889,16 @@ fn map_file_reports_sections_and_archive_members() {
             .arg(dir.join("libarch.a"))
             .arg("-Map")
             .arg(&map2)
-            .arg("-M")
+            .arg("--print-map")
             .arg("-q")
             .current_dir(&dir),
-        "link with -Map FILE and -M",
+        "link with -Map FILE and --print-map",
     );
     assert!(map2.is_file(), "-Map FILE (two-arg) must write the file");
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout.contains("Linker script and memory map"),
-        "-M must print the map to stdout: {stdout:?}"
+        "--print-map must print the map to stdout: {stdout:?}"
     );
 }
 

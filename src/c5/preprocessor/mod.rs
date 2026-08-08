@@ -265,18 +265,16 @@ pub(crate) struct Preprocessor {
     /// gcc / clang shape so editors' jump-to-error works out of
     /// the box.
     pub warnings: Vec<String>,
-    /// Include-resolution trace. Populated only when
-    /// [`Self::set_show_includes`] is on; matches gcc `-H`'s shape:
-    /// one `". stdio.h"` / `".. stddef.h"` line per `#include`,
-    /// where the leading dots mark nesting depth. The CLI's `-H` /
-    /// `--show-includes` flag flushes this list to stderr after
-    /// preprocessing finishes.
-    pub include_trace: Vec<String>,
-    /// `true` when the build driver asked for include tracing.
-    /// Defaults to `false`; flipping it on costs one push to
-    /// `include_trace` per `#include` resolve attempt and nothing
-    /// else.
-    show_includes: bool,
+    /// Include resolutions in directive order. Populated only when
+    /// [`Self::set_track_includes`] is on. Renders the gcc `-H` trace
+    /// (via [`IncludeRecord::trace_line`]) and supplies the `-M`
+    /// family's prerequisite list, so both read one list.
+    pub include_records: Vec<IncludeRecord>,
+    /// `true` when the build driver asked for include tracking (`-H`
+    /// or a `-M`-family flag). Defaults to `false`; flipping it on
+    /// costs one push to `include_records` per `#include` resolve
+    /// attempt and nothing else.
+    track_includes: bool,
     /// Source-declared entry-point name (`#pragma entrypoint(<id>)`).
     /// `None` means the default `main` is used; set via
     /// the pragma to opt the translation unit into a non-`main`
@@ -668,8 +666,8 @@ impl Preprocessor {
             force_includes: Vec::new(),
             source_label: "<source>".to_string(),
             warnings: Vec::new(),
-            include_trace: Vec::new(),
-            show_includes: false,
+            include_records: Vec::new(),
+            track_includes: false,
             entrypoint: None,
             subsystem: None,
             counter: Cell::new(0),
@@ -758,13 +756,12 @@ impl Preprocessor {
         }
     }
 
-    /// Enable / disable gcc-`-H`-style include tracing. When on,
-    /// every `#include` resolution -- successful or missing --
-    /// emits a line into `include_trace`; the CLI's `-H` /
-    /// `--show-includes` flag flushes the list to stderr after
-    /// preprocessing.
-    pub fn set_show_includes(&mut self, enabled: bool) {
-        self.show_includes = enabled;
+    /// Enable / disable include tracking. When on, every `#include`
+    /// resolution -- successful, cached or missing -- appends to
+    /// `include_records`, which feeds both the CLI's `-H` trace and
+    /// the `-M` family's dependency output.
+    pub fn set_track_includes(&mut self, enabled: bool) {
+        self.track_includes = enabled;
     }
 
     /// Override the filename label used for the top-level translation
@@ -1512,5 +1509,6 @@ use directive::{
     format_line_marker, parse_directive,
 };
 use expand::JoinScan;
+pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};
 use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack, pragma_is_visibility};
 use text::{is_ident, strip_c_comments, unfold_line_continuations};

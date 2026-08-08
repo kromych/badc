@@ -1,36 +1,42 @@
 #!/usr/bin/env python3
-"""Kbuild CC shim: hybrid badc/gcc kernel build.
+"""Kbuild CC shim: badc builds the kernel's C, gcc keeps the rest.
 
-Named as the kernel's CC, substitutes badc objects for kernel C compiles
-while gcc keeps every other duty. Per invocation:
+Named as the kernel's CC. Per invocation:
 
-- Kernel C compile (-c, -D__KERNEL__, a .c source, not -m16/-m32): the real
-  gcc runs first with the original argv, producing kbuild's object and the
-  -Wp,-MMD dependency bookkeeping. Unless the source is on the fallback
-  list, badc then recompiles the unit with the flag set sweep.py replays
-  and replaces the object on success. A badc failure leaves gcc's object
-  standing and is recorded: a unit that passed the sweep is expected to
-  compile here, so every such line is a bug report.
+- Kernel C compile (-c, -D__KERNEL__, a .c source, not -m16/-m32): badc
+  compiles it, and only badc. The rewritten flag set carries the
+  dependency flags through, so badc writes the .d file kbuild's fixdep
+  consumes; no other compiler runs and no other compiler's object can
+  end up in the image. A badc failure is the shim's failure: its exit
+  status and diagnostic go straight to make, which stops at the defect.
+  Recorded in the manifest as `badc` or `fail`.
+- A unit named in ``$BADC_FALLBACK`` is compiled by the real compiler and
+  recorded as `fallback`. That list is the bisect tool for a suspected
+  miscompile: naming a unit is explicit and shows up in the manifest, so
+  a build that used it cannot be mistaken for a pure one.
 - ``--version``: answered with badc's identification when ``$BADC`` is set.
   The kernel captures ``$(CC) --version | head -n1`` as
   ``CONFIG_CC_VERSION_TEXT``, which reaches the boot banner and
-  ``/proc/version``; a hybrid build whose kernel C units are badc's must
-  identify badc there, and the answer must come from this shim itself --
+  ``/proc/version``; the answer must come from this shim itself --
   Kconfig re-runs whenever the recorded text disagrees with what the
   build's ``$(CC)`` reports, so an identification the shim did not give
   cannot survive the build. Classification stays with the reference
   compiler: ``scripts/cc-version.sh`` asks via ``-E``, and badc's claimed
   ``__GNUC__`` (4.2.1) is below the kernel's gcc floor.
 - Anything else (cc-option probes, -E, -S, .S units, links,
-  -m16/-m32 units): the real gcc, untouched. Configuration answers stay
-  the reference compiler's, so the built object population matches the
-  corpus the sweep measured.
+  -m16/-m32 units, the host tools under scripts/ and tools/): the real
+  compiler, untouched. gas still assembles .S and ld still links.
+  Configuration answers stay the reference compiler's, so the built
+  object population matches the corpus the sweep measured.
+
+There is no gcc pre-pass and no substitution. Every kernel C object in
+the tree was produced by badc unless its source is on the fallback list.
 
 Environment: BADC (badc binary, required once a kernel unit appears),
 BADC_REAL_CC (default gcc), BADC_TARGET (default linux-x64),
-BADC_FALLBACK (file of kernel-relative source paths to leave to gcc),
-BADC_MANIFEST (append `badc|fallback|fail<TAB>source[<TAB>detail]` per
-kernel unit), BADC_TIMEOUT (seconds per badc run, default 300).
+BADC_FALLBACK (file of kernel-relative source paths to leave to the real
+compiler), BADC_MANIFEST (append `badc|fallback|fail<TAB>source[<TAB>detail]`
+per kernel unit), BADC_TIMEOUT (seconds per badc run, default 300).
 """
 
 from __future__ import annotations
@@ -39,13 +45,22 @@ import os
 import subprocess
 import sys
 
-# Flag policy identical to sweep.py: keep the preprocessor surface and the
-# code model (-mcmodel=), fold -isystem/-idirafter into -I, honor the
-# recorded optimization level, drop the rest (warnings, -g/-std, the gcc
-# hardening spellings badc has no equivalent for).
-KEEP_ARG = {"-I", "-include", "-iquote"}
+# Flag policy as in sweep.py: keep the preprocessor surface and the code
+# model (-mcmodel=), fold -isystem/-idirafter into -I, honor the recorded
+# optimization level, drop the rest (warnings, -g/-std, the gcc hardening
+# spellings badc has no equivalent for). It differs in the dependency
+# flags below: the sweep compiles into a scratch directory and wants no
+# .d files, while this shim is the kernel's CC and must produce them.
+KEEP_ARG = {"-I", "-include", "-iquote", "-MF", "-MT", "-MQ"}
 FOLD_TO_I = {"-isystem", "-idirafter"}
-DROP_ARG = {"-o", "-MF", "-MQ", "-MT", "--param", "-Xassembler", "-Xlinker"}
+DROP_ARG = {"-o", "--param", "-Xassembler", "-Xlinker"}
+
+# Dependency generation. kbuild names the depfile with -Wp,-MMD,<path> and
+# turns it into the .cmd file with fixdep, so a unit whose compiler never
+# sees these rebuilds on the wrong triggers. badc implements the gcc
+# surface, so the flags forward unchanged.
+DEP_FLAG = {"-M", "-MM", "-MD", "-MMD", "-MP"}
+DEP_WP_PREFIX = ("-Wp,-MMD,", "-Wp,-MD,")
 
 # Speculative-execution mitigations. These change what the built object
 # guarantees, not just how it is built, so they are forwarded rather than
@@ -108,7 +123,7 @@ def rewrite(argv: list[str]) -> list[str]:
         elif a.startswith("-I") and len(a) > 2:
             out += ["-I", a[2:]]
             i += 1
-        elif a.startswith(("-D", "-U")):
+        elif a.startswith(("-D", "-U")) or a in DEP_FLAG or a.startswith(DEP_WP_PREFIX):
             out.append(a)
             i += 1
         elif a in DROP_ARG:
@@ -203,48 +218,50 @@ def main(argv: list[str]) -> int:
                 and "-m16" not in argv and "-m32" not in argv)
     if not kernel_c:
         os.execvp(real, [real, *argv])
-
-    rc = subprocess.run([real, *argv]).returncode
-    if rc != 0:
-        return rc
     try:
         obj = argv[argv.index("-o") + 1]
     except (ValueError, IndexError):
-        return 0
+        # kbuild always names the object; a kernel C compile without -o is
+        # some other caller's shape, so leave it to the real compiler
+        # rather than guessing an output path.
+        os.execvp(real, [real, *argv])
     if fallback_listed(src, obj):
+        # Opt-in only, and recorded before the exec: a build that used the
+        # list says so in the manifest.
         manifest("fallback", src, "listed")
-        return 0
+        os.execvp(real, [real, *argv])
 
     if not badc:
         sys.exit("buildcc: $BADC is not set")
     target = os.environ.get("BADC_TARGET", "linux-x64")
     timeout = float(os.environ.get("BADC_TIMEOUT", "300"))
 
-    # badc writes next to the object and replaces it only on success, so a
-    # failure of any kind leaves gcc's object in place.
-    tmp = obj + ".badc"
-    cmd = [badc, "--gnu", "-q", "-c", f"--target={target}", "-o", tmp,
+    cmd = [badc, "--gnu", "-q", "-c", f"--target={target}", "-o", obj,
            *rewrite(argv), src]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True,
                            timeout=timeout)
-        rc_b, err = r.returncode, r.stderr
+        rc, err = r.returncode, r.stderr
     except subprocess.TimeoutExpired:
-        rc_b, err = 900, f"timeout after {timeout:.0f}s"
-    if rc_b == 0 and os.path.isfile(tmp):
-        os.replace(tmp, obj)
+        rc, err = 900, f"timeout after {timeout:.0f}s"
+    if rc == 0:
         manifest("badc", src)
-    else:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        lines = [ln for ln in err.splitlines() if ln.strip()]
-        first = next((ln for ln in lines
-                      if "error" in ln or "panicked" in ln),
-                     lines[-1] if lines else f"exit {rc_b}")
-        manifest("fail", src, first)
-    return 0
+        return 0
+
+    # No second compiler runs. Drop any partial object so a later make
+    # cannot mistake it for a built one, put badc's diagnostic on stderr,
+    # and fail so the build stops at the defect.
+    try:
+        os.unlink(obj)
+    except OSError:
+        pass
+    lines = [ln for ln in err.splitlines() if ln.strip()]
+    first = next((ln for ln in lines
+                  if "error" in ln or "panicked" in ln),
+                 lines[-1] if lines else f"exit {rc}")
+    manifest("fail", src, first)
+    sys.stderr.write(err if err.endswith("\n") else err + "\n")
+    return rc or 1
 
 
 if __name__ == "__main__":

@@ -629,7 +629,10 @@ def probes(vm: VM) -> dict:
     out: dict = {}
     out["uname"] = vm.ssh("uname -r", check=True).stdout.strip()
     out["proc_version"] = vm.ssh("cat /proc/version").stdout.strip()
-    out["dmesg_banner"] = vm.ssh("dmesg | head -1", sudo=True).stdout.strip()
+    # Not `head -1`: only x86_64 prints the version banner first. arm64
+    # opens with the CPU-identification line.
+    out["dmesg_banner"] = vm.ssh(
+        "dmesg | grep -m1 'Linux version'", sudo=True).stdout.strip()
     out["cmdline"] = vm.ssh("cat /proc/cmdline").stdout.strip()
     for _ in range(60):
         state = vm.ssh("systemctl is-system-running").stdout.strip()

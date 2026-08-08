@@ -2477,35 +2477,7 @@ fn parse_section_item(
         // directive on ELF targets; `.zero` fixes the fill at zero; `.fill`
         // repeats a multi-byte unit.
         ".skip" | ".space" | ".zero" | ".fill" => parse_fill_directive(tok, rest),
-        ".ascii" | ".asciz" | ".string" => {
-            let s = rest
-                .strip_prefix('"')
-                .and_then(|r| r.strip_suffix('"'))
-                .ok_or_else(|| {
-                    alloc::format!("inline asm: string literal expected after `{tok}`")
-                })?;
-            let mut bytes: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
-            let mut it = s.bytes();
-            while let Some(b) = it.next() {
-                // The template already went through C string parsing; only
-                // the simple escapes survive here.
-                if b == b'\\' {
-                    match it.next() {
-                        Some(b'n') => bytes.push(b'\n'),
-                        Some(b't') => bytes.push(b'\t'),
-                        Some(b'0') => bytes.push(0),
-                        Some(c) => bytes.push(c),
-                        None => break,
-                    }
-                } else {
-                    bytes.push(b);
-                }
-            }
-            if tok != ".ascii" {
-                bytes.push(0);
-            }
-            Ok(AsmSectionItem::Bytes(bytes))
-        }
+        ".ascii" | ".asciz" | ".string" => parse_string_directive(tok, rest),
         ".globl" | ".global" => {
             let name = rest.trim();
             if !is_asm_symbol_name(name) {
@@ -2617,6 +2589,109 @@ pub(crate) fn parse_fill_operands<'a>(
 /// True for a directive of the space-and-fill family.
 pub(crate) fn is_fill_directive(tok: &str) -> bool {
     matches!(tok, ".skip" | ".space" | ".zero" | ".fill")
+}
+
+/// `.ascii` / `.asciz` / `.string`: a comma-separated list of string
+/// operands. Adjacent literals within one operand concatenate; `.asciz` and
+/// `.string` append one NUL per operand, `.ascii` appends none (GNU as).
+/// Escapes are the assembler's: the C parse already consumed one level, so
+/// `\\n` in source arrives here as `\n`.
+fn parse_string_directive(tok: &str, rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
+    let b = rest.as_bytes();
+    let mut bytes: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
+    let mut i = 0usize;
+    let skip_ws = |i: &mut usize| {
+        while *i < b.len() && b[*i].is_ascii_whitespace() {
+            *i += 1;
+        }
+    };
+    loop {
+        // One operand: one or more adjacent string literals.
+        let mut any = false;
+        loop {
+            skip_ws(&mut i);
+            if b.get(i) != Some(&b'"') {
+                break;
+            }
+            i += 1;
+            loop {
+                let c = *b.get(i).ok_or_else(|| {
+                    alloc::format!("inline asm: unterminated string in `{tok} {rest}`")
+                })?;
+                i += 1;
+                match c {
+                    b'"' => break,
+                    b'\\' => {
+                        let e = *b.get(i).ok_or_else(|| {
+                            alloc::format!("inline asm: unterminated escape in `{tok} {rest}`")
+                        })?;
+                        i += 1;
+                        match e {
+                            b'n' => bytes.push(b'\n'),
+                            b't' => bytes.push(b'\t'),
+                            b'r' => bytes.push(b'\r'),
+                            b'b' => bytes.push(8),
+                            b'f' => bytes.push(12),
+                            // Up to three octal digits.
+                            b'0'..=b'7' => {
+                                let mut v = (e - b'0') as u32;
+                                for _ in 0..2 {
+                                    match b.get(i) {
+                                        Some(&d @ b'0'..=b'7') => {
+                                            v = v * 8 + (d - b'0') as u32;
+                                            i += 1;
+                                        }
+                                        _ => break,
+                                    }
+                                }
+                                bytes.push(v as u8);
+                            }
+                            b'x' => {
+                                // GNU as folds any run of hex digits mod 256.
+                                let mut v = 0u32;
+                                let mut n = 0;
+                                while let Some(d) = b.get(i).and_then(|c| (*c as char).to_digit(16))
+                                {
+                                    v = (v * 16 + d) & 0xff;
+                                    i += 1;
+                                    n += 1;
+                                }
+                                if n == 0 {
+                                    return Err(alloc::format!(
+                                        "inline asm: `\\x` without hex digits in `{tok} {rest}`"
+                                    ));
+                                }
+                                bytes.push(v as u8);
+                            }
+                            // `\"`, `\\`, and any other escape: the character.
+                            _ => bytes.push(e),
+                        }
+                    }
+                    _ => bytes.push(c),
+                }
+            }
+            any = true;
+        }
+        if !any {
+            return Err(alloc::format!(
+                "inline asm: string literal expected in `{tok} {rest}`"
+            ));
+        }
+        if tok != ".ascii" {
+            bytes.push(0);
+        }
+        skip_ws(&mut i);
+        match b.get(i) {
+            None => break,
+            Some(b',') => i += 1,
+            Some(_) => {
+                return Err(alloc::format!(
+                    "inline asm: junk after string in `{tok} {rest}`"
+                ));
+            }
+        }
+    }
+    Ok(AsmSectionItem::Bytes(bytes))
 }
 
 fn parse_fill_directive(tok: &str, rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
@@ -5513,6 +5588,32 @@ mod asm_section_tests {
         assert!(parse_section_value("a - b + 4").is_err());
         // A `+ .` (positive location counter) is not a supported relocation.
         assert!(parse_section_value("sym + .").is_err());
+    }
+
+    #[test]
+    fn string_directive_operand_lists() {
+        // `.ascii` / `.asciz` / `.string` take a comma-separated operand
+        // list; adjacent literals in one operand concatenate; `.asciz` /
+        // `.string` terminate each operand, `.ascii` terminates none.
+        let bytes = |tok: &str, rest: &str| match parse_string_directive(tok, rest).unwrap() {
+            AsmSectionItem::Bytes(b) => b,
+            other => panic!("expected Bytes, got {other:?}"),
+        };
+        assert_eq!(bytes(".ascii", "\"A\""), b"A");
+        assert_eq!(bytes(".asciz", "\"B\""), b"B\0");
+        assert_eq!(bytes(".ascii", "\"C\", \"D\""), b"CD");
+        assert_eq!(bytes(".asciz", "\"E\", \"F\""), b"E\0F\0");
+        assert_eq!(bytes(".ascii", "\"G\" \"H\""), b"GH");
+        assert_eq!(bytes(".string", "\"I\", \"J\""), b"I\0J\0");
+        // The metadata-section shape: an empty literal adjacent to an
+        // escaped NUL is one empty operand plus the NUL byte.
+        assert_eq!(bytes(".ascii", "\"\" \"\\0\""), b"\0");
+        // Assembler escapes: octal and hex runs, and pass-through for the
+        // quoted quote and backslash.
+        assert_eq!(bytes(".ascii", "\"\\101\\x42\\n\\\\\""), b"AB\n\\");
+        assert!(parse_string_directive(".ascii", "\"a\" junk").is_err());
+        assert!(parse_string_directive(".ascii", "\"a\", ").is_err());
+        assert!(parse_string_directive(".ascii", "\"open").is_err());
     }
 
     #[test]

@@ -1297,11 +1297,7 @@ impl<'a> LdsLinker<'a> {
     /// diverges from the reference; plain identity dedup tracks it
     /// closely. Kept a distinct method so a full suffix pass can slot
     /// in when byte-identity across a fresh merge is required (TODO).
-    fn build_string_pool(
-        &self,
-        members: &[usize],
-        align: u64,
-    ) -> (Vec<u8>, PoolMemberMaps) {
+    fn build_string_pool(&self, members: &[usize], align: u64) -> (Vec<u8>, PoolMemberMaps) {
         let mut pool: Vec<u8> = Vec::new();
         let mut interned: HashMap<Vec<u8>, u64> = HashMap::new();
         let mut maps: HashMap<usize, (Vec<u64>, Vec<u64>)> = HashMap::new();
@@ -2217,8 +2213,7 @@ impl<'a> LdsLinker<'a> {
                             if sym.kind() == STT_SECTION {
                                 self.merge_remap(i, sym.value.wrapping_add(addend as u64))
                             } else {
-                                self.merge_remap(i, sym.value)
-                                    .wrapping_add(addend as u64)
+                                self.merge_remap(i, sym.value).wrapping_add(addend as u64)
                             }
                         } else {
                             sym.value.wrapping_add(addend as u64)
@@ -4405,7 +4400,13 @@ SECTIONS {
         .expect("parses");
         // gcc's .rodata.str1.8 shape: 8-aligned strings, NUL padding.
         let a = TestObj::new()
-            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0u8; 4])
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0u8; 4],
+            )
             .sec(
                 ".rodata.str1.8",
                 SHT_PROGBITS,
@@ -4531,7 +4532,13 @@ SECTIONS {
         )
         .expect("parses");
         let a = TestObj::new()
-            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 8, &[0u8; 8])
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 8],
+            )
             .sec(".rodata", SHT_PROGBITS, SHF_ALLOC, 8, &[0u8; 8])
             .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
             .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)

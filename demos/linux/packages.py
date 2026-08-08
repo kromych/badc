@@ -21,11 +21,16 @@ vm. The build runs in <workdir>/linux-<version>; packages land in <workdir>
 packaging tools (an rpm distribution), --deb-tools names a prefix that is
 provisioned from the host's own package mirror via `dnf download` + rpm2cpio
 extraction; nothing is installed system-wide.
+
+Concurrent runs on one host are supported: the ssh forward takes a free port
+per run and the workdir is held under an exclusive lock, so a second run
+against the same workdir fails immediately instead of corrupting the first.
 """
 
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -33,15 +38,25 @@ import platform
 import re
 import shlex
 import shutil
+import socket
 import subprocess
 import sys
 import tarfile
 import time
-import urllib.request
 from pathlib import Path
 
 LINUX_DIR = Path(__file__).resolve().parent
 REPO_ROOT = LINUX_DIR.parents[1]
+
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
+import _fetch  # noqa: E402
+
+# Cloud images are mirrored on this release rather than pulled from the
+# distributions: Debian keeps only the last few dated cloud snapshots, so an
+# upstream URL pinned to a snapshot stops resolving within weeks. `upstream`
+# and `upstream_digest` record where each asset came from and the digest the
+# distribution publishes for it, so the mirrored bytes stay auditable.
+IMAGE_RELEASE_TAG = "vendor-deps-v1"
 
 ARCHES = {
     "x86_64": {
@@ -49,8 +64,17 @@ ARCHES = {
         "make_target": "bzImage",
         "pkg": "deb",
         "qemu": "qemu-system-x86_64",
-        "image_url": "https://cloud.debian.org/images/cloud/trixie/latest/"
-                     "debian-13-genericcloud-amd64.qcow2",
+        "image": {
+            "asset": "debian-13-genericcloud-amd64-20260803-2559.qcow2",
+            "sha256": "d4c515da9031f6e79851de7ddbf50ec9320427f91a7ae99bd0c910d3676be9e1",
+            "upstream": "https://cloud.debian.org/images/cloud/trixie/"
+                        "20260803-2559/"
+                        "debian-13-genericcloud-amd64-20260803-2559.qcow2",
+            "upstream_digest":
+                "sha512:769562604ecaac26b661167891ef922f71f4d87d50a11423fc04e"
+                "51444fda0d882c87996dd1181170d233627f4728e6722db2695c0ef753da"
+                "d762c4ac4ed32e1",
+        },
         "distro": "debian",
         # The corpus defconfig builds these as modules; sit pulls ip_tunnel
         # and tunnel4, so the load also exercises depmod dependency data.
@@ -65,9 +89,16 @@ ARCHES = {
         "make_target": "Image",
         "pkg": "rpm",
         "qemu": "qemu-system-aarch64",
-        "image_url": "https://download.fedoraproject.org/pub/fedora/linux/"
-                     "releases/44/Cloud/aarch64/images/"
-                     "Fedora-Cloud-Base-Generic-44-1.7.aarch64.qcow2",
+        "image": {
+            "asset": "Fedora-Cloud-Base-Generic-44-1.7.aarch64.qcow2",
+            "sha256": "55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e4002a41a72fa0d5b",
+            "upstream": "https://dl.fedoraproject.org/pub/fedora/linux/"
+                        "releases/44/Cloud/aarch64/images/"
+                        "Fedora-Cloud-Base-Generic-44-1.7.aarch64.qcow2",
+            "upstream_digest":
+                "sha256:55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e4002a"
+                "41a72fa0d5b",
+        },
         "distro": "fedora",
         "modprobe": ["fuse", "btrfs"],
         "expect_units": 10000,
@@ -124,9 +155,17 @@ def sha256_of(path: Path) -> str:
 
 
 def run(cmd, cwd=None, env=None, timeout=None, capture=True, check=False):
-    r = subprocess.run(cmd, cwd=cwd, env=env, timeout=timeout, text=True,
-                       stdin=subprocess.DEVNULL,
-                       capture_output=capture)
+    # A timeout is reported as an exit status, not an exception: every caller
+    # already handles a non-zero status, and an escaping TimeoutExpired would
+    # end the run without writing the report.
+    try:
+        r = subprocess.run(cmd, cwd=cwd, env=env, timeout=timeout, text=True,
+                           stdin=subprocess.DEVNULL,
+                           capture_output=capture)
+    except subprocess.TimeoutExpired as e:
+        r = subprocess.CompletedProcess(
+            cmd, 124, e.stdout or "",
+            (e.stderr or "") + f"\ntimed out after {timeout}s")
     if check and r.returncode != 0:
         tail = (r.stderr or r.stdout or "").strip().splitlines()[-8:]
         die(f"{' '.join(map(str, cmd))} exited {r.returncode}\n" +
@@ -216,17 +255,38 @@ def read_manifest(path: Path) -> dict[str, list[str]]:
 
 # --- package ----------------------------------------------------------------
 
+def deb_tool_stamp() -> str:
+    """Digest of the rpm file names `dnf` resolves the tool set to now.
+
+    The mirror host rotates per query, so only the resolved NEVRAs are
+    hashed. A prefix whose stamp differs was built against a package set the
+    mirror no longer serves and is rebuilt rather than reused.
+    """
+    r = run(["dnf", "download", "--url", "--arch", platform.machine(),
+             "--arch", "noarch", *DEB_TOOL_RPMS], check=True)
+    names = sorted(u.rsplit("/", 1)[-1] for u in r.stdout.split()
+                   if u.endswith(".rpm"))
+    if not names:
+        die(f"dnf resolved no rpms for {' '.join(DEB_TOOL_RPMS)}")
+    return hashlib.sha256("\n".join(names).encode()).hexdigest()
+
+
 def ensure_deb_tools(prefix: Path) -> None:
     """Provision the Debian packaging tools under a prefix on an rpm host.
 
     `dnf download` + rpm2cpio extraction only; nothing touches the system.
     """
-    if (prefix / "usr/bin/dpkg-buildpackage").exists():
-        return
     if not shutil.which("dnf"):
         die(f"no dpkg-buildpackage on PATH and no dnf to provision "
             f"{prefix}; install the dpkg/debhelper suite or point "
             f"--deb-tools at a provisioned prefix")
+    stamp = deb_tool_stamp()
+    stamp_file = prefix / "stamp"
+    if ((prefix / "usr/bin/dpkg-buildpackage").exists()
+            and stamp_file.is_file()
+            and stamp_file.read_text().strip() == stamp):
+        return
+    shutil.rmtree(prefix, ignore_errors=True)
     prefix.mkdir(parents=True, exist_ok=True)
     rpms = prefix / "rpms"
     rpms.mkdir(exist_ok=True)
@@ -340,18 +400,33 @@ def assert_manifest(args, failures: list[str]) -> dict:
 # --- vm ---------------------------------------------------------------------
 
 def ensure_image(args, arch) -> Path:
+    """The cloud image, verified against a pinned sha256 in every path.
+
+    An image that does not match is a hard failure: the gate's verdict has to
+    be attributable to the kernel under test, not to whatever the mirror
+    served that day.
+    """
+    spec = arch["image"]
     if args.image:
         if not args.image.is_file():
             die(f"no image at {args.image}")
+        want = args.image_sha256 or spec["sha256"]
+        got = sha256_of(args.image)
+        if got != want:
+            die(f"image {args.image} has sha256 {got}, expected {want} "
+                f"(--image-sha256 states the digest of an ad-hoc image)")
         return args.image
-    dst = args.workdir / arch["image_url"].rsplit("/", 1)[1]
-    if not dst.is_file():
-        log(f"fetching {arch['image_url']}")
-        tmp = dst.with_suffix(".part")
-        with urllib.request.urlopen(arch["image_url"]) as r, open(tmp, "wb") as f:
-            shutil.copyfileobj(r, f)
-        tmp.rename(dst)
+    args.image_cache.mkdir(parents=True, exist_ok=True)
+    dst = args.image_cache / spec["asset"]
+    _fetch.fetch_and_verify(IMAGE_RELEASE_TAG, spec["asset"], dst,
+                            spec["sha256"], log)
     return dst
+
+
+def free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
 
 def make_seed(args) -> Path:
@@ -407,23 +482,42 @@ def probe_kvm(args, arch) -> bool:
     return True
 
 
+def resolve_accel(args, arch) -> str:
+    """The accelerator the vm phase will use.
+
+    `--accel kvm` fails when /dev/kvm is unusable rather than running the
+    same validation an order of magnitude slower under a different
+    execution engine; `auto` reports the substitution it makes.
+    """
+    if args.accel == "tcg":
+        return "tcg"
+    if probe_kvm(args, arch):
+        return "kvm"
+    if args.accel == "kvm":
+        die("--accel kvm: no usable /dev/kvm on this host")
+    log("no usable /dev/kvm: running under tcg (--accel kvm to require kvm)")
+    return "tcg"
+
+
 class VmError(Exception):
     """A vm-phase step failed. Recorded as a run failure; the run still
     tears the VM down and writes its report."""
 
 
 class VM:
-    def __init__(self, args, arch, disk: Path, seed: Path):
+    def __init__(self, args, arch, disk: Path, seed: Path, accel: str):
         self.args, self.arch, self.disk, self.seed = args, arch, disk, seed
+        self.accel = accel
+        # `host` passes the machine's own features through; under tcg there is
+        # no host to pass through, so the model is the emulator's maximum.
+        self.cpu = args.vm_cpu or ("host" if accel == "kvm" else "max")
         self.console = args.workdir / f"console-{args.arch}.log"
         self.pidfile = args.workdir / f"vm-{args.arch}.pid"
         self.key = args.workdir / "vm-key"
 
     def start(self) -> None:
         args, arch = self.args, self.arch
-        kvm = probe_kvm(args, arch)
-        cpu = "host" if kvm else "max"
-        accel = "kvm" if kvm else "tcg"
+        accel, cpu = self.accel, self.cpu
         if args.arch == "aarch64":
             machine = ["-M", f"virt,accel={accel}"]
             for code, vars_ in AARCH64_FIRMWARE:
@@ -668,15 +762,18 @@ def probes(vm: VM) -> dict:
 
 def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
     image = ensure_image(args, arch)
+    accel = resolve_accel(args, arch)
     seed = make_seed(args)
     disk = args.workdir / f"disk-{args.arch}.qcow2"
     disk.unlink(missing_ok=True)
     run(["qemu-img", "create", "-q", "-f", "qcow2", "-b", str(image.resolve()),
          "-F", "qcow2", str(disk), args.vm_disk], check=True)
 
-    vm = VM(args, arch, disk, seed)
+    vm = VM(args, arch, disk, seed, accel)
     vm.start()
-    result: dict = {"image": image.name, "image_sha256": sha256_of(image)}
+    result: dict = {"image": image.name, "image_sha256": arch["image"]["sha256"],
+                    "accel": accel, "cpu": vm.cpu, "ssh_port": args.ssh_port,
+                    "vm_cpus": args.vm_cpus, "vm_mem_mb": args.vm_mem}
     try:
         boot_id = vm.wait_ssh(args.vm_timeout)
         log("stock system up; capturing baseline")
@@ -693,10 +790,8 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         log(f"installing {', '.join(p.name for p in packages)}")
         vm.scp(packages, "")
         names = " ".join(shlex.quote(p.name) for p in packages)
-        if arch["pkg"] == "deb":
-            r = vm.ssh(f"dpkg -i {names}", sudo=True, timeout=1800)
-        else:
-            r = vm.ssh(f"rpm -ivh {names}", sudo=True, timeout=1800)
+        cmd = f"dpkg -i {names}" if arch["pkg"] == "deb" else f"rpm -ivh {names}"
+        r = vm.ssh(cmd, sudo=True, timeout=args.install_timeout)
         result["install_rc"] = r.returncode
         result["install_tail"] = (r.stdout + r.stderr).strip()[-2000:]
         if r.returncode != 0:
@@ -855,13 +950,30 @@ def main() -> int:
                     help="prefix for the Debian packaging tools on an rpm "
                          "host; provisioned there when missing")
     ap.add_argument("--image", type=Path,
-                    help="cloud image (default: fetch the pinned URL)")
-    ap.add_argument("--ssh-port", type=int, default=22422)
+                    help="cloud image (default: fetch the pinned asset)")
+    ap.add_argument("--image-sha256",
+                    help="expected sha256 of an ad-hoc --image; the pinned "
+                         "digest is required without it")
+    ap.add_argument("--image-cache", type=Path,
+                    default=LINUX_DIR / ".cache" / "images",
+                    help="where the pinned image is kept between runs")
+    ap.add_argument("--accel", choices=("auto", "kvm", "tcg"), default="auto",
+                    help="qemu accelerator; kvm fails when /dev/kvm is "
+                         "unusable instead of substituting tcg")
+    ap.add_argument("--ssh-port", type=int, default=0,
+                    help="host port forwarded to the vm's ssh (default: a "
+                         "free port, so runs do not collide)")
+    ap.add_argument("--vm-cpu", default="",
+                    help="qemu -cpu model (default: host under kvm, max "
+                         "under tcg)")
     ap.add_argument("--vm-cpus", type=int, default=2)
     ap.add_argument("--vm-mem", type=int, default=2048)
     ap.add_argument("--vm-disk", default="12G")
     ap.add_argument("--vm-timeout", type=int, default=900,
                     help="seconds to wait for ssh after a boot")
+    ap.add_argument("--install-timeout", type=int, default=1800,
+                    help="seconds for the package install, which regenerates "
+                         "the initramfs and is the longest single step")
     ap.add_argument("--qemu-args", default="")
     ap.add_argument("--workdir", type=Path,
                     default=Path.cwd() / "packages-out")
@@ -874,6 +986,18 @@ def main() -> int:
         die(f"unknown phases: {sorted(unknown)}")
     args.workdir = args.workdir.resolve()
     args.workdir.mkdir(parents=True, exist_ok=True)
+    # Held for the process lifetime: the tree, the packages and the vm disk
+    # all live in the workdir, so two runs sharing one would corrupt both.
+    lock = (args.workdir / "lock").open("w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        die(f"another packages.py run holds {args.workdir}; pass a distinct "
+            f"--workdir")
+    lock.write(f"{os.getpid()}\n")
+    lock.flush()
+    if not args.ssh_port:
+        args.ssh_port = free_port()
     args.badc = Path(args.badc).resolve()
     args.manifest = args.workdir / f"manifest-{args.arch}.txt"
     if not args.expect_units:

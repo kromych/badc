@@ -44,6 +44,11 @@ const COMPILE_SKIPLIST: &[&str] = &[
     // can not be used when making a PIE object". The object-path
     // relocation shape is locked by a linker test.
     "file_scope_asm_sym_mem.c",
+    // `-mcmodel=kernel` relocatable-object fixture: its externs have no
+    // definition to link and the model itself requires `-c` on
+    // linux-x64 only. Snapshotted via its `// snapshot-flags:`
+    // directive; the relocation shape is locked by linker tests.
+    "kernel_model_extern_data.c",
 ];
 
 /// Each calls a declared-but-undefined function from a statically dead

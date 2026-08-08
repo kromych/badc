@@ -10615,6 +10615,130 @@ fn x86_percpu_seg_a_operand_uses_a_direct_pcrel_reloc() {
     assert_eq!(addends, [-4, 4], "PC32 addend must be field offset - 4");
 }
 
+/// External-data access patterns from kernel objects: scalar read,
+/// address-of, struct member, indexed array. One source, compiled under
+/// both x86-64 code models by the two tests below.
+const X86_CODE_MODEL_EXTERN_SRC: &str = "\
+    extern unsigned long jiffies;\n\
+    extern struct net_t { int ifindex; } init_net;\n\
+    extern struct cpu_t { unsigned char family; } cpu_info;\n\
+    extern unsigned long __per_cpu_offset[];\n\
+    extern const unsigned char _ctype[];\n\
+    extern int strcmp(const char *, const char *);\n\
+    unsigned long read_jiffies(void) { return jiffies; }\n\
+    unsigned long *jiffies_addr(void) { return &jiffies; }\n\
+    int net_index(void) { return init_net.ifindex; }\n\
+    unsigned char family(void) { return cpu_info.family; }\n\
+    unsigned long pcpu_base(int cpu) { return __per_cpu_offset[cpu]; }\n\
+    int ctype_class(int c) { return _ctype[c & 0xff]; }\n\
+    int (*cmp_fn(void))(const char *, const char *) { return &strcmp; }\n";
+
+const X86_CODE_MODEL_EXTERN_SYMS: &[&str] = &[
+    "jiffies",
+    "init_net",
+    "cpu_info",
+    "__per_cpu_offset",
+    "_ctype",
+    "strcmp",
+];
+
+#[test]
+fn x86_kernel_model_extern_addresses_are_sign_extended_abs32() {
+    // Under `-mcmodel=kernel` every symbol sits in the sign-extended
+    // 32-bit range (psABI 3.5.1), so an external address materializes as
+    // `mov reg, $sym` (`REX.W c7 /0`) with R_X86_64_32S at the imm32 and
+    // no GOT load. A consumer that applies the relocations itself (the
+    // kernel's module loader accepts NONE/64/32/32S/PC32/PLT32/PC64)
+    // rejects the GOT form the small model emits.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{CodeModel, NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    const R_X86_64_GOTPCREL: u32 = 9;
+    const R_X86_64_32S: u32 = 11;
+    const R_X86_64_REX_GOTPCRELX: u32 = 42;
+
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        code_model: CodeModel::Kernel,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(
+        X86_CODE_MODEL_EXTERN_SRC.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse");
+
+    assert!(
+        !obj.text_relocs
+            .iter()
+            .any(|r| r.rtype == R_X86_64_REX_GOTPCRELX || r.rtype == R_X86_64_GOTPCREL),
+        "the kernel model must not address anything through the GOT"
+    );
+    for name in X86_CODE_MODEL_EXTERN_SYMS {
+        let relocs: alloc::vec::Vec<_> = obj
+            .text_relocs
+            .iter()
+            .filter(|r| obj.symbols[r.sym_idx].name == *name)
+            .collect();
+        assert!(!relocs.is_empty(), "no text reloc against `{name}`");
+        for r in relocs {
+            assert_eq!(r.rtype, R_X86_64_32S, "`{name}` reloc type");
+            assert_eq!(r.addend, 0, "`{name}` addend");
+            // The imm32 follows `REX.W c7 /0` with mod=11: REX is
+            // 0x48/0x49 (B extends the destination), modrm reg field 0.
+            let i = r.offset as usize - 3;
+            assert_eq!(obj.text[i] & 0xfe, 0x48, "`{name}` REX prefix");
+            assert_eq!(obj.text[i + 1], 0xc7, "`{name}` opcode");
+            assert_eq!(obj.text[i + 2] & 0xf8, 0xc0, "`{name}` modrm");
+        }
+    }
+}
+
+#[test]
+fn x86_small_model_extern_addresses_keep_the_relaxable_got_load() {
+    // Default (small) model, same source: every external address rides
+    // the relaxable GOT load, R_X86_64_REX_GOTPCRELX at the disp32 of
+    // `mov reg, [rip+disp32]`, and no absolute form reaches the object.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    const R_X86_64_32S: u32 = 11;
+    const R_X86_64_REX_GOTPCRELX: u32 = 42;
+
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(
+        X86_CODE_MODEL_EXTERN_SRC.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse");
+
+    assert!(
+        !obj.text_relocs.iter().any(|r| r.rtype == R_X86_64_32S),
+        "the small model must not emit absolute text references"
+    );
+    for name in X86_CODE_MODEL_EXTERN_SYMS {
+        assert!(
+            obj.text_relocs
+                .iter()
+                .any(|r| obj.symbols[r.sym_idx].name == *name && r.rtype == R_X86_64_REX_GOTPCRELX),
+            "`{name}` must keep the relaxable GOT load"
+        );
+    }
+}
+
 #[test]
 fn x86_this_ip_rip_relative_lea_has_no_reloc() {
     // `_THIS_IP_` compiles `lea disp(%%rip), %reg` with a literal

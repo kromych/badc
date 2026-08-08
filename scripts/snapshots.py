@@ -14,6 +14,13 @@ for cosmetic reasons. Cross-arch ELFs are produced via `badc
 (llvm-objdump on macOS, GNU objdump on Linux, both handle either ELF
 class).
 
+A fixture may pin extra badc flags for its snapshots with a leading
+`// snapshot-flags: ...` comment (e.g. `-c -mcmodel=kernel` for a form
+only a relocatable object shows). The flags apply to the SSA and every
+asm emission; a target that rejects them drops that snapshot. With `-c`
+the object is disassembled with relocations shown (`-r`), which is where
+the addressing form of an unresolved reference is visible.
+
 Fixtures that fail to compile (missing headers in the stripped fixture
 form, etc.) are logged but don't fail the run.
 """
@@ -135,6 +142,14 @@ def normalise_asm(text: str) -> str:
     return text
 
 
+SNAPSHOT_FLAGS_RE = re.compile(r"^//\s*snapshot-flags:\s*(.+?)\s*$", re.MULTILINE)
+
+
+def fixture_flags(src: Path) -> list[str]:
+    m = SNAPSHOT_FLAGS_RE.search(src.read_text(errors="replace"))
+    return m.group(1).split() if m else []
+
+
 def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> bool:
     # Pin the cross-target so the SSA dump's register allocation is
     # host-independent (the docstring at the top of this file calls
@@ -154,6 +169,7 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> boo
             "-O",
             "--target=linux-x64",
             "--dump-ssa",
+            *fixture_flags(src),
             "-o",
             str(tmp_bin),
             str(rel),
@@ -226,8 +242,9 @@ def build_info_stop_address(binary: Path) -> int | None:
 def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root: Path) -> bool:
     # Relative source path + cwd=root: keep `__FILE__` checkout-independent
     # (see emit_ssa).
+    flags = fixture_flags(src)
     proc = subprocess.run(
-        [str(badc), "-q", "-O", f"--target={target}", "-o", str(tmp_bin),
+        [str(badc), "-q", "-O", f"--target={target}", *flags, "-o", str(tmp_bin),
          str(src.relative_to(root))],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -239,6 +256,8 @@ def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root:
     extra: list[str] = []
     if stop is not None:
         extra.append(f"--stop-address=0x{stop:x}")
+    if "-c" in flags:
+        extra.append("-r")
     # llvm-objdump's output text differs from GNU objdump's enough that
     # snapshots taken with one cannot match the other (mnemonic spelling,
     # operand syntax, header line shape). Prefer llvm-objdump everywhere

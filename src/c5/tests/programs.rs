@@ -1242,6 +1242,15 @@ fn member_name_space_keeps_object_shape() {
 }
 
 #[test]
+fn string_literal_const_index_fold() {
+    // C99 6.4.5p6: literal storage is immutable, so a constant-index
+    // read may fold to the initializer's byte; the folded value must
+    // equal the runtime load at every position, including the
+    // terminator and concatenated parts.
+    assert_eq!(run_fixture("string_literal_const_index_fold.c"), 0);
+}
+
+#[test]
 fn attr_arg_keeps_declared_type() {
     // An attribute argument (`aligned(sizeof(T))`, `_Alignas(sizeof
     // expr)`, ...) parses with the expression and type-name machinery;

@@ -58,9 +58,10 @@ impl<'a> ConstData<'a> {
             })
             .map(|s| (s.val, s.val + s.reserved_data_bytes))
             .collect();
-        // Staged local-initializer templates: anonymous, so nothing can
-        // write them; their image is their value for the whole run.
-        intervals.extend(program.local_init_templates.iter().copied());
+        // Anonymous immutable data: string literals (C99 6.4.5p6),
+        // `__func__` arrays, and staged local-initializer templates.
+        // Nothing can write them; their image is their value.
+        intervals.extend(program.const_data_ranges.iter().copied());
         // Every form of data relocation: a link-time address in this
         // unit's data, an extern symbol's address, and a function
         // address. The image bytes under any of them are a placeholder.

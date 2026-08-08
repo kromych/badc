@@ -428,7 +428,7 @@ impl Compiler {
             while self.lex.tk == '"' {
                 self.next()?;
             }
-            self.data.push(0);
+            self.push_literal_nul();
             let bytes = (addr as u64).to_le_bytes();
             self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
             self.note_init_reloc(var_offset as usize);

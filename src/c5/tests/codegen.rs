@@ -5196,6 +5196,57 @@ fn typeof_literal_member_with_sizeof_aligned_attr_stores_in_place() {
     }
 }
 
+/// A compile-time assertion guarded by a constant-index read of a
+/// string literal must fold away at `-O`: the load folds to the
+/// literal's byte (C99 6.4.5p6 makes the storage immutable), the guard
+/// becomes constant, and no reference to the assert helper survives.
+/// The kernel's newline check (`fmt[sizeof(fmt) - 2] != '\n'`) is this
+/// shape. A guard that holds must keep its call.
+#[test]
+fn literal_index_guarded_assert_call_folds_away() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        extern void __compiletime_assert_1(void) __attribute__((__error__(\"newline\")));\n\
+        extern void __compiletime_assert_2(void) __attribute__((__error__(\"held\")));\n\
+        void f(void) {\n\
+            do {\n\
+                if (!(!(\"HW step 0x%0x\\n\"[sizeof(\"HW step 0x%0x\\n\") - 2] != '\\n')))\n\
+                    __compiletime_assert_1();\n\
+            } while (0);\n\
+        }\n\
+        void g(void) {\n\
+            if (!(\"A\\n\"[0] != 'A'))\n\
+                __compiletime_assert_2();\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let obj = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new().with_optimize()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        assert!(
+            !syms.iter().any(|(n, _)| n == "__compiletime_assert_1"),
+            "{target:?}: the folded guard must leave no assert reference"
+        );
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_2"),
+            "{target:?}: a guard that holds must keep its call"
+        );
+    }
+}
+
 /// `(offset, symbol name, addend)` for every `.rela.text` entry whose
 /// type is `R_X86_64_PLT32` (4): the branches this unit leaves for the
 /// linker to resolve by name.

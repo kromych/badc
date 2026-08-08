@@ -1550,7 +1550,10 @@ pub(super) fn write_relocatable(
 
     // Data objects defined in this unit, by name and unified data
     // offset; an inline-asm section reloc naming one resolves
-    // section-relative like the attribute path.
+    // section-relative like the attribute path. An alias definition
+    // carries its target's offset and binds like any defined object;
+    // dropping it here would hand its name an undefined entry beside
+    // the definition.
     let defined_data_by_name: alloc::collections::BTreeMap<&str, i64> = {
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
@@ -1560,7 +1563,6 @@ pub(super) fn write_relocatable(
             .filter(|s| {
                 s.class == Token::Glo as i64
                     && s.defined_here
-                    && !s.is_alias
                     && !s.is_thread_local
                     && !s.name.is_empty()
                     && matches!(s.linkage, Linkage::External | Linkage::Internal)

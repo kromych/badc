@@ -3918,6 +3918,42 @@ fn elf64_section_headers(
         .collect()
 }
 
+/// Full `.symtab` records of an ELF64 object as
+/// `(name, st_info, st_shndx, st_value, st_size)`.
+fn elf64_symbol_records(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u8, u16, u64, u64)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let Some(sh) = (0..shnum)
+        .map(|i| shoff + i * shentsize)
+        .find(|&sh| u32a(sh + 4) == 2)
+    else {
+        return alloc::vec::Vec::new();
+    };
+    let sym_off = u64a(sh + 0x18) as usize;
+    let sym_len = u64a(sh + 0x20) as usize;
+    let strsh = shoff + (u32a(sh + 0x28) as usize) * shentsize;
+    let str_off = u64a(strsh + 0x18) as usize;
+    let mut out = alloc::vec::Vec::new();
+    let mut p = sym_off;
+    while p + 24 <= sym_off + sym_len {
+        let s = str_off + u32a(p) as usize;
+        let e = b[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+        out.push((
+            alloc::string::String::from_utf8_lossy(&b[s..e]).into_owned(),
+            b[p + 4],
+            u16a(p + 6),
+            u64a(p + 8),
+            u64a(p + 16),
+        ));
+        p += 24;
+    }
+    out
+}
+
 /// For a RELA relocation the addend lives in `r_addend`; the target
 /// field in the section image carries no information and gas leaves it
 /// zero. The x86_64 kernel module loader enforces exactly that before
@@ -4012,6 +4048,93 @@ fn relocated_slots_are_zero_in_relocatable_objects() {
                 abs_slots >= 8,
                 "{ctx}: only {abs_slots} absolute pointer slots seen -- the sweep \
                  no longer covers the initializers it was written for"
+            );
+        }
+    }
+}
+
+/// An `extern` declaration carrying `alias("target")` defines the
+/// symbol, and a name referenced from file-scope asm binds to that
+/// definition -- one symbol table entry, no undefined duplicate, with
+/// the definition at the target's storage. A later `extern typeof(x) x;`
+/// redeclaration denotes the same definition and must not detach it.
+#[test]
+fn alias_defined_object_referenced_from_asm_binds_to_its_definition() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SHN_LORESERVE: u16 = 0xff00;
+    const SRC: &str = "\
+        static const unsigned fk[4] __attribute__((__aligned__(1 << 6))) = { 1, 2, 3, 4 }; \
+        extern const unsigned pub_fk[4] __attribute__((alias(\"fk\"))); \
+        static const unsigned priv_fk[4] __attribute__((alias(\"fk\"))); \
+        extern typeof(pub_fk) pub_fk; \
+        asm(\".section \\\".export_symbol\\\",\\\"a\\\"\\n\" \
+            \"__export_symbol_pub_fk:\\n\" \
+            \".asciz \\\"\\\"\\n\" \
+            \".balign 8\\n\" \
+            \".quad pub_fk\\n\" \
+            \".quad priv_fk\\n\" \
+            \".previous\\n\"); \
+        int probe(void) { return (int)(pub_fk[0] + priv_fk[1]); }";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+        let syms = elf64_symbol_records(&obj);
+        let pubs: alloc::vec::Vec<_> = syms.iter().filter(|s| s.0 == "pub_fk").collect();
+        assert_eq!(
+            pubs.len(),
+            1,
+            "{target:?}: `pub_fk` must have one entry, got {pubs:?}"
+        );
+        let &(_, info, shndx, value, size) = pubs[0];
+        assert_eq!(info >> 4, 1, "{target:?}: `pub_fk` binding is not GLOBAL");
+        assert_eq!(info & 0xf, 1, "{target:?}: `pub_fk` type is not OBJECT");
+        assert!(
+            shndx != 0 && shndx < SHN_LORESERVE,
+            "{target:?}: `pub_fk` is not defined (st_shndx {shndx})"
+        );
+        assert_eq!(size, 16, "{target:?}: `pub_fk` lost the target's size");
+        // The definition names the target's storage: the section bytes
+        // at `st_value` are `fk`'s initializer.
+        let secs = elf64_section_headers(&obj);
+        let (_, _, sec_off, _, _) = secs[shndx as usize];
+        let lo = (sec_off + value) as usize;
+        let mut want = [0u8; 16];
+        for (i, v) in [1u32, 2, 3, 4].iter().enumerate() {
+            want[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        assert_eq!(
+            &obj[lo..lo + 16],
+            &want,
+            "{target:?}: `pub_fk` does not point at `fk`'s bytes"
+        );
+        // The internal-linkage alias resolved section-relative; no
+        // undefined entry may carry either alias name.
+        for (name, _, shndx, _, _) in &syms {
+            assert!(
+                !((name == "pub_fk" || name == "priv_fk") && *shndx == 0),
+                "{target:?}: `{name}` gained an undefined entry"
+            );
+        }
+        // Both asm references landed, each against a defined target.
+        let rela = elf64_section(&obj, ".rela.export_symbol").expect("asm section relocations");
+        assert_eq!(rela.len(), 48, "{target:?}: expected two RELA entries");
+        for r in rela.chunks_exact(24) {
+            let sym_idx = u32::from_le_bytes(r[12..16].try_into().unwrap()) as usize;
+            let (name, _, shndx, _, _) = &syms[sym_idx];
+            assert!(
+                *shndx != 0,
+                "{target:?}: asm reference to `{name}` binds to an undefined symbol"
             );
         }
     }

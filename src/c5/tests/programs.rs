@@ -1945,6 +1945,14 @@ fn attribute_weak_alias() {
 }
 
 #[test]
+fn alias_extern_redeclaration() {
+    // A no-initializer redeclaration of an alias-defined object is a
+    // pure redeclaration; it must not re-allocate storage over the
+    // alias binding.
+    assert_eq!(run_fixture("alias_extern_redeclaration.c"), 0);
+}
+
+#[test]
 fn register_var_stack_pointer() {
     // `register T name asm("sp"/"rsp"/"x29"/"rbp")` reads compile; the
     // interpreter substitutes its per-frame proxy for both pointers.

@@ -368,6 +368,11 @@ def probe_kvm(args, arch) -> bool:
     return True
 
 
+class VmError(Exception):
+    """A vm-phase step failed. Recorded as a run failure; the run still
+    tears the VM down and writes its report."""
+
+
 class VM:
     def __init__(self, args, arch, disk: Path, seed: Path):
         self.args, self.arch, self.disk, self.seed = args, arch, disk, seed
@@ -428,16 +433,19 @@ class VM:
                  "-o", "ConnectTimeout=10", "-o", "LogLevel=ERROR",
                  "badc@127.0.0.1", cmd], timeout=timeout)
         if check and r.returncode != 0:
-            die(f"vm command {cmd!r} exited {r.returncode}: "
-                f"{(r.stderr or r.stdout).strip()[-400:]}")
+            raise VmError(f"vm command {cmd!r} exited {r.returncode}: "
+                          f"{(r.stderr or r.stdout).strip()[-400:]}")
         return r
 
     def scp(self, paths: list[Path], dest: str) -> None:
-        run(["scp", "-q", "-P", str(self.args.ssh_port), "-i", str(self.key),
-             "-o", "StrictHostKeyChecking=no",
-             "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
-             *map(str, paths), f"badc@127.0.0.1:{dest}"],
-            timeout=600, check=True)
+        r = run(["scp", "-q", "-P", str(self.args.ssh_port), "-i", str(self.key),
+                 "-o", "StrictHostKeyChecking=no",
+                 "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
+                 *map(str, paths), f"badc@127.0.0.1:{dest}"],
+                timeout=600)
+        if r.returncode != 0:
+            raise VmError(f"scp into the vm exited {r.returncode}: "
+                          f"{(r.stderr or '').strip()[-300:]}")
 
     def pull(self, remote: str, dest: Path) -> bool:
         r = run(["scp", "-q", "-P", str(self.args.ssh_port), "-i", str(self.key),
@@ -451,15 +459,15 @@ class VM:
         deadline = time.time() + timeout
         while time.time() < deadline:
             if self.pid() is None:
-                die(f"qemu exited while waiting for ssh "
-                    f"(console: {self.console})")
+                raise VmError(f"qemu exited while waiting for ssh "
+                              f"(console: {self.console})")
             r = self.ssh("cat /proc/sys/kernel/random/boot_id", timeout=20)
             bid = r.stdout.strip()
             if r.returncode == 0 and bid and bid != expect_boot_id:
                 return bid
             time.sleep(5)
-        die(f"vm ssh not reachable within {timeout}s "
-            f"(console: {self.console})")
+        raise VmError(f"vm ssh not reachable within {timeout}s "
+                      f"(console: {self.console})")
 
     def reboot(self, timeout: int, boot_id: str) -> str:
         self.ssh("reboot", sudo=True)
@@ -758,11 +766,11 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         result["cores_badc"] = sweep_cores(args, vm, "badc", failures)
         if not result["cores_badc"]:
             log("no userspace cores under the badc kernel")
+    except VmError as e:
+        failures.append(str(e))
     finally:
         try:
             vm.stop()
-        except SystemExit:
-            raise
         except Exception as e:  # teardown must not mask the verdict
             log(f"vm teardown: {e}")
     return result

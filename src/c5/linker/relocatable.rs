@@ -117,6 +117,9 @@ pub struct EtSection {
 }
 
 impl EtSection {
+    // Accessor for consumers and tests; the merge reads the raw
+    // fields directly.
+    #[allow(dead_code)]
     pub fn size(&self) -> u64 {
         if self.sh_type == SHT_NOBITS {
             self.nobits_size
@@ -727,8 +730,6 @@ struct OutSec {
     defined_syms: Vec<(String, u64)>,
     /// First contribution's SHF_LINK_ORDER target.
     link_from: Option<SecId>,
-    /// Kept-group index owning this section, if any.
-    group: Option<usize>,
     /// NOP fill for executable-section padding (machine-dependent).
     exec_fill: ExecFill,
 }
@@ -755,7 +756,6 @@ impl OutSec {
             contribs: Vec::new(),
             defined_syms: Vec::new(),
             link_from: None,
-            group: None,
             exec_fill,
         }
     }
@@ -1626,7 +1626,7 @@ fn write_et_rel(
     // String tables.
     let mut strtab: Vec<u8> = alloc::vec![0];
     let mut strmap: HashMap<String, u32> = HashMap::new();
-    let mut intern = |t: &mut Vec<u8>, m: &mut HashMap<String, u32>, s: &str| -> u32 {
+    let intern = |t: &mut Vec<u8>, m: &mut HashMap<String, u32>, s: &str| -> u32 {
         if s.is_empty() {
             return 0;
         }

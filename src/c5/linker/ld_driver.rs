@@ -93,7 +93,7 @@ pub fn run_ld(args: &[String]) -> i32 {
         print_version: false,
     };
     let mut it = args.iter().map(String::as_str);
-    let mut next_of = |it: &mut dyn Iterator<Item = &str>, flag: &str| -> Result<String, i32> {
+    let next_of = |it: &mut dyn Iterator<Item = &str>, flag: &str| -> Result<String, i32> {
         it.next()
             .map(str::to_string)
             .ok_or_else(|| ld_err(format!("{flag} requires an argument")))
@@ -339,7 +339,7 @@ fn collect_inputs(a: &LdArgs, machine: Option<u16>) -> Result<Vec<EtRel>, i32> {
         }
         objs.push(o);
     };
-    let mut resolve_span = |objs: &mut Vec<EtRel>,
+    let resolve_span = |objs: &mut Vec<EtRel>,
                             undef: &mut HashSet<String>,
                             defined: &mut HashSet<String>,
                             span: &mut [PendingArchive]|

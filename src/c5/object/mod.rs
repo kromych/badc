@@ -329,6 +329,7 @@ fn fold_asm_sections(
             let at = base + r.offset as usize;
             let target_off = match &r.target {
                 AsmSectionTarget::Text(off) => *off,
+                AsmSectionTarget::OwnSection(off) => base + *off as usize,
                 AsmSectionTarget::Symbol(name) => match label_at
                     .get(name.as_str())
                     .and_then(|p| match p {

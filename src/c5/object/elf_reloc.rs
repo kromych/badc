@@ -2537,6 +2537,11 @@ pub(super) fn write_relocatable(
                         let (sym, o) = home_sym(plan.map(*off));
                         (sym, o + r.addend)
                     }
+                    // The section the relocation lives in (`.quad .`):
+                    // its own section symbol plus the offset.
+                    AsmSectionTarget::OwnSection(off) => {
+                        (carve.sym_idx[e], base as i64 + *off as i64 + r.addend)
+                    }
                     AsmSectionTarget::TextBlock(_) => {
                         // Rewritten to `Text` after block layout; an unresolved
                         // one here means the emit skipped resolve_asm_goto_relocs.

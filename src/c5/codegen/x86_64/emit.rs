@@ -7399,6 +7399,7 @@ fn emit_inline_asm(
         section_blocks,
         &const_of,
         false,
+        &[],
     ) {
         Ok(m) => m,
         Err(m) => {

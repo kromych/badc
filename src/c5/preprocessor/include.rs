@@ -28,6 +28,91 @@ impl IncludeForm {
     }
 }
 
+/// Which header set supplied a resolved `#include`. Selects what the
+/// `-MM` / `-MMD` dependency filter drops.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum IncludeOrigin {
+    /// The including file's own directory, an `-iquote` directory or
+    /// an `-I` directory.
+    User,
+    /// The compiler's own header set: an `own_header_roots` file, or
+    /// an in-binary body with no filesystem path.
+    Own,
+    /// A host system directory probed after the own set
+    /// (`system_fallback_paths`).
+    System,
+}
+
+/// A resolved `#include`: the body plus the bookkeeping the callers
+/// need once the search has picked a file.
+pub(super) struct Resolved {
+    pub(super) body: String,
+    /// Identity for `#pragma once` and include-guard bookkeeping: the
+    /// filesystem path for a file, the bare name for an in-binary
+    /// header, so one header reached by two spellings stays one file.
+    pub(super) key: String,
+    /// Filesystem path, `None` for an in-binary body.
+    pub(super) path: Option<String>,
+    pub(super) origin: IncludeOrigin,
+}
+
+impl Resolved {
+    /// A body served from a file on disk.
+    fn file(body: String, path: String, origin: IncludeOrigin) -> Self {
+        Resolved {
+            body,
+            key: path.clone(),
+            path: Some(path),
+            origin,
+        }
+    }
+}
+
+/// What became of one `#include` directive.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum IncludeStatus {
+    /// The body was spliced into the output.
+    Opened,
+    /// Resolved but skipped: `#pragma once`, or an include guard whose
+    /// controlling macro is defined.
+    Cached,
+    /// No search path or header set matched.
+    Missing,
+}
+
+/// One `#include` resolution. Recorded when include tracking is on;
+/// renders the gcc `-H` trace and supplies the `-M` family's
+/// prerequisite list, so both read one list rather than each keeping
+/// its own.
+pub struct IncludeRecord {
+    /// Nesting depth: 1 for a directive in the primary source.
+    pub depth: usize,
+    /// The header name as the directive spelled it.
+    pub spelling: String,
+    /// Filesystem path, `None` for an in-binary header or a miss.
+    pub path: Option<String>,
+    pub origin: IncludeOrigin,
+    pub status: IncludeStatus,
+}
+
+impl IncludeRecord {
+    /// The gcc `-H` line for this record: leading dots mark nesting
+    /// depth, `!` marks a miss.
+    pub fn trace_line(&self) -> String {
+        let mark = if self.status == IncludeStatus::Missing {
+            "!"
+        } else {
+            "."
+        };
+        let suffix = match self.status {
+            IncludeStatus::Opened => "",
+            IncludeStatus::Cached => " (cached)",
+            IncludeStatus::Missing => " (missing)",
+        };
+        format!("{} {}{}", mark.repeat(self.depth), self.spelling, suffix)
+    }
+}
+
 impl Preprocessor {
     /// `#include <name>` / `#include "name"` -- splice the named
     /// header's processed contents into the output.
@@ -101,7 +186,7 @@ impl Preprocessor {
         name: &str,
         form: IncludeForm,
         filename: &str,
-    ) -> Option<(String, String, bool)> {
+    ) -> Option<Resolved> {
         if form.next {
             // `#include_next` resumes past the search-path entry that
             // supplied the current file, so the including file's own
@@ -127,21 +212,17 @@ impl Preprocessor {
     /// the resolved body.
     pub(super) fn finish_include(
         &mut self,
-        resolved: Option<(String, String, bool)>,
+        resolved: Option<Resolved>,
         name: &str,
         line_no: usize,
         filename: &str,
         out: &mut String,
     ) -> Result<(), C5Error> {
-        let Some((content, resolved_path, own)) = resolved else {
+        let Some(found) = resolved else {
             // Missing header is a hard error, as in gcc/clang: the
             // directive cannot perform the replacement C99 6.10.2
             // requires, and continuing with an empty body miscompiles.
-            if self.show_includes {
-                let depth = self.include_stack.len() + 1;
-                self.include_trace
-                    .push(format!("{} {} (missing)", "!".repeat(depth), name));
-            }
+            self.record_include(name, None, IncludeOrigin::User, IncludeStatus::Missing);
             return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
                 filename,
                 line_no,
@@ -157,21 +238,21 @@ impl Preprocessor {
         // `#pragma once` drops unconditionally; the guard form drops only
         // while its controlling macro is defined, since that is what makes
         // the body inactive.
-        if self.pragma_once_files.contains(&resolved_path)
-            || self.include_is_guarded_out(&resolved_path)
-        {
-            if self.show_includes {
-                let depth = self.include_stack.len() + 1;
-                self.include_trace
-                    .push(format!("{} {} (cached)", ".".repeat(depth), name));
-            }
+        if self.pragma_once_files.contains(&found.key) || self.include_is_guarded_out(&found.key) {
+            self.record_include(
+                name,
+                found.path.clone(),
+                found.origin,
+                IncludeStatus::Cached,
+            );
             return Ok(());
         }
-        if self.show_includes {
-            let depth = self.include_stack.len() + 1;
-            self.include_trace
-                .push(format!("{} {}", ".".repeat(depth), name));
-        }
+        self.record_include(
+            name,
+            found.path.clone(),
+            found.origin,
+            IncludeStatus::Opened,
+        );
         // A header may legitimately appear more than once on the active
         // include path: a guard-protected re-include where an inner header
         // pulls a guarded outer one back in. The include guard skips the body
@@ -193,10 +274,33 @@ impl Preprocessor {
                 &format!("`#include {name}` nested too deeply (chain: {chain} -> {name})"),
             )));
         }
-        self.include_stack.push((name.to_string(), own));
-        let result = self.process_named(&content, &resolved_path, out);
+        self.include_stack
+            .push((name.to_string(), found.origin == IncludeOrigin::Own));
+        let result = self.process_named(&found.body, &found.key, out);
         self.include_stack.pop();
         result
+    }
+
+    /// Append one `#include` resolution to the tracking list. A no-op
+    /// unless `-H` or a `-M`-family flag asked for it.
+    fn record_include(
+        &mut self,
+        spelling: &str,
+        path: Option<String>,
+        origin: IncludeOrigin,
+        status: IncludeStatus,
+    ) {
+        if !self.track_includes {
+            return;
+        }
+        let depth = self.include_stack.len() + 1;
+        self.include_records.push(IncludeRecord {
+            depth,
+            spelling: spelling.to_string(),
+            path,
+            origin,
+            status,
+        });
     }
 
     /// Whether a repeat `#include` of `path` would produce nothing: the
@@ -213,8 +317,10 @@ impl Preprocessor {
     /// The compiler's own copy of `name`: the body from an on-disk
     /// header root if one carries it, else the in-binary registry.
     /// The key is always `name`, so a header reached both directly and
-    /// through another bundled header is one file to `#pragma once`.
-    fn own_header(&self, name: &str) -> Option<(String, String, bool)> {
+    /// through another bundled header is one file to `#pragma once`;
+    /// `path` still carries the root-relative file when one supplied
+    /// the body, since dependency output names files.
+    fn own_header(&self, name: &str) -> Option<Resolved> {
         #[cfg(feature = "std")]
         for root in &self.own_header_roots {
             let candidate = if root.ends_with('/') || root.ends_with('\\') {
@@ -223,10 +329,20 @@ impl Preprocessor {
                 alloc::format!("{root}/{name}")
             };
             if let Ok(body) = std::fs::read_to_string(&candidate) {
-                return Some((body, name.to_string(), true));
+                return Some(Resolved {
+                    body,
+                    key: name.to_string(),
+                    path: Some(candidate),
+                    origin: IncludeOrigin::Own,
+                });
             }
         }
-        embedded_header(name).map(|b| (b.to_string(), name.to_string(), true))
+        embedded_header(name).map(|b| Resolved {
+            body: b.to_string(),
+            key: name.to_string(),
+            path: None,
+            origin: IncludeOrigin::Own,
+        })
     }
 
     /// Look `name` up and return its body plus the path it resolved
@@ -235,11 +351,7 @@ impl Preprocessor {
     /// paths (`-I` plus built-in defaults), then the compiler's own
     /// header set. The resolved path is the filesystem candidate that
     /// matched, or `name` for a header from the own set.
-    pub(super) fn find_include(
-        &self,
-        name: &str,
-        source_dir: Option<&str>,
-    ) -> Option<(String, String, bool)> {
+    pub(super) fn find_include(&self, name: &str, source_dir: Option<&str>) -> Option<Resolved> {
         #[cfg(feature = "std")]
         {
             let join = |dir: &str| -> String {
@@ -257,7 +369,7 @@ impl Preprocessor {
             if let Some(dir) = source_dir {
                 let candidate = join(dir);
                 if let Ok(body) = std::fs::read_to_string(&candidate) {
-                    return Some((body, candidate, false));
+                    return Some(Resolved::file(body, candidate, IncludeOrigin::User));
                 }
                 // `-iquote` directories apply to `#include "..."` only
                 // (C99 6.10.2p2 leaves the extra places implementation-
@@ -266,7 +378,7 @@ impl Preprocessor {
                 for path in &self.quote_search_paths {
                     let candidate = join(path);
                     if let Ok(body) = std::fs::read_to_string(&candidate) {
-                        return Some((body, candidate, false));
+                        return Some(Resolved::file(body, candidate, IncludeOrigin::User));
                     }
                 }
             }
@@ -301,7 +413,7 @@ impl Preprocessor {
             for path in &self.search_paths {
                 let candidate = join(path);
                 if let Ok(body) = std::fs::read_to_string(&candidate) {
-                    return Some((body, candidate, false));
+                    return Some(Resolved::file(body, candidate, IncludeOrigin::User));
                 }
             }
         }
@@ -327,7 +439,7 @@ impl Preprocessor {
             for path in &self.system_fallback_paths {
                 let candidate = join(path);
                 if let Ok(body) = std::fs::read_to_string(&candidate) {
-                    return Some((body, candidate, false));
+                    return Some(Resolved::file(body, candidate, IncludeOrigin::System));
                 }
             }
         }
@@ -338,7 +450,12 @@ impl Preprocessor {
             return crate::c5::headers::embedded_headers()
                 .iter()
                 .find(|(n, _)| n.eq_ignore_ascii_case(&lower))
-                .map(|(n, body)| (body.to_string(), n.to_string(), true));
+                .map(|(n, body)| Resolved {
+                    body: body.to_string(),
+                    key: n.to_string(),
+                    path: None,
+                    origin: IncludeOrigin::Own,
+                });
         }
         None
     }
@@ -348,11 +465,7 @@ impl Preprocessor {
     /// probe the remaining paths and finally the embedded registry. When
     /// the directive's file came from the embedded registry (no filesystem
     /// directory), there is nothing after it, so resolution yields none.
-    pub(super) fn find_include_next(
-        &self,
-        name: &str,
-        current_file: &str,
-    ) -> Option<(String, String, bool)> {
+    pub(super) fn find_include_next(&self, name: &str, current_file: &str) -> Option<Resolved> {
         #[cfg(feature = "std")]
         {
             // Skip the search-path entries up to and including the one whose
@@ -394,7 +507,7 @@ impl Preprocessor {
                 }
                 let candidate = join(path);
                 if let Ok(body) = std::fs::read_to_string(&candidate) {
-                    return Some((body, candidate, false));
+                    return Some(Resolved::file(body, candidate, IncludeOrigin::User));
                 }
             }
         }

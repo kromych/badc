@@ -6,7 +6,7 @@ use super::CODE_BASE;
 use super::codegen::Target;
 use super::error::C5Error;
 use super::lexer::{self, Lexer};
-use super::preprocessor::{DylibSpec, Preprocessor};
+use super::preprocessor::{DylibSpec, IncludeRecord, Preprocessor};
 use super::program::Program;
 use super::symbol::Symbol;
 use super::token::Token;
@@ -243,7 +243,7 @@ pub struct StructField {
 ///
 /// Builder-style methods (`with_defines`, `with_undefines`,
 /// `with_include_paths`, `with_force_includes`, `with_source_label`,
-/// `with_show_includes`) return `self` so the typical CLI shape is
+/// `with_track_includes`) return `self` so the typical CLI shape is
 /// `CompileOptions::default().with_defines(d).with_include_paths(p)`.
 #[derive(Default, Debug, Clone)]
 pub struct CompileOptions {
@@ -275,10 +275,12 @@ pub struct CompileOptions {
     /// callers; the preprocessor then falls back to the historical
     /// `<source>` placeholder.
     pub source_label: String,
-    /// `-H` / `--show-includes` -- when true the preprocessor
-    /// pushes one line per `#include` resolve into the include
-    /// trace, drainable via [`Compiler::take_include_trace`].
-    pub show_includes: bool,
+    /// When true the preprocessor records one entry per `#include`
+    /// resolve, readable via [`Compiler::include_trace`] (the `-H`
+    /// rendering) and [`Compiler::include_records`] (the `-M`
+    /// family's prerequisite source). Set by `-H` and by any
+    /// dependency-output flag.
+    pub track_includes: bool,
     /// `-Wdead-store` -- when true the compiler emits a
     /// per-store `dead store: value assigned to ...` diagnostic
     /// alongside the per-symbol `unused variable` / `set but
@@ -382,9 +384,9 @@ impl CompileOptions {
         self.source_label = label.into();
         self
     }
-    /// Flip the gcc-style `-H` include trace on or off.
-    pub fn with_show_includes(mut self, on: bool) -> Self {
-        self.show_includes = on;
+    /// Flip include tracking on or off. See [`Self::track_includes`].
+    pub fn with_track_includes(mut self, on: bool) -> Self {
+        self.track_includes = on;
         self
     }
     /// Enable per-store dead-store diagnostics. See
@@ -1393,12 +1395,10 @@ pub struct Compiler {
     /// onto `Program::function_aliases`.
     pub(super) asm_sym_sets: Vec<(String, String)>,
 
-    /// gcc `-H`-shape include trace produced by the preprocessor when
-    /// `with_full_options_and_label_with_trace(.., show_includes =
-    /// true)` was used. Empty otherwise. The CLI flushes this list
-    /// to stderr after the compile finishes; library callers can
-    /// drain it via [`Self::take_include_trace`].
-    include_trace: Vec<String>,
+    /// Include resolutions recorded by the preprocessor when
+    /// [`CompileOptions::track_includes`] was set. Empty otherwise.
+    /// Renders the `-H` trace and the `-M` family's prerequisites.
+    include_records: Vec<IncludeRecord>,
 
     /// `#pragma entrypoint(<name>)` value drained from the
     /// preprocessor. Default `None` means "use `main`".
@@ -1744,13 +1744,33 @@ impl Compiler {
         Self::with_options(source, target, CompileOptions::default())
     }
 
-    /// Drain the gcc `-H`-shape include trace produced by the
-    /// preprocessor. Empty when constructed without
-    /// `CompileOptions::with_show_includes(true)`. The CLI calls
-    /// this after `compile()` and dumps the list to stderr;
-    /// library callers can do the same.
-    pub fn take_include_trace(&mut self) -> Vec<String> {
-        core::mem::take(&mut self.include_trace)
+    /// The gcc `-H`-shape include trace. Empty when constructed
+    /// without `CompileOptions::with_track_includes(true)`.
+    pub fn include_trace(&self) -> Vec<String> {
+        self.include_records
+            .iter()
+            .map(IncludeRecord::trace_line)
+            .collect()
+    }
+
+    /// The recorded `#include` resolutions, in directive order.
+    /// Feeds `depfile::prerequisites` for the `-M` flag family.
+    pub fn include_records(&self) -> &[IncludeRecord] {
+        &self.include_records
+    }
+
+    /// The preprocessing failure deferred from construction, if any.
+    /// `compile` reports it too; a caller that stops at the
+    /// preprocessor (`-M` / `-MM`) reads it here instead.
+    pub fn preprocess_error(&self) -> Option<&C5Error> {
+        self.deferred_error.as_ref()
+    }
+
+    /// Diagnostics the preprocessor produced. `compile` folds these
+    /// into `Program::warnings`; a caller that stops at the
+    /// preprocessor reads them here.
+    pub fn preprocess_warnings(&self) -> &[String] {
+        &self.warnings
     }
 
     /// Construct a compiler with the full set of preprocessor /
@@ -1790,7 +1810,7 @@ impl Compiler {
             pp.enable_gnu(opts.gnu89_inline);
         }
         pp.set_source_label(&opts.source_label);
-        pp.set_show_includes(opts.show_includes);
+        pp.set_track_includes(opts.track_includes);
         for path in &opts.include_paths {
             pp.add_search_path(path);
         }
@@ -1900,7 +1920,7 @@ impl Compiler {
         // pipeline as the parser's type-warning output, so a build
         // driver sees one unified list.
         let pp_warnings = pp.warnings;
-        let pp_include_trace = pp.include_trace;
+        let pp_include_records = pp.include_records;
         let pp_entrypoint = pp.entrypoint;
         let pp_subsystem = pp.subsystem;
         let pp_intrinsics = pp.intrinsics;
@@ -1997,7 +2017,7 @@ impl Compiler {
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
             asm_sym_sets: Vec::new(),
-            include_trace: pp_include_trace,
+            include_records: pp_include_records,
             pp_entrypoint,
             pp_subsystem,
             pp_intrinsics,

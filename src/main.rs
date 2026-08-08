@@ -57,7 +57,7 @@ Multi-TU knobs:
                            sections, per-input-section placement,
                            symbol addresses) to <file>. ELF output
                            only.
-  -M, --print-map          Print the link map to stdout.
+  --print-map              Print the link map to stdout.
   --jobs N, -jN            Compile independent `.c` sources
                            concurrently in up to 2*N worker threads
                            (capped at the source count). Output is
@@ -114,6 +114,33 @@ Compile knobs:
                            stderr (gcc -H shape; leading dots mark
                            nesting depth; missing headers print as
                            `! <name> (missing)`).
+  -M                       Write a make dependency rule naming the
+                           source and every header it opened, and
+                           compile nothing. Goes to stdout unless
+                           -MF (or -o) names a file.
+  -MM                      As -M, but omit system headers: the
+                           compiler's own header set and anything
+                           resolved from a system fallback
+                           directory. Headers from -I, -iquote or
+                           the including file's directory are user
+                           headers and stay.
+  -MD                      Write the rule to a file and compile as
+                           usual. The file is -MF, else the -o
+                           object with its suffix replaced by `.d`,
+                           else the source's base name + `.d`.
+  -MMD                     As -MD with -MM's header filter. This is
+                           the form kbuild uses.
+  -MF file                 Write the dependency rule to `file`.
+  -MT target               Name the rule's target, used verbatim.
+                           Repeatable; replaces the default name.
+  -MQ target               As -MT, but quote the name for make.
+  -MP                      Add an empty rule for each prerequisite
+                           so a deleted header does not stop make.
+  -Wp,-MD,file             The preprocessor spellings of -MD / -MMD,
+  -Wp,-MMD,file            which take the output path as an operand.
+                           kbuild passes dependency generation this
+                           way. As in gcc, the rule keeps the
+                           source-derived name; -o does not name it.
   -q, --quiet              Suppress `info:` chatter on stderr (the
                            per-source `info: compiling <path>`
                            progress line in multi-TU mode and the
@@ -223,6 +250,117 @@ impl Mode {
     }
 }
 
+/// What the `-M` flag family asked the driver to produce.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DepKind {
+    /// `-M` / `-MM`: write the dependency rule and compile nothing.
+    Only,
+    /// `-MD` / `-MMD`: write the rule alongside the normal output.
+    WithOutput,
+}
+
+/// A dependency-output request assembled from the `-M` flag family.
+struct DepOptions {
+    kind: DepKind,
+    /// `-M` / `-MD` list system headers; `-MM` / `-MMD` omit them.
+    /// badc's system set is the compiler's own headers plus anything
+    /// resolved from a system fallback directory; a header from `-I`,
+    /// `-iquote` or the including file's directory is a user header.
+    system: bool,
+    /// `-MF`, or the path carried by `-Wp,-M[M]D,<path>`.
+    file: Option<String>,
+    /// `-MT` (verbatim) and `-MQ` (make-quoted) rule targets, in
+    /// command-line order. Empty means the default naming applies.
+    targets: Vec<String>,
+    /// `-MP`: give every prerequisite an empty rule of its own.
+    phony: bool,
+    /// Set by the `-MD` / `-MMD` spellings, where gcc's driver names
+    /// the rule after `-o`.
+    target_from_output: bool,
+}
+
+impl DepOptions {
+    /// The file to write for `src`, or `None` to write to stdout
+    /// (which only `-M` / `-MM` without `-MF` do).
+    fn output_path(&self, output: Option<&std::path::Path>, src: &str) -> Option<PathBuf> {
+        if let Some(f) = &self.file {
+            return Some(PathBuf::from(f));
+        }
+        match self.kind {
+            // `-M` / `-MM` write to `-o` when it is given, else stdout.
+            DepKind::Only => output.map(PathBuf::from),
+            // `-MD` / `-MMD` name the file after the object, else after
+            // the source basename in the current directory. The suffix
+            // swap applies to the file name only, so a dot in a
+            // directory component does not count.
+            DepKind::WithOutput => Some(match output {
+                Some(o) => o.with_extension("d"),
+                None => PathBuf::from(source_basename(src)).with_extension("d"),
+            }),
+        }
+    }
+
+    /// The rule's target names for `src`.
+    fn rule_targets(&self, output: Option<&std::path::Path>, src: &str) -> Vec<String> {
+        if !self.targets.is_empty() {
+            return self.targets.clone();
+        }
+        if self.target_from_output
+            && let Some(o) = output
+        {
+            return vec![badc::dep_escape(&o.to_string_lossy())];
+        }
+        // gcc's default: the source's base name with its suffix
+        // replaced by `.o`, directory components dropped.
+        let base = source_basename(src);
+        let stem = match base.rfind('.') {
+            Some(i) if i > 0 => &base[..i],
+            _ => &base[..],
+        };
+        vec![badc::dep_escape(&format!("{stem}.o"))]
+    }
+}
+
+/// The file-name component of a source path, or the whole path when it
+/// has no directory component.
+fn source_basename(src: &str) -> String {
+    std::path::Path::new(src)
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| src.to_string())
+}
+
+/// Render and write one translation unit's dependency rule. Returns
+/// `Err` after logging when the file cannot be written -- gcc treats a
+/// dependency file it cannot open as fatal, and a build system that
+/// asked for one and silently got none rebuilds wrongly forever.
+fn emit_deps(
+    src: &str,
+    records: &[badc::IncludeRecord],
+    deps: &DepOptions,
+    output: Option<&std::path::Path>,
+    log: &mut TuLog,
+    tty: bool,
+) -> Result<(), ()> {
+    let prereqs = badc::dep_prerequisites(src, records, deps.system);
+    let text = badc::dep_render(&deps.rule_targets(output, src), &prereqs, deps.phony);
+    match deps.output_path(output, src) {
+        Some(path) => std::fs::write(&path, text).map_err(|e| {
+            log.diag(
+                tty,
+                format!(
+                    "badc: error: opening dependency file {}: {e}",
+                    path.display()
+                ),
+            );
+        }),
+        None => {
+            print!("{text}");
+            Ok(())
+        }
+    }
+}
+
 /// Native-stack reservation shared by the driver thread and every
 /// `--jobs` compile worker. The parser caps nesting at `MAX_NEST_DEPTH`
 /// (512); at a measured ~33 KiB/level a debug build's deepest
@@ -305,6 +443,14 @@ fn run() {
     // here" or "why didn't this header resolve" without poking the
     // amalgamated `__BADC_DUMP_PP` output.
     let mut show_includes = false;
+    // gcc `-M` flag family: make-syntax dependency output. See
+    // `DepOptions`; assembled after parsing.
+    let mut dep_kind: Option<DepKind> = None;
+    let mut dep_system = true;
+    let mut dep_file: Option<String> = None;
+    let mut dep_targets: Vec<String> = Vec::new();
+    let mut dep_phony = false;
+    let mut dep_target_from_output = false;
     // `-Wdead-store` opts into the per-store dead-store
     // diagnostic. Off by default; the per-symbol
     // `unused variable` / `set but never used` warnings still
@@ -481,7 +627,10 @@ fn run() {
             s if s.starts_with("-Map=") => {
                 map_path = Some(PathBuf::from(&s["-Map=".len()..]));
             }
-            "-M" | "--print-map" => print_map = true,
+            // `-M` is gcc's dependency-output flag, handled below. The
+            // link map keeps the long spelling; GNU ld's `-M` belongs
+            // to the linker persona, which parses separately.
+            "--print-map" => print_map = true,
             "-D" => match iter.next() {
                 Some(s) => match s.split_once('=') {
                     Some((name, body)) => defines.push((name.to_string(), body.to_string())),
@@ -552,6 +701,70 @@ fn run() {
             // marking nesting depth. `--show-includes` is the
             // descriptive long form (also matches MSVC's spelling).
             "-H" | "--show-includes" => show_includes = true,
+            // gcc `-M` family -- make-syntax dependency output. `-M` /
+            // `-MM` write the rule and compile nothing; `-MD` / `-MMD`
+            // write it beside the normal output. The `MM` spellings
+            // drop system headers. Later flags win, as with gcc.
+            "-M" | "-MM" | "-MD" | "-MMD" => {
+                dep_kind = Some(if arg == "-M" || arg == "-MM" {
+                    DepKind::Only
+                } else {
+                    DepKind::WithOutput
+                });
+                dep_system = arg == "-M" || arg == "-MD";
+                // gcc's driver names the rule after `-o` for the
+                // compile-too spellings by injecting `-MQ <object>`.
+                dep_target_from_output = matches!(arg.as_str(), "-MD" | "-MMD");
+            }
+            "-MP" => dep_phony = true,
+            "-MF" | "-MT" | "-MQ" => match iter.next() {
+                Some(v) => match arg.as_str() {
+                    "-MF" => dep_file = Some(v),
+                    // `-MT` takes the target verbatim; `-MQ` quotes it
+                    // for make.
+                    "-MT" => dep_targets.push(v),
+                    _ => dep_targets.push(badc::dep_escape(&v)),
+                },
+                None => {
+                    eprint_diagnostic(format!("badc: error: {arg} requires an argument"));
+                    std::process::exit(1);
+                }
+            },
+            // gcc hands a `-Wp,` payload's comma-separated pieces to the
+            // preprocessor. There `-MD` / `-MMD` take the output path as
+            // an operand, which is how kbuild requests dependency files
+            // (`-Wp,-MMD,<path>`). Reaching the preprocessor directly
+            // means no `-o`-derived rule name applies, so the rule keeps
+            // the source-derived default -- gcc behaves the same, and
+            // the kernel's `fixdep` discards the rule name regardless.
+            s if s.starts_with("-Wp,") => {
+                let mut parts = s["-Wp,".len()..].split(',');
+                while let Some(p) = parts.next() {
+                    match p {
+                        "-MD" | "-MMD" => match parts.next() {
+                            Some(path) => {
+                                dep_kind = Some(DepKind::WithOutput);
+                                dep_system = p == "-MD";
+                                dep_file = Some(path.to_string());
+                                dep_target_from_output = false;
+                            }
+                            None => {
+                                eprint_diagnostic(format!(
+                                    "badc: error: `-Wp,{p}` requires a file operand"
+                                ));
+                                std::process::exit(1);
+                            }
+                        },
+                        "-MP" => dep_phony = true,
+                        _ => {
+                            eprint_diagnostic(format!(
+                                "badc: error: unsupported preprocessor option `{p}` in `{s}`"
+                            ));
+                            std::process::exit(1);
+                        }
+                    }
+                }
+            }
             // gcc-shape `-Wdead-store` -- enable the per-store
             // dead-store diagnostic. `-Wno-dead-store` is the
             // opt-out spelling.
@@ -1327,6 +1540,28 @@ fn run() {
         std::process::exit(1);
     }
 
+    let deps = dep_kind.map(|kind| DepOptions {
+        kind,
+        system: dep_system,
+        file: dep_file,
+        targets: dep_targets,
+        phony: dep_phony,
+        target_from_output: dep_target_from_output,
+    });
+    // One dependency file cannot describe several translation units.
+    // gcc truncates it per unit, leaving only the last; badc compiles
+    // units in parallel, where that would race, so it is refused.
+    if let Some(d) = &deps
+        && d.file.is_some()
+        && sources.len() > 1
+    {
+        eprint_diagnostic(format!(
+            "badc: error: a single dependency file cannot describe {} translation \
+             units (drop -MF / -Wp,-M[M]D or compile one source at a time)",
+            sources.len()
+        ));
+        std::process::exit(1);
+    }
     // Stdin is consumed exactly once. The `--dump-pp`, JIT / interp,
     // and native-link paths can each call `read_stdin_source()`;
     // cache the bytes in an Option so a second call sees the same
@@ -1344,6 +1579,72 @@ fn run() {
         *stdin_cache.borrow_mut() = Some(s.clone());
         s
     };
+
+    // `-M` / `-MM` preprocess only: emit the rule and produce no
+    // object, as gcc does.
+    if let Some(d) = &deps
+        && d.kind == DepKind::Only
+    {
+        let stderr_is_tty = std::io::stderr().is_terminal();
+        let mut failed = false;
+        for src in &sources {
+            let contents = if src == "-" {
+                read_stdin_source()
+            } else {
+                match std::fs::read_to_string(src) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprint_diagnostic(format!("badc: error: cannot read `{src}`: {e}"));
+                        std::process::exit(1);
+                    }
+                }
+            };
+            let copts = badc::CompileOptions::default()
+                .with_gnu(gnu)
+                .with_gnu89_inline(gnu89_inline)
+                .with_defines(defines.clone())
+                .with_undefines(undefines.clone())
+                .with_include_paths(include_paths.clone())
+                .with_quote_include_paths(quote_include_paths.clone())
+                .with_system_include_paths(system_include_paths.clone())
+                .with_own_header_roots(own_header_roots.clone())
+                .with_force_includes(force_includes.clone())
+                .with_source_label(src.clone())
+                .with_track_includes(true);
+            let compiler = badc::Compiler::with_options(contents, target, copts);
+            let mut log = TuLog::default();
+            if show_includes {
+                for line in compiler.include_trace() {
+                    log.raw(line);
+                }
+            }
+            for w in compiler.preprocess_warnings() {
+                log.diag(stderr_is_tty, w);
+            }
+            // An unresolved `#include` leaves the prerequisite list
+            // incomplete, so report it and write nothing, as gcc does.
+            let res = match compiler.preprocess_error() {
+                Some(e) => {
+                    log.diag(stderr_is_tty, e);
+                    Err(())
+                }
+                None => emit_deps(
+                    src,
+                    compiler.include_records(),
+                    d,
+                    output_path.as_deref(),
+                    &mut log,
+                    stderr_is_tty,
+                ),
+            };
+            log.flush();
+            failed |= res.is_err();
+        }
+        if failed {
+            std::process::exit(1);
+        }
+        return;
+    }
 
     // `--jit` / `--interp` run one translation unit in-process. There
     // is no link step: the first `.c` is the unit and must define
@@ -1381,11 +1682,11 @@ fn run() {
             .with_own_header_roots(own_header_roots.clone())
             .with_force_includes(force_includes.clone())
             .with_source_label(src_path.clone())
-            .with_show_includes(show_includes)
+            .with_track_includes(show_includes)
             .with_warn_dead_store(warn_dead_store);
-        let mut compiler = Compiler::with_options(contents, target, copts);
+        let compiler = Compiler::with_options(contents, target, copts);
         if show_includes {
-            for line in compiler.take_include_trace() {
+            for line in compiler.include_trace() {
                 eprintln!("{line}");
             }
         }
@@ -1559,6 +1860,8 @@ fn run() {
             system_include_paths: &system_include_paths,
             own_header_roots: &own_header_roots,
             force_includes: &force_includes,
+            deps: deps.as_ref(),
+            dep_output: output_path.as_deref(),
             stdin_src: stdin_src.as_deref(),
         };
         // In-memory variant for the embedded runtime sources
@@ -2164,6 +2467,8 @@ fn run() {
             system_include_paths: &system_include_paths,
             own_header_roots: &own_header_roots,
             force_includes: &force_includes,
+            deps: deps.as_ref(),
+            dep_output: output_path.as_deref(),
             stdin_src: None,
         };
         if let Some(out) = output_path.as_deref() {
@@ -2289,6 +2594,10 @@ fn run() {
             system_include_paths: &system_include_paths,
             own_header_roots: &own_header_roots,
             force_includes: &force_includes,
+            // `--ar` bundles objects; gcc has no dependency-output
+            // analogue for archive assembly.
+            deps: None,
+            dep_output: None,
             stdin_src: None,
         };
         let mut members: Vec<badc::ArchiveMember> = Vec::with_capacity(total_inputs);
@@ -2613,6 +2922,11 @@ struct CompileCfg<'a> {
     system_include_paths: &'a [String],
     own_header_roots: &'a [String],
     force_includes: &'a [String],
+    /// `-MD` / `-MMD` request, `None` when no dependency output was
+    /// asked for. Each unit writes its own file.
+    deps: Option<&'a DepOptions>,
+    /// `-o`, which names the dependency file and its rule target.
+    dep_output: Option<&'a std::path::Path>,
     /// Pre-read stdin bytes for a `-` source; `None` when no input is
     /// stdin. Keeps a worker off the process stdin stream.
     stdin_src: Option<&'a str>,
@@ -2769,17 +3083,31 @@ fn compile_native_tu(
         .with_own_header_roots(cfg.own_header_roots.to_vec())
         .with_force_includes(cfg.force_includes.to_vec())
         .with_source_label(src_path.to_string())
-        .with_show_includes(cfg.show_includes)
+        .with_track_includes(cfg.show_includes || cfg.deps.is_some())
         .with_warn_dead_store(cfg.warn_dead_store)
         .with_optimize(cfg.optimize_flag)
         .with_export_all_functions(cfg.export_all)
         .with_implicit_extern_fns(implicit_externs.to_vec())
         .with_no_entry_point(true);
-    let mut compiler = badc::Compiler::with_options(src_bytes, cfg.target, copts);
+    let compiler = badc::Compiler::with_options(src_bytes, cfg.target, copts);
     if cfg.show_includes {
-        for line in compiler.take_include_trace() {
+        for line in compiler.include_trace() {
             log.raw(line);
         }
+    }
+    if let Some(d) = cfg.deps
+        && compiler.preprocess_error().is_none()
+        && emit_deps(
+            src_path,
+            compiler.include_records(),
+            d,
+            cfg.dep_output,
+            &mut log,
+            cfg.stderr_is_tty,
+        )
+        .is_err()
+    {
+        return (log, Err(()));
     }
     let program = match compiler.compile() {
         Ok(p) => p,
@@ -2852,15 +3180,29 @@ fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Result<Vec<u8>
         .with_own_header_roots(cfg.own_header_roots.to_vec())
         .with_force_includes(cfg.force_includes.to_vec())
         .with_source_label(src_path.to_string())
-        .with_show_includes(cfg.show_includes)
+        .with_track_includes(cfg.show_includes || cfg.deps.is_some())
         .with_warn_dead_store(cfg.warn_dead_store)
         .with_optimize(cfg.optimize_flag)
         .with_no_entry_point(true);
-    let mut compiler = badc::Compiler::with_options(src_bytes, cfg.target, copts);
+    let compiler = badc::Compiler::with_options(src_bytes, cfg.target, copts);
     if cfg.show_includes {
-        for line in compiler.take_include_trace() {
+        for line in compiler.include_trace() {
             log.raw(line);
         }
+    }
+    if let Some(d) = cfg.deps
+        && compiler.preprocess_error().is_none()
+        && emit_deps(
+            src_path,
+            compiler.include_records(),
+            d,
+            cfg.dep_output,
+            &mut log,
+            cfg.stderr_is_tty,
+        )
+        .is_err()
+    {
+        return (log, Err(()));
     }
     let program = match compiler.compile() {
         Ok(p) => p,

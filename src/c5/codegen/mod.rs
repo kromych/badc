@@ -1496,6 +1496,9 @@ pub(crate) struct Build {
     /// time), `.data.rel.ro` with it (the load-time fixup needs a
     /// writable page until the relocation is applied).
     pub pic: bool,
+    /// Mirror of [`NativeOptions::code_model`]. The relocatable writer
+    /// reads it to pick the external-address form; see [`CodeModel`].
+    pub code_model: CodeModel,
     /// The shared library's own name, recorded in the image so a
     /// consumer that links against it by name references the file it
     /// loads at runtime (PE export-directory Name, Mach-O
@@ -2223,9 +2226,30 @@ pub struct NativeOptions {
     /// targets directly, which unwind-data discovery requires. Final
     /// images are position-independent either way.
     pub pic: bool,
+    /// Code model (`-mcmodel=`); see [`CodeModel`]. Like [`Self::pic`]
+    /// it chooses the `-c` object's relocation shapes; final images are
+    /// unaffected.
+    pub code_model: CodeModel,
     /// Speculative-execution mitigations (the `-m` hardening flags).
     /// Default is every field off; see [`Hardening`].
     pub hardening: Hardening,
+}
+
+/// x86-64 psABI code model (`-mcmodel=`). Chooses how a relocatable
+/// object addresses a symbol that binds outside the unit.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum CodeModel {
+    /// Small model (the default): external addresses materialize as a
+    /// relaxable GOT load (`R_X86_64_REX_GOTPCRELX`) so a symbol a
+    /// shared library supplies keeps the indirection while an in-image
+    /// resolution relaxes back to a direct `lea`.
+    #[default]
+    Small,
+    /// Kernel model: every symbol sits in the sign-extended 32-bit
+    /// range (psABI 3.5.1), so external addresses materialize as
+    /// `mov reg, $sym` with `R_X86_64_32S` and no GOT entry exists.
+    /// x86-64 ELF relocatable output only.
+    Kernel,
 }
 
 /// Widest transfer unit a byte-moving lowering may use over storage of
@@ -2300,6 +2324,7 @@ impl NativeOptions {
             no_fp_regs: false,
             strict_align: false,
             pic: false,
+            code_model: CodeModel::Small,
             hardening: Hardening::NONE,
         }
     }

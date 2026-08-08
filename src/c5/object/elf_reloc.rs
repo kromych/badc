@@ -35,6 +35,7 @@ use super::super::program::{ExportedFunction, Program};
 use super::Build;
 use super::Machine;
 use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget, DwarfRelocWidth};
+use crate::c5::CodeModel;
 use crate::c5::layout::{round_up, write_struct};
 // Relocation types this writer emits. `R_X86_64_TPOFF32` and the
 // `R_AARCH64_TLSLE_ADD_TPREL_*` pair carry local-exec TLS: the linker
@@ -1359,20 +1360,28 @@ pub(super) fn write_relocatable(
             STV_DEFAULT
         }
     };
-    // Whether a cross-TU address materialization resolves through the GOT.
-    // A hidden name never does: it is not preemptible, so the direct
-    // page-relative pair is correct and keeps the GOT empty. On x86_64
-    // every other name does, because the load relaxes back to a direct
-    // reference. On aarch64 the direct pair serves a plain extern, but a
-    // weak name may resolve to zero, which no page-relative pair encodes,
-    // so a link that forbids text relocations rejects the direct form;
-    // gcc emits the GOT pair for exactly that case.
-    let got_addressed = |name: &str| -> bool {
-        !hidden_names.contains(name)
-            && match machine {
-                Machine::X86_64 => true,
-                Machine::Aarch64 => weak_names.contains(name),
-            }
+    // Addressing form of a cross-TU address materialization. A hidden
+    // name is not preemptible, so the direct page-relative pair is
+    // correct and keeps the GOT empty. On x86_64 every other name rides
+    // the GOT under the small model (the load relaxes back to a direct
+    // reference), and the sign-extended 32-bit absolute under the kernel
+    // model (every symbol is in range, and a consumer that applies the
+    // relocations itself implements no GOT). On aarch64 the direct pair
+    // serves a plain extern, but a weak name may resolve to zero, which
+    // no page-relative pair encodes, so a link that forbids text
+    // relocations rejects the direct form; gcc emits the GOT pair for
+    // exactly that case.
+    let kernel_abs = machine == Machine::X86_64 && build.code_model == CodeModel::Kernel;
+    let extern_addr_form = |name: &str| -> ExternAddrForm {
+        if hidden_names.contains(name) {
+            return ExternAddrForm::Direct;
+        }
+        match machine {
+            Machine::X86_64 if kernel_abs => ExternAddrForm::Abs32,
+            Machine::X86_64 => ExternAddrForm::Got,
+            Machine::Aarch64 if weak_names.contains(name) => ExternAddrForm::Got,
+            Machine::Aarch64 => ExternAddrForm::Direct,
+        }
     };
     let mut local_func_idxs: Vec<usize> = Vec::new();
     let mut global_func_idxs: Vec<usize> = Vec::new();
@@ -1839,7 +1848,7 @@ pub(super) fn write_relocatable(
         .user_extern_data_refs
         .iter()
         .map(|r| r.symbol_name.as_str())
-        .filter(|n| got_addressed(n))
+        .filter(|n| extern_addr_form(n) == ExternAddrForm::Got)
         .collect();
     // Local inline-asm section labels, still inside the LOCAL block. A
     // `.L`-prefixed local is an assembler temporary: gas keeps it out of
@@ -2205,13 +2214,19 @@ pub(super) fn write_relocatable(
         // through the GOT (`adrp :got: + ldr`); an external linker resolves
         // it against the shared library and badc's own linker relaxes it to
         // the import's PLT stub. The `add` half is rewritten to `ldr` below.
+        // Under the x86-64 kernel model the address is a sign-extended
+        // 32-bit absolute like every other external address.
         if site.is_addr {
-            emit_got_ref_relocs(
-                machine_for_rela,
-                &mut rela_bytes,
-                site.instr_offset as u64,
-                sym_idx,
-            );
+            if kernel_abs {
+                emit_abs32_ref_reloc(&mut rela_bytes, site.instr_offset as u64, sym_idx, 0);
+            } else {
+                emit_got_ref_relocs(
+                    machine_for_rela,
+                    &mut rela_bytes,
+                    site.instr_offset as u64,
+                    sym_idx,
+                );
+            }
             continue;
         }
         // x86_64 CALL/JMP rel32 is 5 bytes: opcode + 4-byte
@@ -2385,10 +2400,12 @@ pub(super) fn write_relocatable(
     // Cross-TU data references. The reloc targets the named
     // undefined-data symbol with addend zero so the linker resolves
     // it against the defining TU's storage. Per-arch addressing:
-    // * x86_64 -- GOT load with the relaxable marking. The linker
-    //   relaxes an in-image resolution back to `lea` (a fully static
-    //   link ends with an empty GOT) and keeps the indirection for a
-    //   shared-library resolution.
+    // * x86_64 small model -- GOT load with the relaxable marking. The
+    //   linker relaxes an in-image resolution back to `lea` (a fully
+    //   static link ends with an empty GOT) and keeps the indirection
+    //   for a shared-library resolution.
+    // * x86_64 kernel model -- `mov reg, $sym` + `R_X86_64_32S`: every
+    //   symbol is in the sign-extended 32-bit range and no GOT exists.
     // * aarch64 -- direct `adrp + add`, the same pair local data uses.
     //   No linker relaxes the aarch64 GOT forms, so a GOT reference
     //   cannot serve images whose layout forbids a GOT; the direct
@@ -2401,9 +2418,9 @@ pub(super) fn write_relocatable(
         // definition, as gas binds a reference within one translation unit.
         // A GOT reference keeps the symbol: the slot is per-symbol, so the
         // section+offset reduction has nothing to bind to there.
-        let got = got_addressed(r.symbol_name.as_str());
+        let form = extern_addr_form(r.symbol_name.as_str());
         let (sym_idx, base) = match asm_label_ref(r.symbol_name.as_str()) {
-            Some(_) if got => (
+            Some(_) if form == ExternAddrForm::Got => (
                 *asm_label_symidx
                     .get(r.symbol_name.as_str())
                     .expect("a resolved asm label has a symbol") as u64,
@@ -2433,21 +2450,23 @@ pub(super) fn write_relocatable(
             );
             continue;
         }
-        if got {
-            emit_got_ref_relocs(
+        match form {
+            ExternAddrForm::Got => emit_got_ref_relocs(
                 machine_for_rela,
                 &mut rela_bytes,
                 r.instr_offset as u64,
                 sym_idx,
-            );
-        } else {
-            emit_addr_fixup_relocs(
+            ),
+            ExternAddrForm::Abs32 => {
+                emit_abs32_ref_reloc(&mut rela_bytes, r.instr_offset as u64, sym_idx, base)
+            }
+            ExternAddrForm::Direct => emit_addr_fixup_relocs(
                 machine_for_rela,
                 &mut rela_bytes,
                 r.instr_offset as u64,
                 sym_idx,
                 base,
-            );
+            ),
         }
     }
 
@@ -2929,27 +2948,37 @@ pub(super) fn write_relocatable(
     let mut sh: Vec<Elf64Shdr> = Vec::with_capacity(num_sections);
     sh.push(Elf64Shdr::default()); // SHN_UNDEF
 
-    // .text -- GOT-addressed extern materializations become GOT loads
-    // (see `rewrite_extern_addr_loads_to_got`): import address-of sites
-    // (`reloc_call_sites` with `is_addr`) on both arches, and the cross-TU
-    // data references (`user_extern_data_refs`) `got_addressed` selects.
-    // Same length as `build.text`. A `direct_pcrel` ref is already a
-    // `mov`/`op sym(%rip)` in the emitted text, not a `lea` to rewrite.
-    let mut got_site_offsets: alloc::vec::Vec<usize> = build
-        .user_extern_data_refs
-        .iter()
-        .filter(|r| r.direct_pcrel.is_none() && got_addressed(r.symbol_name.as_str()))
-        .map(|r| r.instr_offset)
-        .collect();
-    got_site_offsets.extend(
-        build
-            .reloc_call_sites
-            .iter()
-            .filter(|s| s.is_addr)
-            .map(|s| s.instr_offset),
-    );
+    // .text -- extern materializations are rewritten to match the relocs
+    // emitted above: GOT loads (`rewrite_extern_addr_loads_to_got`) or,
+    // under the x86-64 kernel model, `mov reg, $sym`
+    // (`rewrite_extern_addr_loads_to_abs32`). The sites are the import
+    // address-of sites (`reloc_call_sites` with `is_addr`) and the
+    // cross-TU data references (`user_extern_data_refs`) whose form is
+    // not `Direct`. Same length as `build.text`. A `direct_pcrel` ref is
+    // already a `mov`/`op sym(%rip)` in the emitted text, not a `lea` to
+    // rewrite.
+    let mut got_site_offsets: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
+    let mut abs_site_offsets: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
+    for r in &build.user_extern_data_refs {
+        if r.direct_pcrel.is_some() {
+            continue;
+        }
+        match extern_addr_form(r.symbol_name.as_str()) {
+            ExternAddrForm::Got => got_site_offsets.push(r.instr_offset),
+            ExternAddrForm::Abs32 => abs_site_offsets.push(r.instr_offset),
+            ExternAddrForm::Direct => {}
+        }
+    }
+    for s in build.reloc_call_sites.iter().filter(|s| s.is_addr) {
+        if kernel_abs {
+            abs_site_offsets.push(s.instr_offset);
+        } else {
+            got_site_offsets.push(s.instr_offset);
+        }
+    }
     let mut text_body =
         rewrite_extern_addr_loads_to_got(machine_for_rela, &build.text, &got_site_offsets);
+    rewrite_extern_addr_loads_to_abs32(&mut text_body, &abs_site_offsets);
     // Carve the named-section function groups out of the `.text` tail;
     // the default prefix and the trailing version marker stay.
     if !carve.text_ranges.is_empty() {
@@ -3813,6 +3842,23 @@ fn emit_addr_fixup_relocs(
     }
 }
 
+/// Addressing form of a cross-TU address materialization in a
+/// relocatable object; chosen per symbol by `extern_addr_form`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExternAddrForm {
+    /// The codegen's direct page-relative / RIP-relative pair, kept
+    /// as-is; relocs from [`emit_addr_fixup_relocs`].
+    Direct,
+    /// GOT slot load; text rewritten by
+    /// [`rewrite_extern_addr_loads_to_got`], relocs from
+    /// [`emit_got_ref_relocs`].
+    Got,
+    /// Sign-extended 32-bit absolute (x86-64 kernel model); text
+    /// rewritten by [`rewrite_extern_addr_loads_to_abs32`], reloc from
+    /// [`emit_abs32_ref_reloc`].
+    Abs32,
+}
+
 /// Emit the GOT-indirect relocs for address-taking a dylib-routed import:
 /// `R_AARCH64_ADR_GOT_PAGE` at the `adrp` and
 /// `R_AARCH64_LD64_GOT_LO12_NC` at the paired `ldr` on aarch64;
@@ -3848,6 +3894,20 @@ fn emit_got_ref_relocs(machine: Machine, out: &mut Vec<u8>, instr_offset: u64, s
             write_struct(out, &rela);
         }
     }
+}
+
+/// Emit the kernel-model reloc for an external-address materialization:
+/// `R_X86_64_32S` at the imm32 of the `mov reg, imm32` produced by
+/// [`rewrite_extern_addr_loads_to_abs32`] (REX + opcode + modrm precede
+/// it). Absolute, so no end-of-field skew; `addend` carries the
+/// section-relative offset when the symbol reduced to section+offset.
+fn emit_abs32_ref_reloc(out: &mut Vec<u8>, instr_offset: u64, sym_idx: u64, addend: i64) {
+    let rela = Elf64Rela {
+        r_offset: instr_offset + 3,
+        r_info: (sym_idx << 32) | R_X86_64_32S as u64,
+        r_addend: addend,
+    };
+    write_struct(out, &rela);
 }
 
 /// Rewrite each external-address materialization into the GOT-load form
@@ -3892,6 +3952,25 @@ fn rewrite_extern_addr_loads_to_got(
     body
 }
 
+/// Rewrite each x86-64 external-address `lea reg, [rip+disp32]`
+/// (`REX.W 8D` modrm mod=00 rm=101) into `mov reg, imm32`
+/// (`REX.W C7 /0` modrm mod=11): the destination moves from modrm.reg
+/// to modrm.rm and REX.R to REX.B, and the imm32 occupies the bytes the
+/// disp32 did, so the instruction length is unchanged. Paired with the
+/// `R_X86_64_32S` from [`emit_abs32_ref_reloc`].
+fn rewrite_extern_addr_loads_to_abs32(body: &mut [u8], instr_offsets: &[usize]) {
+    for &lea_offset in instr_offsets {
+        if lea_offset + 3 > body.len() || body[lea_offset + 1] != 0x8d {
+            continue;
+        }
+        let rex = body[lea_offset];
+        let modrm = body[lea_offset + 2];
+        body[lea_offset] = 0x48 | ((rex >> 2) & 1);
+        body[lea_offset + 1] = 0xc7;
+        body[lea_offset + 2] = 0xc0 | ((modrm >> 3) & 0x07);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3917,6 +3996,27 @@ mod tests {
         assert_eq!(e_type, ET_REL);
         let e_machine = u16::from_le_bytes([bytes[18], bytes[19]]);
         assert_eq!(e_machine, EM_X86_64);
+    }
+
+    /// The kernel-model rewrite moves the destination from the lea's
+    /// modrm.reg (REX.R) to the mov's modrm.rm (REX.B) for every
+    /// register, including r8-r15.
+    #[test]
+    fn abs32_rewrite_moves_the_destination_register() {
+        // (lea reg, [rip+0], mov reg, imm32) pairs for rax, rdi, r8, r12.
+        let cases: [([u8; 3], [u8; 3]); 4] = [
+            ([0x48, 0x8d, 0x05], [0x48, 0xc7, 0xc0]),
+            ([0x48, 0x8d, 0x3d], [0x48, 0xc7, 0xc7]),
+            ([0x4c, 0x8d, 0x05], [0x49, 0xc7, 0xc0]),
+            ([0x4c, 0x8d, 0x25], [0x49, 0xc7, 0xc4]),
+        ];
+        for (lea, mov) in cases {
+            let mut body = alloc::vec::Vec::from(lea);
+            body.extend_from_slice(&[0, 0, 0, 0]);
+            rewrite_extern_addr_loads_to_abs32(&mut body, &[0]);
+            assert_eq!(&body[..3], &mov, "lea {lea:02x?}");
+            assert_eq!(&body[3..], &[0, 0, 0, 0], "imm32 slot untouched");
+        }
     }
 
     fn empty_program(path: &str) -> Program {
@@ -3974,6 +4074,7 @@ mod tests {
             data: Vec::new(),
             data_ro_len: 0,
             pic: false,
+            code_model: Default::default(),
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
             data_align: 8,

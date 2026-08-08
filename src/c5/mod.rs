@@ -59,12 +59,12 @@ pub use linker::{
     parse_native_elf, parse_shared_library, render_link_map, write_executable_elf64,
     write_native_image_from_merged, write_native_image_from_merged_ex,
 };
-#[cfg(all(feature = "full", feature = "std"))]
-#[allow(unused_imports)]
-pub use linker::{is_ld_invocation, run_ld};
 #[cfg(feature = "full")]
 #[allow(unused_imports)]
 pub use linker::{ArchiveMember, read_archive, write_archive};
+#[cfg(all(feature = "full", feature = "std"))]
+#[allow(unused_imports)]
+pub use linker::{is_ld_invocation, run_ld};
 #[cfg(feature = "full")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
 #[cfg(feature = "full")]

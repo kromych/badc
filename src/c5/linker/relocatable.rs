@@ -204,9 +204,7 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
     }
     let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
     if ehdr.e_ident[4] != 2 || ehdr.e_ident[5] != 1 {
-        return Err(err(&format!(
-            "{source}: not a little-endian ELF64 object"
-        )));
+        return Err(err(&format!("{source}: not a little-endian ELF64 object")));
     }
     if ehdr.e_type != ET_REL {
         return Err(err(&format!(
@@ -292,10 +290,7 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
         if let Some(ci) = carried[i]
             && sections[ci].flags & SHF_LINK_ORDER != 0
         {
-            sections[ci].link_target = carried
-                .get(sh.sh_link as usize)
-                .copied()
-                .flatten();
+            sections[ci].link_target = carried.get(sh.sh_link as usize).copied().flatten();
         }
     }
 
@@ -434,11 +429,7 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
     })
 }
 
-fn read_carried(
-    bytes: &[u8],
-    sh: &Elf64Shdr,
-    shstr: &[u8],
-) -> Result<EtSection, C5Error> {
+fn read_carried(bytes: &[u8], sh: &Elf64Shdr, shstr: &[u8]) -> Result<EtSection, C5Error> {
     let name = cstr(shstr, sh.sh_name as usize)?;
     Ok(EtSection {
         name,
@@ -602,80 +593,80 @@ pub fn parse_module_script(text: &str) -> Result<LdScript, C5Error> {
             if tok(p).is_empty() {
                 return Err(err("linker script: unterminated SECTIONS block"));
             }
-        let name = tok(p).to_string();
-        p += 1;
-        // Optional address expression (module.lds uses a literal 0).
-        if tok(p) != ":" {
-            if tok(p) != "0" {
-                return Err(err(&format!(
-                    "linker script: unsupported output-section address `{}`",
-                    tok(p)
-                )));
+            let name = tok(p).to_string();
+            p += 1;
+            // Optional address expression (module.lds uses a literal 0).
+            if tok(p) != ":" {
+                if tok(p) != "0" {
+                    return Err(err(&format!(
+                        "linker script: unsupported output-section address `{}`",
+                        tok(p)
+                    )));
+                }
+                p += 1;
             }
-            p += 1;
-        }
-        expect(&mut p, ":")?;
-        let mut align = 1u64;
-        if tok(p) == "ALIGN" {
-            p += 1;
-            expect(&mut p, "(")?;
-            align = tok(p)
-                .parse()
-                .map_err(|_| err("linker script: ALIGN wants an integer"))?;
-            p += 1;
-            expect(&mut p, ")")?;
-        }
-        expect(&mut p, "{")?;
-        let mut stmts: Vec<SecStmt> = Vec::new();
-        while tok(p) != "}" {
-            match tok(p) {
-                "" => return Err(err("linker script: unterminated output section")),
-                "." => {
-                    // `. = ALIGN(n);`
-                    p += 1;
-                    expect(&mut p, "=")?;
-                    expect(&mut p, "ALIGN")?;
-                    expect(&mut p, "(")?;
-                    let n: u64 = tok(p)
-                        .parse()
-                        .map_err(|_| err("linker script: ALIGN wants an integer"))?;
-                    p += 1;
-                    expect(&mut p, ")")?;
-                    expect(&mut p, ";")?;
-                    stmts.push(SecStmt::AlignDot(n));
-                }
-                "KEEP" => {
-                    // KEEP only affects --gc-sections, inert here.
-                    p += 1;
-                    expect(&mut p, "(")?;
-                    stmts.push(parse_gather(&toks, &mut p)?);
-                    expect(&mut p, ")")?;
-                }
-                "BYTE" => {
-                    p += 1;
-                    expect(&mut p, "(")?;
-                    let v: u8 = tok(p)
-                        .parse()
-                        .map_err(|_| err("linker script: BYTE wants an integer"))?;
-                    p += 1;
-                    expect(&mut p, ")")?;
-                    stmts.push(SecStmt::Byte(v));
-                }
-                "*" => stmts.push(parse_gather(&toks, &mut p)?),
-                t => {
-                    let sym = t.to_string();
-                    p += 1;
-                    expect(&mut p, "=")?;
-                    if tok(p) != "." {
-                        return Err(err(&format!(
-                            "linker script: unsupported assignment to `{sym}`"
-                        )));
+            expect(&mut p, ":")?;
+            let mut align = 1u64;
+            if tok(p) == "ALIGN" {
+                p += 1;
+                expect(&mut p, "(")?;
+                align = tok(p)
+                    .parse()
+                    .map_err(|_| err("linker script: ALIGN wants an integer"))?;
+                p += 1;
+                expect(&mut p, ")")?;
+            }
+            expect(&mut p, "{")?;
+            let mut stmts: Vec<SecStmt> = Vec::new();
+            while tok(p) != "}" {
+                match tok(p) {
+                    "" => return Err(err("linker script: unterminated output section")),
+                    "." => {
+                        // `. = ALIGN(n);`
+                        p += 1;
+                        expect(&mut p, "=")?;
+                        expect(&mut p, "ALIGN")?;
+                        expect(&mut p, "(")?;
+                        let n: u64 = tok(p)
+                            .parse()
+                            .map_err(|_| err("linker script: ALIGN wants an integer"))?;
+                        p += 1;
+                        expect(&mut p, ")")?;
+                        expect(&mut p, ";")?;
+                        stmts.push(SecStmt::AlignDot(n));
                     }
-                    p += 1;
-                    expect(&mut p, ";")?;
-                    stmts.push(SecStmt::DefineSym(sym));
+                    "KEEP" => {
+                        // KEEP only affects --gc-sections, inert here.
+                        p += 1;
+                        expect(&mut p, "(")?;
+                        stmts.push(parse_gather(&toks, &mut p)?);
+                        expect(&mut p, ")")?;
+                    }
+                    "BYTE" => {
+                        p += 1;
+                        expect(&mut p, "(")?;
+                        let v: u8 = tok(p)
+                            .parse()
+                            .map_err(|_| err("linker script: BYTE wants an integer"))?;
+                        p += 1;
+                        expect(&mut p, ")")?;
+                        stmts.push(SecStmt::Byte(v));
+                    }
+                    "*" => stmts.push(parse_gather(&toks, &mut p)?),
+                    t => {
+                        let sym = t.to_string();
+                        p += 1;
+                        expect(&mut p, "=")?;
+                        if tok(p) != "." {
+                            return Err(err(&format!(
+                                "linker script: unsupported assignment to `{sym}`"
+                            )));
+                        }
+                        p += 1;
+                        expect(&mut p, ";")?;
+                        stmts.push(SecStmt::DefineSym(sym));
+                    }
                 }
-            }
             }
             p += 1; // `}`
             if name == "/DISCARD/" {
@@ -953,8 +944,7 @@ fn merge_property_notes(notes: &[Vec<u8>], n_inputs: usize, align: u64) -> Optio
                 let mut d = name_end;
                 while d + 8 <= desc_end {
                     let pty = u32::from_le_bytes(note[d..d + 4].try_into().unwrap());
-                    let dsz =
-                        u32::from_le_bytes(note[d + 4..d + 8].try_into().unwrap()) as usize;
+                    let dsz = u32::from_le_bytes(note[d + 4..d + 8].try_into().unwrap()) as usize;
                     if d + 8 + dsz > desc_end || dsz != 4 {
                         break; // only u32 payloads participate
                     }
@@ -1538,9 +1528,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                 }
             };
             syms.push(out);
-        } else if let Some((_, outsec, off)) =
-            script_syms.iter().find(|(n, _, _)| n == name)
-        {
+        } else if let Some((_, outsec, off)) = script_syms.iter().find(|(n, _, _)| n == name) {
             syms.push(OutSym {
                 name: name.clone(),
                 info: STB_GLOBAL << 4, // STT_NOTYPE
@@ -1826,9 +1814,7 @@ fn write_et_rel(
                 let mut b = Vec::with_capacity(out_relocs[*i].len() * ELF64_RELA_SIZE);
                 for &(off, sym, rtype, addend) in &out_relocs[*i] {
                     b.extend_from_slice(&off.to_le_bytes());
-                    b.extend_from_slice(
-                        &(((sym as u64) << 32) | rtype as u64).to_le_bytes(),
-                    );
+                    b.extend_from_slice(&(((sym as u64) << 32) | rtype as u64).to_le_bytes());
                     b.extend_from_slice(&addend.to_le_bytes());
                 }
                 (

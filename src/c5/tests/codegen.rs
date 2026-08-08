@@ -5694,7 +5694,10 @@ fn x64_indirect_branch_thunk_inline_embeds_the_retpoline() {
         "call, switch dispatch and computed goto each embed the capture"
     );
     assert!(count(CALL_HEAD) >= 1, "call form hops over the body");
-    assert!(count(JMP_HEAD) >= 1, "jump form enters the capture directly");
+    assert!(
+        count(JMP_HEAD) >= 1,
+        "jump form enters the capture directly"
+    );
     assert_eq!(
         x64_register_indirect_forms(&text),
         0,

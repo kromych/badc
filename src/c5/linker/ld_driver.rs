@@ -349,9 +349,9 @@ fn collect_inputs(a: &LdArgs, machine: Option<u16>) -> Result<Vec<EtRel>, i32> {
         objs.push(o);
     };
     let resolve_span = |objs: &mut Vec<EtRel>,
-                            undef: &mut HashSet<String>,
-                            defined: &mut HashSet<String>,
-                            span: &mut [PendingArchive]|
+                        undef: &mut HashSet<String>,
+                        defined: &mut HashSet<String>,
+                        span: &mut [PendingArchive]|
      -> Result<(), i32> {
         loop {
             let mut changed = false;

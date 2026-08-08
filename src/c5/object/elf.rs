@@ -2158,9 +2158,8 @@ pub(super) fn write(
     // Symbol index of a target stream's section symbol and the addend
     // rebased into that section. Data offsets index the unified
     // stream: read-only prefix, then .data, then the zero-fill region.
-    let sec_sym_idx = |sec: Sec| -> u64 {
-        1 + sec_syms.iter().position(|&(s, _)| s == sec).unwrap() as u64
-    };
+    let sec_sym_idx =
+        |sec: Sec| -> u64 { 1 + sec_syms.iter().position(|&(s, _)| s == sec).unwrap() as u64 };
     let map_data_off = |d: u64| -> (Sec, u64) {
         if d < ro_len {
             (Sec::RoData, d)
@@ -2172,9 +2171,7 @@ pub(super) fn write(
     };
     let site_vaddr = |r: &crate::c5::codegen::EmittedFinalReloc| -> u64 {
         match r.site {
-            crate::c5::codegen::EmitStream::Text => {
-                code_vmaddr + stub_len + r.site_offset
-            }
+            crate::c5::codegen::EmitStream::Text => code_vmaddr + stub_len + r.site_offset,
             crate::c5::codegen::EmitStream::Data => {
                 let (sec, off) = map_data_off(r.site_offset);
                 let base = sec_syms

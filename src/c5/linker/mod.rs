@@ -55,6 +55,9 @@ pub use archive::{ArchiveMember, read_archive, write_archive};
 pub use image::write_executable_elf64;
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
+pub use ld_driver::{is_ld_invocation, run_ld};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
 pub use link::{
     MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
     emit_aarch64_plt, emit_x86_64_plt, link_native_objects, link_native_objects_with_options,
@@ -62,20 +65,17 @@ pub use link::{
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
-pub use ld_driver::{is_ld_invocation, run_ld};
-#[cfg(feature = "std")]
-#[allow(unused_imports)]
 pub use map::{ArchiveInclusion, render_link_map};
-#[cfg(feature = "std")]
-#[allow(unused_imports)]
-pub use relocatable::{
-    EtRel, LdScript, RelinkOptions, link_relocatable, parse_et_rel, parse_module_script,
-};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use object::{
     NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, SharedLibrary,
     is_elf_object, parse_native_elf, parse_shared_library,
+};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use relocatable::{
+    EtRel, LdScript, RelinkOptions, link_relocatable, parse_et_rel, parse_module_script,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

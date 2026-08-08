@@ -4,8 +4,7 @@
 //! relocation rewriting, script handling).
 
 use crate::c5::linker::relocatable::{
-    EtRel, EtSymRef, RelinkOptions, glob_match, link_relocatable, parse_et_rel,
-    parse_module_script,
+    EtRel, EtSymRef, RelinkOptions, glob_match, link_relocatable, parse_et_rel, parse_module_script,
 };
 use crate::c5::{
     CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
@@ -97,11 +96,7 @@ fn merges_sections_symbols_and_relocs() {
         .iter()
         .position(|s| s.name == "bump")
         .unwrap() as u32;
-    let text = merged
-        .sections
-        .iter()
-        .find(|s| s.name == ".text")
-        .unwrap();
+    let text = merged.sections.iter().find(|s| s.name == ".text").unwrap();
     assert!(
         text.relocs.iter().any(|r| r.sym == bump_idx),
         "call reloc re-indexed to the merged symbol"
@@ -148,16 +143,8 @@ fn locals_kept_per_object() {
     assert!(merged.symbols.iter().any(|s| s.name == "secret_a"));
     assert!(merged.symbols.iter().any(|s| s.name == "secret_b"));
     // ELF ordering: every local precedes every global.
-    let last_local = merged
-        .symbols
-        .iter()
-        .rposition(|s| s.binding == 0)
-        .unwrap();
-    let first_global = merged
-        .symbols
-        .iter()
-        .position(|s| s.binding != 0)
-        .unwrap();
+    let last_local = merged.symbols.iter().rposition(|s| s.binding == 0).unwrap();
+    let first_global = merged.symbols.iter().position(|s| s.binding != 0).unwrap();
     assert!(last_local < first_global);
 }
 
@@ -293,8 +280,14 @@ fn emit_relocs_survive_into_final_elf() {
         let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
         parse_native_elf(&bytes).expect("parse")
     };
-    let a = compile("int helper(int n);\nint main(void) { return helper(3); }\n", false);
-    let b = compile("int gval = 7;\nint helper(int n) { return n + gval; }\n", true);
+    let a = compile(
+        "int helper(int n);\nint main(void) { return helper(3); }\n",
+        false,
+    );
+    let b = compile(
+        "int gval = 7;\nint helper(int n) { return n + gval; }\n",
+        true,
+    );
     let mut merged = link_native_objects(&[a, b]).expect("link");
     assert!(
         !merged.applied_text_relocs.is_empty(),

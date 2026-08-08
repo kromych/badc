@@ -684,7 +684,7 @@ fn run() {
                     "small" => badc::CodeModel::Small,
                     "kernel" => badc::CodeModel::Kernel,
                     // aarch64 `tiny` narrows the layout contract to
-                    // ±1MiB; the small-model form stays valid under it,
+                    // +/-1MiB; the small-model form stays valid under it,
                     // so it lowers as small. Validated against the
                     // target below.
                     "tiny" => {

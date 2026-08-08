@@ -5506,7 +5506,15 @@ pub(crate) fn materialize_asm_sections(
             // Alignment padding follows the instruction boundary the last
             // byte-emitting item left; the padding itself sets none.
             match item {
-                AsmSectionItem::CodeBytes { .. } => sec.after_insn = true,
+                AsmSectionItem::CodeBytes { .. } => {
+                    sec.after_insn = true;
+                    // gas gives a section holding instructions at least the
+                    // architecture's instruction alignment (4 on AArch64,
+                    // where `align_is_p2` holds; 1 on x86).
+                    if align_is_p2 {
+                        sec.align = sec.align.max(4);
+                    }
+                }
                 AsmSectionItem::Data { .. }
                 | AsmSectionItem::Fill { .. }
                 | AsmSectionItem::Bytes(_)

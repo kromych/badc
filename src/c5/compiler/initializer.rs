@@ -1950,9 +1950,9 @@ impl Compiler {
     /// first `.field` has already been consumed) and resolve it down
     /// to the final member: its absolute byte offset and its
     /// `StructField` record (so the caller sees array / bitfield
-    /// shape, not just the element type). Accepts further `.member`
-    /// steps; `[index]` sub-array designators surface as a parse
-    /// error until they are wired up. The current type must be a
+    /// shape, not just the element type). Accepts `.member` steps and
+    /// `[index]` sub-array designators, one rank per index, in any
+    /// mix (`.a[i][j]`, `.a[i].b`). The current type must be a
     /// value-typed struct or union for any `.` step.
     pub(super) fn resolve_nested_designator_chain(
         &mut self,
@@ -1995,36 +1995,46 @@ impl Compiler {
                 cur_ty = sub.ty;
                 last = Some(sub);
             } else {
-                // C99 6.7.8p7 `.member[i]`: index the current array member.
-                // Its element type is `cur_ty`; its dimension is on the
-                // field record (`array_size`, with the element type stored
-                // separately, so the stride is `sizeof(element)`).
+                // C99 6.7.8p7 `.member[i]`: index the current array member,
+                // one rank per designator. The element type is `cur_ty`; the
+                // field record carries the dimensions (`array_size` is the
+                // total element count, `array_dims` the per-rank list for a
+                // multi-dimensional member), so each step scales by the
+                // product of the remaining inner dimensions.
                 let arr = match &last {
                     Some(f) if f.array_size > 0 => f.clone(),
                     _ => return Err(self.compile_err("`[N]` designator on a non-array field")),
                 };
-                if arr.inner_array_size != 0 {
-                    return Err(self.compile_err(
-                        "multi-dimensional `[N]` sub-designator is not yet supported",
-                    ));
-                }
+                let dims: Vec<i64> = if arr.array_dims.len() >= 2 {
+                    arr.array_dims.clone()
+                } else {
+                    alloc::vec![arr.array_size]
+                };
+                let inner: i64 = dims[1..].iter().product::<i64>().max(1);
                 self.next()?;
-                let m = self.parse_constant_int()?;
-                if m < 0 || m >= arr.array_size {
+                let m = self.parse_constant_int_folding_const_objects()?;
+                if m < 0 || m >= dims[0] {
                     return Err(self.compile_err(format!(
                         "array designator index {m} out of bounds [0, {})",
-                        arr.array_size
+                        dims[0]
                     )));
                 }
                 if self.lex.tk != ']' {
                     return Err(self.compile_err("`]` expected after sub-designator index"));
                 }
                 self.next()?;
-                cur_offset += m * self.size_of_type(cur_ty) as i64;
-                // The indexed element is one `cur_ty`; strip the array so the
-                // leaf initializes a single element.
+                cur_offset += m * inner * self.size_of_type(cur_ty) as i64;
+                // Drop the indexed rank: the remaining dims describe the
+                // selected row, and a scalar leaf clears the array shape so
+                // the value fill writes a single element.
                 let mut elem = arr;
-                elem.array_size = 0;
+                elem.array_size = if dims.len() >= 2 { inner } else { 0 };
+                elem.inner_array_size = if dims.len() >= 3 { dims[2] } else { 0 };
+                elem.array_dims = if dims.len() >= 3 {
+                    dims[1..].to_vec()
+                } else {
+                    Vec::new()
+                };
                 last = Some(elem);
             }
             took_step = true;

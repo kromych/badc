@@ -30,32 +30,35 @@ const MAX_OUTPUT_WIDTH: usize = 72;
 pub fn escape(name: &str) -> String {
     let bytes = name.as_bytes();
     let mut out = String::with_capacity(name.len());
+    // Everything between two escapes is copied as a slice: each byte
+    // this matches is single-byte ASCII, so the cut points are always
+    // character boundaries and a multi-byte path survives intact.
+    let mut start = 0;
     for (i, &c) in bytes.iter().enumerate() {
-        match c {
+        let replacement = match c {
             b'\\' => {
-                // Count the run this backslash belongs to and look past
-                // it: only a run that ends at whitespace is doubled.
+                // Only a backslash run that ends at whitespace is
+                // doubled; elsewhere the byte stands.
                 let mut end = i;
                 while end < bytes.len() && bytes[end] == b'\\' {
                     end += 1;
                 }
-                if end < bytes.len() && (bytes[end] == b' ' || bytes[end] == b'\t') {
-                    out.push('\\');
+                match bytes.get(end) {
+                    Some(b' ' | b'\t') => "\\\\",
+                    _ => continue,
                 }
-                out.push('\\');
             }
-            b' ' | b'\t' => {
-                out.push('\\');
-                out.push(c as char);
-            }
-            b'#' => {
-                out.push('\\');
-                out.push('#');
-            }
-            b'$' => out.push_str("$$"),
-            _ => out.push(c as char),
-        }
+            b' ' => "\\ ",
+            b'\t' => "\\\t",
+            b'#' => "\\#",
+            b'$' => "$$",
+            _ => continue,
+        };
+        out.push_str(&name[start..i]);
+        out.push_str(replacement);
+        start = i + 1;
     }
+    out.push_str(&name[start..]);
     out
 }
 
@@ -191,6 +194,9 @@ mod tests {
         assert_eq!(escape("bs\\sl.h"), "bs\\sl.h");
         assert_eq!(escape("bs\\ sp.h"), "bs\\\\\\ sp.h");
         assert_eq!(escape("x\\\\ y.h"), "x\\\\\\\\\\ y.h");
+        // A multi-byte path is not a sequence of bytes to re-encode.
+        assert_eq!(escape("caf\u{e9}/\u{4e2d}.h"), "caf\u{e9}/\u{4e2d}.h");
+        assert_eq!(escape("caf\u{e9} x.h"), "caf\u{e9}\\ x.h");
     }
 
     #[test]

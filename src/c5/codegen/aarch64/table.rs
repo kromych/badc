@@ -148,6 +148,9 @@ pub(crate) enum Opnd {
         is64: bool,
         sp: bool,
     },
+    /// `Xn!`: a 64-bit register the instruction writes back, as the memory
+    /// copy/set family spells its size and pointer operands.
+    RegWb(u8),
     /// SIMD/FP register: `num` 0..31, `is_d` selects the D (64) vs S (32) view.
     VReg {
         num: u8,
@@ -426,10 +429,44 @@ fn fp_ldst_reg(mnem: &str, rt: &Opnd) -> Option<(u8, u32, u32, u32)> {
     })
 }
 
+/// Register number and `opc` selector (s 0, d 1, q 2) of a SIMD register-pair
+/// transfer operand; `None` for a non-FP operand.
+fn fp_pair_reg(o: &Opnd) -> Option<(u8, u8)> {
+    Some(match *o {
+        Opnd::VReg { num, is_d: false } => (num, 0),
+        Opnd::VReg { num, is_d: true } => (num, 1),
+        Opnd::QReg(num) => (num, 2),
+        _ => return None,
+    })
+}
+
 /// Encode one A64 instruction to its 32-bit word. Operand order is the written
 /// (assembly) order. `OptLsl` slots may be omitted by the caller (a missing
 /// trailing shift defaults to 0).
 pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
+    // The add/sub immediate field is unsigned, so GNU as encodes a negative
+    // immediate as the opposite operation on the negated value: `cmp x0, #-16`
+    // assembles as `cmn x0, #16`. The immediate is last, or last before an
+    // explicit `lsl`.
+    if let Some(opposite) = match mnemonic {
+        "add" => Some("sub"),
+        "sub" => Some("add"),
+        "adds" => Some("subs"),
+        "subs" => Some("adds"),
+        "cmp" => Some("cmn"),
+        "cmn" => Some("cmp"),
+        _ => None,
+    } && let Some(at) = ops
+        .iter()
+        .rposition(|o| !matches!(o, Opnd::Lsl(_)))
+        .filter(|&i| matches!(ops[i], Opnd::Imm(v) if v < 0))
+        && let Opnd::Imm(v) = ops[at]
+        && let Some(neg) = v.checked_neg()
+    {
+        let mut swapped = ops.to_vec();
+        swapped[at] = Opnd::Imm(neg);
+        return encode(opposite, &swapped);
+    }
     // A written `sp` is only ever a catalogue form's business: the bespoke
     // arms below all encode register 31 as the zero register, so routing an sp
     // operand past them would silently drop the stack pointer.
@@ -493,6 +530,58 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | if acquire { 1 << 22 } else { 0 }
             | if release { 1 << 15 } else { 0 };
         return Ok(base | ((rs as u32) << 16) | ((rn as u32) << 5) | (rt as u32));
+    }
+    // Memory copy / set (FEAT_MOPS). Every mnemonic shares one field layout --
+    // destination pointer at bit 0, size at bit 5, source pointer or set value
+    // at bit 16 -- so the option and stage suffixes only pick the base word.
+    // `cpy` takes `[Xd]!, [Xs]!, Xn!` and `set` takes `[Xd]!, Xn!, Xs`.
+    if let Some(base) = mops_base(mnemonic) {
+        let (rd, rn, rs, set) = match ops {
+            [
+                Opnd::Mem {
+                    base: rd,
+                    off: 0,
+                    pre: true,
+                },
+                Opnd::Mem {
+                    base: rs,
+                    off: 0,
+                    pre: true,
+                },
+                Opnd::RegWb(rn),
+            ] => (*rd, *rn, *rs, false),
+            [
+                Opnd::Mem {
+                    base: rd,
+                    off: 0,
+                    pre: true,
+                },
+                Opnd::RegWb(rn),
+                Opnd::Reg {
+                    num: rs,
+                    is64: true,
+                    sp: false,
+                },
+            ] => (*rd, *rn, *rs, true),
+            _ => {
+                return Err(format!(
+                    "inline asm: `{mnemonic}` needs `[Xd]!, [Xs]!, Xn!` or `[Xd]!, Xn!, Xs`"
+                ));
+            }
+        };
+        // GNU as rejects register 31 wherever the operand is a pointer or the
+        // size; only the set value reads it, as xzr.
+        if rd == 31 || rn == 31 || (!set && rs == 31) {
+            return Err(format!(
+                "inline asm: `{mnemonic}` needs a 64-bit integer register here"
+            ));
+        }
+        if rd == rn || rd == rs || rn == rs {
+            return Err(format!(
+                "inline asm: `{mnemonic}` operands must be distinct registers"
+            ));
+        }
+        return Ok(base | ((rs as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
     }
     // fmov between a SIMD/FP register and a GP register (bridging the two
     // register files), or an FP-to-FP move. The GP<->FP forms require matching
@@ -684,10 +773,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // SIMD `dup Vd.T, Rn`: broadcast a GP register into every lane. The imm5
     // field carries the element size as a one-hot bit. Valid targets are
     // 8b/16b/4h/8h/2s/4s/2d; the single-lane .1d is not a broadcast target.
-    if mnemonic == "dup" {
-        let [Opnd::VecReg { num: rd, size, q }, Opnd::Reg { num: rn, .. }] = *ops else {
-            return Err(String::from("inline asm: bad dup operands"));
-        };
+    // The element form `dup Bd|Hd|Sd|Dd, Vn.T[i]` is handled with its `mov`
+    // spelling below, so a non-GP source falls through rather than erroring.
+    if mnemonic == "dup"
+        && let [Opnd::VecReg { num: rd, size, q }, Opnd::Reg { num: rn, .. }] = *ops
+    {
         if size > 3 || (size == 3 && !q) {
             return Err(String::from(
                 "inline asm: bad dup arrangement (8b/16b/4h/8h/2s/4s/2d)",
@@ -765,15 +855,18 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
-    // SIMD logical `<and|bic|orr|orn|eor> Vd.T, Vn.T, Vm.T`, byte arrangement
-    // only; the (U, size) fields select the operation. GP forms (Reg operands)
-    // fall through to the catalogue.
+    // SIMD logical `<and|bic|orr|orn|eor|bsl|bit|bif> Vd.T, Vn.T, Vm.T`, byte
+    // arrangement only; the (U, size) fields select the operation. GP forms
+    // (Reg operands) fall through to the catalogue.
     if let Some(variant) = match mnemonic {
         "and" => Some(0u32),
         "bic" => Some(0x0040_0000),
         "orr" => Some(0x0080_0000),
         "orn" => Some(0x00C0_0000),
         "eor" => Some(0x2000_0000),
+        "bsl" => Some(0x2040_0000),
+        "bit" => Some(0x2080_0000),
+        "bif" => Some(0x20C0_0000),
         _ => None,
     } && let [
         Opnd::VecReg { num: rd, size, q },
@@ -800,6 +893,168 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rm as u32) << 16)
             | ((rn as u32) << 5)
             | (rd as u32));
+    }
+    // SIMD register-pair load/store `<ldp|stp> <St1|Dt1|Qt1>, <t2>, [Xn|SP..]`.
+    // `opc` selects the register view and the scale (4 << opc); the addressing
+    // mode sits at bit 23 (post-index 1, signed offset 2, pre-index 3) and the
+    // load bit at 22. Byte-identical to GNU as: `ldp q0, q1, [x2, #16]` is
+    // 0xAD408440 and `stp d2, d3, [x2, #-16]!` is 0x6DBF0C42.
+    if let ("ldp" | "stp", [t1, t2, mem, rest @ ..]) = (mnemonic, ops)
+        && let Some((rt, opc)) = fp_pair_reg(t1)
+        && let Some((rt2, opc2)) = fp_pair_reg(t2)
+    {
+        if opc != opc2 {
+            return Err(String::from("inline asm: register-pair widths differ"));
+        }
+        let (rn, off, mode) = match (mem, rest) {
+            (
+                Opnd::Mem {
+                    base,
+                    off,
+                    pre: true,
+                },
+                [],
+            ) => (*base, *off, 3u32),
+            (
+                Opnd::Mem {
+                    base,
+                    off: 0,
+                    pre: false,
+                },
+                [Opnd::Imm(n)],
+            ) => (*base, *n, 1),
+            (
+                Opnd::Mem {
+                    base,
+                    off,
+                    pre: false,
+                },
+                [],
+            ) => (*base, *off, 2),
+            _ => {
+                return Err(format!(
+                    "inline asm: no A64 encoding for `{mnemonic}` with these operands"
+                ));
+            }
+        };
+        let scale = 4i64 << opc;
+        if off % scale != 0 || !(-64..=63).contains(&(off / scale)) {
+            return Err(format!(
+                "inline asm: `{mnemonic}` offset {off} is not a signed 7-bit multiple of {scale}"
+            ));
+        }
+        let imm7 = ((off / scale) as u32) & 0x7F;
+        let load = u32::from(mnemonic == "ldp");
+        return Ok(0x2C00_0000
+            | ((opc as u32) << 30)
+            | (mode << 23)
+            | (load << 22)
+            | (imm7 << 15)
+            | ((rt2 as u32) << 10)
+            | ((rn as u32) << 5)
+            | (rt as u32));
+    }
+    // SIMD shift-and-insert by immediate. `sri` counts from the right, so the
+    // immh:immb field holds `2 * esize - shift` for a shift of 1..=esize;
+    // `sli` counts from the left, holding `esize + shift` for 0..=esize-1.
+    // Byte-identical to GNU as: `sri v1.4s, v17.4s, #20` is 0x6F2C4621 and
+    // `sli v1.4s, v17.4s, #20` is 0x6F345621.
+    if let Some((base, right)) = match mnemonic {
+        "sri" => Some((0x2F00_4400u32, true)),
+        "sli" => Some((0x2F00_5400u32, false)),
+        _ => None,
+    } && let [
+        Opnd::VecReg { num: rd, size, q },
+        Opnd::VecReg {
+            num: rn,
+            size: s1,
+            q: q1,
+        },
+        Opnd::Imm(shift),
+    ] = *ops
+    {
+        if size != s1 || q != q1 {
+            return Err(String::from("inline asm: vector shift arrangements differ"));
+        }
+        if size == 3 && !q {
+            return Err(String::from(
+                "inline asm: .1d arrangement is reserved (use .2d)",
+            ));
+        }
+        let esize = 8i64 << size;
+        let range = if right { 1..=esize } else { 0..=esize - 1 };
+        if !range.contains(&shift) {
+            return Err(format!(
+                "inline asm: `{mnemonic}` shift {shift} out of range for this arrangement"
+            ));
+        }
+        let field = if right {
+            2 * esize - shift
+        } else {
+            esize + shift
+        } as u32;
+        return Ok((if q { 1u32 << 30 } else { 0 })
+            | base
+            | (field << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SHA1 / SHA512 schedule and hash updates: the arrangement is fixed by the
+    // instruction, so only the register fields vary. `sha512h` / `sha512h2`
+    // take their two sources as q registers. Byte-identical to GNU as:
+    // `sha1su0 v0.4s, v1.4s, v2.4s` is 0x5E023020 and `sha512h q3, q6, v7.2d`
+    // is 0xCE6780C3.
+    // Scalar SIMD forms on the 64-bit view: `add`/`sub Dd, Dn, Dm` and the
+    // SHA1 hash update `sha1h Sd, Sn`. Byte-identical to GNU as: `add d7, d7,
+    // d16` is 0x5EF084E7 and `sha1h s14, s12` is 0x5E28098E.
+    if let Some((base, is_d)) = match mnemonic {
+        "add" => Some((0x5EF0_8400u32, true)),
+        "sub" => Some((0x7EF0_8400, true)),
+        "sha1h" => Some((0x5E28_0800, false)),
+        _ => None,
+    } {
+        let fields = match *ops {
+            [
+                Opnd::VReg { num: rd, is_d: a },
+                Opnd::VReg { num: rn, is_d: b },
+            ] if !is_d && !a && !b => Some((rd, rn, 0)),
+            [
+                Opnd::VReg { num: rd, is_d: a },
+                Opnd::VReg { num: rn, is_d: b },
+                Opnd::VReg { num: rm, is_d: c },
+            ] if is_d && a && b && c => Some((rd, rn, rm)),
+            _ => None,
+        };
+        if let Some((rd, rn, rm)) = fields {
+            return Ok(base | ((rm as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
+        }
+    }
+    if let Some((base, esize)) = match mnemonic {
+        "sha1su0" => Some((0x5E00_3000u32, 2u8)),
+        "sha1su1" => Some((0x5E28_1800, 2)),
+        "sha512su0" => Some((0xCEC0_8000, 3)),
+        "sha512su1" => Some((0xCE60_8800, 3)),
+        "sha512h" => Some((0xCE60_8000, 3)),
+        "sha512h2" => Some((0xCE60_8400, 3)),
+        _ => None,
+    } {
+        let vec_of = |o: &Opnd| match *o {
+            Opnd::VecReg { num, size, q } if size == esize && q => Some(num),
+            _ => None,
+        };
+        let fields = match *ops {
+            [ref d, ref n] => vec_of(d).zip(vec_of(n)).map(|(d, n)| (d, n, 0)),
+            [Opnd::QReg(d), Opnd::QReg(n), ref m] => vec_of(m).map(|m| (d, n, m)),
+            [ref d, ref n, ref m] => vec_of(d)
+                .zip(vec_of(n))
+                .zip(vec_of(m))
+                .map(|((d, n), m)| (d, n, m)),
+            _ => None,
+        };
+        let (rd, rn, rm) = fields.ok_or_else(|| {
+            format!("inline asm: no A64 encoding for `{mnemonic}` with these operands")
+        })?;
+        return Ok(base | ((rm as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
     }
     // SIMD permute `<zip1|zip2|uzp1|uzp2|trn1|trn2> Vd.T, Vn.T, Vm.T`, one
     // arrangement. size at bit 22, Q at 30; each op's base word carries its
@@ -1374,7 +1629,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // element (X for d, W otherwise), Q following; smov's Q follows the chosen
     // destination, which must be wider than the element.
     if let Some((base, signed)) = match mnemonic {
-        "umov" => Some((0x0E00_3C00u32, false)),
+        "umov" | "mov" => Some((0x0E00_3C00u32, false)),
         "smov" => Some((0x0E00_2C00, true)),
         _ => None,
     } && let [
@@ -1400,6 +1655,60 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         let imm5 = ((index as u32) << (size + 1)) | (1u32 << size);
         let q = if is64 { 1u32 << 30 } else { 0 };
         return Ok(base | q | (imm5 << 16) | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SIMD element to SIMD element: `ins Vd.T[i], Vn.T[j]` (also spelled
+    // `mov`). imm5 carries the destination element size and lane, imm4 the
+    // source lane scaled by the element size. Byte-identical to GNU as:
+    // `mov v2.s[1], v5.s[3]` is 0x6E0C64A2.
+    if let "ins" | "mov" = mnemonic
+        && let [
+            Opnd::VecElem {
+                num: rd,
+                size,
+                index,
+            },
+            Opnd::VecElem {
+                num: rn,
+                size: s1,
+                index: index2,
+            },
+        ] = *ops
+    {
+        if size != s1 {
+            return Err(String::from("inline asm: ins element sizes differ"));
+        }
+        let imm5 = ((index as u32) << (size + 1)) | (1u32 << size);
+        let imm4 = (index2 as u32) << size;
+        return Ok(0x6E00_0400 | (imm5 << 16) | (imm4 << 11) | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SIMD element to scalar: `mov Bd|Hd|Sd|Dd, Vn.T[i]`, the `dup` element
+    // alias. imm5 carries the element size and lane; the destination view must
+    // name the same element size. Byte-identical to GNU as: `mov d19, v0.d[1]`
+    // is 0x5E180413.
+    if let "mov" | "dup" = mnemonic
+        && let [dst, src] = ops
+        && let Opnd::VecElem {
+            num: rn,
+            size,
+            index,
+        } = *src
+        && let Some(dsize) = match *dst {
+            Opnd::VScalar { size: s, .. } => Some(s),
+            Opnd::VReg { is_d, .. } => Some(if is_d { 3 } else { 2 }),
+            _ => None,
+        }
+    {
+        let rd = match *dst {
+            Opnd::VScalar { num, .. } | Opnd::VReg { num, .. } => num,
+            _ => unreachable!("guarded by the size match"),
+        };
+        if dsize != size {
+            return Err(String::from(
+                "inline asm: scalar destination must name the source element size",
+            ));
+        }
+        let imm5 = ((index as u32) << (size + 1)) | (1u32 << size);
+        return Ok(0x5E00_0400 | (imm5 << 16) | ((rn as u32) << 5) | (rd as u32));
     }
     // GP register to SIMD element: `ins Vd.T[i], Rn` (also spelled `mov`). The
     // vector register is 128-bit so Q is fixed; imm5 carries element size and
@@ -1947,6 +2256,43 @@ fn encode_catalogue(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     Err(format!(
         "inline asm: no A64 encoding for `{mnemonic}` with these operands"
     ))
+}
+
+/// Base word of a FEAT_MOPS memory copy / set mnemonic, with the destination,
+/// size and source fields clear. Measured from GNU as; the suffixes select the
+/// stage (`p`/`m`/`e`) and the read/write temporal-hint options.
+#[rustfmt::skip]
+static MOPS_FORMS: &[(&str, u32)] = &[
+    ("cpye", 0x1D800400), ("cpyen", 0x1D80C400), ("cpyern", 0x1D808400),
+    ("cpyert", 0x1D802400), ("cpyertwn", 0x1D806400), ("cpyet", 0x1D803400),
+    ("cpyetn", 0x1D80F400), ("cpyewn", 0x1D804400), ("cpyewt", 0x1D801400),
+    ("cpyfe", 0x19800400), ("cpyfen", 0x1980C400), ("cpyfern", 0x19808400),
+    ("cpyfert", 0x19802400), ("cpyfertwn", 0x19806400), ("cpyfet", 0x19803400),
+    ("cpyfetn", 0x1980F400), ("cpyfewn", 0x19804400), ("cpyfewt", 0x19801400),
+    ("cpyfm", 0x19400400), ("cpyfmn", 0x1940C400), ("cpyfmrn", 0x19408400),
+    ("cpyfmrt", 0x19402400), ("cpyfmrtwn", 0x19406400), ("cpyfmt", 0x19403400),
+    ("cpyfmtn", 0x1940F400), ("cpyfmwn", 0x19404400), ("cpyfmwt", 0x19401400),
+    ("cpyfp", 0x19000400), ("cpyfpn", 0x1900C400), ("cpyfprn", 0x19008400),
+    ("cpyfprt", 0x19002400), ("cpyfprtwn", 0x19006400), ("cpyfpt", 0x19003400),
+    ("cpyfptn", 0x1900F400), ("cpyfpwn", 0x19004400), ("cpyfpwt", 0x19001400),
+    ("cpym", 0x1D400400), ("cpymn", 0x1D40C400), ("cpymrn", 0x1D408400),
+    ("cpymrt", 0x1D402400), ("cpymrtwn", 0x1D406400), ("cpymt", 0x1D403400),
+    ("cpymtn", 0x1D40F400), ("cpymwn", 0x1D404400), ("cpymwt", 0x1D401400),
+    ("cpyp", 0x1D000400), ("cpypn", 0x1D00C400), ("cpyprn", 0x1D008400),
+    ("cpyprt", 0x1D002400), ("cpyprtwn", 0x1D006400), ("cpypt", 0x1D003400),
+    ("cpyptn", 0x1D00F400), ("cpypwn", 0x1D004400), ("cpypwt", 0x1D001400),
+    ("sete", 0x19C08400), ("seten", 0x19C0A400), ("setet", 0x19C09400),
+    ("setetn", 0x19C0B400), ("setm", 0x19C04400), ("setmn", 0x19C06400),
+    ("setmt", 0x19C05400), ("setmtn", 0x19C07400), ("setp", 0x19C00400),
+    ("setpn", 0x19C02400), ("setpt", 0x19C01400), ("setptn", 0x19C03400),
+];
+
+/// Look up a memory copy / set base word by mnemonic.
+fn mops_base(mnemonic: &str) -> Option<u32> {
+    MOPS_FORMS
+        .binary_search_by(|(m, _)| (*m).cmp(mnemonic))
+        .ok()
+        .map(|i| MOPS_FORMS[i].1)
 }
 
 /// Every operand written as `sp`/`wsp` must land in a slot the form encodes as

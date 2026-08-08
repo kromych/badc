@@ -448,6 +448,214 @@ fn widened_catalogue_encodings() {
     );
 }
 
+// ------------------------------------------------------------------
+// `.code16` / `.code32`. Every expectation below is the byte string GNU as
+// 2.46.1 produces for the same AT&T source under the same `.code` directive.
+// ------------------------------------------------------------------
+
+fn enc_in(mode: Mode, addr: u8, mnem: &str, w: Option<u8>, ops: &[Opnd]) -> Vec<u8> {
+    let m = Mnem::from_name(mnem).unwrap_or_else(|| panic!("no such mnemonic `{mnem}`"));
+    encode_in(mode, addr, m, w, ops).unwrap_or_else(|e| panic!("{mnem}: {e}"))
+}
+
+#[test]
+fn code16_operand_size_prefix_matches_gnu_as() {
+    let e = |mnem: &str, w: Option<u8>, ops: &[Opnd]| enc_in(Mode::Bits16, 2, mnem, w, ops);
+    // 16-bit is the default operand size; 32-bit takes the 66 prefix.
+    assert_eq!(e("mov", None, &[r(3, 2), r(0, 2)]), [0x89, 0xc3]);
+    assert_eq!(e("mov", None, &[r(3, 4), r(0, 4)]), [0x66, 0x89, 0xc3]);
+    assert_eq!(e("xor", None, &[r(3, 4), r(3, 4)]), [0x66, 0x31, 0xdb]);
+    assert_eq!(
+        e("mov", None, &[r(1, 2), Opnd::Imm(11)]),
+        [0xb9, 0x0b, 0x00]
+    );
+    assert_eq!(
+        e("shl", None, &[r(3, 4), Opnd::Imm(4)]),
+        [0x66, 0xc1, 0xe3, 0x04]
+    );
+    assert_eq!(
+        e("sub", None, &[r(4, 2), Opnd::Imm(44)]),
+        [0x83, 0xec, 0x2c]
+    );
+    // The stack and near-branch group's default is the mode's, not 64-bit.
+    assert_eq!(e("push", None, &[r(6, 2)]), [0x56]);
+    assert_eq!(e("push", None, &[r(6, 4)]), [0x66, 0x56]);
+    assert_eq!(e("pop", None, &[r(7, 2)]), [0x5f]);
+    // An operandless form takes the size its AT&T suffix names.
+    assert_eq!(e("ret", None, &[]), [0xc3]);
+    assert_eq!(e("ret", Some(2), &[]), [0xc3]);
+    assert_eq!(e("ret", Some(4), &[]), [0x66, 0xc3]);
+    // An extending move's operand size is its destination's.
+    assert_eq!(
+        e("movzx", Some(4), &[r(0, 4), r(2, 1)]),
+        [0x66, 0x0f, 0xb6, 0xc2]
+    );
+    assert_eq!(e("movzx", Some(2), &[r(0, 2), r(0, 1)]), [0x0f, 0xb6, 0xc0]);
+    assert_eq!(
+        e("movzx", Some(4), &[r(4, 4), r(4, 2)]),
+        [0x66, 0x0f, 0xb7, 0xe4]
+    );
+    // A form whose operand size is baked into the opcode takes no prefix.
+    assert_eq!(e("lldt", None, &[r(0, 2)]), [0x0f, 0x00, 0xd0]);
+    assert_eq!(e("in", None, &[r(0, 2), r(2, 2)]), [0xed]);
+    assert_eq!(e("in", None, &[r(0, 4), r(2, 2)]), [0x66, 0xed]);
+    // The three-operand imul the AT&T two-operand spelling folds into.
+    assert_eq!(
+        e("imul", None, &[r(0, 4), r(0, 4), Opnd::Imm(0x0101_0101)]),
+        [0x66, 0x69, 0xc0, 0x01, 0x01, 0x01, 0x01]
+    );
+    // A descriptor-table op reads `m16&16` / `m16&32` / `m16&64`; the second
+    // element's width takes the prefix. `clflush` and the save / restore area
+    // ops ignore their operand's width in every mode.
+    assert_eq!(e("lgdt", Some(4), &[m(3, 4)]), [0x66, 0x0f, 0x01, 0x17]);
+    assert_eq!(e("lgdt", Some(2), &[m(3, 2)]), [0x0f, 0x01, 0x17]);
+    assert_eq!(e("lidt", Some(4), &[m(3, 4)]), [0x66, 0x0f, 0x01, 0x1f]);
+    assert_eq!(e("clflush", None, &[m(3, 2)]), [0x0f, 0xae, 0x3f]);
+}
+
+#[test]
+fn code16_addressing_matches_gnu_as() {
+    let e = |addr: u8, mnem: &str, ops: &[Opnd]| enc_in(Mode::Bits16, addr, mnem, None, ops);
+    // The 16-bit r/m forms: base and index are limited to bx / bp with si / di,
+    // and there is no SIB byte.
+    assert_eq!(e(2, "mov", &[r(0, 2), m(3, 2)]), [0x8b, 0x07]);
+    assert_eq!(e(2, "mov", &[r(0, 2), m(6, 2)]), [0x8b, 0x04]);
+    assert_eq!(e(2, "mov", &[r(0, 2), m(7, 2)]), [0x8b, 0x05]);
+    // bp has no no-displacement form: rm=110 with mod=00 is the base-less one.
+    assert_eq!(e(2, "mov", &[r(0, 2), m(5, 2)]), [0x8b, 0x46, 0x00]);
+    assert_eq!(e(2, "mov", &[r(0, 2), msib(3, 6, 1, 0, 2)]), [0x8b, 0x00]);
+    assert_eq!(e(2, "mov", &[r(0, 2), msib(3, 7, 1, 0, 2)]), [0x8b, 0x01]);
+    assert_eq!(e(2, "mov", &[r(0, 2), msib(5, 6, 1, 0, 2)]), [0x8b, 0x02]);
+    assert_eq!(e(2, "mov", &[r(0, 2), msib(5, 7, 1, 0, 2)]), [0x8b, 0x03]);
+    assert_eq!(e(2, "mov", &[r(0, 2), md(3, 4, 2)]), [0x8b, 0x47, 0x04]);
+    assert_eq!(
+        e(2, "mov", &[r(0, 2), md(3, 0x1234, 2)]),
+        [0x8b, 0x87, 0x34, 0x12]
+    );
+    assert_eq!(
+        e(2, "mov", &[r(0, 2), msib(5, 6, 1, 4, 2)]),
+        [0x8b, 0x42, 0x04]
+    );
+    assert_eq!(
+        e(2, "mov", &[r(0, 2), md(7, 0x100, 2)]),
+        [0x8b, 0x85, 0x00, 0x01]
+    );
+    // A base-less absolute address is rm=110 plus disp16.
+    assert_eq!(
+        e(
+            2,
+            "mov",
+            &[
+                r(3, 2),
+                Opnd::AbsMem {
+                    disp: 0x1234,
+                    width: 2
+                }
+            ]
+        ),
+        [0x8b, 0x1e, 0x34, 0x12]
+    );
+    // A 32-bit address takes the 67 prefix and the 32-bit r/m forms; the 67
+    // precedes the operand-size 66.
+    assert_eq!(
+        e(4, "mov", &[r(7, 2), md(4, 0x44, 2)]),
+        [0x67, 0x8b, 0x7c, 0x24, 0x44]
+    );
+    assert_eq!(e(4, "mov", &[r(0, 4), m(3, 4)]), [0x67, 0x66, 0x8b, 0x03]);
+    assert_eq!(
+        e(4, "mov", &[r(0, 4), msib(0, 3, 4, 0, 4)]),
+        [0x67, 0x66, 0x8b, 0x04, 0x98]
+    );
+}
+
+#[test]
+fn code32_matches_gnu_as() {
+    let e = |addr: u8, mnem: &str, w: Option<u8>, ops: &[Opnd]| {
+        enc_in(Mode::Bits32, addr, mnem, w, ops)
+    };
+    // 32-bit is the default operand size; 16-bit takes the 66 prefix.
+    assert_eq!(e(4, "mov", None, &[r(3, 4), r(0, 4)]), [0x89, 0xc3]);
+    assert_eq!(e(4, "mov", None, &[r(3, 2), r(0, 2)]), [0x66, 0x89, 0xc3]);
+    assert_eq!(e(4, "push", None, &[r(6, 4)]), [0x56]);
+    assert_eq!(e(4, "push", None, &[r(6, 2)]), [0x66, 0x56]);
+    assert_eq!(e(4, "pop", None, &[r(7, 4)]), [0x5f]);
+    assert_eq!(e(4, "ret", None, &[]), [0xc3]);
+    assert_eq!(e(4, "ret", Some(2), &[]), [0x66, 0xc3]);
+    assert_eq!(
+        e(4, "movzx", Some(4), &[r(0, 4), r(0, 2)]),
+        [0x0f, 0xb7, 0xc0]
+    );
+    assert_eq!(
+        e(4, "movzx", Some(2), &[r(0, 2), r(0, 1)]),
+        [0x66, 0x0f, 0xb6, 0xc0]
+    );
+    assert_eq!(e(4, "lldt", None, &[r(0, 2)]), [0x0f, 0x00, 0xd0]);
+    assert_eq!(e(4, "lgdt", Some(4), &[m(3, 4)]), [0x0f, 0x01, 0x13]);
+    assert_eq!(e(4, "lgdt", Some(2), &[m(3, 2)]), [0x66, 0x0f, 0x01, 0x13]);
+    // A base-less absolute address is rm=101 plus disp32; only long mode reads
+    // that as RIP-relative and needs the base-less SIB.
+    assert_eq!(
+        e(
+            4,
+            "mov",
+            None,
+            &[
+                r(3, 4),
+                Opnd::AbsMem {
+                    disp: 0x1234_5678,
+                    width: 4
+                }
+            ]
+        ),
+        [0x8b, 0x1d, 0x78, 0x56, 0x34, 0x12]
+    );
+    assert_eq!(
+        encode(
+            Mnem::Mov,
+            None,
+            &[
+                r(3, 4),
+                Opnd::AbsMem {
+                    disp: 0x1234_5678,
+                    width: 4
+                }
+            ]
+        )
+        .unwrap(),
+        [0x8b, 0x1c, 0x25, 0x78, 0x56, 0x34, 0x12]
+    );
+    assert_eq!(
+        e(4, "mov", None, &[r(0, 4), md(4, 8, 4)]),
+        [0x8b, 0x44, 0x24, 0x08]
+    );
+    // A 16-bit address takes the 67 prefix and the 16-bit r/m forms.
+    assert_eq!(
+        e(2, "mov", None, &[r(0, 2), m(3, 2)]),
+        [0x67, 0x66, 0x8b, 0x07]
+    );
+}
+
+#[test]
+fn modes_without_rex_reject_long_mode_forms() {
+    let mv = Mnem::Mov;
+    for mode in [Mode::Bits16, Mode::Bits32] {
+        let addr = mode.addrsize();
+        // 64-bit operands, r8..r15 and RIP-relative addressing all need REX or
+        // long-mode ModRM, which these modes have not.
+        assert!(encode_in(mode, addr, mv, None, &[r(3, 8), r(0, 8)]).is_err());
+        assert!(encode_in(mode, addr, mv, None, &[r(8, 4), r(0, 4)]).is_err());
+        assert!(encode_in(mode, addr, mv, None, &[r(0, 4), mrip(0, 4)]).is_err());
+        // The mode's two address sizes are the only encodable ones.
+        assert!(encode_in(mode, 8, mv, None, &[r(0, 4), m(3, 4)]).is_err());
+    }
+    // 16-bit addressing has no encoding in long mode.
+    assert!(encode_in(Mode::Bits64, 2, mv, None, &[r(0, 4), m(3, 4)]).is_err());
+    // Only bx / bp with si / di form a 16-bit address.
+    assert!(encode_in(Mode::Bits16, 2, mv, None, &[r(0, 2), m(0, 2)]).is_err());
+    assert!(encode_in(Mode::Bits16, 2, mv, None, &[r(0, 2), msib(3, 5, 1, 0, 2)]).is_err());
+    assert!(encode_in(Mode::Bits16, 2, mv, None, &[r(0, 2), msib(3, 6, 2, 0, 2)]).is_err());
+}
+
 #[test]
 fn catalogue_is_sorted() {
     // encode() binary-searches the catalogue by mnemonic, which is correct only

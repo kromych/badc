@@ -2308,7 +2308,7 @@ fn run_inline_asm(
             Mnemonic::Out => {
                 // Port write is a no-op: no hardware to receive it.
             }
-            Mnemonic::Pause | Mnemonic::Pushfq | Mnemonic::Int => {
+            Mnemonic::Pause | Mnemonic::SizedNullary { .. } | Mnemonic::Int => {
                 // Spin-hint / flags-push / breakpoint: no observable effect
                 // on the VM's register model (a debugger is not attached).
             }

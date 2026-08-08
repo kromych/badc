@@ -3281,6 +3281,7 @@ fn emit_inline_asm_aarch64(
             AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
             AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
             AsmOpndA64::Reg { num, is64, sp } => Opnd::Reg { num, is64, sp },
+            AsmOpndA64::RegWb(num) => Opnd::RegWb(num),
             AsmOpndA64::VReg { num, is_d } => Opnd::VReg { num, is_d },
             AsmOpndA64::QReg(num) => Opnd::QReg(num),
             AsmOpndA64::VScalar { num, size } => Opnd::VScalar { num, size },
@@ -9268,6 +9269,7 @@ pub(crate) fn encode_a64_file_asm_section_code(
             AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
             AsmOpndA64::Cond(c) => Opnd::Cond(c),
             AsmOpndA64::Reg { num, is64, sp } => Opnd::Reg { num, is64, sp },
+            AsmOpndA64::RegWb(num) => Opnd::RegWb(num),
             AsmOpndA64::VReg { num, is_d } => Opnd::VReg { num, is_d },
             AsmOpndA64::QReg(num) => Opnd::QReg(num),
             AsmOpndA64::VScalar { num, size } => Opnd::VScalar { num, size },
@@ -9358,9 +9360,13 @@ pub(crate) fn encode_a64_file_asm_section_code(
                 }
                 let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
                 for o in &insn.operands {
-                    ops.push(conv(o)?);
+                    ops.push(
+                        conv(o).map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?,
+                    );
                 }
-                bytes.extend_from_slice(&table::encode(&insn.mnemonic, &ops)?.to_le_bytes());
+                let word = table::encode(&insn.mnemonic, &ops)
+                    .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
+                bytes.extend_from_slice(&word.to_le_bytes());
             }
             *item = AsmSectionItem::CodeBytes { bytes, relocs };
         }
@@ -9618,6 +9624,306 @@ mod tests {
                 (40, AsmRelocKind::A64Branch26 { link: true }, "ext_func"),
             ]
         );
+    }
+
+    /// The SIMD forms the crypto and CRC units need encode to the words GNU as
+    /// emits: the bit-select group, shift-and-insert by immediate across every
+    /// arrangement, the SHA1 / SHA512 updates, register-pair load/store in the
+    /// s / d / q views with all three addressing modes, and the `mov` aliases
+    /// of the element insert / duplicate / extract forms.
+    #[test]
+    fn file_scope_a64_simd_match_gnu_as() {
+        use super::super::ssa::emit_common::{
+            extract_file_scope_asm_sections, materialize_asm_sections,
+        };
+        let text = ".pushsection .t,\"ax\"\n\
+                    bsl v1.16b, v2.16b, v3.16b\n\
+                    bit v1.16b, v2.16b, v3.16b\n\
+                    bif v2.16b, v7.16b, v22.16b\n\
+                    bsl v1.8b, v2.8b, v3.8b\n\
+                    bif v5.8b, v6.8b, v11.8b\n\
+                    sri v1.4s, v17.4s, #20\n\
+                    sri v1.4s, v17.4s, #1\n\
+                    sri v1.4s, v4.4s, #32\n\
+                    sri v3.8b, v17.8b, #1\n\
+                    sri v3.8b, v17.8b, #8\n\
+                    sri v3.8h, v17.8h, #16\n\
+                    sri v3.2d, v17.2d, #64\n\
+                    sri v3.2d, v17.2d, #1\n\
+                    sri v3.16b, v17.16b, #3\n\
+                    sha1su0 v0.4s, v1.4s, v2.4s\n\
+                    sha1su1 v0.4s, v3.4s\n\
+                    sha512h q3, q6, v7.2d\n\
+                    sha512h2 q3, q1, v0.2d\n\
+                    sha512su0 v0.2d, v1.2d\n\
+                    sha512su1 v0.2d, v2.2d, v5.2d\n\
+                    ldp q0, q1, [x2]\n\
+                    ldp q0, q1, [x2, #16]\n\
+                    ldp q11, q12, [x3], #0x20\n\
+                    ldp q16, q17, [x4, #-128]!\n\
+                    ldp q18, q19, [x5, #-96]\n\
+                    stp q0, q1, [x2]\n\
+                    stp q6, q7, [sp, #32]\n\
+                    stp q11, q12, [x3], #0x20\n\
+                    stp q16, q17, [x4, #-128]!\n\
+                    ldp s0, s1, [x2, #8]\n\
+                    ldp d0, d1, [x2, #16]\n\
+                    stp d2, d3, [x2, #-16]!\n\
+                    sli v1.4s, v17.4s, #20\n\
+                    sli v3.8b, v17.8b, #0\n\
+                    sli v3.2d, v17.2d, #63\n\
+                    sri v1.2s, v2.2s, #12\n\
+                    sri v1.4h, v2.4h, #5\n\
+                    mov d19, v0.d[1]\n\
+                    mov s3, v7.s[2]\n\
+                    mov v17.d[1], v19.d[0]\n\
+                    mov v2.h[2], v5.h[0]\n\
+                    mov v2.b[15], v5.b[3]\n\
+                    mov v2.s[1], v5.s[3]\n\
+                    ins v17.d[1], v19.d[0]\n\
+                    dup d19, v0.d[1]\n\
+                    mov v3.d[0], x5\n\
+                    mov x5, v3.d[1]\n\
+                    mov w5, v3.s[2]\n\
+                    .popsection\n";
+        let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
+        encode_a64_file_asm_section_code(&mut blocks).unwrap();
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            true,
+            &mut sink,
+        )
+        .unwrap();
+        let want_words: [u32; 48] = [
+            0x6e631c41, // bsl v1.16b, v2.16b, v3.16b
+            0x6ea31c41, // bit v1.16b, v2.16b, v3.16b
+            0x6ef61ce2, // bif v2.16b, v7.16b, v22.16b
+            0x2e631c41, // bsl v1.8b, v2.8b, v3.8b
+            0x2eeb1cc5, // bif v5.8b, v6.8b, v11.8b
+            0x6f2c4621, // sri v1.4s, v17.4s, #20
+            0x6f3f4621, // sri v1.4s, v17.4s, #1
+            0x6f204481, // sri v1.4s, v4.4s, #32
+            0x2f0f4623, // sri v3.8b, v17.8b, #1
+            0x2f084623, // sri v3.8b, v17.8b, #8
+            0x6f104623, // sri v3.8h, v17.8h, #16
+            0x6f404623, // sri v3.2d, v17.2d, #64
+            0x6f7f4623, // sri v3.2d, v17.2d, #1
+            0x6f0d4623, // sri v3.16b, v17.16b, #3
+            0x5e023020, // sha1su0 v0.4s, v1.4s, v2.4s
+            0x5e281860, // sha1su1 v0.4s, v3.4s
+            0xce6780c3, // sha512h q3, q6, v7.2d
+            0xce608423, // sha512h2 q3, q1, v0.2d
+            0xcec08020, // sha512su0 v0.2d, v1.2d
+            0xce658840, // sha512su1 v0.2d, v2.2d, v5.2d
+            0xad400440, // ldp q0, q1, [x2]
+            0xad408440, // ldp q0, q1, [x2, #16]
+            0xacc1306b, // ldp q11, q12, [x3], #0x20
+            0xadfc4490, // ldp q16, q17, [x4, #-128]!
+            0xad7d4cb2, // ldp q18, q19, [x5, #-96]
+            0xad000440, // stp q0, q1, [x2]
+            0xad011fe6, // stp q6, q7, [sp, #32]
+            0xac81306b, // stp q11, q12, [x3], #0x20
+            0xadbc4490, // stp q16, q17, [x4, #-128]!
+            0x2d410440, // ldp s0, s1, [x2, #8]
+            0x6d410440, // ldp d0, d1, [x2, #16]
+            0x6dbf0c42, // stp d2, d3, [x2, #-16]!
+            0x6f345621, // sli v1.4s, v17.4s, #20
+            0x2f085623, // sli v3.8b, v17.8b, #0
+            0x6f7f5623, // sli v3.2d, v17.2d, #63
+            0x2f344441, // sri v1.2s, v2.2s, #12
+            0x2f1b4441, // sri v1.4h, v2.4h, #5
+            0x5e180413, // mov d19, v0.d[1]
+            0x5e1404e3, // mov s3, v7.s[2]
+            0x6e180671, // mov v17.d[1], v19.d[0]
+            0x6e0a04a2, // mov v2.h[2], v5.h[0]
+            0x6e1f1ca2, // mov v2.b[15], v5.b[3]
+            0x6e0c64a2, // mov v2.s[1], v5.s[3]
+            0x6e180671, // ins v17.d[1], v19.d[0]
+            0x5e180413, // dup d19, v0.d[1]
+            0x4e081ca3, // mov v3.d[0], x5
+            0x4e183c65, // mov x5, v3.d[1]
+            0x0e143c65, // mov w5, v3.s[2]
+        ];
+        let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
+    }
+
+    /// A relocation specifier may carry GNU as's optional `#` and a constant
+    /// addend. Byte- and relocation-identical to `as`: `add x1, x2, #:lo12:sym`
+    /// is 0x91000041 with ADD_ABS_LO12_NC, and the addend rides the relocation
+    /// rather than the immediate field.
+    #[test]
+    fn file_scope_a64_hash_lo12_matches_gnu_as() {
+        use super::super::ssa::emit_common::{
+            AsmRelocKind, AsmSectionTarget, extract_file_scope_asm_sections,
+            materialize_asm_sections,
+        };
+        let text = ".pushsection .t,\"ax\"\n\
+                    add x1, x2, #:lo12:sym\n\
+                    add x1, x2, :lo12:sym\n\
+                    add sp, x0, #:lo12:sym2 + 4096\n\
+                    ldr x4, [x3, #:lo12:sym]\n.popsection\n";
+        let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
+        encode_a64_file_asm_section_code(&mut blocks).unwrap();
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            true,
+            &mut sink,
+        )
+        .unwrap();
+        let want_words: [u32; 4] = [0x91000041, 0x91000041, 0x9100001f, 0xf9400064];
+        let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
+        let kinds: Vec<(u32, AsmRelocKind, &str, i64)> = sec
+            .relocs
+            .iter()
+            .map(|r| {
+                let AsmSectionTarget::Symbol(n) = &r.target else {
+                    panic!("symbol target expected, got {:?}", r.target)
+                };
+                (r.offset, r.kind, n.as_str(), r.addend)
+            })
+            .collect();
+        assert_eq!(
+            kinds,
+            vec![
+                (0, AsmRelocKind::A64AddLo12, "sym", 0),
+                (4, AsmRelocKind::A64AddLo12, "sym", 0),
+                (8, AsmRelocKind::A64AddLo12, "sym2", 4096),
+                (12, AsmRelocKind::A64LdstLo12(8), "sym", 0),
+            ]
+        );
+    }
+
+    /// The add/sub immediate field is unsigned, so GNU as encodes a negative
+    /// immediate as the opposite operation on the negated value, `lsl #12`
+    /// included. The scalar 64-bit `add` / `sub` and `sha1h` are covered here
+    /// too; all match `as` byte for byte.
+    #[test]
+    fn file_scope_a64_negative_addsub_imm_matches_gnu_as() {
+        use super::super::ssa::emit_common::{
+            extract_file_scope_asm_sections, materialize_asm_sections,
+        };
+        let text = ".pushsection .t,\"ax\"\n\
+                    cmp w4, #48 - (4 << 4)\n\
+                    cmp x0, #-16\n\
+                    cmn x0, #16\n\
+                    add x1, x2, #-16\n\
+                    sub x1, x2, #-16\n\
+                    adds x1, x2, #-16\n\
+                    subs x1, x2, #-16\n\
+                    cmp w4, #-4096\n\
+                    add x1, x2, #-4096\n\
+                    sha1h s14, s12\n\
+                    add d7, d7, d16\n\
+                    sub d7, d7, d16\n\
+                    .popsection\n";
+        let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
+        encode_a64_file_asm_section_code(&mut blocks).unwrap();
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            true,
+            &mut sink,
+        )
+        .unwrap();
+        let want_words: [u32; 12] = [
+            0x3100409f, // cmp w4, #48 - (4 << 4)
+            0xb100401f, // cmp x0, #-16
+            0xb100401f, // cmn x0, #16
+            0xd1004041, // add x1, x2, #-16
+            0x91004041, // sub x1, x2, #-16
+            0xf1004041, // adds x1, x2, #-16
+            0xb1004041, // subs x1, x2, #-16
+            0x3140049f, // cmp w4, #-4096
+            0xd1400441, // add x1, x2, #-4096
+            0x5e28098e, // sha1h s14, s12
+            0x5ef084e7, // add d7, d7, d16
+            0x7ef084e7, // sub d7, d7, d16
+        ];
+        let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
+    }
+
+    /// The memory copy / set family (FEAT_MOPS) encodes to the words GNU as
+    /// emits. The cases cover both operand shapes, all three stages, and the
+    /// read/write option suffixes, with the registers varied so the
+    /// destination / size / source fields are each pinned.
+    #[test]
+    fn file_scope_a64_mops_match_gnu_as() {
+        use super::super::ssa::emit_common::{
+            extract_file_scope_asm_sections, materialize_asm_sections,
+        };
+        let text = ".pushsection .t,\"ax\"\n\
+                    cpyfp [x1]!, [x2]!, x3!\n\
+                    cpyfprt [x4]!, [x8]!, x16!\n\
+                    cpyfpwn [x5]!, [x10]!, x20!\n\
+                    cpyfptn [x30]!, [x29]!, x28!\n\
+                    cpyp [x0]!, [x1]!, x2!\n\
+                    cpym [x1]!, [x2]!, x3!\n\
+                    cpye [x4]!, [x8]!, x16!\n\
+                    cpypwn [x5]!, [x10]!, x20!\n\
+                    cpyfprtwn [x30]!, [x29]!, x28!\n\
+                    setp [x0]!, x1!, x2\n\
+                    setpt [x1]!, x2!, x3\n\
+                    setpn [x4]!, x8!, x16\n\
+                    setptn [x5]!, x10!, x20\n\
+                    setm [x30]!, x29!, x28\n\
+                    sete [x0]!, x1!, x2\n\
+                    seten [x1]!, x2!, x3\n\
+                    setpn [x0]!, x1!, xzr\n.popsection\n";
+        let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
+        encode_a64_file_asm_section_code(&mut blocks).unwrap();
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            true,
+            &mut sink,
+        )
+        .unwrap();
+        let want_words: [u32; 17] = [
+            0x19020461, // cpyfp [x1]!, [x2]!, x3!
+            0x19082604, // cpyfprt [x4]!, [x8]!, x16!
+            0x190a4685, // cpyfpwn [x5]!, [x10]!, x20!
+            0x191df79e, // cpyfptn [x30]!, [x29]!, x28!
+            0x1d010440, // cpyp [x0]!, [x1]!, x2!
+            0x1d420461, // cpym [x1]!, [x2]!, x3!
+            0x1d880604, // cpye [x4]!, [x8]!, x16!
+            0x1d0a4685, // cpypwn [x5]!, [x10]!, x20!
+            0x191d679e, // cpyfprtwn [x30]!, [x29]!, x28!
+            0x19c20420, // setp [x0]!, x1!, x2
+            0x19c31441, // setpt [x1]!, x2!, x3
+            0x19d02504, // setpn [x4]!, x8!, x16
+            0x19d43545, // setptn [x5]!, x10!, x20
+            0x19dc47be, // setm [x30]!, x29!, x28
+            0x19c28420, // sete [x0]!, x1!, x2
+            0x19c3a441, // seten [x1]!, x2!, x3
+            0x19df2420, // setpn [x0]!, x1!, xzr
+        ];
+        let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
     }
 
     /// The flow-form ALTERNATIVE at file scope: `.subsection 1` holds the

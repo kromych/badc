@@ -1636,7 +1636,7 @@ pub(crate) fn emit_function(
     let asm_text_abs_refs_snapshot = asm_text_abs_refs.len();
     let asm_text_labels_snapshot = asm_text_labels.len();
     let asm_extern_call_sites_snapshot = asm_extern_call_sites.len();
-    let asm_sections_snapshot = super::ssa::emit_common::snapshot_asm_sections(asm_sections);
+    let asm_sections_snapshot = asm_sections.snapshot();
     // A cross-unit `extern _Thread_local` access (`extern_tls_names` maps
     // the access value-id to the referenced symbol) and a same-unit one
     // both record an `ElfTpoffFixup` the linker resolves against the
@@ -1656,7 +1656,7 @@ pub(crate) fn emit_function(
             asm_text_abs_refs.truncate(asm_text_abs_refs_snapshot);
             asm_text_labels.truncate(asm_text_labels_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-            super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
+            asm_sections.restore(&asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             return false;
         }};
@@ -1866,8 +1866,8 @@ pub(crate) fn emit_function(
     let body_line_rows = ssa_line_rows.len();
     let body_asm_extern = asm_extern_call_sites.len();
     // The section sink merges by name, so a re-emit restores its full
-    // per-section state rather than a length (see [`restore_asm_sections`]).
-    let body_asm_sections = super::ssa::emit_common::snapshot_asm_sections(asm_sections);
+    // per-section state rather than a length (see [`AsmSectionSink::restore`]).
+    let body_asm_sections = asm_sections.snapshot();
 
     // Blocks an indirect branch can enter: switch-table successors and
     // the blocks whose address `&&label` took. Each opens with `endbr64`
@@ -2330,7 +2330,7 @@ pub(crate) fn emit_function(
                 elf_tpoff_fixups.truncate(body_elf_tpoff);
                 ssa_line_rows.truncate(body_line_rows);
                 asm_extern_call_sites.truncate(body_asm_extern);
-                super::ssa::emit_common::restore_asm_sections(asm_sections, &body_asm_sections);
+                asm_sections.restore(&body_asm_sections);
                 for b in block_offsets.iter_mut() {
                     *b = 0;
                 }
@@ -2360,9 +2360,11 @@ pub(crate) fn emit_function(
     // Rewrite `asm goto` section fields (`.long %l0 - .`) to the label
     // block's now-final text offset. Scoped to this function's contribution
     // via the entry snapshot; only this pass's relocs survived the loop.
-    super::ssa::emit_common::resolve_asm_goto_relocs(asm_sections, &body_asm_sections, &|bid| {
-        block_offsets[bid as usize]
-    });
+    super::ssa::emit_common::resolve_asm_goto_relocs(
+        asm_sections.relocs_mut(),
+        &body_asm_sections,
+        &|bid| block_offsets[bid as usize],
+    );
 
     // Patch recorded branches. The displacement is measured from the
     // byte after the displacement field: `site + 1` for the rel8 short
@@ -7139,7 +7141,7 @@ fn emit_inline_asm(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    asm_sections: &mut Vec<super::ssa::emit_common::AsmSection>,
+    asm_sections: &mut super::ssa::emit_common::AsmSectionSink,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     data_fixups: &mut Vec<DataFixup>,
     user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
@@ -7422,7 +7424,7 @@ fn emit_inline_asm(
         section_blocks,
         &const_of,
         false,
-        &[],
+        &super::ssa::emit_common::AsmSectionSink::default(),
     ) {
         Ok(m) => m,
         Err(m) => {

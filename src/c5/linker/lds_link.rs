@@ -514,10 +514,14 @@ enum ChunkSrc {
     Pad(Vec<u8>),
 }
 
-/// Attachment of an expression value / symbol.
+/// Attachment of an expression value / symbol. A plain number and an
+/// address taken from the location counter outside any output section
+/// are both absolute in expressions, but only the latter picks up a
+/// symtab section through section_for_dot (ld's rel_from_abs).
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Att {
     Abs,
+    DotAbs,
     Out(usize),
 }
 
@@ -615,9 +619,6 @@ pub struct LdsLinker<'a> {
     cur_stmt: usize,
     found_end: bool,
     after_end: Vec<bool>,
-    /// Set when an evaluation read the location counter outside any
-    /// output section (ld's rel_from_abs).
-    rel_from_abs: bool,
     lma_delta: u64,
     final_pass: bool,
     errors: Vec<String>,
@@ -736,7 +737,6 @@ impl<'a> LdsLinker<'a> {
             cur_stmt: 0,
             found_end: false,
             after_end: Vec::new(),
-            rel_from_abs: false,
             lma_delta: 0,
             final_pass: false,
             errors: Vec::new(),
@@ -1243,7 +1243,7 @@ impl<'a> LdsLinker<'a> {
             // two and marks strings; above it, an exact multiple.
             if !align.is_power_of_two()
                 || (entsize < align && (!entsize.is_power_of_two() || !strings))
-                || (entsize > align && entsize % align != 0)
+                || (entsize > align && !entsize.is_multiple_of(align))
             {
                 continue;
             }
@@ -1293,7 +1293,7 @@ impl<'a> LdsLinker<'a> {
         entsize: u64,
         strings: bool,
         align: u64,
-    ) -> (Vec<u8>, HashMap<usize, (Vec<u64>, Vec<u64>)>) {
+    ) -> (Vec<u8>, PoolMemberMaps) {
         struct Entry {
             /// Content including the terminator for strings.
             bytes: Vec<u8>,
@@ -1313,7 +1313,7 @@ impl<'a> LdsLinker<'a> {
                 let o = &self.objects[id.obj];
                 o.section_data(&o.sections[id.sec]).to_owned()
             };
-            pad_tail &= data.len() as u64 % align == 0;
+            pad_tail &= (data.len() as u64).is_multiple_of(align);
             let (mut starts, mut ids) = (Vec::new(), Vec::new());
             let mut pos = 0usize;
             while pos < data.len() {
@@ -1391,7 +1391,7 @@ impl<'a> LdsLinker<'a> {
                 let (el, cl) = (entries[e].bytes.len(), entries[cmp].bytes.len());
                 if entries[e].align >= entries[cmp].align
                     && el > cl
-                    && (el - cl) as u64 % entries[cmp].align == 0
+                    && ((el - cl) as u64).is_multiple_of(entries[cmp].align)
                     && entries[e].bytes[el - cl..] == entries[cmp].bytes[..]
                 {
                     entries[cmp].suffix_of = e;
@@ -1422,8 +1422,7 @@ impl<'a> LdsLinker<'a> {
         let mut pool = vec![0u8; size as usize];
         for e in &entries {
             if e.align != 0 {
-                pool[e.index as usize..e.index as usize + e.bytes.len()]
-                    .copy_from_slice(&e.bytes);
+                pool[e.index as usize..e.index as usize + e.bytes.len()].copy_from_slice(&e.bytes);
             }
         }
         let mut maps: HashMap<usize, (Vec<u64>, Vec<u64>)> = HashMap::new();
@@ -1538,7 +1537,10 @@ impl<'a> LdsLinker<'a> {
         self.prefer_next = false;
         self.cur_stmt = 0;
         self.found_end = false;
-        self.after_end = vec![false; self.outs.len()];
+        // Values persist across passes: a statement before its
+        // section's visit this pass sees the previous pass's flag, as
+        // ld's phases do.
+        self.after_end.resize(self.outs.len(), false);
         self.lma_delta = 0;
         self.errors.clear();
         self.undefined.clear();
@@ -1574,7 +1576,13 @@ impl<'a> LdsLinker<'a> {
                 Stmt::Assert(e, m) => self.exec_assert(&e, &m),
                 Stmt::Open(oi) => {
                     self.after_end[oi] = self.found_end;
-                    if self.outs[oi].alloc && !self.outs[oi].removed {
+                    // A section already known empty never becomes the
+                    // dot anchor (its sizes converged in earlier
+                    // passes; `removed` itself settles only at finish).
+                    if self.outs[oi].alloc
+                        && self.outs[oi].size > 0
+                        && self.outs[oi].name != "/DISCARD/"
+                    {
                         self.dot_section = Some(oi);
                         self.prefer_next = false;
                     }
@@ -1764,7 +1772,7 @@ impl<'a> LdsLinker<'a> {
         // uniform SHT_NOTE membership keeps NOTE; everything else is
         // PROGBITS.
         let noload = stype == Some(OutputSectionType::NoLoad);
-        let shtype = if size > 0 && !file_bytes {
+        let shtype = if size > 0 && !file_bytes && all_nobits {
             SHT_NOBITS
         } else if any_input && all_note {
             SHT_NOTE
@@ -1869,7 +1877,6 @@ impl<'a> LdsLinker<'a> {
             self.found_end = true;
         }
         let cur = self.lookup(&a.symbol);
-        self.rel_from_abs = false;
         let rhs = self.eval(&a.value);
         let value = match a.op {
             AssignOp::Set => rhs,
@@ -1881,7 +1888,7 @@ impl<'a> LdsLinker<'a> {
                 }
             }
         };
-        let final_out = if value.att == Att::Abs && self.rel_from_abs {
+        let final_out = if value.att == Att::DotAbs && self.final_pass {
             self.section_for_dot()
         } else {
             None
@@ -1904,9 +1911,11 @@ impl<'a> LdsLinker<'a> {
     /// `end` assignment the previous section wins again. The walks
     /// skip removed and non-allocated sections.
     fn section_for_dot(&self) -> Option<usize> {
-        let is_alloc = |oi: usize| {
-            self.outs[oi].alloc && !self.outs[oi].removed && self.outs[oi].flags & SHF_TLS == 0
-        };
+        // `removed` is only settled after the last pass; an empty
+        // section is already known stripped here (sizes converged).
+        let stripped = |oi: usize| self.outs[oi].size == 0 || self.outs[oi].name == "/DISCARD/";
+        let is_alloc =
+            |oi: usize| self.outs[oi].alloc && !stripped(oi) && self.outs[oi].flags & SHF_TLS == 0;
         let opens: Vec<usize> = self
             .stmts
             .iter()
@@ -1927,7 +1936,7 @@ impl<'a> LdsLinker<'a> {
                 .peekable();
             let mut os = nxt.next();
             while let Some(o) = os {
-                if !self.after_end[o] && self.outs[o].removed {
+                if !self.after_end[o] && stripped(o) {
                     os = nxt.next();
                 } else {
                     break;
@@ -1988,10 +1997,7 @@ impl<'a> LdsLinker<'a> {
             // through section_for_dot.
             let att = match self.cur_out {
                 Some(o) => Att::Out(o),
-                None => {
-                    self.rel_from_abs = true;
-                    Att::Abs
-                }
+                None => Att::DotAbs,
             };
             return Some(Val { v: self.dot, att });
         }
@@ -2123,6 +2129,11 @@ impl<'a> LdsLinker<'a> {
                     (BinOp::Add, Att::Out(s), Att::Abs) => Att::Out(s),
                     (BinOp::Add, Att::Abs, Att::Out(s)) => Att::Out(s),
                     (BinOp::Sub, Att::Out(s), Att::Abs) => Att::Out(s),
+                    // A dot address plus/minus a number stays a dot
+                    // address; any other combination is a number.
+                    (BinOp::Add, Att::DotAbs, Att::Abs) => Att::DotAbs,
+                    (BinOp::Add, Att::Abs, Att::DotAbs) => Att::DotAbs,
+                    (BinOp::Sub, Att::DotAbs, Att::Abs) => Att::DotAbs,
                     _ => Att::Abs,
                 };
                 Val { v, att }
@@ -2139,10 +2150,7 @@ impl<'a> LdsLinker<'a> {
                 let a = self.eval_inner(a);
                 let att = match self.cur_out {
                     Some(o) => Att::Out(o),
-                    None => {
-                        self.rel_from_abs = true;
-                        Att::Abs
-                    }
+                    None => Att::DotAbs,
                 };
                 Val {
                     v: align_up(self.dot, a.v),
@@ -2313,7 +2321,11 @@ impl<'a> LdsLinker<'a> {
                 }
                 let target = self.resolve_sym_prevpass(id.obj, r.sym as usize, r.addend);
                 let Some(target) = target else { continue };
-                rel_addrs.push((base + r.offset, target as i64, packable && r.offset % 2 == 0));
+                rel_addrs.push((
+                    base + r.offset,
+                    target as i64,
+                    packable && r.offset % 2 == 0,
+                ));
             }
         }
         // GOT slots are RELATIVE targets too; a slot for an unresolved
@@ -2438,7 +2450,10 @@ impl<'a> LdsLinker<'a> {
             && sym.other & 0x3 == 0
             && !sym.name.is_empty()
             && !self.globals.contains_key(&sym.name)
+            // During sizing the current pass's script table is swapped
+            // out; the previous pass's values match at convergence.
             && !self.script_now.contains_key(&sym.name)
+            && !self.script_prev.contains_key(&sym.name)
     }
 
     /// True when an ABS64 site against this symbol names a load
@@ -2504,8 +2519,7 @@ impl<'a> LdsLinker<'a> {
                             if sym.kind() == STT_SECTION {
                                 self.merge_remap(i, sym.value.wrapping_add(addend as u64))
                             } else {
-                                self.merge_remap(i, sym.value)
-                                    .wrapping_add(addend as u64)
+                                self.merge_remap(i, sym.value).wrapping_add(addend as u64)
                             }
                         } else {
                             sym.value.wrapping_add(addend as u64)
@@ -3510,17 +3524,21 @@ impl<'a> LdsLinker<'a> {
         }
         // A symbol's visibility aggregates over every reference and
         // definition; hidden or internal globals cannot be preempted
-        // and are emitted with local binding, as bfd forces them.
+        // and are emitted with local binding. bfd applies the forcing
+        // from the dynamic-symbol adjustment, so only links with
+        // dynamic sections see it.
         let mut forced_vis: HashMap<&str, u8> = HashMap::new();
-        for o in &self.objects {
-            for sym in &o.symbols {
-                let vis = sym.other & 0x3;
-                if sym.binding() == STB_LOCAL || sym.name.is_empty() || vis == 0 || vis == 3 {
-                    continue;
+        if self.opts.emit == LdsEmit::Dyn {
+            for o in &self.objects {
+                for sym in &o.symbols {
+                    let vis = sym.other & 0x3;
+                    if sym.binding() == STB_LOCAL || sym.name.is_empty() || vis == 0 || vis == 3 {
+                        continue;
+                    }
+                    let e = forced_vis.entry(sym.name.as_str()).or_insert(vis);
+                    // INTERNAL(1) constrains more than HIDDEN(2).
+                    *e = (*e).min(vis);
                 }
-                let e = forced_vis.entry(sym.name.as_str()).or_insert(vis);
-                // INTERNAL(1) constrains more than HIDDEN(2).
-                *e = (*e).min(vis);
             }
         }
         // Resolved global definitions, name order (the table order is
@@ -3546,16 +3564,13 @@ impl<'a> LdsLinker<'a> {
         for (name, s) in script_syms {
             let shndx = match (s.val.att, s.final_out) {
                 (Att::Out(oi), _) => out_shndx(oi),
-                (Att::Abs, Some(oi)) => out_shndx(oi),
-                (Att::Abs, None) => SHN_ABS,
+                (_, Some(oi)) => out_shndx(oi),
+                (_, None) => SHN_ABS,
             };
-            let vis = forced_vis.get(name.as_str()).copied().or_else(|| {
-                if s.hidden {
-                    Some(STV_HIDDEN)
-                } else {
-                    None
-                }
-            });
+            let vis = forced_vis
+                .get(name.as_str())
+                .copied()
+                .or(s.hidden.then_some(STV_HIDDEN));
             syms.push(FinalSym {
                 name: name.clone(),
                 info: (if vis.is_some() { STB_LOCAL } else { STB_GLOBAL } << 4) | STT_NOTYPE,
@@ -4119,6 +4134,8 @@ mod tests {
         // name, bind, kind, sec (usize::MAX = UNDEF, MAX-1 = ABS), value, size
         syms: Vec<(String, u8, u8, usize, u64, u64)>,
         entsizes: Vec<(usize, u64)>,
+        // Symbol-list index -> st_other.
+        sym_vis: Vec<(usize, u8)>,
     }
 
     impl TestObj {
@@ -4127,6 +4144,7 @@ mod tests {
                 secs: Vec::new(),
                 syms: Vec::new(),
                 entsizes: Vec::new(),
+                sym_vis: Vec::new(),
             }
         }
         fn sec(mut self, name: &str, shtype: u32, flags: u64, align: u64, body: &[u8]) -> Self {
@@ -4167,6 +4185,12 @@ mod tests {
             self
         }
 
+        /// Set st_other (visibility) of the most recently added symbol.
+        fn vis(mut self, other: u8) -> Self {
+            self.sym_vis.push((self.syms.len() - 1, other));
+            self
+        }
+
         fn build(self, machine: u16) -> Vec<u8> {
             let nsec = self.secs.len();
             let mut bodies: Vec<u8> = Vec::new();
@@ -4186,13 +4210,16 @@ mod tests {
                 e[6..8].copy_from_slice(&((k + 1) as u16).to_le_bytes());
                 symtab.extend_from_slice(&e);
             }
-            for (name, bind, kind, sec, value, size) in &self.syms {
+            for (k, (name, bind, kind, sec, value, size)) in self.syms.iter().enumerate() {
                 let noff = strtab.len() as u32;
                 strtab.extend_from_slice(name.as_bytes());
                 strtab.push(0);
                 let mut e = [0u8; 24];
                 e[0..4].copy_from_slice(&noff.to_le_bytes());
                 e[4] = (bind << 4) | kind;
+                if let Some(&(_, other)) = self.sym_vis.iter().find(|&&(i, _)| i == k) {
+                    e[5] = other;
+                }
                 let shndx: u16 = if *sec == usize::MAX {
                     0
                 } else if *sec == usize::MAX - 1 {
@@ -4722,7 +4749,13 @@ SECTIONS {
         .expect("parses");
         // gcc's .rodata.str1.8 shape: 8-aligned strings, NUL padding.
         let a = TestObj::new()
-            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0u8; 4])
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0u8; 4],
+            )
             .sec(
                 ".rodata.str1.8",
                 SHT_PROGBITS,
@@ -4848,7 +4881,13 @@ SECTIONS {
         )
         .expect("parses");
         let a = TestObj::new()
-            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 8, &[0u8; 8])
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 8],
+            )
             .sec(".rodata", SHT_PROGBITS, SHF_ALLOC, 8, &[0u8; 8])
             .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
             .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
@@ -4876,5 +4915,308 @@ SECTIONS {
         let d_off = section_file_off(&res.image, data_addr);
         let slot = u64::from_le_bytes(res.image[d_off..d_off + 8].try_into().unwrap());
         assert_eq!(slot, ro_addr, "slot holds the link-time value in place");
+    }
+    /// bfd merge layout for an aligned string class: entries keep the
+    /// alignment implied by their input offsets, deduplicate on
+    /// identity, tail-merge only when the length difference is a
+    /// multiple of the shorter entry's alignment, assign offsets in
+    /// first-seen order with padding, and the pool tail pads to the
+    /// section alignment when every member size is a multiple of it.
+    #[test]
+    fn merge_pool_matches_bfd_layout() {
+        let script = parse_linker_script(
+            "SECTIONS { . = 0x1000; .text : { *(.text*) } .rodata : { *(.rodata*) } }",
+        )
+        .expect("parses");
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sec(
+                ".rodata.str1.8",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE | SHF_STRINGS,
+                8,
+                b"world\0\0\0friend\0\0",
+            )
+            .entsize(1, 1)
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .sym("m1_pad", STB_GLOBAL, STT_OBJECT, 1, 6, 0)
+            .sym("m1_end", STB_GLOBAL, STT_OBJECT, 1, 16, 0)
+            .build(EM_X86_64);
+        let b = TestObj::new()
+            .sec(
+                ".rodata.str1.8",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE | SHF_STRINGS,
+                8,
+                b"orld\0\0\0\0",
+            )
+            .entsize(0, 1)
+            .sym("b_str", STB_GLOBAL, STT_OBJECT, 0, 0, 5)
+            .build(EM_X86_64);
+        let objs = alloc::vec![
+            parse_lds_object("a.o", a).expect("parses"),
+            parse_lds_object("b.o", b).expect("parses"),
+        ];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let secs = readelf_sections(&res.image);
+        let ro = secs.iter().find(|s| s.0 == ".rodata").expect("rodata");
+        // "orld\0" cannot tail into "world\0": the length delta (1) is
+        // not a multiple of its alignment (8). The empty string from
+        // the padding (alignment 2) tails into "orld\0" at delta 4.
+        // First-seen layout with per-entry alignment:
+        //   world\0 @0, friend\0 @8, orld\0 @16, tail pad to 24.
+        assert_eq!(ro.3, 24, "pool size");
+        let off = section_file_off(&res.image, ro.2);
+        assert_eq!(
+            &res.image[off..off + 24],
+            b"world\0\0\0friend\0\0orld\0\0\0\0"
+        );
+        let syms = image_symbols(&res.image);
+        assert_eq!(find_sym(&syms, "b_str"), ro.2 + 16);
+        // The padding byte at input offset 6 remaps to the shared
+        // empty string inside "orld\0" (its NUL at pool offset 20).
+        assert_eq!(find_sym(&syms, "m1_pad"), ro.2 + 20);
+        // An offset at the input's end resolves to the pool's end.
+        assert_eq!(find_sym(&syms, "m1_end"), ro.2 + 24);
+    }
+
+    /// Fixed-entsize pools deduplicate on identity in first-seen
+    /// order; a section whose entsize is below its alignment fails
+    /// bfd's sanity check and stays unmerged.
+    #[test]
+    fn merge_fixed_pool_dedupes_and_rejects_underaligned() {
+        let script = parse_linker_script(
+            "SECTIONS { . = 0x1000; .text : { *(.text*) } .rodata : { *(.rodata*) } }",
+        )
+        .expect("parses");
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sec(
+                ".rodata.cst8",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE,
+                8,
+                &[
+                    1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                ],
+            )
+            // entsize 8 below the 16-byte alignment: kept verbatim.
+            .sec(
+                ".rodata.cst16",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE,
+                16,
+                &[3u8; 16],
+            )
+            .entsize(1, 8)
+            .entsize(2, 8)
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .sym("third", STB_GLOBAL, STT_OBJECT, 1, 16, 8)
+            .build(EM_X86_64);
+        let b = TestObj::new()
+            .sec(
+                ".rodata.cst8",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE,
+                8,
+                &[2, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0],
+            )
+            .entsize(0, 8)
+            .sym("b_two", STB_GLOBAL, STT_OBJECT, 0, 0, 8)
+            .sym("b_four", STB_GLOBAL, STT_OBJECT, 0, 8, 8)
+            .build(EM_X86_64);
+        let objs = alloc::vec![
+            parse_lds_object("a.o", a).expect("parses"),
+            parse_lds_object("b.o", b).expect("parses"),
+        ];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let secs = readelf_sections(&res.image);
+        let ro = secs.iter().find(|s| s.0 == ".rodata").expect("rodata");
+        // Pool: [1][2][4] (24 bytes), pad to 16, verbatim cst16.
+        assert_eq!(ro.3, 24 + 8 + 16, "pool + alignment pad + verbatim cst16");
+        let syms = image_symbols(&res.image);
+        assert_eq!(find_sym(&syms, "third"), ro.2, "duplicate entry folds");
+        assert_eq!(find_sym(&syms, "b_two"), ro.2 + 8);
+        assert_eq!(find_sym(&syms, "b_four"), ro.2 + 16);
+    }
+
+    /// An ABS64 against a non-local symbol in an allocated section the
+    /// script discards reserves a `.rela.dyn` slot that is never
+    /// written (bfd sizes the global path without a discard check);
+    /// local-target relocs in the same section reserve nothing.
+    #[test]
+    fn discarded_alloc_relocs_reserve_none_slots() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0;
+  .text : { *(.text*) }
+  .data : { *(.data*) }
+  .rela.dyn : { *(.rela .rela*) }
+  .relr.dyn : { *(.relr.dyn) }
+  /DISCARD/ : { *(.export_symbol) }
+}
+"#,
+        )
+        .expect("parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 8],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sec(".export_symbol", SHT_PROGBITS, SHF_ALLOC, 8, &[0u8; 16])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .sym("local_t", STB_LOCAL, STT_OBJECT, 0, 4, 0)
+            // Symtab: null(0), sections(1..=3), _start(4), local_t(5).
+            .reloc(1, 0, 4, rt::R_AARCH64_ABS64, 0)
+            .reloc(2, 0, 4, rt::R_AARCH64_ABS64, 0)
+            .reloc(2, 8, 5, rt::R_AARCH64_ABS64, 0)
+            .build(EM_AARCH64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            pack_relative_relocs: true,
+            max_page_size: 0x10000,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let secs = readelf_sections(&res.image);
+        let rela = secs.iter().find(|s| s.0 == ".rela.dyn").expect("rela");
+        // One reserved slot for the discarded global-target reloc; the
+        // local-target one reserves nothing; the live .data slot packs
+        // into RELR.
+        assert_eq!(rela.3, 24, "one zeroed reservation");
+        let off = section_file_off(&res.image, rela.2);
+        assert_eq!(&res.image[off..off + 24], &[0u8; 24], "slot reads R_*_NONE");
+        let relr = secs.iter().find(|s| s.0 == ".relr.dyn").expect("relr");
+        assert!(relr.3 > 0, "live slot packed into RELR");
+    }
+
+    /// Symbols assigned from the top-level location counter attach per
+    /// ld's section_for_dot: after a dot assignment they bind to the
+    /// next output section, skipping one the link strips as empty;
+    /// with no dot assignment in between they bind to the previous
+    /// allocated section.
+    #[test]
+    fn boundary_symbols_attach_like_ld() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0x1000;
+  .text : { *(.text*) }
+  . = ALIGN(0x100);
+  bnd = .;
+  .maybe : { *(.absent) }
+  .data : { *(.data*) }
+  tail = .;
+}
+"#,
+        )
+        .expect("parses");
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[1u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let secs = readelf_sections(&res.image);
+        let data_shndx = (secs.iter().position(|s| s.0 == ".data").expect("data") + 1) as u16;
+        let syms = image_symbols(&res.image);
+        let shndx_of = |name: &str| {
+            syms.iter()
+                .find(|(n, _, _)| n == name)
+                .unwrap_or_else(|| panic!("{name}"))
+                .2
+        };
+        assert_eq!(shndx_of("bnd"), data_shndx, "dot assignment prefers next");
+        assert_eq!(shndx_of("tail"), data_shndx, "previous allocated section");
+    }
+
+    /// An unresolved default-visibility weak reference keeps
+    /// symbol-based dynamic entries (ABS64 at its slots, GLOB_DAT for
+    /// its GOT entry) instead of resolving statically; a hidden global
+    /// is emitted with local binding in a dynamic link.
+    #[test]
+    fn undefweak_keeps_symbol_entries_and_hidden_forces_local() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0;
+  .text : { *(.text*) }
+  .got : { *(.got) }
+  .data : { *(.data*) }
+  .rela.dyn : { *(.rela .rela*) }
+  .relr.dyn : { *(.relr.dyn) }
+}
+"#,
+        )
+        .expect("parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 8],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .sym("wref", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+            .sym("hid", STB_GLOBAL, STT_FUNC, 0, 4, 0)
+            .vis(STV_HIDDEN)
+            // Symtab: null(0), sections(1..=2), _start(3), wref(4), hid(5).
+            .reloc(1, 0, 4, rt::R_AARCH64_ABS64, 0)
+            .reloc(0, 0, 4, rt::R_AARCH64_ADR_GOT_PAGE, 0)
+            .reloc(0, 4, 4, rt::R_AARCH64_LD64_GOT_LO12_NC, 0)
+            .build(EM_AARCH64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            pack_relative_relocs: true,
+            max_page_size: 0x10000,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let secs = readelf_sections(&res.image);
+        let rela = secs.iter().find(|s| s.0 == ".rela.dyn").expect("rela");
+        assert_eq!(rela.3, 48, "GLOB_DAT for the GOT slot + ABS64 at the site");
+        let off = section_file_off(&res.image, rela.2);
+        let types: Vec<u32> = (0..2)
+            .map(|k| {
+                u32::from_le_bytes(
+                    res.image[off + k * 24 + 8..off + k * 24 + 12]
+                        .try_into()
+                        .unwrap(),
+                )
+            })
+            .collect();
+        assert!(types.contains(&rt::R_AARCH64_GLOB_DAT));
+        assert!(types.contains(&rt::R_AARCH64_ABS64));
+        // The hidden global is forced local: nm reports it lowercase.
+        let shoff = u64::from_le_bytes(res.image[40..48].try_into().unwrap()) as usize;
+        let shnum = u16::from_le_bytes(res.image[60..62].try_into().unwrap()) as usize;
+        let mut hid_info = None;
+        for i in 1..shnum {
+            let h: Elf64Shdr = read_struct(&res.image, shoff + i * 64).unwrap();
+            if h.sh_type == SHT_SYMTAB {
+                let strh: Elf64Shdr =
+                    read_struct(&res.image, shoff + h.sh_link as usize * 64).unwrap();
+                let strtab =
+                    &res.image[strh.sh_offset as usize..(strh.sh_offset + strh.sh_size) as usize];
+                for k in 0..(h.sh_size / 24) as usize {
+                    let at = h.sh_offset as usize + k * 24;
+                    let noff = u32::from_le_bytes(res.image[at..at + 4].try_into().unwrap());
+                    if strz(strtab, noff as usize) == "hid" {
+                        hid_info = Some(res.image[at + 4]);
+                    }
+                }
+            }
+        }
+        assert_eq!(hid_info.expect("hid emitted") >> 4, STB_LOCAL);
     }
 }

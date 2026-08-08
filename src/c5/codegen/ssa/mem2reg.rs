@@ -1418,6 +1418,7 @@ mod tests {
             is_inline: false,
             is_always_inline: false,
             is_naked: false,
+            section: None,
             is_weak: false,
             is_internal: false,
             const_params: 0,

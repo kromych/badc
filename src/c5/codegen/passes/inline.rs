@@ -1171,19 +1171,29 @@ impl<'a> CandidatePool<'a> {
         CandidatePool { map, unrolled }
     }
 
-    fn view(&self, exclude: usize) -> CandidateSet<'_, 'a> {
+    fn view(
+        &self,
+        exclude: usize,
+        caller_section: Option<alloc::string::String>,
+    ) -> CandidateSet<'_, 'a> {
         CandidateSet {
             pool: self,
             exclude,
+            caller_section,
         }
     }
 }
 
 /// One caller's view of a pool. The caller's own entry is excluded:
-/// splicing a self-recursive call would expand without bound.
+/// splicing a self-recursive call would expand without bound. A callee
+/// with an explicit section is visible only to callers placed in the
+/// same section: its placement is a contract (the kernel's section
+/// whitelists), which the splice would erase, so gcc keeps such calls
+/// out of line too.
 struct CandidateSet<'p, 'a> {
     pool: &'p CandidatePool<'a>,
     exclude: usize,
+    caller_section: Option<alloc::string::String>,
 }
 
 impl<'a> CandidateSet<'_, 'a> {
@@ -1191,7 +1201,10 @@ impl<'a> CandidateSet<'_, 'a> {
         if *pc == self.exclude {
             None
         } else {
-            self.pool.map.get(pc)
+            self.pool
+                .map
+                .get(pc)
+                .filter(|c| c.section.is_none() || c.section == self.caller_section)
         }
     }
 
@@ -2530,6 +2543,7 @@ fn splice_multi_block(
         is_variadic: original.is_variadic,
         is_inline: original.is_inline,
         is_always_inline: original.is_always_inline,
+        section: original.section,
         is_naked: original.is_naked,
         is_weak: original.is_weak,
         is_internal: original.is_internal,
@@ -3314,7 +3328,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             // Splicing a self-recursive call would expand indefinitely,
             // so the caller's own entry is excluded from its view.
             let local = pools[usize::from(only_marked) | (usize::from(only_frame_free) << 1)]
-                .view(caller.ent_pc);
+                .view(caller.ent_pc, caller.section.clone());
             if local.is_empty() {
                 continue;
             }

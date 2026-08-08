@@ -1164,6 +1164,12 @@ pub(crate) struct FunctionSsa {
     /// translation unit, so the whole-program facts a pass can derive
     /// from the call sites it sees are complete.
     pub is_internal: bool,
+    /// Explicit placement from `__attribute__((section(...)))`, `None`
+    /// for the default text section. Placement is a contract consumers
+    /// read (the kernel whitelists init references by section), so a
+    /// body with one is only spliced into a caller placed identically,
+    /// as gcc does.
+    pub section: Option<alloc::string::String>,
     /// Declared parameters, by index, whose value a whole-program
     /// constant reached (`passes::ipa_const_param`). Their incoming
     /// argument register has no reader left, so the entry spill of
@@ -1464,6 +1470,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             is_naked: _,
             is_weak: _,
             is_internal: _,
+            section: _,
             const_params: _,
             insts,
             inst_src: _,

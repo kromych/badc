@@ -1550,7 +1550,10 @@ pub(super) fn write_relocatable(
 
     // Data objects defined in this unit, by name and unified data
     // offset; an inline-asm section reloc naming one resolves
-    // section-relative like the attribute path.
+    // section-relative like the attribute path. An alias definition
+    // carries its target's offset and binds like any defined object;
+    // dropping it here would hand its name an undefined entry beside
+    // the definition.
     let defined_data_by_name: alloc::collections::BTreeMap<&str, i64> = {
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
@@ -1560,7 +1563,6 @@ pub(super) fn write_relocatable(
             .filter(|s| {
                 s.class == Token::Glo as i64
                     && s.defined_here
-                    && !s.is_alias
                     && !s.is_thread_local
                     && !s.name.is_empty()
                     && matches!(s.linkage, Linkage::External | Linkage::Internal)
@@ -3002,25 +3004,47 @@ pub(super) fn write_relocatable(
         });
     }
 
+    // RELA carries the addend in `r_addend`; the slot bytes under a
+    // relocation are dead in the image and gas leaves them zero, which
+    // a consumer that validates the slot before applying it requires.
+    // `build.data` bakes VM values into pointer slots (the target's
+    // data offset, a function's `ent_pc`), so clear each relocated
+    // slot before the bytes are copied out.
+    let data_src = {
+        let mut cleared = build.data.clone();
+        for off in relocated_data_offsets(program) {
+            let off = off as usize;
+            let Some(slot) = cleared.get_mut(off..off + 8) else {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "elf_reloc: relocated slot {off:#x} past end of .data ({})",
+                        build.data.len(),
+                    ),
+                )));
+            };
+            slot.fill(0);
+        }
+        cleared
+    };
     // .data -- `sh_addralign` carries the alignment of the content the
     // plan keeps here. Objects moved into a named section copy their
     // bytes there (a `.bss`-resident wholly-zero object contributes
     // zeros); the remaining content packs at the planned positions and
     // the dropped alignment padding leaves no file bytes behind.
     let data_body: Vec<u8> = if plan.spans.is_empty() {
-        build.data.clone()
+        data_src
     } else {
         let mut body = alloc::vec![0u8; plan.data_len as usize];
         for s in &plan.spans {
             if s.pad {
                 continue;
             }
-            let file_lo = (s.old_lo as usize).min(build.data.len());
-            let file_hi = (s.old_hi as usize).min(build.data.len());
+            let file_lo = (s.old_lo as usize).min(data_src.len());
+            let file_hi = (s.old_hi as usize).min(data_src.len());
             match s.home {
                 DataHome::Data(b) => {
                     let b = b as usize;
-                    body[b..b + (file_hi - file_lo)].copy_from_slice(&build.data[file_lo..file_hi]);
+                    body[b..b + (file_hi - file_lo)].copy_from_slice(&data_src[file_lo..file_hi]);
                 }
                 DataHome::Named(e, b) => {
                     // Written at the planned base: spans arrive in
@@ -3035,7 +3059,7 @@ pub(super) fn write_relocatable(
                         ent.bytes.resize(b + size, 0);
                     }
                     ent.bytes[b..b + (file_hi - file_lo)]
-                        .copy_from_slice(&build.data[file_lo..file_hi]);
+                        .copy_from_slice(&data_src[file_lo..file_hi]);
                 }
                 DataHome::Bss(_) => {}
             }

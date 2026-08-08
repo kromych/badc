@@ -1922,12 +1922,16 @@ impl Compiler {
                         let tgt = self.symbols.iter().position(|s| {
                             s.name == target && s.class == Token::Glo as i64 && s.defined_here
                         });
+                        // `has_initializer` marks the alias as carrying a
+                        // value: a later `= init` trips the duplicate-
+                        // definition check like any second initializer.
                         let Some(tgt) = tgt else {
                             // The target may be defined later in the unit.
                             self.pending_aliases.push((id_idx, target, true));
                             self.symbols[id_idx].class = Token::Glo as i64;
                             self.symbols[id_idx].type_ = ty;
                             self.symbols[id_idx].is_alias = true;
+                            self.symbols[id_idx].has_initializer = true;
                             self.accept_declarator_separator()?;
                             continue;
                         };
@@ -1938,6 +1942,15 @@ impl Compiler {
                         self.symbols[id_idx].defined_here = true;
                         self.symbols[id_idx].is_extern_decl = false;
                         self.symbols[id_idx].is_alias = true;
+                        self.symbols[id_idx].has_initializer = true;
+                        self.accept_declarator_separator()?;
+                        continue;
+                    }
+                    // A later no-initializer declaration of an alias-defined
+                    // object redeclares it (C99 6.9.2p2). The alias owns no
+                    // storage, so the merge-or-allocate paths below would
+                    // give it fresh zero bytes and break the binding.
+                    if self.symbols[id_idx].is_alias && self.lex.tk != Token::Assign {
                         self.accept_declarator_separator()?;
                         continue;
                     }

@@ -9622,6 +9622,111 @@ mod tests {
         );
     }
 
+    /// The SIMD forms the crypto and CRC units need encode to the words GNU as
+    /// emits: the bit-select group, shift-and-insert by immediate across every
+    /// arrangement, the SHA1 / SHA512 updates, and register-pair load/store in
+    /// the s / d / q views with all three addressing modes.
+    #[test]
+    fn file_scope_a64_simd_match_gnu_as() {
+        use super::super::ssa::emit_common::{
+            extract_file_scope_asm_sections, materialize_asm_sections,
+        };
+        let text = ".pushsection .t,\"ax\"\n\
+                    bsl v1.16b, v2.16b, v3.16b\n\
+                    bit v1.16b, v2.16b, v3.16b\n\
+                    bif v2.16b, v7.16b, v22.16b\n\
+                    bsl v1.8b, v2.8b, v3.8b\n\
+                    bif v5.8b, v6.8b, v11.8b\n\
+                    sri v1.4s, v17.4s, #20\n\
+                    sri v1.4s, v17.4s, #1\n\
+                    sri v1.4s, v4.4s, #32\n\
+                    sri v3.8b, v17.8b, #1\n\
+                    sri v3.8b, v17.8b, #8\n\
+                    sri v3.8h, v17.8h, #16\n\
+                    sri v3.2d, v17.2d, #64\n\
+                    sri v3.2d, v17.2d, #1\n\
+                    sri v3.16b, v17.16b, #3\n\
+                    sha1su0 v0.4s, v1.4s, v2.4s\n\
+                    sha1su1 v0.4s, v3.4s\n\
+                    sha512h q3, q6, v7.2d\n\
+                    sha512h2 q3, q1, v0.2d\n\
+                    sha512su0 v0.2d, v1.2d\n\
+                    sha512su1 v0.2d, v2.2d, v5.2d\n\
+                    ldp q0, q1, [x2]\n\
+                    ldp q0, q1, [x2, #16]\n\
+                    ldp q11, q12, [x3], #0x20\n\
+                    ldp q16, q17, [x4, #-128]!\n\
+                    ldp q18, q19, [x5, #-96]\n\
+                    stp q0, q1, [x2]\n\
+                    stp q6, q7, [sp, #32]\n\
+                    stp q11, q12, [x3], #0x20\n\
+                    stp q16, q17, [x4, #-128]!\n\
+                    ldp s0, s1, [x2, #8]\n\
+                    ldp d0, d1, [x2, #16]\n\
+                    stp d2, d3, [x2, #-16]!\n\
+                    sli v1.4s, v17.4s, #20\n\
+                    sli v3.8b, v17.8b, #0\n\
+                    sli v3.2d, v17.2d, #63\n\
+                    sri v1.2s, v2.2s, #12\n\
+                    sri v1.4h, v2.4h, #5\n\
+                    .popsection\n";
+        let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
+        encode_a64_file_asm_section_code(&mut blocks).unwrap();
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            true,
+            &mut sink,
+        )
+        .unwrap();
+        let want_words: [u32; 37] = [
+            0x6e631c41, // bsl v1.16b, v2.16b, v3.16b
+            0x6ea31c41, // bit v1.16b, v2.16b, v3.16b
+            0x6ef61ce2, // bif v2.16b, v7.16b, v22.16b
+            0x2e631c41, // bsl v1.8b, v2.8b, v3.8b
+            0x2eeb1cc5, // bif v5.8b, v6.8b, v11.8b
+            0x6f2c4621, // sri v1.4s, v17.4s, #20
+            0x6f3f4621, // sri v1.4s, v17.4s, #1
+            0x6f204481, // sri v1.4s, v4.4s, #32
+            0x2f0f4623, // sri v3.8b, v17.8b, #1
+            0x2f084623, // sri v3.8b, v17.8b, #8
+            0x6f104623, // sri v3.8h, v17.8h, #16
+            0x6f404623, // sri v3.2d, v17.2d, #64
+            0x6f7f4623, // sri v3.2d, v17.2d, #1
+            0x6f0d4623, // sri v3.16b, v17.16b, #3
+            0x5e023020, // sha1su0 v0.4s, v1.4s, v2.4s
+            0x5e281860, // sha1su1 v0.4s, v3.4s
+            0xce6780c3, // sha512h q3, q6, v7.2d
+            0xce608423, // sha512h2 q3, q1, v0.2d
+            0xcec08020, // sha512su0 v0.2d, v1.2d
+            0xce658840, // sha512su1 v0.2d, v2.2d, v5.2d
+            0xad400440, // ldp q0, q1, [x2]
+            0xad408440, // ldp q0, q1, [x2, #16]
+            0xacc1306b, // ldp q11, q12, [x3], #0x20
+            0xadfc4490, // ldp q16, q17, [x4, #-128]!
+            0xad7d4cb2, // ldp q18, q19, [x5, #-96]
+            0xad000440, // stp q0, q1, [x2]
+            0xad011fe6, // stp q6, q7, [sp, #32]
+            0xac81306b, // stp q11, q12, [x3], #0x20
+            0xadbc4490, // stp q16, q17, [x4, #-128]!
+            0x2d410440, // ldp s0, s1, [x2, #8]
+            0x6d410440, // ldp d0, d1, [x2, #16]
+            0x6dbf0c42, // stp d2, d3, [x2, #-16]!
+            0x6f345621, // sli v1.4s, v17.4s, #20
+            0x2f085623, // sli v3.8b, v17.8b, #0
+            0x6f7f5623, // sli v3.2d, v17.2d, #63
+            0x2f344441, // sri v1.2s, v2.2s, #12
+            0x2f1b4441, // sri v1.4h, v2.4h, #5
+        ];
+        let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
+    }
+
     /// The memory copy / set family (FEAT_MOPS) encodes to the words GNU as
     /// emits. The cases cover both operand shapes, all three stages, and the
     /// read/write option suffixes, with the registers varied so the

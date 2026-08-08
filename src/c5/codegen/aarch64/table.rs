@@ -429,6 +429,17 @@ fn fp_ldst_reg(mnem: &str, rt: &Opnd) -> Option<(u8, u32, u32, u32)> {
     })
 }
 
+/// Register number and `opc` selector (s 0, d 1, q 2) of a SIMD register-pair
+/// transfer operand; `None` for a non-FP operand.
+fn fp_pair_reg(o: &Opnd) -> Option<(u8, u8)> {
+    Some(match *o {
+        Opnd::VReg { num, is_d: false } => (num, 0),
+        Opnd::VReg { num, is_d: true } => (num, 1),
+        Opnd::QReg(num) => (num, 2),
+        _ => return None,
+    })
+}
+
 /// Encode one A64 instruction to its 32-bit word. Operand order is the written
 /// (assembly) order. `OptLsl` slots may be omitted by the caller (a missing
 /// trailing shift defaults to 0).
@@ -820,15 +831,18 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
-    // SIMD logical `<and|bic|orr|orn|eor> Vd.T, Vn.T, Vm.T`, byte arrangement
-    // only; the (U, size) fields select the operation. GP forms (Reg operands)
-    // fall through to the catalogue.
+    // SIMD logical `<and|bic|orr|orn|eor|bsl|bit|bif> Vd.T, Vn.T, Vm.T`, byte
+    // arrangement only; the (U, size) fields select the operation. GP forms
+    // (Reg operands) fall through to the catalogue.
     if let Some(variant) = match mnemonic {
         "and" => Some(0u32),
         "bic" => Some(0x0040_0000),
         "orr" => Some(0x0080_0000),
         "orn" => Some(0x00C0_0000),
         "eor" => Some(0x2000_0000),
+        "bsl" => Some(0x2040_0000),
+        "bit" => Some(0x2080_0000),
+        "bif" => Some(0x20C0_0000),
         _ => None,
     } && let [
         Opnd::VecReg { num: rd, size, q },
@@ -855,6 +869,143 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rm as u32) << 16)
             | ((rn as u32) << 5)
             | (rd as u32));
+    }
+    // SIMD register-pair load/store `<ldp|stp> <St1|Dt1|Qt1>, <t2>, [Xn|SP..]`.
+    // `opc` selects the register view and the scale (4 << opc); the addressing
+    // mode sits at bit 23 (post-index 1, signed offset 2, pre-index 3) and the
+    // load bit at 22. Byte-identical to GNU as: `ldp q0, q1, [x2, #16]` is
+    // 0xAD408440 and `stp d2, d3, [x2, #-16]!` is 0x6DBF0C42.
+    if let ("ldp" | "stp", [t1, t2, mem, rest @ ..]) = (mnemonic, ops)
+        && let Some((rt, opc)) = fp_pair_reg(t1)
+        && let Some((rt2, opc2)) = fp_pair_reg(t2)
+    {
+        if opc != opc2 {
+            return Err(String::from("inline asm: register-pair widths differ"));
+        }
+        let (rn, off, mode) = match (mem, rest) {
+            (
+                Opnd::Mem {
+                    base,
+                    off,
+                    pre: true,
+                },
+                [],
+            ) => (*base, *off, 3u32),
+            (
+                Opnd::Mem {
+                    base,
+                    off: 0,
+                    pre: false,
+                },
+                [Opnd::Imm(n)],
+            ) => (*base, *n, 1),
+            (
+                Opnd::Mem {
+                    base,
+                    off,
+                    pre: false,
+                },
+                [],
+            ) => (*base, *off, 2),
+            _ => {
+                return Err(format!(
+                    "inline asm: no A64 encoding for `{mnemonic}` with these operands"
+                ));
+            }
+        };
+        let scale = 4i64 << opc;
+        if off % scale != 0 || !(-64..=63).contains(&(off / scale)) {
+            return Err(format!(
+                "inline asm: `{mnemonic}` offset {off} is not a signed 7-bit multiple of {scale}"
+            ));
+        }
+        let imm7 = ((off / scale) as u32) & 0x7F;
+        let load = u32::from(mnemonic == "ldp");
+        return Ok(0x2C00_0000
+            | ((opc as u32) << 30)
+            | (mode << 23)
+            | (load << 22)
+            | (imm7 << 15)
+            | ((rt2 as u32) << 10)
+            | ((rn as u32) << 5)
+            | (rt as u32));
+    }
+    // SIMD shift-and-insert by immediate. `sri` counts from the right, so the
+    // immh:immb field holds `2 * esize - shift` for a shift of 1..=esize;
+    // `sli` counts from the left, holding `esize + shift` for 0..=esize-1.
+    // Byte-identical to GNU as: `sri v1.4s, v17.4s, #20` is 0x6F2C4621 and
+    // `sli v1.4s, v17.4s, #20` is 0x6F345621.
+    if let Some((base, right)) = match mnemonic {
+        "sri" => Some((0x2F00_4400u32, true)),
+        "sli" => Some((0x2F00_5400u32, false)),
+        _ => None,
+    } && let [
+        Opnd::VecReg { num: rd, size, q },
+        Opnd::VecReg {
+            num: rn,
+            size: s1,
+            q: q1,
+        },
+        Opnd::Imm(shift),
+    ] = *ops
+    {
+        if size != s1 || q != q1 {
+            return Err(String::from("inline asm: vector shift arrangements differ"));
+        }
+        if size == 3 && !q {
+            return Err(String::from(
+                "inline asm: .1d arrangement is reserved (use .2d)",
+            ));
+        }
+        let esize = 8i64 << size;
+        let range = if right { 1..=esize } else { 0..=esize - 1 };
+        if !range.contains(&shift) {
+            return Err(format!(
+                "inline asm: `{mnemonic}` shift {shift} out of range for this arrangement"
+            ));
+        }
+        let field = if right {
+            2 * esize - shift
+        } else {
+            esize + shift
+        } as u32;
+        return Ok((if q { 1u32 << 30 } else { 0 })
+            | base
+            | (field << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SHA1 / SHA512 schedule and hash updates: the arrangement is fixed by the
+    // instruction, so only the register fields vary. `sha512h` / `sha512h2`
+    // take their two sources as q registers. Byte-identical to GNU as:
+    // `sha1su0 v0.4s, v1.4s, v2.4s` is 0x5E023020 and `sha512h q3, q6, v7.2d`
+    // is 0xCE6780C3.
+    if let Some((base, esize)) = match mnemonic {
+        "sha1su0" => Some((0x5E00_3000u32, 2u8)),
+        "sha1su1" => Some((0x5E28_1800, 2)),
+        "sha512su0" => Some((0xCEC0_8000, 3)),
+        "sha512su1" => Some((0xCE60_8800, 3)),
+        "sha512h" => Some((0xCE60_8000, 3)),
+        "sha512h2" => Some((0xCE60_8400, 3)),
+        _ => None,
+    } {
+        let vec_of = |o: &Opnd| match *o {
+            Opnd::VecReg { num, size, q } if size == esize && q => Some(num),
+            _ => None,
+        };
+        let fields = match *ops {
+            [ref d, ref n] => vec_of(d).zip(vec_of(n)).map(|(d, n)| (d, n, 0)),
+            [Opnd::QReg(d), Opnd::QReg(n), ref m] => vec_of(m).map(|m| (d, n, m)),
+            [ref d, ref n, ref m] => vec_of(d)
+                .zip(vec_of(n))
+                .zip(vec_of(m))
+                .map(|((d, n), m)| (d, n, m)),
+            _ => None,
+        };
+        let (rd, rn, rm) = fields.ok_or_else(|| {
+            format!("inline asm: no A64 encoding for `{mnemonic}` with these operands")
+        })?;
+        return Ok(base | ((rm as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
     }
     // SIMD permute `<zip1|zip2|uzp1|uzp2|trn1|trn2> Vd.T, Vn.T, Vm.T`, one
     // arrangement. size at bit 22, Q at 30; each op's base word carries its

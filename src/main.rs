@@ -3058,18 +3058,6 @@ fn default_output_path(source: &str, target: Target, mode: Mode) -> PathBuf {
     }
 }
 
-/// Lower the program to a native binary, write it, mark it executable,
-/// and -- when the produced format is Mach-O on a macOS host -- shell
-/// out to `codesign --sign -` so the loader will accept it. ELF
-/// binaries don't need signing; cross-format combinations print an
-/// advisory line and skip the signing step.
-/// Write `bytes` to `out`, exit on failure, log
-/// `info: wrote file <path>` on success unless `quiet` is set.
-/// Used by every output path -- object emit, archive emit, JIT
-/// binary emit, native-binary emit -- so the chatter is uniform.
-/// Routes the info line through `eprint_diagnostic` so the
-/// severity word picks up the green TTY color.
-/// Inputs and options for a `-T/--script` link, gathered by the CLI.
 /// One link input in command-line position: placement follows the
 /// order files are loaded, so archives keep their place in the line.
 enum LinkInputCli {
@@ -3077,6 +3065,7 @@ enum LinkInputCli {
     Archive { path: String, whole: bool },
 }
 
+/// Inputs and options for a `-T/--script` link, gathered by the CLI.
 struct ScriptLinkCli {
     script_path: std::path::PathBuf,
     inputs: Vec<LinkInputCli>,
@@ -3289,6 +3278,12 @@ fn run_script_link(cli: ScriptLinkCli) {
     }
 }
 
+/// Write `bytes` to `out`, exit on failure, log
+/// `info: wrote file <path>` on success unless `quiet` is set.
+/// Used by every output path -- object emit, archive emit, JIT
+/// binary emit, native-binary emit -- so the chatter is uniform.
+/// Routes the info line through `eprint_diagnostic` so the
+/// severity word picks up the green TTY color.
 fn write_output(out: &std::path::Path, bytes: &[u8], target: Target, quiet: bool) {
     if let Err(e) = std::fs::write(out, bytes) {
         eprint_diagnostic(format!(

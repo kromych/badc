@@ -1586,7 +1586,7 @@ impl Compiler {
                     // top-level `__attribute__((cleanup))` functions in
                     // reverse declaration order before the synthetic return.
                     if self.cleanup_scopes.last().is_some_and(|s| !s.is_empty()) {
-                        let pairs: alloc::vec::Vec<(usize, usize)> = self
+                        let pending: alloc::vec::Vec<_> = self
                             .cleanup_scopes
                             .last()
                             .unwrap()
@@ -1594,9 +1594,9 @@ impl Compiler {
                             .rev()
                             .cloned()
                             .collect();
-                        for (var_sym, fn_sym) in pairs {
+                        for cv in pending {
                             let before = self.ast.stmts.len();
-                            self.push_cleanup_call(var_sym, fn_sym);
+                            self.push_cleanup_call(&cv);
                             for id in before..self.ast.stmts.len() {
                                 top_level_ids.push(id as super::super::ast::StmtId);
                             }

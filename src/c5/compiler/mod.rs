@@ -1611,11 +1611,13 @@ pub struct Compiler {
     /// `DW_TAG_lexical_block` ranges are not emitted yet (TODO).
     pending_block_locals: Vec<crate::c5::program::VariableInfo>,
     /// Stack of block scopes carrying `__attribute__((cleanup(fn)))`
-    /// variables, innermost last. Each entry is `(var_sym, cleanup_fn_sym)`
-    /// in declaration order. A block exit emits `fn(&var)` in reverse order
-    /// (C++-style, matching GCC) on every path out: fall-through, `return`,
-    /// `break`, and `continue`.
-    cleanup_scopes: Vec<Vec<(usize, usize)>>,
+    /// variables, innermost last, in declaration order. A block exit emits
+    /// `fn(&var)` in reverse order (C++-style, matching GCC) on every path
+    /// out: fall-through, `return`, `break`, and `continue`. Entries are
+    /// snapshots of the declared binding: the symbol slot is rebound when
+    /// an inner scope shadows the name, and an exit emitted inside such a
+    /// scope must address the registered binding, not the current one.
+    cleanup_scopes: Vec<Vec<stmt::CleanupVar>>,
     /// `cleanup_scopes` depth at each enclosing `break` target (loop or
     /// `switch`) and `continue` target (loop only), innermost last. A
     /// `break` / `continue` cleans the scopes above the recorded depth.

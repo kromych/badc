@@ -1888,7 +1888,9 @@ impl<'a> LdsLinker<'a> {
                 }
             }
         };
-        let final_out = if value.att == Att::DotAbs && self.final_pass {
+        // Computed every pass: the dynamic-fixup sizing consults the
+        // previous pass's table before the final one runs.
+        let final_out = if value.att == Att::DotAbs {
             self.section_for_dot()
         } else {
             None
@@ -2473,7 +2475,11 @@ impl<'a> LdsLinker<'a> {
                         .get(&sym.name)
                         .or_else(|| self.script_prev.get(&sym.name))
                     {
-                        return matches!(s.val.att, Att::Out(_));
+                        // A symbol assigned from the top-level location
+                        // counter is rebased into its section before
+                        // emission (ld's ldexp_finalize_syms), so it is
+                        // a load address like an in-section one.
+                        return matches!(s.val.att, Att::Out(_)) || s.final_out.is_some();
                     }
                 }
                 false

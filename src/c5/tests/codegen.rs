@@ -3889,6 +3889,134 @@ fn relocatable_objects_carry_no_empty_relocation_sections() {
     }
 }
 
+/// Section headers of an ELF64 object as
+/// `(name, sh_type, sh_offset, sh_size, sh_info)`.
+fn elf64_section_headers(
+    obj: &[u8],
+) -> alloc::vec::Vec<(alloc::string::String, u32, u64, u64, u32)> {
+    let u16a = |o: usize| u16::from_le_bytes(obj[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(obj[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(obj[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let hdr = |i: usize| shoff + i * shentsize;
+    let str_off = u64a(hdr(u16a(0x3e) as usize) + 0x18) as usize;
+    (0..shnum)
+        .map(|i| {
+            let h = hdr(i);
+            let s = str_off + u32a(h) as usize;
+            let e = obj[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+            (
+                alloc::string::String::from_utf8_lossy(&obj[s..e]).into_owned(),
+                u32a(h + 4),
+                u64a(h + 0x18),
+                u64a(h + 0x20),
+                u32a(h + 0x2c),
+            )
+        })
+        .collect()
+}
+
+/// For a RELA relocation the addend lives in `r_addend`; the target
+/// field in the section image carries no information and gas leaves it
+/// zero. The x86_64 kernel module loader enforces exactly that before
+/// applying a module's relocations. Pointer slots in static data used
+/// to leak the VM's baked values (the target's data offset for data
+/// pointers, the function's `ent_pc` for function pointers).
+#[test]
+fn relocated_slots_are_zero_in_relocatable_objects() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SHT_RELA: u32 = 4;
+    const SHT_NOBITS: u32 = 8;
+    // Data pointers to a static object, function pointers to static
+    // functions (several, so a leaked consecutive index is caught), a
+    // pointer to an extern object, a string-literal pointer, and a
+    // function pointer the section attribute moves into a named
+    // section.
+    const SRC: &str = "\
+        static int inc(int x) { return x + 1; } \
+        static int dec(int x) { return x - 1; } \
+        static int gv = 7; \
+        extern int ev; \
+        typedef int (*fnp)(int); \
+        static fnp table[4] = { inc, dec, inc, dec }; \
+        static int *pg = &gv; \
+        static int *pe = &ev; \
+        static const char *msg = \"m\"; \
+        __attribute__((section(\"placed\"))) fnp placed_fn = inc; \
+        int use(int i) { return table[i](*pg + *pe) + (int)*msg; }";
+    // Slot width of a relocation type whose target field is a whole
+    // little-endian integer. Instruction-field relocations (aarch64
+    // ADRP/ADD/CALL26, TLS immediates) encode into opcode bits and are
+    // not slot-shaped.
+    fn slot_width(machine: u16, rtype: u32) -> Option<usize> {
+        match (machine, rtype) {
+            // R_X86_64_64 / PC64, then PC32 / PLT32 / 32 / 32S.
+            (62, 1) | (62, 24) => Some(8),
+            (62, 2) | (62, 4) | (62, 10) | (62, 11) => Some(4),
+            // R_AARCH64_ABS64 / PREL64, then ABS32 / PREL32.
+            (183, 257) | (183, 260) => Some(8),
+            (183, 258) | (183, 261) => Some(4),
+            _ => None,
+        }
+    }
+    for debug in [false, true] {
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let program = Compiler::with_options(
+                SRC.to_string(),
+                target,
+                CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new().with_debug_info(debug)
+            };
+            let obj = crate::emit_native_with_options(&program, target, opts)
+                .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+            let machine = u16::from_le_bytes(obj[0x12..0x14].try_into().unwrap());
+            let secs = elf64_section_headers(&obj);
+            let ctx = alloc::format!("{target:?}, debug={debug}");
+            let mut abs_slots = 0usize;
+            for (name, ty, off, size, info) in &secs {
+                if *ty != SHT_RELA {
+                    continue;
+                }
+                let (tname, tty, toff, _tsize, _) = &secs[*info as usize];
+                assert_ne!(
+                    *tty, SHT_NOBITS,
+                    "{ctx}: `{name}` relocates the no-bits section `{tname}`"
+                );
+                for r in obj[*off as usize..(*off + *size) as usize].chunks_exact(24) {
+                    let r_offset = u64::from_le_bytes(r[0..8].try_into().unwrap());
+                    let rtype = u32::from_le_bytes(r[8..12].try_into().unwrap());
+                    let Some(w) = slot_width(machine, rtype) else {
+                        continue;
+                    };
+                    if w == 8 {
+                        abs_slots += 1;
+                    }
+                    let lo = (*toff + r_offset) as usize;
+                    let slot = &obj[lo..lo + w];
+                    assert!(
+                        slot.iter().all(|&b| b == 0),
+                        "{ctx}: `{name}` entry at {r_offset:#x} (type {rtype}) leaves \
+                         {slot:02x?} in `{tname}`"
+                    );
+                }
+            }
+            // 4 table entries + pg + pe + msg + placed_fn.
+            assert!(
+                abs_slots >= 8,
+                "{ctx}: only {abs_slots} absolute pointer slots seen -- the sweep \
+                 no longer covers the initializers it was written for"
+            );
+        }
+    }
+}
+
 /// The post-inline recompaction lowers prebuilt bodies, so the import
 /// table has to come from those bodies rather than from the ASTs. An
 /// import whose only source reference is a static helper the inliner

@@ -4666,6 +4666,9 @@ fn unrouted_weak_undef_resolves_to_zero() {
               text_relocs: alloc::vec::Vec<NativeReloc>,
               data_relocs: alloc::vec::Vec<NativeReloc>| {
         crate::c5::linker::NativeObject {
+            source: alloc::string::String::new(),
+            sections: alloc::vec::Vec::new(),
+            discarded: alloc::vec::Vec::new(),
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
@@ -4838,6 +4841,9 @@ fn aarch64_data_ref_object(
         visibility: 0,
     };
     crate::c5::linker::NativeObject {
+        source: alloc::string::String::new(),
+        sections: alloc::vec::Vec::new(),
+        discarded: alloc::vec::Vec::new(),
         machine: NativeMachine::Aarch64,
         text,
         text_align: 16,
@@ -11346,4 +11352,274 @@ fn absolute_asm_label_immediate_is_refused_in_a_single_file_image() {
         ..Default::default()
     };
     emit_native_with_options(&program, target, reloc).expect("the object path carries the reloc");
+}
+
+/// Parse an ELF64 image's section headers into `(name, addr, size)`,
+/// file order, index 0 skipped.
+fn map_image_sections(image: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u64, u64)> {
+    let u16at = |o: usize| u16::from_le_bytes(image[o..o + 2].try_into().unwrap()) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let u64at = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+    let shoff = u64at(0x28) as usize;
+    let shentsize = u16at(0x3a);
+    let shnum = u16at(0x3c);
+    let shstrndx = u16at(0x3e);
+    let names_off = u64at(shoff + shstrndx * shentsize + 24) as usize;
+    let cstr = |o: usize| {
+        let end = image[o..].iter().position(|&b| b == 0).unwrap() + o;
+        alloc::string::String::from_utf8_lossy(&image[o..end]).into_owned()
+    };
+    (1..shnum)
+        .map(|i| {
+            let base = shoff + i * shentsize;
+            (
+                cstr(names_off + u32at(base) as usize),
+                u64at(base + 16),
+                u64at(base + 32),
+            )
+        })
+        .collect()
+}
+
+/// Read `(name, st_value)` for every named `.symtab` entry of an
+/// ELF64 image.
+fn map_image_symtab(image: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u64)> {
+    let u16at = |o: usize| u16::from_le_bytes(image[o..o + 2].try_into().unwrap()) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let u64at = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+    let shoff = u64at(0x28) as usize;
+    let shentsize = u16at(0x3a);
+    let shnum = u16at(0x3c);
+    let mut syms = alloc::vec::Vec::new();
+    for i in 1..shnum {
+        let base = shoff + i * shentsize;
+        // SHT_SYMTAB = 2; sh_link names the paired string table.
+        if u32at(base + 4) != 2 {
+            continue;
+        }
+        let off = u64at(base + 24) as usize;
+        let size = u64at(base + 32) as usize;
+        let strtab_shdr = shoff + u32at(base + 40) as usize * shentsize;
+        let str_off = u64at(strtab_shdr + 24) as usize;
+        for s in (off..off + size).step_by(24) {
+            let name_off = str_off + u32at(s) as usize;
+            let end = image[name_off..].iter().position(|&b| b == 0).unwrap() + name_off;
+            let name = alloc::string::String::from_utf8_lossy(&image[name_off..end]).into_owned();
+            if !name.is_empty() {
+                syms.push((name, u64at(s + 8)));
+            }
+        }
+    }
+    syms
+}
+
+#[test]
+fn link_map_reports_contributions_symbols_and_archive_members() {
+    // Three units, one labeled as an archive member; the printf import
+    // forces a PLT pool and the writer's `.symtab`, letting the map's
+    // symbol rows be checked against the image's own addresses.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        ArchiveInclusion, emit_x86_64_plt, link_native_objects, parse_native_elf, render_link_map,
+        write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    use alloc::string::{String, ToString};
+    let target = Target::LinuxX64;
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let compile = |src: String, no_entry: bool| {
+        let program = Compiler::with_options(
+            src,
+            target,
+            CompileOptions::default().with_no_entry_point(no_entry),
+        )
+        .compile()
+        .expect("compile");
+        parse_native_elf(&emit_native_with_options(&program, target, opts).expect("emit"))
+            .expect("parse")
+    };
+    let mut main_o = compile(
+        alloc::format!(
+            "{TEST_PRELUDE}\
+             extern int helper(int);\n\
+             extern int archfn(int);\n\
+             int g_global = 42;\n\
+             int main(void) {{ printf(\"%d\\n\", helper(1) + archfn(2) + g_global); return 0; }}\n"
+        ),
+        false,
+    );
+    let mut helper_o = compile(
+        "int h_data = 5;\nint helper(int x) { return x + h_data; }\n".to_string(),
+        true,
+    );
+    let mut arch_o = compile(
+        "const char a_msg[] = \"archive\";\nint archfn(int x) { return x + a_msg[0]; }\n"
+            .to_string(),
+        true,
+    );
+    main_o.source = "main.o".to_string();
+    helper_o.source = "helper.o".to_string();
+    arch_o.source = "liba.a(archmem.o)".to_string();
+    let mut merged = link_native_objects(&[main_o, helper_o, arch_o]).expect("link");
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        target,
+        None,
+    )
+    .expect("write executable");
+    let pulls = [ArchiveInclusion {
+        member: "liba.a(archmem.o)".to_string(),
+        referenced_by: "main.o".to_string(),
+        symbol: "archfn".to_string(),
+    }];
+    let map = render_link_map(&merged, &exe, &pulls, "prog").expect("render map");
+
+    assert!(
+        map.contains("Archive member included to satisfy reference by file (symbol)"),
+        "archive table header missing:\n{map}"
+    );
+    assert!(
+        map.contains(&alloc::format!(
+            "{:<30}main.o (archfn)",
+            "liba.a(archmem.o)"
+        )),
+        "archive member row missing:\n{map}"
+    );
+    // The per-object writer emits a `.comment` producer marker the
+    // parse drops; the map must report it under the discard table.
+    assert!(
+        map.contains("Discarded input sections"),
+        "discarded table header missing:\n{map}"
+    );
+    assert!(
+        map.lines()
+            .any(|l| l.starts_with(" .comment") && l.ends_with("liba.a(archmem.o)")),
+        "discarded .comment row missing:\n{map}"
+    );
+    assert!(map.contains("Memory Configuration"), "missing:\n{map}");
+    assert!(
+        map.contains("Linker script and memory map"),
+        "missing:\n{map}"
+    );
+    assert!(map.contains("OUTPUT(prog elf64-x86-64)"), "missing:\n{map}");
+
+    // Every output section (bar the symbol/string tables ld omits)
+    // appears with the image's own address and size.
+    let sections = map_image_sections(&exe);
+    let header_line = |name: &str, addr: u64, size: u64| {
+        let mut l = String::from(name);
+        for _ in 0..16usize.saturating_sub(name.len()) {
+            l.push(' ');
+        }
+        l.push_str(&alloc::format!("0x{addr:016x}"));
+        l.push_str(&alloc::format!("{:>11}", alloc::format!("0x{size:x}")));
+        l
+    };
+    for (name, addr, size) in &sections {
+        if matches!(name.as_str(), ".symtab" | ".strtab" | ".shstrtab") {
+            assert!(
+                !map.contains(&alloc::format!("\n{name} ")),
+                "`{name}` must be omitted from the map"
+            );
+            continue;
+        }
+        let line = header_line(name, *addr, *size);
+        assert!(
+            map.lines().any(|l| l == line),
+            "missing output section row `{line}` in:\n{map}"
+        );
+    }
+
+    // Input contributions and *fill* rows tile the stream-backed
+    // sections exactly.
+    for sec in [".text", ".rodata", ".data"] {
+        let Some((_, addr, size)) = sections.iter().find(|(n, _, _)| n == sec) else {
+            panic!("image lacks {sec}");
+        };
+        let header = header_line(sec, *addr, *size);
+        let mut cursor = *addr;
+        let mut rows = 0usize;
+        for line in map.lines().skip_while(|l| *l != header).skip(1) {
+            if line.is_empty() {
+                break;
+            }
+            if line.starts_with("                ") {
+                continue; // symbol row
+            }
+            let mut it = line.split_whitespace();
+            let (name, addr_s, size_s) =
+                (it.next().unwrap(), it.next().unwrap(), it.next().unwrap());
+            let row_addr = u64::from_str_radix(&addr_s[2..], 16).unwrap();
+            let row_size = u64::from_str_radix(&size_s[2..], 16).unwrap();
+            assert_eq!(
+                row_addr, cursor,
+                "{sec}: row `{name}` at 0x{row_addr:x} leaves a hole (cursor 0x{cursor:x})"
+            );
+            cursor += row_size;
+            rows += 1;
+        }
+        assert!(rows > 0, "{sec}: no contribution rows");
+        assert_eq!(
+            cursor,
+            addr + size,
+            "{sec}: contributions + fills must sum to the section size"
+        );
+    }
+
+    // The map's symbol rows carry the image's own addresses.
+    let symtab = map_image_symtab(&exe);
+    for f in ["main", "helper", "archfn"] {
+        let st_value = symtab
+            .iter()
+            .find(|(n, _)| n == f)
+            .unwrap_or_else(|| panic!("`{f}` missing from .symtab"))
+            .1;
+        let row = alloc::format!("                0x{st_value:016x}                {f}");
+        assert!(
+            map.lines().any(|l| l == row),
+            "symbol row for `{f}` at 0x{st_value:x} missing in:\n{map}"
+        );
+    }
+    // Data-stream symbols: the read-only prefix backs `.rodata`, the
+    // remainder `.data`.
+    let sec_addr = |n: &str| sections.iter().find(|(s, _, _)| s == n).unwrap().1;
+    let a_msg = merged.defined["a_msg"].value + sec_addr(".rodata");
+    let g_global = merged.defined["g_global"].value - merged.data_ro_len as u64 + sec_addr(".data");
+    for (sym, addr) in [("a_msg", a_msg), ("g_global", g_global)] {
+        let row = alloc::format!("                0x{addr:016x}                {sym}");
+        assert!(
+            map.lines().any(|l| l == row),
+            "data symbol row for `{sym}` at 0x{addr:x} missing in:\n{map}"
+        );
+    }
+
+    // Linker-materialized content is attributed, not silent.
+    assert!(
+        map.lines()
+            .any(|l| l.starts_with(" .plt ") && l.ends_with("<internal>")),
+        "PLT pool row missing in:\n{map}"
+    );
+    assert!(
+        map.lines()
+            .any(|l| l.starts_with(" .stub ") && l.ends_with("<internal>")),
+        "entry stub row missing in:\n{map}"
+    );
+
+    // Per-input-section identity survives into the merged model.
+    assert_eq!(
+        merged.section_map.sources,
+        alloc::vec![
+            "main.o".to_string(),
+            "helper.o".to_string(),
+            "liba.a(archmem.o)".to_string()
+        ]
+    );
 }

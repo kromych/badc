@@ -37,6 +37,8 @@ mod image;
 #[cfg(feature = "std")]
 pub(crate) mod link;
 #[cfg(feature = "std")]
+pub(crate) mod map;
+#[cfg(feature = "std")]
 pub(crate) mod object;
 #[cfg(feature = "std")]
 mod synth_build;
@@ -50,10 +52,13 @@ pub use image::write_executable_elf64;
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use link::{
-    MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline, emit_aarch64_plt,
-    emit_x86_64_plt, link_native_objects, link_native_objects_with_options,
+    MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
+    emit_aarch64_plt, emit_x86_64_plt, link_native_objects, link_native_objects_with_options,
     link_native_objects_with_shared_libs,
 };
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use map::{ArchiveInclusion, render_link_map};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use object::{

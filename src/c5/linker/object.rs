@@ -84,17 +84,17 @@ pub(crate) struct Elf64Ehdr {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct Elf64Shdr {
-    sh_name: u32,
-    sh_type: u32,
-    sh_flags: u64,
-    sh_addr: u64,
-    sh_offset: u64,
-    sh_size: u64,
-    sh_link: u32,
-    sh_info: u32,
-    sh_addralign: u64,
-    sh_entsize: u64,
+pub(crate) struct Elf64Shdr {
+    pub(crate) sh_name: u32,
+    pub(crate) sh_type: u32,
+    pub(crate) sh_flags: u64,
+    pub(crate) sh_addr: u64,
+    pub(crate) sh_offset: u64,
+    pub(crate) sh_size: u64,
+    pub(crate) sh_link: u32,
+    pub(crate) sh_info: u32,
+    pub(crate) sh_addralign: u64,
+    pub(crate) sh_entsize: u64,
 }
 
 #[repr(C)]
@@ -151,7 +151,7 @@ const _: () = {
 /// `T` to the on-disk shape -- the helper sidesteps Rust's type
 /// system there because every ELF struct has its own well-known
 /// layout.
-fn read_struct<T: Copy>(bytes: &[u8], off: usize) -> Result<T, C5Error> {
+pub(crate) fn read_struct<T: Copy>(bytes: &[u8], off: usize) -> Result<T, C5Error> {
     let n = core::mem::size_of::<T>();
     if off.checked_add(n).is_none_or(|end| end > bytes.len()) {
         return Err(err(&alloc::format!(
@@ -488,9 +488,35 @@ pub enum ElfTpoffTarget {
     Extern(String),
 }
 
+/// One family-classified input section: its name as spelled in the
+/// object and its extent within this object's merged family blob.
+/// The linker rebases `offset` by the object's per-family base so a
+/// link map can attribute every output byte range to the input
+/// section that produced it.
+#[derive(Debug, Clone)]
+pub struct InputSection {
+    pub name: String,
+    pub family: SectionFamily,
+    /// Byte offset within this object's family blob ([`NativeObject::text`],
+    /// [`NativeObject::rodata`], [`NativeObject::data`], the bss space,
+    /// or the TLS block).
+    pub offset: u64,
+    pub size: u64,
+}
+
 /// Result of parsing one native ELF ET_REL object.
 #[derive(Debug, Clone)]
 pub struct NativeObject {
+    /// Origin label for diagnostics and the link map: the input path,
+    /// or `lib.a(member.o)` for an archive member. Set by the caller
+    /// after parse; empty when unset.
+    pub source: String,
+    /// Family-classified input sections in placement order.
+    pub sections: Vec<InputSection>,
+    /// Sections the parser drops (`Discard` family content), as
+    /// `(name, sh_size)`. Symbol / string / relocation tables are
+    /// metadata consumed by the parse, not dropped content.
+    pub discarded: Vec<(String, u64)>,
     pub machine: NativeMachine,
     pub text: Vec<u8>,
     /// Largest sh_addralign among the text-family sections, at least 16.
@@ -739,6 +765,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut rela_debug_line_idx: Option<usize> = None;
     // `.init_array*` / `.fini_array*` sections: (shndx, is_dtor, priority).
     let mut init_array_sections: Vec<(usize, bool, Option<u32>)> = Vec::new();
+    let mut discarded: Vec<(String, u64)> = Vec::new();
     // Family per section index, for the symbol decoder. Sections the
     // walk routes to a dedicated channel keep `Discard`: they carry no
     // merged-stream payload.
@@ -804,6 +831,10 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                     // Kept when its target section joined a family;
                     // filtered below once every index is classified.
                     rela_section_indices.push(i);
+                } else if !matches!(sh.sh_type, 0 | SHT_RELA | SHT_SYMTAB | SHT_STRTAB) {
+                    // Dropped content, recorded for the link map's
+                    // "Discarded input sections" report.
+                    discarded.push((name.to_string(), sh.sh_size));
                 }
             }
         }
@@ -944,6 +975,39 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         // byte). `.tbss` sits past the `.tdata` extent.
         tls_base_per_shndx.push((sh_i, (tls_data_bytes.len() + tls_bss_size) as u64));
         tls_bss_size += sh.sh_size as usize;
+    }
+
+    // Input-section identity records: name, family, and extent within
+    // this object's family blob, in placement order.
+    let mut sections: Vec<InputSection> = Vec::new();
+    for (list, family) in [
+        (&text_base_per_shndx, SectionFamily::Text),
+        (&rodata_base_per_shndx, SectionFamily::RoData),
+        (&data_base_per_shndx, SectionFamily::Data),
+        (&bss_base_per_shndx, SectionFamily::Bss),
+    ] {
+        for &(sh_i, base) in list {
+            sections.push(InputSection {
+                name: strtab_str(shstrtab_bytes, shdrs[sh_i].sh_name as usize)?.to_string(),
+                family,
+                offset: base,
+                size: shdrs[sh_i].sh_size,
+            });
+        }
+    }
+    for (k, &(sh_i, base)) in tls_base_per_shndx.iter().enumerate() {
+        // The TLS base table lists `.tdata*` entries first, then `.tbss*`.
+        let family = if k < tdata_section_indices.len() {
+            SectionFamily::Tdata
+        } else {
+            SectionFamily::Tbss
+        };
+        sections.push(InputSection {
+            name: strtab_str(shstrtab_bytes, shdrs[sh_i].sh_name as usize)?.to_string(),
+            family,
+            offset: base,
+            size: shdrs[sh_i].sh_size,
+        });
     }
 
     // `.symtab` -> linked `.strtab` lives at `sh_link`.
@@ -1348,6 +1412,9 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     };
 
     Ok(NativeObject {
+        source: String::new(),
+        sections,
+        discarded,
         machine,
         text: text_bytes,
         text_align,
@@ -1428,7 +1495,7 @@ fn err(msg: &str) -> C5Error {
     )))
 }
 
-fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [u8], C5Error> {
+pub(crate) fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [u8], C5Error> {
     if sh.sh_type == SHT_NOBITS {
         return Ok(&[]);
     }
@@ -1446,7 +1513,7 @@ fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [u8], C5Erro
     Ok(&bytes[off..off + size])
 }
 
-fn strtab_str(strtab: &[u8], off: usize) -> Result<&str, C5Error> {
+pub(crate) fn strtab_str(strtab: &[u8], off: usize) -> Result<&str, C5Error> {
     if off >= strtab.len() {
         return Err(err(&format!(
             "string offset 0x{off:x} past end of strtab (len {})",
@@ -1533,7 +1600,7 @@ impl ShndxMap {
 /// covers `.bss` + per-variable `.bss.<name>`; `Tdata` and `Tbss`
 /// cover the matching `_Thread_local` storage families.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SectionFamily {
+pub enum SectionFamily {
     Text,
     RoData,
     Data,
@@ -2131,6 +2198,48 @@ mod tests {
         assert_eq!(r.offset, 0);
         assert_eq!(r.sym_idx, 2);
         assert_eq!(r.addend, 0);
+    }
+
+    /// The parser records each family section's identity (name +
+    /// extent within the family blob) and the sections it drops, so
+    /// the linker's section map and the link map's "Discarded input
+    /// sections" report reflect the object's real contents.
+    #[test]
+    fn parse_records_input_sections_and_discarded() {
+        let strtab: Vec<u8> = vec![0];
+        let mut symtab = Vec::new();
+        push_test_sym(&mut symtab, 0, 0, 0, 0, 0);
+        let plans = [
+            SecPlan::strtab(".strtab", strtab),
+            SecPlan::symtab(".symtab", symtab, 2, 1),
+            SecPlan::progbits(".text", vec![0u8; 4]),
+            SecPlan::progbits(".data", vec![0u8; 8]),
+            SecPlan::progbits(".rodata.str1.1", b"hi\0".to_vec()),
+            SecPlan::nobits(".bss", 16),
+            SecPlan::progbits(".comment", b"cc 1.0\0".to_vec()),
+            SecPlan::progbits(".mysec", vec![1, 2, 3]),
+        ];
+        let bytes = build_test_elf(EM_X86_64, &plans);
+        let obj = parse_native_elf(&bytes).expect("parse hand-built ET_REL");
+        let recorded: Vec<(&str, SectionFamily, u64, u64)> = obj
+            .sections
+            .iter()
+            .map(|s| (s.name.as_str(), s.family, s.offset, s.size))
+            .collect();
+        assert_eq!(
+            recorded,
+            vec![
+                (".text", SectionFamily::Text, 0, 4),
+                (".rodata.str1.1", SectionFamily::RoData, 0, 3),
+                (".data", SectionFamily::Data, 0, 8),
+                (".bss", SectionFamily::Bss, 0, 16),
+            ],
+        );
+        assert_eq!(
+            obj.discarded,
+            vec![(".comment".to_string(), 7), (".mysec".to_string(), 3)],
+        );
+        assert!(obj.source.is_empty(), "source is the caller's to set");
     }
 
     /// A `.rodata` an `SHT_RELA` targets cannot be mapped read-only:

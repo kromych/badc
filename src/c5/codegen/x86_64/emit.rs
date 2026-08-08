@@ -6456,12 +6456,14 @@ fn encode_x86_asm_section_code(
         imm_of: &imm_of,
         addr_of: &addr_of,
     };
+    let mut mode = super::table::Mode::Bits64;
     for b in blocks.iter_mut() {
         for item in b.items.iter_mut() {
             let AsmSectionItem::Code(text) = item else {
                 continue;
             };
-            *item = encode_one_x86_section_insn(text, &operand_target, goto_block, &refs)?;
+            *item =
+                encode_one_x86_section_insn(text, &mut mode, &operand_target, goto_block, &refs)?;
         }
     }
     Ok(())
@@ -6472,6 +6474,10 @@ fn encode_x86_asm_section_code(
 /// context: file-scope asm has no numbered operands, `asm goto` labels, or
 /// register assignments, so only self-contained instructions and a direct
 /// `call` / `jmp` to a bare symbol assemble.
+///
+/// The `.code16` / `.code32` / `.code64` state is a property of the assembler's
+/// input stream, so it carries across the walk in section order rather than
+/// resetting per section.
 pub(crate) fn encode_x86_file_asm_section_code(
     blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
 ) -> Result<(), alloc::string::String> {
@@ -6486,13 +6492,56 @@ pub(crate) fn encode_x86_file_asm_section_code(
         imm_of: &imm_of,
         addr_of: &addr_of,
     };
+    let mut mode = super::table::Mode::Bits64;
     super::ssa::emit_common::for_each_section_item_mut(blocks, &mut |item| {
         let AsmSectionItem::Code(text) = item else {
             return Ok(());
         };
-        *item = encode_one_x86_section_insn(text, &operand_target, &goto_block, &refs)?;
+        *item = encode_one_x86_section_insn(text, &mut mode, &operand_target, &goto_block, &refs)?;
         Ok(())
     })
+}
+
+/// Address size of an instruction's memory operand in bytes: the width of the
+/// base or index register it names, or the mode default when the operand names
+/// no register or the register comes from a template operand (always 64-bit).
+fn section_addr_size(insn: &super::asm::AsmInsn, mode: super::table::Mode) -> u8 {
+    use super::asm::{AsmMemBase, AsmOpnd};
+    let of = |b: AsmMemBase| match b {
+        AsmMemBase::Reg { size, .. } => Some(size.bytes()),
+        AsmMemBase::Ref(_) => None,
+    };
+    insn.operands
+        .iter()
+        .find_map(|o| match *o {
+            AsmOpnd::Mem { base, index, .. } | AsmOpnd::SymMem { base, index, .. } => {
+                of(base).or_else(|| index.and_then(of))
+            }
+            AsmOpnd::IndexMem { index, .. } => of(index),
+            _ => None,
+        })
+        .unwrap_or_else(|| mode.addrsize())
+}
+
+/// Byte width of a near-branch displacement and whether the operand-size
+/// prefix selects it. The displacement follows the operand size, which is 32
+/// in long and 32-bit modes and 16 in 16-bit mode; an AT&T size suffix
+/// (`calll` in a `.code16` stub) names the other one.
+fn branch_rel_width(
+    mode: super::table::Mode,
+    suffix: Option<super::super::ir::AsmRegSize>,
+) -> (u8, bool) {
+    let dflt: u8 = if mode == super::table::Mode::Bits16 {
+        2
+    } else {
+        4
+    };
+    let want = match suffix.map(|s| s.bytes()) {
+        Some(2) => 2,
+        Some(4) => 4,
+        _ => dflt,
+    };
+    (want, want != dflt)
 }
 
 /// Template-operand resolution for a replacement instruction: the register
@@ -6519,6 +6568,7 @@ struct SectionOperandRefs<'a> {
 /// against the symbol. A form that resolves to none of these is rejected.
 fn encode_one_x86_section_insn(
     text: &str,
+    mode: &mut super::table::Mode,
     operand_target: &dyn Fn(u8) -> Option<super::ssa::emit_common::AsmSectionTarget>,
     goto_block: &dyn Fn(u8) -> Option<u32>,
     refs: &SectionOperandRefs<'_>,
@@ -6528,6 +6578,21 @@ fn encode_one_x86_section_insn(
     use super::ssa::emit_common::{
         AsmRelocKind, AsmSectionItem, AsmSectionReloc, AsmSectionTarget,
     };
+    // An encoding-mode directive sets the state the rest of the stream
+    // assembles under and deposits no bytes.
+    if let Some(m) = match text {
+        ".code16" => Some(super::table::Mode::Bits16),
+        ".code32" => Some(super::table::Mode::Bits32),
+        ".code64" => Some(super::table::Mode::Bits64),
+        _ => None,
+    } {
+        *mode = m;
+        return Ok(AsmSectionItem::CodeBytes {
+            bytes: alloc::vec::Vec::new(),
+            relocs: alloc::vec::Vec::new(),
+        });
+    }
+    let mode = *mode;
     let insns = super::asm::parse_template(text.as_bytes())
         .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
     // A leading `lock` / `rep` prefix parses as its own entry; it rides in
@@ -6631,16 +6696,24 @@ fn encode_one_x86_section_insn(
             None
         };
         if let Some(target) = target {
-            let bytes = alloc::vec![if is_call { 0xE8u8 } else { 0xE9 }, 0, 0, 0, 0];
+            let (rel, prefixed) = branch_rel_width(mode, insn.suffix);
+            let mut bytes = alloc::vec::Vec::new();
+            if prefixed {
+                bytes.push(0x66);
+            }
+            bytes.push(if is_call { 0xE8u8 } else { 0xE9 });
+            let offset = bytes.len() as u32;
+            bytes.resize(bytes.len() + rel as usize, 0);
             let reloc = AsmSectionReloc {
-                offset: 1,
-                width: 4,
+                offset,
+                width: rel,
                 kind: AsmRelocKind::Data,
                 pcrel: true,
-                branch: true,
+                // Only long mode reaches a call target through a PLT slot.
+                branch: mode == super::table::Mode::Bits64,
                 signed: false,
                 target,
-                addend: -4,
+                addend: -(rel as i64),
             };
             return Ok(AsmSectionItem::CodeBytes {
                 bytes,
@@ -6668,17 +6741,23 @@ fn encode_one_x86_section_insn(
             None
         };
         if let Some(name) = target {
+            let (rel, prefixed) = branch_rel_width(mode, insn.suffix);
             let mut bytes = alloc::vec::Vec::new();
-            super::encode::emit_jcc_rel32(&mut bytes, cc, 0);
+            if prefixed {
+                bytes.push(0x66);
+            }
+            bytes.extend_from_slice(&[0x0F, 0x80 | (cc as u8)]);
+            let offset = bytes.len() as u32;
+            bytes.resize(bytes.len() + rel as usize, 0);
             let reloc = AsmSectionReloc {
-                offset: 2,
-                width: 4,
+                offset,
+                width: rel,
                 kind: AsmRelocKind::Data,
                 pcrel: true,
-                branch: true,
+                branch: mode == super::table::Mode::Bits64,
                 signed: false,
                 target: AsmSectionTarget::Symbol(name),
-                addend: -4,
+                addend: -(rel as i64),
             };
             return Ok(AsmSectionItem::CodeBytes {
                 bytes,
@@ -6739,7 +6818,7 @@ fn encode_one_x86_section_insn(
     // register (an FP operand is not an address register).
     let base_reg = |b: AsmMemBase| -> Option<u8> {
         match b {
-            AsmMemBase::Reg(r) => Some(r),
+            AsmMemBase::Reg { num, .. } => Some(num),
             AsmMemBase::Ref(i) => refs.op_reg.get(i as usize).copied().flatten().filter(|_| {
                 !matches!(
                     refs.operands.get(i as usize).map(|o| o.constraint),
@@ -7028,16 +7107,25 @@ fn encode_one_x86_section_insn(
     }
     // Encode the instruction body; a segment override rides in front of it.
     let mut body = alloc::vec::Vec::new();
-    super::asm::encode(&mut body, insn.mnemonic, insn.suffix, &concrete)
+    let addr = section_addr_size(insn, mode);
+    super::asm::encode_in(&mut body, mode, addr, insn.mnemonic, insn.suffix, &concrete)
         .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
+    // GNU as orders the prefixes segment, address size, operand size, then
+    // repeat / lock; the encoded body carries the size prefixes at its front,
+    // so the repeat / lock byte goes after them.
+    let sizes = body.iter().take_while(|b| matches!(b, 0x66 | 0x67)).count();
     let mut bytes = alloc::vec::Vec::new();
-    if let Some(b) = prefix {
-        bytes.push(b);
-    }
     if let Some(seg) = insn.seg.or(operand_seg) {
         bytes.push(seg);
     }
-    let seg_len = bytes.len() as u32;
+    bytes.extend_from_slice(&body[..sizes]);
+    if let Some(b) = prefix {
+        bytes.push(b);
+    }
+    // A field of `body` past the size prefixes lands in `bytes` shifted by the
+    // segment and repeat / lock bytes only, the size prefixes having moved
+    // ahead of them.
+    let seg_len = bytes.len() as u32 - sizes as u32;
     let mut relocs = alloc::vec::Vec::new();
     if let Some((target, off, idx, pcrel)) = sym_disp {
         // Locate the disp32 field: re-encode with a distinct displacement in
@@ -7074,8 +7162,15 @@ fn encode_one_x86_section_insn(
             other => other,
         };
         let mut probe_bytes = alloc::vec::Vec::new();
-        super::asm::encode(&mut probe_bytes, insn.mnemonic, insn.suffix, &probe)
-            .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
+        super::asm::encode_in(
+            &mut probe_bytes,
+            mode,
+            addr,
+            insn.mnemonic,
+            insn.suffix,
+            &probe,
+        )
+        .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
         let field = riprel_disp32_field(&body, &probe_bytes).ok_or_else(|| {
             alloc::format!("inline asm: replacement `{text}` disp32 field is not a 4-byte run")
         })?;
@@ -7101,7 +7196,7 @@ fn encode_one_x86_section_insn(
             addend,
         });
     }
-    bytes.extend_from_slice(&body);
+    bytes.extend_from_slice(&body[sizes..]);
     Ok(AsmSectionItem::CodeBytes { bytes, relocs })
 }
 
@@ -7893,7 +7988,7 @@ fn emit_inline_asm(
                     let size = asm_mem_size(None, insn, &asm.operands, &op_reg);
                     let resolve = |b: super::asm::AsmMemBase| -> Option<u8> {
                         match b {
-                            super::asm::AsmMemBase::Reg(r) => Some(r),
+                            super::asm::AsmMemBase::Reg { num, .. } => Some(num),
                             super::asm::AsmMemBase::Ref(idx) => {
                                 op_reg.get(idx as usize).copied().flatten().filter(|_| {
                                     !matches!(
@@ -8012,7 +8107,7 @@ fn emit_inline_asm(
                     let size = asm_mem_size(None, insn, &asm.operands, &op_reg)
                         .unwrap_or(AsmRegSize::Quad);
                     let index = match index {
-                        super::asm::AsmMemBase::Reg(r) => r,
+                        super::asm::AsmMemBase::Reg { num, .. } => num,
                         super::asm::AsmMemBase::Ref(i) => {
                             match op_reg.get(i as usize).copied().flatten().filter(|_| {
                                 !matches!(asm.operands[i as usize].constraint, AsmConstraint::Fp)
@@ -10209,5 +10304,90 @@ mod relax_branches_tests {
             &[0, 4, 8, 134],
         );
         assert!(short[0]);
+    }
+}
+
+#[cfg(test)]
+mod code_mode_tests {
+    use super::super::ssa::emit_common::{
+        AsmSectionItem, extract_file_scope_asm_sections, for_each_section_item_mut,
+    };
+    use alloc::vec::Vec;
+
+    /// Bytes a file-scope asm stream assembles to, in section order.
+    fn assemble(text: &str) -> Vec<u8> {
+        let mut blocks = extract_file_scope_asm_sections(text, false).expect("parses");
+        super::encode_x86_file_asm_section_code(&mut blocks).expect("assembles");
+        let mut out = Vec::new();
+        for b in blocks.iter_mut() {
+            for_each_section_item_mut(core::slice::from_mut(b), &mut |item| {
+                if let AsmSectionItem::CodeBytes { bytes, .. } = item {
+                    out.extend_from_slice(bytes);
+                }
+                Ok(())
+            })
+            .expect("walks");
+        }
+        out
+    }
+
+    /// `.code16` / `.code32` / `.code64` select the encoding mode of the
+    /// instructions that follow, and the state carries across a section switch
+    /// as it does in the assembler's input stream. Bytes measured with GNU as
+    /// 2.46.1 for the same source.
+    #[test]
+    fn code_directives_select_the_encoding_mode() {
+        assert_eq!(
+            assemble(".code16\nmovl %eax, %ebx\nmov %ax, %bx\n"),
+            [0x66, 0x89, 0xc3, 0x89, 0xc3]
+        );
+        assert_eq!(
+            assemble(".code32\nmovl %eax, %ebx\nmov %ax, %bx\n"),
+            [0x89, 0xc3, 0x66, 0x89, 0xc3]
+        );
+        assert_eq!(
+            assemble("movl %eax, %ebx\nmov %ax, %bx\n"),
+            [0x89, 0xc3, 0x66, 0x89, 0xc3]
+        );
+        // The mode switches mid-stream and carries into the next section.
+        assert_eq!(
+            assemble(".code16\npushw %si\n.code64\npush %rsi\n.code32\npush %esi\n"),
+            [0x56, 0x56, 0x56]
+        );
+        assert_eq!(
+            assemble(".code16\n.section \"a\",\"ax\"\nmovl %eax, %ebx\n"),
+            [0x66, 0x89, 0xc3]
+        );
+    }
+
+    /// GNU as orders the prefixes segment, address size, operand size, then
+    /// repeat / lock, whatever the mode.
+    #[test]
+    fn prefix_order_matches_gnu_as() {
+        assert_eq!(assemble(".code16\nrep movsl\n"), [0x66, 0xf3, 0xa5]);
+        assert_eq!(assemble(".code16\nrep movsw\n"), [0xf3, 0xa5]);
+        assert_eq!(assemble(".code32\nrep movsw\n"), [0x66, 0xf3, 0xa5]);
+        assert_eq!(assemble("rep movsw\n"), [0x66, 0xf3, 0xa5]);
+        assert_eq!(assemble("rep movsq\n"), [0xf3, 0x48, 0xa5]);
+        assert_eq!(
+            assemble(".code16\nlock addl $1, (%bx)\n"),
+            [0x66, 0xf0, 0x83, 0x07, 0x01]
+        );
+        assert_eq!(
+            assemble("lock addw $1, (%rax)\n"),
+            [0x66, 0xf0, 0x83, 0x00, 0x01]
+        );
+    }
+
+    /// A near branch's displacement follows the operand size: 16-bit in a
+    /// `.code16` stub unless the AT&T suffix names the other width.
+    #[test]
+    fn branch_displacement_width_follows_the_mode() {
+        assert_eq!(assemble(".code16\ncall f\n"), [0xe8, 0, 0]);
+        assert_eq!(assemble(".code16\ncalll f\n"), [0x66, 0xe8, 0, 0, 0, 0]);
+        assert_eq!(assemble(".code16\njmp f\n"), [0xe9, 0, 0]);
+        assert_eq!(assemble(".code16\njz f\n"), [0x0f, 0x84, 0, 0]);
+        assert_eq!(assemble(".code32\ncall f\n"), [0xe8, 0, 0, 0, 0]);
+        assert_eq!(assemble("call f\n"), [0xe8, 0, 0, 0, 0]);
     }
 }

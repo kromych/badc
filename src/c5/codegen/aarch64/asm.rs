@@ -46,6 +46,9 @@ pub(crate) enum AsmOpndA64 {
     /// zero register or SP per the instruction, so `sp` records which spelling
     /// was written; the encoder picks the form that reads it that way.
     Reg { num: u8, is64: bool, sp: bool },
+    /// `Xn!`: a 64-bit register operand the instruction writes back, as the
+    /// memory copy/set family spells its size and pointer operands.
+    RegWb(u8),
     /// A shifted-register `<lsr|asr|ror> #amount` modifier (`kind` 1..3; `lsl`
     /// stays [`AsmOpndA64::Lsl`], which the extended forms also take).
     Shift { kind: u8, amount: u8 },
@@ -938,6 +941,13 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     }
     if let Some((num, is64, sp)) = parse_reg(tok) {
         return Ok(AsmOpndA64::Reg { num, is64, sp });
+    }
+    // `Xn!`: a register the instruction writes back, the size and pointer
+    // operands of the memory copy/set family.
+    if let Some(base) = tok.strip_suffix('!')
+        && let Some((num, true, false)) = parse_reg(base)
+    {
+        return Ok(AsmOpndA64::RegWb(num));
     }
     // A system-register name (for mrs / msr).
     if let Some(field) = sysreg_field(tok) {

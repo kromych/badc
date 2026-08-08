@@ -3281,6 +3281,7 @@ fn emit_inline_asm_aarch64(
             AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
             AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
             AsmOpndA64::Reg { num, is64, sp } => Opnd::Reg { num, is64, sp },
+            AsmOpndA64::RegWb(num) => Opnd::RegWb(num),
             AsmOpndA64::VReg { num, is_d } => Opnd::VReg { num, is_d },
             AsmOpndA64::QReg(num) => Opnd::QReg(num),
             AsmOpndA64::VScalar { num, size } => Opnd::VScalar { num, size },
@@ -9268,6 +9269,7 @@ pub(crate) fn encode_a64_file_asm_section_code(
             AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
             AsmOpndA64::Cond(c) => Opnd::Cond(c),
             AsmOpndA64::Reg { num, is64, sp } => Opnd::Reg { num, is64, sp },
+            AsmOpndA64::RegWb(num) => Opnd::RegWb(num),
             AsmOpndA64::VReg { num, is_d } => Opnd::VReg { num, is_d },
             AsmOpndA64::QReg(num) => Opnd::QReg(num),
             AsmOpndA64::VScalar { num, size } => Opnd::VScalar { num, size },
@@ -9618,6 +9620,70 @@ mod tests {
                 (40, AsmRelocKind::A64Branch26 { link: true }, "ext_func"),
             ]
         );
+    }
+
+    /// The memory copy / set family (FEAT_MOPS) encodes to the words GNU as
+    /// emits. The cases cover both operand shapes, all three stages, and the
+    /// read/write option suffixes, with the registers varied so the
+    /// destination / size / source fields are each pinned.
+    #[test]
+    fn file_scope_a64_mops_match_gnu_as() {
+        use super::super::ssa::emit_common::{
+            extract_file_scope_asm_sections, materialize_asm_sections,
+        };
+        let text = ".pushsection .t,\"ax\"\n\
+                    cpyfp [x1]!, [x2]!, x3!\n\
+                    cpyfprt [x4]!, [x8]!, x16!\n\
+                    cpyfpwn [x5]!, [x10]!, x20!\n\
+                    cpyfptn [x30]!, [x29]!, x28!\n\
+                    cpyp [x0]!, [x1]!, x2!\n\
+                    cpym [x1]!, [x2]!, x3!\n\
+                    cpye [x4]!, [x8]!, x16!\n\
+                    cpypwn [x5]!, [x10]!, x20!\n\
+                    cpyfprtwn [x30]!, [x29]!, x28!\n\
+                    setp [x0]!, x1!, x2\n\
+                    setpt [x1]!, x2!, x3\n\
+                    setpn [x4]!, x8!, x16\n\
+                    setptn [x5]!, x10!, x20\n\
+                    setm [x30]!, x29!, x28\n\
+                    sete [x0]!, x1!, x2\n\
+                    seten [x1]!, x2!, x3\n\
+                    setpn [x0]!, x1!, xzr\n.popsection\n";
+        let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
+        encode_a64_file_asm_section_code(&mut blocks).unwrap();
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            true,
+            &mut sink,
+        )
+        .unwrap();
+        let want_words: [u32; 17] = [
+            0x19020461, // cpyfp [x1]!, [x2]!, x3!
+            0x19082604, // cpyfprt [x4]!, [x8]!, x16!
+            0x190a4685, // cpyfpwn [x5]!, [x10]!, x20!
+            0x191df79e, // cpyfptn [x30]!, [x29]!, x28!
+            0x1d010440, // cpyp [x0]!, [x1]!, x2!
+            0x1d420461, // cpym [x1]!, [x2]!, x3!
+            0x1d880604, // cpye [x4]!, [x8]!, x16!
+            0x1d0a4685, // cpypwn [x5]!, [x10]!, x20!
+            0x191d679e, // cpyfprtwn [x30]!, [x29]!, x28!
+            0x19c20420, // setp [x0]!, x1!, x2
+            0x19c31441, // setpt [x1]!, x2!, x3
+            0x19d02504, // setpn [x4]!, x8!, x16
+            0x19d43545, // setptn [x5]!, x10!, x20
+            0x19dc47be, // setm [x30]!, x29!, x28
+            0x19c28420, // sete [x0]!, x1!, x2
+            0x19c3a441, // seten [x1]!, x2!, x3
+            0x19df2420, // setpn [x0]!, x1!, xzr
+        ];
+        let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
     }
 
     /// The flow-form ALTERNATIVE at file scope: `.subsection 1` holds the

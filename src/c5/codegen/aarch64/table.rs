@@ -148,6 +148,9 @@ pub(crate) enum Opnd {
         is64: bool,
         sp: bool,
     },
+    /// `Xn!`: a 64-bit register the instruction writes back, as the memory
+    /// copy/set family spells its size and pointer operands.
+    RegWb(u8),
     /// SIMD/FP register: `num` 0..31, `is_d` selects the D (64) vs S (32) view.
     VReg {
         num: u8,
@@ -493,6 +496,58 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | if acquire { 1 << 22 } else { 0 }
             | if release { 1 << 15 } else { 0 };
         return Ok(base | ((rs as u32) << 16) | ((rn as u32) << 5) | (rt as u32));
+    }
+    // Memory copy / set (FEAT_MOPS). Every mnemonic shares one field layout --
+    // destination pointer at bit 0, size at bit 5, source pointer or set value
+    // at bit 16 -- so the option and stage suffixes only pick the base word.
+    // `cpy` takes `[Xd]!, [Xs]!, Xn!` and `set` takes `[Xd]!, Xn!, Xs`.
+    if let Some(base) = mops_base(mnemonic) {
+        let (rd, rn, rs, set) = match ops {
+            [
+                Opnd::Mem {
+                    base: rd,
+                    off: 0,
+                    pre: true,
+                },
+                Opnd::Mem {
+                    base: rs,
+                    off: 0,
+                    pre: true,
+                },
+                Opnd::RegWb(rn),
+            ] => (*rd, *rn, *rs, false),
+            [
+                Opnd::Mem {
+                    base: rd,
+                    off: 0,
+                    pre: true,
+                },
+                Opnd::RegWb(rn),
+                Opnd::Reg {
+                    num: rs,
+                    is64: true,
+                    sp: false,
+                },
+            ] => (*rd, *rn, *rs, true),
+            _ => {
+                return Err(format!(
+                    "inline asm: `{mnemonic}` needs `[Xd]!, [Xs]!, Xn!` or `[Xd]!, Xn!, Xs`"
+                ));
+            }
+        };
+        // GNU as rejects register 31 wherever the operand is a pointer or the
+        // size; only the set value reads it, as xzr.
+        if rd == 31 || rn == 31 || (!set && rs == 31) {
+            return Err(format!(
+                "inline asm: `{mnemonic}` needs a 64-bit integer register here"
+            ));
+        }
+        if rd == rn || rd == rs || rn == rs {
+            return Err(format!(
+                "inline asm: `{mnemonic}` operands must be distinct registers"
+            ));
+        }
+        return Ok(base | ((rs as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
     }
     // fmov between a SIMD/FP register and a GP register (bridging the two
     // register files), or an FP-to-FP move. The GP<->FP forms require matching
@@ -1947,6 +2002,43 @@ fn encode_catalogue(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     Err(format!(
         "inline asm: no A64 encoding for `{mnemonic}` with these operands"
     ))
+}
+
+/// Base word of a FEAT_MOPS memory copy / set mnemonic, with the destination,
+/// size and source fields clear. Measured from GNU as; the suffixes select the
+/// stage (`p`/`m`/`e`) and the read/write temporal-hint options.
+#[rustfmt::skip]
+static MOPS_FORMS: &[(&str, u32)] = &[
+    ("cpye", 0x1D800400), ("cpyen", 0x1D80C400), ("cpyern", 0x1D808400),
+    ("cpyert", 0x1D802400), ("cpyertwn", 0x1D806400), ("cpyet", 0x1D803400),
+    ("cpyetn", 0x1D80F400), ("cpyewn", 0x1D804400), ("cpyewt", 0x1D801400),
+    ("cpyfe", 0x19800400), ("cpyfen", 0x1980C400), ("cpyfern", 0x19808400),
+    ("cpyfert", 0x19802400), ("cpyfertwn", 0x19806400), ("cpyfet", 0x19803400),
+    ("cpyfetn", 0x1980F400), ("cpyfewn", 0x19804400), ("cpyfewt", 0x19801400),
+    ("cpyfm", 0x19400400), ("cpyfmn", 0x1940C400), ("cpyfmrn", 0x19408400),
+    ("cpyfmrt", 0x19402400), ("cpyfmrtwn", 0x19406400), ("cpyfmt", 0x19403400),
+    ("cpyfmtn", 0x1940F400), ("cpyfmwn", 0x19404400), ("cpyfmwt", 0x19401400),
+    ("cpyfp", 0x19000400), ("cpyfpn", 0x1900C400), ("cpyfprn", 0x19008400),
+    ("cpyfprt", 0x19002400), ("cpyfprtwn", 0x19006400), ("cpyfpt", 0x19003400),
+    ("cpyfptn", 0x1900F400), ("cpyfpwn", 0x19004400), ("cpyfpwt", 0x19001400),
+    ("cpym", 0x1D400400), ("cpymn", 0x1D40C400), ("cpymrn", 0x1D408400),
+    ("cpymrt", 0x1D402400), ("cpymrtwn", 0x1D406400), ("cpymt", 0x1D403400),
+    ("cpymtn", 0x1D40F400), ("cpymwn", 0x1D404400), ("cpymwt", 0x1D401400),
+    ("cpyp", 0x1D000400), ("cpypn", 0x1D00C400), ("cpyprn", 0x1D008400),
+    ("cpyprt", 0x1D002400), ("cpyprtwn", 0x1D006400), ("cpypt", 0x1D003400),
+    ("cpyptn", 0x1D00F400), ("cpypwn", 0x1D004400), ("cpypwt", 0x1D001400),
+    ("sete", 0x19C08400), ("seten", 0x19C0A400), ("setet", 0x19C09400),
+    ("setetn", 0x19C0B400), ("setm", 0x19C04400), ("setmn", 0x19C06400),
+    ("setmt", 0x19C05400), ("setmtn", 0x19C07400), ("setp", 0x19C00400),
+    ("setpn", 0x19C02400), ("setpt", 0x19C01400), ("setptn", 0x19C03400),
+];
+
+/// Look up a memory copy / set base word by mnemonic.
+fn mops_base(mnemonic: &str) -> Option<u32> {
+    MOPS_FORMS
+        .binary_search_by(|(m, _)| (*m).cmp(mnemonic))
+        .ok()
+        .map(|i| MOPS_FORMS[i].1)
 }
 
 /// Every operand written as `sp`/`wsp` must land in a slot the form encodes as

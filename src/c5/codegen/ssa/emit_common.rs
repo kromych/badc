@@ -835,7 +835,8 @@ pub(crate) fn take_bail() -> Option<alloc::string::String> {
 /// One value of a section data directive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AsmSectionValue {
-    Const(i64),
+    /// Held at 128 bits so `.octa` carries its full field.
+    Const(i128),
     /// `%N` / `%cN` / `%c[name]` (canonicalized): the operand's
     /// compile-time constant.
     OperandConst(u8),
@@ -2268,12 +2269,15 @@ fn parse_gas_macro_header(
     let name = it.next().ok_or("inline asm: `.macro` without a name")?;
     let params = it
         .map(|p| {
+            // GNU as scans the formal name, then the `=` / `:` separator and
+            // the text after it as separate tokens, so whitespace may border
+            // either (`regsize = 64`, `tsk : req`).
             let (head, default) = match p.split_once('=') {
-                Some((h, d)) => (h, alloc::string::String::from(d)),
+                Some((h, d)) => (h.trim_end(), alloc::string::String::from(d.trim())),
                 None => (p, alloc::string::String::new()),
             };
             let (pname, qual) = match head.split_once(':') {
-                Some((n, q)) => (n, q),
+                Some((n, q)) => (n.trim_end(), q.trim()),
                 None => (head, ""),
             };
             GasParam {
@@ -3294,6 +3298,10 @@ fn parse_section_item(
         ".extern" | ".arch" | ".arch_extension" | ".cpu" | ".ltorg" => {
             Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new()))
         }
+        // `.cfi_*` describes unwind state to a DWARF consumer and deposits no
+        // bytes in this section. badc emits no unwind info for asm bodies, the
+        // same as the template path.
+        _ if tok.starts_with(".cfi_") => Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new())),
         // `.code64` restates the only x86 encoding mode supported; `.code16`
         // and `.code32` select modes the encoder does not implement and stay
         // rejected below.
@@ -3788,7 +3796,7 @@ fn parse_operand_reloc(a: &str) -> Option<Result<AsmSectionValue, alloc::string:
 /// Parse one data-directive value: a constant, an operand reference, or
 /// a label / symbol reference (optionally `- .` PC-relative).
 fn parse_section_value(a: &str) -> Result<AsmSectionValue, alloc::string::String> {
-    if let Some(v) = parse_raw_int(a) {
+    if let Some(v) = eval_const_expr_wide(a) {
         return Ok(AsmSectionValue::Const(v));
     }
     // A fully-enclosing parenthesis group is grouping only; strip it so
@@ -5038,9 +5046,7 @@ pub(crate) fn materialize_asm_sections(
                                                 "inline asm: unsupported item inside `.rept`",
                                             ));
                                         };
-                                        sec.bytes.extend_from_slice(
-                                            &(*c as u64).to_le_bytes()[..*width as usize],
-                                        );
+                                        push_le(&mut sec.bytes, *c, *width as usize);
                                     }
                                 }
                                 AsmSectionItem::Fill { count, unit, value } => {
@@ -5214,9 +5220,9 @@ pub(crate) fn materialize_asm_sections(
                 AsmSectionItem::Data { width, values } => {
                     for v in values {
                         match v {
-                            AsmSectionValue::Const(c) => sec
-                                .bytes
-                                .extend_from_slice(&(*c as u64).to_le_bytes()[..*width as usize]),
+                            AsmSectionValue::Const(c) => {
+                                push_le(&mut sec.bytes, *c, *width as usize)
+                            }
                             AsmSectionValue::OperandConst(idx) => match const_of(*idx) {
                                 Some(c) => sec.bytes.extend_from_slice(
                                     &(c as u64).to_le_bytes()[..*width as usize],
@@ -5257,9 +5263,7 @@ pub(crate) fn materialize_asm_sections(
                                             "inline asm: non-constant section data value",
                                         )
                                     })?;
-                                sec.bytes.extend_from_slice(
-                                    &(c as u64).to_le_bytes()[..*width as usize],
-                                );
+                                push_le(&mut sec.bytes, c as i128, *width as usize);
                             }
                             AsmSectionValue::LocExpr(text) => {
                                 let key = section_key(b);
@@ -5291,9 +5295,7 @@ pub(crate) fn materialize_asm_sections(
                                                 "inline asm: `{text}` = {c} does not fit a {width}-byte field"
                                             ));
                                         }
-                                        sec.bytes.extend_from_slice(
-                                            &(c as u64).to_le_bytes()[..*width as usize],
-                                        );
+                                        push_le(&mut sec.bytes, c as i128, *width as usize);
                                     }
                                     AsmResolved::Reloc {
                                         target,
@@ -5391,9 +5393,7 @@ pub(crate) fn materialize_asm_sections(
                                                 "inline asm: value {c} does not fit a {width}-byte field"
                                             ));
                                         }
-                                        sec.bytes.extend_from_slice(
-                                            &(c as u64).to_le_bytes()[..*width as usize],
-                                        );
+                                        push_le(&mut sec.bytes, c as i128, *width as usize);
                                     }
                                     AsmResolved::Reloc {
                                         target,
@@ -6017,6 +6017,7 @@ pub(crate) fn data_directive_width(tok: &str) -> Option<usize> {
         ".word" | ".2byte" | ".short" | ".hword" => 2,
         ".long" | ".4byte" | ".int" => 4,
         ".quad" | ".8byte" => 8,
+        ".octa" => 16,
         _ => return None,
     })
 }
@@ -6027,7 +6028,7 @@ fn parse_raw_piece(piece: &str) -> Option<alloc::vec::Vec<u8>> {
         let args = piece[piece.find(char::is_whitespace)?..].trim();
         let mut out = alloc::vec::Vec::new();
         for a in args.split(',') {
-            out.extend_from_slice(&(parse_raw_int(a.trim())? as u64).to_le_bytes()[..w]);
+            push_le(&mut out, eval_const_expr_wide(a.trim())?, w);
         }
         return Some(out);
     }
@@ -6510,6 +6511,30 @@ fn parse_asm_number(t: &str) -> Option<i64> {
         return None;
     }
     u64::from_str_radix(digits, radix).ok().map(|v| v as i64)
+}
+
+/// Evaluate a data-directive value as a 128-bit constant. A literal too wide
+/// for 64 bits parses directly (GNU as accepts a bignum wherever the
+/// directive's field can hold it); anything else falls back to the 64-bit
+/// expression evaluator and sign-extends, as GNU as does for `.octa -1`.
+fn eval_const_expr_wide(s: &str) -> Option<i128> {
+    let t = s.trim();
+    let digits = t.trim_end_matches(['u', 'U', 'l', 'L']);
+    if let Some(h) = digits
+        .strip_prefix("0x")
+        .or_else(|| digits.strip_prefix("0X"))
+        && !h.is_empty()
+        && let Ok(v) = u128::from_str_radix(h, 16)
+    {
+        return Some(v as i128);
+    }
+    eval_const_expr(t).map(i128::from)
+}
+
+/// Append the low `width` bytes of a value, little-endian. A field wider than
+/// the evaluated expression takes its sign extension.
+fn push_le(out: &mut alloc::vec::Vec<u8>, value: i128, width: usize) {
+    out.extend_from_slice(&value.to_le_bytes()[..width]);
 }
 
 /// Translate a c5-stack slot index (the operand of an
@@ -7159,6 +7184,42 @@ mod asm_section_tests {
             parse_section_value("sym + .").unwrap(),
             AsmSectionValue::LocExpr(alloc::string::String::from("sym + ."))
         );
+    }
+
+    #[test]
+    fn octa_and_cfi_match_gnu_as() {
+        // GNU as reference (x86-64 `as`, section `.probe,"a"`). `.octa` takes a
+        // 16-byte little-endian field: a literal too wide for 64 bits keeps its
+        // full value, a narrower expression sign-extends. `.cfi_*` deposits no
+        // bytes.
+        let text = ".pushsection .probe,\"a\"\n\
+                    .cfi_sections .debug_frame\n\
+                    .octa 0x000102030405060708090a0b0c0d0e0f\n\
+                    .cfi_startproc\n\
+                    .octa 1+2\n\
+                    .octa -1\n\
+                    .octa 0x5BE0CD191F83D9AB9B05688C510E527F, 0xA54FF53A3C6EF372BB67AE856A09E667\n\
+                    .cfi_endproc\n\
+                    .popsection\n";
+        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            false,
+            &mut sink,
+        )
+        .unwrap();
+        let mut want = alloc::vec::Vec::new();
+        want.extend_from_slice(&(0x000102030405060708090a0b0c0d0e0fu128).to_le_bytes());
+        want.extend_from_slice(&3u128.to_le_bytes());
+        want.extend_from_slice(&(-1i128).to_le_bytes());
+        want.extend_from_slice(&(0x5BE0CD191F83D9AB9B05688C510E527Fu128).to_le_bytes());
+        want.extend_from_slice(&(0xA54FF53A3C6EF372BB67AE856A09E667u128).to_le_bytes());
+        assert_eq!(sink[0].bytes, want);
     }
 
     #[test]
@@ -8193,6 +8254,29 @@ mod asm_section_tests {
                 .unwrap_err()
                 .contains(".inst")
         );
+    }
+
+    #[test]
+    fn gas_macro_spaced_qualifiers_bind_like_gnu_as() {
+        // GNU as scans a formal's `=` / `:` separator as its own token, so
+        // whitespace may border either. Verified against `as`: `m1 x5` binds
+        // `a`, `m2` takes the default x7 and `m2 x9` overrides it.
+        let none = |_: &str| None;
+        let text = ".macro m1, a : req\nadd x0, x0, \\a\n.endm\n\
+                    .macro m2, b = x7\nadd x1, x1, \\b\n.endm\n\
+                    m1 x5\nm2\nm2 x9\n";
+        let out = expand_asm_gas_macros(text, 4, &none).unwrap().unwrap();
+        let body: alloc::vec::Vec<&str> = out
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect();
+        assert_eq!(body, ["add x0, x0, x5", "add x1, x1, x7", "add x1, x1, x9"]);
+        // A default is only bound when the invocation omits the argument, so a
+        // spaced default never leaks into a supplied one.
+        let text = ".macro m3, p = 64\n.if \\p == 32\nnop\n.else\nret\n.endif\n.endm\nm3\nm3 32\n";
+        let out = expand_asm_gas_macros(text, 4, &none).unwrap().unwrap();
+        assert!(out.contains("ret") && out.contains("nop"), "{out}");
     }
 
     fn rept(text: &str) -> Result<alloc::string::String, alloc::string::String> {

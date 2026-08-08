@@ -1000,6 +1000,54 @@ pub(crate) enum AsmSectionItem {
         name: alloc::string::String,
         expr: alloc::string::String,
     },
+    /// An AArch64 literal pool: the values the `ldr Rt, =value` loads since
+    /// the previous flush deposit here. Parsed from `.ltorg` with no entries;
+    /// the arch backend assigns them before layout, and also appends one at
+    /// the end of each section, which is where GNU as flushes what `.ltorg`
+    /// did not.
+    LiteralPool(alloc::vec::Vec<AsmPoolEntry>),
+}
+
+/// One AArch64 literal-pool entry. `label` is the synthetic symbol the
+/// loads' 19-bit displacements resolve against; several loads share an
+/// entry when they request the same width and value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AsmPoolEntry {
+    /// Entry width in bytes: 4, 8, or 16.
+    pub size: u8,
+    pub label: alloc::string::String,
+    pub value: AsmPoolValue,
+}
+
+/// A literal-pool entry's value: a constant truncated to the entry width, or
+/// a link-time address the entry relocates to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AsmPoolValue {
+    Const(i128),
+    Sym {
+        name: alloc::string::String,
+        addend: i64,
+    },
+}
+
+/// Offsets a literal pool's entries take when flushed at `at`, and the
+/// offset just past the pool. GNU as deposits the entries in width-ascending
+/// groups, keeps first-reference order within a group, and aligns each group
+/// to its own width.
+pub(crate) fn literal_pool_layout(
+    entries: &[AsmPoolEntry],
+    at: i64,
+) -> (alloc::vec::Vec<i64>, i64) {
+    let mut offs = alloc::vec![0i64; entries.len()];
+    let mut at = at;
+    for size in [4u8, 8, 16] {
+        for i in (0..entries.len()).filter(|&i| entries[i].size == size) {
+            at += align_gap(at, size as i64, None);
+            offs[i] = at;
+            at += size as i64;
+        }
+    }
+    (offs, at)
 }
 
 /// A parsed `.pushsection` / `.section` block of a template.
@@ -3265,10 +3313,13 @@ fn parse_section_item(
             }
             Ok(AsmSectionItem::Global(alloc::string::String::from(name)))
         }
+        // `.ltorg` flushes the AArch64 literal pool accumulated since the
+        // previous flush. The arch backend fills the entries in before
+        // layout; on a target without a pool the directive deposits nothing.
+        ".ltorg" if is_aarch64 => Ok(AsmSectionItem::LiteralPool(alloc::vec::Vec::new())),
         // Assembler-state directives with no effect on the emitted object:
         // `.extern` declares what an unresolved name already is; the arch
-        // selectors admit no more than the encoder's table does; `.ltorg`
-        // flushes a literal pool this assembler does not accumulate.
+        // selectors admit no more than the encoder's table does.
         ".extern" | ".arch" | ".arch_extension" | ".cpu" | ".ltorg" => {
             Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new()))
         }
@@ -4355,7 +4406,7 @@ fn eval_section_set_expr(
 /// The `(name, flags, sh_type)` identity key of a section block, as the
 /// measurement map and the expression spaces use it. Subsections share the
 /// key: they are ordered blocks of one section.
-fn section_key(b: &AsmSectionBlock) -> alloc::string::String {
+pub(crate) fn section_key(b: &AsmSectionBlock) -> alloc::string::String {
     alloc::format!("{}\u{0}{}\u{0}{:?}", b.name, b.flags, b.sh_type)
 }
 
@@ -4368,7 +4419,7 @@ fn section_key_of(s: &AsmSection) -> alloc::string::String {
 /// subsection-1 blocks lay out after every subsection-0 block while blocks
 /// of one subsection keep their source order. Measurement and
 /// materialization must walk the same order.
-fn subsection_order(blocks: &[AsmSectionBlock]) -> alloc::vec::Vec<usize> {
+pub(crate) fn subsection_order(blocks: &[AsmSectionBlock]) -> alloc::vec::Vec<usize> {
     let mut order: alloc::vec::Vec<usize> = (0..blocks.len()).collect();
     order.sort_by_key(|&i| blocks[i].subsection);
     order
@@ -4674,6 +4725,13 @@ fn measure_round_inner(
                 | AsmSectionItem::SymSet { .. } => {}
                 AsmSectionItem::SetExpr { name, expr } => {
                     sets.push((name.clone(), expr.clone(), key.clone(), at));
+                }
+                AsmSectionItem::LiteralPool(entries) => {
+                    let (offs, end) = literal_pool_layout(entries, at);
+                    for (e, off) in entries.iter().zip(&offs) {
+                        map.insert(e.label.clone(), (key.clone(), *off));
+                    }
+                    at = end;
                 }
                 AsmSectionItem::Data { width, values } => {
                     at += *width as i64 * values.len() as i64;
@@ -5086,6 +5144,41 @@ pub(crate) fn materialize_asm_sections(
                         section_index: sec_idx,
                         offset: at,
                     });
+                }
+                AsmSectionItem::LiteralPool(entries) => {
+                    let (offs, end) = literal_pool_layout(entries, sec.bytes.len() as i64);
+                    sec.bytes.resize(end as usize, 0);
+                    for (e, &off) in entries.iter().zip(&offs) {
+                        sec.align = sec.align.max(e.size as u32);
+                        sec.labels.push(AsmSectionLabel {
+                            name: e.label.clone(),
+                            offset: off as u32,
+                            global: false,
+                            weak: false,
+                            sym_type: AsmSymType::NoType,
+                            size: None,
+                        });
+                        match &e.value {
+                            AsmPoolValue::Const(v) => {
+                                let at = off as usize;
+                                let n = e.size as usize;
+                                sec.bytes[at..at + n].copy_from_slice(&v.to_le_bytes()[..n]);
+                            }
+                            AsmPoolValue::Sym { name, addend } => {
+                                sec.relocs.push(AsmSectionReloc {
+                                    offset: off as u32,
+                                    width: e.size,
+                                    kind: AsmRelocKind::Data,
+                                    pcrel: false,
+                                    branch: false,
+                                    signed: false,
+                                    target: AsmSectionTarget::Symbol(name.clone()),
+                                    addend: *addend,
+                                })
+                            }
+                        }
+                    }
+                    sec.after_insn = false;
                 }
                 // `.weak` binding applies to whatever definition the name has
                 // (a section label here, or a symbol defined elsewhere in the
@@ -5907,7 +6000,7 @@ std::thread_local! {
 
 /// Next value of the per-lowering asm-instance sequence.
 #[cfg(feature = "std")]
-fn next_asm_instance() -> u32 {
+pub(crate) fn next_asm_instance() -> u32 {
     ASM_INSTANCE.with(|c| {
         let v = c.get();
         c.set(v.wrapping_add(1));
@@ -5926,7 +6019,7 @@ pub(crate) fn reset_asm_instance() {
 static ASM_INSTANCE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
 #[cfg(not(feature = "std"))]
-fn next_asm_instance() -> u32 {
+pub(crate) fn next_asm_instance() -> u32 {
     ASM_INSTANCE.fetch_add(1, core::sync::atomic::Ordering::Relaxed)
 }
 
@@ -6500,7 +6593,7 @@ fn parse_asm_number(t: &str) -> Option<i64> {
 /// for 64 bits parses directly (GNU as accepts a bignum wherever the
 /// directive's field can hold it); anything else falls back to the 64-bit
 /// expression evaluator and sign-extends, as GNU as does for `.octa -1`.
-fn eval_const_expr_wide(s: &str) -> Option<i128> {
+pub(crate) fn eval_const_expr_wide(s: &str) -> Option<i128> {
     let t = s.trim();
     let digits = t.trim_end_matches(['u', 'U', 'l', 'L']);
     if let Some(h) = digits

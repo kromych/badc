@@ -135,6 +135,10 @@ pub(crate) enum AsmOpndA64 {
     /// `[base, :lo12:sym]`: a load/store whose scaled immediate is the
     /// symbol's low 12 bits, plus a constant addend.
     MemSymLo12 { base: u8, name: String, addend: i64 },
+    /// `ldr Rt, =value`: the value goes in the section's literal pool and the
+    /// load reads it PC-relatively. The expression text is resolved when the
+    /// pool is assigned, before layout.
+    LitPool(String),
 }
 
 /// The base register of a memory operand.
@@ -752,6 +756,11 @@ fn shift_amount(rest: &str) -> Option<i64> {
 
 /// Parse one operand token (already trimmed).
 fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
+    // `=value`: the literal-pool request of `ldr`. No other operand starts
+    // with `=`, so the expression carries through unparsed.
+    if let Some(expr) = tok.strip_prefix('=') {
+        return Ok(AsmOpndA64::LitPool(String::from(expr.trim())));
+    }
     // `[...]` is an offset reference; `[...]!` a pre-index writeback.
     if let Some(inner) = tok.strip_prefix('[').and_then(|t| t.strip_suffix(']')) {
         return parse_mem(inner, false);
@@ -1021,7 +1030,7 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
 /// Split a symbol reference with an optional constant byte addend
 /// (`sym + 24`, `sym-8`); `None` when the head is not a symbol name or the
 /// tail is not `+`/`-` a constant expression.
-fn split_sym_addend(s: &str) -> Option<(&str, i64)> {
+pub(super) fn split_sym_addend(s: &str) -> Option<(&str, i64)> {
     let s = s.trim();
     let end = s
         .find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '$')))

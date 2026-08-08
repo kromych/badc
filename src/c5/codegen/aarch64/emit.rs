@@ -3422,6 +3422,13 @@ fn emit_inline_asm_aarch64(
                     "aarch64 inline asm: symbol operand needs a relocation",
                 ));
             }
+            // TODO literal pools in function-body asm; a function body has no
+            // section of its own to flush one into.
+            AsmOpndA64::LitPool(_) => {
+                return Err(String::from(
+                    "aarch64 inline asm: `ldr` literal pool needs a file-scope section",
+                ));
+            }
         })
     };
     // Local labels: definitions record the code offset they stand at; branches
@@ -9319,6 +9326,7 @@ pub(crate) fn encode_a64_file_asm_section_code(
             }
         })
     };
+    assign_a64_literal_pools(blocks)?;
     super::ssa::emit_common::for_each_section_item_mut(blocks, &mut |item| {
         {
             let AsmSectionItem::Code(text) = item else {
@@ -9482,17 +9490,14 @@ fn encode_a64_sym_insn(
                 addend,
             )))
         }
-        // `ldr Rt, sym`: a PC-relative literal load.
-        "ldr" if insn.operands.len() == 2 => {
-            let (rt, is64) = match conv(&insn.operands[0])? {
-                Opnd::Reg { num, is64, .. } => (num, is64),
-                _ => {
-                    return Err(alloc::string::String::from(
+        // `ldr Rt, sym` / `ldrsw Xt, sym`: a PC-relative literal load.
+        "ldr" | "ldrsw" if insn.operands.len() == 2 => {
+            let (word, _) =
+                a64_ldr_literal_word(&insn.mnemonic, &insn.operands[0]).ok_or_else(|| {
+                    alloc::string::String::from(
                         "inline asm: `ldr` literal needs a register destination",
-                    ));
-                }
-            };
-            let word = if is64 { 0x5800_0000u32 } else { 0x1800_0000 } | rt as u32;
+                    )
+                })?;
             Ok(Some((word, K::A64LdrLit19, name.clone(), addend)))
         }
         _ => {
@@ -9510,6 +9515,153 @@ fn encode_a64_sym_insn(
             Ok(Some((word, k, name.clone(), addend)))
         }
     }
+}
+
+/// Assign the literal pools of a file-scope asm statement. Each
+/// `ldr Rt, =value` takes an entry of its section's pending pool, sharing one
+/// with an earlier request of the same width and value, and becomes a literal
+/// load of the entry's synthetic label. `.ltorg` and the end of the section
+/// deposit what has accumulated, which is where GNU as flushes.
+fn assign_a64_literal_pools(
+    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+) -> Result<(), alloc::string::String> {
+    use super::ssa::emit_common::{AsmPoolEntry, AsmSectionItem, section_key, subsection_order};
+    if !blocks
+        .iter()
+        .flat_map(|b| &b.items)
+        .any(|it| matches!(it, AsmSectionItem::Code(t) if t.contains('=')))
+    {
+        return Ok(());
+    }
+    let order = subsection_order(blocks);
+    // Where each section's last block sits in the layout order: the flush
+    // point for whatever `.ltorg` left pending.
+    let mut last_of: alloc::collections::BTreeMap<alloc::string::String, usize> =
+        alloc::collections::BTreeMap::new();
+    for (pos, &bi) in order.iter().enumerate() {
+        last_of.insert(section_key(&blocks[bi]), pos);
+    }
+    let uniq = super::ssa::emit_common::next_asm_instance();
+    let mut seq = 0u32;
+    let mut pending: alloc::collections::BTreeMap<alloc::string::String, Vec<AsmPoolEntry>> =
+        alloc::collections::BTreeMap::new();
+    for (pos, &bi) in order.iter().enumerate() {
+        let key = section_key(&blocks[bi]);
+        for item in &mut blocks[bi].items {
+            match item {
+                AsmSectionItem::LiteralPool(entries) => {
+                    *entries = pending.remove(&key).unwrap_or_default();
+                }
+                AsmSectionItem::Code(text) if text.contains('=') => {
+                    let Some(eq) = text.find('=') else { continue };
+                    let insns = super::asm::parse_template(text.as_bytes())
+                        .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
+                    let pool_ops = insns
+                        .iter()
+                        .flat_map(|i| &i.operands)
+                        .filter(|o| matches!(o, super::asm::AsmOpndA64::LitPool(_)))
+                        .count();
+                    if pool_ops == 0 {
+                        continue;
+                    }
+                    if insns.len() != 1 || pool_ops != 1 || insns[0].operands.len() != 2 {
+                        return Err(alloc::format!(
+                            "inline asm: `{text}` is not a literal-pool load"
+                        ));
+                    }
+                    let super::asm::AsmOpndA64::LitPool(expr) = &insns[0].operands[1] else {
+                        return Err(alloc::format!(
+                            "inline asm: `{text}` is not a literal-pool load"
+                        ));
+                    };
+                    let (_, size) = a64_ldr_literal_word(&insns[0].mnemonic, &insns[0].operands[0])
+                        .ok_or_else(|| {
+                            alloc::format!("inline asm: `{text}` has no literal-pool load form")
+                        })?;
+                    let value = a64_pool_value(expr, size)?;
+                    let entries = pending.entry(key.clone()).or_default();
+                    let label = match entries.iter().find(|e| e.size == size && e.value == value) {
+                        Some(e) => e.label.clone(),
+                        None => {
+                            let label = alloc::format!(".Lc5_ltorg_{uniq}_{seq}");
+                            seq += 1;
+                            entries.push(AsmPoolEntry {
+                                size,
+                                label: label.clone(),
+                                value,
+                            });
+                            label
+                        }
+                    };
+                    text.truncate(eq);
+                    text.push_str(&label);
+                }
+                _ => {}
+            }
+        }
+        if last_of.get(&key) == Some(&pos)
+            && let Some(entries) = pending.remove(&key)
+            && !entries.is_empty()
+        {
+            blocks[bi].items.push(AsmSectionItem::LiteralPool(entries));
+        }
+    }
+    Ok(())
+}
+
+/// The value a `ldr Rt, =value` deposits: a constant truncated to the entry
+/// width, or a link-time address the entry relocates to. GNU as has no
+/// 16-byte relocation, so only the 4- and 8-byte entries take a symbol.
+fn a64_pool_value(
+    expr: &str,
+    size: u8,
+) -> Result<super::ssa::emit_common::AsmPoolValue, alloc::string::String> {
+    use super::ssa::emit_common::AsmPoolValue;
+    if let Some(v) = super::ssa::emit_common::eval_const_expr_wide(expr) {
+        return Ok(AsmPoolValue::Const(v));
+    }
+    let (name, addend) = super::asm::split_sym_addend(expr)
+        .ok_or_else(|| alloc::format!("inline asm: bad literal-pool value `{expr}`"))?;
+    if size == 16 {
+        return Err(alloc::format!(
+            "inline asm: literal-pool symbol `{name}` needs a 4- or 8-byte load"
+        ));
+    }
+    Ok(AsmPoolValue::Sym {
+        name: alloc::string::String::from(name),
+        addend,
+    })
+}
+
+/// The LDR (literal) word for a destination register view, with the number
+/// of bytes the load reads. `None` for a mnemonic or operand class that has
+/// no literal form.
+fn a64_ldr_literal_word(mnem: &str, rt: &super::asm::AsmOpndA64) -> Option<(u32, u8)> {
+    use super::asm::AsmOpndA64 as O;
+    Some(match (mnem, rt) {
+        (
+            "ldr",
+            &O::Reg {
+                num, is64: false, ..
+            },
+        ) => (0x1800_0000 | num as u32, 4),
+        (
+            "ldr",
+            &O::Reg {
+                num, is64: true, ..
+            },
+        ) => (0x5800_0000 | num as u32, 8),
+        (
+            "ldrsw",
+            &O::Reg {
+                num, is64: true, ..
+            },
+        ) => (0x9800_0000 | num as u32, 4),
+        ("ldr", &O::VReg { num, is_d: false }) => (0x1C00_0000 | num as u32, 4),
+        ("ldr", &O::VReg { num, is_d: true }) => (0x5C00_0000 | num as u32, 8),
+        ("ldr", &O::QReg(num)) => (0x9C00_0000 | num as u32, 16),
+        _ => return None,
+    })
 }
 
 /// The access size in bytes of a load/store mnemonic, from the mnemonic's
@@ -9970,6 +10122,202 @@ mod tests {
         .flat_map(|w| w.to_le_bytes())
         .collect();
         assert_eq!(sink[0].bytes, want);
+    }
+
+    /// Materialize one file-scope asm text and return the named section.
+    fn a64_file_asm_section(text: &str, name: &str) -> super::super::ssa::emit_common::AsmSection {
+        use super::super::ssa::emit_common::{
+            extract_file_scope_asm_sections, materialize_asm_sections,
+        };
+        let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
+        encode_a64_file_asm_section_code(&mut blocks).unwrap();
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            true,
+            &mut sink,
+        )
+        .unwrap();
+        sink.iter()
+            .find(|s| s.name == name)
+            .expect("section emitted")
+            .clone()
+    }
+
+    /// `ldr Rt, =value` deposits the value in the section's literal pool.
+    /// The bytes are GNU as's for the same input: `.ltorg` flushes what has
+    /// accumulated, identical requests share an entry, the entries land in
+    /// width-ascending groups each aligned to its own width, a symbol entry
+    /// takes an `R_AARCH64_ABS64`, and what no `.ltorg` flushed is deposited
+    /// at the end of the section.
+    #[test]
+    fn file_scope_a64_literal_pool_matches_gnu_as() {
+        use super::super::ssa::emit_common::{AsmRelocKind, AsmSectionTarget};
+        let text = ".text\n.globl f\nf:\n\
+                    ldr x0, =some_sym\n\
+                    ldr w1, =0x12345678\n\
+                    ldr x2, =some_sym\n\
+                    ldr x3, =0x1122334455667788\n\
+                    ldr w4, =0x12345678\n\
+                    ldr x5, =other_sym + 8\n\
+                    .ltorg\nret\n.globl g\ng:\nldr x6, =tail_sym\nret\n";
+        let sec = a64_file_asm_section(text, ".text");
+        let want: Vec<u8> = [
+            0x58000100u32, // ldr x0, 20   (some_sym)
+            0x180000a1,    // ldr w1, 18   (0x12345678)
+            0x580000c2,    // ldr x2, 20   (shares the some_sym entry)
+            0x580000e3,    // ldr x3, 28
+            0x18000044,    // ldr w4, 18   (shares the 0x12345678 entry)
+            0x580000e5,    // ldr x5, 30
+            0x12345678,    // pool: the 4-byte group first
+            0x00000000,    // padding to the 8-byte group
+            0x00000000,    // some_sym (ABS64)
+            0x00000000,
+            0x55667788, // 0x1122334455667788
+            0x11223344,
+            0x00000000, // other_sym + 8 (ABS64)
+            0x00000000,
+            0xd65f03c0, // ret
+            0x58000066, // ldr x6, 48
+            0xd65f03c0, // ret
+            0x00000000, // end-of-section pool: padding
+            0x00000000, // tail_sym (ABS64)
+            0x00000000,
+        ]
+        .iter()
+        .flat_map(|w| w.to_le_bytes())
+        .collect();
+        assert_eq!(sec.bytes, want);
+        assert_eq!(sec.align, 8);
+        let relocs: Vec<_> = sec
+            .relocs
+            .iter()
+            .map(|r| {
+                (
+                    r.offset,
+                    r.width,
+                    r.kind,
+                    r.pcrel,
+                    r.target.clone(),
+                    r.addend,
+                )
+            })
+            .collect();
+        let sym = |n: &str| AsmSectionTarget::Symbol(alloc::string::String::from(n));
+        assert_eq!(
+            relocs,
+            alloc::vec![
+                (0x20, 8, AsmRelocKind::Data, false, sym("some_sym"), 0),
+                (0x30, 8, AsmRelocKind::Data, false, sym("other_sym"), 8),
+                (0x48, 8, AsmRelocKind::Data, false, sym("tail_sym"), 0),
+            ]
+        );
+    }
+
+    /// A pool entry is shared by width and value, not by register class: the
+    /// `d`/`x` and `s`/`w` requests of one value take one entry each, and a
+    /// symbol addend distinguishes entries. Bytes are GNU as's.
+    #[test]
+    fn file_scope_a64_literal_pool_widths_match_gnu_as() {
+        let text = ".text\n.globl h\nh:\n\
+                    ldr d2, =0x1111111122222222\n\
+                    ldr x3, =0x1111111122222222\n\
+                    ldr s4, =0x33445566\n\
+                    ldr w5, =0x33445566\n\
+                    .ltorg\n.globl i\ni:\n\
+                    ldr x6, =sym_c\nldr x7, =sym_c+0\nldr x8, =sym_c+4\n\
+                    .ltorg\n.globl j\nj:\n.ltorg\nnop\n";
+        let sec = a64_file_asm_section(text, ".text");
+        let want: Vec<u8> = [
+            0x5c0000c2u32, // ldr d2, 14
+            0x580000a3,    // ldr x3, 14 (shares the d2 entry)
+            0x1c000044,    // ldr s4, 10
+            0x18000025,    // ldr w5, 10 (shares the s4 entry)
+            0x33445566,    // pool: 4-byte group
+            0x00000000,    // padding to the 8-byte group
+            0x22222222,    // 0x1111111122222222
+            0x11111111,
+            0x58000086, // ldr x6, 30
+            0x58000067, // ldr x7, 30 (shares the sym_c entry)
+            0x58000088, // ldr x8, 38
+            0x00000000, // padding
+            0x00000000, // sym_c (ABS64)
+            0x00000000,
+            0x00000000, // sym_c + 4 (ABS64)
+            0x00000000,
+            0xd503201f, // nop; the empty `.ltorg` deposits nothing
+        ]
+        .iter()
+        .flat_map(|w| w.to_le_bytes())
+        .collect();
+        assert_eq!(sec.bytes, want);
+        let relocs: Vec<_> = sec.relocs.iter().map(|r| (r.offset, r.addend)).collect();
+        assert_eq!(relocs, alloc::vec![(0x30, 0), (0x38, 4)]);
+    }
+
+    /// A pool of one width raises the section's alignment to that width and
+    /// pads to it: GNU as gives the 4-, 8- and 16-byte cases alignment 4, 8
+    /// and 16, and a `q` entry zero-extends its 64-bit value.
+    #[test]
+    fn file_scope_a64_literal_pool_alignment_matches_gnu_as() {
+        for (reg, value, align, want) in [
+            (
+                "w0",
+                "0x11223344",
+                4u32,
+                alloc::vec![0x18000020u32, 0x11223344],
+            ),
+            (
+                "x0",
+                "0x1122334455667788",
+                8,
+                alloc::vec![0x58000040, 0x00000000, 0x55667788, 0x11223344],
+            ),
+            (
+                "q0",
+                "0x1122334455667788",
+                16,
+                alloc::vec![
+                    0x9c000080, 0x00000000, 0x00000000, 0x00000000, 0x55667788, 0x11223344,
+                    0x00000000, 0x00000000,
+                ],
+            ),
+        ] {
+            let text =
+                alloc::format!(".section .p,\"ax\",@progbits\nldr {reg}, ={value}\n.ltorg\n");
+            let sec = a64_file_asm_section(&text, ".p");
+            let bytes: Vec<u8> = want.iter().flat_map(|w| w.to_le_bytes()).collect();
+            assert_eq!(sec.bytes, bytes, "{reg}");
+            assert_eq!(sec.align, align, "{reg}");
+        }
+    }
+
+    /// Every LDR (literal) destination view encodes as GNU as does, with the
+    /// same-section target folded into the 19-bit displacement.
+    #[test]
+    fn file_scope_a64_ldr_literal_views_match_gnu_as() {
+        let text = ".section .lit,\"ax\",@progbits\nlit0:\n.word 1\n\
+                    ldr w0, lit0\nldr x1, lit0\nldr s2, lit0\nldr d3, lit0\n\
+                    ldr q4, lit0\nldrsw x5, lit0\n";
+        let sec = a64_file_asm_section(text, ".lit");
+        let want: Vec<u8> = [
+            0x00000001u32, // .word 1
+            0x18ffffe0,    // ldr w0, lit0
+            0x58ffffc1,    // ldr x1, lit0
+            0x1cffffa2,    // ldr s2, lit0
+            0x5cffff83,    // ldr d3, lit0
+            0x9cffff64,    // ldr q4, lit0
+            0x98ffff45,    // ldrsw x5, lit0
+        ]
+        .iter()
+        .flat_map(|w| w.to_le_bytes())
+        .collect();
+        assert_eq!(sec.bytes, want);
+        assert!(sec.relocs.is_empty(), "same-section literal needs no reloc");
     }
 
     fn lift_and_alloc(src: &str, target: Target) -> (crate::c5::ir::FunctionSsa, Allocation) {

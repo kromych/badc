@@ -151,9 +151,16 @@ impl Compiler {
         var_offset: i64,
         is_thread_local: bool,
     ) -> Result<(), C5Error> {
-        self.with_nesting("initializer", |c| {
+        // A static object's initializer is a value position: block-scope
+        // `const` scalar objects fold (`static int x = h;` inside a
+        // function), as GCC accepts. No-op at file scope, where no
+        // block-scope object is live.
+        self.const_object_fold += 1;
+        let r = self.with_nesting("initializer", |c| {
             c.parse_global_initializer_inner(var_ty, var_offset, is_thread_local)
-        })
+        });
+        self.const_object_fold -= 1;
+        r
     }
 
     fn parse_global_initializer_inner(

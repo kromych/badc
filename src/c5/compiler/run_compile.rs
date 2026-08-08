@@ -84,11 +84,11 @@ impl Compiler {
         while self.lex.tk != '}' && self.lex.tk != 0 {
             if self.lex.tk == Token::Brak {
                 self.next()?;
-                i = self.parse_constant_int()?;
+                i = self.parse_constant_int_folding_const_objects()?;
                 // GNU `[lo ... hi]`: the entry ends at the range high.
                 if self.lex.tk == Token::Ellipsis {
                     self.next()?;
-                    i = i.max(self.parse_constant_int()?);
+                    i = i.max(self.parse_constant_int_folding_const_objects()?);
                 }
                 if self.lex.tk == ']' {
                     self.next()?;
@@ -2497,10 +2497,12 @@ impl Compiler {
                                     let mut range_hi: Option<i64> = None;
                                     if self.lex.tk == Token::Brak {
                                         self.next()?;
-                                        let desig = self.parse_constant_int()?;
+                                        let desig =
+                                            self.parse_constant_int_folding_const_objects()?;
                                         if self.lex.tk == Token::Ellipsis {
                                             self.next()?;
-                                            let hi = self.parse_constant_int()?;
+                                            let hi =
+                                                self.parse_constant_int_folding_const_objects()?;
                                             if hi < desig || hi >= array_size {
                                                 return Err(self.compile_err(format!(
                                                     "array designator range [{desig} ... {hi}] out of bounds [0, {array_size})"
@@ -2541,7 +2543,8 @@ impl Compiler {
                                             let mut d = 0usize;
                                             while self.lex.tk == Token::Brak {
                                                 self.next()?; // `[`
-                                                let n = self.parse_constant_int()?;
+                                                let n = self
+                                                    .parse_constant_int_folding_const_objects()?;
                                                 if self.lex.tk != ']' {
                                                     return Err(self.compile_err(
                                                         "`]` expected after array designator index",

@@ -219,6 +219,18 @@ pub(crate) struct Symbol {
     /// `char buf[N * 2 + 1]` is a fixed array rather than a VLA.
     pub is_const_qualified: bool,
 
+    /// Folded initializer of a block-scope `const`-qualified scalar
+    /// arithmetic object with automatic storage. GCC (GNU mode, at -O)
+    /// folds a reference to such an object where a case label or
+    /// `static_assert` needs a constant; the value is recorded at the
+    /// declaration, already converted to the declared type, and consumed
+    /// by the constant-expression evaluator only in those contexts.
+    /// `None` for every other object shape (non-const, volatile,
+    /// aggregate, pointer, missing or non-constant initializer).
+    pub const_object_value: Option<ConstObjectValue>,
+    /// Shadow slot for `const_object_value`. See `h_array_size`.
+    pub h_const_object_value: Option<ConstObjectValue>,
+
     /// True for a file-scope array whose element type is `const`-qualified
     /// (`static const T x[]`). Its elements -- and their members -- cannot
     /// be written (C99 6.7.3), so a relocation the initializer planted in
@@ -495,6 +507,15 @@ pub(crate) struct Symbol {
     pub maybe_unused: bool,
 }
 
+/// Recorded initializer value of a block-scope `const` scalar arithmetic
+/// object (see `Symbol::const_object_value`). Floats carry the f64 bit
+/// pattern so the type stays `Copy + Eq` for the shadow-slot machinery.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConstObjectValue {
+    Int(i64),
+    FloatBits(u64),
+}
+
 /// The machine register a `register T name asm("reg")` declaration
 /// names, resolved against the compile target. The stack and frame
 /// pointers are singled out because reading them is the pervasive use
@@ -629,6 +650,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_zero_len_array: _,
             h_is_zero_len_array: _,
             is_const_qualified: _,
+            const_object_value: _,
+            h_const_object_value: _, // scope-restore shadow
             storage_is_const: _,
             has_initializer: _,
             runtime_initialized: _,

@@ -726,6 +726,9 @@ impl Compiler {
         s.asm_register = None;
         s.h_is_global_register = s.is_global_register;
         s.is_global_register = false;
+        // The inner binding records its own folded const value, if any.
+        s.h_const_object_value = s.const_object_value;
+        s.const_object_value = None;
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -750,6 +753,7 @@ impl Compiler {
         sym.is_zero_len_array = sym.h_is_zero_len_array;
         sym.asm_register = sym.h_asm_register;
         sym.is_global_register = sym.h_is_global_register;
+        sym.const_object_value = sym.h_const_object_value;
         sym.is_scope_static = false;
         sym.is_scope_typedef = false;
         sym.block_extern_active = false;
@@ -780,6 +784,7 @@ impl Compiler {
             && sym.is_zero_len_array == sym.h_is_zero_len_array
             && sym.asm_register == sym.h_asm_register
             && sym.is_global_register == sym.h_is_global_register
+            && sym.const_object_value == sym.h_const_object_value
             && !sym.is_scope_static
             && !sym.is_scope_typedef
             && !sym.block_extern_active

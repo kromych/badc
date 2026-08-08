@@ -567,6 +567,23 @@ impl Compiler {
                 self.symbols[loc_idx].type_align =
                     decl_align.as_ref().map(|a| a.obj_align.max(0)).unwrap_or(0);
                 self.check_register_asm_init(asm_reg)?;
+                // A `const` scalar arithmetic auto local with a constant
+                // initializer records its value for the case-label /
+                // `static_assert` fold (see `const_object_fold`).
+                // Unconditional write so a reused slot leaks no stale
+                // value from an outer binding.
+                self.symbols[loc_idx].const_object_value = None;
+                if self.pending.base_is_const
+                    && array_size == 0
+                    && asm_reg.is_none()
+                    && !super::types::is_volatile_ty(ty)
+                    && (super::types::is_integer_scalar_ty(ty)
+                        || super::types::is_floating_scalar(ty))
+                    && self.lex.tk == Token::Assign
+                {
+                    self.symbols[loc_idx].const_object_value =
+                        self.try_fold_const_object_init(ty)?;
+                }
                 // This declaration can sit inside an enclosing aggregate's
                 // element initializer (an element that is a statement
                 // expression), so keep the carriers reentrant.
@@ -953,12 +970,12 @@ impl Compiler {
                     // dimension down to a single struct element.
                     if self.lex.tk == Token::Brak {
                         self.next()?; // `[`
-                        let desig = self.parse_constant_int()?;
+                        let desig = self.parse_constant_int_folding_const_objects()?;
                         // GNU range designator `[lo ... hi]`.
                         let mut desig_hi = desig;
                         if self.lex.tk == Token::Ellipsis {
                             self.next()?;
-                            desig_hi = self.parse_constant_int()?;
+                            desig_hi = self.parse_constant_int_folding_const_objects()?;
                         }
                         if self.lex.tk != ']' {
                             return Err(
@@ -980,7 +997,7 @@ impl Compiler {
                             let mut d = 0usize;
                             while self.lex.tk == Token::Brak {
                                 self.next()?; // `[`
-                                let n = self.parse_constant_int()?;
+                                let n = self.parse_constant_int_folding_const_objects()?;
                                 if self.lex.tk != ']' {
                                     return Err(self
                                         .compile_err("`]` expected after array designator index"));
@@ -1198,7 +1215,7 @@ impl Compiler {
             let mut range_end = i;
             if self.lex.tk == Token::Brak {
                 self.next()?;
-                let a = self.parse_constant_int()?;
+                let a = self.parse_constant_int_folding_const_objects()?;
                 if a < 0 {
                     return Err(self.compile_err(format!(
                         "array designator index must be non-negative (got {a})"
@@ -1207,7 +1224,7 @@ impl Compiler {
                 let mut b = a;
                 if self.lex.tk == Token::Ellipsis {
                     self.next()?;
-                    b = self.parse_constant_int()?;
+                    b = self.parse_constant_int_folding_const_objects()?;
                     if b < a {
                         return Err(self.compile_err(format!(
                             "array range designator high {b} below low {a}"
@@ -1449,11 +1466,11 @@ impl Compiler {
             return Ok(None);
         }
         self.next()?; // `[`
-        let idx = self.parse_constant_int()?;
+        let idx = self.parse_constant_int_folding_const_objects()?;
         let mut hi = idx;
         if self.lex.tk == Token::Ellipsis {
             self.next()?;
-            hi = self.parse_constant_int()?;
+            hi = self.parse_constant_int_folding_const_objects()?;
         }
         if idx < 0 || hi < idx || hi >= count {
             return Err(self.compile_err(format!(
@@ -1502,6 +1519,74 @@ impl Compiler {
             }
         }
         Ok(())
+    }
+
+    /// Try to fold a `const` scalar arithmetic auto local's initializer
+    /// to a constant of the declared type, mirroring the value GCC's
+    /// case-label / `static_assert` fold reads. The lexer is at the `=`;
+    /// the parse is speculative and fully rolled back so the normal
+    /// initializer path re-parses and emits the store. `None` when the
+    /// initializer is not a constant arithmetic expression (a runtime
+    /// value, an address, a string literal).
+    fn try_fold_const_object_init(
+        &mut self,
+        ty: i64,
+    ) -> Result<Option<crate::c5::symbol::ConstObjectValue>, C5Error> {
+        use super::const_expr::ConstVal;
+        use crate::c5::symbol::ConstObjectValue;
+        let cp = self.init_checkpoint();
+        self.next()?; // `=`
+        // C99 6.7.8p11: a scalar initializer may be brace-wrapped.
+        let braced = self.lex.tk == '{';
+        if braced {
+            self.next()?;
+        }
+        // Chains fold too (`const unsigned a = 5; const unsigned b = a;`),
+        // so the recording parse runs with the object fold enabled.
+        self.const_object_fold += 1;
+        let v = self.parse_const_expr_cond_val();
+        self.const_object_fold -= 1;
+        let mut ended = v.is_ok();
+        if ended && braced {
+            if self.lex.tk == ',' {
+                ended = self.next().is_ok();
+            }
+            ended = ended && self.lex.tk == '}' && self.next().is_ok();
+        }
+        ended = ended && (self.lex.tk == ',' || self.lex.tk == ';');
+        let rec = match v {
+            Ok(val) if ended => match val {
+                // An `Int` carrying a pointer type is a staged address
+                // (a string literal's data offset), not a value.
+                ConstVal::Int { ty: vty, .. } if is_pointer_ty(vty) => None,
+                ConstVal::Int { .. } | ConstVal::Float(_) => {
+                    if super::types::is_floating_scalar(ty) {
+                        let f = val.as_float();
+                        let f = if self.size_of_type(ty) == 4 {
+                            f as f32 as f64
+                        } else {
+                            f
+                        };
+                        Some(ConstObjectValue::FloatBits(f.to_bits()))
+                    } else {
+                        // Convert to the declared type (C99 6.7.8p11).
+                        let bytes = self.size_of_type(ty);
+                        let is_bool = super::types::strip_unsigned(ty) == Ty::Bool as i64;
+                        Some(ConstObjectValue::Int(super::types::narrow_const_int(
+                            bytes,
+                            super::types::is_unsigned_ty(ty),
+                            is_bool,
+                            val.as_i128(),
+                        ) as i64))
+                    }
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        self.pending.const_expr_nonconst = false;
+        self.restore_init_checkpoint(cp);
+        Ok(rec)
     }
 
     pub(super) fn allocate_local_with_init(
@@ -1776,12 +1861,12 @@ impl Compiler {
                         // dimension down to a single struct element.
                         if self.lex.tk == Token::Brak {
                             self.next()?; // `[`
-                            let desig = self.parse_constant_int()?;
+                            let desig = self.parse_constant_int_folding_const_objects()?;
                             // GNU range designator `[lo ... hi]`.
                             let mut desig_hi = desig;
                             if self.lex.tk == Token::Ellipsis {
                                 self.next()?;
-                                desig_hi = self.parse_constant_int()?;
+                                desig_hi = self.parse_constant_int_folding_const_objects()?;
                             }
                             if self.lex.tk != ']' {
                                 return Err(
@@ -1802,7 +1887,7 @@ impl Compiler {
                                 let mut d = 0usize;
                                 while self.lex.tk == Token::Brak {
                                     self.next()?; // `[`
-                                    let n = self.parse_constant_int()?;
+                                    let n = self.parse_constant_int_folding_const_objects()?;
                                     if self.lex.tk != ']' {
                                         return Err(self.compile_err(
                                             "`]` expected after array designator index",
@@ -2434,7 +2519,7 @@ impl Compiler {
             let mut range_hi = i;
             if self.lex.tk == Token::Brak {
                 self.next()?; // consume `[`
-                let n = self.parse_constant_int()?;
+                let n = self.parse_constant_int_folding_const_objects()?;
                 if n < 0 {
                     return Err(self.compile_err(format!(
                         "array designator index must be non-negative (got {n})"
@@ -2443,7 +2528,7 @@ impl Compiler {
                 range_hi = n;
                 if self.lex.tk == Token::Ellipsis {
                     self.next()?; // consume `...`
-                    let hi = self.parse_constant_int()?;
+                    let hi = self.parse_constant_int_folding_const_objects()?;
                     if hi < n {
                         return Err(self.compile_err(format!(
                             "array range designator high {hi} below low {n}"

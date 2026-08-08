@@ -416,6 +416,32 @@ impl Compiler {
         Ok(self.require_integer_const(v)?.as_int())
     }
 
+    /// As [`Self::parse_constant_int`], with references to block-scope
+    /// `const` scalar objects folding to their recorded initializer
+    /// values. Entry point for the value contexts GCC folds them in:
+    /// case labels (including GNU ranges), `static_assert`, and
+    /// initializer designator indices.
+    pub(super) fn parse_constant_int_folding_const_objects(&mut self) -> Result<i64, C5Error> {
+        self.const_object_fold += 1;
+        let r = self.parse_constant_int();
+        self.const_object_fold -= 1;
+        r
+    }
+
+    /// Run `rule` with the const-object fold masked: a type dimension
+    /// (array declarator, compound-literal or type-name `[N]`) never
+    /// folds a block-scope `const` object even inside a folding value
+    /// context, so `int a[h]` stays variably sized (gcc parity).
+    pub(super) fn with_const_object_fold_masked<T>(
+        &mut self,
+        rule: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let saved = core::mem::take(&mut self.const_object_fold);
+        let r = rule(self);
+        self.const_object_fold = saved;
+        r
+    }
+
     /// As [`Self::parse_constant_int`], keeping all 128 bits. Used by the
     /// initializer paths, whose destination may be the 16-byte integer.
     pub(super) fn parse_constant_i128(&mut self) -> Result<i128, C5Error> {
@@ -699,7 +725,12 @@ impl Compiler {
             ));
         }
         self.next()?;
-        let value = self.parse_const_expr_cond_val()?.as_int();
+        // GCC (GNU mode, at -O) folds block-scope `const` scalar objects
+        // in the controlling expression.
+        self.const_object_fold += 1;
+        let value = self.parse_const_expr_cond_val();
+        self.const_object_fold -= 1;
+        let value = value?.as_int();
         // The message argument is optional in C23 but required in
         // C11. Accept both shapes: a trailing `, "msg"` is the
         // canonical form; a bare `(expr)` falls back to a generic
@@ -2032,6 +2063,31 @@ impl Compiler {
             let ty = self.symbols[self.lex.curr_id_idx].type_;
             self.next()?;
             return Ok(ConstVal::Int { val: v as i128, ty });
+        }
+        // A block-scope `const` scalar arithmetic object with a recorded
+        // constant initializer folds to that value in the contexts GCC
+        // folds it (case labels, `static_assert`; see `const_object_fold`).
+        if self.const_object_fold > 0 && self.lex.tk == Token::Id {
+            let idx = self.lex.curr_id_idx;
+            let sym = &self.symbols[idx];
+            if sym.class == Token::Loc as i64
+                && let Some(v) = sym.const_object_value
+            {
+                let ty = sym.type_;
+                // A folded reference reads the object's value: keep the
+                // unused-binding report quiet even though no load emits.
+                self.symbols[idx].was_referenced = true;
+                self.symbols[idx].was_read = true;
+                self.next()?;
+                return Ok(match v {
+                    crate::c5::symbol::ConstObjectValue::Int(i) => {
+                        ConstVal::Int { val: i as i128, ty }
+                    }
+                    crate::c5::symbol::ConstObjectValue::FloatBits(b) => {
+                        ConstVal::Float(f64::from_bits(b))
+                    }
+                });
+            }
         }
         // C99 6.6 leaves it implementation-defined, but GCC and common
         // practice fold a `const`-qualified integer object with static

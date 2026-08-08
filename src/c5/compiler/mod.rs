@@ -1178,6 +1178,15 @@ pub struct Compiler {
     /// diagnostic (`1 ? 2 : 1/0` is accepted by gcc / clang).
     const_unevaluated: u32,
 
+    /// Nesting depth of constant-expression contexts where a reference
+    /// to a `const`-qualified scalar object folds to its recorded
+    /// initializer value (`Symbol::const_object_value`). GCC (GNU mode,
+    /// at -O) applies that fold to case labels (including GNU ranges)
+    /// and `static_assert`, and not to array bounds, enum values,
+    /// bitfield widths, or alignment specifiers; the entry points for
+    /// the folding contexts raise this depth.
+    const_object_fold: u32,
+
     /// Per-function AST. The arena is reset at every function
     /// entry; the SSA walker reads from these snapshots at codegen
     /// entry.
@@ -1906,6 +1915,7 @@ impl Compiler {
             pending_is_naked: false,
             pending_noreturn: false,
             const_unevaluated: 0,
+            const_object_fold: 0,
             ast: super::ast::Ast::new(),
             ast_acc: None,
             ast_vstack: Vec::new(),

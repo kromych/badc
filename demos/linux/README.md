@@ -12,7 +12,7 @@ Two pins, with distinct jobs and no shared version:
 
 | `--config` | kernel | configuration | used by |
 |---|---|---|---|
-| `defconfig` (default) | 7.1.5, both arches | the tree's own `make defconfig` | the sweep |
+| `defconfig` (default) | 7.1.6, both arches | the tree's own `make defconfig` | the sweep |
 | `minimal` | 6.12.8 (x86_64), 6.10.1 (aarch64) | vendored `configs/<arch>-<version>.config` | the link-and-boot gate |
 
 The sweep corpus is defconfig on the latest stable release: it is what a

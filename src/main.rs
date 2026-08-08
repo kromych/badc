@@ -53,6 +53,11 @@ Multi-TU knobs:
                            Repeatable; probed in declared order.
   -l <name>                Pull `lib<name>.a` in as a static
                            library. Members are pulled in on demand.
+  -Map=<file>, -Map <file> Write a GNU-ld-style link map (output
+                           sections, per-input-section placement,
+                           symbol addresses) to <file>. ELF output
+                           only.
+  -M, --print-map          Print the link map to stdout.
   --jobs N, -jN            Compile independent `.c` sources
                            concurrently in up to 2*N worker threads
                            (capped at the source count). Output is
@@ -267,6 +272,10 @@ fn run() {
     let mut cli_entry: Option<String> = None;
     let mut cli_subsystem: Option<badc::Subsystem> = None;
     let mut output_path: Option<PathBuf> = None;
+    // `-Map=FILE` / `-Map FILE` write a GNU-ld-style link map;
+    // `-M` / `--print-map` print it to stdout. Both may be given.
+    let mut map_path: Option<PathBuf> = None;
+    let mut print_map = false;
     let mut target_spec: Option<String> = None;
     let mut defines: Vec<(String, String)> = Vec::new();
     let mut undefines: Vec<String> = Vec::new();
@@ -424,6 +433,17 @@ fn run() {
                     std::process::exit(1);
                 }
             },
+            "-Map" => match iter.next() {
+                Some(p) => map_path = Some(PathBuf::from(p)),
+                None => {
+                    eprint_diagnostic("badc: error: -Map requires a file argument");
+                    std::process::exit(1);
+                }
+            },
+            s if s.starts_with("-Map=") => {
+                map_path = Some(PathBuf::from(&s["-Map=".len()..]));
+            }
+            "-M" | "--print-map" => print_map = true,
             "-D" => match iter.next() {
                 Some(s) => match s.split_once('=') {
                     Some((name, body)) => defines.push((name.to_string(), body.to_string())),
@@ -894,6 +914,17 @@ fn run() {
         std::process::exit(1);
     }
 
+    // The link map describes a completed link.
+    if (map_path.is_some() || print_map)
+        && (compile_only || !matches!(mode, Mode::NativeExecutable | Mode::SharedLibrary))
+    {
+        eprintln!(
+            "badc: -Map / --print-map require a link (current mode is {})",
+            if compile_only { "-c" } else { mode.flag_name() }
+        );
+        std::process::exit(1);
+    }
+
     if mode == Mode::ListSymbols {
         print_predefined_symbols();
         return;
@@ -1337,7 +1368,7 @@ fn run() {
         let tus = compile_units(&sources, workers, |_, src| {
             compile_native_tu(src, &[], &cfg)
         });
-        for tu in tus {
+        for (i, mut tu) in tus.into_iter().enumerate() {
             if entry_override.is_none() {
                 entry_override = tu.entry;
             }
@@ -1345,6 +1376,7 @@ fn run() {
                 subsystem_override = tu.subsystem;
             }
             source_auto_includes.push(tu.auto_includes);
+            tu.obj.source = sources[i].clone();
             native_objs.push(tu.obj);
         }
         stats.mark("compile");
@@ -1444,7 +1476,10 @@ fn run() {
             };
             let bytes = compile_in_memory(&label, src, &runtime_defines);
             match badc::parse_native_elf(&bytes) {
-                Ok(o) => native_objs.push(o),
+                Ok(mut o) => {
+                    o.source = label.clone();
+                    native_objs.push(o);
+                }
                 Err(e) => {
                     eprint_diagnostic(format!("badc: {label}: {e}"));
                     std::process::exit(1);
@@ -1468,7 +1503,10 @@ fn run() {
                 std::process::exit(1);
             }
             match badc::parse_native_elf(&bytes) {
-                Ok(o) => native_objs.push(o),
+                Ok(mut o) => {
+                    o.source = obj_path.clone();
+                    native_objs.push(o);
+                }
                 Err(e) => {
                     eprint_diagnostic(format!("badc: {obj_path}: {e}"));
                     std::process::exit(1);
@@ -1483,7 +1521,7 @@ fn run() {
         // (from any archive). Unreferenced members stay out, so their
         // unrelated undefined or duplicate symbols cannot fail a
         // valid link.
-        let mut pending: Vec<Option<(String, badc::NativeObject)>> = Vec::new();
+        let mut pending: Vec<Option<badc::NativeObject>> = Vec::new();
         for a_path in &archives {
             let bytes = match std::fs::read(a_path) {
                 Ok(b) => b,
@@ -1511,7 +1549,10 @@ fn run() {
                     std::process::exit(1);
                 }
                 match badc::parse_native_elf(&m.bytes) {
-                    Ok(o) => pending.push(Some((format!("{a_path}({})", m.name), o))),
+                    Ok(mut o) => {
+                        o.source = format!("{a_path}({})", m.name);
+                        pending.push(Some(o));
+                    }
                     Err(e) => {
                         eprint_diagnostic(format!("badc: {a_path}({}): {e}", m.name));
                         std::process::exit(1);
@@ -1527,7 +1568,10 @@ fn run() {
         for (name, body) in badc::embedded_compiler_rt().iter() {
             let bytes = compile_in_memory(&format!("<compiler-rt/{name}>"), body.to_string(), &[]);
             match badc::parse_native_elf(&bytes) {
-                Ok(o) => pending.push(Some((format!("<compiler-rt/{name}>"), o))),
+                Ok(mut o) => {
+                    o.source = format!("<compiler-rt/{name}>");
+                    pending.push(Some(o));
+                }
                 Err(e) => {
                     eprint_diagnostic(format!("badc: <compiler-rt/{name}>: {e}"));
                     std::process::exit(1);
@@ -1542,10 +1586,7 @@ fn run() {
         // it -- the user's definition wins over the binding.
         if source_auto_includes.iter().any(|a| !a.is_empty()) {
             let mut defined_fns = std::collections::HashSet::<String>::new();
-            for o in native_objs
-                .iter()
-                .chain(pending.iter().flatten().map(|(_, o)| o))
-            {
+            for o in native_objs.iter().chain(pending.iter().flatten()) {
                 for s in &o.symbols {
                     // STB_GLOBAL STT_FUNC section-resident definitions.
                     if s.binding == 1
@@ -1581,28 +1622,37 @@ fn run() {
                 let (log, res) = compile_native_tu(&sources[i], &redirect, &cfg);
                 log.flush();
                 match res {
-                    Ok(tu) => native_objs[i] = tu.obj,
+                    Ok(mut tu) => {
+                        tu.obj.source = sources[i].clone();
+                        native_objs[i] = tu.obj;
+                    }
                     Err(()) => std::process::exit(1),
                 }
             }
         }
+        let mut archive_inclusions: Vec<badc::ArchiveInclusion> = Vec::new();
         if !pending.is_empty() {
-            type NameSet = hashbrown::HashSet<String>;
-            let mut defined = NameSet::new();
-            let mut undefined = NameSet::new();
+            let mut defined = hashbrown::HashSet::<String>::new();
+            // Unresolved strong references, each keyed to the first
+            // input that made it (the link map's "referenced by" file).
+            let mut undefined = hashbrown::HashMap::<String, String>::new();
             // A global or weak definition satisfies references; only a
             // strong (STB_GLOBAL) undefined reference pulls a member,
             // matching ELF archive practice (a weak reference left
             // unresolved does not extract members).
             let account =
-                |o: &badc::NativeObject, defined: &mut NameSet, undefined: &mut NameSet| {
+                |o: &badc::NativeObject,
+                 defined: &mut hashbrown::HashSet<String>,
+                 undefined: &mut hashbrown::HashMap<String, String>| {
                     for s in &o.symbols {
                         if s.binding == 0 {
                             continue;
                         }
                         if s.section == badc::NativeSymSection::Undef {
                             if s.binding == 1 && !defined.contains(&s.name) {
-                                undefined.insert(s.name.clone());
+                                undefined
+                                    .entry(s.name.clone())
+                                    .or_insert_with(|| o.source.clone());
                             }
                         } else {
                             defined.insert(s.name.clone());
@@ -1618,7 +1668,9 @@ fn run() {
             if let Some(entry) = &freestanding_entry
                 && !defined.contains(entry)
             {
-                undefined.insert(entry.clone());
+                undefined
+                    .entry(entry.clone())
+                    .or_insert_with(|| "<command line>".to_string());
             }
             // The archive symbol index lists strong section-resident
             // definitions; a member is pulled on exactly those. A pulled
@@ -1629,18 +1681,24 @@ fn run() {
             while progress {
                 progress = false;
                 for slot in pending.iter_mut() {
-                    let wanted = slot.as_ref().is_some_and(|(_, o)| {
-                        o.symbols.iter().any(|s| {
-                            s.binding == 1
+                    let wanted = slot.as_ref().and_then(|o| {
+                        o.symbols.iter().find_map(|s| {
+                            (s.binding == 1
                                 && !matches!(
                                     s.section,
                                     badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
                                 )
-                                && undefined.contains(&s.name)
+                                && undefined.contains_key(&s.name))
+                            .then(|| s.name.clone())
                         })
                     });
-                    if wanted {
-                        let (_, o) = slot.take().expect("a wanted slot is occupied");
+                    if let Some(symbol) = wanted {
+                        let o = slot.take().expect("a wanted slot is occupied");
+                        archive_inclusions.push(badc::ArchiveInclusion {
+                            member: o.source.clone(),
+                            referenced_by: undefined.get(&symbol).cloned().unwrap_or_default(),
+                            symbol,
+                        });
                         account(&o, &mut defined, &mut undefined);
                         native_objs.push(o);
                         progress = true;
@@ -1763,6 +1821,28 @@ fn run() {
         write_output(out, &bytes, target, quiet);
         set_executable(out);
         post_write_native(out, target);
+        if map_path.is_some() || print_map {
+            let out_name = out.file_name().and_then(|n| n.to_str()).unwrap_or("a.out");
+            let map = match badc::render_link_map(&merged, &bytes, &archive_inclusions, out_name) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: {e}"));
+                    std::process::exit(1);
+                }
+            };
+            if let Some(p) = &map_path {
+                if let Err(e) = std::fs::write(p, &map) {
+                    eprint_diagnostic(format!(
+                        "badc: error: cannot write map file `{}`: {e}",
+                        p.display()
+                    ));
+                    std::process::exit(1);
+                }
+            }
+            if print_map {
+                print!("{map}");
+            }
+        }
         stats.mark("write");
         stats.report(native_objs.len());
         return;

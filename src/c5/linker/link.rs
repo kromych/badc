@@ -24,8 +24,8 @@ use hashbrown::HashMap;
 use crate::c5::error::C5Error;
 
 use super::object::{
-    ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection, SharedLibrary,
-    reloc_desc,
+    ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection, SectionFamily,
+    SharedLibrary, reloc_desc,
 };
 use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 // A tail-call `b <sym>` reaches its target the same way `bl` does --
@@ -241,6 +241,40 @@ pub struct MergedNative {
     /// DT_FINI_ARRAY. The pointer slots already carry R_*_RELATIVE via
     /// [`Self::data_abs_relocs`].
     pub init_fini_arrays: crate::c5::codegen::InitFiniArrays,
+    /// Per-input-section placement records for the merged streams.
+    pub section_map: SectionMap,
+}
+
+/// One input section's placement within a merged output stream.
+#[derive(Debug, Clone)]
+pub struct SectionContribution {
+    /// Index into [`SectionMap::sources`]; `None` for linker-materialized
+    /// content (init/fini arrays, the PLT pool).
+    pub input: Option<usize>,
+    /// Input section name as spelled in the object; `COMMON` for a
+    /// coalesced C99 6.9.2 tentative definition.
+    pub name: String,
+    /// Byte offset within the merged stream.
+    pub offset: u64,
+    pub size: u64,
+}
+
+/// Which input object contributed which byte range of each merged
+/// stream, in placement order. `data` offsets index the unified data
+/// stream ([`MergedNative::data`]; offsets under
+/// [`MergedNative::data_ro_len`] are the read-only prefix), `tls`
+/// offsets the merged TLS block, the rest the like-named streams.
+#[derive(Debug, Clone, Default)]
+pub struct SectionMap {
+    /// Origin label per input object ([`NativeObject::source`]), in
+    /// link order.
+    pub sources: Vec<String>,
+    pub text: Vec<SectionContribution>,
+    pub data: Vec<SectionContribution>,
+    pub bss: Vec<SectionContribution>,
+    pub tls: Vec<SectionContribution>,
+    /// Input sections the object parser dropped, `(input, name, size)`.
+    pub discarded: Vec<(usize, String, u64)>,
 }
 
 /// Pending `R_*_64` relocation that the final-image writer
@@ -586,6 +620,36 @@ pub fn link_native_objects_with_shared_libs<'a>(
         bss_size += obj.bss_size;
     }
 
+    // Per-input-section placement: each record's stream offset is the
+    // owning unit's family base plus the section's offset within that
+    // unit's blob. RoData joins the data list -- Pass 1 laid the
+    // read-only payload into the same offset space.
+    let mut section_map = SectionMap::default();
+    for (i, obj) in objs.iter().enumerate() {
+        section_map.sources.push(obj.source.clone());
+        for (name, size) in &obj.discarded {
+            section_map.discarded.push((i, name.clone(), *size));
+        }
+        for s in &obj.sections {
+            let (list, base) = match s.family {
+                SectionFamily::Text => (&mut section_map.text, text_bases[i] as u64),
+                SectionFamily::RoData => (&mut section_map.data, rodata_bases[i] as u64),
+                SectionFamily::Data => (&mut section_map.data, data_bases[i] as u64),
+                SectionFamily::Bss => (&mut section_map.bss, bss_bases[i] as u64),
+                SectionFamily::Tdata | SectionFamily::Tbss => {
+                    (&mut section_map.tls, tls_bases[i] as u64)
+                }
+                SectionFamily::Discard => continue,
+            };
+            list.push(SectionContribution {
+                input: Some(i),
+                name: s.name.clone(),
+                offset: base + s.offset,
+                size: s.size,
+            });
+        }
+    }
+
     // Pass 1.5 -- `.init_array` / `.fini_array` materialisation. Collect
     // every unit's constructor / destructor entries, rebased to merged
     // `.text` offsets, and order them: prioritized ascending, then
@@ -629,6 +693,19 @@ pub fn link_native_objects_with_shared_libs<'a>(
             let fini_end = data.len() as u64;
             (init_start, init_end, fini_start, fini_end)
         };
+    for (name, start, end) in [
+        (".init_array", init_array_start, init_array_end),
+        (".fini_array", fini_array_start, fini_array_end),
+    ] {
+        if end > start {
+            section_map.data.push(SectionContribution {
+                input: None,
+                name: name.to_string(),
+                offset: start,
+                size: end - start,
+            });
+        }
+    }
 
     // The startup runtime walks `[__init_array_start, __init_array_end)`; the
     // end symbol is a one-past-the-array `.data` address. These arrays are the
@@ -779,8 +856,11 @@ pub fn link_native_objects_with_shared_libs<'a>(
     // Common: coalesce.
     // Name-ordered: slot assignment walks it, so the `.bss` layout must
     // not depend on the order the units happen to declare the names in.
-    let mut common_max: BTreeMap<&str, (u64, u64)> = BTreeMap::new();
-    for obj in objs.iter() {
+    // The third tuple field is the first declaring unit; the section map
+    // attributes the merged slot to it, the way ld's map reports a
+    // COMMON allocation under an object.
+    let mut common_max: BTreeMap<&str, (u64, u64, usize)> = BTreeMap::new();
+    for (i, obj) in objs.iter().enumerate() {
         for sym in &obj.symbols {
             if !matches!(sym.section, NativeSymSection::Common) {
                 continue;
@@ -788,12 +868,12 @@ pub fn link_native_objects_with_shared_libs<'a>(
             if sym.name.is_empty() || defined.contains_key(sym.name.as_str()) {
                 continue;
             }
-            let entry = common_max.entry(sym.name.as_str()).or_insert((0, 1));
+            let entry = common_max.entry(sym.name.as_str()).or_insert((0, 1, i));
             entry.0 = entry.0.max(sym.size);
             entry.1 = entry.1.max(sym.value.max(1));
         }
     }
-    for (name, (size, align)) in &common_max {
+    for (name, (size, align, unit)) in &common_max {
         let align = (*align).max(1) as usize;
         bss_size = align_usize(bss_size, align);
         let slot_offset = bss_size as u64;
@@ -809,6 +889,12 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 weak: false,
             },
         );
+        section_map.bss.push(SectionContribution {
+            input: Some(*unit),
+            name: "COMMON".to_string(),
+            offset: slot_offset,
+            size: *size,
+        });
     }
 
     // Boundary symbols for the init/fini arrays laid out in Pass 1.5.
@@ -1792,6 +1878,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
             fini: (fini_array_end > fini_array_start)
                 .then_some((fini_array_start, fini_array_end - fini_array_start)),
         },
+        section_map,
     })
 }
 
@@ -1810,6 +1897,19 @@ pub struct DebugTextReloc {
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Record the PLT pool `[pool_start, text.len())` as a linker-
+/// materialized `.plt` contribution. No-op when no stub was emitted.
+fn record_plt_contribution(merged: &mut MergedNative, pool_start: usize) {
+    if merged.text.len() > pool_start {
+        merged.section_map.text.push(SectionContribution {
+            input: None,
+            name: ".plt".to_string(),
+            offset: pool_start as u64,
+            size: (merged.text.len() - pool_start) as u64,
+        });
+    }
+}
+
 fn resolve_debug_reloc(
     machine: NativeMachine,
     section_bytes: &mut [u8],
@@ -1946,6 +2046,7 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
     // section-header alignment doesn't have to backfill padding
     // before the first trampoline.
     align_up(&mut merged.text, 16);
+    let plt_pool_start = merged.text.len();
 
     // One trampoline per unique import index, in order of first
     // occurrence in `pending_imports`. An import that no call
@@ -2049,6 +2150,7 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
     }
 
     merged.pending_imports = parked_back;
+    record_plt_contribution(merged, plt_pool_start);
     Ok(trampolines)
 }
 
@@ -2086,6 +2188,7 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
         )));
     }
     align_up(&mut merged.text, 16);
+    let plt_pool_start = merged.text.len();
 
     let mut tramp_for_import: BTreeMap<usize, usize> = BTreeMap::new();
     let mut trampolines: Vec<PltTrampoline> = Vec::new();
@@ -2207,6 +2310,7 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
     }
 
     merged.pending_imports = parked_back;
+    record_plt_contribution(merged, plt_pool_start);
     Ok(trampolines)
 }
 
@@ -3077,6 +3181,9 @@ mod tests {
     #[test]
     fn common_symbols_coalesce_to_single_bss_slot() {
         let mk_unit = |size: u64, align: u64| NativeObject {
+            source: alloc::string::String::new(),
+            sections: alloc::vec::Vec::new(),
+            discarded: alloc::vec::Vec::new(),
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
@@ -3148,6 +3255,81 @@ mod tests {
         );
     }
 
+    /// The merge keeps per-input-section identity: each contribution's
+    /// stream offset is the owning unit's base plus the section's
+    /// offset in that unit, and a coalesced COMMON slot is attributed
+    /// to its declaring unit.
+    #[test]
+    fn section_map_records_placements_and_common_slots() {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let mut a = compile_native(
+            "int a_data = 1;\nint main(void) { return a_data; }\n",
+            Target::LinuxX64,
+            opts,
+        );
+        a.source = "a.o".to_string();
+        let mut b = compile_native_with(
+            "int b_data = 2;\nint bfn(void) { return b_data; }\n",
+            Target::LinuxX64,
+            opts,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        );
+        b.source = "lib.a(b.o)".to_string();
+        // A tentative definition (SHN_COMMON) declared by unit B.
+        b.symbols.push(super::super::object::NativeSymbol {
+            name: "tentative".to_string(),
+            section: NativeSymSection::Common,
+            value: 8,
+            size: 16,
+            binding: 1,
+            kind: 1,
+            visibility: 0,
+        });
+        let a_text_len = a.text.len();
+        let merged = link_native_objects(&[a, b]).expect("link");
+        let sm = &merged.section_map;
+        assert_eq!(
+            sm.sources,
+            alloc::vec!["a.o".to_string(), "lib.a(b.o)".to_string()]
+        );
+        let a_text = sm
+            .text
+            .iter()
+            .find(|c| c.input == Some(0) && c.name == ".text")
+            .expect("unit A .text contribution");
+        assert_eq!(a_text.offset, 0);
+        let b_text = sm
+            .text
+            .iter()
+            .find(|c| c.input == Some(1) && c.name == ".text")
+            .expect("unit B .text contribution");
+        // Unit B's base: unit A's text plus the per-unit producer
+        // marker, 16-aligned.
+        assert_eq!(
+            b_text.offset as usize,
+            (a_text_len + crate::OUTPUT_MARKER.len() + 1).next_multiple_of(16),
+        );
+        let bfn = merged.defined.get("bfn").expect("bfn defined");
+        assert!(
+            (b_text.offset..b_text.offset + b_text.size).contains(&bfn.value),
+            "bfn (0x{:x}) must lie inside unit B's .text contribution",
+            bfn.value,
+        );
+        let tent = merged.defined.get("tentative").expect("tentative defined");
+        assert!(matches!(tent.section, NativeSymSection::Bss));
+        let slot = sm
+            .bss
+            .iter()
+            .find(|c| c.name == "COMMON")
+            .expect("COMMON contribution");
+        assert_eq!(slot.input, Some(1), "attributed to the declaring unit");
+        assert_eq!(slot.offset, tent.value);
+        assert_eq!(slot.size, 16);
+    }
+
     /// A reloc against an SHN_COMMON symbol parks a *unified* data-byte
     /// offset, the same as one against a `.bss`-defined symbol: the
     /// coalesced slot offset is bss-relative, so it needs the merged
@@ -3156,6 +3338,9 @@ mod tests {
     #[test]
     fn common_symbol_reloc_is_biased_past_merged_data() {
         let mk_unit = |data: alloc::vec::Vec<u8>, with_reloc: bool| NativeObject {
+            source: alloc::string::String::new(),
+            sections: alloc::vec::Vec::new(),
+            discarded: alloc::vec::Vec::new(),
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
@@ -3247,6 +3432,9 @@ mod tests {
     #[test]
     fn common_yields_to_strong_definition() {
         let unit_common = NativeObject {
+            source: alloc::string::String::new(),
+            sections: alloc::vec::Vec::new(),
+            discarded: alloc::vec::Vec::new(),
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
@@ -3300,6 +3488,9 @@ mod tests {
             debug_line_relocs: alloc::vec::Vec::new(),
         };
         let unit_strong = NativeObject {
+            source: alloc::string::String::new(),
+            sections: alloc::vec::Vec::new(),
+            discarded: alloc::vec::Vec::new(),
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
@@ -3384,6 +3575,9 @@ mod tests {
                   text_relocs: alloc::vec::Vec<NativeReloc>|
          -> NativeObject {
             NativeObject {
+                source: alloc::string::String::new(),
+                sections: alloc::vec::Vec::new(),
+                discarded: alloc::vec::Vec::new(),
                 text_align: 16,
                 rodata: Vec::new(),
                 rodata_align: 8,
@@ -3556,6 +3750,9 @@ mod tests {
     #[test]
     fn conflicting_import_dylib_routing_errors() {
         let mk = |dylib: &str| NativeObject {
+            source: alloc::string::String::new(),
+            sections: alloc::vec::Vec::new(),
+            discarded: alloc::vec::Vec::new(),
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
@@ -3636,6 +3833,9 @@ mod tests {
         // may abort the link.
         use super::super::object::{NativeReloc, NativeSymbol};
         let base = || NativeObject {
+            source: alloc::string::String::new(),
+            sections: alloc::vec::Vec::new(),
+            discarded: alloc::vec::Vec::new(),
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,

@@ -3804,3 +3804,118 @@ fn dlopened_module_binds_host_data_and_bss_globals() {
         String::from_utf8_lossy(&out.stdout)
     );
 }
+
+// `-Map=FILE` / `-Map FILE` / `-M` produce a GNU-ld-style link map.
+// Emitting a Linux ELF needs no matching host, so these run anywhere.
+#[test]
+fn map_file_reports_sections_and_archive_members() {
+    let dir = tempdir("map-file");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int helper(int);\nextern int archfn(int);\nint g_global = 42;\n\
+         int main() { return helper(1) + archfn(2) + g_global; }\n",
+    );
+    write_source(
+        &dir,
+        "helper.c",
+        "int h_data = 5;\nint helper(int x) { return x + h_data; }\n",
+    );
+    write_source(&dir, "archmem.c", "int archfn(int x) { return x * 2; }\n");
+    run(
+        Command::new(badc())
+            .arg("--ar")
+            .arg("--target=linux-x64")
+            .arg("-o")
+            .arg(dir.join("libarch.a"))
+            .arg(dir.join("archmem.c"))
+            .current_dir(&dir),
+        "build archive",
+    );
+    let map_path = dir.join("prog.map");
+    run(
+        Command::new(badc())
+            .arg("--target=linux-x64")
+            .arg("-o")
+            .arg(dir.join("prog"))
+            .arg(dir.join("main.c"))
+            .arg(dir.join("helper.c"))
+            .arg(dir.join("libarch.a"))
+            .arg(format!("-Map={}", map_path.display()))
+            .arg("-q")
+            .current_dir(&dir),
+        "link with -Map=",
+    );
+    let map = std::fs::read_to_string(&map_path).expect("read map file");
+    assert!(
+        map.contains("Archive member included to satisfy reference by file (symbol)"),
+        "archive table missing:\n{map}"
+    );
+    assert!(
+        map.contains("libarch.a(archmem.c.o)") || map.contains("libarch.a(archmem.o)"),
+        "archive member label missing:\n{map}"
+    );
+    assert!(map.contains("(archfn)"), "pulling symbol missing:\n{map}");
+    assert!(map.contains("Memory Configuration"), "missing:\n{map}");
+    assert!(
+        map.contains("Linker script and memory map"),
+        "missing:\n{map}"
+    );
+    for row in ["\n.text ", "\n.data "] {
+        assert!(map.contains(row), "missing {row:?}:\n{map}");
+    }
+    for source in ["main.c", "helper.c"] {
+        assert!(
+            map.lines()
+                .any(|l| l.starts_with(" .text") && l.ends_with(source)),
+            "no .text contribution from {source}:\n{map}"
+        );
+    }
+    assert!(
+        map.contains("OUTPUT(prog elf64-x86-64)"),
+        "OUTPUT line missing:\n{map}"
+    );
+
+    // The two-arg `-Map FILE` form and `-M` (stdout) coexist.
+    let map2 = dir.join("prog2.map");
+    let out = run(
+        Command::new(badc())
+            .arg("--target=linux-x64")
+            .arg("-o")
+            .arg(dir.join("prog2"))
+            .arg(dir.join("main.c"))
+            .arg(dir.join("helper.c"))
+            .arg(dir.join("libarch.a"))
+            .arg("-Map")
+            .arg(&map2)
+            .arg("-M")
+            .arg("-q")
+            .current_dir(&dir),
+        "link with -Map FILE and -M",
+    );
+    assert!(map2.is_file(), "-Map FILE (two-arg) must write the file");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Linker script and memory map"),
+        "-M must print the map to stdout: {stdout:?}"
+    );
+}
+
+#[test]
+fn map_option_requires_a_link() {
+    let dir = tempdir("map-requires-link");
+    let src = write_source(&dir, "one.c", "int main() { return 0; }\n");
+    let out = Command::new(badc())
+        .arg("-c")
+        .arg(&src)
+        .arg("-Map=one.map")
+        .current_dir(&dir)
+        .output()
+        .expect("run badc -c -Map");
+    assert!(!out.status.success(), "-c with -Map must be rejected");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("require a link"),
+        "diagnostic must say the map needs a link: {stderr:?}"
+    );
+}

@@ -427,6 +427,9 @@ pub struct LdsOptions {
     /// keep their input bytes. RELR-covered slots always get the
     /// link-time value (the format stores the addend in place).
     pub apply_dynamic_relocs: bool,
+    /// `--emit-relocs`: carry every applied input relocation into the
+    /// output as `.rela.<outsec>` entries against the output symtab.
+    pub emit_relocs: bool,
     pub emit_warnings: bool,
 }
 
@@ -443,6 +446,7 @@ impl Default for LdsOptions {
             discard_none: false,
             pack_relative_relocs: false,
             apply_dynamic_relocs: true,
+            emit_relocs: false,
             emit_warnings: true,
         }
     }
@@ -638,6 +642,37 @@ pub struct LdsLinker<'a> {
     /// an undefined symbol still needs a slot).
     got_slots: Vec<String>,
     got_map: HashMap<String, usize>,
+    /// `--emit-relocs`: every relocation applied to an output section,
+    /// recorded on the final pass and written back as `.rela.<outsec>`.
+    emitted: Vec<EmittedReloc>,
+    /// Where `build_symtab` put each symbol, for resolving `emitted`.
+    sym_index: SymIndex,
+}
+
+/// Where each symbol landed in `build_symtab`'s output, for resolving
+/// `--emit-relocs` records. Positions index that vector, not the ELF
+/// table, which the writer reorders locals-first.
+#[derive(Default)]
+struct SymIndex {
+    /// Output section index -> its section symbol.
+    sec: HashMap<usize, usize>,
+    /// (object, input symbol index) -> emitted local.
+    local: HashMap<(usize, u32), usize>,
+    /// Global, script-defined and undefined-weak symbols by name.
+    by_name: HashMap<String, usize>,
+}
+
+/// One applied relocation kept for `--emit-relocs`. The referenced
+/// symbol is named by its input slot; the output symtab index is
+/// resolved once the table exists.
+#[derive(Debug, Clone, Copy)]
+struct EmittedReloc {
+    out: usize,
+    addr: u64,
+    rtype: u32,
+    addend: i64,
+    obj: usize,
+    sym: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -749,6 +784,8 @@ impl<'a> LdsLinker<'a> {
             relr_addrs: Vec::new(),
             got_slots: Vec::new(),
             got_map: HashMap::new(),
+            emitted: Vec::new(),
+            sym_index: SymIndex::default(),
         };
         linker.resolve_globals()?;
         linker.synthesize_sections();
@@ -868,12 +905,20 @@ impl<'a> LdsLinker<'a> {
         }
         if self.opts.emit == LdsEmit::Dyn {
             let rela = self.push_synth_section(SYNTH_RELA, SHT_RELA, SHF_ALLOC);
-            let relr = self.push_synth_section(SYNTH_RELR, SHT_RELR, SHF_ALLOC);
+            // `.relr.dyn` exists only where RELR packing was asked for.
+            // Creating it unconditionally leaves an empty section no
+            // script names, which `--orphan-handling=error` rejects.
+            let relr = self
+                .opts
+                .pack_relative_relocs
+                .then(|| self.push_synth_section(SYNTH_RELR, SHT_RELR, SHF_ALLOC));
             let got = self.push_synth_section(SYNTH_GOT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
             let gotplt = self.push_synth_section(SYNTH_GOTPLT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
             let synth = self.synth_obj;
             self.objects[synth].sections[rela].entsize = 24;
-            self.objects[synth].sections[relr].entsize = 8;
+            if let Some(relr) = relr {
+                self.objects[synth].sections[relr].entsize = 8;
+            }
             self.objects[synth].sections[got].entsize = 8;
             // .got: one reserved header slot; GOT slots append per use.
             self.objects[synth].sections[got].size = 8;
@@ -2388,7 +2433,16 @@ impl<'a> LdsLinker<'a> {
             match sec.name.as_str() {
                 SYNTH_RELA => sec.size = (nones + self.dyn_relas.len() as u64) * 24,
                 SYNTH_RELR => sec.size = relr_words.len() as u64 * 8,
-                SYNTH_GOT => sec.size = 8 + self.got_slots.len() as u64 * 8,
+                // The reserved header entry (`_GLOBAL_OFFSET_TABLE_[0]`)
+                // exists only once something needs the GOT; bfd leaves
+                // an unused `.got` empty, which scripts assert on.
+                SYNTH_GOT => {
+                    sec.size = if self.got_slots.is_empty() {
+                        0
+                    } else {
+                        8 + self.got_slots.len() as u64 * 8
+                    }
+                }
                 _ => {}
             }
         }
@@ -2732,7 +2786,9 @@ impl<'a> LdsLinker<'a> {
         let phdrs = self.build_phdrs(&emit_order)?;
 
         // Symbol table.
-        let syms = self.build_symtab(&emit_order, &out_shndx);
+        let mut sym_index = SymIndex::default();
+        let syms = self.build_symtab(&emit_order, &out_shndx, &mut sym_index);
+        self.sym_index = sym_index;
 
         // Assemble the image.
         let image = self.write_image(&emit_order, &shndx_of_out, contents, phdrs, syms, entry)?;
@@ -2818,6 +2874,16 @@ impl<'a> LdsLinker<'a> {
                 let Some(s_plus_a) = target else { continue };
                 if errors.len() > 40 {
                     break;
+                }
+                if self.opts.emit_relocs {
+                    self.emitted.push(EmittedReloc {
+                        out,
+                        addr: p,
+                        rtype: r.rtype,
+                        addend: r.addend,
+                        obj: id.obj,
+                        sym: r.sym,
+                    });
                 }
                 self.apply_one(
                     buf,
@@ -3311,6 +3377,7 @@ impl<'a> LdsLinker<'a> {
                         bytes.extend_from_slice(&wdd.to_le_bytes());
                     }
                 }
+                SYNTH_GOT if self.got_slots.is_empty() => {}
                 SYNTH_GOT => {
                     bytes.extend_from_slice(&0u64.to_le_bytes());
                     let base = self.got_addr_prevpass().unwrap_or(0);
@@ -3486,10 +3553,15 @@ impl<'a> LdsLinker<'a> {
         &self,
         emit_order: &[usize],
         out_shndx: &dyn Fn(usize) -> u16,
+        index: &mut SymIndex,
     ) -> Vec<FinalSym> {
+        let track = self.opts.emit_relocs;
         let mut syms: Vec<FinalSym> = Vec::new();
         // Section symbols.
         for &oi in emit_order {
+            if track {
+                index.sec.insert(oi, syms.len());
+            }
             syms.push(FinalSym {
                 name: String::new(),
                 info: STT_SECTION,
@@ -3509,6 +3581,9 @@ impl<'a> LdsLinker<'a> {
                     continue;
                 }
                 if sym.kind() == STT_FILE {
+                    if track {
+                        index.local.insert((obj_i, sym_i as u32), syms.len());
+                    }
                     syms.push(FinalSym {
                         name: sym.name.clone(),
                         info: sym.info,
@@ -3524,6 +3599,9 @@ impl<'a> LdsLinker<'a> {
                     continue;
                 }
                 if let Some(fs) = self.finalize_sym(obj_i, sym_i, out_shndx) {
+                    if track {
+                        index.local.insert((obj_i, sym_i as u32), syms.len());
+                    }
                     syms.push(fs);
                 }
             }
@@ -3561,6 +3639,9 @@ impl<'a> LdsLinker<'a> {
                     fs.info = (STB_LOCAL << 4) | (fs.info & 0xf);
                     fs.other = vis;
                 }
+                if track {
+                    index.by_name.insert(name.clone(), syms.len());
+                }
                 syms.push(fs);
             }
         }
@@ -3577,6 +3658,9 @@ impl<'a> LdsLinker<'a> {
                 .get(name.as_str())
                 .copied()
                 .or(s.hidden.then_some(STV_HIDDEN));
+            if track {
+                index.by_name.insert(name.clone(), syms.len());
+            }
             syms.push(FinalSym {
                 name: name.clone(),
                 info: (if vis.is_some() { STB_LOCAL } else { STB_GLOBAL } << 4) | STT_NOTYPE,
@@ -3601,6 +3685,9 @@ impl<'a> LdsLinker<'a> {
             }
         }
         for name in weak_undefs {
+            if track {
+                index.by_name.insert(name.clone(), syms.len());
+            }
             syms.push(FinalSym {
                 name: name.clone(),
                 info: (STB_WEAK << 4) | STT_NOTYPE,
@@ -3654,6 +3741,69 @@ impl<'a> LdsLinker<'a> {
                 }
             }
         }
+    }
+
+    /// `--emit-relocs` payloads: the recorded relocations grouped by
+    /// output section, each entry naming the output symtab index of
+    /// the symbol the input relocation referenced.
+    fn emitted_rela_sections(&self, final_of: &[u32]) -> Result<Vec<(usize, Vec<u8>)>, C5Error> {
+        let index = &self.sym_index;
+        if self.emitted.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut by_out: BTreeMap<usize, Vec<&EmittedReloc>> = BTreeMap::new();
+        for r in &self.emitted {
+            by_out.entry(r.out).or_default().push(r);
+        }
+        let mut unresolved: Vec<String> = Vec::new();
+        let mut out: Vec<(usize, Vec<u8>)> = Vec::new();
+        for (oi, mut recs) in by_out {
+            recs.sort_by_key(|r| r.addr);
+            let mut body: Vec<u8> = Vec::with_capacity(recs.len() * 24);
+            for r in recs {
+                let sym = match self.emitted_sym_slot(r, index) {
+                    Some(pos) => final_of[pos],
+                    None => {
+                        if unresolved.len() < 10 {
+                            let s = &self.objects[r.obj].symbols[r.sym as usize];
+                            unresolved.push(format!(
+                                "  {}: --emit-relocs: symbol `{}' referenced at {:#x} is not \
+                                 in the output symbol table",
+                                self.objects[r.obj].source, s.name, r.addr
+                            ));
+                        }
+                        0
+                    }
+                };
+                body.extend_from_slice(&r.addr.to_le_bytes());
+                body.extend_from_slice(&(((sym as u64) << 32) | r.rtype as u64).to_le_bytes());
+                body.extend_from_slice(&r.addend.to_le_bytes());
+            }
+            out.push((oi, body));
+        }
+        if !unresolved.is_empty() {
+            return Err(err(&unresolved.join("\n")));
+        }
+        Ok(out)
+    }
+
+    /// The `build_symtab` slot an emitted relocation's symbol maps to:
+    /// a global by name, a section reference through the output
+    /// section's symbol, otherwise the surviving local.
+    fn emitted_sym_slot(&self, r: &EmittedReloc, index: &SymIndex) -> Option<usize> {
+        let sym = self.objects[r.obj].symbols.get(r.sym as usize)?;
+        if sym.binding() != STB_LOCAL && !sym.name.is_empty() {
+            return index.by_name.get(&sym.name).copied();
+        }
+        if sym.kind() == STT_SECTION {
+            let sec = *self.objects[r.obj].shndx_map.get(&sym.shndx)?;
+            let i = self.insec_index(r.obj, sec);
+            let SecFate::Placed { out } = self.fates[i] else {
+                return None;
+            };
+            return index.sec.get(&out).copied();
+        }
+        index.local.get(&(r.obj, r.sym)).copied()
     }
 
     // -------------------------------------------------------- writer
@@ -3766,6 +3916,7 @@ impl<'a> LdsLinker<'a> {
         let mut strtab: Vec<u8> = alloc::vec![0];
         let mut sym_bytes: Vec<u8> = Vec::new();
         let mut locals = 1u32;
+        let mut final_of: Vec<u32> = alloc::vec![0; syms.len()];
         {
             let push = |s: &FinalSym, strtab: &mut Vec<u8>, sym_bytes: &mut Vec<u8>| {
                 let name_off = if s.name.is_empty() {
@@ -3785,18 +3936,29 @@ impl<'a> LdsLinker<'a> {
             };
             // Null entry.
             sym_bytes.extend_from_slice(&[0u8; 24]);
-            for s in &syms {
+            let mut next = 1u32;
+            for (i, s) in syms.iter().enumerate() {
                 if s.info >> 4 == STB_LOCAL {
                     push(s, &mut strtab, &mut sym_bytes);
+                    final_of[i] = next;
+                    next += 1;
                     locals += 1;
                 }
             }
-            for s in &syms {
+            for (i, s) in syms.iter().enumerate() {
                 if s.info >> 4 != STB_LOCAL {
                     push(s, &mut strtab, &mut sym_bytes);
+                    final_of[i] = next;
+                    next += 1;
                 }
             }
         }
+
+        // `--emit-relocs`: one `.rela.<outsec>` per output section that
+        // took relocations, entries in address order, `r_offset` the
+        // final address and `r_info` naming the output symtab entry the
+        // input relocation referenced.
+        let rela: Vec<(usize, Vec<u8>)> = self.emitted_rela_sections(&final_of)?;
 
         // Section header string table.
         let mut shstrtab: Vec<u8> = alloc::vec![0];
@@ -3821,9 +3983,24 @@ impl<'a> LdsLinker<'a> {
         let n_symtab = intern(".symtab", &mut shstrtab, &mut shname);
         let n_strtab = intern(".strtab", &mut shstrtab, &mut shname);
         let n_shstrtab = intern(".shstrtab", &mut shstrtab, &mut shname);
+        let rela_names: Vec<u32> = rela
+            .iter()
+            .map(|(oi, _)| {
+                let n = format!(".rela{}", self.outs[*oi].name);
+                intern(&n, &mut shstrtab, &mut shname)
+            })
+            .collect();
         let shstr_off = strtab_off + strtab.len() as u64;
-        let shoff = align_up(shstr_off + shstrtab.len() as u64, 8);
-        let shnum = emit_order.len() + 4; // null + sections + symtab + strtab + shstrtab
+        let mut rela_off: Vec<u64> = Vec::with_capacity(rela.len());
+        let mut pos_after = shstr_off + shstrtab.len() as u64;
+        for (_, body) in &rela {
+            let at = align_up(pos_after, 8);
+            rela_off.push(at);
+            pos_after = at + body.len() as u64;
+        }
+        let shoff = align_up(pos_after, 8);
+        // null + sections + symtab + strtab + shstrtab + one per rela
+        let shnum = emit_order.len() + 4 + rela.len();
 
         let mut image: Vec<u8> = alloc::vec![0u8; shoff as usize + shnum * 64];
 
@@ -3847,7 +4024,9 @@ impl<'a> LdsLinker<'a> {
         image[56..58].copy_from_slice(&(phnum as u16).to_le_bytes());
         image[58..60].copy_from_slice(&64u16.to_le_bytes());
         image[60..62].copy_from_slice(&(shnum as u16).to_le_bytes());
-        image[62..64].copy_from_slice(&((shnum as u16) - 1).to_le_bytes());
+        // `.shstrtab` keeps its index whether or not `--emit-relocs`
+        // appended tables after it.
+        image[62..64].copy_from_slice(&((emit_order.len() + 3) as u16).to_le_bytes());
 
         // Program headers.
         for (k, (ph, _)) in phdrs.iter().enumerate() {
@@ -3877,6 +4056,10 @@ impl<'a> LdsLinker<'a> {
             .copy_from_slice(&sym_bytes);
         image[strtab_off as usize..strtab_off as usize + strtab.len()].copy_from_slice(&strtab);
         image[shstr_off as usize..shstr_off as usize + shstrtab.len()].copy_from_slice(&shstrtab);
+        for (k, (_, body)) in rela.iter().enumerate() {
+            let at = rela_off[k] as usize;
+            image[at..at + body.len()].copy_from_slice(body);
+        }
 
         // Section headers.
         let wr_shdr = |idx: usize, sh: Elf64Shdr, image: &mut Vec<u8>| {
@@ -3960,7 +4143,24 @@ impl<'a> LdsLinker<'a> {
             },
             &mut image,
         );
-        let _ = shndx_of_out;
+        for (k, (oi, body)) in rela.iter().enumerate() {
+            wr_shdr(
+                symtab_idx + 3 + k,
+                Elf64Shdr {
+                    sh_name: rela_names[k],
+                    sh_type: SHT_RELA,
+                    sh_flags: 0,
+                    sh_addr: 0,
+                    sh_offset: rela_off[k],
+                    sh_size: body.len() as u64,
+                    sh_link: symtab_idx as u32,
+                    sh_info: shndx_of_out[oi] as u32,
+                    sh_addralign: 8,
+                    sh_entsize: 24,
+                },
+                &mut image,
+            );
+        }
 
         // Build-id digest over the whole image with the digest field
         // zeroed (it already is), then patched in place.
@@ -4587,6 +4787,74 @@ SECTIONS {
         let p0_vaddr = u64::from_le_bytes(res.image[80..88].try_into().unwrap());
         let p0_paddr = u64::from_le_bytes(res.image[88..96].try_into().unwrap());
         assert_eq!(p0_paddr, p0_vaddr - 0x400000);
+    }
+
+    /// `--emit-relocs`: every applied relocation reappears as a
+    /// `.rela.<outsec>` entry whose `r_offset` is the final address,
+    /// whose symbol index names the output symtab entry the input
+    /// relocation referenced, and whose addend is the input's. This is
+    /// what `arch/x86/tools/relocs` reads to build the KASLR table.
+    #[test]
+    fn emit_relocs_carries_applied_relocations_into_the_image() {
+        let script = parse_linker_script(SCRIPT).expect("script parses");
+        let opts = LdsOptions {
+            emit_relocs: true,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, two_objects(), &opts).expect("link succeeds");
+        let secs = readelf_sections(&res.image);
+        let rela_data = secs
+            .iter()
+            .find(|s| s.0 == ".rela.data")
+            .expect(".rela.data emitted");
+        assert_eq!(rela_data.1, SHT_RELA);
+        assert_eq!(rela_data.3 % 24, 0);
+        assert!(secs.iter().any(|s| s.0 == ".rela.text"), "{secs:?}");
+
+        // sh_info names the section the table applies to, sh_link the
+        // symbol table it indexes.
+        let shoff = u64::from_le_bytes(res.image[40..48].try_into().unwrap()) as usize;
+        let shnum = u16::from_le_bytes(res.image[60..62].try_into().unwrap()) as usize;
+        let sh = |i: usize| -> Elf64Shdr { read_struct(&res.image, shoff + i * 64).unwrap() };
+        let data_idx = (1..shnum)
+            .find(|&i| {
+                let h = sh(i);
+                h.sh_type != SHT_RELA && h.sh_addr == secs[i - 1].2 && secs[i - 1].0 == ".data"
+            })
+            .expect(".data section index");
+        let rela_idx = (1..shnum)
+            .find(|&i| sh(i).sh_type == SHT_RELA && sh(i).sh_info as usize == data_idx)
+            .expect(".rela.data header");
+        assert_eq!(sh(sh(rela_idx).sh_link as usize).sh_type, SHT_SYMTAB);
+
+        // The `.data` slot holding &callee: its entry sits at the
+        // slot's address and names `callee`.
+        let syms = image_symbols(&res.image);
+        let data_addr = secs.iter().find(|s| s.0 == ".data").expect(".data").2;
+        let h = sh(rela_idx);
+        let n = (h.sh_size / 24) as usize;
+        let mut found = false;
+        for k in 0..n {
+            let at = h.sh_offset as usize + k * 24;
+            let off = u64::from_le_bytes(res.image[at..at + 8].try_into().unwrap());
+            let info = u64::from_le_bytes(res.image[at + 8..at + 16].try_into().unwrap());
+            if off != data_addr {
+                continue;
+            }
+            assert_eq!(syms[(info >> 32) as usize].0, "callee");
+            found = true;
+        }
+        assert!(found, "entry for the .data slot at {data_addr:#x}");
+
+        // Without the option no table is written.
+        let plain = link_with_script(&script, two_objects(), &LdsOptions::default())
+            .expect("link succeeds");
+        assert!(
+            !readelf_sections(&plain.image)
+                .iter()
+                .any(|s| s.1 == SHT_RELA),
+            "no relocation tables without --emit-relocs"
+        );
     }
 
     #[test]

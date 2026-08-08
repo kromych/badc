@@ -235,6 +235,18 @@ impl LinkerScript {
             _ => None,
         })
     }
+    /// Every `SECTIONS` block in order. A script may hold more than
+    /// one -- the kernel appends an arch block to `scripts/module.lds`
+    /// -- and ld accumulates them.
+    pub fn all_sections(&self) -> impl Iterator<Item = &SectionsItem> {
+        self.commands
+            .iter()
+            .filter_map(|c| match c {
+                Command::Sections(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+    }
     pub fn phdrs(&self) -> Option<&[PhdrDef]> {
         self.commands.iter().find_map(|c| match c {
             Command::Phdrs(v) => Some(v.as_slice()),

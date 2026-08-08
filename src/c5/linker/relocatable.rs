@@ -24,6 +24,9 @@ use hashbrown::{HashMap, HashSet};
 
 use crate::c5::error::C5Error;
 
+use super::lds::{
+    BinOp, DataWidth, Expr, LinkerScript, SectionContent, SectionsItem, SortKind, UnOp,
+};
 use super::object::{Elf64Ehdr, Elf64Shdr, read_struct};
 
 pub const EM_X86_64: u16 = 62;
@@ -537,204 +540,110 @@ pub fn glob_match(pat: &str, name: &str) -> bool {
     m(&p, &n)
 }
 
-/// Tokenize and parse the script subset. Errors name the offending
-/// token so an unsupported construct fails loudly instead of silently
-/// mislinking.
-pub fn parse_module_script(text: &str) -> Result<LdScript, C5Error> {
-    let mut toks: Vec<String> = Vec::new();
-    let mut it = text.chars().peekable();
-    while let Some(c) = it.next() {
-        match c {
-            c if c.is_whitespace() => {}
-            '/' if it.peek() == Some(&'*') => {
-                it.next();
-                let mut prev = ' ';
-                for c in it.by_ref() {
-                    if prev == '*' && c == '/' {
-                        break;
+/// Lower a parsed linker script to the relocatable link's model.
+///
+/// An ET_REL output has no addresses, so only the statements that
+/// shape section membership survive: `/DISCARD/` patterns, the input
+/// specs each output section gathers, `sym = .` definitions, `BYTE`
+/// literals, and `. = ALIGN(n)` inside a section body, which sets the
+/// offset of what follows. Everything an address would be needed for
+/// -- output-section addresses, `AT`, `:phdr`, top-level assignments,
+/// `ASSERT` -- is dropped, as GNU ld drops it under `-r`.
+pub fn lower_script(script: &LinkerScript) -> LdScript {
+    let mut out = LdScript::default();
+    for item in script.all_sections() {
+        let SectionsItem::Output(os) = item else {
+            continue;
+        };
+        if os.name == "/DISCARD/" {
+            for c in &os.contents {
+                if let SectionContent::Input(spec) = c {
+                    for pat in &spec.patterns {
+                        out.discard.push(pat.pattern.clone());
                     }
-                    prev = c;
                 }
             }
-            '{' | '}' | '(' | ')' | ':' | ';' | '=' => toks.push(c.to_string()),
-            _ => {
-                let mut s = String::new();
-                s.push(c);
-                while let Some(&d) = it.peek() {
-                    if d.is_whitespace() || "{}():;=".contains(d) {
-                        break;
-                    }
-                    s.push(d);
-                    it.next();
-                }
-                toks.push(s);
-            }
+            continue;
         }
-    }
-    let mut p = 0usize;
-    let mut script = LdScript::default();
-    let tok = |p: usize| -> &str { toks.get(p).map(String::as_str).unwrap_or("") };
-    let expect = |p: &mut usize, want: &str| -> Result<(), C5Error> {
-        if tok(*p) != want {
-            return Err(err(&format!(
-                "linker script: expected `{want}`, found `{}`",
-                tok(*p)
-            )));
-        }
-        *p += 1;
-        Ok(())
-    };
-    // A script may hold several SECTIONS blocks (the kernel appends
-    // an arch part to scripts/module.lds); rules accumulate.
-    while tok(p) == "SECTIONS" {
-        p += 1;
-        expect(&mut p, "{")?;
-        while tok(p) != "}" {
-            if tok(p).is_empty() {
-                return Err(err("linker script: unterminated SECTIONS block"));
-            }
-            let name = tok(p).to_string();
-            p += 1;
-            // Optional address expression (module.lds uses a literal 0).
-            if tok(p) != ":" {
-                if tok(p) != "0" {
-                    return Err(err(&format!(
-                        "linker script: unsupported output-section address `{}`",
-                        tok(p)
-                    )));
+        let mut stmts: Vec<SecStmt> = Vec::new();
+        for c in &os.contents {
+            match c {
+                SectionContent::Input(spec) if !spec.patterns.is_empty() => {
+                    stmts.push(SecStmt::Gather(GatherSpec {
+                        patterns: spec.patterns.iter().map(|p| p.pattern.clone()).collect(),
+                        sort: spec.file_sort != SortKind::None
+                            || spec.patterns.iter().any(|p| p.sort != SortKind::None),
+                    }));
                 }
-                p += 1;
-            }
-            expect(&mut p, ":")?;
-            let mut align = 1u64;
-            if tok(p) == "ALIGN" {
-                p += 1;
-                expect(&mut p, "(")?;
-                align = tok(p)
-                    .parse()
-                    .map_err(|_| err("linker script: ALIGN wants an integer"))?;
-                p += 1;
-                expect(&mut p, ")")?;
-            }
-            expect(&mut p, "{")?;
-            let mut stmts: Vec<SecStmt> = Vec::new();
-            while tok(p) != "}" {
-                match tok(p) {
-                    "" => return Err(err("linker script: unterminated output section")),
-                    "." => {
-                        // `. = ALIGN(n);`
-                        p += 1;
-                        expect(&mut p, "=")?;
-                        expect(&mut p, "ALIGN")?;
-                        expect(&mut p, "(")?;
-                        let n: u64 = tok(p)
-                            .parse()
-                            .map_err(|_| err("linker script: ALIGN wants an integer"))?;
-                        p += 1;
-                        expect(&mut p, ")")?;
-                        expect(&mut p, ";")?;
+                SectionContent::Assign(a) if a.symbol == "." => {
+                    if let Some(n) = const_align(&a.value) {
                         stmts.push(SecStmt::AlignDot(n));
                     }
-                    "KEEP" => {
-                        // KEEP only affects --gc-sections, inert here.
-                        p += 1;
-                        expect(&mut p, "(")?;
-                        stmts.push(parse_gather(&toks, &mut p)?);
-                        expect(&mut p, ")")?;
-                    }
-                    "BYTE" => {
-                        p += 1;
-                        expect(&mut p, "(")?;
-                        let v: u8 = tok(p)
-                            .parse()
-                            .map_err(|_| err("linker script: BYTE wants an integer"))?;
-                        p += 1;
-                        expect(&mut p, ")")?;
-                        stmts.push(SecStmt::Byte(v));
-                    }
-                    "*" => stmts.push(parse_gather(&toks, &mut p)?),
-                    t => {
-                        let sym = t.to_string();
-                        p += 1;
-                        expect(&mut p, "=")?;
-                        if tok(p) != "." {
-                            return Err(err(&format!(
-                                "linker script: unsupported assignment to `{sym}`"
-                            )));
-                        }
-                        p += 1;
-                        expect(&mut p, ";")?;
-                        stmts.push(SecStmt::DefineSym(sym));
-                    }
                 }
-            }
-            p += 1; // `}`
-            if name == "/DISCARD/" {
-                for s in stmts {
-                    match s {
-                        SecStmt::Gather(g) => script.discard.extend(g.patterns),
-                        _ => {
-                            return Err(err("linker script: /DISCARD/ takes input specs only"));
-                        }
-                    }
+                SectionContent::Assign(a) if a.value == Expr::Symbol(".".to_string()) => {
+                    stmts.push(SecStmt::DefineSym(a.symbol.clone()));
                 }
-            } else {
-                script.outsecs.push(OutSecRule { name, align, stmts });
+                SectionContent::Data(DataWidth::Byte, Expr::Number(v)) => {
+                    stmts.push(SecStmt::Byte(*v as u8));
+                }
+                _ => {}
             }
         }
-        p += 1; // block `}`
+        out.outsecs.push(OutSecRule {
+            name: os.name.clone(),
+            align: os.align.as_ref().and_then(const_expr).unwrap_or(0),
+            stmts,
+        });
     }
-    if !tok(p).is_empty() {
-        return Err(err(&format!(
-            "linker script: unsupported construct `{}`",
-            tok(p)
-        )));
-    }
-    Ok(script)
+    out
 }
 
-/// Parse `*( pattern... )` where each pattern may be `SORT(glob)`.
-/// Cursor sits on the `*`.
-fn parse_gather(toks: &[String], p: &mut usize) -> Result<SecStmt, C5Error> {
-    let tok = |p: usize| -> &str { toks.get(p).map(String::as_str).unwrap_or("") };
-    if tok(*p) != "*" {
-        return Err(err(&format!(
-            "linker script: expected `*(...)`, found `{}`",
-            tok(*p)
-        )));
+/// The alignment of `. = ALIGN(n)` when `n` is a constant.
+fn const_align(e: &Expr) -> Option<u64> {
+    match e {
+        Expr::AlignDot(inner) => const_expr(inner),
+        _ => None,
     }
-    *p += 1;
-    if tok(*p) != "(" {
-        return Err(err("linker script: expected `(` after `*`"));
-    }
-    *p += 1;
-    let mut patterns = Vec::new();
-    let mut sort = false;
-    while tok(*p) != ")" {
-        match tok(*p) {
-            "" => return Err(err("linker script: unterminated input spec")),
-            "SORT" | "SORT_BY_NAME" => {
-                sort = true;
-                *p += 1;
-                if tok(*p) != "(" {
-                    return Err(err("linker script: expected `(` after SORT"));
-                }
-                *p += 1;
-                patterns.push(tok(*p).to_string());
-                *p += 1;
-                if tok(*p) != ")" {
-                    return Err(err("linker script: SORT takes one pattern"));
-                }
-                *p += 1;
-            }
-            t => {
-                patterns.push(t.to_string());
-                *p += 1;
+}
+
+/// Evaluate an expression built only from literals and operators.
+/// Anything naming a symbol or the location counter has no value in a
+/// relocatable link and yields `None`.
+fn const_expr(e: &Expr) -> Option<u64> {
+    Some(match e {
+        Expr::Number(n) => *n,
+        Expr::Unary(op, a) => {
+            let a = const_expr(a)?;
+            match op {
+                UnOp::Neg => 0u64.wrapping_sub(a),
+                UnOp::Not => u64::from(a == 0),
+                UnOp::BitNot => !a,
             }
         }
-    }
-    *p += 1; // `)`
-    Ok(SecStmt::Gather(GatherSpec { patterns, sort }))
+        Expr::Binary(op, a, b) => {
+            let (a, b) = (const_expr(a)?, const_expr(b)?);
+            match op {
+                BinOp::Add => a.wrapping_add(b),
+                BinOp::Sub => a.wrapping_sub(b),
+                BinOp::Mul => a.wrapping_mul(b),
+                BinOp::Div => a.checked_div(b)?,
+                BinOp::Rem => a.checked_rem(b)?,
+                BinOp::Shl => a.checked_shl(u32::try_from(b).ok()?)?,
+                BinOp::Shr => a.checked_shr(u32::try_from(b).ok()?)?,
+                BinOp::BitAnd => a & b,
+                BinOp::BitOr => a | b,
+                BinOp::BitXor => a ^ b,
+                _ => return None,
+            }
+        }
+        _ => return None,
+    })
+}
+
+/// Parse a linker script for a relocatable link. The grammar is the
+/// full one; [`lower_script`] keeps what an ET_REL output can honor.
+pub fn parse_module_script(text: &str) -> Result<LdScript, C5Error> {
+    Ok(lower_script(&super::lds::parse_linker_script(text)?))
 }
 
 // ---- Merge ----------------------------------------------------------

@@ -1459,6 +1459,7 @@ fn run() {
             strip_debug: ld_strip_debug,
             discard_locals,
             discard_none,
+            emit_relocs,
             quiet,
         };
         run_script_link(opts);
@@ -3440,6 +3441,7 @@ struct ScriptLinkCli {
     strip_debug: bool,
     discard_locals: bool,
     discard_none: bool,
+    emit_relocs: bool,
     quiet: bool,
 }
 
@@ -3607,6 +3609,7 @@ fn run_script_link(cli: ScriptLinkCli) {
         discard_none: cli.discard_none,
         pack_relative_relocs: cli.pack_relative_relocs,
         apply_dynamic_relocs: cli.apply_dynamic_relocs,
+        emit_relocs: cli.emit_relocs,
         emit_warnings: !cli.quiet,
     };
     let res = match badc::link_with_script(&script, inputs, &opts) {

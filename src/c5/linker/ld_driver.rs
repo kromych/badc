@@ -2,10 +2,11 @@
 //! (argv[0] basename `ld` / `ld.badc` / `*-ld`) or with a leading
 //! `--ld`, so a build system can set `LD=badc` unchanged.
 //!
-//! Supported today: relocatable links (`-r`), including the option
-//! surface a kernel build passes. Final links dispatch to the
-//! script-driven engine. TODO: route final links here once the
-//! SECTIONS/PHDRS layout engine lands.
+//! Two link kinds share one option surface and one input resolver:
+//! `-r` merges to ET_REL ([`super::relocatable`]), and a final link
+//! runs the script-driven layout engine ([`super::lds_link`]). A
+//! final link requires an explicit `-T`/`--script`; there is no
+//! built-in default script.
 
 #![cfg(feature = "std")]
 
@@ -16,6 +17,8 @@ use hashbrown::HashSet;
 use std::path::{Path, PathBuf};
 
 use super::archive;
+use super::lds::parse_linker_script;
+use super::lds_link::{LdsEmit, LdsObject, LdsOptions, OrphanHandling, parse_lds_object};
 use super::relocatable::{
     DiscardLocals, EM_AARCH64, EM_X86_64, EtRel, LdScript, RelinkOptions, link_relocatable,
     parse_et_rel, parse_module_script,
@@ -38,6 +41,10 @@ enum BuildId {
     Sha1,
 }
 
+/// Binutils compatibility level reported by `--version`. Raise it only
+/// alongside the behaviour a consumer gates on that version.
+const LD_COMPAT_VERSION: &str = "2.30";
+
 struct LdArgs {
     relocatable: bool,
     output: PathBuf,
@@ -50,15 +57,32 @@ struct LdArgs {
     emit_relocs: bool,
     no_undefined: bool,
     discard_locals: DiscardLocals,
+    /// `--discard-none`: keep every local symbol.
+    discard_none: bool,
     strip_debug: bool,
     orphan_handling: Option<String>,
     /// `-z noexecstack` / `-z execstack`.
     gnu_stack: Option<bool>,
     print_version: bool,
+    // Final-link options; ignored under `-r`, which has no layout.
+    /// `-shared` / `-pie`: ET_DYN output.
+    shared: bool,
+    entry: Option<String>,
+    map_path: Option<PathBuf>,
+    print_map: bool,
+    max_page_size: Option<u64>,
+    pack_relative_relocs: bool,
+    apply_dynamic_relocs: bool,
+    /// `-u SYM`: symbols forced undefined before the archive scan.
+    undefined: Vec<String>,
 }
 
 fn ld_err(msg: impl core::fmt::Display) -> i32 {
-    eprintln!("badc-ld: error: {msg}");
+    let text = alloc::string::ToString::to_string(&msg);
+    eprintln!(
+        "badc-ld: error: {}",
+        text.strip_prefix("error: ").unwrap_or(&text)
+    );
     1
 }
 
@@ -90,10 +114,19 @@ pub fn run_ld(args: &[String]) -> i32 {
         emit_relocs: false,
         no_undefined: false,
         discard_locals: DiscardLocals::None,
+        discard_none: false,
         strip_debug: false,
         orphan_handling: None,
         gnu_stack: None,
         print_version: false,
+        shared: false,
+        entry: None,
+        map_path: None,
+        print_map: false,
+        max_page_size: None,
+        pack_relative_relocs: false,
+        apply_dynamic_relocs: true,
+        undefined: Vec::new(),
     };
     let mut it = args.iter().map(String::as_str);
     let next_of = |it: &mut dyn Iterator<Item = &str>, flag: &str| -> Result<String, i32> {
@@ -145,6 +178,74 @@ pub fn run_ld(args: &[String]) -> i32 {
             }
             "--fatal-warnings" => a.fatal_warnings = true,
             "--no-fatal-warnings" => a.fatal_warnings = false,
+            "-shared" | "-pie" | "--pic-executable" => a.shared = true,
+            "-e" | "--entry" => match next_of(&mut it, "-e") {
+                Ok(s) => a.entry = Some(s),
+                Err(c) => return c,
+            },
+            s if s.starts_with("--entry=") => a.entry = Some(s["--entry=".len()..].to_string()),
+            "-u" | "--undefined" => match next_of(&mut it, "-u") {
+                Ok(s) => a.undefined.push(s),
+                Err(c) => return c,
+            },
+            s if s.starts_with("--undefined=") => {
+                a.undefined.push(s["--undefined=".len()..].to_string());
+            }
+            s if s.starts_with("-u") && s.len() > 2 => a.undefined.push(s[2..].to_string()),
+            "-M" | "--print-map" => a.print_map = true,
+            "-Map" => match next_of(&mut it, "-Map") {
+                Ok(p) => a.map_path = Some(PathBuf::from(p)),
+                Err(c) => return c,
+            },
+            s if s.starts_with("-Map=") => a.map_path = Some(PathBuf::from(&s["-Map=".len()..])),
+            "--pack-dyn-relocs=relr" => a.pack_relative_relocs = true,
+            "--pack-dyn-relocs=none" => a.pack_relative_relocs = false,
+            "--apply-dynamic-relocs" => a.apply_dynamic_relocs = true,
+            "--no-apply-dynamic-relocs" => a.apply_dynamic_relocs = false,
+            // Accepted with no effect on the emitted image: badc emits
+            // no interpreter, no ld-generated unwind tables, and
+            // resolves every branch in range without veneers.
+            "--no-dynamic-linker"
+            | "-Bsymbolic"
+            | "-Bsymbolic-functions"
+            | "--pic-veneer"
+            | "--no-ld-generated-unwind-info" => {}
+            // Dynamic-linking metadata. The script-driven engine emits
+            // relocation tables (`.rela.dyn`, `.relr.dyn`) but no
+            // `.dynsym`/`.dynstr`/`.hash`/`.dynamic`, so an image whose
+            // symbols a dynamic loader must find cannot be built here.
+            // Rejected rather than ignored: silently dropping these
+            // yields an object that links and is unusable.
+            // TODO: emit dynamic-linking metadata under the script
+            // engine and accept these.
+            "-soname" | "-h" | "--dynamic-linker" => {
+                let _ = next_of(&mut it, arg);
+                return ld_err(format!(
+                    "`{arg}` needs dynamic-linking metadata (.dynsym/.dynamic), \
+                     which the script-driven link does not emit"
+                ));
+            }
+            s if s.starts_with("-soname=")
+                || s.starts_with("--soname=")
+                || s.starts_with("--dynamic-linker=")
+                || s.starts_with("--hash-style=") =>
+            {
+                let flag = s.split_once('=').map(|(f, _)| f).unwrap_or(s);
+                return ld_err(format!(
+                    "`{flag}` needs dynamic-linking metadata (.dynsym/.dynamic), \
+                     which the script-driven link does not emit"
+                ));
+            }
+            "--fix-cortex-a53-843419" => {
+                // Erratum veneer generation is not implemented; the
+                // sequences the workaround rewrites must be absent.
+                // TODO: scan for adrp-at-0xff8/0xffc patterns and
+                // materialise veneers.
+                eprintln!(
+                    "badc-ld: note: --fix-cortex-a53-843419 accepted; erratum veneers are \
+                     not generated"
+                );
+            }
             // Accepted with GNU semantics for ET_REL output: these
             // keywords shape final images only and change nothing
             // about a relocatable link.
@@ -153,6 +254,16 @@ pub fn run_ld(args: &[String]) -> i32 {
                     match kw.as_str() {
                         "noexecstack" => a.gnu_stack = Some(false),
                         "execstack" => a.gnu_stack = Some(true),
+                        "pack-relative-relocs" => a.pack_relative_relocs = true,
+                        "nopack-relative-relocs" => a.pack_relative_relocs = false,
+                        s if s.starts_with("max-page-size=") => {
+                            match parse_page_size(&s["max-page-size=".len()..]) {
+                                Some(n) => a.max_page_size = Some(n),
+                                None => {
+                                    return ld_err("-z max-page-size requires a power of two");
+                                }
+                            }
+                        }
                         _ => {}
                     }
                     if let Some(code) = check_z_keyword(&kw) {
@@ -173,9 +284,18 @@ pub fn run_ld(args: &[String]) -> i32 {
             }
             "--emit-relocs" | "-q" => a.emit_relocs = true,
             "--no-undefined" => a.no_undefined = true,
-            "-X" | "--discard-locals" => a.discard_locals = DiscardLocals::Temporaries,
-            "-x" | "--discard-all" => a.discard_locals = DiscardLocals::All,
-            "--discard-none" => a.discard_locals = DiscardLocals::None,
+            "-X" | "--discard-locals" => {
+                a.discard_locals = DiscardLocals::Temporaries;
+                a.discard_none = false;
+            }
+            "-x" | "--discard-all" => {
+                a.discard_locals = DiscardLocals::All;
+                a.discard_none = false;
+            }
+            "--discard-none" => {
+                a.discard_locals = DiscardLocals::None;
+                a.discard_none = true;
+            }
             "--strip-debug" | "-S" => a.strip_debug = true,
             "-EL" => {} // little-endian, the only byte order supported
             "-EB" => return ld_err("big-endian output is not supported"),
@@ -208,17 +328,23 @@ pub fn run_ld(args: &[String]) -> i32 {
         }
     }
     if a.print_version {
-        // One complete identification on the first line, as GNU ld
-        // prints ("GNU ld (GNU Binutils) 2.43"); the "GNU" token
-        // keeps ld-version probes in build systems working, while
-        // the feature surface is what run_ld implements. The git
-        // tail of BUILD_INFO follows on its own lines.
+        // GNU ld's identification shape, `GNU ld (<package>) <version>`,
+        // with badc named as the package: build systems parse the
+        // first and last fields (binutils flavour, version) and show
+        // the middle to people, so this reports what runs without
+        // claiming to be binutils. The version is the compatibility
+        // level of the implemented option surface, not a binutils
+        // release badc contains; it is deliberately the oldest that
+        // still parses, so nothing gated on a newer linker is claimed
+        // -- feature questions are answered by rejecting options
+        // `run_ld` does not implement. The git tail of BUILD_INFO
+        // follows on its own lines.
         let git_tail = crate::BUILD_INFO
             .split_once('\n')
             .map(|(_, tail)| tail)
             .unwrap_or("");
         println!(
-            "badc ld (GNU compatible) {}\n{}",
+            "GNU ld (badc {}) {LD_COMPAT_VERSION}\n{}",
             env!("CARGO_PKG_VERSION"),
             git_tail
         );
@@ -233,17 +359,10 @@ pub fn run_ld(args: &[String]) -> i32 {
     };
 
     if !a.relocatable {
-        // TODO: dispatch final links to the script-driven layout
-        // engine once it lands.
-        return ld_err(
-            "only relocatable links (-r) are supported in ld mode; \
-             final links are handled by the badc driver",
-        );
+        return run_final_link(&a, machine);
     }
-    if a.emit_relocs {
-        // GNU ld ignores --emit-relocs under -r (every relocation
-        // survives a relocatable link anyway).
-    }
+    // GNU ld ignores --emit-relocs under -r: every relocation
+    // survives a relocatable link anyway.
 
     let mut script = match &a.script {
         None => None,
@@ -259,7 +378,7 @@ pub fn run_ld(args: &[String]) -> i32 {
         }
     };
 
-    let objs = match collect_inputs(&a, machine) {
+    let objs: Vec<EtRel> = match collect_inputs(&a, machine) {
         Ok(o) => o,
         Err(code) => return code,
     };
@@ -330,36 +449,94 @@ fn check_z_keyword(kw: &str) -> Option<i32> {
     }
 }
 
+/// What the input resolver needs from a parsed object. Archive member
+/// selection is the same walk for both link kinds, so the two object
+/// representations differ only in these four operations.
+trait InputObject: Sized {
+    fn parse(source: &str, bytes: Vec<u8>) -> Result<Self, String>;
+    fn machine(&self) -> u16;
+    fn source(&self) -> &str;
+    /// Global (or weak) names this object defines.
+    fn defined(&self) -> Vec<&str>;
+    /// Names it references strongly; weak references never pull a
+    /// member.
+    fn strong_undef(&self) -> Vec<&str>;
+}
+
+impl InputObject for EtRel {
+    fn parse(source: &str, bytes: Vec<u8>) -> Result<Self, String> {
+        parse_et_rel(&bytes, source).map_err(|e| format!("{e}"))
+    }
+    fn machine(&self) -> u16 {
+        self.machine
+    }
+    fn source(&self) -> &str {
+        &self.source
+    }
+    fn defined(&self) -> Vec<&str> {
+        EtRel::defined_globals(self).collect()
+    }
+    fn strong_undef(&self) -> Vec<&str> {
+        EtRel::strong_undefs(self).collect()
+    }
+}
+
+impl InputObject for LdsObject {
+    fn parse(source: &str, bytes: Vec<u8>) -> Result<Self, String> {
+        parse_lds_object(source, bytes).map_err(|e| format!("{e}"))
+    }
+    fn machine(&self) -> u16 {
+        self.machine
+    }
+    fn source(&self) -> &str {
+        &self.source
+    }
+    fn defined(&self) -> Vec<&str> {
+        self.symbols
+            .iter()
+            .filter(|s| (s.info >> 4) != 0 && s.shndx != 0 && !s.name.is_empty())
+            .map(|s| s.name.as_str())
+            .collect()
+    }
+    fn strong_undef(&self) -> Vec<&str> {
+        self.symbols
+            .iter()
+            .filter(|s| (s.info >> 4) == 1 && s.shndx == 0 && !s.name.is_empty())
+            .map(|s| s.name.as_str())
+            .collect()
+    }
+}
+
 /// Walk the positional inputs, expanding archives. `--whole-archive`
 /// spans include every member; other archives contribute members that
 /// resolve undefined references, rescanning to a fixpoint across a
 /// `--start-group` span (a lone archive rescans itself the same way).
-fn collect_inputs(a: &LdArgs, machine: Option<u16>) -> Result<Vec<EtRel>, i32> {
+fn collect_inputs<T: InputObject>(a: &LdArgs, machine: Option<u16>) -> Result<Vec<T>, i32> {
     struct PendingArchive {
         members: Vec<(String, Vec<u8>)>,
         taken: Vec<bool>,
     }
-    let mut objs: Vec<EtRel> = Vec::new();
-    let mut undef: HashSet<String> = HashSet::new();
+    let mut objs: Vec<T> = Vec::new();
+    // `-u SYM` forces a reference before any input is read, so a
+    // member defining it is pulled even though nothing else names it.
+    let mut undef: HashSet<String> = a.undefined.iter().cloned().collect();
     let mut defined: HashSet<String> = HashSet::new();
     let mut whole = false;
     let mut group: Option<Vec<PendingArchive>> = None;
-    let note = |objs: &mut Vec<EtRel>,
-                undef: &mut HashSet<String>,
-                defined: &mut HashSet<String>,
-                o: EtRel| {
-        for d in o.defined_globals() {
-            defined.insert(d.to_string());
-            undef.remove(d);
-        }
-        for u in o.strong_undefs() {
-            if !defined.contains(u) {
-                undef.insert(u.to_string());
+    let note =
+        |objs: &mut Vec<T>, undef: &mut HashSet<String>, defined: &mut HashSet<String>, o: T| {
+            for d in o.defined() {
+                defined.insert(d.to_string());
+                undef.remove(d);
             }
-        }
-        objs.push(o);
-    };
-    let resolve_span = |objs: &mut Vec<EtRel>,
+            for u in o.strong_undef() {
+                if !defined.contains(u) {
+                    undef.insert(u.to_string());
+                }
+            }
+            objs.push(o);
+        };
+    let resolve_span = |objs: &mut Vec<T>,
                         undef: &mut HashSet<String>,
                         defined: &mut HashSet<String>,
                         span: &mut [PendingArchive]|
@@ -367,15 +544,16 @@ fn collect_inputs(a: &LdArgs, machine: Option<u16>) -> Result<Vec<EtRel>, i32> {
         loop {
             let mut changed = false;
             for ar in span.iter_mut() {
-                for (i, (name, bytes)) in ar.members.iter().enumerate() {
+                for i in 0..ar.members.len() {
                     if ar.taken[i] {
                         continue;
                     }
-                    let o = match parse_et_rel(bytes, name) {
+                    let (name, bytes) = &ar.members[i];
+                    let o = match T::parse(name, bytes.clone()) {
                         Ok(o) => o,
                         Err(e) => return Err(ld_err(e)),
                     };
-                    if o.defined_globals().any(|d| undef.contains(d)) {
+                    if o.defined().iter().any(|d| undef.contains(*d)) {
                         ar.taken[i] = true;
                         note(objs, undef, defined, o);
                         changed = true;
@@ -448,7 +626,7 @@ fn collect_inputs(a: &LdArgs, machine: Option<u16>) -> Result<Vec<EtRel>, i32> {
             if whole {
                 for (name, bytes) in members {
                     let label = format!("{}({})", path.display(), name);
-                    match parse_et_rel(&bytes, &label) {
+                    match T::parse(&label, bytes) {
                         Ok(o) => note(&mut objs, &mut undef, &mut defined, o),
                         Err(e) => return Err(ld_err(e)),
                     }
@@ -471,7 +649,7 @@ fn collect_inputs(a: &LdArgs, machine: Option<u16>) -> Result<Vec<EtRel>, i32> {
         } else {
             let bytes = std::fs::read(path)
                 .map_err(|e| ld_err(format!("cannot read `{}`: {e}", path.display())))?;
-            match parse_et_rel(&bytes, &path.display().to_string()) {
+            match T::parse(&path.display().to_string(), bytes) {
                 Ok(o) => note(&mut objs, &mut undef, &mut defined, o),
                 Err(e) => return Err(ld_err(e)),
             }
@@ -482,16 +660,120 @@ fn collect_inputs(a: &LdArgs, machine: Option<u16>) -> Result<Vec<EtRel>, i32> {
     }
     if let Some(m) = machine {
         for o in &objs {
-            if o.machine != m {
+            if o.machine() != m {
                 return Err(ld_err(format!(
                     "{}: machine {} is incompatible with the requested emulation",
-                    o.source, o.machine
+                    o.source(),
+                    o.machine()
                 )));
             }
         }
     }
     Ok(objs)
 }
+
+/// `-z max-page-size=` / GNU ld's size syntax: decimal or `0x` hex,
+/// power of two.
+fn parse_page_size(body: &str) -> Option<u64> {
+    let n = match body.strip_prefix("0x").or_else(|| body.strip_prefix("0X")) {
+        Some(hex) => u64::from_str_radix(hex, 16).ok()?,
+        None => body.parse::<u64>().ok()?,
+    };
+    n.is_power_of_two().then_some(n)
+}
+
+/// Final (non-`-r`) link: lay the inputs out under the script and
+/// write the image. GNU ld falls back on a built-in default script
+/// when none is given; badc has none, so the script is required.
+fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
+    let Some(spath) = &a.script else {
+        return ld_err(
+            "a final link needs an explicit linker script (-T/--script); \
+             badc has no built-in default script",
+        );
+    };
+    let text = match std::fs::read_to_string(spath) {
+        Ok(t) => t,
+        Err(e) => return ld_err(format!("cannot read script `{}`: {e}", spath.display())),
+    };
+    let script = match parse_linker_script(&text) {
+        Ok(s) => s,
+        Err(e) => return ld_err(format!("{e}")),
+    };
+    let objs: Vec<LdsObject> = match collect_inputs(a, machine) {
+        Ok(o) => o,
+        Err(code) => return code,
+    };
+    if objs.is_empty() {
+        return ld_err("no input files");
+    }
+    let m = machine.unwrap_or(objs[0].machine);
+    let opts = LdsOptions {
+        emit: if a.shared {
+            LdsEmit::Dyn
+        } else {
+            LdsEmit::Exec
+        },
+        entry_override: a.entry.clone(),
+        // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64.
+        max_page_size: a
+            .max_page_size
+            .unwrap_or(if m == EM_AARCH64 { 0x10000 } else { 0x200000 }),
+        orphan_handling: match a.orphan_handling.as_deref() {
+            Some("warn") => OrphanHandling::Warn,
+            Some("error") => OrphanHandling::Error,
+            Some("discard") => OrphanHandling::Discard,
+            _ => OrphanHandling::Place,
+        },
+        build_id_sha1: a.build_id == BuildId::Sha1,
+        strip_debug: a.strip_debug,
+        discard_locals: a.discard_locals != DiscardLocals::None,
+        discard_none: a.discard_none,
+        pack_relative_relocs: a.pack_relative_relocs,
+        apply_dynamic_relocs: a.apply_dynamic_relocs,
+        emit_relocs: a.emit_relocs,
+        emit_warnings: true,
+    };
+    let res = match super::lds_link::link_with_script(&script, objs, &opts) {
+        Ok(r) => r,
+        Err(e) => return ld_err(format!("{e}")),
+    };
+    for w in &res.warnings {
+        eprintln!("badc-ld: warning: {w}");
+    }
+    if a.fatal_warnings && !res.warnings.is_empty() {
+        return ld_err(format!(
+            "{} warning(s) treated as errors (--fatal-warnings)",
+            res.warnings.len()
+        ));
+    }
+    if let Err(e) = std::fs::write(&a.output, &res.image) {
+        return ld_err(format!("cannot write `{}`: {e}", a.output.display()));
+    }
+    set_executable(&a.output);
+    if let Some(p) = &a.map_path
+        && let Err(e) = std::fs::write(p, &res.map)
+    {
+        return ld_err(format!("cannot write map file `{}`: {e}", p.display()));
+    }
+    if a.print_map {
+        print!("{}", res.map);
+    }
+    0
+}
+
+#[cfg(unix)]
+fn set_executable(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(md) = std::fs::metadata(path) {
+        let mut perms = md.permissions();
+        perms.set_mode(perms.mode() | 0o111);
+        let _ = std::fs::set_permissions(path, perms);
+    }
+}
+
+#[cfg(not(unix))]
+fn set_executable(_path: &Path) {}
 
 /// Sections no script rule names. `--orphan-handling` reporting and
 /// `discard` both derive from this list.

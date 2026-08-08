@@ -12,8 +12,8 @@ Prerequisite: a completed reference build in the kernel tree (``setup.py
 to a scratch directory.
 
 Flag rewriting keeps the preprocessor surface (-D/-U/-I/-iquote/-include,
--isystem folded into -I) and drops everything else: warnings, optimization,
-debug, and the gcc code-model/hardening set (-mcmodel=kernel, -mno-red-zone,
+-isystem folded into -I) and the code model (-mcmodel=), and drops everything
+else: warnings, optimization, debug, and the gcc hardening set (-mno-red-zone,
 -fno-strict-aliasing, -fstack-protector*, -pg, ...) have no badc spelling.
 badc runs with --gnu -q -c --target=<triple>. Kbuild issues relative paths,
 so badc runs with the kernel tree as its working directory.
@@ -157,6 +157,12 @@ def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
             i += 1
         elif a == "-mstrict-align":
             out.append(a)  # MMU-off units need naturally-aligned accesses
+            i += 1
+        elif a.startswith("-mcmodel="):
+            # Code model: under `kernel` external addresses become the
+            # sign-extended 32-bit absolutes the module loader applies,
+            # not GOT loads. badc validates the value.
+            out.append(a)
             i += 1
         elif a.startswith("-O"):
             opt = a  # last one wins, as with gcc

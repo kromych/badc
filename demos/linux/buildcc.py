@@ -29,9 +29,10 @@ import os
 import subprocess
 import sys
 
-# Flag policy identical to sweep.py: keep the preprocessor surface, fold
-# -isystem/-idirafter into -I, honor the recorded optimization level, drop
-# the rest (warnings, -g/-std, the gcc code-model set).
+# Flag policy identical to sweep.py: keep the preprocessor surface and the
+# code model (-mcmodel=), fold -isystem/-idirafter into -I, honor the
+# recorded optimization level, drop the rest (warnings, -g/-std, the gcc
+# hardening spellings badc has no equivalent for).
 KEEP_ARG = {"-I", "-include", "-iquote"}
 FOLD_TO_I = {"-isystem", "-idirafter"}
 DROP_ARG = {"-o", "-MF", "-MQ", "-MT", "--param", "-Xassembler", "-Xlinker"}
@@ -118,6 +119,12 @@ def rewrite(argv: list[str]) -> list[str]:
             # with it trapped (no CR4.OSFXSR on x86_64, CPACR_EL1.FPEN on
             # aarch64) and callers do not maintain the System V `al`
             # convention. badc's variadic prologue honors both spellings.
+            out.append(a)
+            i += 1
+        elif a.startswith("-mcmodel="):
+            # Code model: under `kernel` external addresses become the
+            # sign-extended 32-bit absolutes the module loader applies,
+            # not GOT loads. badc validates the value.
             out.append(a)
             i += 1
         elif a in ("-fPIC", "-fpic", "-fPIE", "-fpie", "-fno-pic", "-fno-PIC"):

@@ -184,7 +184,7 @@ impl Preprocessor {
                 .include_stack
                 .iter()
                 .map(|(n, _)| n.as_str())
-                .collect::<Vec<_>>()
+                .collect::<alloc::vec::Vec<_>>()
                 .join(" -> ");
             return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
                 filename,

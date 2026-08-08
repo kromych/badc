@@ -26,6 +26,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
+/// Per-member `(input offsets, pooled offsets)` produced by pool builders.
+type PoolMemberMaps = HashMap<usize, (Vec<u64>, Vec<u64>)>;
+
 
 use crate::c5::error::C5Error;
 
@@ -865,7 +868,7 @@ impl<'a> LdsLinker<'a> {
         self.placements = alloc::vec![Placement::default(); self.insecs.len()];
     }
 
-    fn insec<'b>(&'b self, i: usize) -> &'b RawSection {
+    fn insec(&self, i: usize) -> &RawSection {
         let id = self.insecs[i];
         &self.objects[id.obj].sections[id.sec]
     }
@@ -1002,11 +1005,11 @@ impl<'a> LdsLinker<'a> {
             }
             match pat.sort {
                 SortKind::ByName => {
-                    matches.sort_by(|&a, &b| self.insec(a).name.cmp(&self.insec(b).name));
+                    matches.sort_by_key(|&a| self.insec(a).name.clone());
                 }
                 SortKind::ByAlignment => {
                     // Descending alignment, stable.
-                    matches.sort_by(|&a, &b| self.insec(b).addralign.cmp(&self.insec(a).addralign));
+                    matches.sort_by_key(|&a| core::cmp::Reverse(self.insec(a).addralign));
                 }
                 SortKind::None => {}
             }
@@ -1026,11 +1029,10 @@ impl<'a> LdsLinker<'a> {
             return true;
         }
         for (pi, p) in spec.patterns.iter().enumerate() {
-            if let Some(only) = only_pattern {
-                if pi != only {
+            if let Some(only) = only_pattern
+                && pi != only {
                     continue;
                 }
-            }
             if p.exclude_files.iter().any(|f| file_glob(f, source)) {
                 continue;
             }
@@ -1204,7 +1206,7 @@ impl<'a> LdsLinker<'a> {
             }
             let strings = s.flags & SHF_STRINGS != 0;
             let entsize = s.entsize;
-            if entsize == 0 || (!strings && s.size % entsize != 0) {
+            if entsize == 0 || (!strings && !s.size.is_multiple_of(entsize)) {
                 continue;
             }
             if strings && entsize != 1 {
@@ -1257,7 +1259,7 @@ impl<'a> LdsLinker<'a> {
         &self,
         members: &[usize],
         entsize: u64,
-    ) -> (Vec<u8>, HashMap<usize, (Vec<u64>, Vec<u64>)>) {
+    ) -> (Vec<u8>, PoolMemberMaps) {
         let mut pool: Vec<u8> = Vec::new();
         let mut interned: HashMap<Vec<u8>, u64> = HashMap::new();
         let mut maps: HashMap<usize, (Vec<u64>, Vec<u64>)> = HashMap::new();
@@ -1293,10 +1295,7 @@ impl<'a> LdsLinker<'a> {
     /// diverges from the reference; plain identity dedup tracks it
     /// closely. Kept a distinct method so a full suffix pass can slot
     /// in when byte-identity across a fresh merge is required (TODO).
-    fn build_string_pool(
-        &self,
-        members: &[usize],
-    ) -> (Vec<u8>, HashMap<usize, (Vec<u64>, Vec<u64>)>) {
+    fn build_string_pool(&self, members: &[usize]) -> (Vec<u8>, PoolMemberMaps) {
         let mut pool: Vec<u8> = Vec::new();
         let mut interned: HashMap<Vec<u8>, u64> = HashMap::new();
         let mut maps: HashMap<usize, (Vec<u64>, Vec<u64>)> = HashMap::new();
@@ -1543,8 +1542,8 @@ impl<'a> LdsLinker<'a> {
                         // A merged-away member (not its pool's
                         // representative) contributes no bytes and no
                         // alignment: its storage lives in the pool rep.
-                        if let Some(&pl) = self.merge_of.get(&i) {
-                            if self.pools[pl].rep != i {
+                        if let Some(&pl) = self.merge_of.get(&i)
+                            && self.pools[pl].rep != i {
                                 self.placements[i] = Placement {
                                     out: oi,
                                     off,
@@ -1552,7 +1551,6 @@ impl<'a> LdsLinker<'a> {
                                 };
                                 continue;
                             }
-                        }
                         let (a, sz, nobits) = {
                             let s = self.insec(i);
                             let a = if let Some(&pl) = self.merge_of.get(&i) {
@@ -1564,11 +1562,10 @@ impl<'a> LdsLinker<'a> {
                         };
                         let aligned = align_up(off, a);
                         if aligned > off {
-                            if let Some(f) = &fill_bytes {
-                                if !nobits && !all_nobits {
+                            if let Some(f) = &fill_bytes
+                                && !nobits && !all_nobits {
                                     chunks.push((off, aligned - off, ChunkSrc::Pad(f.clone())));
                                 }
-                            }
                             off = aligned;
                         }
                         self.placements[i] = Placement {
@@ -1597,13 +1594,11 @@ impl<'a> LdsLinker<'a> {
                                 self.outs[oi].name
                             ));
                         } else {
-                            if new_off > off {
-                                if let Some(f) = &fill_bytes {
-                                    if !all_nobits {
+                            if new_off > off
+                                && let Some(f) = &fill_bytes
+                                    && !all_nobits {
                                         chunks.push((off, new_off - off, ChunkSrc::Pad(f.clone())));
                                     }
-                                }
-                            }
                             off = new_off;
                             end = end.max(off);
                         }
@@ -1798,11 +1793,10 @@ impl<'a> LdsLinker<'a> {
         if let Some(s) = self.script_now.get(name) {
             return Some(s.val);
         }
-        if let Some(&(oi, si)) = self.globals.get(name) {
-            if let Some(v) = self.object_sym_val(oi, si) {
+        if let Some(&(oi, si)) = self.globals.get(name)
+            && let Some(v) = self.object_sym_val(oi, si) {
                 return Some(v);
             }
-        }
         if let Some(s) = self.script_prev.get(name) {
             return Some(s.val);
         }
@@ -2247,7 +2241,7 @@ fn encode_relr(addrs: &[u64]) -> Vec<u64> {
             let mut word: u64 = 0;
             while i < addrs.len() {
                 let d = addrs[i].wrapping_sub(base);
-                if d >= 63 * 8 || d % 8 != 0 {
+                if d >= 63 * 8 || !d.is_multiple_of(8) {
                     break;
                 }
                 word |= 1u64 << (d / 8);
@@ -3375,11 +3369,7 @@ impl<'a> LdsLinker<'a> {
             let first = members[0];
             ph.p_vaddr = self.outs[first].addr;
             ph.p_paddr = self.outs[first].lma;
-            ph.p_offset = if self.outs[first].shtype == SHT_NOBITS {
-                file_off[&first]
-            } else {
-                file_off[&first]
-            };
+            ph.p_offset = file_off[&first];
             let mut file_end = ph.p_offset;
             let mut mem_end = ph.p_vaddr;
             for &oi in members.iter() {
@@ -3595,9 +3585,9 @@ impl<'a> LdsLinker<'a> {
 
         // Build-id digest over the whole image with the digest field
         // zeroed (it already is), then patched in place.
-        if self.opts.build_id_sha1 {
-            if let Some((out, off)) = self.build_id_location() {
-                if !self.outs[out].removed && self.outs[out].shtype != SHT_NOBITS {
+        if self.opts.build_id_sha1
+            && let Some((out, off)) = self.build_id_location()
+                && !self.outs[out].removed && self.outs[out].shtype != SHT_NOBITS {
                     let file_at = file_off[&out] + off + 16;
                     let digest = sha1(&image);
                     let at = file_at as usize;
@@ -3605,8 +3595,6 @@ impl<'a> LdsLinker<'a> {
                         image[at..at + 20].copy_from_slice(&digest);
                     }
                 }
-            }
-        }
         Ok(image)
     }
 
@@ -3762,9 +3750,12 @@ mod tests {
     use super::*;
     use crate::c5::linker::lds::parse_linker_script;
 
+    /// `(name, sh_type, flags, addralign, bytes, relocs)` of a test section.
+    type TestSec = (String, u32, u64, u64, Vec<u8>, Vec<RawReloc>);
+
     /// Minimal ET_REL builder for engine tests.
     struct TestObj {
-        secs: Vec<(String, u32, u64, u64, Vec<u8>, Vec<RawReloc>)>,
+        secs: Vec<TestSec>,
         // name, bind, kind, sec (usize::MAX = UNDEF, MAX-1 = ABS), value, size
         syms: Vec<(String, u8, u8, usize, u64, u64)>,
         entsizes: Vec<(usize, u64)>,
@@ -3898,7 +3889,7 @@ mod tests {
             let n_shstr = add_name(".shstrtab", &mut shstr);
             let shstr_at = out.len();
             out.extend_from_slice(&shstr);
-            while out.len() % 8 != 0 {
+            while !out.len().is_multiple_of(8) {
                 out.push(0);
             }
             let shoff = out.len();

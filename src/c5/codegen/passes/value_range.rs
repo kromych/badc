@@ -120,7 +120,7 @@ fn value_numbers(insts: &[Inst]) -> Vec<ValueId> {
         let key: Key = match &insts[i] {
             Inst::Imm(k) => (1, 0, 0, *k),
             Inst::LocalAddr(off) => (5, 0, 0, *off),
-            Inst::ParamRef { idx, kind } => (7, *idx as u32, load_kind_code(*kind), 0),
+            Inst::ParamRef { idx, kind } => (7, (*idx), load_kind_code(*kind), 0),
             Inst::Extend { value, kind } if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
                 (8, c(*value), load_kind_code(*kind), 0)
             }

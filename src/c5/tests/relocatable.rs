@@ -276,7 +276,7 @@ fn build_id_note_is_emitted_and_stable() {
         build_id_sha1: true,
         ..Default::default()
     };
-    let one = link_relocatable(&[a.clone()], &opts).expect("merge");
+    let one = link_relocatable(std::slice::from_ref(&a), &opts).expect("merge");
     let two = link_relocatable(&[a], &opts).expect("merge");
     assert_eq!(one, two, "deterministic output");
     let merged = parse_et_rel(&one, "merged").expect("parse");
@@ -350,7 +350,7 @@ fn emit_relocs_survive_into_final_elf() {
         )
     };
     assert_eq!(names(&with), (true, true));
-    assert_eq!(names(&without).0, false, "off by default");
+    assert!(!names(&without).0, "off by default");
     // The emitted .rela.text carries every applied entry; count the
     // SHT_RELA sections' entries whose sh_flags carry SHF_INFO_LINK
     // (the .rela.dyn dynamic section is SHF_ALLOC instead).

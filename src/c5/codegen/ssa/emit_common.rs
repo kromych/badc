@@ -2711,7 +2711,7 @@ fn extract_asm_sections_impl(
             }
             continue;
         }
-        if tok == ".rept" && matches!(*stack.last().unwrap(), Some(_)) {
+        if tok == ".rept" && (*stack.last().unwrap()).is_some() {
             rept_stack.push((alloc::string::String::from(rest), alloc::vec::Vec::new()));
             continue;
         }
@@ -3087,65 +3087,6 @@ pub(crate) fn parse_align_operands(rest: &str) -> Option<(i64, Option<u8>, Optio
     Some((spec, fill, max))
 }
 
-/// Scan one GNU as string literal from `s` (opening quote already
-/// consumed), appending its bytes to `out`. Escapes follow gas: the C
-/// single-character set, 1-3 octal digits, `\x` with any run of hex
-/// digits (low byte kept), and identity for the rest. Returns the text
-/// after the closing quote, or `None` when the literal never closes.
-fn scan_asm_string_literal<'a>(s: &'a str, out: &mut alloc::vec::Vec<u8>) -> Option<&'a str> {
-    let b = s.as_bytes();
-    let mut i = 0;
-    while i < b.len() {
-        match b[i] {
-            b'"' => return Some(&s[i + 1..]),
-            b'\\' => {
-                i += 1;
-                let c = *b.get(i)?;
-                i += 1;
-                match c {
-                    b'b' => out.push(0x08),
-                    b'f' => out.push(0x0c),
-                    b'n' => out.push(b'\n'),
-                    b'r' => out.push(b'\r'),
-                    b't' => out.push(b'\t'),
-                    b'v' => out.push(0x0b),
-                    b'0'..=b'7' => {
-                        let mut v = (c - b'0') as u32;
-                        for _ in 0..2 {
-                            match b.get(i) {
-                                Some(&d @ b'0'..=b'7') => {
-                                    v = v * 8 + (d - b'0') as u32;
-                                    i += 1;
-                                }
-                                _ => break,
-                            }
-                        }
-                        out.push(v as u8);
-                    }
-                    b'x' | b'X' => {
-                        let mut v = 0u32;
-                        let mut any = false;
-                        while let Some(d) = b.get(i).and_then(|&d| (d as char).to_digit(16)) {
-                            v = (v << 4) | d;
-                            any = true;
-                            i += 1;
-                        }
-                        if !any {
-                            return None;
-                        }
-                        out.push(v as u8);
-                    }
-                    other => out.push(other),
-                }
-            }
-            c => {
-                out.push(c);
-                i += 1;
-            }
-        }
-    }
-    None
-}
 
 /// Parse one directive inside a named section. A non-directive token is an
 /// instruction kept as text for the arch backend to encode.

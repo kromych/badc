@@ -1083,9 +1083,9 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                 prop_notes.push(s.bytes.clone());
                 prop_align = prop_align.max(s.addralign);
                 dropped.insert((oi, si));
-            } else if opts.strip_debug && s.name.starts_with(".debug") {
-                dropped.insert((oi, si));
-            } else if script.discard.iter().any(|p| glob_match(p, &s.name)) {
+            } else if (opts.strip_debug && s.name.starts_with(".debug"))
+                || script.discard.iter().any(|p| glob_match(p, &s.name))
+            {
                 dropped.insert((oi, si));
             }
         }
@@ -1861,7 +1861,7 @@ fn write_et_rel(
                 SHT_SYMTAB,
                 0,
                 8,
-                (symtab_final + 1) as u32, // .strtab follows
+                (symtab_final + 1), // .strtab follows
                 first_global,
                 ELF64_SYM_SIZE as u64,
                 8,

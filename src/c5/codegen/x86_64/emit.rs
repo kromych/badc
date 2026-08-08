@@ -6639,8 +6639,9 @@ fn encode_one_x86_section_insn(
     // form with a branch relocation the writer resolves against the label's
     // symbol (a same-section target patches at materialize time).
     if let Some(cc) = jcc_cond(mnem) {
-        let target = if insn.operands.is_empty() && insn.sym_target.is_some() {
-            let name = insn.sym_target.as_ref().expect("checked");
+        let target = if insn.operands.is_empty()
+            && let Some(name) = insn.sym_target.as_ref()
+        {
             if name.contains('%') {
                 return Err(alloc::format!(
                     "inline asm: replacement `{text}` branch target embeds an operand"

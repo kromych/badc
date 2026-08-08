@@ -1931,6 +1931,7 @@ fn record_plt_contribution(merged: &mut MergedNative, pool_start: usize) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_debug_reloc(
     machine: NativeMachine,
     section_bytes: &mut [u8],

@@ -197,6 +197,8 @@ fn asm_section_err(name: &str, what: &str) -> C5Error {
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
+const SHF_MERGE: u64 = 0x10;
+const SHF_STRINGS: u64 = 0x20;
 const SHF_INFO_LINK: u64 = 0x40;
 
 const STB_LOCAL: u8 = 0;
@@ -3506,16 +3508,21 @@ pub(super) fn write_relocatable(
     }
 
     // .comment -- the producer fingerprint (non-alloc, so it never
-    // reaches the loaded image through this object).
+    // reaches the loaded image through this object). Flagged
+    // SHF_MERGE | SHF_STRINGS with a byte entsize, as gcc and clang
+    // flag theirs, so a linker merging many badc objects folds the
+    // identical NUL-terminated line into one copy.
     let comment_off = out.len() as u64;
     out.extend_from_slice(crate::OUTPUT_MARKER.as_bytes());
     out.push(0);
     sh.push(Elf64Shdr {
         sh_name: shstrtab_offs[comment_name_idx],
         sh_type: SHT_PROGBITS,
+        sh_flags: SHF_MERGE | SHF_STRINGS,
         sh_offset: comment_off,
         sh_size: crate::OUTPUT_MARKER.len() as u64 + 1,
         sh_addralign: 1,
+        sh_entsize: 1,
         ..Default::default()
     });
 

@@ -142,11 +142,14 @@ probe class to one answerer. C capability probes go to badc with their flags
 passed through unchanged, so a flag badc does not accept fails the probe;
 that is the truthful answer and it matches the sweep, which drops exactly
 those flags when it replays a compile. Assembler probes (`-x assembler*`) and
-preprocess-only version queries (`-E`) are delegated to the reference
-compiler: badc has no standalone assembler driver and `.S` units are out of
-scope, and the version gates encode a toolchain's bug history rather than a
-capability. Those two delegations are the limits of the mode, and both are
-reported in the probe log.
+preprocess-only classification queries (`-E`, `scripts/cc-version.sh`) are
+delegated to the reference compiler: badc has no standalone assembler driver
+and `.S` units are out of scope, and the version gates encode a toolchain's
+bug history rather than a capability. Those two delegations are the limits of
+the mode, and both are reported in the probe log. `--version` is answered by
+badc itself: its first line becomes `CONFIG_CC_VERSION_TEXT`, the
+identification the boot banner and `/proc/version` report, which must name
+the compiler that probed the tree.
 
 ### Corroborated probes
 
@@ -180,9 +183,18 @@ Named as `CC=`, the shim classifies each invocation. A kernel C compile
 first with the original argv -- kbuild's object and `.d` bookkeeping stay
 authoritative -- then, unless the source is on the fallback list, badc
 recompiles the unit with the sweep's flag rewrite and replaces the object.
-Everything else (probes, `-E`, `-S`, `.S` units, links, 16/32-bit units)
-goes to gcc untouched, so the configuration and object population match
-the reference corpus. A badc failure leaves gcc's object standing and is
+`--version` is answered with badc's identification (`$BADC --version`): its
+first line becomes `CONFIG_CC_VERSION_TEXT`, the compiler text in the boot
+banner and `/proc/version`, and Kconfig re-records that text whenever it
+disagrees with what the build's `$(CC)` reports, so only the shim's own
+answer can survive the build. Everything else (probes, `-E`, `-S`, `.S`
+units, links, 16/32-bit units) goes to gcc untouched, so the configuration
+and object population match the reference corpus -- in particular
+`scripts/cc-version.sh` classifies the reference compiler (`-E`), keeping
+`CONFIG_GCC_VERSION` at the reference toolchain's value: identification
+follows the compiler that built the objects, classification stays with the
+toolchain whose bug-history gates the corpus was captured under (badc's
+claimed `__GNUC__`, 4.2.1, sits below the kernel's gcc floor). A badc failure leaves gcc's object standing and is
 recorded; since the fallback list is exactly the sweep's fail set, every
 recorded failure is a compiler bug candidate.
 
@@ -250,12 +262,20 @@ stopped on, and the gate quotes that line in the failure. A kernel whose
 procfs reads never return prints the boot marker and hangs, which the boot
 marker alone cannot distinguish from a pass.
 
+Before building, the gate re-runs `make olddefconfig` with the shim as CC, so
+the tree's `CONFIG_CC_VERSION_TEXT` records badc's identification; the diff
+is logged, and only that symbol moves (the capability probes still go to the
+reference compiler). Each boot's `Linux version` banner -- the same text
+`/proc/version` serves -- must then contain `badc`, which pins the claim in
+the booted kernel, not just the configuration.
+
 It fails on any unit badc cannot compile, any unit that fell back to the
 reference compiler, any undefined reference at link, any boot that does not
-reach either marker, and on a build that compiled fewer units than
-`--expect-units` -- make skips units whose objects are current, so without a
-floor a tree that rebuilt nothing would pass while testing nothing. For the
-same reason the tree is rebuilt from clean by default.
+reach either marker, any banner that does not identify badc, and on a build
+that compiled fewer units than `--expect-units` -- make skips units whose
+objects are current, so without a floor a tree that rebuilt nothing would
+pass while testing nothing. For the same reason the tree is rebuilt from
+clean by default.
 
 Per-arch differences (target triple, image path, qemu machine and console)
 are a table in the script; `--arch` selects the row and defaults to the host.

@@ -370,6 +370,61 @@ fn emit_relocs_survive_into_final_elf() {
     );
 }
 
+/// Every relocatable ELF object carries the producer identification
+/// in `.comment`, shaped as gcc and clang shape theirs: one
+/// NUL-terminated line, SHF_MERGE | SHF_STRINGS with a byte entsize,
+/// so a linker folds the identical line from many badc objects into
+/// one copy in the linked image (a kernel keeps `.comment` in
+/// vmlinux and module objects).
+#[test]
+fn comment_section_is_a_mergeable_single_line_identification() {
+    use crate::c5::linker::object::{Elf64Ehdr, Elf64Shdr, read_struct};
+    let copts = CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options("int f(void){return 1;}".into(), Target::LinuxX64, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let ehdr: Elf64Ehdr = read_struct(&bytes, 0).unwrap();
+    let shstr: Elf64Shdr = read_struct(
+        &bytes,
+        ehdr.e_shoff as usize + ehdr.e_shstrndx as usize * ehdr.e_shentsize as usize,
+    )
+    .unwrap();
+    let name_at = |off: usize| {
+        let base = shstr.sh_offset as usize + off;
+        let end = bytes[base..].iter().position(|&b| b == 0).unwrap() + base;
+        core::str::from_utf8(&bytes[base..end]).unwrap()
+    };
+    let mut found = false;
+    for i in 0..ehdr.e_shnum as usize {
+        let sh: Elf64Shdr =
+            read_struct(&bytes, ehdr.e_shoff as usize + i * ehdr.e_shentsize as usize).unwrap();
+        if name_at(sh.sh_name as usize) != ".comment" {
+            continue;
+        }
+        found = true;
+        assert_eq!(sh.sh_type, 1, ".comment is SHT_PROGBITS");
+        assert_eq!(sh.sh_flags, 0x30, ".comment is SHF_MERGE | SHF_STRINGS");
+        assert_eq!(sh.sh_entsize, 1, ".comment merges byte strings");
+        let content = &bytes[sh.sh_offset as usize..(sh.sh_offset + sh.sh_size) as usize];
+        let mut want = crate::OUTPUT_MARKER.as_bytes().to_vec();
+        want.push(0);
+        assert_eq!(content, want, ".comment is the NUL-terminated version line");
+        assert!(
+            !content.contains(&b'\n'),
+            ".comment holds a single line, as `readelf -p` renders it"
+        );
+    }
+    assert!(found, "no .comment section in the relocatable object");
+}
+
 #[test]
 fn ld_invocation_detection() {
     use crate::c5::linker::ld_driver::is_ld_invocation;

@@ -52,7 +52,8 @@ fn unsupported_inline_asm_reports_the_specific_form() {
 fn output_marker_is_version_only_and_present_in_every_target() {
     use crate::{NativeOptions, Target};
     let program = super::compile_str("int main() { return 0; }");
-    // `OUTPUT_MARKER` is `BADC\n\tv<version>` (see `src/lib.rs`).
+    // `OUTPUT_MARKER` is the one-line identification `badc
+    // <version> (...)` (see `src/lib.rs`).
     let needle = crate::OUTPUT_MARKER.as_bytes();
     // The git tail only ever appears in `BUILD_INFO`; its label
     // `\n\tcommit ` must not reach the output.
@@ -81,6 +82,33 @@ fn output_marker_is_version_only_and_present_in_every_target() {
             "{target:?}: git provenance leaked into output -- breaks reproducibility"
         );
     }
+}
+
+/// The first line of `--version` (`BUILD_INFO`) is the complete
+/// identification consumers record: the Linux kernel captures
+/// `$(CC) --version | head -n1` as `CONFIG_CC_VERSION_TEXT`,
+/// which reaches the boot banner and `/proc/version`. It must
+/// name the compiler, its release version, and the
+/// gcc-compatibility claim, and it must equal the marker emitted
+/// into output (`OUTPUT_MARKER`) so on-disk identification and
+/// reported identification cannot diverge.
+#[test]
+fn version_line_is_a_complete_single_line_identification() {
+    assert_eq!(crate::VERSION_LINE, crate::OUTPUT_MARKER);
+    assert_eq!(crate::BUILD_INFO.lines().next(), Some(crate::VERSION_LINE));
+    assert!(!crate::VERSION_LINE.contains('\n'));
+    let expect = format!("badc {} (", env!("CARGO_PKG_VERSION"));
+    assert!(
+        crate::VERSION_LINE.starts_with(&expect),
+        "version line {:?} does not start with {expect:?}",
+        crate::VERSION_LINE
+    );
+    assert!(
+        crate::VERSION_LINE.contains("gcc-compatible")
+            && crate::VERSION_LINE.contains(crate::GNU_COMPAT_VERSION),
+        "version line {:?} lacks the gcc-compatibility statement",
+        crate::VERSION_LINE
+    );
 }
 
 /// `-g` / `with_debug_info(true)` carries DWARF into the emitted

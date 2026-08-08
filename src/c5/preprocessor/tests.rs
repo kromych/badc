@@ -126,6 +126,36 @@ fn gnu_identity_macros_are_opt_in() {
 }
 
 #[test]
+fn gnu_identity_version_derives_from_the_shared_claim() {
+    // The `__GNUC__` triple and `__VERSION__` must state
+    // `GNU_COMPAT_VERSION` -- the same claim `--version` prints --
+    // and `__VERSION__` must name badc as the producer, as clang
+    // names itself in its "<dialect> Compatible <producer>" form.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.enable_gnu(false);
+    let out = pp
+        .process("maj __GNUC__\nmin __GNUC_MINOR__\npat __GNUC_PATCHLEVEL__\nver __VERSION__\n")
+        .expect("preprocessor failed");
+    let mut claim = crate::GNU_COMPAT_VERSION.split('.');
+    for label in ["maj", "min", "pat"] {
+        let want = format!("{label} {}", claim.next().expect("x.y.z"));
+        assert!(
+            out.contains(&want),
+            "expected {want:?} (GNU_COMPAT_VERSION component): {out}"
+        );
+    }
+    let want_ver = format!(
+        "ver \"{} Compatible badc {}\"",
+        crate::GNU_COMPAT_VERSION,
+        env!("CARGO_PKG_VERSION")
+    );
+    assert!(
+        out.contains(&want_ver),
+        "__VERSION__ does not identify badc: {out}"
+    );
+}
+
+#[test]
 fn vendor_and_stdc_pragmas_are_silent() {
     // GCC/clang vendor pragmas and the C99 6.10.6 STDC pragmas carry
     // no directive c5 acts on, so they must not warn.

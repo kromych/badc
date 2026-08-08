@@ -11,7 +11,17 @@ while gcc keeps every other duty. Per invocation:
   and replaces the object on success. A badc failure leaves gcc's object
   standing and is recorded: a unit that passed the sweep is expected to
   compile here, so every such line is a bug report.
-- Anything else (--version, cc-option probes, -E, -S, .S units, links,
+- ``--version``: answered with badc's identification when ``$BADC`` is set.
+  The kernel captures ``$(CC) --version | head -n1`` as
+  ``CONFIG_CC_VERSION_TEXT``, which reaches the boot banner and
+  ``/proc/version``; a hybrid build whose kernel C units are badc's must
+  identify badc there, and the answer must come from this shim itself --
+  Kconfig re-runs whenever the recorded text disagrees with what the
+  build's ``$(CC)`` reports, so an identification the shim did not give
+  cannot survive the build. Classification stays with the reference
+  compiler: ``scripts/cc-version.sh`` asks via ``-E``, and badc's claimed
+  ``__GNUC__`` (4.2.1) is below the kernel's gcc floor.
+- Anything else (cc-option probes, -E, -S, .S units, links,
   -m16/-m32 units): the real gcc, untouched. Configuration answers stay
   the reference compiler's, so the built object population matches the
   corpus the sweep measured.
@@ -184,6 +194,9 @@ def fallback_listed(src: str, obj: str) -> bool:
 
 def main(argv: list[str]) -> int:
     real = os.environ.get("BADC_REAL_CC", "gcc")
+    badc = os.environ.get("BADC")
+    if argv == ["--version"] and badc:
+        os.execvp(badc, [badc, "--version"])
     src = next((a for a in argv
                 if a.endswith(".c") and not a.startswith("-")), None)
     kernel_c = (src is not None and "-c" in argv and "-D__KERNEL__" in argv
@@ -202,7 +215,6 @@ def main(argv: list[str]) -> int:
         manifest("fallback", src, "listed")
         return 0
 
-    badc = os.environ.get("BADC")
     if not badc:
         sys.exit("buildcc: $BADC is not set")
     target = os.environ.get("BADC_TARGET", "linux-x64")

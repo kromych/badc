@@ -873,7 +873,7 @@ fn run() {
                 Some(emu) => {
                     let spec = match emu.as_str() {
                         "elf_x86_64" => Some("linux-x64"),
-                        "aarch64linux" | "aarch64elf" => Some("linux-arm64"),
+                        "aarch64linux" | "aarch64elf" => Some("linux-aarch64"),
                         _ => None,
                     };
                     match spec {

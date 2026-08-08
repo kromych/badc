@@ -610,8 +610,10 @@ pub struct LdsLinker<'a> {
     synth_obj: usize,
     dyn_relas: Vec<DynReloc>,
     relr_addrs: Vec<u64>,
-    got_slots: Vec<(usize, usize)>,
-    got_map: HashMap<(usize, usize), usize>,
+    /// GOT slots, keyed by referenced symbol name (a GOT reference to
+    /// an undefined symbol still needs a slot).
+    got_slots: Vec<String>,
+    got_map: HashMap<String, usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -1410,6 +1412,12 @@ impl<'a> LdsLinker<'a> {
     fn layout_pass(&mut self, final_pass: bool) -> Result<(), C5Error> {
         self.final_pass = final_pass;
         self.script_prev = core::mem::take(&mut self.script_now);
+        // Dynamic machinery is sized from the previous pass's placement
+        // (the `placed` flags and offsets still hold here); do it before
+        // resetting for this pass. Skipped on the first pass, where no
+        // placement exists yet -- the relocation sections start empty
+        // and gain their size once a pass has run.
+        self.size_dynamic_sections();
         for p in &mut self.placements {
             p.placed = false;
         }
@@ -1419,9 +1427,6 @@ impl<'a> LdsLinker<'a> {
         self.lma_delta = 0;
         self.errors.clear();
         self.undefined.clear();
-
-        // Dynamic machinery sized from the previous pass's layout.
-        self.size_dynamic_sections();
 
         // File-level commands before SECTIONS.
         let mut sections_done = false;
@@ -2033,8 +2038,8 @@ impl<'a> LdsLinker<'a> {
         // GOT slot set stays stable across passes (driven by reloc
         // types alone), so compute it once.
         if self.got_slots.is_empty() && self.got_map.is_empty() {
-            let mut slots: Vec<(usize, usize)> = Vec::new();
-            let mut map: HashMap<(usize, usize), usize> = HashMap::new();
+            let mut slots: Vec<String> = Vec::new();
+            let mut map: HashMap<String, usize> = HashMap::new();
             for i in 0..self.insecs.len() {
                 let SecFate::Placed { .. } = self.fates[i] else {
                     continue;
@@ -2045,13 +2050,14 @@ impl<'a> LdsLinker<'a> {
                         r.rtype,
                         rt::R_AARCH64_ADR_GOT_PAGE | rt::R_AARCH64_LD64_GOT_LO12_NC
                     ) {
-                        let key = self.canonical_sym(id.obj, r.sym as usize);
-                        if let Some(key) = key {
-                            map.entry(key).or_insert_with(|| {
-                                slots.push(key);
-                                slots.len() - 1
-                            });
+                        let name = self.objects[id.obj].symbols[r.sym as usize].name.clone();
+                        if name.is_empty() {
+                            continue;
                         }
+                        map.entry(name.clone()).or_insert_with(|| {
+                            slots.push(name);
+                            slots.len() - 1
+                        });
                     }
                 }
             }
@@ -2078,6 +2084,11 @@ impl<'a> LdsLinker<'a> {
                 if r.rtype != rt::R_AARCH64_ABS64 {
                     continue;
                 }
+                // Only a load-address (section-relative) target needs a
+                // load-time RELATIVE fixup; an absolute constant does not.
+                if !self.reloc_is_relative(id.obj, r.sym as usize) {
+                    continue;
+                }
                 let target = self.resolve_sym_prevpass(id.obj, r.sym as usize, r.addend);
                 let Some(target) = target else { continue };
                 rel_addrs.push((base + r.offset, target as i64));
@@ -2086,8 +2097,8 @@ impl<'a> LdsLinker<'a> {
         // GOT slots are RELATIVE targets too.
         let got_base = self.got_addr_prevpass();
         if let Some(got_base) = got_base {
-            for (k, &(oi, si)) in self.got_slots.clone().iter().enumerate() {
-                if let Some(v) = self.resolve_sym_prevpass(oi, si, 0) {
+            for (k, name) in self.got_slots.clone().iter().enumerate() {
+                if let Some(v) = self.resolve_name(name) {
                     rel_addrs.push((got_base + 8 + k as u64 * 8, v as i64));
                 }
             }
@@ -2125,16 +2136,35 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
-    /// Map a reloc's symbol to its canonical definition site.
-    fn canonical_sym(&self, oi: usize, si: usize) -> Option<(usize, usize)> {
-        let sym = self.objects[oi].symbols.get(si)?;
-        if sym.shndx as u16 == SHN_UNDEF {
-            if let Some(&(doi, dsi)) = self.globals.get(&sym.name) {
-                return Some((doi, dsi));
-            }
-            return None;
+    /// Resolve a symbol name to a final value through the global table
+    /// or a script assignment. Used for GOT slot fills.
+    fn resolve_name(&self, name: &str) -> Option<u64> {
+        if let Some(&(oi, si)) = self.globals.get(name) {
+            return self.resolve_sym_prevpass(oi, si, 0);
         }
-        Some((oi, si))
+        self.script_now.get(name).map(|s| s.val.v)
+    }
+
+    /// True when an ABS64 site against this symbol names a load
+    /// address (a section-relative definition or an Out-attributed
+    /// script symbol), so an ET_DYN image needs a RELATIVE fixup for
+    /// it. An absolute constant or an undefined symbol does not.
+    fn reloc_is_relative(&self, oi: usize, si: usize) -> bool {
+        let sym = &self.objects[oi].symbols[si];
+        match sym.shndx as u16 {
+            SHN_ABS | SHN_UNDEF | SHN_COMMON => {
+                if sym.binding() != STB_LOCAL {
+                    if let Some(&(doi, dsi)) = self.globals.get(&sym.name) {
+                        return self.reloc_is_relative(doi, dsi);
+                    }
+                    if let Some(s) = self.script_now.get(&sym.name) {
+                        return matches!(s.val.att, Att::Out(_));
+                    }
+                }
+                false
+            }
+            _ => true,
+        }
     }
 
     fn resolve_sym_prevpass(&self, oi: usize, si: usize, addend: i64) -> Option<u64> {
@@ -2889,8 +2919,8 @@ impl<'a> LdsLinker<'a> {
     }
 
     fn got_slot_addr(&self, oi: usize, r: &RawReloc) -> Option<u64> {
-        let key = self.canonical_sym(oi, r.sym as usize)?;
-        let idx = *self.got_map.get(&key)?;
+        let name = &self.objects[oi].symbols[r.sym as usize].name;
+        let idx = *self.got_map.get(name)?;
         Some(self.got_addr_prevpass()? + 8 + idx as u64 * 8)
     }
 
@@ -2930,8 +2960,8 @@ impl<'a> LdsLinker<'a> {
                 SYNTH_GOT => {
                     bytes.extend_from_slice(&0u64.to_le_bytes());
                     let base = self.got_addr_prevpass().unwrap_or(0);
-                    for (k, &(soi, ssi)) in self.got_slots.clone().iter().enumerate() {
-                        let v = self.resolve_sym_prevpass(soi, ssi, 0).unwrap_or(0);
+                    for (k, gname) in self.got_slots.clone().iter().enumerate() {
+                        let v = self.resolve_name(gname).unwrap_or(0);
                         let slot_addr = base + 8 + k as u64 * 8;
                         let write = relr_set.contains(&slot_addr) || self.opts.apply_dynamic_relocs;
                         bytes.extend_from_slice(&if write { v } else { 0 }.to_le_bytes());
@@ -3015,21 +3045,28 @@ impl<'a> LdsLinker<'a> {
             }
             Ok(segs)
         } else {
-            // No PHDRS command: synthesize PT_LOAD runs (a boundary
-            // wherever the read-only status flips), PT_NOTE runs, and
-            // PT_GNU_STACK.
+            // No PHDRS command: bfd's default segment assignment. A new
+            // PT_LOAD begins only at a read-only-to-writable transition
+            // (so read-only content keeps read-only pages) or where a
+            // file-backed section follows a NOBITS one (file content
+            // can't trail zero-fill in the same segment). Executable
+            // sections OR their bit into the current segment rather than
+            // forcing a split, which is why a writable segment can carry
+            // code (the RWE segment ld emits without a PHDRS command).
             let mut segs: Vec<(Elf64Phdr, Vec<usize>)> = Vec::new();
             let mut cur: Option<usize> = None;
-            let mut cur_ro = false;
+            let mut cur_writable = false;
+            let mut prev_nobits = false;
             for &oi in emit_order {
                 let o = &self.outs[oi];
                 if !o.alloc {
                     continue;
                 }
-                let ro = o.flags & SHF_WRITE == 0;
+                let writable = o.flags & SHF_WRITE != 0;
+                let nobits = o.shtype == SHT_NOBITS;
                 let start_new = match cur {
                     None => true,
-                    Some(_) => ro != cur_ro,
+                    Some(_) => (writable && !cur_writable) || (!nobits && prev_nobits),
                 };
                 if start_new {
                     segs.push((
@@ -3042,12 +3079,14 @@ impl<'a> LdsLinker<'a> {
                         Vec::new(),
                     ));
                     cur = Some(segs.len() - 1);
-                    cur_ro = ro;
+                    cur_writable = writable;
                 }
+                cur_writable |= writable;
+                prev_nobits = nobits;
                 let k = cur.expect("current segment exists");
                 segs[k].1.push(oi);
                 let mut fl = PF_R;
-                if o.flags & SHF_WRITE != 0 {
+                if writable {
                     fl |= PF_W;
                 }
                 if o.flags & SHF_EXECINSTR != 0 {
@@ -4307,5 +4346,79 @@ SECTIONS {
         // b's "world" resolves into the pool at offset 6.
         let syms = image_symbols(&res.image);
         assert_eq!(find_sym(&syms, "b_str"), ro.2 + 6);
+    }
+
+    const DYN_SCRIPT: &str = r#"
+ENTRY(_start)
+SECTIONS {
+  . = 0;
+  .text : { *(.text*) }
+  .rodata : { *(.rodata*) }
+  .data : { *(.data*) }
+  .rela.dyn : { __rela_start = .; *(.rela .rela*) __rela_end = .; }
+  .relr.dyn : { __relr_start = .; *(.relr.dyn) __relr_end = .; }
+  .bss : { *(.bss) }
+  /DISCARD/ : { *(.note*) *(.comment) }
+}
+"#;
+
+    /// ET_DYN link: every absolute pointer becomes a load-time
+    /// RELATIVE fixup, packed into .relr.dyn under
+    /// `pack-relative-relocs`. Regression for the pass-ordering bug
+    /// that reset placement before sizing the dynamic sections, so
+    /// they always came out empty.
+    #[test]
+    fn dyn_link_emits_relative_relocations() {
+        let script = parse_linker_script(DYN_SCRIPT).expect("script parses");
+        // .data holds two 8-byte pointers to `target` (an 8-aligned
+        // and a non-8-aligned slot) via ABS64.
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 8],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 24])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .sym("target", STB_GLOBAL, STT_FUNC, 0, 4, 0)
+            // Symtab: null(0), sections(1,2), _start(3), target(4).
+            .reloc(1, 0, 4, rt::R_AARCH64_ABS64, 0)
+            .reloc(1, 9, 4, rt::R_AARCH64_ABS64, 0)
+            .build(EM_AARCH64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            pack_relative_relocs: true,
+            max_page_size: 0x10000,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("dyn link succeeds");
+        // ET_DYN.
+        assert_eq!(u16::from_le_bytes(res.image[16..18].try_into().unwrap()), 3);
+        let secs = readelf_sections(&res.image);
+        let relr = secs.iter().find(|s| s.0 == ".relr.dyn");
+        let rela = secs.iter().find(|s| s.0 == ".rela.dyn");
+        // The 8-aligned slot packs into RELR; the odd slot stays RELA.
+        assert!(relr.is_some_and(|s| s.3 > 0), "relr.dyn must be non-empty");
+        assert!(
+            rela.is_some_and(|s| s.3 >= 24),
+            "rela.dyn must hold the odd slot"
+        );
+        // The RELR word relocates the 8-aligned .data slot's address.
+        let syms = image_symbols(&res.image);
+        let data_addr = secs.iter().find(|s| s.0 == ".data").unwrap().2;
+        let relr_off = section_file_off(&res.image, relr.unwrap().2);
+        let w0 = u64::from_le_bytes(res.image[relr_off..relr_off + 8].try_into().unwrap());
+        assert_eq!(w0 & 1, 0, "first RELR entry is a base address");
+        assert_eq!(w0, data_addr, "RELR relocates the .data pointer slot");
+        // The RELA entry is R_AARCH64_RELATIVE (type 1027) at the odd slot.
+        let rela_off = section_file_off(&res.image, rela.unwrap().2);
+        let r_offset = u64::from_le_bytes(res.image[rela_off..rela_off + 8].try_into().unwrap());
+        let r_type = u32::from_le_bytes(res.image[rela_off + 8..rela_off + 12].try_into().unwrap());
+        assert_eq!(r_offset, data_addr + 9);
+        assert_eq!(r_type, rt::R_AARCH64_RELATIVE);
+        let _ = syms;
     }
 }

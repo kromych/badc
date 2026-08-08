@@ -1929,8 +1929,23 @@ pub(super) fn write_relocatable(
 
     // `alias("target")` function symbols: an additional name at the
     // target's extent. A `.set alias, target` whose target is a label an
-    // inline-asm section defined aliases that label's placement.
+    // inline-asm section defined aliases that label's placement; a chain
+    // of aliases (`memcpy` -> `__memcpy` -> `__pi_memcpy`) follows to its
+    // defined end.
     for (i, a) in program.function_aliases.iter().enumerate() {
+        let mut target = a.target.as_str();
+        for _ in 0..program.function_aliases.len() {
+            match program.function_aliases.iter().find(|x| x.name == target) {
+                Some(next) => target = next.target.as_str(),
+                None => break,
+            }
+        }
+        let a = crate::c5::program::FunctionAlias {
+            name: a.name.clone(),
+            target: String::from(target),
+            weak: a.weak,
+        };
+        let a = &a;
         if let Some(l) = asm_labels.iter().find(|l| l.name == a.target) {
             func_symidx_by_name.insert(a.name.clone(), symbols.len() as u32);
             symbols.push(Elf64Sym {

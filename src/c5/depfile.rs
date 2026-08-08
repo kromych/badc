@@ -1,11 +1,16 @@
 //! GNU make dependency-file rendering for the `-M` flag family.
 //!
-//! The format is the one gcc and clang write and `make` (and the Linux
-//! kernel's `scripts/basic/fixdep`) read: one rule whose targets name
-//! the object and whose prerequisites are the translation unit's source
-//! and every header it opened, wrapped at 72 columns with ` \` line
-//! continuations, optionally followed by a phony target per prerequisite
-//! (`-MP`).
+//! The output is make syntax: one rule whose targets name the object and
+//! whose prerequisites are the translation unit's source and every header
+//! it opened, wrapped at 72 columns with ` \` line continuations,
+//! optionally followed by a phony target per prerequisite (`-MP`). `make`
+//! reads it, and so does the Linux kernel's `scripts/basic/fixdep`.
+//!
+//! It follows gcc's writer: the same files, in the same order, with the
+//! same escaping and the same wrap points. It is not byte-for-byte
+//! identical, and deliberately so -- gcc repeats a prerequisite reached
+//! twice, and this emits each once. The rules are equivalent to `make`,
+//! which stats each prerequisite either way.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;

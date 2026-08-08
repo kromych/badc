@@ -3418,6 +3418,7 @@ fn export_data_exposes_data_globals_in_dynsym() {
             None,
             false,
             export_data,
+            false,
         )
         .expect("write executable")
     };
@@ -3542,6 +3543,7 @@ fn dynamic_exports_carry_section_size_binding_and_visibility() {
         None,
         true,
         true,
+        false,
     )
     .expect("write executable");
 

@@ -119,6 +119,10 @@ pub struct MergedNative {
     /// (switch dispatch tables from folded `.rodata`); see
     /// [`DataPcRel`].
     pub data_pcrel_relocs: Vec<DataPcRel>,
+    /// Text relocations the merge applied in place, kept so a writer
+    /// under `--emit-relocs` can re-emit each as a `.rela.text` entry
+    /// against the `.text` section symbol.
+    pub applied_text_relocs: Vec<AppliedTextReloc>,
     /// Data-initializer slots that hold the address of an imported
     /// function: `(slot_data_offset, import_index)`. A function-pointer
     /// table entry naming a shared-library symbol (`static freefn t =
@@ -275,6 +279,18 @@ pub struct SectionMap {
     pub tls: Vec<SectionContribution>,
     /// Input sections the object parser dropped, `(input, name, size)`.
     pub discarded: Vec<(usize, String, u64)>,
+}
+
+/// One text relocation resolved and patched during the merge:
+/// `text_offset` is the patched site, `target_text_offset` the
+/// resolved `S + A` within the merged text stream. Re-emitted under
+/// `--emit-relocs` as `rtype` against the `.text` section symbol with
+/// `target_text_offset` as the addend.
+#[derive(Debug, Clone, Copy)]
+pub struct AppliedTextReloc {
+    pub text_offset: u64,
+    pub rtype: u32,
+    pub target_text_offset: i64,
 }
 
 /// Pending `R_*_64` relocation that the final-image writer
@@ -973,6 +989,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
     // resolve each against the merged symbol table, and apply
     // the patch in `text` at `text_bases[i] + reloc.offset`.
     let mut pending_imports: Vec<PendingImportReloc> = Vec::new();
+    let mut applied_text_relocs: Vec<AppliedTextReloc> = Vec::new();
     for (i, obj) in objs.iter().enumerate() {
         let text_base = text_bases[i];
         for reloc in &obj.text_relocs {
@@ -1081,6 +1098,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         machine,
                         &mut text,
                         &mut pending_imports,
+                        &mut applied_text_relocs,
                         patch_offset,
                         reloc,
                         target,
@@ -1111,6 +1129,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                             machine,
                             &mut text,
                             &mut pending_imports,
+                            &mut applied_text_relocs,
                             patch_offset,
                             reloc,
                             target,
@@ -1236,6 +1255,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         machine,
                         &mut text,
                         &mut pending_imports,
+                        &mut applied_text_relocs,
                         patch_offset,
                         reloc,
                         target,
@@ -1841,6 +1861,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
         defined,
         imports,
         pending_imports,
+        applied_text_relocs,
         data_abs_relocs,
         data_pcrel_relocs,
         data_import_refs,
@@ -2588,6 +2609,7 @@ fn resolve_merged_target(
     machine: NativeMachine,
     text: &mut [u8],
     pending: &mut Vec<PendingImportReloc>,
+    applied: &mut Vec<AppliedTextReloc>,
     patch_offset: usize,
     reloc: &NativeReloc,
     target: MergedTarget,
@@ -2607,6 +2629,11 @@ fn resolve_merged_target(
                 )?;
             } else {
                 apply_reloc(machine, text, patch_offset, reloc, off, sym_name)?;
+                applied.push(AppliedTextReloc {
+                    text_offset: patch_offset as u64,
+                    rtype: reloc.rtype,
+                    target_text_offset: off,
+                });
             }
         }
         MergedTarget::Data(off) => {

@@ -336,6 +336,10 @@ fn run() {
     // data globals). ELF only; macOS already exports executable globals,
     // Windows has no analogue.
     let mut export_data = false;
+    // `--emit-relocs` -- keep the resolved relocations in the final
+    // ELF image as `.rela.*` sections (GNU ld -q), for consumers that
+    // relocate the image wholesale (the x86 KASLR relocs tool).
+    let mut emit_relocs = false;
     // `--gnu` -- define the GCC identity macros (`__GNUC__` etc.).
     let mut gnu = false;
     let mut gnu89_inline = false;
@@ -670,6 +674,8 @@ fn run() {
                     }
                 };
             }
+            // Keep resolved relocations in the final ELF image (ld -q).
+            "--emit-relocs" => emit_relocs = true,
             // Export every non-static function (dlopen/dlsym visibility).
             "--export-all" => export_all = true,
             // Export every defined non-static global (function and data)
@@ -1813,6 +1819,7 @@ fn run() {
             shared_lib_name,
             export_all,
             export_data,
+            emit_relocs,
         );
         let bytes = match write_result {
             Ok(b) => b,

@@ -273,6 +273,79 @@ fn build_id_note_is_emitted_and_stable() {
 }
 
 #[test]
+fn emit_relocs_survive_into_final_elf() {
+    use crate::c5::linker::link::link_native_objects;
+    use crate::c5::linker::object::parse_native_elf;
+    use crate::c5::linker::{emit_x86_64_plt, write_native_image_from_merged_ex};
+
+    let compile = |src: &str, no_entry: bool| {
+        let copts = CompileOptions {
+            no_entry_point: no_entry,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(src.to_string(), Target::LinuxX64, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse")
+    };
+    let a = compile("int helper(int n);\nint main(void) { return helper(3); }\n", false);
+    let b = compile("int gval = 7;\nint helper(int n) { return n + gval; }\n", true);
+    let mut merged = link_native_objects(&[a, b]).expect("link");
+    assert!(
+        !merged.applied_text_relocs.is_empty(),
+        "merge records the applied text relocations"
+    );
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let image = |emit: bool| {
+        write_native_image_from_merged_ex(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            Target::LinuxX64,
+            None,
+            false,
+            false,
+            emit,
+        )
+        .expect("write")
+    };
+    let with = image(true);
+    let without = image(false);
+    let names = |b: &[u8]| {
+        (
+            b.windows(10).any(|w| w == b".rela.text"),
+            b.windows(7).any(|w| w == b".symtab"),
+        )
+    };
+    assert_eq!(names(&with), (true, true));
+    assert_eq!(names(&without).0, false, "off by default");
+    // The emitted .rela.text carries every applied entry; count the
+    // SHT_RELA sections' entries whose sh_flags carry SHF_INFO_LINK
+    // (the .rela.dyn dynamic section is SHF_ALLOC instead).
+    use crate::c5::linker::object::{Elf64Ehdr, Elf64Shdr, read_struct};
+    let ehdr: Elf64Ehdr = read_struct(&with, 0).unwrap();
+    let mut emitted = 0usize;
+    for i in 0..ehdr.e_shnum as usize {
+        let sh: Elf64Shdr =
+            read_struct(&with, ehdr.e_shoff as usize + i * ehdr.e_shentsize as usize).unwrap();
+        if sh.sh_type == 4 && sh.sh_flags & 0x40 != 0 {
+            emitted += (sh.sh_size / 24) as usize;
+        }
+    }
+    assert!(
+        emitted >= merged.applied_text_relocs.len(),
+        "every applied reloc re-emitted ({emitted} entries)"
+    );
+}
+
+#[test]
 fn ld_invocation_detection() {
     use crate::c5::linker::ld_driver::is_ld_invocation;
     assert!(is_ld_invocation("/usr/bin/ld", None));

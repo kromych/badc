@@ -2470,6 +2470,7 @@ pub(crate) fn lower(
     };
 
     Ok(Build {
+        emitted_relocs: Vec::new(),
         asm_sections,
         asm_section_text_refs,
         asm_text_abs_refs,

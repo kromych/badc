@@ -1409,9 +1409,38 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
             size: 0,
         });
     }
-    // Per-object locals.
+    // Per-object locals. An object that keeps locals but carries no
+    // STT_FILE symbol gets one synthesized from its basename, as GNU
+    // ld does for assembler objects without a `.file` directive.
     let mut local_map: HashMap<(usize, u32), u32> = HashMap::new();
     for (oi, o) in objs.iter().enumerate() {
+        let has_file = o.symbols.iter().any(|s| s.kind == STT_FILE);
+        let keeps_locals = o.symbols.iter().enumerate().any(|(yi, s)| {
+            yi != 0
+                && s.binding == STB_LOCAL
+                && s.kind != STT_SECTION
+                && match s.sec {
+                    EtSymRef::Section(si) => placed.contains_key(&(oi, si)),
+                    EtSymRef::Undef => false,
+                    _ => true,
+                }
+        });
+        if !has_file && keeps_locals {
+            let base = o
+                .source
+                .rsplit(['/', '('])
+                .next()
+                .unwrap_or(&o.source)
+                .trim_end_matches(')');
+            syms.push(OutSym {
+                name: base.to_string(),
+                info: (STB_LOCAL << 4) | STT_FILE,
+                other: 0,
+                shndx: SHN_ABS,
+                value: 0,
+                size: 0,
+            });
+        }
         for (yi, sym) in o.symbols.iter().enumerate() {
             if yi == 0 || sym.binding != STB_LOCAL || sym.kind == STT_SECTION {
                 continue;

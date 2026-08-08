@@ -2284,6 +2284,7 @@ pub(crate) fn lower(
     };
 
     Ok(Build {
+        emitted_relocs: Vec::new(),
         asm_sections,
         // The aarch64 ALTERNATIVE replacement is appended to `.text` (a
         // deferred region), not a separately loaded section, so no

@@ -2304,14 +2304,22 @@ fn subst_asm_operands(
 }
 
 /// Split a macro invocation's arguments: GNU as separates them by commas
-/// or whitespace, with quoted runs and bracketed groups opaque.
+/// or whitespace, with quoted runs and bracketed groups opaque. An argument
+/// that begins with `(` runs to the next comma, whitespace included
+/// (`nops (662b-661b) / 4` passes one expression).
 fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
     let mut parts: alloc::vec::Vec<&str> = alloc::vec::Vec::new();
     let b = s.as_bytes();
     let mut depth = 0i32;
     let mut quoted = false;
     let mut start = 0usize;
+    let mut paren_led = false;
+    let mut in_arg = false;
     for (i, &c) in b.iter().enumerate() {
+        if !in_arg && !c.is_ascii_whitespace() {
+            in_arg = true;
+            paren_led = c == b'(';
+        }
         let split = match c {
             b'"' => {
                 quoted = !quoted;
@@ -2327,7 +2335,7 @@ fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
                 false
             }
             b',' => depth == 0,
-            _ => depth == 0 && c.is_ascii_whitespace(),
+            _ => depth == 0 && c.is_ascii_whitespace() && in_arg && !paren_led,
         };
         if split {
             let p = s[start..i].trim();
@@ -2335,6 +2343,7 @@ fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
                 parts.push(p);
             }
             start = i + 1;
+            in_arg = false;
         }
     }
     let p = s[start..].trim();
@@ -2577,7 +2586,8 @@ fn split_first_token(s: &str) -> (&str, &str) {
 /// sigil in the preceding text, which is not a valid label name.
 fn peel_leading_label(stmt: &str) -> Option<(&str, &str)> {
     let colon = stmt.find(':')?;
-    let name = &stmt[..colon];
+    // GNU as allows whitespace between the label and its colon (`0 :`).
+    let name = stmt[..colon].trim_end();
     if !is_asm_symbol_name(name) && !is_numeric_label(name) {
         return None;
     }
@@ -3201,6 +3211,37 @@ fn parse_section_item(
         ".incbin" => parse_incbin_directive(rest),
         ".type" => parse_type_directive(rest),
         ".size" => parse_size_directive(rest),
+        // `name = expr` in a section is the assignment spelling of `.set`
+        // (the piggyback length constants). The expander folds the constant
+        // form it sees; one reaching here carries an expression or a symbol.
+        _ if !tok.starts_with('.')
+            && (rest.starts_with('=') && !rest.starts_with("==")
+                || tok
+                    .split_once('=')
+                    .is_some_and(|(n, e)| is_asm_symbol_name(n) && !e.starts_with('='))) =>
+        {
+            let (name, expr) = match rest.strip_prefix('=') {
+                Some(e) => (tok, alloc::string::String::from(e.trim())),
+                None => {
+                    let (n, e) = tok.split_once('=').expect("guard admits an assignment");
+                    (n, alloc::format!("{} {rest}", e.trim()))
+                }
+            };
+            if !is_asm_symbol_name(name) {
+                return Err(alloc::format!("inline asm: bad assignment `{tok} {rest}`"));
+            }
+            let expr = alloc::string::String::from(expr.trim());
+            if is_asm_symbol_name(&expr) {
+                return Ok(AsmSectionItem::SymSet {
+                    name: alloc::string::String::from(name),
+                    target: expr,
+                });
+            }
+            Ok(AsmSectionItem::SetExpr {
+                name: alloc::string::String::from(name),
+                expr,
+            })
+        }
         // A non-directive token is an instruction: the ALTERNATIVE replacement
         // in `.altinstr_replacement,"ax"`, or a trampoline body assembled into
         // `.rodata`. Keep it as text; the arch backend encodes it to bytes and
@@ -4590,15 +4631,33 @@ fn measure_round_inner(
                     at = (base + add).max(at);
                 }
                 AsmSectionItem::OrgExpr(expr) => {
+                    // A target referencing labels of a later subsection (the
+                    // alternatives length equalizer) resolves in round two,
+                    // like a fill count.
                     let resolve = |t: &str| -> Option<AsmExprLeaf> {
-                        map.get(numeric_label_digits(t).unwrap_or(t)).map(|(k, off)| {
+                        let loc = |k: &str, off: i64| {
                             AsmExprLeaf::Loc(AsmExprTerm {
-                                space: Some((AsmSpace::Section(k.clone()), *off)),
+                                space: Some((AsmSpace::Section(alloc::string::String::from(k)), off)),
                                 target: AsmSectionTarget::Symbol(alloc::string::String::from(t)),
                             })
-                        })
+                        };
+                        map.get(numeric_label_digits(t).unwrap_or(t))
+                            .map(|(k, off)| loc(k, *off))
+                            .or_else(|| {
+                                let p = prev?;
+                                Some(loc(p.section(t)?, p.offset(t)?))
+                            })
+                            .or_else(|| prev.and_then(|p| p.symbol(t).map(AsmExprLeaf::Abs)))
                     };
-                    at = eval_org_target(expr, &key, at, &resolve, const_of)?.max(at);
+                    match eval_org_target(expr, &key, at, &resolve, const_of) {
+                        Ok(target) => at = target.max(at),
+                        Err(e) => {
+                            *unresolved_fill = true;
+                            if prev.is_some() {
+                                return Err(e);
+                            }
+                        }
+                    }
                 }
                 AsmSectionItem::Rept { count, items } => {
                     let resolve = |t: &str| -> Option<i64> {

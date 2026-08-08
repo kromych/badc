@@ -1347,6 +1347,41 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 continue;
             }
         }
+        // `movz` / `movk` with an `:abs_gN[_s|_nc]:` specifier on a constant
+        // expression: GNU as resolves the 16-bit group of the value and the
+        // matching shift at assembly. Only the constant form is supported;
+        // a symbolic value would need a MOVW relocation.
+        if matches!(mnem, "movz" | "movk") && rest.contains(":abs_g") {
+            let toks = split_operands(rest);
+            if toks.len() == 2
+                && let Some(spec) = toks[1].strip_prefix(":abs_g")
+                && let Some((group, expr)) = spec.split_once(':')
+            {
+                let g = group.trim_end_matches("_nc").trim_end_matches("_s");
+                let shift: u32 = g
+                    .parse::<u32>()
+                    .ok()
+                    .filter(|g| *g <= 3)
+                    .map(|g| g * 16)
+                    .ok_or_else(|| format!("inline asm: bad `:abs_g` group `{}`", toks[1]))?;
+                let v = emit_common::eval_const_expr_ops(expr.trim(), &|_| None).ok_or_else(
+                    || format!("inline asm: `:abs_g` value `{expr}` is not a constant"),
+                )?;
+                let field = ((v as u64) >> shift) & 0xffff;
+                insns.push(AsmInsnA64 {
+                    mnemonic: String::from(mnem),
+                    operands: alloc::vec![
+                        parse_operand(toks[0])?,
+                        AsmOpndA64::Imm(field as i64),
+                        AsmOpndA64::Lsl(shift),
+                    ],
+                    bytes: Vec::new(),
+                    label_def: None,
+                    sym_target: None,
+                });
+                continue;
+            }
+        }
         // A bare `ret` defaults its operand to the link register.
         let rest = if mnem == "ret" && rest.is_empty() {
             "x30"

@@ -9640,6 +9640,52 @@ mod tests {
         );
     }
 
+    /// The flow-form ALTERNATIVE at file scope: `.subsection 1` holds the
+    /// replacement, `.previous` returns, the `.org` pair equalizes the
+    /// lengths, and a `.rept` count over labels of the main subsection
+    /// resolves at layout. Bytes match GNU as for the same input: the main
+    /// stream first, the subsection-1 content appended after.
+    #[test]
+    fn file_scope_a64_subsection_org_rept_match_gnu_as() {
+        use super::super::ssa::emit_common::{
+            AsmComments, extract_file_scope_asm_sections, materialize_asm_sections,
+            prepare_file_asm_text,
+        };
+        let text = ".text\nf:\n661:\nnop\nnop\n662:\n.subsection 1\n663:\nmov x1, #2\nmov x2, #3\n\
+                    664:\n.previous\n.org . - (664b-663b) + (662b-661b)\n\
+                    .org . - (662b-661b) + (664b-663b)\n\
+                    661:\nnop\n662:\n.subsection 1\n663:\n.rept (662b-661b) / 4\nnop\n.endr\n664:\n\
+                    .previous\n.org . - (664b-663b) + (662b-661b)\n\
+                    .org . - (662b-661b) + (664b-663b)\nret\n";
+        let text = prepare_file_asm_text(text, AsmComments::A64).unwrap();
+        let mut blocks = extract_file_scope_asm_sections(&text, true).unwrap();
+        encode_a64_file_asm_section_code(&mut blocks).unwrap();
+        let mut sink = Vec::new();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            true,
+            &mut sink,
+        )
+        .unwrap();
+        let want: Vec<u8> = [
+            0xd503201fu32, // nop (661 first instance)
+            0xd503201f, // nop
+            0xd503201f, // nop (second instance)
+            0xd65f03c0, // ret
+            0xd2800041, // mov x1, #2 (subsection 1)
+            0xd2800062, // mov x2, #3
+            0xd503201f, // rept'd nop
+        ]
+        .iter()
+        .flat_map(|w| w.to_le_bytes())
+        .collect();
+        assert_eq!(sink[0].bytes, want);
+    }
+
     fn lift_and_alloc(src: &str, target: Target) -> (crate::c5::ir::FunctionSsa, Allocation) {
         let program = Compiler::new(src.into()).compile().expect("compile");
         let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false)

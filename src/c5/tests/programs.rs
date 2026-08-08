@@ -1242,6 +1242,14 @@ fn member_name_space_keeps_object_shape() {
 }
 
 #[test]
+fn array_alias_param_outer_bracket() {
+    // C99 6.7.7p3 + 6.7.5.3p7: `rows_t rows[]` over `typedef T rows_t[1]`
+    // is pointer-to-row; one subscript strides a whole row and decays to
+    // the element pointer (the kernel's cpumask_var_t parameter shape).
+    assert_eq!(run_fixture("array_alias_param_outer_bracket.c"), 0);
+}
+
+#[test]
 fn aggregate_init_struct_member_copy() {
     // C99 6.7.8p13: a struct member of an automatic aggregate initialized
     // by a non-constant struct expression (subscript, deref, by-value

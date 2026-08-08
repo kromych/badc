@@ -35,11 +35,15 @@ mod archive;
 #[cfg(feature = "std")]
 mod image;
 #[cfg(feature = "std")]
+pub(crate) mod ld_driver;
+#[cfg(feature = "std")]
 pub(crate) mod link;
 #[cfg(feature = "std")]
 pub(crate) mod map;
 #[cfg(feature = "std")]
 pub(crate) mod object;
+#[cfg(feature = "std")]
+pub(crate) mod relocatable;
 #[cfg(feature = "std")]
 mod synth_build;
 
@@ -58,7 +62,15 @@ pub use link::{
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
+pub use ld_driver::{is_ld_invocation, run_ld};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
 pub use map::{ArchiveInclusion, render_link_map};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use relocatable::{
+    EtRel, LdScript, RelinkOptions, link_relocatable, parse_et_rel, parse_module_script,
+};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use object::{

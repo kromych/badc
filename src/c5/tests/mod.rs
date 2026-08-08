@@ -51,6 +51,8 @@ mod programs;
 #[cfg(feature = "full")]
 mod reloc_golden;
 #[cfg(feature = "full")]
+mod relocatable;
+#[cfg(feature = "full")]
 mod stack_guard;
 mod types;
 mod vla;

@@ -249,6 +249,22 @@ fn main() {
 fn run() {
     let raw: Vec<String> = std::env::args().collect();
 
+    // Linker-driver dispatch: invoked as `ld` (argv[0]) or with a
+    // leading `--ld`, the remaining arguments follow GNU ld's
+    // surface so a build system can set `LD=badc --ld` or symlink
+    // `ld` to badc.
+    if badc::is_ld_invocation(
+        raw.first().map(String::as_str).unwrap_or(""),
+        raw.get(1).map(String::as_str),
+    ) {
+        let skip = if raw.get(1).map(String::as_str) == Some("--ld") {
+            2
+        } else {
+            1
+        };
+        std::process::exit(badc::run_ld(&raw[skip..]));
+    }
+
     // Mode selection: at most one of the mode-picking flags
     // may appear. We track the *first* seen so an error
     // message can name both flags.

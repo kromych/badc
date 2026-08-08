@@ -835,6 +835,19 @@ impl OutSec {
 /// any input, values ORed; `UINT32_OR_AND` (ISA_1_USED /
 /// FEATURE_2_USED) needs every input, values ORed. An input without
 /// a property note drops the all-input classes, matching GNU ld.
+/// ELF object-attribute sections carry one attribute set, not a
+/// concatenation of the inputs': BFD reads the first subsection length
+/// and rejects anything past it. Only the first copy is kept, and the
+/// rest must agree.
+/// TODO: merge per tag -- the AArch64 `aeabi_feature_and_bits` set is
+/// an AND across inputs, so disagreeing objects have a defined result.
+fn is_attributes_section(sh_type: u32) -> bool {
+    const SHT_GNU_ATTRIBUTES: u32 = 0x6fff_fff5;
+    /// `SHT_ARM_ATTRIBUTES` / `SHT_AARCH64_ATTRIBUTES`, the same value.
+    const SHT_ARCH_ATTRIBUTES: u32 = 0x7000_0003;
+    matches!(sh_type, SHT_GNU_ATTRIBUTES | SHT_ARCH_ATTRIBUTES)
+}
+
 fn merge_property_notes(notes: &[Vec<u8>], n_inputs: usize, align: u64) -> Option<EtSection> {
     // Generic ranges (0xb000....) plus the processor-specific ranges
     // shared by x86_64 and aarch64 (0xc000....).
@@ -1086,6 +1099,17 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                 outsecs.push(OutSec::new(&s.name, exec_fill));
                 outsecs.len() - 1
             });
+            if is_attributes_section(s.sh_type) {
+                if outsecs[idx].bytes.is_empty() {
+                    outsecs[idx].append(objs, oi, si);
+                } else if outsecs[idx].bytes != s.bytes {
+                    return Err(err(&format!(
+                        "{}: `{}` disagrees with an earlier object's;                          object attributes are not merged per tag",
+                        o.source, s.name
+                    )));
+                }
+                continue;
+            }
             outsecs[idx].append(objs, oi, si);
         }
     }

@@ -4,7 +4,8 @@
 //! relocation rewriting, script handling).
 
 use crate::c5::linker::relocatable::{
-    EtRel, EtSymRef, RelinkOptions, glob_match, link_relocatable, parse_et_rel, parse_module_script,
+    EtRel, EtSection, EtSymRef, RelinkOptions, glob_match, link_relocatable, parse_et_rel,
+    parse_module_script,
 };
 use crate::c5::{
     CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
@@ -267,6 +268,48 @@ fn module_script_arch_tail_and_byte() {
             .unwrap_or_else(|| panic!("{name} kept"));
         assert_eq!(s.size(), 1, "{name} carries the BYTE(0) placeholder");
     }
+}
+
+/// Object-attribute sections hold one attribute set. Concatenating the
+/// inputs' copies produces a section BFD rejects ("bad subsection
+/// length"), so only the first is kept.
+#[test]
+fn object_attributes_are_kept_once_not_concatenated() {
+    let attrs: Vec<u8> = {
+        let mut v = alloc::vec![b'A'];
+        let body = b"\x01\x00\x00\x00gnu\x00";
+        v.extend_from_slice(&((body.len() + 4) as u32).to_le_bytes());
+        v.extend_from_slice(body);
+        v
+    };
+    let obj = |fname: &str, src: &str| -> EtRel {
+        let mut o = compile_obj(&alloc::format!("int {fname}(void) {{ return 1; }}\n"), src);
+        o.sections.push(EtSection {
+            name: ".ARM.attributes".to_string(),
+            sh_type: 0x7000_0003,
+            flags: 0,
+            addralign: 1,
+            entsize: 0,
+            bytes: attrs.clone(),
+            nobits_size: 0,
+            link_target: None,
+            relocs: Vec::new(),
+            group: None,
+        });
+        o
+    };
+    let bytes = link_relocatable(
+        &[obj("f", "a.o"), obj("g", "b.o")],
+        &RelinkOptions::default(),
+    )
+    .expect("link");
+    let merged = parse_et_rel(&bytes, "merged").expect("parse merged");
+    let sec = merged
+        .sections
+        .iter()
+        .find(|s| s.name == ".ARM.attributes")
+        .expect("attributes kept");
+    assert_eq!(sec.bytes, attrs, "one attribute set, not two");
 }
 
 #[test]

@@ -9524,9 +9524,7 @@ fn encode_a64_sym_insn(
                     (label_branch_word(&kind, 0)?, K::A64Condbr19)
                 }
                 LabelBranch::Tb { .. } => (label_branch_word(&kind, 0)?, K::A64Tstbr14),
-                LabelBranch::Adr { rd } => {
-                    (super::encode::enc_adr(super::Reg(rd), 0), K::A64Adr21)
-                }
+                LabelBranch::Adr { rd } => (super::encode::enc_adr(super::Reg(rd), 0), K::A64Adr21),
             };
             Ok(Some((word, k, name.clone(), addend)))
         }
@@ -9679,12 +9677,12 @@ mod tests {
         .unwrap();
         let want: Vec<u8> = [
             0xd503201fu32, // nop (661 first instance)
-            0xd503201f, // nop
-            0xd503201f, // nop (second instance)
-            0xd65f03c0, // ret
-            0xd2800041, // mov x1, #2 (subsection 1)
-            0xd2800062, // mov x2, #3
-            0xd503201f, // rept'd nop
+            0xd503201f,    // nop
+            0xd503201f,    // nop (second instance)
+            0xd65f03c0,    // ret
+            0xd2800041,    // mov x1, #2 (subsection 1)
+            0xd2800062,    // mov x2, #3
+            0xd503201f,    // rept'd nop
         ]
         .iter()
         .flat_map(|w| w.to_le_bytes())

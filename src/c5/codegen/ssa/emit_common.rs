@@ -2088,7 +2088,8 @@ fn bind_gas_macro_args(
         }
     }
     for p in params {
-        map.entry(p.name.clone()).or_insert_with(|| p.default.clone());
+        map.entry(p.name.clone())
+            .or_insert_with(|| p.default.clone());
     }
     map
 }
@@ -2158,7 +2159,9 @@ fn collect_gas_repeat_body(
 /// `=default` (bound when the invocation supplies no argument), a `:req`
 /// qualifier (dropped; binding is positional either way), or `:vararg`
 /// (binds the rest of the argument text).
-fn parse_gas_macro_header(rest: &str) -> Result<(alloc::string::String, GasParams), alloc::string::String> {
+fn parse_gas_macro_header(
+    rest: &str,
+) -> Result<(alloc::string::String, GasParams), alloc::string::String> {
     // Parameters split like invocation arguments: a parenthesised
     // `=default` may contain spaces.
     let toks = split_macro_args(rest);
@@ -2689,8 +2692,9 @@ fn extract_asm_sections_impl(
                         },
                     }
                 }
-                ".rept" => rept_stack
-                    .push((alloc::string::String::from(rest), alloc::vec::Vec::new())),
+                ".rept" => {
+                    rept_stack.push((alloc::string::String::from(rest), alloc::vec::Vec::new()))
+                }
                 ".pushsection" | ".section" | ".popsection" | ".previous" | ".subsection" => {
                     return Err(alloc::format!(
                         "inline asm: `{tok}` inside `.rept` is not supported"
@@ -2698,7 +2702,11 @@ fn extract_asm_sections_impl(
                 }
                 _ => {
                     let item = parse_section_item(tok, rest, is_aarch64)?;
-                    rept_stack.last_mut().expect("nonempty checked").1.push(item);
+                    rept_stack
+                        .last_mut()
+                        .expect("nonempty checked")
+                        .1
+                        .push(item);
                 }
             }
             continue;
@@ -2749,7 +2757,10 @@ fn extract_asm_sections_impl(
             // the current base to that section, reusing an existing block of the
             // same name so repeated switches accumulate into one section.
             _ if file_scope && base_section_shorthand(tok) => {
-                let idx = match blocks.iter().position(|b| b.name == tok && b.subsection == 0) {
+                let idx = match blocks
+                    .iter()
+                    .position(|b| b.name == tok && b.subsection == 0)
+                {
                     Some(i) => i,
                     None => {
                         blocks.push(parse_section_args(tok)?);
@@ -2772,10 +2783,14 @@ fn extract_asm_sections_impl(
                         "inline asm: `.subsection` is not supported (deferred replacement code)",
                     ));
                 }
-                let n: u32 = rest.trim().parse().map_err(|_| {
-                    alloc::format!("inline asm: bad `.subsection` number `{rest}`")
-                })?;
-                let cur = stack.last().unwrap().expect("file scope always in a section");
+                let n: u32 = rest
+                    .trim()
+                    .parse()
+                    .map_err(|_| alloc::format!("inline asm: bad `.subsection` number `{rest}`"))?;
+                let cur = stack
+                    .last()
+                    .unwrap()
+                    .expect("file scope always in a section");
                 let (name, flags, sh_type) = (
                     blocks[cur].name.clone(),
                     blocks[cur].flags.clone(),
@@ -4341,10 +4356,7 @@ fn section_expr_leaf(
     key: &str,
     here: i64,
     measured: &SectionLabelOffsets,
-    sink_labels: &alloc::collections::BTreeMap<
-        alloc::string::String,
-        (alloc::string::String, i64),
-    >,
+    sink_labels: &alloc::collections::BTreeMap<alloc::string::String, (alloc::string::String, i64)>,
     num_unique: &alloc::collections::BTreeMap<&str, alloc::string::String>,
     label_off: &dyn Fn(&str) -> Option<LabelLoc>,
 ) -> Option<AsmExprLeaf> {
@@ -4709,7 +4721,10 @@ fn measure_round_inner(
                     let resolve = |t: &str| -> Option<AsmExprLeaf> {
                         let loc = |k: &str, off: i64| {
                             AsmExprLeaf::Loc(AsmExprTerm {
-                                space: Some((AsmSpace::Section(alloc::string::String::from(k)), off)),
+                                space: Some((
+                                    AsmSpace::Section(alloc::string::String::from(k)),
+                                    off,
+                                )),
                                 target: AsmSectionTarget::Symbol(alloc::string::String::from(t)),
                             })
                         };
@@ -5029,7 +5044,9 @@ pub(crate) fn materialize_asm_sections(
                         measured.offset(t).or_else(|| measured.symbol(t))
                     })
                     .ok_or_else(|| {
-                        alloc::format!("inline asm: fill count `{count}` is not a constant expression")
+                        alloc::format!(
+                            "inline asm: fill count `{count}` is not a constant expression"
+                        )
                     })?;
                     push_fill(&mut sec.bytes, n.max(0), *unit, *value);
                 }
@@ -5275,8 +5292,7 @@ pub(crate) fn materialize_asm_sections(
                                             target,
                                             addend,
                                         });
-                                        sec.bytes
-                                            .extend_from_slice(&[0u8; 8][..*width as usize]);
+                                        sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
                                     }
                                 }
                             }
@@ -5376,8 +5392,7 @@ pub(crate) fn materialize_asm_sections(
                                             target,
                                             addend,
                                         });
-                                        sec.bytes
-                                            .extend_from_slice(&[0u8; 8][..*width as usize]);
+                                        sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
                                     }
                                 }
                             }
@@ -6199,7 +6214,11 @@ fn val_relational(
         let truth = match d.to_abs() {
             Some(d) => rel(d, 0),
             None if equality => rel(1, 0),
-            None => return Err(alloc::string::String::from("operand of `comparison` is not absolute")),
+            None => {
+                return Err(alloc::string::String::from(
+                    "operand of `comparison` is not absolute",
+                ));
+            }
         };
         v = AsmExprValue::abs(if truth { -1 } else { 0 });
     }

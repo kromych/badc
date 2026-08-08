@@ -754,11 +754,20 @@ fn code_model_values_follow_the_target() {
     let small = compile("linux-aarch64", "small").expect("aarch64 rejects -mcmodel=small");
     assert_eq!(tiny, small, "tiny must lower as the small model");
     let err = compile("linux-x64", "tiny").expect_err("x86-64 accepts -mcmodel=tiny");
-    assert!(err.contains("-mcmodel=tiny"), "unexpected diagnostic: {err}");
+    assert!(
+        err.contains("-mcmodel=tiny"),
+        "unexpected diagnostic: {err}"
+    );
     let err = compile("linux-aarch64", "kernel").expect_err("aarch64 accepts -mcmodel=kernel");
-    assert!(err.contains("-mcmodel=kernel"), "unexpected diagnostic: {err}");
+    assert!(
+        err.contains("-mcmodel=kernel"),
+        "unexpected diagnostic: {err}"
+    );
     let err = compile("linux-x64", "medium").expect_err("x86-64 accepts -mcmodel=medium");
-    assert!(err.contains("unsupported code model"), "unexpected diagnostic: {err}");
+    assert!(
+        err.contains("unsupported code model"),
+        "unexpected diagnostic: {err}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

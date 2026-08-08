@@ -2957,8 +2957,7 @@ fn file_scope_asm_jcc_to_section_label_and_lock_prefix() {
         .windows(2)
         .position(|w| w == [0x0f, 0x85])
         .expect("`jne .slowpath` must encode as `0f 85 <rel32>`");
-    let disp =
-        i32::from_le_bytes(obj.text[jne + 2..jne + 6].try_into().expect("rel32")) as i64;
+    let disp = i32::from_le_bytes(obj.text[jne + 2..jne + 6].try_into().expect("rel32")) as i64;
     assert_eq!(
         jne as i64 + 6 + disp,
         label.value as i64,
@@ -9341,10 +9340,7 @@ fn aarch64_alternative_rept_nonconstant_count_is_rejected() {
         ..Default::default()
     };
     let err = emit_native_with_options(&program, Target::LinuxAarch64, opts).unwrap_err();
-    assert!(
-        alloc::format!("{err:?}").contains("662b-661b"),
-        "{err:?}"
-    );
+    assert!(alloc::format!("{err:?}").contains("662b-661b"), "{err:?}");
 }
 
 #[test]
@@ -10450,11 +10446,10 @@ int main(void) { return 0; }
             .iter()
             .find(|(n, _, _, _)| n == ".rodata")
             .unwrap_or_else(|| panic!("{target:?}: .rodata missing"));
-        let words: Vec<u32> = ro
-            .3
-            .chunks_exact(4)
-            .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
-            .collect();
+        let words: Vec<u32> =
+            ro.3.chunks_exact(4)
+                .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+                .collect();
         for want in [0x300u32, 0x340] {
             assert!(
                 words.contains(&want),

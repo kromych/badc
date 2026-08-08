@@ -34,11 +34,11 @@
 mod archive;
 #[cfg(feature = "std")]
 mod image;
+pub(crate) mod ld_driver;
 #[cfg(feature = "std")]
 pub(crate) mod lds;
 #[cfg(feature = "std")]
 pub(crate) mod lds_link;
-pub(crate) mod ld_driver;
 #[cfg(feature = "std")]
 pub(crate) mod link;
 #[cfg(feature = "std")]
@@ -56,6 +56,7 @@ pub use archive::{ArchiveMember, read_archive, write_archive};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use image::write_executable_elf64;
+pub use ld_driver::{is_ld_invocation, run_ld};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use lds::{LinkerScript, parse_linker_script};
@@ -64,7 +65,6 @@ pub use lds::{LinkerScript, parse_linker_script};
 pub use lds_link::{
     LdsEmit, LdsObject, LdsOptions, LdsResult, OrphanHandling, link_with_script, parse_lds_object,
 };
-pub use ld_driver::{is_ld_invocation, run_ld};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use link::{

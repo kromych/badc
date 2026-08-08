@@ -6511,7 +6511,9 @@ fn encode_one_x86_section_insn(
 ) -> Result<super::ssa::emit_common::AsmSectionItem, alloc::string::String> {
     use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg};
     use super::asm::{AsmMemBase, AsmOpnd, Concrete, Mnemonic};
-    use super::ssa::emit_common::{AsmRelocKind, AsmSectionItem, AsmSectionReloc, AsmSectionTarget};
+    use super::ssa::emit_common::{
+        AsmRelocKind, AsmSectionItem, AsmSectionReloc, AsmSectionTarget,
+    };
     let insns = super::asm::parse_template(text.as_bytes())
         .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
     // A leading `lock` / `rep` prefix parses as its own entry; it rides in

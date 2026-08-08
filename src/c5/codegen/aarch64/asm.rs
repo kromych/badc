@@ -131,11 +131,7 @@ pub(crate) enum AsmOpndA64 {
     },
     /// `[base, :lo12:sym]`: a load/store whose scaled immediate is the
     /// symbol's low 12 bits, plus a constant addend.
-    MemSymLo12 {
-        base: u8,
-        name: String,
-        addend: i64,
-    },
+    MemSymLo12 { base: u8, name: String, addend: i64 },
 }
 
 /// The base register of a memory operand.
@@ -1397,9 +1393,10 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     .filter(|g| *g <= 3)
                     .map(|g| g * 16)
                     .ok_or_else(|| format!("inline asm: bad `:abs_g` group `{}`", toks[1]))?;
-                let v = emit_common::eval_const_expr_ops(expr.trim(), &|_| None).ok_or_else(
-                    || format!("inline asm: `:abs_g` value `{expr}` is not a constant"),
-                )?;
+                let v =
+                    emit_common::eval_const_expr_ops(expr.trim(), &|_| None).ok_or_else(|| {
+                        format!("inline asm: `:abs_g` value `{expr}` is not a constant")
+                    })?;
                 let field = ((v as u64) >> shift) & 0xffff;
                 insns.push(AsmInsnA64 {
                     mnemonic: String::from(mnem),

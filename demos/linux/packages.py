@@ -90,6 +90,16 @@ DMESG_SEVERE = re.compile(
     r"Unable to handle kernel|kernel NULL pointer|UBSAN:|KASAN:")
 DMESG_WARN = re.compile(r"WARNING:")
 
+# badc's one-line identification: `badc <version> (gcc-compatible, GNU C
+# <v>)`. It is both the `--version` first line the kernel records as
+# CONFIG_CC_VERSION_TEXT and the `.comment` producer string in every
+# object badc writes.
+BADC_ID = re.compile(r"badc \S+ \(gcc-compatible, GNU C [^)]+\)")
+
+
+def names_badc(text: str) -> bool:
+    return bool(BADC_ID.search(text or ""))
+
 
 def log(m: str) -> None:
     print(f"linux packages: {m}", flush=True)
@@ -279,6 +289,35 @@ def phase_package(args, arch, tree) -> list[Path]:
     if not rpms:
         die(f"binrpm-pkg produced no kernel rpm under {tree}/rpmbuild/RPMS")
     return rpms
+
+
+def assert_module_producer(tree: Path, failures: list[str]) -> dict:
+    """Every packaged module must carry badc's `.comment` producer string.
+
+    The banner states the compiler Kconfig recorded; this states the
+    compiler that actually wrote the shipped objects. Modules are read
+    from the build tree, where they are neither stripped nor compressed.
+    """
+    mods = sorted(tree.glob("**/*.ko"))[:24]
+    if not mods:
+        failures.append(f"no modules built under {tree}")
+        return {}
+    checked, bad = 0, []
+    for m in mods:
+        r = run(["readelf", "-p", ".comment", str(m)])
+        if r.returncode != 0:
+            continue
+        checked += 1
+        if not names_badc(r.stdout):
+            bad.append(m.relative_to(tree).as_posix())
+    if not checked:
+        failures.append("could not read .comment from any module")
+    elif bad:
+        failures.append(f"modules whose .comment does not name badc: "
+                        f"{len(bad)} ({', '.join(bad[:3])})")
+    else:
+        log(f"module .comment names badc in all {checked} sampled modules")
+    return {"sampled": checked, "not_badc": bad}
 
 
 def assert_manifest(args, failures: list[str]) -> dict:
@@ -590,7 +629,10 @@ def probes(vm: VM) -> dict:
     out: dict = {}
     out["uname"] = vm.ssh("uname -r", check=True).stdout.strip()
     out["proc_version"] = vm.ssh("cat /proc/version").stdout.strip()
-    out["dmesg_banner"] = vm.ssh("dmesg | head -1", sudo=True).stdout.strip()
+    # Not `head -1`: only x86_64 prints the version banner first. arm64
+    # opens with the CPU-identification line.
+    out["dmesg_banner"] = vm.ssh(
+        "dmesg | grep -m1 'Linux version'", sudo=True).stdout.strip()
     out["cmdline"] = vm.ssh("cat /proc/cmdline").stdout.strip()
     for _ in range(60):
         state = vm.ssh("systemctl is-system-running").stdout.strip()
@@ -696,17 +738,28 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         if cur["uname"] != args.release:
             failures.append(f"booted {cur['uname']}, expected {args.release}")
             return result
-        # TODO: require "badc" once the compiler identification lands (the
-        # banner text is CONFIG_CC_VERSION_TEXT, probed from the reference
-        # compiler at configure time). Recorded, not asserted, until then.
+        # The banner is CONFIG_CC_VERSION_TEXT, captured from
+        # `$(CC) --version | head -n1` at configure time. buildcc.py
+        # answers that with badc's identification, so a kernel whose C
+        # units are badc's must say so in /proc/version and in the boot
+        # banner. Both surfaces are asserted: they come from the same
+        # string, and a disagreement means the recorded config and the
+        # running image were built from different Kconfig runs.
         result["compiler_id"] = {
             "banner": cur["proc_version"],
-            "names_badc": "badc" in cur["proc_version"].lower(),
-            "expected_fail": "badc" not in cur["proc_version"].lower(),
+            "dmesg_banner": cur["dmesg_banner"],
+            "names_badc": names_badc(cur["proc_version"]),
         }
         if not result["compiler_id"]["names_badc"]:
-            log(f"compiler-id (expected-fail): banner names the reference "
-                f"compiler: {cur['proc_version'][:120]}")
+            failures.append(
+                f"/proc/version does not identify badc: "
+                f"{cur['proc_version'][:160]}")
+        elif not names_badc(cur["dmesg_banner"]):
+            failures.append(
+                f"boot banner does not identify badc: "
+                f"{cur['dmesg_banner'][:160]}")
+        else:
+            log(f"compiler-id: {cur['proc_version'][:120]}")
         if cur["multi_user"] != "active":
             failures.append(f"multi-user.target: {cur['multi_user']}")
         if cur["systemd_state"] not in ("running", "degraded"):
@@ -863,6 +916,7 @@ def main() -> int:
                                "sha256": sha256_of(p)} for p in packages]
     if {"build", "package"} & phases:
         report["units"] = assert_manifest(args, failures)
+        report["module_producer"] = assert_module_producer(tree, failures)
 
     if "vm" in phases and not failures:
         if not packages:

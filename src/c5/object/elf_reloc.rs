@@ -596,6 +596,85 @@ struct NamedDataObj {
     entry: usize,
 }
 
+/// Carve the anonymous immutable spans -- string literals, `__func__`
+/// arrays, Mcpy templates -- out of the writable `.data` image into
+/// `.rodata`. The named-object pass keys on symbols, and none of this
+/// data has one, so without this it stays writable.
+///
+/// C99 6.4.5p6 leaves writing through a literal undefined, and the
+/// read-only mapping is what enforces it. Consumers also classify by
+/// address rather than declared type: the Linux kernel's `kfree_const`
+/// frees any pointer outside `[__start_rodata, __end_rodata)`.
+///
+/// A span a named object already covers is that object's storage (a
+/// `const char[]` initialized from a literal) and stays with it, so
+/// writable storage a literal initializes remains writable. Alignment
+/// is the span's existing offset residue rather than 1, since an Mcpy
+/// template can need more than byte alignment.
+fn carve_anonymous_const_data(
+    program: &crate::c5::program::Program,
+    build: &crate::c5::codegen::Build,
+    reloc_slots: &alloc::collections::BTreeSet<u64>,
+    carve: &mut CarvePlan,
+    named_objs: &mut Vec<NamedDataObj>,
+) -> Result<(), C5Error> {
+    let data_file_len = build.data.len() as u64;
+    let spans: Vec<(u64, u64)> = program
+        .const_data_ranges
+        .iter()
+        .filter(|&&(lo, hi)| lo >= 0 && hi > lo)
+        .map(|&(lo, hi)| (lo as u64, hi as u64))
+        .filter(|&(_, hi)| hi <= data_file_len)
+        .collect();
+    if spans.is_empty() {
+        return Ok(());
+    }
+    // Adjacent literals are separate objects but pack as one range.
+    let merge = |mut v: Vec<(u64, u64)>| -> Vec<(u64, u64)> {
+        v.sort_unstable();
+        let mut out: Vec<(u64, u64)> = Vec::with_capacity(v.len());
+        for (lo, hi) in v {
+            match out.last_mut() {
+                Some(last) if lo <= last.1 => last.1 = last.1.max(hi),
+                _ => out.push((lo, hi)),
+            }
+        }
+        out
+    };
+    let taken = merge(
+        named_objs
+            .iter()
+            .map(|o| (o.val, o.val + o.extent))
+            .collect(),
+    );
+    for (lo, hi) in merge(spans) {
+        // `taken` is disjoint and sorted, so the only candidate is the
+        // last span starting before `hi`.
+        let overlaps_named = taken[..taken.partition_point(|&(start, _)| start < hi)]
+            .last()
+            .is_some_and(|&(_, end)| end > lo);
+        // A relocated slot inside the span would need the span's
+        // section to take the relocation; literals carry none, so an
+        // overlap means the span is not the immutable image it claims.
+        if overlaps_named || reloc_slots.range(lo..hi).next().is_some() {
+            continue;
+        }
+        let align = 1u64 << lo.trailing_zeros().min(3);
+        let e = carve
+            .table
+            .get_or_insert(RODATA_SECTION, SHT_PROGBITS, SHF_ALLOC, align)
+            .map_err(|m| C5Error::Compile(crate::c5::error::fmt_internal_err(&m)))?;
+        named_objs.push(NamedDataObj {
+            val: lo,
+            copy: hi - lo,
+            extent: hi - lo,
+            align,
+            entry: e,
+        });
+    }
+    Ok(())
+}
+
 /// Build the data placement plan. `named_objs` is in declaration
 /// order; each object's in-section base is packed here at its
 /// alignment, advancing `sizes` so following inline-asm payloads
@@ -1063,6 +1142,7 @@ pub(super) fn write_relocatable(
                 entry: e,
             });
         }
+        carve_anonymous_const_data(program, build, &reloc_slots, &mut carve, &mut named_objs)?;
         {
             let mut by_val: Vec<(u64, u64)> =
                 named_objs.iter().map(|o| (o.val, o.extent)).collect();

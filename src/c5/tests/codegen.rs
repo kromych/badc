@@ -3812,6 +3812,100 @@ fn post_inline_orphaned_static_and_its_relocations_drop() {
 
 /// Section header table of an ELF64 object as
 /// `(name, sh_type, sh_size, sh_link, sh_info)`.
+/// `sh_flags` of a named section.
+fn elf64_section_flags(obj: &[u8], name: &str) -> Option<u64> {
+    let u16a = |o: usize| u16::from_le_bytes(obj[o..o + 2].try_into().unwrap()) as usize;
+    let u32a = |o: usize| u32::from_le_bytes(obj[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(obj[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a);
+    let str_off = u64a(shoff + u16a(0x3e) * shentsize + 0x18) as usize;
+    (0..u16a(0x3c)).find_map(|i| {
+        let h = shoff + i * shentsize;
+        let s = str_off + u32a(h) as usize;
+        let e = obj[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+        (&obj[s..e] == name.as_bytes()).then(|| u64a(h + 8))
+    })
+}
+
+/// C99 6.4.5p6 leaves modifying a string literal undefined, and the
+/// placement is what enforces it. Consumers also classify a pointer by
+/// where it landed rather than by its declared type: the Linux kernel's
+/// `kfree_const` frees anything outside `[__start_rodata, __end_rodata)`,
+/// so a literal left in the writable image reaches `kfree` as though it
+/// were heap and corrupts the allocator.
+///
+/// Locks both directions: anonymous literals -- including the template a
+/// local aggregate is copied from -- land in a `.rodata` carrying no
+/// `SHF_WRITE`, while every form in which a literal becomes an object's
+/// writable storage stays in `.data`.
+#[test]
+fn string_literals_are_placed_in_read_only_data() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SHF_WRITE: u64 = 0x1;
+    const SRC: &str = "\
+        char mut_g[] = \"mutable-global\"; \
+        static char mut_s[] = \"mutable-static\"; \
+        char mut_pad[10] = \"padded-ab\"; \
+        const char c_named[] = \"const-named\"; \
+        const char *anon(void) { return \"anon-literal\"; } \
+        const char *tab[] = { \"tab-entry\" }; \
+        char local_copy(void) { char t[] = \"local-template\"; t[0] = 'Z'; return t[1]; } \
+        char *touch(int i) { return i ? mut_g : (i > 1 ? mut_s : mut_pad); }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let obj = emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+
+        let rodata = elf64_section(&obj, ".rodata").expect("no .rodata section");
+        let data = elf64_section(&obj, ".data").unwrap_or(&[]);
+        let holds =
+            |hay: &[u8], needle: &str| hay.windows(needle.len()).any(|w| w == needle.as_bytes());
+
+        let flags = elf64_section_flags(&obj, ".rodata").expect("no .rodata header");
+        assert_eq!(
+            flags & SHF_WRITE,
+            0,
+            "{target:?}: .rodata is writable (sh_flags {flags:#x})"
+        );
+        // Anonymous immutable data: the literal an expression yields, the
+        // one a pointer table names, and a local aggregate's template.
+        for lit in ["anon-literal", "tab-entry", "local-template", "const-named"] {
+            assert!(holds(rodata, lit), "{target:?}: `{lit}` is not in .rodata");
+            assert!(
+                !holds(data, lit),
+                "{target:?}: `{lit}` is still in the writable .data"
+            );
+        }
+        // A literal that initializes writable storage is that object's
+        // image and must stay writable.
+        for mutable in ["mutable-global", "mutable-static", "padded-ab"] {
+            assert!(
+                holds(data, mutable),
+                "{target:?}: `{mutable}` left the writable .data"
+            );
+            assert!(
+                !holds(rodata, mutable),
+                "{target:?}: `{mutable}` was made read-only"
+            );
+        }
+    }
+}
+
 fn elf64_section_table(obj: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u32, u64, u32, u32)> {
     let u16a = |o: usize| u16::from_le_bytes(obj[o..o + 2].try_into().unwrap());
     let u32a = |o: usize| u32::from_le_bytes(obj[o..o + 4].try_into().unwrap());

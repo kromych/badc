@@ -133,6 +133,18 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         re.compile(r"(movq\s+%rsp,\s+%rdi\n\s+movl\s+)\$0x[0-9a-fA-F]+(,\s+%esi).*"),
         r"\1$<entry_off>\2",
     ),
+    # The aarch64 stub passes the same offset in `x1`, right after `mov
+    # x0, sp`, as a `mov`/`movk` pair. Same layout value, same absence of
+    # codegen signal. `mov x0, sp` alone also starts ordinary sequences
+    # that load `x1` with a real constant, so the trailing `movk` is part
+    # of the anchor.
+    (
+        re.compile(
+            r"(mov\s+x0,\s+sp\n\s+mov\s+x1,\s+)#0x[0-9a-fA-F]+.*"
+            r"(\n\s+movk\s+x1,\s+#0x0,\s+lsl\s+#16)"
+        ),
+        r"\1<entry_off>\2",
+    ),
 )
 
 

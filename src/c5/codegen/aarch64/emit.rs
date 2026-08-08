@@ -9361,7 +9361,7 @@ pub(crate) fn encode_a64_file_asm_section_code(
                         "inline asm: `{text}` in a file-scope section needs a relocation"
                     ));
                 }
-                if let Some((word, kind, name)) = encode_a64_sym_insn(insn, &conv)
+                if let Some((word, kind, name, addend)) = encode_a64_sym_insn(insn, &conv)
                     .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?
                 {
                     // An empty name marks a `.`-relative form resolved in
@@ -9375,7 +9375,7 @@ pub(crate) fn encode_a64_file_asm_section_code(
                             branch: false,
                             signed: false,
                             target: super::ssa::emit_common::AsmSectionTarget::Symbol(name),
-                            addend: 0,
+                            addend,
                         });
                     }
                     bytes.extend_from_slice(&word.to_le_bytes());
@@ -9402,7 +9402,12 @@ fn encode_a64_sym_insn(
     insn: &super::asm::AsmInsnA64,
     conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
 ) -> Result<
-    Option<(u32, super::ssa::emit_common::AsmRelocKind, alloc::string::String)>,
+    Option<(
+        u32,
+        super::ssa::emit_common::AsmRelocKind,
+        alloc::string::String,
+        i64,
+    )>,
     alloc::string::String,
 > {
     use super::asm::AsmOpndA64;
@@ -9421,11 +9426,11 @@ fn encode_a64_sym_insn(
         } else {
             super::encode::enc_b(0)
         };
-        return Ok(Some((word, K::A64Branch26 { link }, name.clone())));
+        return Ok(Some((word, K::A64Branch26 { link }, name.clone(), 0)));
     }
     // A load/store whose immediate is `:lo12:sym`: encode with a zero
     // offset; the access size names the LDST reloc width.
-    if let Some(AsmOpndA64::MemSymLo12 { base, name }) = insn.operands.last() {
+    if let Some(AsmOpndA64::MemSymLo12 { base, name, addend }) = insn.operands.last() {
         let size = a64_access_size(&insn.mnemonic, insn.operands.first())?;
         let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
         for o in &insn.operands[..insn.operands.len() - 1] {
@@ -9437,17 +9442,17 @@ fn encode_a64_sym_insn(
             pre: false,
         });
         let word = super::table::encode(&insn.mnemonic, &ops)?;
-        return Ok(Some((word, K::A64LdstLo12(size), name.clone())));
+        return Ok(Some((word, K::A64LdstLo12(size), name.clone(), *addend)));
     }
     // A numeric-label reference (`b 1b`) resolves at materialize time, where
     // this call's label offsets are known; carry it as a symbol reference.
     // `.`-relative branches encode directly.
     let named;
-    let (name, lo12) = match insn.operands.last() {
-        Some(AsmOpndA64::Sym { name, lo12 }) => (name, *lo12),
+    let (name, lo12, addend) = match insn.operands.last() {
+        Some(AsmOpndA64::Sym { name, lo12, addend }) => (name, *lo12, *addend),
         Some(&AsmOpndA64::Label { num, forward }) => {
             named = alloc::format!("{num}{}", if forward { 'f' } else { 'b' });
-            (&named, false)
+            (&named, false, 0)
         }
         Some(&AsmOpndA64::Here(off)) => {
             let kind = build_label_branch(insn, conv)?;
@@ -9455,7 +9460,7 @@ fn encode_a64_sym_insn(
                 LabelBranch::Adr { rd } => super::encode::enc_adr(super::Reg(rd), off),
                 _ => label_branch_word(&kind, off as i64)?,
             };
-            return Ok(Some((word, K::Data, alloc::string::String::new())));
+            return Ok(Some((word, K::Data, alloc::string::String::new(), 0)));
         }
         _ => return Ok(None),
     };
@@ -9475,7 +9480,7 @@ fn encode_a64_sym_insn(
             }
         };
         let word = super::encode::enc_add_imm(super::Reg(rd), super::Reg(rn), 0);
-        return Ok(Some((word, K::A64AddLo12, name.clone())));
+        return Ok(Some((word, K::A64AddLo12, name.clone(), addend)));
     }
     match insn.mnemonic.as_str() {
         "adrp" => {
@@ -9493,6 +9498,7 @@ fn encode_a64_sym_insn(
                 super::encode::enc_adrp(super::Reg(rd), 0),
                 K::A64AdrpPage21,
                 name.clone(),
+                addend,
             )))
         }
         // `ldr Rt, sym`: a PC-relative literal load.
@@ -9506,7 +9512,7 @@ fn encode_a64_sym_insn(
                 }
             };
             let word = if is64 { 0x5800_0000u32 } else { 0x1800_0000 } | rt as u32;
-            Ok(Some((word, K::A64LdrLit19, name.clone())))
+            Ok(Some((word, K::A64LdrLit19, name.clone(), addend)))
         }
         _ => {
             // The branch shapes share the label-branch classifier.
@@ -9522,7 +9528,7 @@ fn encode_a64_sym_insn(
                     (super::encode::enc_adr(super::Reg(rd), 0), K::A64Adr21)
                 }
             };
-            Ok(Some((word, k, name.clone())))
+            Ok(Some((word, k, name.clone(), addend)))
         }
     }
 }

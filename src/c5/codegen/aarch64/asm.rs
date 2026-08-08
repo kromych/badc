@@ -120,14 +120,22 @@ pub(crate) enum AsmOpndA64 {
     /// frontend canonicalizes `%l[name]` and operand-relative `%lN` to
     /// this form). The emitter branches to the label's target block.
     GotoLabel(u8),
-    /// A symbol operand: a branch / `adr` / `adrp` target, or with `lo12`
-    /// the `:lo12:sym` low-12 immediate of an `add`. Only file-scope
-    /// section code encodes these (to a relocation); the in-function
-    /// emitters reject them.
-    Sym { name: String, lo12: bool },
+    /// A symbol operand with a constant byte addend (`sym + 24`): a
+    /// branch / `adr` / `adrp` target, or with `lo12` the `:lo12:sym`
+    /// low-12 immediate of an `add`. Only file-scope section code encodes
+    /// these (to a relocation); the in-function emitters reject them.
+    Sym {
+        name: String,
+        lo12: bool,
+        addend: i64,
+    },
     /// `[base, :lo12:sym]`: a load/store whose scaled immediate is the
-    /// symbol's low 12 bits.
-    MemSymLo12 { base: u8, name: String },
+    /// symbol's low 12 bits, plus a constant addend.
+    MemSymLo12 {
+        base: u8,
+        name: String,
+        addend: i64,
+    },
 }
 
 /// The base register of a memory operand.
@@ -636,7 +644,7 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
     let base = mem_base(parts[0])?;
     // `[base, :lo12:sym]`: the symbol's low 12 bits as the scaled immediate.
     if parts.len() == 2
-        && let Some(name) = parts[1]
+        && let Some(spec) = parts[1]
             .strip_prefix('#')
             .unwrap_or(parts[1])
             .strip_prefix(":lo12:")
@@ -647,9 +655,12 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
         if pre {
             return Err(format!("inline asm: `:lo12:` has no writeback `[{inner}]`"));
         }
+        let (name, addend) = split_sym_addend(spec)
+            .ok_or_else(|| format!("inline asm: bad `:lo12:` symbol `[{inner}]`"))?;
         return Ok(AsmOpndA64::MemSymLo12 {
             base: rn,
-            name: String::from(name.trim()),
+            name: String::from(name),
+            addend,
         });
     }
     // A second part that is not an immediate is a register index: the
@@ -971,31 +982,53 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
         return Ok(AsmOpndA64::Imm(v));
     }
     // `:lo12:sym` (with GAS's optional `#`): a symbol's low 12 bits.
-    if let Some(name) = tok.strip_prefix('#').unwrap_or(tok).strip_prefix(":lo12:") {
-        let name = name.trim();
-        if !name.is_empty() {
-            return Ok(AsmOpndA64::Sym {
-                name: String::from(name),
-                lo12: true,
-            });
-        }
-    }
-    // A symbol name: a branch / adr / adrp target the encoder relocates. A
-    // PSTATE field name reaching here is a malformed `msr` (the immediate
-    // form is matched before the operand parse), not a symbol.
-    if !tok.is_empty()
-        && !tok.as_bytes()[0].is_ascii_digit()
-        && pstate_field(tok).is_none()
-        && tok
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$'))
+    if let Some(spec) = tok.strip_prefix('#').unwrap_or(tok).strip_prefix(":lo12:")
+        && let Some((name, addend)) = split_sym_addend(spec)
     {
         return Ok(AsmOpndA64::Sym {
-            name: String::from(tok),
+            name: String::from(name),
+            lo12: true,
+            addend,
+        });
+    }
+    // A symbol name with an optional constant addend (`sym + 24`): a
+    // branch / adr / adrp target the encoder relocates. A PSTATE field
+    // name reaching here is a malformed `msr` (the immediate form is
+    // matched before the operand parse), not a symbol.
+    if let Some((name, addend)) = split_sym_addend(tok)
+        && pstate_field(name).is_none()
+    {
+        return Ok(AsmOpndA64::Sym {
+            name: String::from(name),
             lo12: false,
+            addend,
         });
     }
     Err(format!("inline asm: unsupported operand `{tok}`"))
+}
+
+/// Split a symbol reference with an optional constant byte addend
+/// (`sym + 24`, `sym-8`); `None` when the head is not a symbol name or the
+/// tail is not `+`/`-` a constant expression.
+fn split_sym_addend(s: &str) -> Option<(&str, i64)> {
+    let s = s.trim();
+    let end = s
+        .find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '$')))
+        .unwrap_or(s.len());
+    let (name, rest) = s.split_at(end);
+    if name.is_empty() || name.as_bytes()[0].is_ascii_digit() {
+        return None;
+    }
+    let rest = rest.trim();
+    if rest.is_empty() {
+        return Some((name, 0));
+    }
+    let (neg, expr) = match rest.strip_prefix('+') {
+        Some(r) => (false, r),
+        None => (true, rest.strip_prefix('-')?),
+    };
+    let v = emit_common::eval_const_expr_ops(expr.trim(), &|_| None)?;
+    Some((name, if neg { -v } else { v }))
 }
 
 /// Parse an AArch64 inline-asm template into its instruction sequence.

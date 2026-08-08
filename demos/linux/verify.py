@@ -14,6 +14,13 @@ initramfs prints only after its checks pass (initramfs.py). A kernel that boots
 and then cannot serve a procfs read fails on the second, and the failure names
 the file it stopped on.
 
+The build step also re-records the compiler identification: it re-runs the
+configuration with the build shim as CC, so CONFIG_CC_VERSION_TEXT -- the
+compiler text in the boot banner and /proc/version -- carries badc's
+identification instead of the reference compiler's, while every capability
+symbol keeps the reference answer. Each boot's `Linux version` banner must
+then name badc.
+
     python3 demos/linux/verify.py --kernel-dir <writable tree> \
         --initramfs <image> --expect-units 1912
 
@@ -104,6 +111,16 @@ def read_manifest(path: Path) -> dict[str, list[str]]:
     return out
 
 
+def cc_version_text(tree: Path) -> str:
+    """The tree's configured CONFIG_CC_VERSION_TEXT, or ""."""
+    cfg = tree / ".config"
+    if not cfg.exists():
+        return ""
+    m = re.search(r'(?m)^CONFIG_CC_VERSION_TEXT="(.*)"$',
+                  cfg.read_text(errors="replace"))
+    return m.group(1) if m else ""
+
+
 def build(args, arch: dict, tree: Path, manifest: Path) -> tuple[int, float, Path]:
     env = dict(os.environ)
     env.update(
@@ -126,6 +143,23 @@ def build(args, arch: dict, tree: Path, manifest: Path) -> tuple[int, float, Pat
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     shim = LINUX_DIR / "buildcc.py"
+    # Identification re-probe: the tree was configured by the reference
+    # compiler, so its CONFIG_CC_VERSION_TEXT -- the boot banner's and
+    # /proc/version's compiler line -- names that compiler. Re-running the
+    # configuration step with the shim as CC records the shim's answer, which
+    # is badc's identification; every other symbol keeps the reference
+    # compiler's answer because the shim delegates the probes to it. The
+    # explicit step (rather than the syncconfig the build would trigger on
+    # the mismatch) makes the change diffable here.
+    before = cc_version_text(tree)
+    subprocess.run(["make", "olddefconfig", f"CC={shim}"], cwd=tree, env=env,
+                   check=True, stdout=subprocess.DEVNULL)
+    after = cc_version_text(tree)
+    if before != after:
+        log(f"CC_VERSION_TEXT: {before!r} -> {after!r}")
+    if "badc" not in after:
+        die(f"re-probed CC_VERSION_TEXT does not name badc: {after!r}")
+
     cmd = ["make", f"-j{args.jobs}", f"CC={shim}", arch["make_target"]]
     log(f"{' '.join(cmd)} (in {tree})")
     build_log = Path(args.workdir) / f"build-{args.arch}.log"
@@ -215,6 +249,16 @@ def last_step(text: str) -> str:
     if not steps:
         return ""
     return f", last step {steps[-1].split(CHECK_STEP, 1)[1].strip()!r}"
+
+
+def banner_line(text: str) -> str:
+    """The kernel's `Linux version ...` banner from a console log, from the
+    marker onward (console lines carry timestamps). The banner embeds
+    CONFIG_CC_VERSION_TEXT, and /proc/version serves the same text."""
+    for ln in text.splitlines():
+        if "Linux version " in ln:
+            return ln[ln.index("Linux version "):]
+    return ""
 
 
 def kaslr_configured(tree: Path) -> bool:
@@ -352,12 +396,19 @@ def main() -> int:
             offsets[seed] = kaslr.parse_kernel_offset(text)
             log(f"probe seed={tag}: "
                 f"displacement={kaslr.format_offset(offsets[seed])} (see {out})")
+        # A tree whose configuration names badc as the compiler must boot a
+        # kernel whose banner -- and therefore /proc/version -- says so; the
+        # banner embeds CONFIG_CC_VERSION_TEXT at build time, so a mismatch
+        # means the image was not built from this configuration.
+        require_badc = "badc" in cc_version_text(tree)
         for i, seed in enumerate(plan, start=1):
             out = Path(args.workdir) / f"boot-{args.arch}-{i}.log"
             text = boot(args, arch, image, out, args.rdinit, trees.get(seed))
             booted, lines = args.marker in text, text.count("\n")
             checked = not args.check_marker or args.check_marker in text
-            ok = booted and checked
+            banner = banner_line(text)
+            identified = not require_badc or "badc" in banner
+            ok = booted and checked and identified
             tag = f"0x{seed:016x}" if seed is not None else "unpinned"
             # An unpinned boot draws its own displacement, which the probe's
             # does not stand for, so it is left unattributed.
@@ -366,10 +417,15 @@ def main() -> int:
             log(f"boot {i}/{len(plan)}: seed={tag} displacement={disp} "
                 f"marker={'yes' if booted else 'NO'} "
                 f"checks={'yes' if checked else 'NO'} console-lines={lines}")
+            if i == 1 and banner:
+                log(f"banner: {banner}")
             boots.append({"ok": ok, "booted": booted, "checked": checked,
-                          "lines": lines, "log": str(out),
+                          "lines": lines, "log": str(out), "banner": banner,
                           "seed": tag, "offset": disp})
-            if not ok:
+            if booted and checked and not identified:
+                failures.append(f"boot {i} banner does not identify badc: "
+                                f"{banner!r} (see {out})")
+            elif not ok:
                 replay = (f"; replay with --kaslr-seed 0x{seed:016x}"
                           if seed is not None else "")
                 want = args.marker if not booted else args.check_marker

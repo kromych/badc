@@ -19,9 +19,14 @@ Routing, one rule per probe class:
   sweep's scope, so answering them with badc would disable assembler-gated
   options for a reason the sweep does not measure.
 - Preprocess-only queries (``-E``): delegated to the reference compiler. These
-  are identity and version queries (``scripts/cc-version.sh``), not capability
+  are classification queries (``scripts/cc-version.sh``), not capability
   probes; the kernel's version gates encode a specific toolchain's bug history
-  rather than a feature badc either has or lacks.
+  rather than a feature badc either has or lacks, and badc's claimed
+  ``__GNUC__`` (4.2.1) sits below the kernel's gcc floor.
+- ``--version``: answered by badc. The first line becomes
+  ``CONFIG_CC_VERSION_TEXT`` -- the boot banner's and ``/proc/version``'s
+  compiler identification -- and identification, unlike classification, must
+  be truthful about which compiler configured the tree.
 
 ``-S`` is answered by compiling to an object: the probe asks whether the
 compiler accepts the construct, not what it emits.
@@ -87,6 +92,14 @@ def delegate(argv: list[str], why: str) -> int:
 
 
 def main(argv: list[str]) -> int:
+    if argv == ["--version"]:
+        badc = os.environ.get("BADC")
+        if not badc:
+            print("ccshim: $BADC is not set", file=sys.stderr)
+            return 2
+        log("badc:version", argv)
+        os.execvp(badc, [badc, "--version"])
+
     lang: str | None = None
     mode = "link"
     out: str | None = None

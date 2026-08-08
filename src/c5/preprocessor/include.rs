@@ -4,6 +4,7 @@ use crate::c5::error::C5Error;
 use crate::c5::headers::embedded_header;
 use alloc::format;
 use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 /// Which header-search rule a `#include`-family construct follows.
 #[derive(Clone, Copy)]

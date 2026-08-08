@@ -295,6 +295,7 @@ fn run() {
     let mut mno_fp_regs = false;
     let mut mstrict_align = false;
     let mut fpic = false;
+    let mut code_model = badc::CodeModel::Small;
     let mut hardening = badc::Hardening::NONE;
     // `--export-all` exports every non-static function in the dynamic
     // symbol table / export trie of native output, so a runtime
@@ -614,6 +615,24 @@ fn run() {
             // `-c` object's relocation shapes.
             "-fPIC" | "-fpic" | "-fPIE" | "-fpie" => fpic = true,
             "-fno-pic" | "-fno-PIC" | "-fno-pie" | "-fno-PIE" => fpic = false,
+            // Code model for `-c` objects; see `CodeModel`. `small` is
+            // the default; `kernel` switches external-address
+            // materialization to the sign-extended 32-bit absolute form
+            // and is validated against the target below. The remaining
+            // psABI models are not implemented.
+            s if s.starts_with("-mcmodel=") => {
+                code_model = match &s["-mcmodel=".len()..] {
+                    "small" => badc::CodeModel::Small,
+                    "kernel" => badc::CodeModel::Kernel,
+                    other => {
+                        eprint_diagnostic(format!(
+                            "badc: error: unsupported code model `{other}` in \
+                             `-mcmodel=` (supported: small, kernel)"
+                        ));
+                        std::process::exit(1);
+                    }
+                };
+            }
             // Export every non-static function (dlopen/dlsym visibility).
             "--export-all" => export_all = true,
             // Export every defined non-static global (function and data)
@@ -812,6 +831,42 @@ fn run() {
     // headers so a hosted native build resolves third-party headers
     // (`zlib.h`, `libfdt.h`) without shadowing the embedded standard set.
     let system_include_paths = default_system_include_paths(target, freestanding);
+
+    // The kernel model rewrites external addresses into sign-extended
+    // 32-bit absolutes, defined by the x86-64 psABI for images linked in
+    // the top 2GB. It shapes relocatable output only: badc's own images
+    // are position-independent and cannot carry an absolute text
+    // reference, and `-fPIC` contradicts it the same way (gcc rejects
+    // the combination).
+    if code_model == badc::CodeModel::Kernel {
+        if target != badc::Target::LinuxX64 {
+            eprint_diagnostic(
+                "badc: error: `-mcmodel=kernel` requires an x86-64 ELF target \
+                 (--target=linux-x64)",
+            );
+            std::process::exit(1);
+        }
+        if fpic {
+            eprint_diagnostic(
+                "badc: error: code model `kernel` does not support \
+                 position-independent output (-fPIC/-fPIE)",
+            );
+            std::process::exit(1);
+        }
+        // Modes that emit no native code (`-E`, --list-symbols, ...)
+        // leave the flag inert, as gcc does.
+        let emits_native = matches!(
+            mode,
+            Mode::NativeExecutable | Mode::SharedLibrary | Mode::Jit | Mode::Interp
+        );
+        if emits_native && !compile_only {
+            eprint_diagnostic(
+                "badc: error: `-mcmodel=kernel` shapes relocatable objects; \
+                 it requires `-c` or `--ar`",
+            );
+            std::process::exit(1);
+        }
+    }
 
     // VM-only flags.
     if (track_pointers || trace) && mode != Mode::Interp {
@@ -1169,6 +1224,7 @@ fn run() {
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.pic = fpic;
+        reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
@@ -1737,6 +1793,7 @@ fn run() {
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.pic = fpic;
+        reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
@@ -1861,6 +1918,7 @@ fn run() {
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.pic = fpic;
+        reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();

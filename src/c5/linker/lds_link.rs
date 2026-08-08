@@ -2146,7 +2146,10 @@ impl<'a> LdsLinker<'a> {
         if let Some(&(oi, si)) = self.globals.get(name) {
             return self.resolve_sym_prevpass(oi, si, 0);
         }
-        self.script_now.get(name).map(|s| s.val.v)
+        self.script_now
+            .get(name)
+            .or_else(|| self.script_prev.get(name))
+            .map(|s| s.val.v)
     }
 
     /// True when an ABS64 site against this symbol names a load
@@ -2161,7 +2164,11 @@ impl<'a> LdsLinker<'a> {
                     if let Some(&(doi, dsi)) = self.globals.get(&sym.name) {
                         return self.reloc_is_relative(doi, dsi);
                     }
-                    if let Some(s) = self.script_now.get(&sym.name) {
+                    if let Some(s) = self
+                        .script_now
+                        .get(&sym.name)
+                        .or_else(|| self.script_prev.get(&sym.name))
+                    {
                         return matches!(s.val.att, Att::Out(_));
                     }
                 }
@@ -2176,8 +2183,19 @@ impl<'a> LdsLinker<'a> {
         match sym.shndx as u16 {
             SHN_ABS => Some(sym.value.wrapping_add(addend as u64)),
             SHN_UNDEF => {
-                let &(doi, dsi) = self.globals.get(&sym.name)?;
-                self.resolve_sym_prevpass(doi, dsi, addend)
+                if let Some(&(doi, dsi)) = self.globals.get(&sym.name) {
+                    return self.resolve_sym_prevpass(doi, dsi, addend);
+                }
+                // A reference the objects leave undefined can bind to
+                // a script-defined symbol; without this the dynamic
+                // fixup collection drops the slot entirely. During
+                // sizing the current pass's table is already swapped
+                // out, so fall back to the previous pass's values,
+                // which match at convergence.
+                self.script_now
+                    .get(&sym.name)
+                    .or_else(|| self.script_prev.get(&sym.name))
+                    .map(|s| s.val.v.wrapping_add(addend as u64))
             }
             _ => {
                 // Prev-pass placement offsets survive the reset; at
@@ -4499,4 +4517,46 @@ SECTIONS {
         let _ = syms;
     }
 
+    /// An ABS64 slot against a symbol only the script defines is a
+    /// load-address fixup like any other: it must reach the dynamic
+    /// tables (RELR here) and, since RELR stores the addend in place,
+    /// carry the link-time value even under
+    /// `--no-apply-dynamic-relocs`. The collection used to drop such
+    /// slots -- no fixup, zero in place.
+    #[test]
+    fn dyn_link_relocates_script_symbol_slots() {
+        let script = parse_linker_script(
+            "ENTRY(_start)\nSECTIONS {\n  . = 0;\n  .text : { *(.text*) }\n  .rodata : { table_start = .; *(.rodata*) }\n  .data : { *(.data*) }\n  .rela.dyn : { *(.rela .rela*) }\n  .relr.dyn : { *(.relr.dyn) }\n}",
+        )
+        .expect("parses");
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 8, &[0u8; 8])
+            .sec(".rodata", SHT_PROGBITS, SHF_ALLOC, 8, &[0u8; 8])
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .sym("table_start", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            // Symtab: null(0), sections(1..=3), _start(4), table_start(5).
+            .reloc(2, 0, 5, rt::R_AARCH64_ABS64, 0)
+            .build(EM_AARCH64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            pack_relative_relocs: true,
+            apply_dynamic_relocs: false,
+            max_page_size: 0x10000,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let secs = readelf_sections(&res.image);
+        let ro_addr = secs.iter().find(|s| s.0 == ".rodata").unwrap().2;
+        let data_addr = secs.iter().find(|s| s.0 == ".data").unwrap().2;
+        let relr = secs.iter().find(|s| s.0 == ".relr.dyn").expect("relr");
+        assert!(relr.3 >= 8, "script-symbol slot must reach RELR");
+        let relr_off = section_file_off(&res.image, relr.2);
+        let w0 = u64::from_le_bytes(res.image[relr_off..relr_off + 8].try_into().unwrap());
+        assert_eq!(w0, data_addr, "RELR relocates the slot");
+        let d_off = section_file_off(&res.image, data_addr);
+        let slot = u64::from_le_bytes(res.image[d_off..d_off + 8].try_into().unwrap());
+        assert_eq!(slot, ro_addr, "slot holds the link-time value in place");
+    }
 }

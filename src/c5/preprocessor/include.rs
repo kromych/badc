@@ -117,18 +117,15 @@ impl Preprocessor {
     /// `#include <name>` / `#include "name"` -- splice the named
     /// header's processed contents into the output.
     ///
-    /// The header is looked up in [`crate::c5::headers::embedded_header`].
-    /// Unknown names emit a warning (matching gcc / clang's
-    /// "fatal error: 'X': No such file or directory" diagnostic
-    /// at warning severity rather than fatal -- c5 chooses the
-    /// permissive shape so legacy fixtures with cosmetic
-    /// `#include`s don't break) and resolve to an empty body.
-    /// Cyclic `#include` returns an error; repeat inclusion of a
-    /// header that previously declared `#pragma once` returns an
-    /// empty string. With [`Self::set_show_includes`] on the
-    /// resolution path is appended to `include_trace` in the
-    /// gcc-`-H` shape (`. file`, `.. nested`, `! missing` for
-    /// the warning case).
+    /// The header is looked up on the search paths and then in
+    /// [`crate::c5::headers::embedded_header`]. An unknown name is an
+    /// error, as in gcc / clang: the directive cannot perform the
+    /// replacement C99 6.10.2 requires. Cyclic `#include` returns an
+    /// error; repeat inclusion of a header that previously declared
+    /// `#pragma once` returns an empty string. With
+    /// [`Self::set_track_includes`] on the resolution is appended to
+    /// `include_records`, which renders the gcc-`-H` shape (`. file`,
+    /// `.. nested`, `! missing`).
     pub(super) fn process_include(
         &mut self,
         name: &str,

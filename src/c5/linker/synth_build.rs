@@ -380,6 +380,7 @@ fn synth_program_and_build(
         data: merged.data.clone(),
         data_ro_len: merged.data_ro_len,
         pic: false,
+        code_model: Default::default(),
         data_align: merged.data_align,
         bss_size: merged.bss_size as i64,
         init_fini_arrays: merged.init_fini_arrays,

@@ -30,7 +30,9 @@ mod tests;
 #[cfg(feature = "native-emit")]
 pub use object::{emit_native, emit_native_with_options};
 pub use {
-    codegen::{Hardening, NativeOptions, OutputKind, Target, jit_run, jit_run_with_options},
+    codegen::{
+        CodeModel, Hardening, NativeOptions, OutputKind, Target, jit_run, jit_run_with_options,
+    },
     compiler::{CompileOptions, Compiler, StructDef, StructField},
     error::C5Error,
     headers::embedded_headers,

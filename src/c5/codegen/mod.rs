@@ -2079,16 +2079,15 @@ pub(crate) struct FuncFixup {
 /// build. Fields name the construct the backend changes rather than the
 /// flag, so one field serves several spellings.
 ///
-/// The x86_64 thunks are external by contract -- the flags request a
-/// branch to a name the execution environment defines, so the object
-/// carries an undefined symbol and a branch relocation, not a generated
-/// thunk body.
+/// The x86_64 extern thunks are external by contract -- those flags
+/// request a branch to a name the execution environment defines, so the
+/// object carries an undefined symbol and a branch relocation, not a
+/// generated thunk body. The inline form embeds the sequence at each
+/// site and names nothing.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Hardening {
-    /// `-mindirect-branch=thunk-extern`: an indirect call or jump
-    /// transfers through `__x86_indirect_thunk_<reg>` instead of
-    /// through the register.
-    pub indirect_branch_thunk: bool,
+    /// `-mindirect-branch=`: how an indirect call or jump transfers.
+    pub indirect_branch: IndirectBranch,
     /// `-mfunction-return=thunk-extern`: a return transfers to
     /// `__x86_return_thunk` instead of executing `ret`.
     pub function_return_thunk: bool,
@@ -2129,13 +2128,29 @@ pub(crate) fn indirect_branch_target_blocks(
 impl Hardening {
     /// Every mitigation off: the emitters keep their unhardened forms.
     pub const NONE: Self = Self {
-        indirect_branch_thunk: false,
+        indirect_branch: IndirectBranch::Keep,
         function_return_thunk: false,
         sls_return: false,
         sls_indirect_jmp: false,
         bti: false,
         cf_protection_branch: false,
     };
+}
+
+/// `-mindirect-branch=` lowering of an indirect call or jump
+/// (gcc's option space; `thunk`, which generates a comdat thunk body,
+/// is not implemented).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum IndirectBranch {
+    /// `keep`: the plain `call *%reg` / `jmp *%reg` forms.
+    #[default]
+    Keep,
+    /// `thunk-extern`: transfer through `__x86_indirect_thunk_<reg>`.
+    ThunkExtern,
+    /// `thunk-inline`: the retpoline sequence embedded at the site,
+    /// for objects that may not reference external symbols (the
+    /// kernel's vDSO).
+    ThunkInline,
 }
 
 /// User-controllable knobs for the native lowering pass. Distinct

@@ -9960,39 +9960,80 @@ fn emit_hardened_ret(
     }
 }
 
+/// `mov %reg, (%rsp)`: overwrite the return address the retpoline's
+/// `call` pushed with the real branch target, so its `ret` transfers
+/// there with the return predictor pinned to the capture loop.
+fn emit_mov_r_to_rsp_slot(code: &mut Vec<u8>, target: Reg) {
+    code.push(if target.0 >= 8 { 0x4C } else { 0x48 });
+    code.push(0x89);
+    code.push(0x04 | ((target.0 & 7) << 3));
+    code.push(0x24);
+}
+
+/// The retpoline capture: `pause; lfence; jmp .-7`, then the slot
+/// overwrite and `ret`. Entered by a `call` whose displacement lands
+/// on the `mov`; the pushed return address keeps speculation in the
+/// loop. Mirrors gcc's `-mindirect-branch=thunk-inline` body.
+fn emit_retpoline_capture(code: &mut Vec<u8>, target: Reg) {
+    code.extend_from_slice(&[0xF3, 0x90]); // pause
+    code.extend_from_slice(&[0x0F, 0xAE, 0xE8]); // lfence
+    code.extend_from_slice(&[0xEB, 0xF9]); // jmp back over both
+    emit_mov_r_to_rsp_slot(code, target);
+    code.push(0xC3); // ret
+}
+
 /// Indirect call through `target`. `-mindirect-branch=thunk-extern`
-/// replaces `call *%reg` with a direct call to the register's thunk. A
-/// call has an architectural successor either way, so `-mharden-sls=`
-/// places no trap here.
+/// replaces `call *%reg` with a direct call to the register's thunk;
+/// `thunk-inline` embeds the retpoline (gcc's shape: hop over the
+/// 17-byte thunk body, then call into it, so the continuation follows
+/// the site). A call has an architectural successor either way, so
+/// `-mharden-sls=` places no trap here.
 fn emit_hardened_call_r(
     code: &mut Vec<u8>,
     target: Reg,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
 ) {
-    if abi.hardening.indirect_branch_thunk {
-        let symbol = super::encode::indirect_thunk_symbol(target);
-        emit_extern_branch(code, extern_sites, symbol, true);
-        return;
+    use crate::c5::codegen::IndirectBranch;
+    match abi.hardening.indirect_branch {
+        IndirectBranch::ThunkExtern => {
+            let symbol = super::encode::indirect_thunk_symbol(target);
+            emit_extern_branch(code, extern_sites, symbol, true);
+        }
+        IndirectBranch::ThunkInline => {
+            code.extend_from_slice(&[0xEB, 0x11]); // jmp over the thunk body
+            code.extend_from_slice(&[0xE8, 0x07, 0x00, 0x00, 0x00]); // call the capture
+            emit_retpoline_capture(code, target);
+            // call back into the thunk head; the pushed address is the
+            // continuation after this site.
+            code.extend_from_slice(&[0xE8, 0xEA, 0xFF, 0xFF, 0xFF]);
+        }
+        IndirectBranch::Keep => super::encode::emit_call_r(code, target),
     }
-    super::encode::emit_call_r(code, target);
 }
 
 /// Indirect jump through `target` (computed goto, switch-table
 /// dispatch), routed through the register's thunk under
-/// `-mindirect-branch=thunk-extern`; `-mharden-sls=indirect-jmp` traps
-/// after the transfer in either form.
+/// `-mindirect-branch=thunk-extern` and embedded as the retpoline
+/// sequence under `thunk-inline`; `-mharden-sls=indirect-jmp` traps
+/// after the transfer in every form.
 fn emit_hardened_jmp_r(
     code: &mut Vec<u8>,
     target: Reg,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
 ) {
-    if abi.hardening.indirect_branch_thunk {
-        let symbol = super::encode::indirect_thunk_symbol(target);
-        emit_extern_branch(code, extern_sites, symbol, false);
-    } else {
-        super::encode::emit_jmp_r(code, target);
+    use crate::c5::codegen::IndirectBranch;
+    match abi.hardening.indirect_branch {
+        IndirectBranch::ThunkExtern => {
+            let symbol = super::encode::indirect_thunk_symbol(target);
+            emit_extern_branch(code, extern_sites, symbol, false);
+        }
+        IndirectBranch::ThunkInline => {
+            code.extend_from_slice(&[0xE8, 0x07, 0x00, 0x00, 0x00]); // call the capture
+            emit_retpoline_capture(code, target);
+        }
+        IndirectBranch::Keep => super::encode::emit_jmp_r(code, target),
     }
     if abi.hardening.sls_indirect_jmp {
         super::encode::emit_int3(code);

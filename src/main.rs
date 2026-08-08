@@ -519,15 +519,16 @@ fn run() {
             // argument that is not implemented is rejected rather than
             // ignored: a hardening flag that compiles but does nothing
             // leaves the caller believing the output is mitigated.
-            // The `thunk` / `thunk-inline` kinds want a compiler-generated
-            // thunk body, which badc does not produce.
+            // The `thunk` kind wants a comdat thunk body in the object,
+            // which badc does not produce.
             s if s.starts_with("-mindirect-branch=") => match &s["-mindirect-branch=".len()..] {
-                "keep" => hardening.indirect_branch_thunk = false,
-                "thunk-extern" => hardening.indirect_branch_thunk = true,
+                "keep" => hardening.indirect_branch = badc::IndirectBranch::Keep,
+                "thunk-extern" => hardening.indirect_branch = badc::IndirectBranch::ThunkExtern,
+                "thunk-inline" => hardening.indirect_branch = badc::IndirectBranch::ThunkInline,
                 other => {
                     eprint_diagnostic(format!(
                         "badc: error: unsupported argument `{other}` to `-mindirect-branch=` \
-                             (supported: keep, thunk-extern)"
+                             (supported: keep, thunk-extern, thunk-inline)"
                     ));
                     std::process::exit(1);
                 }

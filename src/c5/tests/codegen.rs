@@ -5289,7 +5289,7 @@ fn x64_indirect_branch_thunk_covers_call_switch_and_computed_goto() {
         HARDENING_SRC,
         crate::Target::LinuxX64,
         crate::Hardening {
-            indirect_branch_thunk: true,
+            indirect_branch: crate::IndirectBranch::ThunkExtern,
             ..crate::Hardening::NONE
         },
     );
@@ -5314,6 +5314,45 @@ fn x64_indirect_branch_thunk_covers_call_switch_and_computed_goto() {
 }
 
 #[test]
+fn x64_indirect_branch_thunk_inline_embeds_the_retpoline() {
+    // `-mindirect-branch=thunk-inline` (the vDSO's form: no external
+    // symbol may be named): every indirect transfer embeds the
+    // retpoline. The capture loop is `pause; lfence; jmp .-7` and the
+    // slot overwrite follows; a call site hops over the body first so
+    // the continuation stays after the site (gcc's shape).
+    const CAPTURE: &[u8] = &[0xF3, 0x90, 0x0F, 0xAE, 0xE8, 0xEB, 0xF9];
+    const CALL_HEAD: &[u8] = &[0xEB, 0x11, 0xE8, 0x07, 0x00, 0x00, 0x00];
+    const JMP_HEAD: &[u8] = &[0xE8, 0x07, 0x00, 0x00, 0x00, 0xF3, 0x90];
+    let hardened = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            indirect_branch: crate::IndirectBranch::ThunkInline,
+            ..crate::Hardening::NONE
+        },
+    );
+    assert!(
+        x64_branch_relocs(&hardened)
+            .iter()
+            .all(|(_, n, _)| !n.starts_with("__x86_indirect_thunk_")),
+        "inline form names no thunk symbol"
+    );
+    let text = elf_text(&hardened);
+    let count = |pat: &[u8]| text.windows(pat.len()).filter(|w| *w == pat).count();
+    assert!(
+        count(CAPTURE) >= 3,
+        "call, switch dispatch and computed goto each embed the capture"
+    );
+    assert!(count(CALL_HEAD) >= 1, "call form hops over the body");
+    assert!(count(JMP_HEAD) >= 1, "jump form enters the capture directly");
+    assert_eq!(
+        x64_register_indirect_forms(&text),
+        0,
+        "no register-indirect transfer survives"
+    );
+}
+
+#[test]
 fn x64_direct_tail_call_is_not_routed_through_a_thunk() {
     // A call in tail position becomes a direct `jmp` to the callee: it is
     // neither a return nor an indirect branch. The callee's own epilogue
@@ -5326,7 +5365,7 @@ fn x64_direct_tail_call_is_not_routed_through_a_thunk() {
         crate::Target::LinuxX64,
         crate::Hardening {
             function_return_thunk: true,
-            indirect_branch_thunk: true,
+            indirect_branch: crate::IndirectBranch::ThunkExtern,
             ..crate::Hardening::NONE
         },
     );

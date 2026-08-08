@@ -82,7 +82,8 @@ pub mod c5;
 
 #[allow(unused_imports)]
 pub use c5::{
-    C5Error, CompileOptions, Compiler, Hardening, Host, NativeOptions, OutputKind, Overwrite,
+    C5Error, CompileOptions, Compiler, Hardening, Host, IndirectBranch, NativeOptions, OutputKind,
+    Overwrite,
     PredefinedKind, PredefinedSymbol, Program, Target, Trace, VariableInfo, Vm, embedded_headers,
     jit_run, jit_run_with_options, predefined_symbols,
 };

@@ -1743,11 +1743,13 @@ pub(crate) fn expand_asm_gas_macros(
     let mut aliases: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String> =
         alloc::collections::BTreeMap::new();
     let mut out = alloc::string::String::with_capacity(text.len());
+    let mut altmacro = false;
     expand_gas_statements(
         &stmts,
         &mut macros,
         &mut equ,
         &mut aliases,
+        &mut altmacro,
         &mut out,
         inst_width,
         0,
@@ -1760,6 +1762,7 @@ fn expand_gas_statements(
     macros: &mut alloc::collections::BTreeMap<alloc::string::String, GasMacro>,
     equ: &mut alloc::collections::BTreeMap<alloc::string::String, i64>,
     aliases: &mut alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
+    altmacro: &mut bool,
     out: &mut alloc::string::String,
     inst_width: usize,
     depth: usize,
@@ -1886,6 +1889,10 @@ fn expand_gas_statements(
                     ));
                 }
             }
+            // Alternate macro syntax. Only the `%expr` argument evaluation is
+            // interpreted; the mode carries into nested expansions, which is
+            // where an invocation written inside a macro body reads it.
+            ".altmacro" | ".noaltmacro" => *altmacro = tok == ".altmacro",
             ".irp" => {
                 let (var, values) = parse_gas_irp_header(rest)?;
                 let (body, next) = collect_gas_repeat_body(stmts, i)?;
@@ -1902,6 +1909,7 @@ fn expand_gas_statements(
                         macros,
                         equ,
                         aliases,
+                        altmacro,
                         out,
                         inst_width,
                         depth + 1,
@@ -1920,6 +1928,7 @@ fn expand_gas_statements(
                                 macros,
                                 equ,
                                 aliases,
+                                altmacro,
                                 out,
                                 inst_width,
                                 depth + 1,
@@ -1938,6 +1947,7 @@ fn expand_gas_statements(
                             macros,
                             equ,
                             aliases,
+                            altmacro,
                             out,
                             inst_width,
                             depth + 1,
@@ -2037,7 +2047,7 @@ fn expand_gas_statements(
                     let def = &macros[tok];
                     let params = def.params.clone();
                     let body = def.body.clone();
-                    let map = bind_gas_macro_args(&params, rest);
+                    let map = bind_gas_macro_args(&params, rest, *altmacro);
                     let inst = next_asm_instance();
                     let expanded: alloc::vec::Vec<alloc::string::String> = body
                         .iter()
@@ -2048,6 +2058,7 @@ fn expand_gas_statements(
                         macros,
                         equ,
                         aliases,
+                        altmacro,
                         out,
                         inst_width,
                         depth + 1,
@@ -2140,8 +2151,19 @@ fn unquote_gas_arg(a: &str) -> &str {
 fn bind_gas_macro_args(
     params: &GasParams,
     rest: &str,
+    altmacro: bool,
 ) -> alloc::collections::BTreeMap<alloc::string::String, alloc::string::String> {
     let args = split_macro_args(rest);
+    // Under `.altmacro` a `%`-led argument is an expression evaluated at the
+    // invocation and bound as its decimal value. A `:vararg` parameter takes
+    // the raw text, so this applies only where a single argument binds.
+    let value = |a: &str| match altmacro.then(|| a.strip_prefix('%')).flatten() {
+        Some(e) => match eval_const_expr(e) {
+            Some(v) => alloc::format!("{v}"),
+            None => alloc::string::String::from(unquote_gas_arg(a)),
+        },
+        None => alloc::string::String::from(unquote_gas_arg(a)),
+    };
     let is_keyword = |a: &str| {
         a.split_once('=')
             .is_some_and(|(k, _)| params.iter().any(|p| p.name == k.trim()))
@@ -2150,10 +2172,7 @@ fn bind_gas_macro_args(
     for a in &args {
         if is_keyword(a) {
             let (k, v) = a.split_once('=').unwrap();
-            map.insert(
-                alloc::string::String::from(k.trim()),
-                alloc::string::String::from(unquote_gas_arg(v.trim())),
-            );
+            map.insert(alloc::string::String::from(k.trim()), value(v.trim()));
         }
     }
     let unbound: alloc::vec::Vec<&GasParam> = params
@@ -2177,10 +2196,7 @@ fn bind_gas_macro_args(
         }
         match positional.next() {
             Some((_, a)) => {
-                map.insert(
-                    p.name.clone(),
-                    alloc::string::String::from(unquote_gas_arg(a)),
-                );
+                map.insert(p.name.clone(), value(a));
             }
             None => {
                 map.insert(p.name.clone(), p.default.clone());
@@ -3302,10 +3318,13 @@ fn parse_section_item(
         // bytes in this section. badc emits no unwind info for asm bodies, the
         // same as the template path.
         _ if tok.starts_with(".cfi_") => Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new())),
-        // `.code64` restates the only x86 encoding mode supported; `.code16`
-        // and `.code32` select modes the encoder does not implement and stay
-        // rejected below.
-        ".code64" if !is_aarch64 => Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new())),
+        // `.code16` / `.code32` / `.code64` select the x86 encoding mode for
+        // the instructions that follow. The directive deposits no bytes; it
+        // reaches the arch backend as a code item, which reads it as the
+        // encoder state the rest of the stream assembles under.
+        ".code16" | ".code32" | ".code64" if !is_aarch64 => {
+            Ok(AsmSectionItem::Code(alloc::string::String::from(tok)))
+        }
         ".weak" => {
             let name = rest.trim();
             if !is_asm_symbol_name(name) {
@@ -6346,7 +6365,13 @@ fn val_mul(
                 if !(0..64).contains(&c) {
                     return Err(alloc::format!("shift count {c} out of range"));
                 }
-                if op == b'l' { a << c } else { a >> c }
+                // GNU as shifts the 64-bit value, so `>>` does not replicate
+                // the sign bit: `~0 >> 63` is 1, not -1.
+                if op == b'l' {
+                    a << c
+                } else {
+                    ((a as u64) >> c) as i64
+                }
             }
         };
         v = AsmExprValue::abs(r);
@@ -7183,6 +7208,21 @@ mod asm_section_tests {
         assert_eq!(
             parse_section_value("sym + .").unwrap(),
             AsmSectionValue::LocExpr(alloc::string::String::from("sym + ."))
+        );
+    }
+
+    #[test]
+    fn shift_right_is_logical_like_gnu_as() {
+        // GNU as shifts the 64-bit value, so `>>` never replicates the sign
+        // bit. Verified against `as` (`.quad` of each expression): the kernel's
+        // GENMASK reduces to 1, not -1, which is what makes it a valid AArch64
+        // logical immediate.
+        assert_eq!(eval_const_expr("~0 >> 63"), Some(1));
+        assert_eq!(eval_const_expr("-8 >> 1"), Some(0x7fff_ffff_ffff_fffc));
+        assert_eq!(eval_const_expr("1 << 63 >> 60"), Some(8));
+        assert_eq!(
+            eval_const_expr("(((~(0)) << (0)) & (~(0) >> (64 - 1 - (0))))"),
+            Some(1)
         );
     }
 
@@ -8277,6 +8317,51 @@ mod asm_section_tests {
         let text = ".macro m3, p = 64\n.if \\p == 32\nnop\n.else\nret\n.endif\n.endm\nm3\nm3 32\n";
         let out = expand_asm_gas_macros(text, 4, &none).unwrap().unwrap();
         assert!(out.contains("ret") && out.contains("nop"), "{out}");
+    }
+
+    #[test]
+    fn altmacro_percent_arguments_evaluate_like_gnu_as() {
+        // Under `.altmacro` a `%`-led argument is evaluated at the invocation
+        // and bound as its decimal value. The kernel's SVE register loop drives
+        // a recursive macro this way; assembled with `as`, the body below emits
+        // `add x0, x0, #0` through `#7` in order.
+        let none = |_: &str| None;
+        let text = ".macro __for from:req, to:req\n\
+                    .if (\\from) == (\\to)\n\
+                    _for__body %\\from\n\
+                    .else\n\
+                    __for %\\from, %((\\from) + ((\\to) - (\\from)) / 2)\n\
+                    __for %((\\from) + ((\\to) - (\\from)) / 2 + 1), %\\to\n\
+                    .endif\n\
+                    .endm\n\
+                    .macro _for var:req, from:req, to:req, insn:vararg\n\
+                    .macro _for__body \\var:req\n\
+                    .noaltmacro\n\
+                    \\insn\n\
+                    .altmacro\n\
+                    .endm\n\
+                    .altmacro\n\
+                    __for \\from, \\to\n\
+                    .noaltmacro\n\
+                    .purgem _for__body\n\
+                    .endm\n\
+                    _for n, 0, 7, add x0, x0, #\\n\n";
+        let out = expand_asm_gas_macros(text, 4, &none).unwrap().unwrap();
+        let body: alloc::vec::Vec<&str> = out
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect();
+        assert_eq!(
+            body,
+            (0..8)
+                .map(|n| alloc::format!("add x0, x0, #{n}"))
+                .collect::<alloc::vec::Vec<_>>()
+        );
+        // Without `.altmacro` the `%` is not an evaluation marker.
+        let text = ".macro m a\n.byte \\a\n.endm\nm %1+2\n";
+        let out = expand_asm_gas_macros(text, 4, &none).unwrap().unwrap();
+        assert!(out.contains("%1+2"), "{out}");
     }
 
     fn rept(text: &str) -> Result<alloc::string::String, alloc::string::String> {

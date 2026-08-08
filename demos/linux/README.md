@@ -334,6 +334,50 @@ CI runs this against the pinned release configured with the architecture's
 own `defconfig`, and boots the result under the emulator the qemu lane
 compiles and links with badc. Both architectures are gated.
 
+## Distro packages (packages.py)
+
+`verify.py` boots a marker initramfs; `packages.py` runs the rest of the road
+a kernel travels in a distribution. It builds the pinned release with badc
+compiling every kernel C unit (the buildcc.py contract: zero fallbacks),
+packages it with the kernel's own targets -- `bindeb-pkg` on x86_64,
+`binrpm-pkg` on aarch64 -- installs the package in a stock cloud image
+(Debian stable on x86_64, Fedora on aarch64) under qemu, and validates the
+reboot: the package scriptlets (depmod, initramfs generation via
+initramfs-tools or dracut, the boot-loader entry), systemd reaching
+multi-user, udev-bound virtio devices, on-demand `modprobe` of packaged
+modules, an untainted kernel, a clean dmesg, and disk/network I/O. Before
+the install the same probes run against the image's stock kernel, so every
+measurement has a baseline from the same userspace.
+
+```sh
+python3 demos/linux/packages.py --arch x86_64 \
+    --tarball <linux-<version>.tar.xz> --config <corpus .config> \
+    --report packages-x86_64.json
+```
+
+Phases -- `tree` (extract + configure), `build` (hybrid make), `package`,
+`vm` -- are idempotent and `--phases` selects a subset; `--image` reuses a
+downloaded cloud image, and a fresh qcow2 overlay keeps the base image
+pristine per run. On an rpm host the Debian packaging tools (dpkg, dpkg-dev,
+debhelper) are provisioned under `--deb-tools` from the host's own mirror via
+`dnf download` + rpm2cpio extraction; nothing is installed system-wide, and
+`dpkg-buildpackage` runs with `-d` plus a scratch admindir because the build
+host's package database is not what the produced package depends on.
+`rpmbuild` runs with `--without debuginfo` and `INSTALL_MOD_STRIP=1`: the
+gate packages the kernel, not its debug info. Run it on the box whose
+architecture matches; it is not wired into CI.
+
+Core dumps are captured throughout. Before validation the vm phase sets
+`kernel.core_pattern`, a core size limit (limits.d) and systemd's
+`DefaultLimitCORE` on the stock system, via sysctl.d / systemd drop-ins that
+persist into the badc kernel's boot, so a crash of any service, udev worker
+or `modprobe` dumps rather than vanishing. After each phase the run sweeps
+`/var/crash` (and `coredumpctl` where present), pulls each core, its binary
+and `/proc/version` into the box scratch, and takes a first-pass `gdb` back
+trace; a core from a badc-compiled binary is a reported finding. A kernel
+oops or panic leaves no userspace core -- the qemu serial console log is that
+record and is kept per boot regardless.
+
 ## Scope
 
 The sweep gates nothing; it is a measurement. A unit that gcc compiles and

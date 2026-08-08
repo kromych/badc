@@ -35,6 +35,21 @@ use super::types::{is_struct_ty, is_struct_value_ty, is_void_ty, struct_ptr_dept
 /// `h_*` shadow slot used at function-body top level this is a per-entry
 /// snapshot; it carries every field that a block-local declarator can retype
 /// on the reused symbol slot (C99 6.2.1 nested scopes).
+/// A registered `__attribute__((cleanup(fn)))` variable. The fields the
+/// destructor call bakes into its `Ident` are captured at declaration
+/// time; see `register_cleanup_var`.
+#[derive(Clone)]
+pub(super) struct CleanupVar {
+    var_sym: usize,
+    fn_sym: usize,
+    class: i64,
+    ty: i64,
+    val: i64,
+    is_thread_local: bool,
+    array_size: i64,
+    fn_ty: i64,
+}
+
 pub(super) struct BlockShadow {
     pub(super) idx: usize,
     class: i64,
@@ -311,7 +326,7 @@ impl Compiler {
         // across iterations, C99 6.8.5.3). The calls are read while the
         // init binding is still live -- before the restore below.
         if self.cleanup_scopes.last().is_some_and(|s| !s.is_empty()) {
-            let pairs: alloc::vec::Vec<(usize, usize)> = self
+            let pending: alloc::vec::Vec<CleanupVar> = self
                 .cleanup_scopes
                 .last()
                 .unwrap()
@@ -319,8 +334,8 @@ impl Compiler {
                 .rev()
                 .cloned()
                 .collect();
-            for (var_sym, fn_sym) in pairs {
-                self.push_cleanup_call(var_sym, fn_sym);
+            for cv in pending {
+                self.push_cleanup_call(&cv);
             }
             self.coalesce_exit_since(for_stmt_start);
         }
@@ -502,25 +517,54 @@ impl Compiler {
 
     /// Register a `__attribute__((cleanup(fn)))` variable in the current
     /// block scope. `fn(&var)` then runs on every exit from the scope.
+    /// The binding is snapshotted here: an inner scope may rebind the
+    /// symbol slot by shadowing the name, and the cleanup emitted at an
+    /// exit inside that scope must still address this declaration.
     /// The variable and the function are marked referenced so neither
     /// draws an unused diagnostic.
     pub(super) fn register_cleanup_var(&mut self, var_sym: usize, fn_sym: usize) {
         self.symbols[var_sym].was_read = true;
         self.symbols[var_sym].was_referenced = true;
         self.symbols[fn_sym].was_referenced = true;
+        let s = &self.symbols[var_sym];
+        let cv = CleanupVar {
+            var_sym,
+            fn_sym,
+            class: s.class,
+            ty: s.type_,
+            val: s.val,
+            is_thread_local: s.is_thread_local,
+            array_size: if s.array_size == 0 && s.is_zero_len_array {
+                -1
+            } else {
+                s.array_size
+            },
+            fn_ty: self.symbols[fn_sym].type_,
+        };
         if let Some(scope) = self.cleanup_scopes.last_mut() {
-            scope.push((var_sym, fn_sym));
+            scope.push(cv);
         }
     }
 
     /// Build the `Stmt::Expr` for one cleanup call `fn(&var)` and push it
-    /// into the AST statement stream.
-    pub(super) fn push_cleanup_call(&mut self, var_sym: usize, fn_sym: usize) {
+    /// into the AST statement stream. The `Ident` is built from the
+    /// registered snapshot, not the live symbol slot.
+    pub(super) fn push_cleanup_call(&mut self, cv: &CleanupVar) {
         use super::super::ast::{Expr, Stmt, UnOp};
         let pos = self.ast_src_pos();
-        let var_ty = self.symbols[var_sym].type_;
-        let ident = self.ast_emit_ident(var_sym as u32, var_ty);
-        let ptr_ty = var_ty + Ty::Ptr as i64;
+        let ident = self.ast.push_expr(
+            Expr::Ident {
+                sym: cv.var_sym as u32,
+                ty: cv.ty,
+                class: cv.class,
+                val: cv.val,
+                is_thread_local: cv.is_thread_local,
+                array_size: cv.array_size,
+            },
+            pos,
+        );
+        self.ast_acc = Some(ident);
+        let ptr_ty = cv.ty + Ty::Ptr as i64;
         let addr = self.ast.push_expr(
             Expr::Unary {
                 op: UnOp::AddrOf,
@@ -529,13 +573,12 @@ impl Compiler {
             },
             pos,
         );
-        let ret_ty = self.symbols[fn_sym].type_;
-        let callee = self.ast_synthesize_callee(fn_sym as u32, ret_ty);
+        let callee = self.ast_synthesize_callee(cv.fn_sym as u32, cv.fn_ty);
         let call = self.ast.push_expr(
             Expr::Call {
                 callee,
                 args: alloc::vec![addr],
-                ty: ret_ty,
+                ty: cv.fn_ty,
             },
             pos,
         );
@@ -547,14 +590,14 @@ impl Compiler {
     /// declaration order, C++-style, matching GCC). Used before a
     /// `return` (`from == 0`), `break`, or `continue`.
     fn emit_cleanups_above(&mut self, from: usize) {
-        let mut pending: alloc::vec::Vec<(usize, usize)> = alloc::vec::Vec::new();
+        let mut pending: alloc::vec::Vec<CleanupVar> = alloc::vec::Vec::new();
         for scope in self.cleanup_scopes[from..].iter().rev() {
-            for &(var_sym, fn_sym) in scope.iter().rev() {
-                pending.push((var_sym, fn_sym));
+            for cv in scope.iter().rev() {
+                pending.push(cv.clone());
             }
         }
-        for (var_sym, fn_sym) in pending {
-            self.push_cleanup_call(var_sym, fn_sym);
+        for cv in pending {
+            self.push_cleanup_call(&cv);
         }
     }
 
@@ -785,7 +828,7 @@ impl Compiler {
         // ends in a terminator these are emitted after it and the walker
         // never reaches them; the terminator's own path already cleaned.
         if self.cleanup_scopes.last().is_some_and(|s| !s.is_empty()) {
-            let pairs: alloc::vec::Vec<(usize, usize)> = self
+            let pending: alloc::vec::Vec<CleanupVar> = self
                 .cleanup_scopes
                 .last()
                 .unwrap()
@@ -793,9 +836,9 @@ impl Compiler {
                 .rev()
                 .cloned()
                 .collect();
-            for (var_sym, fn_sym) in pairs {
+            for cv in pending {
                 let before = self.ast.stmts.len();
-                self.push_cleanup_call(var_sym, fn_sym);
+                self.push_cleanup_call(&cv);
                 for id in before..self.ast.stmts.len() {
                     top_level_ids.push(id as super::super::ast::StmtId);
                 }

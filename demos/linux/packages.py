@@ -439,6 +439,13 @@ class VM:
              *map(str, paths), f"badc@127.0.0.1:{dest}"],
             timeout=600, check=True)
 
+    def pull(self, remote: str, dest: Path) -> bool:
+        r = run(["scp", "-q", "-P", str(self.args.ssh_port), "-i", str(self.key),
+                 "-o", "StrictHostKeyChecking=no",
+                 "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
+                 f"badc@127.0.0.1:{remote}", str(dest)], timeout=600)
+        return r.returncode == 0
+
     def wait_ssh(self, timeout: int, expect_boot_id: str | None = None) -> str:
         """Wait until ssh answers; with expect_boot_id, until a new boot."""
         deadline = time.time() + timeout
@@ -469,6 +476,106 @@ class VM:
                 return
             time.sleep(2)
         os.kill(pid, 15)
+
+
+# Core file directory and pattern. A plain file pattern (not the distro's
+# systemd-coredump pipe) makes cores land as extractable files; the sweep
+# also checks coredumpctl in case a pipe pattern is still in force.
+CORE_DIR = "/var/crash"
+CORE_PATTERN = f"{CORE_DIR}/core.%e.%p.%t"
+
+
+def configure_core_capture(vm: VM) -> dict:
+    """Turn on core dumps and make the settings survive the reboot into the
+    badc kernel: a sysctl.d file for the pattern, a limits.d file and a
+    systemd drop-in for the size limit (so service / udev / modprobe crashes
+    dump too). Applied on the stock system after the baseline, then verified
+    again on the badc system. Returns the live core_pattern for the record."""
+    script = (
+        f"set -e; sudo mkdir -p {CORE_DIR}; sudo chmod 1777 {CORE_DIR}; "
+        f"printf 'kernel.core_pattern={CORE_PATTERN}\\nkernel.core_uses_pid=1\\n' "
+        "| sudo tee /etc/sysctl.d/99-badc-cores.conf >/dev/null; "
+        f"sudo sysctl -w kernel.core_pattern='{CORE_PATTERN}' >/dev/null; "
+        "printf '* soft core unlimited\\n* hard core unlimited\\n' "
+        "| sudo tee /etc/security/limits.d/99-badc-core.conf >/dev/null; "
+        "sudo mkdir -p /etc/systemd/system.conf.d; "
+        "printf '[Manager]\\nDefaultLimitCORE=infinity\\n' "
+        "| sudo tee /etc/systemd/system.conf.d/99-badc-core.conf >/dev/null; "
+        "sudo systemctl daemon-reexec 2>/dev/null || true"
+    )
+    vm.ssh(script, timeout=120)
+    return {"core_pattern": vm.ssh("cat /proc/sys/kernel/core_pattern").stdout.strip()}
+
+
+def sweep_cores(args, vm: VM, phase: str, findings: list[str]) -> list[dict]:
+    """After a validation phase, collect any core dumps: pull each core, the
+    crashed binary and /proc/version out of the VM into the box scratch, and
+    take a first-pass backtrace on the box. A core from a badc-compiled binary
+    is a finding; every core is reported."""
+    cores_dir = args.workdir / "cores" / f"{args.arch}-{phase}"
+    listing = vm.ssh(
+        f"sudo sh -c 'ls -1 {CORE_DIR}/core.* 2>/dev/null'").stdout.split()
+    have_cdctl = vm.ssh("command -v coredumpctl").returncode == 0
+    cdctl = []
+    if have_cdctl:
+        cdctl = [l for l in vm.ssh(
+            "coredumpctl list --no-legend --no-pager 2>/dev/null"
+        ).stdout.splitlines() if l.strip()]
+    if not listing and not cdctl:
+        return []
+    cores_dir.mkdir(parents=True, exist_ok=True)
+    vm.ssh(f"cat /proc/version | sudo tee {CORE_DIR}/proc_version >/dev/null")
+    vm.pull(f"{CORE_DIR}/proc_version", cores_dir / "proc_version")
+    found: list[dict] = []
+
+    # coredumpctl-managed cores: export the core and the executable path.
+    for i, line in enumerate(cdctl):
+        exe = line.split()[-1]
+        core = cores_dir / f"cdctl-{i}.core"
+        vm.ssh(f"sudo sh -c 'coredumpctl dump --output={CORE_DIR}/e{i}.core "
+               f"{i} >/dev/null 2>&1'")
+        vm.pull(f"{CORE_DIR}/e{i}.core", core)
+        binp = cores_dir / f"cdctl-{i}.bin"
+        vm.pull(exe, binp)
+        found.append(analyze_core(core, binp, exe, phase, findings))
+
+    # File-pattern cores.
+    for path in listing:
+        core = cores_dir / Path(path).name
+        vm.pull(path, core)
+        exe = Path(path).name.split(".")[1] if "." in Path(path).name else ""
+        which = vm.ssh(f"command -v {exe} 2>/dev/null").stdout.strip() or f"/usr/bin/{exe}"
+        binp = cores_dir / f"{exe}.bin"
+        vm.pull(which, binp)
+        found.append(analyze_core(core, binp, which, phase, findings))
+
+    for f in found:
+        log(f"core [{phase}]: {f['exe']} -> {f['bt_first']}")
+    return found
+
+
+def analyze_core(core: Path, binp: Path, exe: str, phase: str,
+                 findings: list[str]) -> dict:
+    """First-pass backtrace on the box; flag a badc-compiled binary."""
+    bt = ""
+    if core.exists() and binp.exists() and shutil.which("gdb"):
+        r = run(["gdb", "-batch", "-nx", "-ex", "bt", str(binp), str(core)],
+                timeout=120)
+        bt = (r.stdout + r.stderr)
+    top = next((l.strip() for l in bt.splitlines()
+                if l.lstrip().startswith("#")), bt.strip()[:200] or "no bt")
+    # A badc-compiled ELF carries badc's producer string in .comment; distro
+    # binaries carry GCC/Clang. This is the badc-artifact test the report needs.
+    is_badc = False
+    if binp.exists():
+        c = run(["sh", "-c",
+                 f"strings -a {shlex.quote(str(binp))} | grep -i badc | head -1"])
+        is_badc = bool(c.stdout.strip())
+    if is_badc:
+        findings.append(f"core dump from a badc-compiled binary ({exe}) in the "
+                        f"{phase} phase: {top}")
+    return {"exe": exe, "core": str(core), "bt_first": top,
+            "badc_built": is_badc, "phase": phase}
 
 
 def probes(vm: VM) -> dict:
@@ -523,10 +630,15 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
     try:
         boot_id = vm.wait_ssh(args.vm_timeout)
         log("stock system up; capturing baseline")
+        # Turn on core capture on the stock system; the sysctl.d / limits.d /
+        # systemd drop-in make it persist into the badc kernel's boot.
+        result["core_capture"] = configure_core_capture(vm)
+        log(f"core capture: pattern={result['core_capture']['core_pattern']}")
         base = probes(vm)
         result["stock"] = base
         log(f"stock: uname={base['uname']} systemd={base['systemd_state']} "
             f"modules={len(base['modules'])}")
+        result["cores_stock"] = sweep_cores(args, vm, "stock", failures)
 
         log(f"installing {', '.join(p.name for p in packages)}")
         vm.scp(packages, "")
@@ -639,6 +751,13 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         after = vm.ssh("cat /proc/sys/kernel/tainted").stdout.strip()
         if after != "0":
             failures.append(f"kernel tainted after module loads: {after}")
+
+        # Sweep for cores produced under the badc kernel (services, udev,
+        # modprobe). A kernel-side oops/panic leaves no userspace core; the
+        # qemu console log is that record and is kept regardless.
+        result["cores_badc"] = sweep_cores(args, vm, "badc", failures)
+        if not result["cores_badc"]:
+            log("no userspace cores under the badc kernel")
     finally:
         try:
             vm.stop()

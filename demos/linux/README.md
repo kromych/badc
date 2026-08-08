@@ -347,6 +347,17 @@ host's package database is not what the produced package depends on.
 gate packages the kernel, not its debug info. Run it on the box whose
 architecture matches; it is not wired into CI.
 
+Core dumps are captured throughout. Before validation the vm phase sets
+`kernel.core_pattern`, a core size limit (limits.d) and systemd's
+`DefaultLimitCORE` on the stock system, via sysctl.d / systemd drop-ins that
+persist into the badc kernel's boot, so a crash of any service, udev worker
+or `modprobe` dumps rather than vanishing. After each phase the run sweeps
+`/var/crash` (and `coredumpctl` where present), pulls each core, its binary
+and `/proc/version` into the box scratch, and takes a first-pass `gdb` back
+trace; a core from a badc-compiled binary is a reported finding. A kernel
+oops or panic leaves no userspace core -- the qemu serial console log is that
+record and is kept per boot regardless.
+
 ## Scope
 
 The sweep gates nothing; it is a measurement. A unit that gcc compiles and

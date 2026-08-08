@@ -62,29 +62,26 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v21  Imm(2)                                           -> x0
     terminator Return(v21)   (exit_acc=v21)
   block 8  start_pc=0
-    v22  ImmData(16)                                      -> x0
-    v23  Imm(0)                                           -> x1
-    v24  LoadLocal { off=-2, kind=I64 }                   -> x1
-    v25  Imm(0)                                           -> x1
-    v26  Load { addr=v22, disp=0, kind=I8 }               -> x0
-    v27  BinopI { op=ne, lhs=v26, rhs_imm=98 }            -> x0
-    terminator Bz { cond=v27, target=b10, fall=b9 }   (exit_acc=v27)
+    v22  Imm(0)                                           -> x0
+    v23  Imm(0)                                           -> x0
+    v24  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v25  Imm(0)                                           -> x0
+    v26  Imm(98)                                          -> x0
+    v27  Imm(0)                                           -> x0
+    terminator Jmp(b9)   (exit_acc=v27)
   block 9  start_pc=0
-    v28  Imm(3)                                           -> x0
-    terminator Return(v28)   (exit_acc=v28)
-  block 10  start_pc=0
-    v29  ImmData(32)                                      -> x0
+    v29  ImmData(16)                                      -> x0
     v30  Imm(1)                                           -> x1
     v31  Store { addr=v29, disp=0, value=v30, kind=I32 }  -> -
     v32  Load { addr=v29, disp=0, kind=U32 }              -> x0
     v33  BinopI { op=xor, lhs=v32, rhs_imm=1 }            -> x0
     v34  BinopI { op=and, lhs=v33, rhs_imm=4294967295 }   -> x0
     v35  BinopI { op=ne, lhs=v34, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v35, target=b12, fall=b11 }   (exit_acc=v35)
-  block 11  start_pc=0
+    terminator Bz { cond=v35, target=b11, fall=b10 }   (exit_acc=v35)
+  block 10  start_pc=0
     v36  Imm(7)                                           -> x0
     terminator Return(v36)   (exit_acc=v36)
-  block 12  start_pc=0
+  block 11  start_pc=0
     v37  Imm(0)                                           -> x0
     terminator Return(v37)   (exit_acc=v37)
 c99_qualifiers.c:47: warning: unused variable `sum`

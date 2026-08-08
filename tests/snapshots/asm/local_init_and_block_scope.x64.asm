@@ -14,23 +14,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	<rip>, %rax
                	movl	$0x1, %ecx
                	movl	%ecx, -0x18(%rbp)
-               	movsbq	(%rax), %rcx
-               	cmpq	$0x68, %rcx
-               	je	<addr>
-               	movl	$0x3, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
-               	movsbq	0x1(%rax), %rax
-               	cmpq	$0x69, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
                	movslq	-0x18(%rbp), %rax
                	addq	$0x2, %rax
                	addq	$0x3, %rax

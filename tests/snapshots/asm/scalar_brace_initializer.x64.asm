@@ -12,36 +12,13 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rcx
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x29, %rax
+               	movslq	(%rcx), %rcx
+               	cmpq	$0x29, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movsbq	(%rcx), %rax
-               	cmpq	$0x78, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	movl	$0x1, %eax
-               	testq	%rdx, %rdx
-               	jne	<addr>
-               	movsbq	0x1(%rcx), %rax
-               	cmpq	$0x79, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movsbq	0x2(%rcx), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	retq
+               	xorq	%rcx, %rcx
+               	xorq	%rax, %rax
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	cmpq	$0x64, %rax
@@ -50,5 +27,3 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>

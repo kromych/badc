@@ -85,13 +85,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movsbq	(%rax), %rax
-               	cmpq	$0x75, %rax
-               	je	<addr>
-               	movl	$0x6, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
                	movslq	-0x10(%rbp), %rax
                	testq	%rax, %rax
                	je	<addr>

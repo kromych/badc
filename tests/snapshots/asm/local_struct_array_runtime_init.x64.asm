@@ -18,10 +18,8 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	movl	$0x9, %eax
                	movl	%eax, -0x10(%rbp)
-               	leaq	<rip>, %rdx
                	leaq	-0x8(%rbp), %rcx
-               	leaq	<rip>, %rsi
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	-0x10(%rbp), %rdx
                	movslq	(%rcx), %rax
                	cmpq	$0x7, %rax
                	je	<addr>
@@ -29,24 +27,10 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movslq	(%rdi), %rax
+               	movslq	(%rdx), %rax
                	cmpq	$0x9, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	movsbq	(%rdx), %rax
-               	cmpq	$0x78, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	movsbq	(%rsi), %rax
-               	cmpq	$0x79, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq

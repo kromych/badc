@@ -957,6 +957,59 @@ impl Pending {
         self.type_align = s.type_align;
         self.attr_vector_size = s.attr_vector_size;
     }
+
+    /// Detach the declared-type carriers seeded by a base-type or
+    /// `typeof` specifier. An attribute argument (`aligned(sizeof(T))`,
+    /// `vector_size(N)`, `_Alignas(T)`, ...) re-enters the expression
+    /// and type-name parsers, which reset these carriers on entry;
+    /// `skip_attribute_specifiers` detaches them around the attribute
+    /// so it cannot alter the type of the declarator it annotates.
+    pub(super) fn take_decl_type_carriers(&mut self) -> DeclTypeCarriers {
+        DeclTypeCarriers {
+            base_was_void: core::mem::take(&mut self.base_was_void),
+            base_is_const: core::mem::take(&mut self.base_is_const),
+            base_was_long_double: core::mem::take(&mut self.base_was_long_double),
+            base_is_function_type: core::mem::take(&mut self.base_is_function_type),
+            fn_ptr_indirection: self.fn_ptr_indirection.take(),
+            typedef_fn_proto: self.typedef_fn_proto.take(),
+            fn_ptr_param_types: self.fn_ptr_param_types.take(),
+            typedef_base_array_size: core::mem::take(&mut self.typedef_base_array_size),
+            typedef_base_array_dims: core::mem::take(&mut self.typedef_base_array_dims),
+            typeof_operand_was_array: core::mem::take(&mut self.typeof_operand_was_array),
+            type_align: core::mem::take(&mut self.type_align),
+        }
+    }
+
+    pub(super) fn restore_decl_type_carriers(&mut self, s: DeclTypeCarriers) {
+        self.base_was_void = s.base_was_void;
+        self.base_is_const = s.base_is_const;
+        self.base_was_long_double = s.base_was_long_double;
+        self.base_is_function_type = s.base_is_function_type;
+        self.fn_ptr_indirection = s.fn_ptr_indirection;
+        self.typedef_fn_proto = s.typedef_fn_proto;
+        self.fn_ptr_param_types = s.fn_ptr_param_types;
+        self.typedef_base_array_size = s.typedef_base_array_size;
+        self.typedef_base_array_dims = s.typedef_base_array_dims;
+        self.typeof_operand_was_array = s.typeof_operand_was_array;
+        self.type_align = s.type_align;
+    }
+}
+
+/// The declared-type carriers of the declaration being parsed, detached
+/// while an attribute specifier's arguments parse. See
+/// [`Pending::take_decl_type_carriers`].
+pub(super) struct DeclTypeCarriers {
+    base_was_void: bool,
+    base_is_const: bool,
+    base_was_long_double: bool,
+    base_is_function_type: bool,
+    fn_ptr_indirection: Option<i64>,
+    typedef_fn_proto: Option<(usize, bool)>,
+    fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
+    typedef_base_array_size: i64,
+    typedef_base_array_dims: alloc::vec::Vec<i64>,
+    typeof_operand_was_array: bool,
+    type_align: i64,
 }
 
 impl Default for Pending {
@@ -1065,9 +1118,10 @@ pub struct Compiler {
     /// `__func__`) recorded as they are placed in `data`, for static
     /// DCE object boundaries. See `Program::data_object_starts`.
     data_object_starts: Vec<i64>,
-    /// `[lo, hi)` ranges of staged local-initializer templates. See
-    /// `Program::local_init_templates`.
-    local_init_templates: Vec<(i64, i64)>,
+    /// `[lo, hi)` ranges of anonymous immutable data (string literals,
+    /// `__func__` arrays, staged local-initializer templates). See
+    /// `Program::const_data_ranges`.
+    const_data_ranges: Vec<(i64, i64)>,
     /// Alignment-padding ranges within `data`. See
     /// `Program::data_pad_ranges`.
     data_pad_ranges: Vec<(i64, i64)>,
@@ -1886,7 +1940,7 @@ impl Compiler {
             next_ent_pc: 0,
             data,
             data_object_starts: Vec::new(),
-            local_init_templates: Vec::new(),
+            const_data_ranges: Vec::new(),
             data_pad_ranges: Vec::new(),
             data_align_marks: Vec::new(),
             flex_array_measured_count: None,
@@ -2407,7 +2461,7 @@ impl Compiler {
             asm_weak_names: self.asm_weak_names,
             data_align: self.data_align,
             data_object_starts: self.data_object_starts,
-            local_init_templates: self.local_init_templates,
+            const_data_ranges: self.const_data_ranges,
             data_pad_ranges: self.data_pad_ranges,
             data_align_marks: self.data_align_marks,
             entry_pc,

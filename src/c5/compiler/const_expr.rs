@@ -1654,7 +1654,7 @@ impl Compiler {
             while self.lex.tk == '"' {
                 self.next()?;
             }
-            self.data.push(0);
+            self.push_literal_nul();
             let len = self.data.len() as i64 - off;
             let sym = self.intern_compound_literal_symbol(off, Ty::Char as i64, len);
             return Ok(ConstDesig {
@@ -1949,7 +1949,7 @@ impl Compiler {
             while self.lex.tk == '"' {
                 self.next()?;
             }
-            self.data.push(0);
+            self.push_literal_nul();
             return Ok(ConstVal::Int {
                 val: addr as i128,
                 ty: Ty::Ptr as i64,

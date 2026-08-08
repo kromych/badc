@@ -12,7 +12,5 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w0, [x0, #0x5]
+               	mov	x0, #0x66               // =102
                	ret

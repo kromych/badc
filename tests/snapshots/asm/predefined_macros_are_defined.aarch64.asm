@@ -36,12 +36,5 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsb	x0, [x0]
-               	cmp	x0, #0x0
-               	b.ne	<addr>
-               	mov	x0, #0x2                // =2
-               	ret
                	mov	x0, #0x0                // =0
                	ret

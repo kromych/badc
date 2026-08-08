@@ -5399,6 +5399,105 @@ fn elf_section_bodies(
     out
 }
 
+/// A `typeof(<string literal>)` member with `aligned(sizeof(T))` is an
+/// array of char stored in place: the attribute argument's `sizeof`
+/// parse must not reset the member's declared-type carriers. The
+/// regression emitted an 8-byte relocation to a pooled copy in `.bss`
+/// instead of the literal's characters.
+#[test]
+fn typeof_literal_member_with_sizeof_aligned_attr_stores_in_place() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        typedef unsigned int Word;\n\
+        struct hdr { Word a, b, c; };\n\
+        static const struct {\n\
+            struct hdr _hdr;\n\
+            unsigned char _name[sizeof(\"Linux\")] __attribute__((aligned(4)));\n\
+            typeof(\"\") _desc __attribute__((aligned(sizeof(Word))));\n\
+        } n __attribute__((__used__, section(\".note.T\"), aligned(4))) = {\n\
+            { sizeof(\"Linux\"), sizeof(\"\"), 0x100, }, \"Linux\", \"\"\n\
+        };\n";
+    const EXPECTED: [u8; 24] = [
+        6, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, b'L', b'i', b'n', b'u', b'x', 0, 0, 0, 0, 0, 0, 0,
+    ];
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::default()
+        };
+        let obj = emit_native_with_options(&prog, target, opts)
+            .unwrap_or_else(|e| panic!("emit for {target:?}: {e}"));
+        let sections = elf_section_bodies(&obj);
+        let note = sections
+            .iter()
+            .find(|(name, _)| name == ".note.T")
+            .unwrap_or_else(|| panic!("{target:?}: no .note.T section"));
+        assert_eq!(note.1, EXPECTED, "{target:?}: .note.T bytes");
+        assert!(
+            !sections.iter().any(|(name, _)| name == ".rela.note.T"),
+            "{target:?}: the literal member must not be relocated"
+        );
+    }
+}
+
+/// A compile-time assertion guarded by a constant-index read of a
+/// string literal must fold away at `-O`: the load folds to the
+/// literal's byte (C99 6.4.5p6 makes the storage immutable), the guard
+/// becomes constant, and no reference to the assert helper survives.
+/// The kernel's newline check (`fmt[sizeof(fmt) - 2] != '\n'`) is this
+/// shape. A guard that holds must keep its call.
+#[test]
+fn literal_index_guarded_assert_call_folds_away() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        extern void __compiletime_assert_1(void) __attribute__((__error__(\"newline\")));\n\
+        extern void __compiletime_assert_2(void) __attribute__((__error__(\"held\")));\n\
+        void f(void) {\n\
+            do {\n\
+                if (!(!(\"HW step 0x%0x\\n\"[sizeof(\"HW step 0x%0x\\n\") - 2] != '\\n')))\n\
+                    __compiletime_assert_1();\n\
+            } while (0);\n\
+        }\n\
+        void g(void) {\n\
+            if (!(\"A\\n\"[0] != 'A'))\n\
+                __compiletime_assert_2();\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let obj = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new().with_optimize()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        assert!(
+            !syms.iter().any(|(n, _)| n == "__compiletime_assert_1"),
+            "{target:?}: the folded guard must leave no assert reference"
+        );
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_2"),
+            "{target:?}: a guard that holds must keep its call"
+        );
+    }
+}
+
 /// `(offset, symbol name, addend)` for every `.rela.text` entry whose
 /// type is `R_X86_64_PLT32` (4): the branches this unit leaves for the
 /// linker to resolve by name.

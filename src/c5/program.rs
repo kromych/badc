@@ -163,12 +163,13 @@ pub struct Program {
     /// starts are recorded, so a missing entry merely glues an object to
     /// its predecessor (kept conservatively), never splits a live one.
     pub data_object_starts: Vec<i64>,
-    /// `[lo, hi)` ranges of staged local-initializer templates within
-    /// `data`: the anonymous images a local aggregate or compound
-    /// literal is Mcpy-initialized from. Nothing names them, so their
-    /// bytes never change after emission; the const-data load fold
-    /// reads them like a const object's image.
-    pub local_init_templates: Vec<(i64, i64)>,
+    /// `[lo, hi)` ranges of anonymous immutable data within `data`:
+    /// string literals (C99 6.4.5p6 makes modifying one undefined),
+    /// the implicit `__func__` arrays, and the staged templates a
+    /// local aggregate or compound literal is Mcpy-initialized from.
+    /// Nothing names them, so their bytes never change after emission;
+    /// the const-data load fold reads them like a const object's image.
+    pub const_data_ranges: Vec<(i64, i64)>,
     /// `[start, end)` ranges of alignment padding within `data`: bytes
     /// the layout pushed purely to align the next allocation, never
     /// object content. The relocatable writer drops each range and
@@ -508,7 +509,7 @@ impl DataOffsets for Program {
             asm_weak_names: _,
             data_align: _, // an alignment, not an offset
             data_object_starts,
-            local_init_templates,
+            const_data_ranges,
             data_pad_ranges,
             data_align_marks,
             entry_pc: _,
@@ -553,7 +554,7 @@ impl DataOffsets for Program {
             }
             None => false,
         });
-        local_init_templates.retain_mut(|(lo, hi)| match r.remap_span(*lo, *hi) {
+        const_data_ranges.retain_mut(|(lo, hi)| match r.remap_span(*lo, *hi) {
             Some((a, b)) => {
                 (*lo, *hi) = (a, b);
                 true
@@ -624,7 +625,7 @@ mod data_offset_tests {
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
             data_object_starts: Vec::new(),
-            local_init_templates: Vec::new(),
+            const_data_ranges: Vec::new(),
             data_pad_ranges: Vec::new(),
             data_align_marks: Vec::new(),
             entry_pc: 0,

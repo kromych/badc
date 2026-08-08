@@ -35,18 +35,6 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrb	w0, [x0]
-               	mov	x17, #0x62              // =98
-               	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
                	ldr	w0, [x0]

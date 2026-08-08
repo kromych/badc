@@ -25,43 +25,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movsbq	(%rax), %rcx
-               	cmpq	$0x56, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	movl	$0x1, %edx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movsbq	0x1(%rax), %rcx
-               	cmpq	$0x41, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	movl	$0x1, %ecx
-               	testq	%rdx, %rdx
-               	jne	<addr>
-               	movsbq	0x2(%rax), %rcx
-               	cmpq	$0x4c, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movsbq	0x3(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x2, %eax
-               	retq
+               	xorq	%rcx, %rcx
+               	xorq	%rcx, %rcx
+               	xorq	%rax, %rax
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>

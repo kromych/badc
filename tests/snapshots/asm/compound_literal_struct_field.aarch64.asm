@@ -22,40 +22,13 @@ Disassembly of section .text:
                	ldr	x10, [x1]
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	mov	x1, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	ldrb	w0, [x1]
-               	mov	x17, #0x6f              // =111
-               	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	x0, #0x0
-               	cset	x2, ne
-               	mov	x0, #0x1                // =1
-               	cbnz	x2, <addr>
-               	ldrb	w0, [x1, #0x1]
-               	mov	x17, #0x6b              // =107
-               	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	ldrb	w0, [x1, #0x2]
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	cbz	x0, <addr>
-               	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

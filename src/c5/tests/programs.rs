@@ -1250,6 +1250,25 @@ fn array_alias_param_outer_bracket() {
 }
 
 #[test]
+fn string_literal_const_index_fold() {
+    // C99 6.4.5p6: literal storage is immutable, so a constant-index
+    // read may fold to the initializer's byte; the folded value must
+    // equal the runtime load at every position, including the
+    // terminator and concatenated parts.
+    assert_eq!(run_fixture("string_literal_const_index_fold.c"), 0);
+}
+
+#[test]
+fn attr_arg_keeps_declared_type() {
+    // An attribute argument (`aligned(sizeof(T))`, `_Alignas(sizeof
+    // expr)`, ...) parses with the expression and type-name machinery;
+    // it must not reset the declared-type carriers of the declarator it
+    // annotates (`typeof("")` array-ness, an array or function-pointer
+    // typedef base).
+    assert_eq!(run_fixture("attr_arg_keeps_declared_type.c"), 0);
+}
+
+#[test]
 fn aggregate_init_struct_member_copy() {
     // C99 6.7.8p13: a struct member of an automatic aggregate initialized
     // by a non-constant struct expression (subscript, deref, by-value

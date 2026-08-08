@@ -81,15 +81,15 @@ Disassembly of section .text:
                	movl	$0x3, %edx
                	leaq	-0xa8(%rbp), %rcx
                	movl	%edx, 0x28(%rcx)
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rdx
                	leaq	-0xa8(%rbp), %rcx
-               	movq	%rsi, 0x30(%rcx)
+               	movq	%rdx, 0x30(%rcx)
                	leaq	0x8(%rax), %rdx
                	leaq	-0xa8(%rbp), %rcx
                	movq	%rdx, 0x38(%rcx)
-               	movl	$0x2000, %edi           # imm = 0x2000
+               	movl	$0x2000, %esi           # imm = 0x2000
                	leaq	-0xa8(%rbp), %rcx
-               	movq	%rdi, 0x40(%rcx)
+               	movq	%rsi, 0x40(%rcx)
                	movslq	(%rax), %rcx
                	cmpq	$0xa, %rcx
                	je	<addr>
@@ -117,13 +117,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x8, %eax
-               	addq	$0xb0, %rsp
-               	popq	%rbp
-               	retq
-               	movsbq	(%rsi), %rax
-               	cmpq	$0x70, %rax
-               	je	<addr>
-               	movl	$0x9, %eax
                	addq	$0xb0, %rsp
                	popq	%rbp
                	retq

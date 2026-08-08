@@ -11,32 +11,7 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rax
-               	cmpq	$0x61, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	movl	$0x1, %eax
-               	testq	%rdx, %rdx
-               	jne	<addr>
-               	movslq	0x4(%rcx), %rax
-               	cmpq	$0x62, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movslq	0x8(%rcx), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x9, %eax
-               	retq
+               	xorq	%rcx, %rcx
+               	xorq	%rax, %rax
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>

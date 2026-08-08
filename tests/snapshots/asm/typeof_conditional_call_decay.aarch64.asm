@@ -44,15 +44,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsb	x0, [x0, #0x1]
-               	cmp	x0, #0x65
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	sub	x0, x29, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

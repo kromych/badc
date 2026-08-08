@@ -87,13 +87,6 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsb	x0, [x0]
-               	cmp	x0, #0x75
-               	b.eq	<addr>
-               	mov	x0, #0x6                // =6
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	ldursw	x0, [x29, #-0x10]
                	cbz	x0, <addr>
                	cmp	x0, #0x5

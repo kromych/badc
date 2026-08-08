@@ -48,6 +48,7 @@ impl Compiler {
 
     pub(super) fn next(&mut self) -> Result<(), C5Error> {
         let prev_tk = self.lex.tk;
+        let pre_len = self.data.len() as i64;
         self.lex
             .next(&mut self.symbols, &mut self.symbol_index, &mut self.data)?;
         // Every string literal interns its bytes at lex time (expression
@@ -58,8 +59,36 @@ impl Compiler {
         // literal instead of gluing it to its neighbors.
         if self.lex.tk == '"' && prev_tk != '"' {
             self.data_object_starts.push(self.lex.ival);
+            // A literal's storage is immutable (C99 6.4.5p6), so record
+            // its byte range for the const-data load fold. Gated on the
+            // bytes being freshly appended: a snapshot restore re-lexes
+            // a literal whose bytes are already interned, and its range
+            // (if any survived the restore) is already recorded.
+            if self.lex.ival >= pre_len && self.lex.ival < self.data.len() as i64 {
+                self.const_data_ranges
+                    .push((self.lex.ival, self.data.len() as i64));
+            }
+        } else if self.lex.tk == '"'
+            && prev_tk == '"'
+            && let Some(last) = self.const_data_ranges.last_mut()
+            && last.1 == pre_len
+        {
+            // Concatenated part: the same object grew by [pre_len, len).
+            last.1 = self.data.len() as i64;
         }
         Ok(())
+    }
+
+    /// Append a narrow literal's terminating NUL and extend its
+    /// recorded const range over it, when the NUL is contiguous with
+    /// that range.
+    pub(super) fn push_literal_nul(&mut self) {
+        self.data.push(0);
+        if let Some(last) = self.const_data_ranges.last_mut()
+            && last.1 + 1 == self.data.len() as i64
+        {
+            last.1 += 1;
+        }
     }
 
     /// Restore a lexer snapshot. A snapshot taken while the current
@@ -102,6 +131,15 @@ impl Compiler {
                 self.data_pad_ranges.pop();
             }
         }
+        while self.const_data_ranges.last().is_some_and(|r| r.0 >= end) {
+            self.const_data_ranges.pop();
+        }
+        if let Some(last) = self.const_data_ranges.last_mut() {
+            last.1 = last.1.min(end);
+            if last.0 >= last.1 {
+                self.const_data_ranges.pop();
+            }
+        }
         while self
             .data_align_marks
             .last()
@@ -121,6 +159,11 @@ impl Compiler {
         }
         debug_assert!(self.data_object_starts.iter().all(|&s| s < end));
         debug_assert!(self.data_pad_ranges.iter().all(|r| r.0 < r.1 && r.1 <= end));
+        debug_assert!(
+            self.const_data_ranges
+                .iter()
+                .all(|r| r.0 < r.1 && r.1 <= end)
+        );
         debug_assert!(self.data_align_marks.iter().all(|&(off, _)| off < end));
         debug_assert!(self.staged_literal_syms.iter().all(|&(off, _)| off < end));
     }

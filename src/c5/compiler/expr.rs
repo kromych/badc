@@ -849,7 +849,7 @@ impl Compiler {
                 self.next()?;
             }
             if !is_wide {
-                self.data.push(0);
+                self.push_literal_nul();
             }
             // The object boundary was recorded when the first part was
             // lexed (see `Compiler::next`).

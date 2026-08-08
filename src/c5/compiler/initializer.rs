@@ -285,6 +285,9 @@ impl Compiler {
         self.data.extend_from_slice(name.as_bytes());
         self.data.push(0);
         self.data_object_starts.push(offset);
+        // A `static const char[]` (C99 6.4.2.2): its image is its value.
+        self.const_data_ranges
+            .push((offset, self.data.len() as i64));
         offset
     }
 
@@ -521,7 +524,7 @@ impl Compiler {
             // holds the characters and nothing else).
             let store_nul = target_size <= 0 || char_count < target_size as usize;
             if store_nul {
-                self.data.push(0);
+                self.push_literal_nul();
             }
             let elems: Vec<(i128, InitElemReloc)> = self.data[start_addr..]
                 .iter()
@@ -1543,7 +1546,7 @@ impl Compiler {
             while self.lex.tk == '"' {
                 self.next()?;
             }
-            self.data.push(0);
+            self.push_literal_nul();
             return Ok((addr as i128, InitElemReloc::Data(None)));
         }
         if self.lex.tk == Token::AndOp {
@@ -2817,7 +2820,7 @@ impl Compiler {
         }
         if self.lex.tk == '"' && strip_unsigned(elem_ty) == Ty::Char as i64 {
             let start_addr = self.take_concat_string_literal()?;
-            self.data.push(0); // ensure NUL terminator in the literal's bytes
+            self.push_literal_nul(); // ensure NUL terminator in the literal's bytes
             let mut idx = 0usize;
             while start_addr + idx < self.data.len() {
                 let b = self.data[start_addr + idx];
@@ -3510,7 +3513,7 @@ impl Compiler {
             // string's data-segment slot into the field's first
             // 8 bytes, which produces garbage at read time.
             let start_addr = self.take_concat_string_literal()?;
-            self.data.push(0); // ensure NUL terminator
+            self.push_literal_nul(); // ensure NUL terminator
             let max = field.array_size as usize;
             let mut idx = 0usize;
             while idx < max {
@@ -3562,7 +3565,7 @@ impl Compiler {
             }
             let start_addr = self.take_concat_string_literal()?;
             for _ in 0..w {
-                self.data.push(0); // terminator slot
+                self.push_literal_nul(); // terminator slot
             }
             for idx in 0..field.array_size as usize {
                 let base = start_addr + idx * w;
@@ -3729,7 +3732,7 @@ impl Compiler {
                 && strip_unsigned(field.ty) == Ty::Char as i64
             {
                 let start_addr = self.take_concat_string_literal()?;
-                self.data.push(0); // ensure NUL terminator
+                self.push_literal_nul(); // ensure NUL terminator
                 let max = field.array_size as usize;
                 for k in 0..max {
                     let b = if start_addr + k < self.data.len() {
@@ -3760,7 +3763,7 @@ impl Compiler {
                 }
                 let start_addr = self.take_concat_string_literal()?;
                 for _ in 0..w {
-                    self.data.push(0); // terminator slot
+                    self.push_literal_nul(); // terminator slot
                 }
                 for k in 0..field.array_size as usize {
                     let base = start_addr + k * w;
@@ -4080,7 +4083,7 @@ impl Compiler {
         // range so the const-data load fold may read its bytes (nothing
         // names a template, so its image never changes).
         self.data_object_starts.push(src_data_addr as i64);
-        self.local_init_templates
+        self.const_data_ranges
             .push((src_data_addr as i64, (src_data_addr + total_bytes) as i64));
         self.emit_lea(local_val);
         self.ast_psh();

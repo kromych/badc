@@ -2071,13 +2071,14 @@ fn run() {
                 }
             };
             if let Some(p) = &map_path
-                && let Err(e) = std::fs::write(p, &map) {
-                    eprint_diagnostic(format!(
-                        "badc: error: cannot write map file `{}`: {e}",
-                        p.display()
-                    ));
-                    std::process::exit(1);
-                }
+                && let Err(e) = std::fs::write(p, &map)
+            {
+                eprint_diagnostic(format!(
+                    "badc: error: cannot write map file `{}`: {e}",
+                    p.display()
+                ));
+                std::process::exit(1);
+            }
             if print_map {
                 print!("{map}");
             }
@@ -3219,9 +3220,10 @@ fn run_script_link(cli: ScriptLinkCli) {
         eprint_diagnostic(format!("info: wrote file {}", out.display()));
     }
     if let Some(p) = &cli.map_path
-        && let Err(e) = std::fs::write(p, &res.map) {
-            fail(format!("error: cannot write map file {}: {e}", p.display()));
-        }
+        && let Err(e) = std::fs::write(p, &res.map)
+    {
+        fail(format!("error: cannot write map file {}: {e}", p.display()));
+    }
     if cli.print_map {
         print!("{}", res.map);
     }

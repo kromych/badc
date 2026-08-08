@@ -1398,11 +1398,12 @@ fn glob_match_bytes(pat: &[u8], name: &[u8]) -> bool {
                 }
                 b'[' => {
                     if let Some((matched, next_p)) = class_match(pat, p, name[n])
-                        && matched {
-                            p = next_p;
-                            n += 1;
-                            continue;
-                        }
+                        && matched
+                    {
+                        p = next_p;
+                        n += 1;
+                        continue;
+                    }
                 }
                 c if c == name[n] => {
                     p += 1;

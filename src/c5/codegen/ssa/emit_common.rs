@@ -3087,7 +3087,6 @@ pub(crate) fn parse_align_operands(rest: &str) -> Option<(i64, Option<u8>, Optio
     Some((spec, fill, max))
 }
 
-
 /// Parse one directive inside a named section. A non-directive token is an
 /// instruction kept as text for the arch backend to encode.
 fn parse_section_item(

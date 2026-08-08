@@ -29,7 +29,6 @@ use hashbrown::{HashMap, HashSet};
 /// Per-member `(input offsets, pooled offsets)` produced by pool builders.
 type PoolMemberMaps = HashMap<usize, (Vec<u64>, Vec<u64>)>;
 
-
 use crate::c5::error::C5Error;
 
 use super::lds::{
@@ -1030,9 +1029,10 @@ impl<'a> LdsLinker<'a> {
         }
         for (pi, p) in spec.patterns.iter().enumerate() {
             if let Some(only) = only_pattern
-                && pi != only {
-                    continue;
-                }
+                && pi != only
+            {
+                continue;
+            }
             if p.exclude_files.iter().any(|f| file_glob(f, source)) {
                 continue;
             }
@@ -1255,11 +1255,7 @@ impl<'a> LdsLinker<'a> {
 
     /// Fixed-entsize merge: dedupe identical entries, first occurrence
     /// wins the offset.
-    fn build_fixed_pool(
-        &self,
-        members: &[usize],
-        entsize: u64,
-    ) -> (Vec<u8>, PoolMemberMaps) {
+    fn build_fixed_pool(&self, members: &[usize], entsize: u64) -> (Vec<u8>, PoolMemberMaps) {
         let mut pool: Vec<u8> = Vec::new();
         let mut interned: HashMap<Vec<u8>, u64> = HashMap::new();
         let mut maps: HashMap<usize, (Vec<u64>, Vec<u64>)> = HashMap::new();
@@ -1543,14 +1539,15 @@ impl<'a> LdsLinker<'a> {
                         // representative) contributes no bytes and no
                         // alignment: its storage lives in the pool rep.
                         if let Some(&pl) = self.merge_of.get(&i)
-                            && self.pools[pl].rep != i {
-                                self.placements[i] = Placement {
-                                    out: oi,
-                                    off,
-                                    placed: true,
-                                };
-                                continue;
-                            }
+                            && self.pools[pl].rep != i
+                        {
+                            self.placements[i] = Placement {
+                                out: oi,
+                                off,
+                                placed: true,
+                            };
+                            continue;
+                        }
                         let (a, sz, nobits) = {
                             let s = self.insec(i);
                             let a = if let Some(&pl) = self.merge_of.get(&i) {
@@ -1563,9 +1560,11 @@ impl<'a> LdsLinker<'a> {
                         let aligned = align_up(off, a);
                         if aligned > off {
                             if let Some(f) = &fill_bytes
-                                && !nobits && !all_nobits {
-                                    chunks.push((off, aligned - off, ChunkSrc::Pad(f.clone())));
-                                }
+                                && !nobits
+                                && !all_nobits
+                            {
+                                chunks.push((off, aligned - off, ChunkSrc::Pad(f.clone())));
+                            }
                             off = aligned;
                         }
                         self.placements[i] = Placement {
@@ -1596,9 +1595,10 @@ impl<'a> LdsLinker<'a> {
                         } else {
                             if new_off > off
                                 && let Some(f) = &fill_bytes
-                                    && !all_nobits {
-                                        chunks.push((off, new_off - off, ChunkSrc::Pad(f.clone())));
-                                    }
+                                && !all_nobits
+                            {
+                                chunks.push((off, new_off - off, ChunkSrc::Pad(f.clone())));
+                            }
                             off = new_off;
                             end = end.max(off);
                         }
@@ -1794,9 +1794,10 @@ impl<'a> LdsLinker<'a> {
             return Some(s.val);
         }
         if let Some(&(oi, si)) = self.globals.get(name)
-            && let Some(v) = self.object_sym_val(oi, si) {
-                return Some(v);
-            }
+            && let Some(v) = self.object_sym_val(oi, si)
+        {
+            return Some(v);
+        }
         if let Some(s) = self.script_prev.get(name) {
             return Some(s.val);
         }
@@ -3587,14 +3588,16 @@ impl<'a> LdsLinker<'a> {
         // zeroed (it already is), then patched in place.
         if self.opts.build_id_sha1
             && let Some((out, off)) = self.build_id_location()
-                && !self.outs[out].removed && self.outs[out].shtype != SHT_NOBITS {
-                    let file_at = file_off[&out] + off + 16;
-                    let digest = sha1(&image);
-                    let at = file_at as usize;
-                    if at + 20 <= image.len() {
-                        image[at..at + 20].copy_from_slice(&digest);
-                    }
-                }
+            && !self.outs[out].removed
+            && self.outs[out].shtype != SHT_NOBITS
+        {
+            let file_at = file_off[&out] + off + 16;
+            let digest = sha1(&image);
+            let at = file_at as usize;
+            if at + 20 <= image.len() {
+                image[at..at + 20].copy_from_slice(&digest);
+            }
+        }
         Ok(image)
     }
 

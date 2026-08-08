@@ -47,6 +47,8 @@ const SHT_PROGBITS: u32 = 1;
 const SHT_SYMTAB: u32 = 2;
 const SHT_STRTAB: u32 = 3;
 const SHT_RELA: u32 = 4;
+/// `R_*_NONE`: recorded under `--emit-relocs`, applies nothing.
+const R_NONE: u32 = 0;
 const SHT_NOTE: u32 = 7;
 const SHT_NOBITS: u32 = 8;
 const SHT_REL: u32 = 9;
@@ -670,7 +672,11 @@ struct EmittedReloc {
     out: usize,
     addr: u64,
     rtype: u32,
-    addend: i64,
+    /// Resolved `S + A`. The emitted addend is this less the final
+    /// value of the symbol the entry names, which is not the input
+    /// addend whenever the reference folds into an output section
+    /// symbol.
+    target: u64,
     obj: usize,
     sym: u32,
 }
@@ -2880,10 +2886,13 @@ impl<'a> LdsLinker<'a> {
                         out,
                         addr: p,
                         rtype: r.rtype,
-                        addend: r.addend,
+                        target: s_plus_a,
                         obj: id.obj,
                         sym: r.sym,
                     });
+                }
+                if r.rtype == R_NONE {
+                    continue; // recorded, applies nothing
                 }
                 self.apply_one(
                     buf,
@@ -2913,9 +2922,6 @@ impl<'a> LdsLinker<'a> {
         r: &RawReloc,
         errors: &mut Vec<String>,
     ) -> Option<u64> {
-        if r.rtype == 0 {
-            return None;
-        }
         let sym = match self.objects[oi].symbols.get(r.sym as usize) {
             Some(s) => s,
             None => {
@@ -3746,7 +3752,11 @@ impl<'a> LdsLinker<'a> {
     /// `--emit-relocs` payloads: the recorded relocations grouped by
     /// output section, each entry naming the output symtab index of
     /// the symbol the input relocation referenced.
-    fn emitted_rela_sections(&self, final_of: &[u32]) -> Result<Vec<(usize, Vec<u8>)>, C5Error> {
+    fn emitted_rela_sections(
+        &self,
+        final_of: &[u32],
+        syms: &[FinalSym],
+    ) -> Result<Vec<(usize, Vec<u8>)>, C5Error> {
         let index = &self.sym_index;
         if self.emitted.is_empty() {
             return Ok(Vec::new());
@@ -3761,7 +3771,8 @@ impl<'a> LdsLinker<'a> {
             recs.sort_by_key(|r| r.addr);
             let mut body: Vec<u8> = Vec::with_capacity(recs.len() * 24);
             for r in recs {
-                let sym = match self.emitted_sym_slot(r, index) {
+                let slot = self.emitted_sym_slot(r, index);
+                let sym = match slot {
                     Some(pos) => final_of[pos],
                     None => {
                         if unresolved.len() < 10 {
@@ -3775,9 +3786,13 @@ impl<'a> LdsLinker<'a> {
                         0
                     }
                 };
+                // `S + A` reconstructs from the entry, so the addend
+                // is the resolved target less the named symbol's value.
+                let base = slot.map_or(0, |pos| syms[pos].value);
+                let addend = r.target.wrapping_sub(base) as i64;
                 body.extend_from_slice(&r.addr.to_le_bytes());
                 body.extend_from_slice(&(((sym as u64) << 32) | r.rtype as u64).to_le_bytes());
-                body.extend_from_slice(&r.addend.to_le_bytes());
+                body.extend_from_slice(&addend.to_le_bytes());
             }
             out.push((oi, body));
         }
@@ -3958,7 +3973,7 @@ impl<'a> LdsLinker<'a> {
         // took relocations, entries in address order, `r_offset` the
         // final address and `r_info` naming the output symtab entry the
         // input relocation referenced.
-        let rela: Vec<(usize, Vec<u8>)> = self.emitted_rela_sections(&final_of)?;
+        let rela: Vec<(usize, Vec<u8>)> = self.emitted_rela_sections(&final_of, &syms)?;
 
         // Section header string table.
         let mut shstrtab: Vec<u8> = alloc::vec![0];
@@ -4830,6 +4845,7 @@ SECTIONS {
         // The `.data` slot holding &callee: its entry sits at the
         // slot's address and names `callee`.
         let syms = image_symbols(&res.image);
+        let callee = find_sym(&syms, "callee");
         let data_addr = secs.iter().find(|s| s.0 == ".data").expect(".data").2;
         let h = sh(rela_idx);
         let n = (h.sh_size / 24) as usize;
@@ -4842,6 +4858,10 @@ SECTIONS {
                 continue;
             }
             assert_eq!(syms[(info >> 32) as usize].0, "callee");
+            // `S + A` reconstructs from the entry: the slot holds
+            // `callee`'s address with a zero addend.
+            let add = i64::from_le_bytes(res.image[at + 16..at + 24].try_into().unwrap());
+            assert_eq!(syms[(info >> 32) as usize].1 as i64 + add, callee as i64);
             found = true;
         }
         assert!(found, "entry for the .data slot at {data_addr:#x}");

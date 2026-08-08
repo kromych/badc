@@ -1005,6 +1005,21 @@ impl Compiler {
     }
 
     pub(super) fn skip_attribute_specifiers(&mut self) -> Result<bool, C5Error> {
+        if !self.at_attribute_specifier() {
+            return Ok(false);
+        }
+        // Attribute arguments parse with the expression and type-name
+        // machinery, which resets the declared-type carriers on entry;
+        // detach them so the attribute leaves the declarator's type
+        // untouched (`typeof("") d __attribute__((aligned(sizeof(T))))`
+        // keeps its array type).
+        let carriers = self.pending.take_decl_type_carriers();
+        let r = self.skip_attribute_specifiers_inner();
+        self.pending.restore_decl_type_carriers(carriers);
+        r
+    }
+
+    fn skip_attribute_specifiers_inner(&mut self) -> Result<bool, C5Error> {
         let mut attrs = AttrFlags::default();
         let mut align: i64 = 0;
         let mut vector_size: i64 = 0;
@@ -1024,14 +1039,7 @@ impl Compiler {
                 // `_Alignas(_Alignof(type-name))`.
                 if is_alignas {
                     self.next()?; // (
-                    if self.lex.tk == Token::Num {
-                        let n = self.parse_constant_int()?;
-                        align = align.max(n);
-                        if self.lex.tk != ')' {
-                            return Err(self.compile_err("`)` expected after `_Alignas` operand"));
-                        }
-                        self.next()?;
-                    } else if self.lex_is_type_start() {
+                    if self.lex_is_type_start() {
                         let mut ty = self.parse_decl_base_type()?;
                         while self.lex.tk == Token::MulOp {
                             self.next()?;
@@ -1046,17 +1054,14 @@ impl Compiler {
                         }
                         self.next()?;
                     } else {
-                        let mut depth = 1i32;
-                        while depth > 0 {
-                            if self.lex.tk == '(' {
-                                depth += 1;
-                            } else if self.lex.tk == ')' {
-                                depth -= 1;
-                            } else if self.lex.tk == 0 {
-                                return Err(self.compile_err("unterminated `_Alignas`"));
-                            }
-                            self.next()?;
+                        // C11 6.7.5: any constant expression, not only a
+                        // literal (`_Alignas(sizeof(long))`).
+                        let n = self.parse_constant_int()?;
+                        align = align.max(n);
+                        if self.lex.tk != ')' {
+                            return Err(self.compile_err("`)` expected after `_Alignas` operand"));
                         }
+                        self.next()?;
                     }
                     continue;
                 }

@@ -1870,7 +1870,7 @@ fn split_label_def(piece: &str) -> Option<(&str, &str)> {
 /// reference resolves a name to the same number.
 pub(crate) fn scan_label_names(text: &str) -> Vec<&str> {
     let mut names: Vec<&str> = Vec::new();
-    for piece in text.split([';', '\n']) {
+    for piece in super::ssa::emit_common::split_asm_statements(text) {
         let mut p = piece.trim();
         while let Some((name, rest)) = split_label_def(p) {
             if !name.as_bytes()[0].is_ascii_digit() && !names.contains(&name) {
@@ -1910,7 +1910,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
     // label from a symbol; named labels intern in definition order.
     let names = scan_label_names(text);
     let mut insns = Vec::new();
-    for piece in text.split([';', '\n']) {
+    for piece in super::ssa::emit_common::split_asm_statements(text) {
         let mut piece = piece.trim();
         if piece.is_empty() {
             continue;

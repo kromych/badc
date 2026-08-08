@@ -2790,7 +2790,12 @@ fn build_label_branch(
             }
         },
         m => {
-            let cond = m.strip_prefix("b.").and_then(super::asm::cond_code);
+            // Both conditional spellings: `b.<cond>` and the bare `b<cond>`
+            // (`bne`, `beq`), which GNU as also accepts.
+            let cond = m
+                .strip_prefix("b.")
+                .and_then(super::asm::cond_code)
+                .or_else(|| m.strip_prefix('b').and_then(super::asm::cond_code));
             match cond.filter(|_| insn.operands.len() == 1) {
                 Some(c) => LabelBranch::BCond(c),
                 None => {
@@ -3432,6 +3437,13 @@ fn emit_inline_asm_aarch64(
             AsmOpndA64::Here(_) => {
                 return Err(String::from(
                     "aarch64 inline asm: `.` reference outside a branch",
+                ));
+            }
+            // TODO symbol relocations in function-body asm; the file-scope
+            // section encoder handles them.
+            AsmOpndA64::Sym { .. } | AsmOpndA64::MemSymLo12 { .. } => {
+                return Err(String::from(
+                    "aarch64 inline asm: symbol operand needs a relocation",
                 ));
             }
         })
@@ -9330,23 +9342,44 @@ pub(crate) fn encode_a64_file_asm_section_code(
             }
         })
     };
-    for b in blocks.iter_mut() {
-        for item in b.items.iter_mut() {
+    super::ssa::emit_common::for_each_section_item_mut(blocks, &mut |item| {
+        {
             let AsmSectionItem::Code(text) = item else {
-                continue;
+                return Ok(());
             };
             let insns = super::asm::parse_template(text.as_bytes())
                 .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
             let mut bytes: Vec<u8> = Vec::new();
+            let mut relocs: Vec<super::ssa::emit_common::AsmSectionReloc> = Vec::new();
             for insn in &insns {
                 if !insn.bytes.is_empty() {
                     bytes.extend_from_slice(&insn.bytes);
                     continue;
                 }
-                if insn.sym_target.is_some() || insn.label_def.is_some() {
+                if insn.label_def.is_some() {
                     return Err(alloc::format!(
                         "inline asm: `{text}` in a file-scope section needs a relocation"
                     ));
+                }
+                if let Some((word, kind, name)) = encode_a64_sym_insn(insn, &conv)
+                    .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?
+                {
+                    // An empty name marks a `.`-relative form resolved in
+                    // place: the word is final, no relocation.
+                    if !name.is_empty() {
+                        relocs.push(super::ssa::emit_common::AsmSectionReloc {
+                            offset: bytes.len() as u32,
+                            width: 4,
+                            kind,
+                            pcrel: false,
+                            branch: false,
+                            signed: false,
+                            target: super::ssa::emit_common::AsmSectionTarget::Symbol(name),
+                            addend: 0,
+                        });
+                    }
+                    bytes.extend_from_slice(&word.to_le_bytes());
+                    continue;
                 }
                 let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
                 for o in &insn.operands {
@@ -9354,19 +9387,258 @@ pub(crate) fn encode_a64_file_asm_section_code(
                 }
                 bytes.extend_from_slice(&table::encode(&insn.mnemonic, &ops)?.to_le_bytes());
             }
-            *item = AsmSectionItem::CodeBytes {
-                bytes,
-                relocs: Vec::new(),
+            *item = AsmSectionItem::CodeBytes { bytes, relocs };
+        }
+        Ok(())
+    })
+}
+
+/// Encode a file-scope section instruction that references a symbol to its
+/// placeholder word plus the relocation kind and symbol name: `b` / `bl` /
+/// `b.cond` / `cbz` / `cbnz` / `tbz` / `tbnz` / `adr` to a symbol, `adrp`,
+/// `add ..., :lo12:`, a load/store with a `:lo12:` immediate, and the `ldr`
+/// literal form. `Ok(None)` when the instruction references no symbol.
+fn encode_a64_sym_insn(
+    insn: &super::asm::AsmInsnA64,
+    conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
+) -> Result<
+    Option<(u32, super::ssa::emit_common::AsmRelocKind, alloc::string::String)>,
+    alloc::string::String,
+> {
+    use super::asm::AsmOpndA64;
+    use super::ssa::emit_common::AsmRelocKind as K;
+    use super::table::Opnd;
+    // `b sym` / `bl sym` carry the name on the instruction, not an operand.
+    if let Some(name) = &insn.sym_target {
+        if name.contains('%') {
+            return Err(alloc::string::String::from(
+                "inline asm: operand reference in a file-scope branch target",
+            ));
+        }
+        let link = insn.mnemonic == "bl";
+        let word = if link {
+            super::encode::enc_bl(0)
+        } else {
+            super::encode::enc_b(0)
+        };
+        return Ok(Some((word, K::A64Branch26 { link }, name.clone())));
+    }
+    // A load/store whose immediate is `:lo12:sym`: encode with a zero
+    // offset; the access size names the LDST reloc width.
+    if let Some(AsmOpndA64::MemSymLo12 { base, name }) = insn.operands.last() {
+        let size = a64_access_size(&insn.mnemonic, insn.operands.first())?;
+        let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
+        for o in &insn.operands[..insn.operands.len() - 1] {
+            ops.push(conv(o)?);
+        }
+        ops.push(Opnd::Mem {
+            base: *base,
+            off: 0,
+            pre: false,
+        });
+        let word = super::table::encode(&insn.mnemonic, &ops)?;
+        return Ok(Some((word, K::A64LdstLo12(size), name.clone())));
+    }
+    // A numeric-label reference (`b 1b`) resolves at materialize time, where
+    // this call's label offsets are known; carry it as a symbol reference.
+    // `.`-relative branches encode directly.
+    let named;
+    let (name, lo12) = match insn.operands.last() {
+        Some(AsmOpndA64::Sym { name, lo12 }) => (name, *lo12),
+        Some(&AsmOpndA64::Label { num, forward }) => {
+            named = alloc::format!("{num}{}", if forward { 'f' } else { 'b' });
+            (&named, false)
+        }
+        Some(&AsmOpndA64::Here(off)) => {
+            let kind = build_label_branch(insn, conv)?;
+            let word = match kind {
+                LabelBranch::Adr { rd } => super::encode::enc_adr(super::Reg(rd), off),
+                _ => label_branch_word(&kind, off as i64)?,
             };
+            return Ok(Some((word, K::Data, alloc::string::String::new())));
+        }
+        _ => return Ok(None),
+    };
+    if lo12 {
+        // `add Rd, Rn, :lo12:sym`.
+        if insn.mnemonic != "add" || insn.operands.len() != 3 {
+            return Err(alloc::string::String::from(
+                "inline asm: `:lo12:` operand outside `add` or a load/store",
+            ));
+        }
+        let (rd, rn) = match (conv(&insn.operands[0])?, conv(&insn.operands[1])?) {
+            (Opnd::Reg { num: rd, .. }, Opnd::Reg { num: rn, .. }) => (rd, rn),
+            _ => {
+                return Err(alloc::string::String::from(
+                    "inline asm: `add :lo12:` needs register operands",
+                ));
+            }
+        };
+        let word = super::encode::enc_add_imm(super::Reg(rd), super::Reg(rn), 0);
+        return Ok(Some((word, K::A64AddLo12, name.clone())));
+    }
+    match insn.mnemonic.as_str() {
+        "adrp" => {
+            let rd = match conv(&insn.operands[0])? {
+                Opnd::Reg {
+                    num, is64: true, ..
+                } => num,
+                _ => {
+                    return Err(alloc::string::String::from(
+                        "inline asm: `adrp` destination must be a 64-bit register",
+                    ));
+                }
+            };
+            Ok(Some((
+                super::encode::enc_adrp(super::Reg(rd), 0),
+                K::A64AdrpPage21,
+                name.clone(),
+            )))
+        }
+        // `ldr Rt, sym`: a PC-relative literal load.
+        "ldr" if insn.operands.len() == 2 => {
+            let (rt, is64) = match conv(&insn.operands[0])? {
+                Opnd::Reg { num, is64, .. } => (num, is64),
+                _ => {
+                    return Err(alloc::string::String::from(
+                        "inline asm: `ldr` literal needs a register destination",
+                    ));
+                }
+            };
+            let word = if is64 { 0x5800_0000u32 } else { 0x1800_0000 } | rt as u32;
+            Ok(Some((word, K::A64LdrLit19, name.clone())))
+        }
+        _ => {
+            // The branch shapes share the label-branch classifier.
+            let kind = build_label_branch(insn, conv)?;
+            let (word, k) = match kind {
+                LabelBranch::B => (label_branch_word(&kind, 0)?, K::A64Branch26 { link: false }),
+                LabelBranch::Bl => (label_branch_word(&kind, 0)?, K::A64Branch26 { link: true }),
+                LabelBranch::BCond(_) | LabelBranch::Cb { .. } => {
+                    (label_branch_word(&kind, 0)?, K::A64Condbr19)
+                }
+                LabelBranch::Tb { .. } => (label_branch_word(&kind, 0)?, K::A64Tstbr14),
+                LabelBranch::Adr { rd } => {
+                    (super::encode::enc_adr(super::Reg(rd), 0), K::A64Adr21)
+                }
+            };
+            Ok(Some((word, k, name.clone())))
         }
     }
-    Ok(())
+}
+
+/// The access size in bytes of a load/store mnemonic, from the mnemonic's
+/// width suffix or the register operand's class.
+fn a64_access_size(
+    mnem: &str,
+    rt: Option<&super::asm::AsmOpndA64>,
+) -> Result<u8, alloc::string::String> {
+    use super::asm::AsmOpndA64;
+    Ok(match mnem {
+        "ldrb" | "strb" | "ldrsb" => 1,
+        "ldrh" | "strh" | "ldrsh" => 2,
+        "ldrsw" => 4,
+        "ldr" | "str" => match rt {
+            Some(AsmOpndA64::Reg { is64, .. }) => {
+                if *is64 {
+                    8
+                } else {
+                    4
+                }
+            }
+            Some(AsmOpndA64::VReg { is_d, .. }) => {
+                if *is_d {
+                    8
+                } else {
+                    4
+                }
+            }
+            Some(AsmOpndA64::QReg(_)) => 16,
+            _ => {
+                return Err(alloc::string::String::from(
+                    "inline asm: `:lo12:` load/store needs a register operand",
+                ));
+            }
+        },
+        _ => {
+            return Err(alloc::format!(
+                "inline asm: `:lo12:` immediate on unsupported mnemonic `{mnem}`"
+            ));
+        }
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::Compiler;
+
+    /// File-scope section instructions referencing symbols encode to the
+    /// words and relocations GNU as emits (byte-verified against `as`):
+    /// same-section branches, `adr`, and the literal `ldr` fold with no
+    /// relocation; `adrp` / `:lo12:` / `bl ext` keep theirs.
+    #[test]
+    fn file_scope_a64_symbol_relocs_match_gnu_as() {
+        use super::super::ssa::emit_common::{
+            AsmRelocKind, AsmSectionTarget, extract_file_scope_asm_sections,
+            materialize_asm_sections,
+        };
+        let text = ".pushsection .t,\"ax\"\nf1:\n1:\ncbz x0, 2f\nb 1b\n2:\nb.eq 1b\n\
+                    tbz x0, #3, 1b\nadr x1, 2b\nldr x2, 2b\nadrp x3, ext_obj\n\
+                    add x3, x3, :lo12:ext_obj\nldr x4, [x3, :lo12:ext_obj]\n\
+                    ldrb w5, [x3, :lo12:ext_obj]\nbl ext_func\nret\n.popsection\n";
+        let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
+        encode_a64_file_asm_section_code(&mut blocks).unwrap();
+        let mut sink = Vec::new();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            true,
+            &mut sink,
+        )
+        .unwrap();
+        // GNU as words for the same input (opcodes at each instruction).
+        let want_words: [u32; 12] = [
+            0xb4000040, // cbz x0, 2f (+8)
+            0x17ffffff, // b 1b (-4)
+            0x54ffffc0, // b.eq 1b (-8)
+            0x361fffa0, // tbz x0,#3,1b (-12)
+            0x10ffffc1, // adr x1, 2b (-8)
+            0x58ffffa2, // ldr x2, 2b (-12)
+            0x90000003, // adrp x3, ext_obj
+            0x91000063, // add x3, x3, :lo12:ext_obj
+            0xf9400064, // ldr x4, [x3, :lo12:ext_obj]
+            0x39400065, // ldrb w5, [x3, :lo12:ext_obj]
+            0x94000000, // bl ext_func
+            0xd65f03c0, // ret
+        ];
+        let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
+        let kinds: Vec<(u32, AsmRelocKind, &str)> = sec
+            .relocs
+            .iter()
+            .map(|r| {
+                let AsmSectionTarget::Symbol(n) = &r.target else {
+                    panic!("symbol target expected, got {:?}", r.target)
+                };
+                (r.offset, r.kind, n.as_str())
+            })
+            .collect();
+        assert_eq!(
+            kinds,
+            vec![
+                (24, AsmRelocKind::A64AdrpPage21, "ext_obj"),
+                (28, AsmRelocKind::A64AddLo12, "ext_obj"),
+                (32, AsmRelocKind::A64LdstLo12(8), "ext_obj"),
+                (36, AsmRelocKind::A64LdstLo12(1), "ext_obj"),
+                (40, AsmRelocKind::A64Branch26 { link: true }, "ext_func"),
+            ]
+        );
+    }
 
     fn lift_and_alloc(src: &str, target: Target) -> (crate::c5::ir::FunctionSsa, Allocation) {
         let program = Compiler::new(src.into()).compile().expect("compile");

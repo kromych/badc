@@ -2927,12 +2927,11 @@ fn asm_data_directive_quoted_symbol_matches_bare() {
 #[test]
 fn file_scope_asm_jcc_to_section_label_and_lock_prefix() {
     // `jne .slowpath` inside a pushed section branches to a label defined
-    // later in the same section: the rel32 `0f 85` form with a branch
-    // relocation the linker resolves against the local label symbol. The
-    // `lock cmpxchg` line encodes with the `f0` prefix in front.
+    // later in the same section: the rel32 `0f 85` form resolved at
+    // assembly with no relocation, exactly as GNU as folds a same-section
+    // fixup. The `lock cmpxchg` line encodes with the `f0` prefix in front.
     use crate::c5::linker::parse_native_elf;
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
-    const R_X86_64_PLT32: u32 = 4;
     let src = super::load_fixture("file_scope_asm_local_label_branch.c");
     let program = Compiler::with_target(src, Target::LinuxX64)
         .compile()
@@ -2947,37 +2946,27 @@ fn file_scope_asm_jcc_to_section_label_and_lock_prefix() {
         obj.text.windows(4).any(|w| w == [0xf0, 0x0f, 0xb0, 0x17]),
         "`lock cmpxchg %dl,(%rdi)` must encode as `f0 0f b0 17`"
     );
-    let jne = obj
-        .text
-        .windows(6)
-        .position(|w| w == [0x0f, 0x85, 0, 0, 0, 0])
-        .expect("`jne .slowpath` must encode as `0f 85 <rel32>`");
-    let r = obj
-        .text_relocs
-        .iter()
-        .find(|r| r.offset == (jne + 2) as u64)
-        .expect("the rel32 field must carry a relocation");
-    assert_eq!(r.rtype, R_X86_64_PLT32, "a branch relocates as PLT32");
-    // The label is local and untyped, so the branch names its section
-    // with the label's offset folded in, as gas emits (`.spin - 4` for
-    // a branch to a local label defined at 0 of `.spin`).
     let label = obj
         .symbols
         .iter()
         .find(|s| s.name == ".slowpath")
         .expect("the section-local label keeps a symbol");
-    let target = &obj.symbols[r.sym_idx];
-    assert!(
-        target.name.is_empty(),
-        "the reloc targets the label's section symbol, not the label"
-    );
-    // `S + A` plus the 4-byte rel32 skew resolves to the label. Both
-    // values are rebased into the parsed object's merged text blob, so
-    // the sum is the view-independent check.
+    // The rel32 lands on the label with no relocation left on the field.
+    let jne = obj
+        .text
+        .windows(2)
+        .position(|w| w == [0x0f, 0x85])
+        .expect("`jne .slowpath` must encode as `0f 85 <rel32>`");
+    let disp =
+        i32::from_le_bytes(obj.text[jne + 2..jne + 6].try_into().expect("rel32")) as i64;
     assert_eq!(
-        target.value as i64 + r.addend + 4,
+        jne as i64 + 6 + disp,
         label.value as i64,
-        "the folded reference resolves to the label"
+        "the same-section branch resolves at assembly"
+    );
+    assert!(
+        !obj.text_relocs.iter().any(|r| r.offset == (jne + 2) as u64),
+        "a resolved same-section branch carries no relocation"
     );
 }
 
@@ -9345,7 +9334,7 @@ fn aarch64_alternative_rept_nonconstant_count_is_rejected() {
     };
     let err = emit_native_with_options(&program, Target::LinuxAarch64, opts).unwrap_err();
     assert!(
-        alloc::format!("{err:?}").contains("not constant"),
+        alloc::format!("{err:?}").contains("662b-661b"),
         "{err:?}"
     );
 }

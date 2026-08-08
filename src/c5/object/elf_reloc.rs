@@ -52,10 +52,13 @@ use crate::c5::layout::{round_up, write_struct};
 // `R_X86_64_GOTPCREL`, which linkers never relax.
 use super::elf_reloc_types::{
     R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
-    R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32,
+    R_AARCH64_ADR_PREL_LO21, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_CONDBR19,
+    R_AARCH64_JUMP26, R_AARCH64_LD_PREL_LO19, R_AARCH64_LD64_GOT_LO12_NC,
+    R_AARCH64_LDST8_ABS_LO12_NC, R_AARCH64_LDST16_ABS_LO12_NC, R_AARCH64_LDST32_ABS_LO12_NC,
+    R_AARCH64_LDST64_ABS_LO12_NC, R_AARCH64_LDST128_ABS_LO12_NC, R_AARCH64_PREL32,
     R_AARCH64_PREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC,
-    R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
-    R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32,
+    R_AARCH64_TSTBR14, R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_PC32, R_X86_64_PC64,
+    R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32,
 };
 
 // ELF64 constants (Elf.h subset).
@@ -1925,8 +1928,21 @@ pub(super) fn write_relocatable(
     }
 
     // `alias("target")` function symbols: an additional name at the
-    // target's extent.
+    // target's extent. A `.set alias, target` whose target is a label an
+    // inline-asm section defined aliases that label's placement.
     for (i, a) in program.function_aliases.iter().enumerate() {
+        if let Some(l) = asm_labels.iter().find(|l| l.name == a.target) {
+            func_symidx_by_name.insert(a.name.clone(), symbols.len() as u32);
+            symbols.push(Elf64Sym {
+                st_name: name_offs[fn_alias_names_start + i],
+                st_info: pack_sym_info(if a.weak { STB_WEAK } else { STB_GLOBAL }, l.st_type),
+                st_shndx: l.shndx,
+                st_value: l.value,
+                st_size: l.st_size,
+                ..Default::default()
+            });
+            continue;
+        }
         let Some(ti) = func_strs.iter().position(|n| n == &a.target) else {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
@@ -2582,21 +2598,39 @@ pub(super) fn write_relocatable(
                         }
                     }
                 };
-                let rtype = match (machine_for_rela, r.pcrel, r.width) {
-                    // A replacement instruction's direct `call` / `jmp` to a
-                    // symbol reaches it through the PLT slot, like a compiler-
-                    // emitted call: `R_X86_64_PLT32`, not a data `PC32`.
-                    (Machine::X86_64, true, 4) if r.branch => R_X86_64_PLT32,
-                    (Machine::X86_64, false, 8) => R_X86_64_64,
-                    // A `push $symbol` imm32 the CPU sign-extends takes 32S.
-                    (Machine::X86_64, false, 4) if r.signed => R_X86_64_32S,
-                    (Machine::X86_64, false, _) => R_X86_64_32,
-                    (Machine::X86_64, true, 8) => R_X86_64_PC64,
-                    (Machine::X86_64, true, _) => R_X86_64_PC32,
-                    (Machine::Aarch64, false, 8) => R_AARCH64_ABS64,
-                    (Machine::Aarch64, false, _) => R_AARCH64_ABS32,
-                    (Machine::Aarch64, true, 8) => R_AARCH64_PREL64,
-                    (Machine::Aarch64, true, _) => R_AARCH64_PREL32,
+                use crate::c5::codegen::ssa::emit_common::AsmRelocKind as RK;
+                let rtype = match r.kind {
+                    RK::Data => match (machine_for_rela, r.pcrel, r.width) {
+                        // A replacement instruction's direct `call` / `jmp` to a
+                        // symbol reaches it through the PLT slot, like a compiler-
+                        // emitted call: `R_X86_64_PLT32`, not a data `PC32`.
+                        (Machine::X86_64, true, 4) if r.branch => R_X86_64_PLT32,
+                        (Machine::X86_64, false, 8) => R_X86_64_64,
+                        // A `push $symbol` imm32 the CPU sign-extends takes 32S.
+                        (Machine::X86_64, false, 4) if r.signed => R_X86_64_32S,
+                        (Machine::X86_64, false, _) => R_X86_64_32,
+                        (Machine::X86_64, true, 8) => R_X86_64_PC64,
+                        (Machine::X86_64, true, _) => R_X86_64_PC32,
+                        (Machine::Aarch64, false, 8) => R_AARCH64_ABS64,
+                        (Machine::Aarch64, false, _) => R_AARCH64_ABS32,
+                        (Machine::Aarch64, true, 8) => R_AARCH64_PREL64,
+                        (Machine::Aarch64, true, _) => R_AARCH64_PREL32,
+                    },
+                    RK::A64Branch26 { link: true } => R_AARCH64_CALL26,
+                    RK::A64Branch26 { link: false } => R_AARCH64_JUMP26,
+                    RK::A64Condbr19 => R_AARCH64_CONDBR19,
+                    RK::A64Tstbr14 => R_AARCH64_TSTBR14,
+                    RK::A64Adr21 => R_AARCH64_ADR_PREL_LO21,
+                    RK::A64AdrpPage21 => R_AARCH64_ADR_PREL_PG_HI21,
+                    RK::A64AddLo12 => R_AARCH64_ADD_ABS_LO12_NC,
+                    RK::A64LdrLit19 => R_AARCH64_LD_PREL_LO19,
+                    RK::A64LdstLo12(sz) => match sz {
+                        1 => R_AARCH64_LDST8_ABS_LO12_NC,
+                        2 => R_AARCH64_LDST16_ABS_LO12_NC,
+                        4 => R_AARCH64_LDST32_ABS_LO12_NC,
+                        8 => R_AARCH64_LDST64_ABS_LO12_NC,
+                        _ => R_AARCH64_LDST128_ABS_LO12_NC,
+                    },
                 };
                 carve.table.entries[e]
                     .relas

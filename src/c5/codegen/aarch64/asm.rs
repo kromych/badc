@@ -120,6 +120,14 @@ pub(crate) enum AsmOpndA64 {
     /// frontend canonicalizes `%l[name]` and operand-relative `%lN` to
     /// this form). The emitter branches to the label's target block.
     GotoLabel(u8),
+    /// A symbol operand: a branch / `adr` / `adrp` target, or with `lo12`
+    /// the `:lo12:sym` low-12 immediate of an `add`. Only file-scope
+    /// section code encodes these (to a relocation); the in-function
+    /// emitters reject them.
+    Sym { name: String, lo12: bool },
+    /// `[base, :lo12:sym]`: a load/store whose scaled immediate is the
+    /// symbol's low 12 bits.
+    MemSymLo12 { base: u8, name: String },
 }
 
 /// The base register of a memory operand.
@@ -626,9 +634,30 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
         _ => Err(format!("inline asm: expected a register `[{inner}]`")),
     };
     let base = mem_base(parts[0])?;
-    // A second part that is not a `#immediate` is a register index: the
-    // register-offset form `[base, Rm{, <extend> #s}]`.
-    if parts.len() >= 2 && !parts[1].starts_with('#') {
+    // `[base, :lo12:sym]`: the symbol's low 12 bits as the scaled immediate.
+    if parts.len() == 2
+        && let Some(name) = parts[1]
+            .strip_prefix('#')
+            .unwrap_or(parts[1])
+            .strip_prefix(":lo12:")
+    {
+        let MemBase::Reg(rn) = base else {
+            return Err(format!("inline asm: bad `:lo12:` base `[{inner}]`"));
+        };
+        if pre {
+            return Err(format!("inline asm: `:lo12:` has no writeback `[{inner}]`"));
+        }
+        return Ok(AsmOpndA64::MemSymLo12 {
+            base: rn,
+            name: String::from(name.trim()),
+        });
+    }
+    // A second part that is not an immediate is a register index: the
+    // register-offset form `[base, Rm{, <extend> #s}]`. GNU as makes the
+    // `#` on an offset optional, so a bare integer (`[x4, -16]`) is an
+    // offset, not an index.
+    let bare_int_off = |t: &str| !t.starts_with('#') && parse_int(t).is_some();
+    if parts.len() >= 2 && !parts[1].starts_with('#') && !bare_int_off(parts[1]) {
         if pre {
             return Err(format!(
                 "inline asm: register offset has no writeback `[{inner}]`"
@@ -662,12 +691,10 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
         });
     }
     let off = if parts.len() == 2 {
-        // The offset after `#` is a GNU as constant expression, not just a
-        // literal: `[xN, #4 * 0]` folds to 0. Operand references do not appear
-        // in an offset, so the resolver yields None.
-        let expr = parts[1]
-            .strip_prefix('#')
-            .ok_or_else(|| format!("inline asm: bad memory offset `{}`", parts[1]))?;
+        // The offset is a GNU as constant expression, not just a literal
+        // (`[xN, #4 * 0]` folds to 0), with the `#` optional. Operand
+        // references do not appear in an offset, so the resolver yields None.
+        let expr = parts[1].strip_prefix('#').unwrap_or(parts[1]);
         super::super::ssa::emit_common::eval_const_expr_ops(expr.trim(), &|_| None)
             .ok_or_else(|| format!("inline asm: bad memory offset `{}`", parts[1]))?
     } else {
@@ -943,6 +970,31 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     if let Some(v) = parse_int(tok) {
         return Ok(AsmOpndA64::Imm(v));
     }
+    // `:lo12:sym` (with GAS's optional `#`): a symbol's low 12 bits.
+    if let Some(name) = tok.strip_prefix('#').unwrap_or(tok).strip_prefix(":lo12:") {
+        let name = name.trim();
+        if !name.is_empty() {
+            return Ok(AsmOpndA64::Sym {
+                name: String::from(name),
+                lo12: true,
+            });
+        }
+    }
+    // A symbol name: a branch / adr / adrp target the encoder relocates. A
+    // PSTATE field name reaching here is a malformed `msr` (the immediate
+    // form is matched before the operand parse), not a symbol.
+    if !tok.is_empty()
+        && !tok.as_bytes()[0].is_ascii_digit()
+        && pstate_field(tok).is_none()
+        && tok
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$'))
+    {
+        return Ok(AsmOpndA64::Sym {
+            name: String::from(tok),
+            lo12: false,
+        });
+    }
     Err(format!("inline asm: unsupported operand `{tok}`"))
 }
 
@@ -972,7 +1024,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         None => text,
     };
     let mut insns = Vec::new();
-    for piece in text.split([';', '\n']) {
+    for piece in emit_common::split_asm_statements(text) {
         let mut piece = piece.trim();
         if piece.is_empty() {
             continue;

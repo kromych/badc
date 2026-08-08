@@ -6472,15 +6472,13 @@ pub(crate) fn encode_x86_file_asm_section_code(
         imm_of: &imm_of,
         addr_of: &addr_of,
     };
-    for b in blocks.iter_mut() {
-        for item in b.items.iter_mut() {
-            let AsmSectionItem::Code(text) = item else {
-                continue;
-            };
-            *item = encode_one_x86_section_insn(text, &operand_target, &goto_block, &refs)?;
-        }
-    }
-    Ok(())
+    super::ssa::emit_common::for_each_section_item_mut(blocks, &mut |item| {
+        let AsmSectionItem::Code(text) = item else {
+            return Ok(());
+        };
+        *item = encode_one_x86_section_insn(text, &operand_target, &goto_block, &refs)?;
+        Ok(())
+    })
 }
 
 /// Template-operand resolution for a replacement instruction: the register
@@ -6513,7 +6511,7 @@ fn encode_one_x86_section_insn(
 ) -> Result<super::ssa::emit_common::AsmSectionItem, alloc::string::String> {
     use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg};
     use super::asm::{AsmMemBase, AsmOpnd, Concrete, Mnemonic};
-    use super::ssa::emit_common::{AsmSectionItem, AsmSectionReloc, AsmSectionTarget};
+    use super::ssa::emit_common::{AsmRelocKind, AsmSectionItem, AsmSectionReloc, AsmSectionTarget};
     let insns = super::asm::parse_template(text.as_bytes())
         .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
     // A leading `lock` / `rep` prefix parses as its own entry; it rides in
@@ -6578,6 +6576,7 @@ fn encode_one_x86_section_insn(
         let reloc = AsmSectionReloc {
             offset,
             width: 4,
+            kind: AsmRelocKind::Data,
             pcrel: true,
             branch: false,
             signed: false,
@@ -6598,58 +6597,77 @@ fn encode_one_x86_section_insn(
                     "inline asm: replacement `{text}` call target embeds an operand"
                 ));
             }
-            AsmSectionTarget::Symbol(name.clone())
+            Some(AsmSectionTarget::Symbol(name.clone()))
         } else if let Some(&AsmOpnd::RefConst { idx, .. }) = insn.operands.first() {
-            operand_target(idx).ok_or_else(|| {
+            Some(operand_target(idx).ok_or_else(|| {
                 alloc::format!("inline asm: replacement `{text}` call target is not a symbol")
-            })?
+            })?)
+        } else if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
+            // A numeric-label target resolves at materialize time against
+            // this statement's section labels.
+            Some(AsmSectionTarget::Symbol(alloc::format!(
+                "{num}{}",
+                if forward { 'f' } else { 'b' }
+            )))
         } else {
-            return Err(alloc::format!(
-                "inline asm: replacement `{text}` is not a direct call/jmp to a symbol"
-            ));
+            // An indirect target (`call *%rdi`) encodes on the general
+            // operand path below.
+            None
         };
-        let bytes = alloc::vec![if is_call { 0xE8u8 } else { 0xE9 }, 0, 0, 0, 0];
-        let reloc = AsmSectionReloc {
-            offset: 1,
-            width: 4,
-            pcrel: true,
-            branch: true,
-            signed: false,
-            target,
-            addend: -4,
-        };
-        return Ok(AsmSectionItem::CodeBytes {
-            bytes,
-            relocs: alloc::vec![reloc],
-        });
-    }
-    // A `jcc` to a symbol -- a section-local label (this or another
-    // statement of the section) or an external name: the rel32 form with a
-    // branch relocation the writer resolves against the label's symbol.
-    if let Some(cc) = jcc_cond(mnem)
-        && insn.operands.is_empty()
-        && let Some(name) = &insn.sym_target
-    {
-        if name.contains('%') {
-            return Err(alloc::format!(
-                "inline asm: replacement `{text}` branch target embeds an operand"
-            ));
+        if let Some(target) = target {
+            let bytes = alloc::vec![if is_call { 0xE8u8 } else { 0xE9 }, 0, 0, 0, 0];
+            let reloc = AsmSectionReloc {
+                offset: 1,
+                width: 4,
+                kind: AsmRelocKind::Data,
+                pcrel: true,
+                branch: true,
+                signed: false,
+                target,
+                addend: -4,
+            };
+            return Ok(AsmSectionItem::CodeBytes {
+                bytes,
+                relocs: alloc::vec![reloc],
+            });
         }
-        let mut bytes = alloc::vec::Vec::new();
-        super::encode::emit_jcc_rel32(&mut bytes, cc, 0);
-        let reloc = AsmSectionReloc {
-            offset: 2,
-            width: 4,
-            pcrel: true,
-            branch: true,
-            signed: false,
-            target: AsmSectionTarget::Symbol(name.clone()),
-            addend: -4,
+    }
+    // A `jcc` to a symbol or a numeric label -- a section-local label (this
+    // or another statement of the section) or an external name: the rel32
+    // form with a branch relocation the writer resolves against the label's
+    // symbol (a same-section target patches at materialize time).
+    if let Some(cc) = jcc_cond(mnem) {
+        let target = if insn.operands.is_empty() && insn.sym_target.is_some() {
+            let name = insn.sym_target.as_ref().expect("checked");
+            if name.contains('%') {
+                return Err(alloc::format!(
+                    "inline asm: replacement `{text}` branch target embeds an operand"
+                ));
+            }
+            Some(name.clone())
+        } else if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
+            Some(alloc::format!("{num}{}", if forward { 'f' } else { 'b' }))
+        } else {
+            None
         };
-        return Ok(AsmSectionItem::CodeBytes {
-            bytes,
-            relocs: alloc::vec![reloc],
-        });
+        if let Some(name) = target {
+            let mut bytes = alloc::vec::Vec::new();
+            super::encode::emit_jcc_rel32(&mut bytes, cc, 0);
+            let reloc = AsmSectionReloc {
+                offset: 2,
+                width: 4,
+                kind: AsmRelocKind::Data,
+                pcrel: true,
+                branch: true,
+                signed: false,
+                target: AsmSectionTarget::Symbol(name),
+                addend: -4,
+            };
+            return Ok(AsmSectionItem::CodeBytes {
+                bytes,
+                relocs: alloc::vec![reloc],
+            });
+        }
     }
     // `pushq $symbol`: the symbol's address as an absolute immediate. `68`
     // pushes a sign-extended imm32; the field takes an `R_X86_64_32S` reloc
@@ -6666,6 +6684,7 @@ fn encode_one_x86_section_insn(
         let reloc = AsmSectionReloc {
             offset: 1,
             width: 4,
+            kind: AsmRelocKind::Data,
             pcrel: false,
             branch: false,
             signed: true,
@@ -7057,6 +7076,7 @@ fn encode_one_x86_section_insn(
         relocs.push(AsmSectionReloc {
             offset: seg_len + field as u32,
             width: 4,
+            kind: AsmRelocKind::Data,
             pcrel,
             branch: false,
             signed: !pcrel,

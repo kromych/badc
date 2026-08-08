@@ -210,14 +210,11 @@ pub fn run_ld(args: &[String]) -> i32 {
             | "-Bsymbolic-functions"
             | "--pic-veneer"
             | "--no-ld-generated-unwind-info" => {}
-            // Dynamic-linking metadata. The script-driven engine emits
-            // relocation tables (`.rela.dyn`, `.relr.dyn`) but no
+            // The script-driven engine emits no
             // `.dynsym`/`.dynstr`/`.hash`/`.dynamic`, so an image whose
             // symbols a dynamic loader must find cannot be built here.
-            // Rejected rather than ignored: silently dropping these
-            // yields an object that links and is unusable.
-            // TODO: emit dynamic-linking metadata under the script
-            // engine and accept these.
+            // Ignoring these would yield an image that links and is
+            // unusable. TODO: emit dynamic-linking metadata.
             "-soname" | "-h" | "--dynamic-linker" => {
                 let _ = next_of(&mut it, arg);
                 return ld_err(format!(
@@ -237,9 +234,7 @@ pub fn run_ld(args: &[String]) -> i32 {
                 ));
             }
             "--fix-cortex-a53-843419" => {
-                // Erratum veneer generation is not implemented; the
-                // sequences the workaround rewrites must be absent.
-                // TODO: scan for adrp-at-0xff8/0xffc patterns and
+                // TODO: scan for the affected adrp page offsets and
                 // materialise veneers.
                 eprintln!(
                     "badc-ld: note: --fix-cortex-a53-843419 accepted; erratum veneers are \
@@ -328,17 +323,11 @@ pub fn run_ld(args: &[String]) -> i32 {
         }
     }
     if a.print_version {
-        // GNU ld's identification shape, `GNU ld (<package>) <version>`,
-        // with badc named as the package: build systems parse the
-        // first and last fields (binutils flavour, version) and show
-        // the middle to people, so this reports what runs without
-        // claiming to be binutils. The version is the compatibility
-        // level of the implemented option surface, not a binutils
-        // release badc contains; it is deliberately the oldest that
-        // still parses, so nothing gated on a newer linker is claimed
-        // -- feature questions are answered by rejecting options
-        // `run_ld` does not implement. The git tail of BUILD_INFO
-        // follows on its own lines.
+        // GNU ld's identification shape with badc named as the
+        // package: build systems parse the first and last fields and
+        // show the middle, so this reports what runs without claiming
+        // to be binutils. Feature questions are answered by rejecting
+        // options `run_ld` does not implement, not by the version.
         let git_tail = crate::BUILD_INFO
             .split_once('\n')
             .map(|(_, tail)| tail)

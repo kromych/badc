@@ -644,8 +644,7 @@ pub struct LdsLinker<'a> {
     /// an undefined symbol still needs a slot).
     got_slots: Vec<String>,
     got_map: HashMap<String, usize>,
-    /// `--emit-relocs`: every relocation applied to an output section,
-    /// recorded on the final pass and written back as `.rela.<outsec>`.
+    /// `--emit-relocs` records, gathered on the final pass.
     emitted: Vec<EmittedReloc>,
     /// Where `build_symtab` put each symbol, for resolving `emitted`.
     sym_index: SymIndex,
@@ -664,18 +663,15 @@ struct SymIndex {
     by_name: HashMap<String, usize>,
 }
 
-/// One applied relocation kept for `--emit-relocs`. The referenced
-/// symbol is named by its input slot; the output symtab index is
-/// resolved once the table exists.
+/// One applied relocation kept for `--emit-relocs`; the output symtab
+/// index is resolved once that table exists.
 #[derive(Debug, Clone, Copy)]
 struct EmittedReloc {
     out: usize,
     addr: u64,
     rtype: u32,
-    /// Resolved `S + A`. The emitted addend is this less the final
-    /// value of the symbol the entry names, which is not the input
-    /// addend whenever the reference folds into an output section
-    /// symbol.
+    /// Resolved `S + A`; the emitted addend is this less the final
+    /// value of the symbol the entry names.
     target: u64,
     obj: usize,
     sym: u32,
@@ -3749,9 +3745,9 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
-    /// `--emit-relocs` payloads: the recorded relocations grouped by
-    /// output section, each entry naming the output symtab index of
-    /// the symbol the input relocation referenced.
+    /// `--emit-relocs` payloads: one `.rela.<outsec>` per output
+    /// section that took relocations, entries in address order,
+    /// `r_offset` the final address.
     fn emitted_rela_sections(
         &self,
         final_of: &[u32],
@@ -3969,10 +3965,6 @@ impl<'a> LdsLinker<'a> {
             }
         }
 
-        // `--emit-relocs`: one `.rela.<outsec>` per output section that
-        // took relocations, entries in address order, `r_offset` the
-        // final address and `r_info` naming the output symtab entry the
-        // input relocation referenced.
         let rela: Vec<(usize, Vec<u8>)> = self.emitted_rela_sections(&final_of, &syms)?;
 
         // Section header string table.
@@ -4805,10 +4797,9 @@ SECTIONS {
     }
 
     /// `--emit-relocs`: every applied relocation reappears as a
-    /// `.rela.<outsec>` entry whose `r_offset` is the final address,
-    /// whose symbol index names the output symtab entry the input
-    /// relocation referenced, and whose addend is the input's. This is
-    /// what `arch/x86/tools/relocs` reads to build the KASLR table.
+    /// `.rela.<outsec>` entry whose `r_offset` is the final address and
+    /// from which `S + A` reconstructs. This is what
+    /// `arch/x86/tools/relocs` reads to build the KASLR table.
     #[test]
     fn emit_relocs_carries_applied_relocations_into_the_image() {
         let script = parse_linker_script(SCRIPT).expect("script parses");
